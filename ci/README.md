@@ -1,9 +1,11 @@
-# PR 02 CI contract
+# PR 02–03 native CI contract
 
 The mandatory lane is CPU-only. Native CUDA compilation is a separate
-nightly/manual lane, and the Python reference suite is an optional offline
-fake-backend lane. None of these PR 02 checks loads a model, initializes a CUDA
-device, launches a kernel, or runs inference.
+nightly/manual lane, the PR 03 GPU host-runtime smoke is an explicit
+self-hosted/manual lane, and the Python reference suite is an optional offline
+fake-backend lane. No CI lane loads a model or runs model inference. Only the
+opted-in PR 03 GPU lane initializes a device and launches the small fill smoke
+kernel.
 
 ## Production CPU gate
 
@@ -50,7 +52,7 @@ docker build \
   --file ci/cuda/Dockerfile \
   --build-arg RUSTINFER_CUDA_ARCHITECTURES=89 \
   --progress plain \
-  --tag rustinfer-pr02-cuda:local \
+  --tag rustinfer-native-cuda:local \
   .
 ```
 
@@ -80,6 +82,70 @@ cargo test --locked -p rustinfer-cuda --features cuda --test abi_link
 `native-cuda.yml` runs the pinned container nightly or by manual dispatch. A
 CUDA base-image, Rust-image, toolkit, or architecture change is an explicit CI
 contract change and must update the digest and captured evidence together.
+
+## Python-free CUDA host-runtime GPU gate
+
+The image build compiles `host_runtime_gpu` with `--no-run`. Execution is a
+separate operation and requires NVIDIA Container Toolkit GPU passthrough. On an
+authorized GPU host:
+
+```sh
+GPU_EVIDENCE_DIR=$(mktemp -d)
+SOURCE_ARCHIVE_PATH=$(mktemp)
+git archive --format=tar --output="${SOURCE_ARCHIVE_PATH}" HEAD
+SOURCE_REVISION=$(git rev-parse HEAD)
+SOURCE_ARCHIVE_SHA256=$(sha256sum "${SOURCE_ARCHIVE_PATH}" | cut -d ' ' -f 1)
+GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' rustinfer-native-cuda:local)
+docker run --rm \
+  --network none \
+  --gpus all \
+  --env NVIDIA_VISIBLE_DEVICES=all \
+  --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+  --env RUSTINFER_CUDA_LEAK_ITERATIONS=128 \
+  --env RUSTINFER_CUDA_COMPUTE_SANITIZER=0 \
+  --env RUSTINFER_GPU_EVIDENCE_DIR=/evidence \
+  --env "RUSTINFER_SOURCE_REVISION=${SOURCE_REVISION}" \
+  --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
+  --env "RUSTINFER_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
+  --volume "${GPU_EVIDENCE_DIR}:/evidence" \
+  rustinfer-native-cuda:local \
+  ci/verify_python_free_gpu_runtime.sh
+```
+
+The verifier has no network and no Python executable. It records NVIDIA and
+Rust/CUDA metadata, lists the exact integration tests, then executes the whole
+ignored test target with `--ignored --test-threads=1 --nocapture`. Every GPU
+test is marked `#[ignore = "remote GPU"]`, so an ordinary Cargo test command
+cannot accidentally execute device work. The required tests cover:
+
+- device identity, compute capability, total memory, multiprocessor count,
+  driver version, and runtime version;
+- an invalid device ordinal;
+- explicit event ordering across two non-default streams;
+- async fill correctness after synchronization;
+- launch-time error staging for invalid launch parameters;
+- positive event elapsed timing; and
+- repeated context/stream/event create-drop leak smoke, controlled by
+  `RUSTINFER_CUDA_LEAK_ITERATIONS` (32–4096, default 128).
+
+Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
+`nvidia-smi-device-metadata.csv`, `host-runtime-test-list.txt`,
+`host-runtime-tests.log`, dynamic-link inspection from `ldd`/`readelf`/`nm`,
+the injected CUDA driver/runtime library inventory, and `SHA256SUMS`. Existing
+evidence is never overwritten. The workflow also binds this output to the
+checked-out revision, the SHA-256 of `git archive --format=tar HEAD`, and the
+locally built GPU image ID.
+
+Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat the same ignored target
+serially under `compute-sanitizer --tool memcheck --leak-check full`. Its output
+is captured as `compute-sanitizer-memcheck.log` and must report zero errors.
+This optional pass is also exposed as the manual workflow input
+`run_compute_sanitizer`.
+
+The GitHub GPU job is disabled unless a manual dispatch explicitly selects
+`run_gpu_tests`. It targets only `[self-hosted, linux, x64, rustinfer-gpu]`, so
+standard hosted runners never receive or wait on a GPU job. Scheduled runs
+continue to perform compile/link validation only.
 
 ## Optional Python reference gate
 

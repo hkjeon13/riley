@@ -1,6 +1,6 @@
 # PR 03 — CUDA Host Runtime과 FFI 경계
 
-**상태:** Planned  
+**상태:** Active
 **선행 조건:** [PR 02](02-workspace-and-ci.md)  
 **다음:** [PR 04 — Tensor와 메모리](04-tensor-and-memory.md)
 
@@ -120,6 +120,14 @@ Smoke kernel은 성능 목적이 아니다. vector add 또는 buffer fill 정도
 - 잘못된 launch가 오류로 전달되는지 확인
 - 반복 생성/drop 시 resource leak smoke
 - Python이 없는 환경에서 동일 테스트 실행
+
+의도적인 illegal-access/assert kernel로 late device fault를 만드는 검사는 이
+단계의 7-test smoke에 섞지 않는다. 그런 fault는 CUDA context를 poison하고
+`compute-sanitizer`의 zero-error leak gate와 같은 프로세스의 후속 lifecycle
+검증을 오염시킨다. PR 03은 정상 fill의 명시적 synchronize와 non-poisoning
+invalid launch를 통해 `LAUNCH`/`SYNCHRONIZE` stage 경계를 고정한다. 실제
+device-fault injection은 별도 프로세스 격리와 복구 정책을 함께 검증하는
+[PR 16 오류 격리 gate](16-reliability-and-release.md#오류-격리)에서 수행한다.
 
 ## 비범위
 

@@ -43,6 +43,9 @@ fn build_native_cuda() -> Result<(), String> {
     for source in [
         cmake_lists,
         kernels_dir.join("include/rustinfer_cuda.h"),
+        kernels_dir.join("src/ffi_internal.hpp"),
+        kernels_dir.join("src/host_runtime.cu"),
+        kernels_dir.join("src/smoke_fill.cu"),
         kernels_dir.join("src/version.cu"),
     ] {
         println!("cargo:rerun-if-changed={}", source.display());
@@ -79,6 +82,7 @@ fn build_native_cuda() -> Result<(), String> {
     run(&mut configure, "configure the native CUDA library")?;
 
     let cudart_link_dir = discover_dynamic_cudart(&build_dir, profile, &toolkit)?;
+    let cuda_driver_link_dir = discover_cuda_driver(&build_dir, profile)?;
 
     let mut build = Command::new(&cmake);
     build
@@ -116,13 +120,59 @@ fn build_native_cuda() -> Result<(), String> {
         "cargo:rustc-link-search=native={}",
         cudart_link_dir.display()
     );
+    println!(
+        "cargo:rustc-link-search=native={}",
+        cuda_driver_link_dir.display()
+    );
     println!("cargo:rustc-link-lib=static=rustinfer_cuda_native");
-    // nvcc emits fatbinary registration calls even for the PR 02 host-only
-    // `.cu` translation unit. Use the toolkit's shared CUDA Runtime both to
-    // satisfy those symbols and to preserve the runtime strategy needed by
-    // later host-runtime PRs. The release environment must provide cudart.
+    // nvcc emits fatbinary registration calls for the AOT CUDA translation
+    // units. Use the selected toolkit's shared CUDA Runtime to satisfy those
+    // symbols; the release environment must provide cudart.
     println!("cargo:rustc-link-lib=dylib=cudart");
+    println!("cargo:rustc-link-lib=dylib=cuda");
     Ok(())
+}
+
+fn discover_cuda_driver(build_dir: &Path, profile: &str) -> Result<PathBuf, String> {
+    let metadata = build_dir.join(format!("rustinfer-cuda-driver-{profile}.path"));
+    let contents = fs::read_to_string(&metadata).map_err(|error| {
+        format!(
+            "CMake did not produce CUDA Driver link metadata at {}: {error}; install the CUDA driver development linker or toolkit stubs",
+            metadata.display()
+        )
+    })?;
+    let linker_path = contents.trim();
+    if linker_path.is_empty() || linker_path.lines().count() != 1 {
+        return Err(format!(
+            "invalid CUDA Driver link metadata in {}: expected one non-empty path",
+            metadata.display()
+        ));
+    }
+    let linker_path = PathBuf::from(linker_path);
+    if !linker_path.is_absolute() || !linker_path.is_file() {
+        return Err(format!(
+            "CMake selected CUDA Driver linker file {}, but it is not an absolute existing file",
+            linker_path.display()
+        ));
+    }
+    let link_dir = linker_path.parent().ok_or_else(|| {
+        format!(
+            "CUDA Driver linker file {} has no parent directory",
+            linker_path.display()
+        )
+    })?;
+    let expected_linker = link_dir.join(dynamic_cuda_driver_filename());
+    if !expected_linker.is_file() {
+        return Err(format!(
+            "CUDA Driver development linker file {} is missing; install the NVIDIA driver development package or complete toolkit stubs",
+            expected_linker.display()
+        ));
+    }
+    println!(
+        "cargo:warning=rustinfer-cuda: CUDA Driver linker={}",
+        expected_linker.display()
+    );
+    Ok(link_dir.to_path_buf())
 }
 
 struct CudaToolkit {
@@ -435,6 +485,16 @@ fn dynamic_cudart_filename() -> &'static str {
         "libcudart.dylib"
     } else {
         "libcudart.so"
+    }
+}
+
+fn dynamic_cuda_driver_filename() -> &'static str {
+    if cfg!(windows) {
+        "cuda.lib"
+    } else if cfg!(target_os = "macos") {
+        "libcuda.dylib"
+    } else {
+        "libcuda.so"
     }
 }
 

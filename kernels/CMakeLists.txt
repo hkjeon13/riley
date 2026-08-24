@@ -12,7 +12,11 @@ endif()
 message(STATUS
     "rustinfer CUDA AOT architectures: ${CMAKE_CUDA_ARCHITECTURES} (compile targets only)")
 
-add_library(rustinfer_cuda_native STATIC src/version.cu)
+add_library(rustinfer_cuda_native STATIC
+    src/host_runtime.cu
+    src/smoke_fill.cu
+    src/version.cu
+)
 
 target_include_directories(rustinfer_cuda_native
     PUBLIC
@@ -25,11 +29,30 @@ target_compile_features(rustinfer_cuda_native PUBLIC cuda_std_17)
 # Static archives do not carry transitive linker directives into Cargo. Keep
 # the CMake dependency accurate and emit the toolkit-selected shared cudart
 # linker file for build.rs to validate and forward explicitly.
-target_link_libraries(rustinfer_cuda_native PRIVATE CUDA::cudart)
+target_link_libraries(rustinfer_cuda_native PRIVATE
+    CUDA::cudart
+    CUDA::cuda_driver
+)
+
+if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+    if(WIN32)
+        target_compile_options(rustinfer_cuda_native PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/EHs-c->
+        )
+    else()
+        target_compile_options(rustinfer_cuda_native PRIVATE
+            $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fno-exceptions>
+        )
+    endif()
+endif()
 
 file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-cudart-$<CONFIG>.path"
     CONTENT "$<TARGET_FILE:CUDA::cudart>\n"
+)
+file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-driver-$<CONFIG>.path"
+    CONTENT "$<TARGET_FILE:CUDA::cuda_driver>\n"
 )
 
 set_target_properties(rustinfer_cuda_native PROPERTIES

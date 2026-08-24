@@ -16,10 +16,10 @@ constexpr char kBuildInfo[] =
 
 }  // namespace
 
-extern "C" uint32_t rustinfer_cuda_abi_version(void) {
+extern "C" uint32_t rustinfer_cuda_abi_version(void) noexcept {
   return RUSTINFER_CUDA_ABI_VERSION;
 }
 
-extern "C" const char* rustinfer_cuda_build_info(void) {
+extern "C" const char* rustinfer_cuda_build_info(void) noexcept {
   return kBuildInfo;
 }

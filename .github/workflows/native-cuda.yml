@@ -10,6 +10,21 @@ on:
         required: true
         default: "89"
         type: string
+      run_gpu_tests:
+        description: Run PR 03 smoke tests on the explicitly labelled self-hosted GPU runner
+        required: true
+        default: false
+        type: boolean
+      leak_iterations:
+        description: Stream/event/context create-drop iterations for the GPU leak smoke
+        required: true
+        default: "128"
+        type: string
+      run_compute_sanitizer:
+        description: Repeat the serial ignored GPU target under Compute Sanitizer memcheck
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -30,5 +45,63 @@ jobs:
             --file ci/cuda/Dockerfile \
             --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
             --progress plain \
-            --tag rustinfer-pr02-cuda:ci \
+            --tag rustinfer-native-cuda:ci \
             .
+
+  host-runtime-gpu:
+    name: Python-free CUDA host-runtime GPU smoke
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gpu_tests }}
+    needs: python-free-build
+    runs-on: [self-hosted, linux, x64, rustinfer-gpu]
+    timeout-minutes: 60
+    env:
+      RUSTINFER_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures }}
+      RUSTINFER_CUDA_LEAK_ITERATIONS: ${{ inputs.leak_iterations }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare unique GPU evidence directory
+        run: |
+          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/rustinfer-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          mkdir -p "${GPU_EVIDENCE_DIR}"
+          test -z "$(find "${GPU_EVIDENCE_DIR}" -mindepth 1 -print -quit)"
+
+      - name: Build the same pinned Python-free CUDA image
+        run: |
+          docker build \
+            --file ci/cuda/Dockerfile \
+            --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
+            --progress plain \
+            --tag rustinfer-native-cuda:gpu-ci \
+            .
+
+      - name: Run serial host-runtime smoke on the GPU
+        run: |
+          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/rustinfer-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SOURCE_ARCHIVE_PATH="${RUNNER_TEMP}/rustinfer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar"
+          git archive --format=tar --output="${SOURCE_ARCHIVE_PATH}" HEAD
+          SOURCE_ARCHIVE_SHA256=$(sha256sum "${SOURCE_ARCHIVE_PATH}" | cut -d ' ' -f 1)
+          GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' rustinfer-native-cuda:gpu-ci)
+          docker run --rm \
+            --network none \
+            --gpus all \
+            --env NVIDIA_VISIBLE_DEVICES=all \
+            --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+            --env "RUSTINFER_CUDA_LEAK_ITERATIONS=${RUSTINFER_CUDA_LEAK_ITERATIONS}" \
+            --env "RUSTINFER_CUDA_COMPUTE_SANITIZER=${{ inputs.run_compute_sanitizer }}" \
+            --env RUSTINFER_GPU_EVIDENCE_DIR=/evidence \
+            --env "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
+            --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
+            --env "RUSTINFER_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
+            --volume "${GPU_EVIDENCE_DIR}:/evidence" \
+            rustinfer-native-cuda:gpu-ci \
+            ci/verify_python_free_gpu_runtime.sh
+
+      - name: Upload GPU verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr03-host-runtime-gpu-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/rustinfer-gpu-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14

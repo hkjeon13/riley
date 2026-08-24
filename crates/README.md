@@ -49,8 +49,11 @@ cargo build --locked --release --features cuda,server
 
 ## Panic과 error 원칙
 
-- 예상 가능한 configuration, artifact, native ABI 오류는 `rustinfer_core::Result`로
-  반환한다. Library 입력 오류에 `panic!`을 사용하지 않는다.
+- 예상 가능한 공통 configuration·artifact 오류는 `rustinfer_core::Result`로
+  반환한다. `rustinfer-cuda`의 ABI/build metadata API도 호환성을 위해 이 타입을
+  유지한다. Device/context/stream/event host-runtime API는 CUDA domain·stage·native
+  status를 잃지 않도록 `CudaResult<T>`/`CudaError`를 사용하며, 상위 runtime
+  경계에서 공통 오류로 변환한다. Library 입력 오류에 `panic!`을 사용하지 않는다.
 - Binary는 오류를 stderr와 non-zero exit status로 변환한다.
 - Debug는 `panic=unwind`, overflow check on이다. Cargo test harness도 unwind를
   사용하며, test profile은 별도로 지원되지 않는 `panic` 설정을 두지 않는다.

@@ -23,17 +23,22 @@ cargo test --locked --workspace --no-default-features
 cargo doc --locked --workspace --no-deps --no-default-features
 ```
 
-The default member is `rustinfer-server`. A CUDA environment builds the empty
-native ABI boundary and version binary with the exact root command below; PR 02
-does not initialize a CUDA device or run inference.
+The default member is `rustinfer-server`. With the `cuda` feature, the same
+workspace builds the native CUDA C ABI plus the safe PR 03 device, primary
+context, non-default stream, event, and diagnostic fill-kernel host runtime.
+The build command below only compiles and links; it does not receive GPU access.
 
 ```bash
 cargo build --locked --release --features cuda,server
 ./target/release/rustinfer --version
 ```
 
-CUDA compilation/link validation is separate from the mandatory CPU gate. See
-[`ci/README.md`](ci/README.md) for the reproducible local and container commands.
+CUDA compilation/link validation is separate from the mandatory CPU gate.
+Device initialization and the diagnostic kernel run only in the explicitly
+authorized, remote/manual GPU smoke; no lane loads a model or performs LLM
+inference. See the [CUDA ABI v1 contract](docs/cuda-abi-v1.md) and
+[`ci/README.md`](ci/README.md) for the ownership rules and reproducible remote
+container commands.
 
 ## 1. Vision
 

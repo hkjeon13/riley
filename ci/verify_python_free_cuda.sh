@@ -59,6 +59,16 @@ cargo test \
     --test abi_link \
     -- --nocapture
 
+# Compile the PR 03 GPU integration target into the reusable image without
+# executing it. Device access is reserved for verify_python_free_gpu_runtime.sh.
+cargo test \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda \
+    --test host_runtime_gpu \
+    --no-run
+
 version_output=$(target/release/rustinfer --version)
 printf '%s\n' "$version_output"
 printf '%s\n' "$version_output" | grep -Eiq 'rustinfer.*0\.1\.0'
