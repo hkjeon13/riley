@@ -1,0 +1,806 @@
+{
+  "cells": [
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.005817958021218931
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.005843584544117956
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.03446672149009067
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 41.40898599871434,
+            "r7_p95": 43.86345590828569
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 1.1327804968459532,
+            "r7_p95": 1.3190435027354397
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1156749997978967,
+            "r7_p95": 1.197297780890949
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 772.6388537864243
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 41.44429800362559,
+            "r7_p95": 44.204412100225454
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 1.1303904975648038,
+            "r7_p95": 1.2316371517954392
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.115257951765201,
+            "r7_p95": 1.146543829306592
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 771.9986840568704
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 42.00075350672705,
+            "r7_p95": 46.47609684325287
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 1.1319584955344908,
+            "r7_p95": 1.309985701664118
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.115565451571808,
+            "r7_p95": 1.1400084565168307
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 761.7451858984866
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 41.47828949498944,
+            "r7_p95": 42.23525344859809
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 1.1301859995000996,
+            "r7_p95": 1.1971231986535713
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1142775643571852,
+            "r7_p95": 1.119629074110567
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 771.3566636055916
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 41.622990007454064,
+            "r7_p95": 44.64946835141745
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 1.1328090040478855,
+            "r7_p95": 1.2996501493034882
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1163101289346213,
+            "r7_p95": 1.1684053193265196
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 768.6742944751069
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.005817958021218931,
+        "warm_end_to_end_r7_p50_sample_cv": 0.005843584544117956,
+        "warm_end_to_end_r7_p95_sample_cv": 0.03446672149009067,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.0011215297089984895,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.042453391853830784,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.0006663740265131666,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.025676557651235943
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.0016112081948853592
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.0016105536932594347
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.0038035468526373783
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 168.0389270040905,
+            "r7_p95": 170.67597999921418
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24472780800.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 1.191559997096192,
+            "r7_p95": 1.2975580000784248
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.192471350375453,
+            "r7_p95": 1.2104937133670777
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 761.6560630565386
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 167.51990549528273,
+            "r7_p95": 169.41896614516736
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24472780800.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 1.1912920090253465,
+            "r7_p95": 1.2659466468903702
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1896681062639765,
+            "r7_p95": 1.2010133811148933
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 764.0169853408534
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 167.79437699733535,
+            "r7_p95": 170.23272475707927
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24472780800.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 1.192156007164158,
+            "r7_p95": 1.2969970935955644
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1914823149623328,
+            "r7_p95": 1.208047948797842
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 762.747893533746
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 167.84483649826143,
+            "r7_p95": 171.07751915609697
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24472780800.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 1.1917154988623224,
+            "r7_p95": 1.3129282539011908
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1903924606149232,
+            "r7_p95": 1.2165733539283012
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 762.5458210407713
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 167.36040049727308,
+            "r7_p95": 170.80540895476588
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24472780800.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 1.189886505017057,
+            "r7_p95": 1.292084951273864
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 1.1895129724779703,
+            "r7_p95": 1.2126811011934995
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 764.7429735215724
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.0016112081948853592,
+        "warm_end_to_end_r7_p50_sample_cv": 0.0016105536932594347,
+        "warm_end_to_end_r7_p95_sample_cv": 0.0038035468526373783,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.0007231301676474677,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.013206557114471001,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.0010554908120061907,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.004800872601395884
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 128,
+        "prompt_tokens": 4096,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.0011417504044486826
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.001022058830437998
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.05009924020319628
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 57.757304995902814,
+            "r7_p95": 59.20787730065058
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24468586496.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 1.4971769996918738,
+            "r7_p95": 1.572435998241417
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 1.4850117093432815,
+            "r7_p95": 1.489898032178321
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 4392.793241469422
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 57.73988949658815,
+            "r7_p95": 67.43306263888371
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24468586496.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 1.4943739952286705,
+            "r7_p95": 1.5680580108892173
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 1.481618758031888,
+            "r7_p95": 1.4883913550405732
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 4394.613846185781
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 57.731734501430765,
+            "r7_p95": 60.624302706855815
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24468586496.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 1.4981259882915765,
+            "r7_p95": 1.6107920091599226
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 1.486531290274504,
+            "r7_p95": 1.493166935453642
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 4390.853722405927
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 57.727551997231785,
+            "r7_p95": 63.31281450402457
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24468586496.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 1.4957499952288345,
+            "r7_p95": 1.566724997246638
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 1.4850518707516454,
+            "r7_p95": 1.4897484192436923
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 4397.697917268193
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 57.868652504112106,
+            "r7_p95": 62.3679469943454
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 24468586496.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 1.4974590012570843,
+            "r7_p95": 1.5881970030022785
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 1.4857831612912817,
+            "r7_p95": 1.4912681935745622
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 4384.295638052964
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.0011417504044486826,
+        "warm_end_to_end_r7_p50_sample_cv": 0.001022058830437998,
+        "warm_end_to_end_r7_p95_sample_cv": 0.05009924020319628,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.0010064245256393076,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.011762235551666896,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.0012686217346748845,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.0012130519935805999
+      },
+      "workload": {
+        "concurrency": 8,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "cold_model_load_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.004535517603315144
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 1,
+      "run_summaries": [
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 15025.81374500005
+          },
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 1
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-01",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 582.2660925238431
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 15027.383338005166
+          },
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 1
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-02",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 597.5823723382157
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 14904.839687005733
+          },
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 1
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-03",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 604.99426934029
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 14879.982108002878
+          },
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 1
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-04",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 582.2597040559167
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 14948.768743997789
+          },
+          "peak_vram_bytes": {
+            "maximum": 24414060544.0,
+            "observation_count": 1
+          },
+          "run_id": "vllm-20260824T192357.417Z-8ce3ce384d9a-run-05",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 599.8087359054952
+          },
+          "trial_count": 1
+        }
+      ],
+      "statistics": {
+        "cold_model_load_r7_p50_sample_cv": 0.004535517603315144,
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.017696369048235176
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "cold"
+      }
+    }
+  ],
+  "comparability": {
+    "engine_revision": "vllm-0.27.1",
+    "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    "git_dirty": false,
+    "git_revision": "09911ba2630845e9d4094b7c33c3ff65931a919c",
+    "lane_manifest_sha256": "002bab2b7dae587c78339131e5057a7cf4e9fc6d0d83432f514a6db59e89469b",
+    "matrix_id": "smollm2-135m-rtx4090-bf16-v1",
+    "matrix_sha256": "a979659ef9d7b3c5a7a85e423347eb6f06ccbd3ae5a370056bd056d3137c7e87",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "prompts_sha256": "709612e45d735888b240951d51b979b7ded1e87ef6cae9296f0b1250647255d2",
+    "scope": "end-to-end"
+  },
+  "contract_version": "rustinfer.repeatability.v2",
+  "definitions": {
+    "cold_model_load": "within each run and cold cell, compute R7 p50 of successful-trial metrics.model_load_ms",
+    "coverage": "every configured exact cell must contain the same run_ids; each run must contain trial_index 1..measurement.<warm_state>.measured_iterations_per_run",
+    "failures": "sum root failure_count across all trials in a cell",
+    "peak_vram_relative_range": "take each run's maximum successful-trial metrics.peak_vram_bytes, then (max-min)/R7 median across runs",
+    "pooled_itl": "within each run and warm cell, pool every actual per-token value from successful requests[].itl_ms arrays and compute R7 p50/p95",
+    "r7": "sort x; h=(n-1)*p; linearly interpolate x[floor(h)] and x[ceil(h)]",
+    "request_mean_tpot": "within each run and warm cell, flatten successful request-level requests[].mean_tpot_ms observations and compute R7 p50/p95",
+    "sample_cv": "across independent runs, sample standard deviation / abs(mean)",
+    "throughput": "within each run and cell, compute R7 p50 of successful-trial metrics.output_tokens_per_second; report its sample CV for every cell, but apply throughput_cv_max only to warm cells because a cold run has one diagnostic first-request observation",
+    "token_identity": "for each cell, trial_index, and request position, require identical prompt_token_ids_sha256 and generated_token_ids_sha256 across runs",
+    "warm_latency": "within each run and warm cell, flatten successful requests[].end_to_end_ms across trials and compute R7 p50/p95"
+  },
+  "errors": [],
+  "ignored_trial_count": 0,
+  "matrix": "/tmp/rustinfer-pr01-09911ba-vllm-20260825/benchmarks/matrix.yaml",
+  "matrix_contract_validation": "passed",
+  "matrix_sha256": "a979659ef9d7b3c5a7a85e423347eb6f06ccbd3ae5a370056bd056d3137c7e87",
+  "passed": true,
+  "status": "passed",
+  "thresholds": {
+    "cold_model_load_p50_cv_max": 0.1,
+    "failure_count_max": 0.0,
+    "peak_vram_relative_range_max": 0.01,
+    "throughput_cv_max": 0.05,
+    "warm_p50_cv_max": 0.05,
+    "warm_p95_cv_max": 0.1
+  },
+  "trial_files": [
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-vllm-run003-staging/raw.jsonl"
+  ]
+}
