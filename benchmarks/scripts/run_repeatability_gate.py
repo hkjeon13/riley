@@ -183,6 +183,7 @@ EXPECTED_THRESHOLDS = {
     "peak_vram_relative_range_max": 0.01,
     "failure_count_max": 0,
 }
+EXPECTED_REPEATABILITY_REPORT_CONTRACT = "rustinfer.repeatability.v2"
 PRIME_CELLS = EXPECTED_CELLS[:3]
 LANE_PRIME_CELLS = {
     lane_id: PRIME_CELLS for lane_id in SUPPORTED_LANES
@@ -273,6 +274,18 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RunnerError(f"{label} must be a JSON object")
     return value
+
+
+def _require_passing_repeatability_report(
+    report: Mapping[str, Any], label: str
+) -> None:
+    if report.get("contract_version") != EXPECTED_REPEATABILITY_REPORT_CONTRACT:
+        raise RunnerError(
+            f"{label}.contract_version must be "
+            f"{EXPECTED_REPEATABILITY_REPORT_CONTRACT!r}"
+        )
+    if report.get("passed") is not True or report.get("status") != "passed":
+        raise RunnerError(f"{label} is not a pass")
 
 
 def _sha256(path: Path) -> str:
@@ -2354,18 +2367,12 @@ def _execute_plan(plan: Mapping[str, Any]) -> int:
         return 1
     try:
         report = _load_json(report_path, "repeatability report")
+        _require_passing_repeatability_report(report, "repeatability report")
     except RunnerError as error:
         _record_failure(
             output_root, stage="checker-report", message=str(error), returncode=0
         )
         print(f"repeatability runner: {error}", file=sys.stderr)
-        return 1
-    if report.get("passed") is not True or report.get("status") != "passed":
-        message = "repeatability checker report is not a pass"
-        _record_failure(
-            output_root, stage="checker-report", message=message, returncode=0
-        )
-        print(f"repeatability runner: {message}", file=sys.stderr)
         return 1
 
     _write_new_json(
@@ -2534,16 +2541,15 @@ def _prepare_finalize_artifacts(
         Path(str(finalization["validation_report"])),
         "combined raw repeatability report",
     )
-    if (
-        validation_report.get("passed") is not True
-        or validation_report.get("status") != "passed"
-    ):
-        raise RunnerError("combined raw repeatability report is not a pass")
+    _require_passing_repeatability_report(
+        validation_report, "combined raw repeatability report"
+    )
 
     report = _load_json(
         Path(str(_mapping(plan["checker"], "planned checker")["report"])),
         "repeatability report",
     )
+    _require_passing_repeatability_report(report, "repeatability report")
     baseline = _load_json(
         staging_root / "preflight-baseline.json", "preflight baseline"
     )

@@ -158,6 +158,13 @@ path를 재사용한다. 따라서 “완전한 filesystem/OS cache cold start�
 `passed`가 아니면 runner도 nonzero로 종료한다. 성공 시 `completion.json`에
 report SHA-256를 기록한다.
 
+Checker v2는 `throughput_cv_max=0.05`를 warm cell에만 적용한다. Cold는 각
+independent run에 첫 request 한 번만 있으므로 throughput CV를 진단 통계로
+계속 보고하되 gate로 쓰지 않는다. Cold pass/fail은
+`cold_model_load_p50_cv_max=0.10`, peak VRAM 상대 범위, failure count와 token
+identity가 결정한다. Runner와 finalizer는
+`contract_version=rustinfer.repeatability.v2`인 passing report만 허용한다.
+
 `--finalize-to`는 선택 사항이며 gate가 완전히 통과한 뒤에만 동작한다.
 destination은 기존에 없는 `benchmarks/results/<id>` 한 단계 경로여야 한다.
 id는 `<YYYYMMDDTHHMMSSZ>-<implementation-id>-repeatability-<run-id>` 형식이고

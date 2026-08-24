@@ -109,6 +109,11 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - peak VRAM
 - failure count
 
+반복성 Gate A에서 처리량 CV 5% 상한은 30회 measured trial의 run 내부 p50을
+계산하는 `warm` cell에만 적용한다. Warmup 없이 첫 request 한 번만 기록하는
+`cold` cell의 처리량 CV는 진단값으로 보존하고, cold pass/fail은 model load
+CV 10%, peak VRAM 상대 범위 1%, failure count 0과 token identity로 판정한다.
+
 ## 결과 schema의 공통 필드
 
 모든 benchmark row 또는 run metadata에는 다음을 기록한다.

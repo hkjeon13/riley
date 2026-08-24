@@ -9,6 +9,11 @@ SHA-256 values for `model.safetensors`, `config.json`, `merges.txt`,
 `special_tokens_map.json`, `tokenizer.json`, `tokenizer_config.json`, and
 `vocab.json`, plus the canonical aggregate tokenizer hash.
 
+Gate A applies the 5% throughput CV threshold only to warm cells. A cold cell
+still reports throughput CV as a diagnostic, while its gate is based on model
+load CV, peak VRAM, failures, and token identity; one first-request observation
+per fresh process is not treated as a stable within-run throughput p50.
+
 The adapter sets `VLLM_USE_FLASHINFER_SAMPLER=0` before importing vLLM. This
 selects vLLM's non-JIT PyTorch sampling path so the pinned lane does not depend
 on a host CUDA toolkit or `nvcc`. A conflicting inherited value is rejected.

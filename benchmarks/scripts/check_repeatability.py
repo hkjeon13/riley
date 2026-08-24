@@ -48,6 +48,7 @@ CANONICAL_PYTHON_VERSION = "3.13.15"
 CANONICAL_PYTHON_LINUX_X86_64_SHA256 = (
     "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866"
 )
+REPORT_CONTRACT_VERSION = "rustinfer.repeatability.v2"
 
 
 class InputError(ValueError):
@@ -735,20 +736,6 @@ def _evaluate_cell(
                     "peak_vram_max_relative_range": peak_range,
                 }
             )
-            result["checks"].extend(
-                [
-                    _check(
-                        "throughput_cv_max",
-                        throughput_cv,
-                        thresholds["throughput_cv_max"],
-                    ),
-                    _check(
-                        "peak_vram_relative_range_max",
-                        peak_range,
-                        thresholds["peak_vram_relative_range_max"],
-                    ),
-                ]
-            )
             if key[3] == "warm":
                 p50_cv = sample_cv(item["end_to_end_ms"]["r7_p50"] for item in summaries)
                 p95_cv = sample_cv(item["end_to_end_ms"]["r7_p95"] for item in summaries)
@@ -776,11 +763,28 @@ def _evaluate_cell(
                 )
                 result["checks"].extend(
                     [
+                        _check(
+                            "throughput_cv_max",
+                            throughput_cv,
+                            thresholds["throughput_cv_max"],
+                        ),
+                        _check(
+                            "peak_vram_relative_range_max",
+                            peak_range,
+                            thresholds["peak_vram_relative_range_max"],
+                        ),
                         _check("warm_p50_cv_max", p50_cv, thresholds["warm_p50_cv_max"]),
                         _check("warm_p95_cv_max", p95_cv, thresholds["warm_p95_cv_max"]),
                     ]
                 )
             else:
+                result["checks"].append(
+                    _check(
+                        "peak_vram_relative_range_max",
+                        peak_range,
+                        thresholds["peak_vram_relative_range_max"],
+                    )
+                )
                 load_cv = sample_cv(
                     item["model_load_ms"]["r7_p50"] for item in summaries
                 )
@@ -825,7 +829,9 @@ def _definitions() -> dict[str, str]:
         ),
         "throughput": (
             "within each run and cell, compute R7 p50 of successful-trial "
-            "metrics.output_tokens_per_second"
+            "metrics.output_tokens_per_second; report its sample CV for every cell, "
+            "but apply throughput_cv_max only to warm cells because a cold run has "
+            "one diagnostic first-request observation"
         ),
         "cold_model_load": (
             "within each run and cold cell, compute R7 p50 of successful-trial "
@@ -857,7 +863,7 @@ def evaluate(
     """Return a JSON-serializable repeatability report."""
 
     report: dict[str, Any] = {
-        "contract_version": "rustinfer.repeatability.v1",
+        "contract_version": REPORT_CONTRACT_VERSION,
         "status": "error",
         "passed": False,
         "definitions": _definitions(),
@@ -977,7 +983,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.output.write_text(rendered + "\n", encoding="utf-8")
         except OSError as error:
             fallback = {
-                "contract_version": "rustinfer.repeatability.v1",
+                "contract_version": REPORT_CONTRACT_VERSION,
                 "status": "error",
                 "passed": False,
                 "errors": [f"cannot write report {args.output}: {error}"],

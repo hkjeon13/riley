@@ -243,6 +243,10 @@ class RepeatabilityGateTests(unittest.TestCase):
 
             self.assertTrue(report["passed"], report)
             self.assertEqual(report["status"], "passed")
+            self.assertEqual(
+                report["contract_version"],
+                check_repeatability.REPORT_CONTRACT_VERSION,
+            )
             self.assertEqual(len(report["cells"]), 2)
             by_state = {
                 cell["workload"]["warm_state"]: cell for cell in report["cells"]
@@ -273,6 +277,27 @@ class RepeatabilityGateTests(unittest.TestCase):
             self.assertIn(
                 "cold_model_load_r7_p50_sample_cv", by_state["cold"]["statistics"]
             )
+            self.assertIn(
+                "throughput_p50_sample_cv", by_state["cold"]["statistics"]
+            )
+            self.assertEqual(
+                {check["name"] for check in by_state["warm"]["checks"]},
+                {
+                    "throughput_cv_max",
+                    "peak_vram_relative_range_max",
+                    "warm_p50_cv_max",
+                    "warm_p95_cv_max",
+                    "failure_count_max",
+                },
+            )
+            self.assertEqual(
+                {check["name"] for check in by_state["cold"]["checks"]},
+                {
+                    "peak_vram_relative_range_max",
+                    "cold_model_load_p50_cv_max",
+                    "failure_count_max",
+                },
+            )
 
             stdout = io.StringIO()
             with contextlib.redirect_stdout(stdout):
@@ -286,6 +311,67 @@ class RepeatabilityGateTests(unittest.TestCase):
                 )
             self.assertEqual(exit_code, 0)
             self.assertTrue(json.loads(stdout.getvalue())["passed"])
+
+    def test_cold_throughput_outlier_is_reported_but_not_gated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = RepeatabilityFixture(Path(directory))
+            for row in fixture.rows:
+                if row["run_id"] == "run-4" and row["warm_state"] == "cold":
+                    metrics = row["metrics"]
+                    assert isinstance(metrics, dict)
+                    metrics["output_tokens_per_second"] = float(
+                        metrics["output_tokens_per_second"]
+                    ) / 4.0
+            fixture.write_rows()
+
+            report = check_repeatability.evaluate(
+                fixture.matrix_path,
+                [fixture.trials_path],
+                allow_noncanonical_matrix=True,
+            )
+
+            self.assertTrue(report["passed"], report)
+            cold = next(
+                cell
+                for cell in report["cells"]
+                if cell["workload"]["warm_state"] == "cold"
+            )
+            self.assertGreater(
+                cold["statistics"]["throughput_p50_sample_cv"],
+                fixture.matrix["repeatability_gate"]["thresholds"][
+                    "throughput_cv_max"
+                ],
+            )
+            self.assertNotIn(
+                "throughput_cv_max", {check["name"] for check in cold["checks"]}
+            )
+
+    def test_cold_model_load_outlier_still_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = RepeatabilityFixture(Path(directory))
+            for row in fixture.rows:
+                if row["run_id"] == "run-4" and row["warm_state"] == "cold":
+                    metrics = row["metrics"]
+                    assert isinstance(metrics, dict)
+                    metrics["model_load_ms"] = float(metrics["model_load_ms"]) * 4.0
+            fixture.write_rows()
+
+            report = check_repeatability.evaluate(
+                fixture.matrix_path,
+                [fixture.trials_path],
+                allow_noncanonical_matrix=True,
+            )
+
+            self.assertFalse(report["passed"])
+            cold = next(
+                cell
+                for cell in report["cells"]
+                if cell["workload"]["warm_state"] == "cold"
+            )
+            failed_checks = {
+                check["name"] for check in cold["checks"] if not check["passed"]
+            }
+            self.assertEqual(failed_checks, {"cold_model_load_p50_cv_max"})
 
     def test_rows_outside_exact_gate_cells_fail_instead_of_being_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

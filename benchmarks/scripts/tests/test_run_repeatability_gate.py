@@ -219,7 +219,13 @@ trials = [item for item in args if item.endswith("raw.jsonl")]
 with Path(os.environ["FAKE_EVENT_LOG"]).open("a", encoding="utf-8") as stream:
     stream.write(json.dumps({"stage": "checker", "trial_count": len(trials)}) + "\n")
 passed = os.environ.get("FAKE_CHECKER_PASS", "1") == "1"
-output.write_text(json.dumps({"status": "passed" if passed else "failed", "passed": passed}) + "\n")
+output.write_text(json.dumps({
+    "contract_version": os.environ.get(
+        "FAKE_CHECKER_CONTRACT_VERSION", "rustinfer.repeatability.v2"
+    ),
+    "status": "passed" if passed else "failed",
+    "passed": passed,
+}) + "\n")
 print("checker stdout")
 print("checker stderr", file=sys.stderr)
 raise SystemExit(0 if passed else 31)
@@ -544,6 +550,13 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             self.assertNotIn(REPOSITORY_ROOT, project_environment.parents)
             self.assertEqual(fake_events[-1]["trial_count"], 20)
             self.assertTrue((output / "repeatability-report.json").is_file())
+            report = json.loads(
+                (output / "repeatability-report.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                report["contract_version"],
+                runner.EXPECTED_REPEATABILITY_REPORT_CONTRACT,
+            )
             self.assertTrue((output / "completion.json").is_file())
             baseline = json.loads(
                 (output / "preflight-baseline.json").read_text(encoding="utf-8")
@@ -829,10 +842,34 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             report = json.loads(
                 (output / "repeatability-report.json").read_text(encoding="utf-8")
             )
-            self.assertEqual(report, {"status": "failed", "passed": False})
+            self.assertEqual(
+                report,
+                {
+                    "contract_version": "rustinfer.repeatability.v2",
+                    "status": "failed",
+                    "passed": False,
+                },
+            )
             failure = json.loads((output / "failure.json").read_text(encoding="utf-8"))
             self.assertEqual(failure["stage"], "checker")
             self.assertEqual(failure["returncode"], 31)
+
+    def test_passing_v1_checker_report_is_rejected_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fakes = FakePrograms(root)
+            output = root / "artifacts"
+            environment = fakes.environment(
+                FAKE_CHECKER_CONTRACT_VERSION="rustinfer.repeatability.v1"
+            )
+            with mock.patch.dict(os.environ, environment, clear=False):
+                returncode = runner.main(fakes.argv(output))
+
+            self.assertEqual(returncode, 1)
+            failure = json.loads((output / "failure.json").read_text(encoding="utf-8"))
+            self.assertEqual(failure["stage"], "checker-report")
+            self.assertIn("contract_version", failure["message"])
+            self.assertFalse((output / "completion.json").exists())
 
     def test_preparation_failure_is_preserved_before_measurement(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
