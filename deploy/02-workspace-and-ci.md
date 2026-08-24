@@ -109,18 +109,19 @@ GPU runner가 준비되기 전에는 로컬 명령과 nightly/manual workflow만
 
 - CUDA C++ compile smoke
 - C ABI link smoke
-- device test
-- kernel correctness
+- device test — PR 03으로 연기; PR 02의 device 호출 비범위와 일치
+- kernel correctness — PR 03 smoke kernel부터 시작; PR 02에서는 실행하지 않음
 - benchmark는 PR merge 필수가 아니라 결과 artifact로 보존
 
 ### Python reference 선택
 
 별도 optional job으로만 실행한다.
 
-- pinned Python environment
-- PyTorch/Transformers reference fixture 생성
-- artifact provenance 검사
-- 생성 artifact를 Rust가 Python 없이 읽는 integration test
+- pinned Python environment의 model-free fake-backend 검사
+- PyTorch/Transformers reference fixture 생성과 provenance 검사는 PR 01의 canonical
+  remote artifact를 사용하며 이 PR에서는 재실행하지 않음
+- 생성 artifact를 Rust가 Python 없이 읽는 integration test는 loader를 구현하는
+  PR 05로 연기
 
 ### Python-free release smoke
 
