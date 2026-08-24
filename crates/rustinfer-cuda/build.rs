@@ -1,5 +1,6 @@
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -77,6 +78,8 @@ fn build_native_cuda() -> Result<(), String> {
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
     run(&mut configure, "configure the native CUDA library")?;
 
+    let cudart_link_dir = discover_dynamic_cudart(&build_dir, profile, &toolkit)?;
+
     let mut build = Command::new(&cmake);
     build
         .arg("--build")
@@ -109,13 +112,85 @@ fn build_native_cuda() -> Result<(), String> {
         "cargo:rustc-link-search=native={}",
         native_lib_dir.display()
     );
+    println!(
+        "cargo:rustc-link-search=native={}",
+        cudart_link_dir.display()
+    );
     println!("cargo:rustc-link-lib=static=rustinfer_cuda_native");
+    // nvcc emits fatbinary registration calls even for the PR 02 host-only
+    // `.cu` translation unit. Use the toolkit's shared CUDA Runtime both to
+    // satisfy those symbols and to preserve the runtime strategy needed by
+    // later host-runtime PRs. The release environment must provide cudart.
+    println!("cargo:rustc-link-lib=dylib=cudart");
     Ok(())
 }
 
 struct CudaToolkit {
     root: PathBuf,
     nvcc: PathBuf,
+}
+
+fn discover_dynamic_cudart(
+    build_dir: &Path,
+    profile: &str,
+    toolkit: &CudaToolkit,
+) -> Result<PathBuf, String> {
+    let metadata = build_dir.join(format!("rustinfer-cuda-cudart-{profile}.path"));
+    let contents = fs::read_to_string(&metadata).map_err(|error| {
+        format!(
+            "CMake did not produce CUDA Runtime link metadata at {}: {error}; ensure the selected toolkit includes the cudart development library",
+            metadata.display()
+        )
+    })?;
+    let linker_path = contents.trim();
+    if linker_path.is_empty() || linker_path.lines().count() != 1 {
+        return Err(format!(
+            "invalid CUDA Runtime link metadata in {}: expected one non-empty path",
+            metadata.display()
+        ));
+    }
+
+    let linker_path = PathBuf::from(linker_path);
+    if !linker_path.is_absolute() || !linker_path.is_file() {
+        return Err(format!(
+            "CMake selected CUDA Runtime linker file {}, but it is not an absolute existing file",
+            linker_path.display()
+        ));
+    }
+
+    let canonical_linker = linker_path.canonicalize().map_err(|error| {
+        format!(
+            "cannot resolve CUDA Runtime linker file {}: {error}",
+            linker_path.display()
+        )
+    })?;
+    if !canonical_linker.starts_with(&toolkit.root) {
+        return Err(format!(
+            "CMake selected CUDA Runtime {} outside the nvcc toolkit root {}; clear the CMake cache and select one CUDA toolkit",
+            canonical_linker.display(),
+            toolkit.root.display()
+        ));
+    }
+
+    let link_dir = linker_path.parent().ok_or_else(|| {
+        format!(
+            "CUDA Runtime linker file {} has no parent directory",
+            linker_path.display()
+        )
+    })?;
+    let expected_linker = link_dir.join(dynamic_cudart_filename());
+    if !expected_linker.is_file() {
+        return Err(format!(
+            "CUDA Runtime development linker file {} is missing; install the complete CUDA toolkit rather than a runtime-only package",
+            expected_linker.display()
+        ));
+    }
+
+    println!(
+        "cargo:warning=rustinfer-cuda: CUDA Runtime strategy=shared linker={}",
+        expected_linker.display()
+    );
+    Ok(link_dir.to_path_buf())
 }
 
 fn discover_cuda_toolkit() -> Result<CudaToolkit, String> {
@@ -341,6 +416,16 @@ fn static_library_filename() -> &'static str {
         "rustinfer_cuda_native.lib"
     } else {
         "librustinfer_cuda_native.a"
+    }
+}
+
+fn dynamic_cudart_filename() -> &'static str {
+    if cfg!(windows) {
+        "cudart.lib"
+    } else if cfg!(target_os = "macos") {
+        "libcudart.dylib"
+    } else {
+        "libcudart.so"
     }
 }
 

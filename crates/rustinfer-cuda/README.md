@@ -17,6 +17,11 @@ architectures and runtime device capability remain separate concepts.
   commas or semicolons, for example `80;89`. It defaults to `89` and is printed
   in the Cargo build log. Runtime-dependent `native` is intentionally rejected.
 - `CMAKE` may select a non-default CMake executable.
+- The native archive deliberately links the toolkit-selected shared CUDA
+  Runtime (`cudart`). CMake writes the exact linker-file location and the Cargo
+  build validates that it resolves beneath the same toolkit as `nvcc`; no
+  toolkit library path is hardcoded. A release environment must provide the
+  matching shared CUDA Runtime, such as an NVIDIA CUDA runtime container.
 
 The native link smoke is:
 

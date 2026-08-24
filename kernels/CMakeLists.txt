@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.22)
 
 project(rustinfer_cuda_native VERSION 0.1.0 LANGUAGES CUDA)
 
+find_package(CUDAToolkit REQUIRED)
+
 if(NOT CMAKE_CUDA_ARCHITECTURES)
     message(FATAL_ERROR
         "CMAKE_CUDA_ARCHITECTURES must contain explicit AOT compile targets")
@@ -19,6 +21,16 @@ target_include_directories(rustinfer_cuda_native
 )
 
 target_compile_features(rustinfer_cuda_native PUBLIC cuda_std_17)
+
+# Static archives do not carry transitive linker directives into Cargo. Keep
+# the CMake dependency accurate and emit the toolkit-selected shared cudart
+# linker file for build.rs to validate and forward explicitly.
+target_link_libraries(rustinfer_cuda_native PRIVATE CUDA::cudart)
+
+file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-cudart-$<CONFIG>.path"
+    CONTENT "$<TARGET_LINKER_FILE:CUDA::cudart>\n"
+)
 
 set_target_properties(rustinfer_cuda_native PROPERTIES
     CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"
