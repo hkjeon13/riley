@@ -95,6 +95,16 @@ cargo test \
     --test host_runtime_gpu \
     --no-run
 
+# Lint the complete CUDA-enabled Rust surface, including the ignored GPU test
+# target, without executing a device operation in this compile-only image.
+cargo clippy \
+    --locked \
+    --package rustinfer-cuda \
+    --all-targets \
+    --no-default-features \
+    --features cuda \
+    -- -D warnings
+
 version_output=$(run_host_metadata target/release/rustinfer --version)
 printf '%s\n' "$version_output"
 printf '%s\n' "$version_output" | grep -Eiq 'rustinfer.*0\.1\.0'

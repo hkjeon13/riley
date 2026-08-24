@@ -5,8 +5,15 @@ use rustinfer_cuda::{
     CudaRuntime, CudaStream, DeviceProperties,
 };
 
+const LEAK_TOLERANCE_BYTES: u64 = 64 * 1024 * 1024;
+
 fn assert_send<T: Send>() {}
 fn assert_sync<T: Sync>() {}
+
+fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
+    let expected_bits = expected.to_bits();
+    values.iter().all(|value| value.to_bits() == expected_bits)
+}
 
 fn first_device() -> Result<(CudaRuntime, CudaDevice), Box<dyn Error>> {
     let runtime = CudaRuntime::initialize()?;
@@ -88,7 +95,7 @@ fn two_stream_event_ordering_is_explicit() -> Result<(), Box<dyn Error>> {
     consumer.synchronize()?;
     assert!(ready.query()?);
     let values = pending.finish()?;
-    assert!(values.iter().all(|value| *value == 3.5));
+    assert!(all_f32_bits_equal(&values, 3.5));
 
     let second_context = device.create_context()?;
     let foreign_event = second_context.create_event()?;
@@ -115,7 +122,7 @@ fn async_fill_is_correct_after_sync() -> Result<(), Box<dyn Error>> {
     let mut stream = context.create_stream()?;
     let values = kernel.launch_fill(&mut stream, 65_537, -7.25)?.finish()?;
     assert_eq!(values.len(), 65_537);
-    assert!(values.iter().all(|value| *value == -7.25));
+    assert!(all_f32_bits_equal(&values, -7.25));
     let overflow = match kernel.launch_fill(&mut stream, u64::MAX, 0.0) {
         Ok(pending) => {
             drop(pending);
@@ -146,7 +153,7 @@ fn invalid_launch_reports_launch_stage() -> Result<(), Box<dyn Error>> {
     ));
 
     let values = kernel.launch_fill(&mut stream, 1_024, 2.0)?.finish()?;
-    assert!(values.iter().all(|value| *value == 2.0));
+    assert!(all_f32_bits_equal(&values, 2.0));
     stream.close()?;
     drop(kernel);
     close_context(context)
@@ -208,7 +215,7 @@ fn repeated_create_drop_has_no_resource_leak() -> Result<(), Box<dyn Error>> {
         let values = iteration_kernel
             .launch_fill(&mut stream, 4_096, 0.25)?
             .finish()?;
-        assert_eq!(values[0], 0.25);
+        assert_eq!(values[0].to_bits(), 0.25_f32.to_bits());
         event.record(&mut stream)?;
         event.synchronize()?;
         event.close()?;
@@ -222,10 +229,9 @@ fn repeated_create_drop_has_no_resource_leak() -> Result<(), Box<dyn Error>> {
         "rustinfer-cuda-leak-smoke iterations={iterations} before_free_bytes={before_free_bytes} after_free_bytes={after_free_bytes}"
     );
     assert_eq!(total_bytes, after_total_bytes);
-    const TOLERANCE_BYTES: u64 = 64 * 1024 * 1024;
     assert!(
-        after_free_bytes.saturating_add(TOLERANCE_BYTES) >= before_free_bytes,
-        "free device memory dropped by more than {TOLERANCE_BYTES} bytes"
+        after_free_bytes.saturating_add(LEAK_TOLERANCE_BYTES) >= before_free_bytes,
+        "free device memory dropped by more than {LEAK_TOLERANCE_BYTES} bytes"
     );
     drop(kernel);
     let live_child = context.create_stream()?;

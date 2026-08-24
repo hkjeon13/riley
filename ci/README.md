@@ -63,9 +63,10 @@ not runtime device behavior. The container gate records or checks:
 2. locked release build plus the plan's exact root command
    `cargo build --release --features cuda,server`;
 3. the host-only C ABI link test and ABI version 1;
-4. `rustinfer --version` reporting the linked CUDA ABI;
-5. a clear failure for an explicit nonexistent CUDA toolkit root; and
-6. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
+4. CUDA feature-on `rustinfer-cuda` Clippy across all targets with warnings denied;
+5. `rustinfer --version` reporting the linked CUDA ABI;
+6. a clear failure for an explicit nonexistent CUDA toolkit root; and
+7. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
    Transformers, or Triton runtime dependency.
 
 PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
