@@ -37,7 +37,7 @@
       "additionalProperties": false,
       "required": ["gate_id", "model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_sha256", "tokenizer_files_sha256", "dtype", "attention_backend", "tensor_capture_cache_path", "log_prob_pipeline", "trust_remote_code", "max_context_tokens", "eos_token_ids", "semantic_generation_steps", "cross_cache_exact_window", "top_k", "oracle_reduction_variant", "required_candidate_reduction_variants"],
       "properties": {
-        "gate_id": { "const": "smollm2-fp32-bf16-native-e0-v1" },
+        "gate_id": { "const": "smollm2-fp32-bf16-native-e0-v2" },
         "model_id": { "const": "HuggingFaceTB/SmolLM2-135M" },
         "model_revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
         "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },

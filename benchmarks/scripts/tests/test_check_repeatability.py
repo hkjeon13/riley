@@ -38,8 +38,8 @@ class RepeatabilityFixture:
                 "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
             },
             "correctness_gate": {
-                "gate_id": "smollm2-fp32-bf16-native-e0-v1",
-                "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+                "gate_id": "smollm2-fp32-bf16-native-e0-v2",
+                "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
             },
             "lane_manifests": ["benchmarks/lanes/hf-transformers.json"],
             "allowed_semantic_classes": ["reference", "E0"],

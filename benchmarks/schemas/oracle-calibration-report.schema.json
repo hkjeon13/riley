@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": { "const": "1.0.0" },
     "report_kind": { "const": "hf-oracle-calibration" },
-    "gate_id": { "const": "smollm2-hf-fp32-bf16-calibration-v1" },
+    "gate_id": { "const": "smollm2-hf-fp32-bf16-calibration-v2" },
     "created_at": { "type": "string", "format": "date-time" },
     "status": { "enum": ["pass", "fail"] },
     "e0_candidate_evidence": { "const": false },
@@ -131,9 +131,9 @@
     },
     "thresholdSet": {
       "const": {
-        "first_layer_hidden": { "max_abs_max": 0.3, "mean_abs_max": 0.0085, "max_relative_max": 0.09, "mean_relative_max": 0.0055, "cosine_min": 0.99998 },
-        "final_logits": { "max_abs_max": 5.6, "mean_abs_max": 1.15, "max_relative_max": 1.0, "mean_relative_max": 0.125, "cosine_min": 0.999 },
-        "final_log_probs": { "max_abs_max": 4.8, "mean_abs_max": 0.6, "max_relative_max": 0.56, "mean_relative_max": 0.047, "cosine_min": 0.9988 }
+        "first_layer_hidden": { "max_abs_max": 0.3884272575378418, "mean_abs_max": 0.008509292567237658, "max_relative_max": 0.13578447438776492, "mean_relative_max": 0.005414661057131772, "cosine_min": 0.999983706829855 },
+        "final_logits": { "max_abs_max": 5.852936458587647, "mean_abs_max": 1.151280319263363, "max_relative_max": 1.1707394897937775, "mean_relative_max": 0.13616598220459955, "cosine_min": 0.9979035305495393 },
+        "final_log_probs": { "max_abs_max": 4.998420619964599, "mean_abs_max": 0.6007178144163239, "max_relative_max": 0.5767027348279953, "mean_relative_max": 0.04668832837569344, "cosine_min": 0.9987779663298298 }
       }
     }
   }

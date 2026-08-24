@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
@@ -211,7 +212,7 @@ class CalibrationFixture:
         self._write_sources()
         self._initialize_git_history()
         self.contract_base = {
-            "gate_id": "smollm2-fp32-bf16-native-e0-v1",
+            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
             "model_id": MODEL_ID,
             "model_revision": MODEL_REVISION,
             "config_sha256": MODEL_CONFIG_SHA256,
@@ -280,7 +281,7 @@ class CalibrationFixture:
         self._write("benchmarks/matrix.yaml", b"matrix-v1\n")
         self._write("benchmarks/prompts.jsonl", self.source_prompts)
         self._write(
-            "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+            "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
             json.dumps(gate_contract_document(), sort_keys=True).encode("utf-8"),
         )
         self._write("benchmarks/environment.md", b"environment-v1\n")
@@ -596,6 +597,63 @@ class CalibrationTests(unittest.TestCase):
             changed = dict(metrics)
             changed["mean_abs"] += 1e-12
             self.assertFalse(metrics_pass(changed, threshold), tensor_name)
+
+    def test_v2_thresholds_are_exact_uniform_15_percent_headroom(self) -> None:
+        activation = gate_contract_document()["numeric"]["threshold_activation"]
+        observed = activation["calibration_evidence"][
+            "observed_aggregate_metrics"
+        ]
+        scale = Decimal("1.15")
+        upper_metrics = {
+            "max_abs": "max_abs_max",
+            "mean_abs": "mean_abs_max",
+            "max_relative": "max_relative_max",
+            "mean_relative": "mean_relative_max",
+        }
+        for tensor_name, recorded in observed.items():
+            threshold = CALIBRATION_THRESHOLDS[tensor_name]
+            for metric_name, threshold_name in upper_metrics.items():
+                expected = float(
+                    Decimal(str(recorded[metric_name])) * scale
+                )
+                self.assertEqual(threshold[threshold_name], expected)
+            cosine = Decimal(str(recorded["cosine_similarity"]))
+            expected_cosine = float(Decimal(1) - (Decimal(1) - cosine) * scale)
+            self.assertEqual(threshold["cosine_min"], expected_cosine)
+
+    def test_v1_manifest_and_report_cannot_activate_v2_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CalibrationFixture(Path(directory))
+            fp32, fp32_path = fixture.make(FP32_ORACLE_KIND)
+            bf16, bf16_path = fixture.make(BF16_ORACLE_KIND)
+
+            v1_manifest = copy.deepcopy(fp32)
+            v1_manifest["contract"]["gate_id"] = (
+                "smollm2-fp32-bf16-native-e0-v1"
+            )
+            with self.assertRaisesRegex(CalibrationError, "contract.gate_id"):
+                validate_calibration_manifest(v1_manifest)
+
+            report = compare_hf_oracles(
+                fp32_manifest=fp32,
+                fp32_manifest_path=fp32_path,
+                bf16_manifest=bf16,
+                bf16_manifest_path=bf16_path,
+                repo_root=fixture.root,
+                created_at=FIXED_TIME,
+                sidecar_loader=fixture.loader,
+            )
+            report["gate_id"] = "smollm2-hf-fp32-bf16-calibration-v1"
+            with self.assertRaisesRegex(CalibrationError, "oracle_report.gate_id"):
+                replay_validate_oracle_report(
+                    report=report,
+                    fp32_manifest=fp32,
+                    fp32_manifest_path=fp32_path,
+                    bf16_manifest=bf16,
+                    bf16_manifest_path=bf16_path,
+                    repo_root=fixture.root,
+                    sidecar_loader=fixture.loader,
+                )
 
     def test_chunked_tensor_metrics_match_scalar_definition(self) -> None:
         reference = [0.0, 0.5, -2.0, 4.0, -0.25]

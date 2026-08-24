@@ -66,7 +66,7 @@ REFERENCE_FIXTURE_SOURCE_PATHS = {
     "prompts": "benchmarks/prompts.jsonl",
     "environment": "benchmarks/environment.md",
     "lane_manifest": "benchmarks/lanes/hf-transformers.json",
-    "correctness_gate": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+    "correctness_gate": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
     "prompt_schema": "benchmarks/schemas/prompt.schema.json",
     "fixture_schema": "benchmarks/schemas/reference-fixture.schema.json",
     "contract_validator": "benchmarks/scripts/validate_contract.py",
@@ -124,6 +124,69 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def validate_threshold_calibration_evidence(
+    root: Path,
+    correctness_gate: dict[str, Any],
+    gate_path: Path,
+) -> None:
+    evidence = correctness_gate["numeric"]["threshold_activation"][
+        "calibration_evidence"
+    ]
+    evidence_path = f"{gate_path}.numeric.threshold_activation.calibration_evidence"
+    relative_report_path = Path(evidence["report_path"])
+    if relative_report_path.is_absolute():
+        _error(f"{evidence_path}.report_path", "must be repository-relative")
+    report_path = (root / relative_report_path).resolve()
+    if root not in report_path.parents or not report_path.is_file():
+        _error(
+            f"{evidence_path}.report_path",
+            "missing or repository-external calibration report",
+        )
+    _expect(
+        report_path.stat().st_size,
+        evidence["report_size_bytes"],
+        f"{evidence_path}.report_size_bytes",
+    )
+    _expect(
+        _sha256(report_path),
+        evidence["report_sha256"],
+        f"{evidence_path}.report_sha256",
+    )
+
+    report = _read_json(report_path)
+    _expect(report["report_kind"], "hf-oracle-calibration", str(report_path))
+    _expect(report["gate_id"], evidence["report_gate_id"], str(report_path))
+    _expect(report["status"], evidence["report_status"], str(report_path))
+    _expect(report["e0_candidate_evidence"], False, str(report_path))
+    _expect(
+        report["bindings"]["git_revision"],
+        evidence["git_revision"],
+        f"{report_path}.bindings.git_revision",
+    )
+    summary = report["summary"]
+    _expect(summary["case_count"], evidence["case_count"], str(report_path))
+    _expect(summary["failure_count"], evidence["failure_count"], str(report_path))
+    _expect(
+        summary["semantic_self_check_pass"],
+        evidence["semantic_self_check_pass"],
+        str(report_path),
+    )
+    _expect(len(report["cases"]), evidence["case_count"], f"{report_path}.cases")
+    _expect(
+        sum(case["pass"] is False for case in report["cases"]),
+        evidence["failure_count"],
+        f"{report_path}.cases",
+    )
+    for tensor_name, expected_metrics in evidence[
+        "observed_aggregate_metrics"
+    ].items():
+        _expect(
+            summary["aggregate_numeric"][tensor_name]["metrics"],
+            expected_metrics,
+            f"{report_path}.summary.aggregate_numeric.{tensor_name}.metrics",
+        )
 
 
 def _exact_keys(value: Any, expected: set[str], path: str) -> None:
@@ -467,8 +530,8 @@ def validate_matrix(matrix: Any, root: Path) -> dict[str, Any]:
     _expect(
         matrix["correctness_gate"],
         {
-            "gate_id": "smollm2-fp32-bf16-native-e0-v1",
-            "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
         },
         f"{path}.correctness_gate",
     )
@@ -1570,6 +1633,11 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
         correctness_gate["model"]["weights_sha256"],
         WEIGHTS_SHA256,
         str(correctness_gate_path),
+    )
+    validate_threshold_calibration_evidence(
+        root,
+        correctness_gate,
+        correctness_gate_path,
     )
 
     lane_paths: dict[str, Path] = {}

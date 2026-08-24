@@ -84,7 +84,7 @@ FIXTURE_SOURCE_PATHS = {
     "prompts": "benchmarks/prompts.jsonl",
     "environment": "benchmarks/environment.md",
     "lane_manifest": "benchmarks/lanes/hf-transformers.json",
-    "correctness_gate": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+    "correctness_gate": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
     "prompt_schema": "benchmarks/schemas/prompt.schema.json",
     "fixture_schema": "benchmarks/schemas/reference-fixture.schema.json",
     "contract_validator": "benchmarks/scripts/validate_contract.py",

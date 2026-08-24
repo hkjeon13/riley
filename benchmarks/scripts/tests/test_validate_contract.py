@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import sys
 import tempfile
@@ -150,6 +151,29 @@ version = "0.27.1"
         with self.assertRaisesRegex(contract.ContractError, "warm_p50_cv_max"):
             contract.validate_matrix(matrix, REPOSITORY_ROOT)
 
+    def test_failed_v1_calibration_report_is_versioned_and_hash_bound(self) -> None:
+        gate_path = (
+            REPOSITORY_ROOT
+            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+        )
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        contract.validate_threshold_calibration_evidence(
+            REPOSITORY_ROOT,
+            gate,
+            gate_path,
+        )
+
+        changed = copy.deepcopy(gate)
+        changed["numeric"]["threshold_activation"]["calibration_evidence"][
+            "report_sha256"
+        ] = "0" * 64
+        with self.assertRaisesRegex(contract.ContractError, "report_sha256"):
+            contract.validate_threshold_calibration_evidence(
+                REPOSITORY_ROOT,
+                changed,
+                gate_path,
+            )
+
     def test_matrix_rejects_cache_scope_or_prime_profile_changes(self) -> None:
         canonical = json.loads(
             (REPOSITORY_ROOT / "benchmarks/matrix.yaml").read_text(encoding="utf-8")
@@ -272,7 +296,7 @@ version = "0.27.1"
         prompts_path = REPOSITORY_ROOT / "benchmarks/prompts.jsonl"
         gate_path = (
             REPOSITORY_ROOT
-            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json"
+            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
         )
         matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
         gate = json.loads(gate_path.read_text(encoding="utf-8"))
@@ -404,7 +428,7 @@ version = "0.27.1"
                 "top_k_comparison": "set-exact",
                 "top_1_comparison": "ordered-exact",
                 "threshold_activation_evidence": (
-                    "replayed-passing-full-31-hf-oracle-calibration-report"
+                    "replayed-passing-full-31-hf-oracle-calibration-report-v2"
                 ),
             },
             "inputs": {

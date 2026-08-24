@@ -52,7 +52,7 @@ from .constants import (
 from .environment import environment_comparability_signature
 
 ORACLE_CALIBRATION_REPORT_KIND = "hf-oracle-calibration"
-ORACLE_CALIBRATION_GATE_ID = "smollm2-hf-fp32-bf16-calibration-v1"
+ORACLE_CALIBRATION_GATE_ID = "smollm2-hf-fp32-bf16-calibration-v2"
 
 
 def _case_map(manifest: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
@@ -354,10 +354,11 @@ def _validate_oracle_report_structure(report: Mapping[str, object]) -> None:
         },
         "oracle_report",
     )
+    if root["gate_id"] != ORACLE_CALIBRATION_GATE_ID:
+        raise CalibrationError("oracle_report.gate_id: immutable mismatch")
     if (
         root["schema_version"] != CALIBRATION_SCHEMA_VERSION
         or root["report_kind"] != ORACLE_CALIBRATION_REPORT_KIND
-        or root["gate_id"] != ORACLE_CALIBRATION_GATE_ID
         or root["e0_candidate_evidence"] is not False
     ):
         raise CalibrationError("oracle_report: identity or E0 role mismatch")

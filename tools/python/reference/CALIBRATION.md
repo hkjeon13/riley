@@ -14,13 +14,15 @@ limit, application graphics/memory clocks, persistence mode, and CPU governor
 profile; drift fails calibration instead of producing a report.
 
 The language-neutral authority is
-`benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json`, validated by
+`benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json`, validated by
 `benchmarks/schemas/correctness-gate.schema.json`. Its gate ID is
-`smollm2-fp32-bf16-native-e0-v1`. The threshold status is an immutable
+`smollm2-fp32-bf16-native-e0-v2`. The original v1 file remains frozen as
+historical evidence and is not referenced by the active matrix or producers.
+The threshold status is an immutable
 condition: a candidate gate requires a passing, raw-sidecar-replayed HF report
-covering all 31 ordered prompts. The gate file is not edited from “pending” to
-“active” after oracle generation; doing that would invalidate its own recorded
-provenance.
+covering all 31 ordered prompts under v2. A v1 manifest or report cannot
+activate v2. The gate file is not edited from “pending” to “active” after
+oracle generation; doing that would invalidate its own recorded provenance.
 
 ## Produce the two HF oracles
 
@@ -86,11 +88,21 @@ does not need to begin with EOS.
 
 ## Activate threshold evidence
 
-The thresholds are conservative ceilings predeclared from a non-activating
-five-prompt RTX 4090 probe. The gate records those observed worst values and
-their headroom explicitly; the probe itself is not activation evidence and the
-ceilings cannot be silently relaxed. A passing full-31 report is the activation
-evidence:
+The v1 full-31 calibration report was reviewed at Git revision
+`8ab7490bfdf9efd1d7c7d831204b8e67c0c7c5b9`. Its raw report SHA-256 is
+`ca13c033af2ddce5cfbf280fc1f4d2f95d0cba0e242bda8c59f2592946cec726`;
+it failed 12 of 31 cases while its semantic self-check passed. It remains
+predeclaration calibration evidence, not activation evidence. The exact 48,625
+byte report is versioned at
+`benchmarks/correctness/evidence/smollm2-fp32-bf16-native-e0-v1-failed-oracle-report.json`;
+the contract validator binds its path, size, SHA-256, report identity, summary,
+and source revision before accepting the v2 gate.
+
+V2 applies one uniform 15% outward margin to every recorded aggregate metric:
+upper bounds are `observed * 1.15`, while cosine lower bounds are
+`1 - (1 - observed) * 1.15`. These values are frozen before the v2 replay.
+Any later data-dependent adjustment requires another gate version. Only an
+independent, passing, raw-sidecar-replayed full-31 v2 report can activate v2:
 
 ```sh
 "$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
@@ -115,12 +127,12 @@ chunks with FP64 scalar sums, rather than expanded into Python-float lists.
 
 | Tensor | max abs | mean abs | max relative | mean relative | cosine |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Full first-layer hidden | 0.30 | 0.0085 | 0.09 | 0.0055 | at least 0.99998 |
-| Final logits | 5.6 | 1.15 | 1.0 | 0.125 | at least 0.9990 |
-| Final log probabilities | 4.8 | 0.60 | 0.56 | 0.047 | at least 0.9988 |
+| Full first-layer hidden | 0.3884272575378418 | 0.008509292567237658 | 0.13578447438776492 | 0.005414661057131772 | at least 0.999983706829855 |
+| Final logits | 5.852936458587647 | 1.151280319263363 | 1.1707394897937775 | 0.13616598220459955 | at least 0.9979035305495393 |
+| Final log probabilities | 4.998420619964599 | 0.6007178144163239 | 0.5767027348279953 | 0.04668832837569344 | at least 0.9987779663298298 |
 
-If the 31-prompt run fails, the output remains a gate failure until a reviewed
-contract revision explains and versions any change. The oracle calibration
+If the 31-prompt v2 run fails, the output remains a gate failure until a
+reviewed, version-bumped contract explains any change. The oracle calibration
 report always contains `e0_candidate_evidence=false`.
 
 ## Native candidate contract

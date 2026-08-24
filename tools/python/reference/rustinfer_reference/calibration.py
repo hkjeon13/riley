@@ -46,7 +46,7 @@ from .environment import (
 )
 
 CALIBRATION_SCHEMA_VERSION = "1.0.0"
-CALIBRATION_GATE_ID = "smollm2-fp32-bf16-native-e0-v1"
+CALIBRATION_GATE_ID = "smollm2-fp32-bf16-native-e0-v2"
 FP32_ORACLE_KIND = "fp32-numeric-oracle"
 BF16_ORACLE_KIND = "bf16-semantic-oracle"
 CANDIDATE_KIND = "candidate"
@@ -93,29 +93,31 @@ REQUIRED_CANDIDATE_REDUCTION_VARIANTS = (
     ALTERNATE_CANDIDATE_REDUCTION_VARIANT,
 )
 
-# Predeclared before the full-corpus run. They become usable for an E0 gate only
-# after a passing, replay-validated 31-prompt HF oracle calibration report.
+# Version 2 was predeclared once from the reviewed, failing full-31 v1 report by
+# applying uniform 15% outward headroom to every observed aggregate metric.
+# It becomes usable for E0 only after an independent, replay-validated passing
+# full-31 v2 HF oracle report; later data-dependent adjustment requires a bump.
 CALIBRATION_THRESHOLDS: dict[str, dict[str, float]] = {
     "first_layer_hidden": {
-        "max_abs_max": 0.30,
-        "mean_abs_max": 0.0085,
-        "max_relative_max": 0.09,
-        "mean_relative_max": 0.0055,
-        "cosine_min": 0.99998,
+        "max_abs_max": 0.3884272575378418,
+        "mean_abs_max": 0.008509292567237658,
+        "max_relative_max": 0.13578447438776492,
+        "mean_relative_max": 0.005414661057131772,
+        "cosine_min": 0.999983706829855,
     },
     "final_logits": {
-        "max_abs_max": 5.6,
-        "mean_abs_max": 1.15,
-        "max_relative_max": 1.0,
-        "mean_relative_max": 0.125,
-        "cosine_min": 0.9990,
+        "max_abs_max": 5.852936458587647,
+        "mean_abs_max": 1.151280319263363,
+        "max_relative_max": 1.1707394897937775,
+        "mean_relative_max": 0.13616598220459955,
+        "cosine_min": 0.9979035305495393,
     },
     "final_log_probs": {
-        "max_abs_max": 4.8,
-        "mean_abs_max": 0.60,
-        "max_relative_max": 0.56,
-        "mean_relative_max": 0.047,
-        "cosine_min": 0.9988,
+        "max_abs_max": 4.998420619964599,
+        "mean_abs_max": 0.6007178144163239,
+        "max_relative_max": 0.5767027348279953,
+        "mean_relative_max": 0.04668832837569344,
+        "cosine_min": 0.9987779663298298,
     },
 }
 
@@ -123,7 +125,7 @@ TENSOR_NAMES = ("first_layer_hidden", "final_logits", "final_log_probs")
 HF_SOURCE_PATHS = {
     "matrix": "benchmarks/matrix.yaml",
     "prompts": "benchmarks/prompts.jsonl",
-    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
     "dependency_lock": "tools/python/reference/uv.lock",
     "python_version_file": "tools/python/reference/.python-version",
     "lane_manifest": "benchmarks/lanes/hf-transformers.json",
@@ -133,7 +135,7 @@ HF_SOURCE_PATHS = {
 NATIVE_SOURCE_PATHS = {
     "matrix": "benchmarks/matrix.yaml",
     "prompts": "benchmarks/prompts.jsonl",
-    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v1.json",
+    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
     "dependency_lock": "Cargo.lock",
     "python_version_file": "tools/python/reference/.python-version",
     "lane_manifest": "benchmarks/lanes/rustinfer-native.json",
@@ -184,36 +186,50 @@ def gate_contract_document() -> dict[str, object]:
             "gate_aggregation": "worst-prompt-metric-and-all-prompts-must-pass",
             "threshold_activation": {
                 "status": "predeclared-requires-passing-full-corpus-oracle-report",
-                "predeclaration_basis": "non-activating-five-prompt-rtx4090-probe-with-conservative-headroom",
-                "probe_prompt_count": 5,
-                "probe_observed_worst": {
-                    "first_layer_hidden": {
-                        "max_abs": 0.270985,
-                        "mean_abs": 0.007399,
-                        "max_relative": 0.078383,
-                        "mean_relative": 0.004708,
-                        "cosine_similarity": 0.9999858,
-                    },
-                    "final_logits": {
-                        "max_abs": 5.08951,
-                        "mean_abs": 1.00111,
-                        "max_relative": 0.89154,
-                        "mean_relative": 0.108706,
-                        "cosine_similarity": 0.9991663,
-                    },
-                    "final_log_probs": {
-                        "max_abs": 4.34645,
-                        "mean_abs": 0.522364,
-                        "max_relative": 0.50148,
-                        "mean_relative": 0.040599,
-                        "cosine_similarity": 0.9989373,
+                "predeclaration_basis": "reviewed-failing-full-31-v1-calibration",
+                "headroom_policy": "uniform-15-percent-outward-from-observed-aggregate",
+                "headroom_formula": "upper=observed*1.15;cosine_min=1-(1-observed)*1.15",
+                "calibration_evidence": {
+                    "gate_id": "smollm2-fp32-bf16-native-e0-v1",
+                    "git_revision": "8ab7490bfdf9efd1d7c7d831204b8e67c0c7c5b9",
+                    "report_gate_id": "smollm2-hf-fp32-bf16-calibration-v1",
+                    "report_path": "benchmarks/correctness/evidence/smollm2-fp32-bf16-native-e0-v1-failed-oracle-report.json",
+                    "report_sha256": "ca13c033af2ddce5cfbf280fc1f4d2f95d0cba0e242bda8c59f2592946cec726",
+                    "report_size_bytes": 48625,
+                    "report_status": "fail",
+                    "case_count": 31,
+                    "failure_count": 12,
+                    "semantic_self_check_pass": True,
+                    "observed_aggregate_metrics": {
+                        "first_layer_hidden": {
+                            "max_abs": 0.33776283264160156,
+                            "mean_abs": 0.007399384841076224,
+                            "max_relative": 0.11807345598936081,
+                            "mean_relative": 0.004708400919245019,
+                            "cosine_similarity": 0.9999858320259609,
+                        },
+                        "final_logits": {
+                            "max_abs": 5.089509963989258,
+                            "mean_abs": 1.0011133210985765,
+                            "max_relative": 1.0180343389511108,
+                            "mean_relative": 0.11840520191704308,
+                            "cosine_similarity": 0.9981769830865559,
+                        },
+                        "final_log_probs": {
+                            "max_abs": 4.346452713012695,
+                            "mean_abs": 0.5223633168837599,
+                            "max_relative": 0.5014806389808655,
+                            "mean_relative": 0.04059854641364647,
+                            "cosine_similarity": 0.998937362025939,
+                        },
                     },
                 },
-                "activation_evidence": "independent-replayed-full-31-corpus-report",
+                "activation_evidence": "independent-replayed-passing-full-31-v2-corpus-report",
                 "required_oracle_report_kind": "hf-oracle-calibration",
+                "required_oracle_gate_id": "smollm2-hf-fp32-bf16-calibration-v2",
                 "required_oracle_case_count": CALIBRATION_PROMPT_COUNT,
                 "required_oracle_report_status": "pass",
-                "failure_policy": "gate-fail-no-silent-threshold-relaxation",
+                "failure_policy": "gate-fail-requires-version-bump-no-data-dependent-adjustment",
             },
             "tensors": {
                 "first_layer_hidden": {
@@ -894,9 +910,10 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
         },
         "manifest.contract",
     )
+    if contract["gate_id"] != CALIBRATION_GATE_ID:
+        raise CalibrationError("manifest.contract.gate_id: immutable mismatch")
     if (
-        contract["gate_id"] != CALIBRATION_GATE_ID
-        or contract["model_id"] != MODEL_ID
+        contract["model_id"] != MODEL_ID
         or contract["model_revision"] != MODEL_REVISION
     ):
         raise CalibrationError("manifest.contract: model identity mismatch")
@@ -1750,7 +1767,7 @@ def compare_calibrations(
             "cross_cache_exact_window": CROSS_CACHE_EXACT_WINDOW,
             "top_k_comparison": "set-exact",
             "top_1_comparison": "ordered-exact",
-            "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report",
+            "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report-v2",
         },
         "inputs": {
             "fp32_manifest_sha256": sha256_file(fp32_manifest_path),
@@ -1921,7 +1938,7 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
         "cross_cache_exact_window": CROSS_CACHE_EXACT_WINDOW,
         "top_k_comparison": "set-exact",
         "top_1_comparison": "ordered-exact",
-        "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report",
+        "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report-v2",
     }:
         raise CalibrationError("report.gate_contract: frozen gate changed")
     inputs = _expect_object(root["inputs"], "report.inputs")
