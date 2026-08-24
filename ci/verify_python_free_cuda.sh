@@ -18,8 +18,11 @@ done
 test "$CUDA_HOME" = "$CUDAToolkit_ROOT"
 test -x "$CUDA_HOME/bin/nvcc"
 
-rustc --version | grep -Eq '^rustc 1\.85\.0 '
-cargo --version | grep -Eq '^cargo 1\.85\.0 '
+rustc_version=$(rustc --version)
+cargo_version=$(cargo --version)
+printf '%s\n' "$rustc_version" "$cargo_version"
+printf '%s\n' "$rustc_version" | grep -Eq '^rustc 1\.85\.0 '
+printf '%s\n' "$cargo_version" | grep -Eq '^cargo 1\.85\.0 '
 uname -m | grep -Eq '^x86_64$'
 "$CUDA_HOME/bin/nvcc" --version
 
