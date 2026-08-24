@@ -464,19 +464,23 @@ impl ContextHandle {
     }
 
     pub(super) fn allocation_stats(&self) -> CudaResult<NativeAllocationStats> {
-        let mut stats = RawAllocationStats::new();
+        let mut allocation_snapshot = RawAllocationStats::new();
         let mut error = ErrorInfo::new();
         // SAFETY: the live context and correctly sized repr(C) output remain
         // valid for the complete synchronous native snapshot.
-        let status = unsafe {
-            rustinfer_cuda_context_allocation_stats(self.as_ptr(), &mut stats, &mut error)
+        let call_status = unsafe {
+            rustinfer_cuda_context_allocation_stats(
+                self.as_ptr(),
+                &mut allocation_snapshot,
+                &mut error,
+            )
         };
-        status_result(status, "query CUDA allocation stats", &error)?;
+        status_result(call_status, "query CUDA allocation stats", &error)?;
         Ok(NativeAllocationStats {
-            device_live_bytes: stats.device_live_bytes,
-            device_live_allocations: stats.device_live_allocations,
-            pinned_host_live_bytes: stats.pinned_host_live_bytes,
-            pinned_host_live_allocations: stats.pinned_host_live_allocations,
+            device_live_bytes: allocation_snapshot.device_live_bytes,
+            device_live_allocations: allocation_snapshot.device_live_allocations,
+            pinned_host_live_bytes: allocation_snapshot.pinned_host_live_bytes,
+            pinned_host_live_allocations: allocation_snapshot.pinned_host_live_allocations,
         })
     }
 

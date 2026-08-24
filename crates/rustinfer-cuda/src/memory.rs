@@ -289,8 +289,8 @@ impl CudaDeviceBuffer {
                 inner: PendingCopy {
                     native,
                     _stream: stream,
-                    _device: self,
-                    _host: source,
+                    device: self,
+                    host: source,
                     released: byte_len == 0,
                     abandoned: false,
                 },
@@ -354,8 +354,8 @@ impl CudaDeviceBuffer {
                 inner: PendingCopy {
                     native,
                     _stream: stream,
-                    _device: self,
-                    _host: destination,
+                    device: self,
+                    host: destination,
                     released: byte_len == 0,
                     abandoned: false,
                 },
@@ -573,8 +573,10 @@ struct PendingCopy<'copy> {
     #[cfg(feature = "cuda")]
     native: Option<ffi::CopyHandle>,
     _stream: &'copy mut CudaStream,
-    _device: &'copy mut CudaDeviceBuffer,
-    _host: &'copy mut CudaPinnedHostBuffer,
+    #[cfg(feature = "cuda")]
+    device: &'copy mut CudaDeviceBuffer,
+    #[cfg(feature = "cuda")]
+    host: &'copy mut CudaPinnedHostBuffer,
     released: bool,
     abandoned: bool,
 }
@@ -646,7 +648,7 @@ impl PendingCopy<'_> {
             ));
         };
         let close_result = native.close();
-        release_buffers(&self._device.use_state, &self._host.use_state);
+        release_buffers(&self.device.use_state, &self.host.use_state);
         self.released = true;
         self.native = None;
         match outcome.result {
