@@ -145,9 +145,12 @@ locally built GPU image ID.
 
 Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat the same ignored target
 serially under `compute-sanitizer --tool memcheck --leak-check full`. Its output
-is captured as `compute-sanitizer-memcheck.log` and must report zero errors.
-This optional pass is also exposed as the manual workflow input
-`run_compute_sanitizer`.
+is captured as `compute-sanitizer-memcheck.log` and must report zero memory or
+leak errors. The seven-test target deliberately exercises one invalid launch;
+`--report-api-errors no` prevents that expected, already-asserted CUDA API
+status from polluting memcheck's error summary without suppressing memory-access
+or allocation-leak findings. This optional pass is also exposed as the manual
+workflow input `run_compute_sanitizer`.
 
 The GitHub GPU job is disabled unless a manual dispatch explicitly selects
 `run_gpu_tests`. It targets only `[self-hosted, linux, x64, rustinfer-gpu]`, so

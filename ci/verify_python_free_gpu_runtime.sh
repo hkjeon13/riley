@@ -263,6 +263,7 @@ if [ "$sanitizer_enabled" -eq 1 ]; then
     if ! compute-sanitizer \
         --tool memcheck \
         --leak-check full \
+        --report-api-errors no \
         --error-exitcode 86 \
         "$test_binary" \
         --ignored \
