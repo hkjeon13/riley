@@ -833,6 +833,8 @@ class VllmBackend:
         self._observability_sampler.start()
         started = timer()
         request_ids: list[str] = []
+        internal_request_ids: dict[str, str] = {}
+        observed_internal_ids: set[str] = set()
         arrivals: dict[str, float] = {}
         token_ids: dict[str, list[int]] = {}
         token_times: dict[str, list[float]] = {}
@@ -852,12 +854,14 @@ class VllmBackend:
                     params=sampling_params,
                     arrival_time=engine_arrival,
                 )
-                if not isinstance(actual_id, str) or actual_id in arrivals:
+                if not isinstance(actual_id, str) or actual_id in observed_internal_ids:
                     raise AdapterError("LLMEngine.add_request returned an invalid ID")
-                request_ids.append(actual_id)
-                arrivals[actual_id] = arrival
-                token_ids[actual_id] = []
-                token_times[actual_id] = []
+                request_ids.append(request_id)
+                internal_request_ids[request_id] = actual_id
+                observed_internal_ids.add(actual_id)
+                arrivals[request_id] = arrival
+                token_ids[request_id] = []
+                token_times[request_id] = []
 
             while self._engine.has_unfinished_requests():
                 step_outputs = self._engine.step()
@@ -907,7 +911,11 @@ class VllmBackend:
             if set(final_outputs) != set(request_ids):
                 raise AdapterError("vLLM engine stopped before every request finished")
         except BaseException:
-            pending = [request_id for request_id in request_ids if request_id not in final_outputs]
+            pending = [
+                internal_request_ids[request_id]
+                for request_id in request_ids
+                if request_id not in final_outputs
+            ]
             try:
                 if pending:
                     self._engine.abort_request(pending, internal=True)

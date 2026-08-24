@@ -126,6 +126,7 @@ class FakeLLMEngine:
         self.calls: list[list[dict[str, object]]] = []
         self.abort_calls: list[tuple[list[str], bool]] = []
         self.emit_multiple_tokens = False
+        self.assign_internal_request_ids = False
 
     def add_request(
         self,
@@ -151,6 +152,8 @@ class FakeLLMEngine:
             "step": 0,
             "generated": 0,
         }
+        if self.assign_internal_request_ids:
+            return f"{request_id}-internal-uuid"
         return request_id
 
     def has_unfinished_requests(self) -> bool:
@@ -506,6 +509,19 @@ class AdapterTests(unittest.TestCase):
         self.assertGreater(llm.calls[0][0]["arrival_time"], 1_000_000_000)
         self.assertLess(measurement.requests[0].ttft_seconds, 1.0)
 
+    def test_internal_engine_ids_are_distinct_from_external_output_ids(self) -> None:
+        backend, llm, _, _ = make_backend()
+        llm.llm_engine.assign_internal_request_ids = True
+        token_rows = backend.materialize_token_ids(("seed", "other"), prompt_tokens=4)
+        measurement = backend.generate_batch(
+            token_rows, max_new_tokens=2, timer=StepTimer(step=0.01)
+        )
+        self.assertEqual(len(measurement.requests), 2)
+        self.assertEqual(
+            [call["request_id"] for call in llm.calls[0]],
+            ["rustinfer-1-0", "rustinfer-1-1"],
+        )
+
     def test_engine_timing_sanity_rejects_duration_later_than_host(self) -> None:
         with self.assertRaisesRegex(AdapterError, "engine TTFT"):
             _validate_engine_timing_sanity(
@@ -597,6 +613,7 @@ class AdapterTests(unittest.TestCase):
     def test_multi_token_delta_is_rejected_and_pending_requests_are_aborted(self) -> None:
         backend, llm, _, _ = make_backend()
         llm.llm_engine.emit_multiple_tokens = True
+        llm.llm_engine.assign_internal_request_ids = True
         token_rows = backend.materialize_token_ids(("seed", "other"), prompt_tokens=4)
         with self.assertRaisesRegex(AdapterError, "multiple or zero tokens"):
             backend.generate_batch(
@@ -605,7 +622,13 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(llm.llm_engine.engine_core.shutdown_calls, 1)
         self.assertEqual(len(llm.llm_engine.abort_calls), 1)
         aborted, internal = llm.llm_engine.abort_calls[0]
-        self.assertEqual(len(aborted), 2)
+        self.assertEqual(
+            aborted,
+            [
+                "rustinfer-1-0-internal-uuid",
+                "rustinfer-1-1-internal-uuid",
+            ],
+        )
         self.assertTrue(internal)
 
     def test_snapshot_hash_verification_binds_weights_config_and_tokenizer(self) -> None:
