@@ -59,3 +59,30 @@ The repository's Python-free GPU evidence workflow, sanitizer mode, and
 required environment variables are described in
 [`../../ci/README.md`](../../ci/README.md). None of these tests loads a model or
 runs inference.
+
+## Safe lifecycle example
+
+Build this example with the `cuda` feature and run it only on an authorized
+CUDA host. `finish` synchronizes the originating stream before copying results
+to host. Close child resources before explicitly closing the retained context
+lease so every destruction error remains observable.
+
+```rust,no_run
+use rustinfer_cuda::{CudaResult, CudaRuntime};
+
+fn main() -> CudaResult<()> {
+    let runtime = CudaRuntime::initialize()?;
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let kernel = context.kernel();
+    let mut stream = context.create_stream()?;
+
+    let values = kernel.launch_fill(&mut stream, 1_024, 1.25)?.finish()?;
+    assert_eq!(values.len(), 1_024);
+
+    stream.close()?;
+    drop(kernel);
+    context.close()?;
+    Ok(())
+}
+```
