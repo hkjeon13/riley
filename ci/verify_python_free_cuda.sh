@@ -85,6 +85,12 @@ cat "$readelf_log"
 nm -D --undefined-only target/release/rustinfer >"$nm_log"
 cat "$nm_log"
 
+if grep -Eiq '=>[[:space:]]+not found' "$ldd_log"; then
+    echo "production artifact has an unresolved shared-library dependency" >&2
+    exit 1
+fi
+grep -Eiq 'libcudart\.so' "$ldd_log" "$readelf_log"
+
 if grep -Eiq 'python|pytorch|torch|transformers|triton' \
     "$ldd_log" "$readelf_log" "$nm_log" Cargo.lock
 then

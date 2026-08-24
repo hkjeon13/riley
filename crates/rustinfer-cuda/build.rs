@@ -164,6 +164,15 @@ fn discover_dynamic_cudart(
             linker_path.display()
         )
     })?;
+    if linker_path
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+    {
+        return Err(format!(
+            "CMake selected CUDA Runtime linker file {} from a stubs directory; select the real shared CUDA Runtime development library",
+            linker_path.display()
+        ));
+    }
     if !canonical_linker.starts_with(&toolkit.root) {
         return Err(format!(
             "CMake selected CUDA Runtime {} outside the nvcc toolkit root {}; clear the CMake cache and select one CUDA toolkit",
