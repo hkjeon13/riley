@@ -209,6 +209,7 @@ driver `580.173.02`, Linux `6.8.0-138-generic` 환경이며 Docker build에는 �
 
 ```text
 source commit:       4c017b6
+archive command:     git archive --format=tar.gz --output=source.tar.gz 4c017b6
 source archive sha:  335c8e85f8e3be666843db8ed3c0fc0aaa8d3b2d1f58e54472de6e6c20997b07
 Rust image amd64:    rust:1.85.0-bookworm@sha256:16a7f242108de02f10fe4a392991679bafa7694e59f5b40a54d5af1be9b40d03
 CUDA image amd64:    nvidia/cuda:12.8.1-devel-ubuntu22.04@sha256:6617a625f4090c76c545a0e7d63f2e441718ef9af7f4efe7dd1242a29e289fd7
