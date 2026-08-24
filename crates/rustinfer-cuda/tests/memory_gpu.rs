@@ -46,8 +46,10 @@ fn allocation_accounting_returns_to_zero() -> Result<(), Box<dyn Error>> {
     device_buffer.close()?;
     pinned_buffer.close()?;
     let closed = context.allocation_stats()?;
+    // Libtest writes the test name before captured output without first ending
+    // the line. Keep the evidence marker on its own exact line.
     println!(
-        "rustinfer-cuda-memory-accounting device_live_bytes={} device_live_allocations={} pinned_host_live_bytes={} pinned_host_live_allocations={}",
+        "\nrustinfer-cuda-memory-accounting device_live_bytes={} device_live_allocations={} pinned_host_live_bytes={} pinned_host_live_allocations={}",
         closed.device_live_bytes(),
         closed.device_live_allocations(),
         closed.pinned_host_live_bytes(),
