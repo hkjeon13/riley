@@ -1,3 +1,5 @@
+use crate::{ModelError, ModelResult};
+
 /// Explicit allocation and complexity bounds for untrusted model artifacts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LoadLimits {
@@ -29,8 +31,8 @@ impl LoadLimits {
             shards: 256,
             tensors: 100_000,
             tensor_rank: 16,
-            shard_bytes: 32 * 1024 * 1024 * 1024,
-            total_weight_bytes: 1024 * 1024 * 1024 * 1024,
+            shard_bytes: 512 * 1024 * 1024,
+            total_weight_bytes: 512 * 1024 * 1024,
             vocabulary_entries: 1_000_000,
             merges: 2_000_000,
             added_tokens: 65_536,
@@ -114,10 +116,65 @@ impl LoadLimits {
     pub const fn added_tokens(self) -> usize {
         self.added_tokens
     }
+
+    /// Returns limits with an explicit resident weight-memory budget.
+    ///
+    /// PR05 retains every validated shard in memory. Raising this budget is an
+    /// explicit operational decision until a later file-backed loader replaces
+    /// the owned-read implementation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when either bound is zero, one shard could exceed the
+    /// total resident budget, or the total cannot be represented by `usize`.
+    pub fn with_weight_byte_limits(
+        mut self,
+        shard_bytes: u64,
+        total_weight_bytes: u64,
+    ) -> ModelResult<Self> {
+        if shard_bytes == 0 || total_weight_bytes == 0 || shard_bytes > total_weight_bytes {
+            return Err(ModelError::InvalidConfig {
+                field: "load_limits.weight_bytes".to_owned(),
+                reason:
+                    "bounds must be positive and shard_bytes must not exceed total_weight_bytes"
+                        .to_owned(),
+            });
+        }
+        usize::try_from(total_weight_bytes).map_err(|_| ModelError::NumericOverflow {
+            field: "load_limits.total_weight_bytes".to_owned(),
+        })?;
+        self.shard_bytes = shard_bytes;
+        self.total_weight_bytes = total_weight_bytes;
+        Ok(self)
+    }
 }
 
 impl Default for LoadLimits {
     fn default() -> Self {
         Self::production()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LoadLimits;
+
+    #[test]
+    fn weight_budget_is_checked_and_explicit() {
+        let limits = LoadLimits::default()
+            .with_weight_byte_limits(1024, 2048)
+            .unwrap();
+        assert_eq!(limits.shard_bytes(), 1024);
+        assert_eq!(limits.total_weight_bytes(), 2048);
+        assert!(
+            LoadLimits::default()
+                .with_weight_byte_limits(2048, 1024)
+                .is_err()
+        );
+        assert!(
+            LoadLimits::default()
+                .with_weight_byte_limits(0, 1024)
+                .is_err()
+        );
     }
 }
