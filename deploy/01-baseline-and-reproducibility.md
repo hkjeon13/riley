@@ -8,7 +8,7 @@
 
 ## 목적
 
-코드를 쓰기 전에 비교 대상, 하드웨어, 모델, 입력 corpus, 정확도 기준과 성능 지표를 고정한다.
+코드를 쓰기 전에 비교 대상, 하드웨어, 모델, 입력 corpus, 정확도 기준과 성능 지표를 고정한다. 이후 추가되는 exact 변환, 분포 보존 알고리즘과 근사 최적화가 같은 기준선에서 평가되도록 결과 schema도 먼저 정의한다.
 
 ## 핵심 결정
 
@@ -55,6 +55,8 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 | Output tokens | 32, 128 |
 | Sampling | greedy 우선, 이후 고정 seed sampling |
 | 상태 | cold load, warm steady-state 분리 |
+| Approximation | 초기에는 `disabled` |
+| Semantic class | reference 또는 `E0`만 초기 release 대상 |
 
 기록 지표:
 
@@ -67,6 +69,46 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - GPU utilization
 - peak VRAM
 - failure count
+
+## 결과 schema의 공통 필드
+
+모든 benchmark row 또는 run metadata에는 다음을 기록한다.
+
+```yaml
+semantic_class: reference | E0 | E1 | A1 | M1
+implementation_id: string
+reference_implementation: string
+approximation_enabled: bool
+error_budget: null | number
+seed: null | integer
+warm_state: cold | warm
+model_revision: string
+engine_revision: string
+```
+
+최적화별 추가 필드는 nullable하게 둔다.
+
+```yaml
+speculative:
+  draft_model: null
+  lookahead: null
+  acceptance_rate: null
+  accepted_tokens_per_verify: null
+  target_calls_per_output_token: null
+
+sparse_attention:
+  selected_pages: null
+  total_pages: null
+  omitted_mass_bound: null
+
+quantization:
+  weight_format: null
+  activation_format: null
+  kv_format: null
+  calibration_revision: null
+```
+
+초기 baseline에서는 이 필드들이 비어 있어도 되지만 schema는 변경 이력을 남긴다.
 
 ## Golden correctness corpus
 
@@ -87,12 +129,16 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - 최종 logits 일부와 통계
 - greedy generated token IDs
 - KV cache on/off 결과
+- sampling에 사용하는 변환 후 logits 또는 log-probability fixture
+- request별 RNG 초기 상태와 알고리즘 ID
 
 전체 대형 tensor를 Git에 넣지 말고, 작은 fixture와 생성 스크립트를 둔다.
 
-## 정확도 기준
+## 의미 보존 등급별 정확도 기준
 
 단일 scalar tolerance만 두지 않는다.
+
+### Reference와 `E0`
 
 - FP32 reference 대비 max/mean absolute error
 - relative error
@@ -100,8 +146,61 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - top-k token set 일치
 - greedy token exact match
 - 여러 step 후 divergence 시점
+- reduction partition 또는 merge 순서를 바꾼 결과
 
-허용 오차는 dtype과 연산별로 사전에 기록한다.
+### `E1`
+
+- greedy mode에서는 exact token match
+- request별 RNG 격리와 snapshot/restore 재현
+- acceptance probability와 residual sampling unit test
+- 작은 categorical distribution의 exhaustive probability test
+- 대규모 sampling의 frequency, total variation 또는 적절한 goodness-of-fit 통계
+- output token당 draft/target 호출 수
+
+고정 seed의 token sequence가 다른 구현과 반드시 같다는 뜻과 목표 분포가 같다는 뜻을 구분해서 보고한다.
+
+### `A1`
+
+- error budget 또는 approximation parameter 공개
+- exact reference 대비 logits/token/quality 차이
+- error-quality-latency curve
+- exact fallback 결과
+- approximation 사용률과 fallback 비율
+- task 또는 corpus 품질 지표
+
+KV page pruning처럼 omitted probability mass만 제한하는 경우, 그 수치를 attention output의 절대 오차와 동일하다고 표현하지 않는다. output norm bound가 필요하면 value norm에 대한 별도 상한을 포함한다.
+
+허용 오차와 통계 threshold는 dtype·연산·등급별로 사전에 기록한다.
+
+## 추가 최적화 지표
+
+### Speculative decoding
+
+- draft latency
+- verification latency
+- draft length
+- acceptance rate
+- accepted tokens per verification
+- target model calls per output token
+- rejected suffix 길이
+- rollback count
+
+### Query-aware page selection
+
+- total/selected KV pages
+- page metadata bytes
+- page upper-bound 계산 시간
+- omitted softmax mass bound
+- exact fallback 비율
+- long-context TPOT와 품질 변화
+
+### 저정밀·등가변환
+
+- transform-only full precision parity
+- quantization 전후 error
+- rotation/scaling runtime overhead
+- weight/KV bytes
+- GEMM throughput과 end-to-end latency
 
 ## 산출물
 
@@ -112,6 +211,8 @@ benchmarks/
 ├── prompts.jsonl
 ├── reference/
 ├── scripts/
+├── schemas/
+│   └── result.schema.json
 └── results/.gitkeep
 ```
 
@@ -121,7 +222,9 @@ benchmarks/
 - custom CUDA kernel
 - 최적화 주장
 - multi-GPU
-- quantization
+- quantization 실행
+- speculative decoding 실행
+- approximate attention 실행
 
 ## 완료 기준
 
@@ -129,7 +232,8 @@ benchmarks/
 - [ ] baseline 실행 명령 재현 가능
 - [ ] benchmark matrix 파일화
 - [ ] golden corpus와 reference 생성 절차 문서화
-- [ ] raw 결과 schema 정의
+- [ ] 의미 보존 등급을 포함한 raw result schema 정의
+- [ ] RNG 알고리즘과 seed 기록 방식 정의
 - [ ] 같은 환경에서 baseline 반복 실행 편차 확인
 
 **중단 조건:** benchmark 결과가 반복 실행마다 크게 흔들리면 다음 PR로 가지 않고 환경 안정화부터 수행한다.

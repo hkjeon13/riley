@@ -33,6 +33,9 @@
 ## 비범위
 의도적으로 하지 않는 것은 무엇인가?
 
+## 의미 보존 등급
+E0, E1, A1, M1 중 무엇이며 왜 그런가?
+
 ## 설계 결정
 대안과 선택 이유는 무엇인가?
 
@@ -46,6 +49,68 @@
 문제가 생기면 어떤 flag/commit/interface로 되돌리는가?
 ```
 
+## 수학적 최적화의 의미 보존 등급
+
+수학적 치환, 확률적 가속, 근사 알고리즘은 동일한 검증 기준을 사용할 수 없다. 관련 PR은 반드시 다음 등급 중 하나를 선언한다.
+
+### `E0` — Exact algebraic transformation
+
+실수 연산에서는 동일하고, 차이는 floating-point 계산 순서에서만 발생하는 변환이다.
+
+예:
+
+- online softmax
+- associative partial reduction
+- residual과 norm의 합법적인 fusion
+- 대각·직교 좌표변환을 quantization 이전 full precision에서 적용
+
+필수 검증:
+
+- reference parity
+- 극단값과 여러 reduction 순서
+- dtype별 tolerance
+- token-level 회귀
+
+### `E1` — Distribution-preserving stochastic algorithm
+
+실행 경로와 RNG 소비량은 달라질 수 있지만 목표 sampling distribution을 보존하는 알고리즘이다.
+
+예:
+
+- rejection sampling으로 보정된 speculative decoding
+
+필수 검증:
+
+- 수락·거절 공식과 residual distribution 구현 검토
+- request별 RNG 격리와 snapshot/restore
+- greedy 경로 exact match
+- sampling distribution에 대한 통계 검정
+- 고정 seed 결과의 정의와 문서화
+
+### `A1` — Bounded approximation
+
+출력이 원본과 달라질 수 있으나 명시적인 error budget 또는 품질 예산으로 제어하는 근사다.
+
+예:
+
+- omitted softmax mass 상한을 이용한 KV page pruning
+- 저랭크 weight 또는 KV 압축
+- quantized inference
+
+필수 검증:
+
+- 근사 파라미터와 단위 공개
+- exact fallback
+- error/quality와 latency의 curve
+- feature flag와 기본값
+- 사용자 응답 또는 metric에서 근사 사용 여부 식별
+
+### `M1` — Model-changing method
+
+재학습, distillation, calibration 또는 architecture 변경이 필요한 방법이다.
+
+이 등급은 기본 inference runtime PR에 섞지 않고 별도 연구 트랙으로 둔다.
+
 ## Merge 필수 조건
 
 - [ ] `cargo fmt --check`
@@ -56,6 +121,10 @@
 - [ ] CUDA 호출 추가 시 오류와 stream semantics 검증
 - [ ] allocation 추가 시 lifetime과 ownership 설명
 - [ ] 성능 주장 시 before/after raw result 첨부
+- [ ] 최적화 PR은 `E0`·`E1`·`A1`·`M1` 중 하나를 선언
+- [ ] `E0`은 reference parity와 수치 안정성 결과 첨부
+- [ ] `E1`은 분포 보존 근거와 RNG 검증 첨부
+- [ ] `A1`은 error budget, exact fallback, opt-in flag 첨부
 - [ ] 범위를 벗어난 후속 과제는 issue 또는 다음 deploy 문서에 남김
 
 ## Correctness 우선 원칙
@@ -64,16 +133,18 @@
 
 ```text
 Reference implementation
-        ↓ parity
+        ↓ parity or distribution contract
 Optimized backend
-        ↓ parity
-Fused/custom kernel
+        ↓ parity, error budget, or statistical validation
+Fused/custom/approximate path
 ```
 
 다음은 금지한다.
 
 - reference 없이 처음부터 fused kernel 작성
 - 허용 오차를 결과에 맞춰 사후 확대
+- 근사 알고리즘을 exact optimization처럼 표현
+- 분포 보존 알고리즘을 소수 prompt의 token 일치만으로 검증
 - 한두 번의 최저 latency만 제시
 - 다른 dtype, batch, prompt 길이로 엔진 비교
 - warm/cold 결과 혼합
@@ -91,6 +162,9 @@ Fused/custom kernel
 - median, p95, 가능하면 p99
 - TTFT, TPOT/ITL, throughput, VRAM
 - profiler trace 또는 raw CSV 위치
+- 의미 보존 등급
+- 근사 또는 speculative parameter
+- exact/reference fallback 결과
 
 ## `unsafe` 정책
 
@@ -106,17 +180,21 @@ Fused/custom kernel
 
 ```text
 reference
-optimized
-experimental-fused
+optimized-exact
+experimental-distribution-preserving
+experimental-approximate
 ```
 
 회귀 발생 시 runtime flag 또는 compile feature로 reference path를 선택할 수 있어야 한다. 안정화 후에만 이전 path 제거를 검토한다.
+
+`A1` path는 명시적인 정책 결정 전까지 기본값이 될 수 없다. `E1` path도 exact greedy와 분포 검증이 완료되기 전에는 기본값으로 승격하지 않는다.
 
 ## 완료 기준
 
 - [ ] PR 템플릿 또는 동등한 문서가 저장소에 존재
 - [ ] benchmark 결과 저장 위치가 합의됨
 - [ ] unsafe/FFI 검토 규칙이 명시됨
+- [ ] 의미 보존 등급과 등급별 검증 방식이 합의됨
 - [ ] 단계 문서의 승인 기준을 merge gate로 사용하기로 합의
 
 [목차](README.md) | [다음 →](01-baseline-and-reproducibility.md)
