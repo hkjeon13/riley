@@ -29,7 +29,7 @@ target_link_libraries(rustinfer_cuda_native PRIVATE CUDA::cudart)
 
 file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-cudart-$<CONFIG>.path"
-    CONTENT "$<TARGET_LINKER_FILE:CUDA::cudart>\n"
+    CONTENT "$<TARGET_FILE:CUDA::cudart>\n"
 )
 
 set_target_properties(rustinfer_cuda_native PROPERTIES
