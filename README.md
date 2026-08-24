@@ -4,6 +4,8 @@
 
 > Project status: design / early prototype
 
+Implementation follows the numbered [deployment plan](deploy/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR, validation, benchmark, and `unsafe`/FFI review contract.
+
 ## 1. Vision
 
 `rustinfer` aims to build a lightweight, high-performance LLM inference engine with a different emphasis from general-purpose engines such as vLLM, SGLang, or TensorRT-LLM.

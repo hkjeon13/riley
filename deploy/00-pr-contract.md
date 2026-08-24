@@ -1,6 +1,7 @@
 # PR 00 — 작업·리뷰 계약
 
-**상태:** Planned  
+**상태:** Active
+
 **선행 조건:** 없음  
 **다음:** [PR 01 — 기준선과 재현성](01-baseline-and-reproducibility.md)
 
@@ -149,7 +150,9 @@ Fused/custom/approximate path
 - 다른 dtype, batch, prompt 길이로 엔진 비교
 - warm/cold 결과 혼합
 
-## 성능 보고 최소 항목
+## 성능 보고 계약
+
+End-to-end 성능 주장에는 다음 항목을 기록한다.
 
 - GPU 모델과 compute capability
 - CPU, RAM, OS
@@ -165,6 +168,10 @@ Fused/custom/approximate path
 - 의미 보존 등급
 - 근사 또는 speculative parameter
 - exact/reference fallback 결과
+
+Version-controlled raw 결과는 `benchmarks/results/<YYYYMMDDTHHMMSSZ>-<implementation-id>-<workload>-<run-id>/`에 append-only로 저장한다. 디렉터리별 필수 파일, end-to-end와 microbenchmark의 scope별 필드, 대형 artifact 보존 방식과 비교 가능성 규칙은 [`benchmarks/README.md`](../benchmarks/README.md)를 따른다.
+
+Microbenchmark는 공통 환경·revision·의미 등급과 operation/shape/layout/backend별 측정값을 기록하고, 적용되지 않는 end-to-end 필드는 `null`과 이유를 남긴다. Microbenchmark 결과만으로 end-to-end 개선을 주장하지 않는다.
 
 ## `unsafe` 정책
 
@@ -191,10 +198,12 @@ experimental-approximate
 
 ## 완료 기준
 
-- [ ] PR 템플릿 또는 동등한 문서가 저장소에 존재
-- [ ] benchmark 결과 저장 위치가 합의됨
-- [ ] unsafe/FFI 검토 규칙이 명시됨
-- [ ] 의미 보존 등급과 등급별 검증 방식이 합의됨
-- [ ] 단계 문서의 승인 기준을 merge gate로 사용하기로 합의
+- [x] PR 템플릿 또는 동등한 문서가 저장소에 존재
+- [x] benchmark 결과 저장 위치가 합의됨
+- [x] unsafe/FFI 검토 규칙이 명시됨
+- [x] 의미 보존 등급과 등급별 검증 방식이 합의됨
+- [x] 단계 문서의 승인 기준을 merge gate로 사용하기로 합의
+
+구현 artifact는 [PR 템플릿](../.github/pull_request_template.md), [기여 계약](../CONTRIBUTING.md), [benchmark artifact 계약](../benchmarks/README.md)이다. 이 단계는 merge 전까지 `Active`, merge 후 `Complete`로 전환한다.
 
 [목차](README.md) | [다음 →](01-baseline-and-reproducibility.md)
