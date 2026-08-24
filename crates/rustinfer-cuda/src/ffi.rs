@@ -898,9 +898,6 @@ impl CopyHandle {
     ) -> CudaResult<Option<Self>> {
         match (NonNull::new(pointer), byte_len) {
             (None, 0) => Ok(None),
-            (Some(pointer), byte_len) if byte_len != 0 => Ok(Some(Self {
-                pointer: Some(pointer),
-            })),
             (None, _) => Err(missing_output(operation, "native copy token is null")),
             (Some(pointer), 0) => {
                 let mut unexpected = Self {
@@ -916,6 +913,9 @@ impl CopyHandle {
                     "native returned a token for a zero-byte copy",
                 ))
             }
+            (Some(pointer), _) => Ok(Some(Self {
+                pointer: Some(pointer),
+            })),
         }
     }
 
