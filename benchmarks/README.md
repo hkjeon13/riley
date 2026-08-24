@@ -30,6 +30,10 @@ End-to-end 결과에는 model/checkpoint revision, dtype/quantization, batch/con
 
 `raw.csv` 또는 `raw.jsonl`에는 집계 전 반복 측정값을 둔다. `metadata.json`에는 측정 환경과 공통 조건을 기계가 읽을 수 있게 기록한다. `README.md`에는 결과 요약, 알려진 편차, 비교 가능 여부를 적는다.
 PR 01 repeatability bundle은 외부 staging에서 dependency/cache preparation과 20개 measured subprocess를 끝낸 뒤에만 import한다. metadata/README에는 offline cache root, prime commands/logs, post-prime fingerprint와 각 measured invocation의 cache 불변 증거를 함께 보존한다. 이 bundle의 cold는 process/model-state cold이며 OS와 immutable disk/compile cache cold가 아니다.
+Preparation 전/후의 전체 cache entry 목록은 deterministic
+`cache.inventory.{before,after}.json.gz`로 보존한다. JSON은 UTF-8, key 정렬,
+compact separator와 trailing newline을 사용하고 gzip은 level 9와 `mtime=0`을
+고정한다. 압축 해제한 내용이 cache inventory v1 증거의 원문이다.
 
 대형 profiler trace, checkpoint, model weight, 전체 tensor dump, 실행 binary는 Git에 넣지 않는다. 외부 artifact store를 사용하고 결과 README에 URI, 크기, SHA-256 checksum, 보존 기간을 기록한다. secret, credential, 사용자 prompt나 개인정보가 포함된 raw artifact는 저장하지 않는다.
 

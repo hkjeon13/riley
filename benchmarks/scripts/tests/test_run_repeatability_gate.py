@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -310,6 +311,23 @@ class FakePrograms:
 
 
 class RepeatabilityRunnerTests(unittest.TestCase):
+    def test_gzip_json_artifact_is_deterministic_and_round_trips(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            value = {"z": [3, 2, 1], "a": {"unicode": "재현성"}}
+            first = root / "first.json.gz"
+            second = root / "second.json.gz"
+
+            runner._write_new_gzip_json(first, value)
+            runner._write_new_gzip_json(second, value)
+
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(first.read_bytes()[4:8], b"\x00\x00\x00\x00")
+            self.assertEqual(
+                json.loads(gzip.decompress(first.read_bytes()).decode("utf-8")),
+                value,
+            )
+
     def test_sensitive_runtime_and_preflight_overrides_are_rejected(self) -> None:
         environment = {
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
@@ -466,6 +484,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             plan = json.loads(
                 (output / "execution-plan.json").read_text(encoding="utf-8")
             )
+            self.assertEqual(plan["contract_version"], runner.RUNNER_CONTRACT_VERSION)
             self.assertEqual(plan["invocation_count"], 20)
             self.assertEqual(plan["cells_per_run"], 4)
             self.assertEqual(plan["independent_runs"], 5)
@@ -558,6 +577,12 @@ class RepeatabilityRunnerTests(unittest.TestCase):
                 runner.EXPECTED_REPEATABILITY_REPORT_CONTRACT,
             )
             self.assertTrue((output / "completion.json").is_file())
+            completion = json.loads(
+                (output / "completion.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                completion["contract_version"], runner.RUNNER_CONTRACT_VERSION
+            )
             baseline = json.loads(
                 (output / "preflight-baseline.json").read_text(encoding="utf-8")
             )
@@ -572,9 +597,25 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             preparation = json.loads(
                 (output / "preparation/summary.json").read_text(encoding="utf-8")
             )
+            self.assertEqual(
+                preparation["contract_version"], runner.PREPARATION_CONTRACT_VERSION
+            )
             self.assertEqual(len(preparation["prime_invocations"]), 3)
             self.assertTrue(preparation["prime_results_excluded_from_checker"])
             self.assertTrue(preparation["python_evidence"]["same_binary_sha256"])
+            self.assertEqual(
+                preparation["cache_inventory_artifact"]["contract_version"],
+                runner.CACHE_INVENTORY_ARTIFACT_CONTRACT,
+            )
+            for key in ("cache_inventory_before", "cache_inventory_after"):
+                inventory_path = Path(plan["preparation"][key])
+                self.assertEqual(inventory_path.suffixes[-2:], [".json", ".gz"])
+                self.assertFalse(inventory_path.with_suffix("").exists())
+                with gzip.open(inventory_path, "rt", encoding="utf-8") as stream:
+                    inventory = json.load(stream)
+                self.assertEqual(
+                    inventory["contract_version"], "rustinfer.cache-inventory.v1"
+                )
             self.assertEqual(
                 plan["reproducibility_environment"]["allowlisted_values"]
                 ["HF_HUB_OFFLINE"],
@@ -1034,6 +1075,21 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             )
             self.assertGreater(manifest["file_count_excluding_this_manifest"], 80)
             self.assertEqual(manifest["destination"], str(destination.resolve()))
+            finalized_paths = {
+                item["path"] for item in manifest["files_excluding_this_manifest"]
+            }
+            self.assertIn(
+                "preparation/cache.inventory.before.json.gz", finalized_paths
+            )
+            self.assertIn(
+                "preparation/cache.inventory.after.json.gz", finalized_paths
+            )
+            self.assertNotIn(
+                "preparation/cache.inventory.before.json", finalized_paths
+            )
+            self.assertNotIn(
+                "preparation/cache.inventory.after.json", finalized_paths
+            )
             for item in manifest["files_excluding_this_manifest"]:
                 copied = destination / item["path"]
                 self.assertEqual(copied.stat().st_size, item["bytes"])

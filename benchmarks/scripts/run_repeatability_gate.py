@@ -11,6 +11,7 @@ invocation, and finally delegates statistical evaluation to
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import importlib.util
 import json
@@ -184,6 +185,9 @@ EXPECTED_THRESHOLDS = {
     "failure_count_max": 0,
 }
 EXPECTED_REPEATABILITY_REPORT_CONTRACT = "rustinfer.repeatability.v2"
+RUNNER_CONTRACT_VERSION = "rustinfer.repeatability-runner.v2"
+PREPARATION_CONTRACT_VERSION = "rustinfer.repeatability-preparation.v2"
+CACHE_INVENTORY_ARTIFACT_CONTRACT = "rustinfer.cache-inventory-artifact.v1"
 PRIME_CELLS = EXPECTED_CELLS[:3]
 LANE_PRIME_CELLS = {
     lane_id: PRIME_CELLS for lane_id in SUPPORTED_LANES
@@ -826,6 +830,21 @@ def _write_new_json(path: Path, value: Mapping[str, Any]) -> None:
     _write_new_bytes(path, encoded)
 
 
+def _write_new_gzip_json(path: Path, value: Mapping[str, Any]) -> None:
+    encoded = (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode("utf-8")
+    compressed = gzip.compress(encoded, compresslevel=9, mtime=0)
+    _write_new_bytes(path, compressed)
+
+
 def _append_event(path: Path, value: Mapping[str, Any]) -> None:
     encoded = (
         json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True) + "\n"
@@ -1448,7 +1467,7 @@ def _build_plan(args: argparse.Namespace, output_root: Path) -> dict[str, Any]:
         *raw_results,
     ]
     return {
-        "contract_version": "rustinfer.repeatability-runner.v1",
+        "contract_version": RUNNER_CONTRACT_VERSION,
         "created_at_utc": created_at,
         "repository_root": str(REPOSITORY_ROOT),
         "output_root": str(output_root),
@@ -1557,11 +1576,19 @@ def _build_plan(args: argparse.Namespace, output_root: Path) -> dict[str, Any]:
             },
             "prime_invocations": prime_invocations,
             "cache_inventory_before": str(
-                preparation_root / "cache.inventory.before.json"
+                preparation_root / "cache.inventory.before.json.gz"
             ),
             "cache_inventory_after": str(
-                preparation_root / "cache.inventory.after.json"
+                preparation_root / "cache.inventory.after.json.gz"
             ),
+            "cache_inventory_artifact": {
+                "contract_version": CACHE_INVENTORY_ARTIFACT_CONTRACT,
+                "content_type": "application/json",
+                "encoding": "gzip",
+                "gzip_compresslevel": 9,
+                "gzip_mtime": 0,
+                "json_serialization": "utf8-sort-keys-compact-newline",
+            },
             "summary": str(preparation_root / "summary.json"),
             "python_evidence": str(
                 preparation_root / "python-evidence.json"
@@ -1648,7 +1675,7 @@ def _record_failure(
     returncode: int | None = None,
 ) -> None:
     failure: dict[str, Any] = {
-        "contract_version": "rustinfer.repeatability-runner.v1",
+        "contract_version": RUNNER_CONTRACT_VERSION,
         "recorded_at_utc": _utc_now(),
         "status": "failed",
         "stage": stage,
@@ -1861,7 +1888,7 @@ def _execute_preparation(plan: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     inventory_before = _cache_inventory(reproducibility)
-    _write_new_json(
+    _write_new_gzip_json(
         Path(str(preparation["cache_inventory_before"])), inventory_before
     )
 
@@ -2069,11 +2096,11 @@ def _execute_preparation(plan: Mapping[str, Any]) -> dict[str, Any]:
         )
 
     inventory_after = _cache_inventory(reproducibility)
-    _write_new_json(
+    _write_new_gzip_json(
         Path(str(preparation["cache_inventory_after"])), inventory_after
     )
     summary = {
-        "contract_version": "rustinfer.repeatability-preparation.v1",
+        "contract_version": PREPARATION_CONTRACT_VERSION,
         "status": "passed",
         "completed_at_utc": _utc_now(),
         "policy": preparation["policy"],
@@ -2096,6 +2123,7 @@ def _execute_preparation(plan: Mapping[str, Any]) -> dict[str, Any]:
         "prime_results_excluded_from_checker": True,
         "cache_inventory_before": _cache_inventory_summary(inventory_before),
         "cache_inventory_after": _cache_inventory_summary(inventory_after),
+        "cache_inventory_artifact": preparation["cache_inventory_artifact"],
         "measured_cache_baseline_sha256": inventory_after["aggregate_sha256"],
     }
     _write_new_json(Path(str(preparation["summary"])), summary)
@@ -2378,7 +2406,7 @@ def _execute_plan(plan: Mapping[str, Any]) -> int:
     _write_new_json(
         output_root / "completion.json",
         {
-            "contract_version": "rustinfer.repeatability-runner.v1",
+            "contract_version": RUNNER_CONTRACT_VERSION,
             "completed_at_utc": _utc_now(),
             "status": "passed",
             "report": str(report_path),
@@ -2486,6 +2514,9 @@ fresh process for every distinct repeatability compile/model profile. Those prim
 `preparation/` and excluded from the checker. The external cache roots below
 were reused unchanged by all 20 measured invocations; every invocation stored
 an inventory fingerprint equal to the post-prime baseline.
+The complete before/after entry lists are preserved as deterministic gzip JSON
+at `preparation/cache.inventory.before.json.gz` and
+`preparation/cache.inventory.after.json.gz` (level 9, `mtime=0`).
 
 ```json
 {json.dumps(preparation, ensure_ascii=False, allow_nan=False, indent=2, sort_keys=True)}

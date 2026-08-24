@@ -146,6 +146,10 @@ trial, 전부 success 및 `failure_count=0`인 경우에만 primed로 인정한�
 relative path, file size, mtime과 aggregate SHA-256로 기록한다. post-prime
 fingerprint가 measured baseline이며 20개 invocation 각각 직후 다시 계산해
 조금이라도 달라지면 fetch/JIT cache fill로 보고 fail closed한다.
+전체 entry 목록은 `cache.inventory.{before,after}.json.gz`에 canonical compact
+JSON을 gzip level 9, `mtime=0`으로 압축해 저장한다. 압축은 Git artifact 크기만
+줄이며, summary의 root별 count/bytes/fingerprint와 원본 entry 증거를 모두
+보존한다.
 
 이 계약의 `cold`는 process/model-state cold이다. 모든 independent run은 새
 process에서 model을 새로 load하지만 immutable model/tokenizer, uv wheel, OS
