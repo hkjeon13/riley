@@ -1,4 +1,4 @@
-# PR 02–04 native CI contract
+# PR 02–05 native CI contract
 
 The mandatory lane is CPU-only. Native CUDA compilation is a separate
 nightly/manual lane, the cumulative PR 03 host-runtime and PR 04 memory GPU
@@ -30,8 +30,18 @@ and it is not part of a production artifact. The checker fails closed unless:
 - `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
 - crate edges and feature ownership match `crates/README.md`;
 - every crate inherits `publish = false`;
-- there are no third-party Cargo packages needing license review in PR 02; and
+- the only direct third-party Cargo dependencies are exact-version `serde`,
+  `serde_json`, and `sha2` requirements owned by `rustinfer-model`;
+- the complete resolved third-party graph exactly matches
+  `ci/approved_cargo_dependencies.toml`, including crates.io source, checksum,
+  license expression, MSRV, and dependency edges;
+- no git dependency is present, and every approved package's MSRV is at most
+  the workspace Rust 1.85 MSRV; and
 - no production build script invokes Python or Triton.
+
+The approved dependency manifest is a reviewed allowlist, not a discovery
+output. Adding or upgrading a package requires updating its exact resolved
+closure and re-reviewing every changed checksum, license, and MSRV entry.
 
 The final shell check copies the current tree to a temporary directory without
 the excluded tool/research roots, then runs locked metadata and an all-targets
