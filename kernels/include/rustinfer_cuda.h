@@ -59,10 +59,22 @@ typedef struct RustInferCudaDeviceProperties {
   char name[RUSTINFER_CUDA_DEVICE_NAME_CAPACITY];
 } RustInferCudaDeviceProperties;
 
+typedef struct RustInferCudaAllocationStats {
+  uint32_t struct_size;
+  uint32_t reserved;
+  uint64_t device_live_bytes;
+  uint64_t device_live_allocations;
+  uint64_t pinned_host_live_bytes;
+  uint64_t pinned_host_live_allocations;
+} RustInferCudaAllocationStats;
+
 typedef struct RustInferCudaContext RustInferCudaContext;
 typedef struct RustInferCudaStream RustInferCudaStream;
 typedef struct RustInferCudaEvent RustInferCudaEvent;
 typedef struct RustInferCudaSmokeBuffer RustInferCudaSmokeBuffer;
+typedef struct RustInferCudaDeviceBuffer RustInferCudaDeviceBuffer;
+typedef struct RustInferCudaPinnedHostBuffer RustInferCudaPinnedHostBuffer;
+typedef struct RustInferCudaCopy RustInferCudaCopy;
 
 #ifdef __cplusplus
 #define RUSTINFER_CUDA_NOEXCEPT noexcept
@@ -96,9 +108,13 @@ RustInferCudaStatus rustinfer_cuda_context_memory_info(
     uint64_t* out_free_bytes,
     uint64_t* out_total_bytes,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_context_allocation_stats(
+    RustInferCudaContext* context,
+    RustInferCudaAllocationStats* out_stats,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 // Once primary-context release is attempted, *context is null even if a
-// deferred asynchronous error is returned. Validation/poison failures before
-// the attempt leave the handle intact.
+// deferred asynchronous error is returned. Validation, poison, live-child, or
+// non-zero allocation-accounting failures before the attempt leave it intact.
 RustInferCudaStatus rustinfer_cuda_context_close(
     RustInferCudaContext** context,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
@@ -149,6 +165,84 @@ RustInferCudaStatus rustinfer_cuda_event_elapsed_ms(
 // Uses the same single-attempt ownership rule as stream_close.
 RustInferCudaStatus rustinfer_cuda_event_close(
     RustInferCudaEvent** event,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// General byte-addressed allocations. A zero-byte allocation still returns an
+// owned opaque handle and contributes one live allocation with zero live bytes.
+RustInferCudaStatus rustinfer_cuda_device_buffer_create(
+    RustInferCudaContext* context,
+    uint64_t byte_len,
+    RustInferCudaDeviceBuffer** out_buffer,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Active copy tokens make close fail with INVALID_STATE before cudaFree.
+// Once cudaFree is attempted, the handle follows the single-shot close rule.
+// An ambiguous failed free stays logically accounted and keeps a context-child
+// lease so allocation stats/context teardown remain fail closed.
+RustInferCudaStatus rustinfer_cuda_device_buffer_close(
+    RustInferCudaDeviceBuffer** buffer,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
+    RustInferCudaContext* context,
+    uint64_t byte_len,
+    RustInferCudaPinnedHostBuffer** out_buffer,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Synchronous CPU access is rejected while an async copy token is active.
+RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_write(
+    RustInferCudaPinnedHostBuffer* buffer,
+    uint64_t destination_offset,
+    const uint8_t* source,
+    uint64_t source_len,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_read(
+    RustInferCudaPinnedHostBuffer* buffer,
+    uint64_t source_offset,
+    uint8_t* destination,
+    uint64_t destination_len,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Active copy tokens make close fail before cudaFreeHost. A free attempt is
+// otherwise single-shot even when CUDA reports a deferred earlier error;
+// ambiguous failure remains logically live/accounted.
+RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
+    RustInferCudaPinnedHostBuffer** buffer,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Non-zero copies return one owning pending token. Submission errors observed
+// after cudaMemcpyAsync is attempted are stored in that token and surfaced by
+// query/synchronize, preserving all buffer lifetimes until completion. A
+// zero-byte copy is a successful no-op and returns *out_copy == NULL.
+RustInferCudaStatus rustinfer_cuda_copy_h2d_async(
+    RustInferCudaDeviceBuffer* destination,
+    uint64_t destination_offset,
+    RustInferCudaPinnedHostBuffer* source,
+    uint64_t source_offset,
+    uint64_t byte_len,
+    RustInferCudaStream* stream,
+    RustInferCudaCopy** out_copy,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_copy_d2h_async(
+    RustInferCudaPinnedHostBuffer* destination,
+    uint64_t destination_offset,
+    RustInferCudaDeviceBuffer* source,
+    uint64_t source_offset,
+    uint64_t byte_len,
+    RustInferCudaStream* stream,
+    RustInferCudaCopy** out_copy,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// out_complete is 1 when native buffer-use counters have been released, even
+// if the returned status reports a deferred submission error.
+RustInferCudaStatus rustinfer_cuda_copy_query(
+    RustInferCudaCopy* copy,
+    uint8_t* out_complete,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_copy_synchronize(
+    RustInferCudaCopy* copy,
+    uint8_t* out_complete,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// An incomplete token is synchronized before close. It is consumed only after
+// completion is confirmed; otherwise the handle and active-use guards remain.
+RustInferCudaStatus rustinfer_cuda_copy_close(
+    RustInferCudaCopy** copy,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
 // Diagnostic-only storage keeps generic tensor allocation outside PR 03.

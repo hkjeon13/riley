@@ -22,7 +22,7 @@ rustinfer-cuda   -> rustinfer-core
 |---|---|---|
 | `rustinfer-core` | 작은 공통 오류·value contract | CUDA, model, scheduler, HTTP |
 | `rustinfer-cuda` | native C ABI의 좁은 Rust 경계 | tensor/model/runtime/server |
-| `rustinfer-tensor` | 향후 tensor shape/layout/ownership 경계 | model architecture, HTTP |
+| `rustinfer-tensor` | tensor shape/layout/view/storage ownership 경계 | model architecture, HTTP |
 | `rustinfer-model` | 향후 canonical model IR 경계 | scheduler, HTTP |
 | `rustinfer-runtime` | model/tensor/backend orchestration 경계 | scheduler, HTTP |
 | `rustinfer-scheduler` | 향후 admission/batching state 경계 | HTTP representation |

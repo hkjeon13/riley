@@ -32,6 +32,7 @@ const ERROR_MESSAGE_CAPACITY: usize = 256;
 const DEVICE_NAME_CAPACITY: usize = 256;
 const ERROR_INFO_SIZE: u32 = 272;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
+const ALLOCATION_STATS_SIZE: u32 = 40;
 
 #[repr(C)]
 struct ErrorInfo {
@@ -89,6 +90,37 @@ impl RawDeviceProperties {
     }
 }
 
+#[repr(C)]
+struct RawAllocationStats {
+    struct_size: u32,
+    reserved: u32,
+    device_live_bytes: u64,
+    device_live_allocations: u64,
+    pinned_host_live_bytes: u64,
+    pinned_host_live_allocations: u64,
+}
+
+impl RawAllocationStats {
+    fn new() -> Self {
+        Self {
+            struct_size: ALLOCATION_STATS_SIZE,
+            reserved: 0,
+            device_live_bytes: 0,
+            device_live_allocations: 0,
+            pinned_host_live_bytes: 0,
+            pinned_host_live_allocations: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeAllocationStats {
+    pub(super) device_live_bytes: u64,
+    pub(super) device_live_allocations: u64,
+    pub(super) pinned_host_live_bytes: u64,
+    pub(super) pinned_host_live_allocations: u64,
+}
+
 #[derive(Debug)]
 pub(super) struct NativeDeviceProperties {
     pub(super) ordinal: i32,
@@ -127,6 +159,24 @@ struct RawSmokeBuffer {
     _not_send_sync: PhantomData<*mut ()>,
 }
 
+#[repr(C)]
+struct RawDeviceBuffer {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawPinnedHostBuffer {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawCopy {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
 unsafe extern "C" {
     fn rustinfer_cuda_abi_version() -> u32;
     fn rustinfer_cuda_build_info() -> *const c_char;
@@ -146,6 +196,11 @@ unsafe extern "C" {
         context: *mut RawContext,
         out_free_bytes: *mut u64,
         out_total_bytes: *mut u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_context_allocation_stats(
+        context: *mut RawContext,
+        out_stats: *mut RawAllocationStats,
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_context_close(context: *mut *mut RawContext, error: *mut ErrorInfo) -> i32;
@@ -189,6 +244,71 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_event_close(event: *mut *mut RawEvent, error: *mut ErrorInfo) -> i32;
+    fn rustinfer_cuda_device_buffer_create(
+        context: *mut RawContext,
+        byte_len: u64,
+        out_buffer: *mut *mut RawDeviceBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_device_buffer_close(
+        buffer: *mut *mut RawDeviceBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_pinned_host_buffer_create(
+        context: *mut RawContext,
+        byte_len: u64,
+        out_buffer: *mut *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_pinned_host_buffer_write(
+        buffer: *mut RawPinnedHostBuffer,
+        destination_offset: u64,
+        source: *const u8,
+        source_len: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_pinned_host_buffer_read(
+        buffer: *mut RawPinnedHostBuffer,
+        source_offset: u64,
+        destination: *mut u8,
+        destination_len: u64,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_pinned_host_buffer_close(
+        buffer: *mut *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_copy_h2d_async(
+        destination: *mut RawDeviceBuffer,
+        destination_offset: u64,
+        source: *mut RawPinnedHostBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        stream: *mut RawStream,
+        out_copy: *mut *mut RawCopy,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_copy_d2h_async(
+        destination: *mut RawPinnedHostBuffer,
+        destination_offset: u64,
+        source: *mut RawDeviceBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        stream: *mut RawStream,
+        out_copy: *mut *mut RawCopy,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_copy_query(
+        copy: *mut RawCopy,
+        out_complete: *mut u8,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_copy_synchronize(
+        copy: *mut RawCopy,
+        out_complete: *mut u8,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_copy_close(copy: *mut *mut RawCopy, error: *mut ErrorInfo) -> i32;
     fn rustinfer_cuda_smoke_buffer_create(
         context: *mut RawContext,
         element_count: u64,
@@ -341,6 +461,23 @@ impl ContextHandle {
         };
         status_result(status, "query CUDA memory info", &error)?;
         Ok((free_bytes, total_bytes))
+    }
+
+    pub(super) fn allocation_stats(&self) -> CudaResult<NativeAllocationStats> {
+        let mut stats = RawAllocationStats::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the live context and correctly sized repr(C) output remain
+        // valid for the complete synchronous native snapshot.
+        let status = unsafe {
+            rustinfer_cuda_context_allocation_stats(self.as_ptr(), &mut stats, &mut error)
+        };
+        status_result(status, "query CUDA allocation stats", &error)?;
+        Ok(NativeAllocationStats {
+            device_live_bytes: stats.device_live_bytes,
+            device_live_allocations: stats.device_live_allocations,
+            pinned_host_live_bytes: stats.pinned_host_live_bytes,
+            pinned_host_live_allocations: stats.pinned_host_live_allocations,
+        })
     }
 
     pub(super) fn close(&mut self) -> CudaResult<()> {
@@ -524,6 +661,307 @@ impl Drop for EventHandle {
     }
 }
 
+pub(super) struct DeviceBufferHandle {
+    pointer: Option<NonNull<RawDeviceBuffer>>,
+}
+
+// SAFETY: the opaque allocation may move between host threads. All access is
+// serialized by exclusive safe-wrapper borrows and native active-copy guards.
+unsafe impl Send for DeviceBufferHandle {}
+
+impl DeviceBufferHandle {
+    pub(super) fn create(context: &ContextHandle, byte_len: u64) -> CudaResult<Self> {
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: context stays alive and native initializes one owned opaque
+        // output or leaves it null on failure.
+        let status = unsafe {
+            rustinfer_cuda_device_buffer_create(
+                context.as_ptr(),
+                byte_len,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "allocate CUDA device buffer", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "allocate CUDA device buffer",
+                "native device-buffer handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawDeviceBuffer {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw is uniquely owned; native either retains it before a
+        // destructive attempt or consumes and nulls it single-shot.
+        let status = unsafe { rustinfer_cuda_device_buffer_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA device buffer", &error)
+    }
+}
+
+impl Drop for DeviceBufferHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+pub(super) struct PinnedHostBufferHandle {
+    pointer: Option<NonNull<RawPinnedHostBuffer>>,
+}
+
+// SAFETY: the allocation may move between host threads. The safe layer is
+// !Sync and native active-copy guards reject CPU access during DMA.
+unsafe impl Send for PinnedHostBufferHandle {}
+
+impl PinnedHostBufferHandle {
+    pub(super) fn create(context: &ContextHandle, byte_len: u64) -> CudaResult<Self> {
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: context stays alive and output/error are writable caller
+        // buffers for the synchronous creation call.
+        let status = unsafe {
+            rustinfer_cuda_pinned_host_buffer_create(
+                context.as_ptr(),
+                byte_len,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "allocate CUDA pinned host buffer", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "allocate CUDA pinned host buffer",
+                "native pinned-host handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawPinnedHostBuffer {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn write(&mut self, destination_offset: u64, source: &[u8]) -> CudaResult<()> {
+        let source_len = u64::try_from(source.len()).map_err(|_| {
+            CudaError::out_of_range(
+                "write CUDA pinned host buffer",
+                "source length does not fit the fixed-width native ABI",
+            )
+        })?;
+        let mut error = ErrorInfo::new();
+        // SAFETY: source is immutably borrowed through the complete synchronous
+        // CPU copy and the opaque destination remains uniquely borrowed.
+        let status = unsafe {
+            rustinfer_cuda_pinned_host_buffer_write(
+                self.as_ptr(),
+                destination_offset,
+                source.as_ptr(),
+                source_len,
+                &mut error,
+            )
+        };
+        status_result(status, "write CUDA pinned host buffer", &error)
+    }
+
+    pub(super) fn read(&mut self, source_offset: u64, destination: &mut [u8]) -> CudaResult<()> {
+        let destination_len = u64::try_from(destination.len()).map_err(|_| {
+            CudaError::out_of_range(
+                "read CUDA pinned host buffer",
+                "destination length does not fit the fixed-width native ABI",
+            )
+        })?;
+        let mut error = ErrorInfo::new();
+        // SAFETY: destination is exclusively borrowed and valid for the
+        // complete synchronous CPU copy; native validates range and busy state.
+        let status = unsafe {
+            rustinfer_cuda_pinned_host_buffer_read(
+                self.as_ptr(),
+                source_offset,
+                destination.as_mut_ptr(),
+                destination_len,
+                &mut error,
+            )
+        };
+        status_result(status, "read CUDA pinned host buffer", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw is uniquely owned; native active-copy validation occurs
+        // before any destructive attempt and single-shot close updates raw.
+        let status = unsafe { rustinfer_cuda_pinned_host_buffer_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA pinned host buffer", &error)
+    }
+}
+
+impl Drop for PinnedHostBufferHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+pub(super) struct CopyCompletion {
+    pub(super) complete: bool,
+    pub(super) result: CudaResult<()>,
+}
+
+pub(super) struct CopyHandle {
+    pointer: Option<NonNull<RawCopy>>,
+}
+
+// SAFETY: a pending token and all three referenced resources move together
+// behind exclusive safe Rust borrows. The token is deliberately not Sync.
+unsafe impl Send for CopyHandle {}
+
+impl CopyHandle {
+    pub(super) fn h2d(
+        destination: &DeviceBufferHandle,
+        destination_offset: u64,
+        source: &PinnedHostBufferHandle,
+        source_offset: u64,
+        byte_len: u64,
+        stream: &StreamHandle,
+    ) -> CudaResult<Option<Self>> {
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: every opaque resource remains exclusively borrowed by the
+        // safe pending owner; native validates context/range/use identity.
+        let status = unsafe {
+            rustinfer_cuda_copy_h2d_async(
+                destination.as_ptr(),
+                destination_offset,
+                source.as_ptr(),
+                source_offset,
+                byte_len,
+                stream.as_ptr(),
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "enqueue CUDA host-to-device copy", &error)?;
+        Self::from_submit_output(pointer, byte_len, "enqueue CUDA host-to-device copy")
+    }
+
+    pub(super) fn d2h(
+        destination: &PinnedHostBufferHandle,
+        destination_offset: u64,
+        source: &DeviceBufferHandle,
+        source_offset: u64,
+        byte_len: u64,
+        stream: &StreamHandle,
+    ) -> CudaResult<Option<Self>> {
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: every opaque resource stays alive behind the pending Rust
+        // borrows; native validates ownership and establishes stream ordering.
+        let status = unsafe {
+            rustinfer_cuda_copy_d2h_async(
+                destination.as_ptr(),
+                destination_offset,
+                source.as_ptr(),
+                source_offset,
+                byte_len,
+                stream.as_ptr(),
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "enqueue CUDA device-to-host copy", &error)?;
+        Self::from_submit_output(pointer, byte_len, "enqueue CUDA device-to-host copy")
+    }
+
+    fn from_submit_output(
+        pointer: *mut RawCopy,
+        byte_len: u64,
+        operation: &'static str,
+    ) -> CudaResult<Option<Self>> {
+        match (NonNull::new(pointer), byte_len) {
+            (None, 0) => Ok(None),
+            (Some(pointer), byte_len) if byte_len != 0 => Ok(Some(Self {
+                pointer: Some(pointer),
+            })),
+            (None, _) => Err(missing_output(operation, "native copy token is null")),
+            (Some(pointer), 0) => {
+                let mut unexpected = Self {
+                    pointer: Some(pointer),
+                };
+                let _ = unexpected.close();
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Copy,
+                    0,
+                    operation,
+                    "native returned a token for a zero-byte copy",
+                ))
+            }
+        }
+    }
+
+    fn as_ptr(&self) -> *mut RawCopy {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn query(&mut self) -> CopyCompletion {
+        let mut complete = 0;
+        let mut error = ErrorInfo::new();
+        // SAFETY: the owned token remains live, and out_complete/error are
+        // writable for the complete native call.
+        let status = unsafe { rustinfer_cuda_copy_query(self.as_ptr(), &mut complete, &mut error) };
+        copy_completion(status, complete, "query CUDA copy", &error)
+    }
+
+    pub(super) fn synchronize(&mut self) -> CopyCompletion {
+        let mut complete = 0;
+        let mut error = ErrorInfo::new();
+        // SAFETY: the owned token and all resources retained by native active
+        // use remain valid until out_complete confirms release.
+        let status =
+            unsafe { rustinfer_cuda_copy_synchronize(self.as_ptr(), &mut complete, &mut error) };
+        copy_completion(status, complete, "synchronize CUDA copy", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw uniquely owns the token. Native keeps it non-null unless
+        // completion is confirmed and all active-use counters are released.
+        let status = unsafe { rustinfer_cuda_copy_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA copy", &error)
+    }
+}
+
+impl Drop for CopyHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct SmokeHandle {
     pointer: Option<NonNull<RawSmokeBuffer>>,
 }
@@ -626,6 +1064,23 @@ fn query_result(
     Ok(complete != 0)
 }
 
+fn copy_completion(
+    status: i32,
+    complete: u8,
+    operation: &'static str,
+    error: &ErrorInfo,
+) -> CopyCompletion {
+    let result = if status == STATUS_NOT_READY {
+        Ok(())
+    } else {
+        status_result(status, operation, error)
+    };
+    CopyCompletion {
+        complete: status != STATUS_NOT_READY && complete != 0,
+        result,
+    }
+}
+
 fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> CudaResult<()> {
     if status == STATUS_SUCCESS {
         return Ok(());
@@ -698,3 +1153,6 @@ const _: () = assert!(size_of::<ErrorInfo>() == 272);
 const _: () = assert!(offset_of!(ErrorInfo, message) == 16);
 const _: () = assert!(size_of::<RawDeviceProperties>() == 320);
 const _: () = assert!(offset_of!(RawDeviceProperties, name) == 64);
+const _: () = assert!(size_of::<RawAllocationStats>() == 40);
+const _: () = assert!(offset_of!(RawAllocationStats, device_live_bytes) == 8);
+const _: () = assert!(offset_of!(RawAllocationStats, pinned_host_live_allocations) == 32);

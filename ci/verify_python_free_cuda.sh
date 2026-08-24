@@ -85,8 +85,9 @@ if [ "$abi_link_binary_count" -ne 1 ]; then
     exit 1
 fi
 
-# Compile the PR 03 GPU integration target into the reusable image without
-# executing it. Device access is reserved for verify_python_free_gpu_runtime.sh.
+# Compile the cumulative PR 03 host-runtime and PR 04 memory GPU integration
+# targets into the reusable image without executing them. Device access is
+# reserved for verify_python_free_gpu_runtime.sh.
 cargo test \
     --locked \
     --package rustinfer-cuda \
@@ -95,11 +96,36 @@ cargo test \
     --test host_runtime_gpu \
     --no-run
 
-# Lint the complete CUDA-enabled Rust surface, including the ignored GPU test
-# target, without executing a device operation in this compile-only image.
+cargo test \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda \
+    --test memory_gpu \
+    --no-run
+
+# Compile the tensor metadata and CUDA-backed ownership adapters without
+# executing any GPU target or model operation.
+cargo test \
+    --locked \
+    --package rustinfer-tensor \
+    --no-default-features \
+    --features cuda \
+    --no-run
+
+# Lint the complete CUDA-enabled Rust surface, including both ignored GPU test
+# targets, without executing a device operation in this compile-only image.
 cargo clippy \
     --locked \
     --package rustinfer-cuda \
+    --all-targets \
+    --no-default-features \
+    --features cuda \
+    -- -D warnings
+
+cargo clippy \
+    --locked \
+    --package rustinfer-tensor \
     --all-targets \
     --no-default-features \
     --features cuda \
@@ -168,4 +194,4 @@ then
     exit 1
 fi
 
-echo "Python-free CUDA compile, C ABI link, version, and dependency smoke passed"
+echo "Python-free CUDA compile, C ABI link, tensor memory, version, and dependency smoke passed"

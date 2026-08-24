@@ -6,12 +6,12 @@
 #include <cuda.h>
 #include <cuda_runtime_api.h>
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <atomic>
 #include <limits>
 #include <new>
 
@@ -22,18 +22,32 @@ struct RustInferCudaContext {
         context(primary_context),
         ordinal(device_ordinal),
         live_children(0),
-        restoration_failed(false) {}
+        restoration_failed(false),
+        device_live_bytes(0),
+        device_live_allocations(0),
+        pinned_host_live_bytes(0),
+        pinned_host_live_allocations(0) {}
 
   CUdevice device;
   CUcontext context;
   int32_t ordinal;
   std::atomic<uint32_t> live_children;
   std::atomic<bool> restoration_failed;
+  std::atomic_flag allocation_stats_lock = ATOMIC_FLAG_INIT;
+  std::atomic<uint64_t> device_live_bytes;
+  std::atomic<uint64_t> device_live_allocations;
+  std::atomic<uint64_t> pinned_host_live_bytes;
+  std::atomic<uint64_t> pinned_host_live_allocations;
 };
 
 struct RustInferCudaStream {
+  RustInferCudaStream(RustInferCudaContext* owning_context,
+                      cudaStream_t native_stream) noexcept
+      : owner(owning_context), stream(native_stream), active_copies(0) {}
+
   RustInferCudaContext* owner;
   cudaStream_t stream;
+  std::atomic<uint32_t> active_copies;
 };
 
 struct RustInferCudaEvent {
@@ -49,7 +63,75 @@ struct RustInferCudaSmokeBuffer {
   cudaStream_t launch_stream;
 };
 
+struct RustInferCudaDeviceBuffer {
+  RustInferCudaDeviceBuffer(RustInferCudaContext* owning_context,
+                            void* allocation, uint64_t allocation_bytes) noexcept
+      : owner(owning_context),
+        device_data(allocation),
+        byte_len(allocation_bytes),
+        active_copies(0) {}
+
+  RustInferCudaContext* owner;
+  void* device_data;
+  uint64_t byte_len;
+  std::atomic<uint32_t> active_copies;
+};
+
+struct RustInferCudaPinnedHostBuffer {
+  RustInferCudaPinnedHostBuffer(RustInferCudaContext* owning_context,
+                                void* allocation,
+                                uint64_t allocation_bytes) noexcept
+      : owner(owning_context),
+        host_data(allocation),
+        byte_len(allocation_bytes),
+        active_copies(0) {}
+
+  RustInferCudaContext* owner;
+  void* host_data;
+  uint64_t byte_len;
+  std::atomic<uint32_t> active_copies;
+};
+
+struct RustInferCudaCopy {
+  RustInferCudaCopy(RustInferCudaContext* owning_context,
+                    RustInferCudaStream* copy_stream,
+                    RustInferCudaDeviceBuffer* device_buffer,
+                    RustInferCudaPinnedHostBuffer* host_buffer) noexcept
+      : owner(owning_context),
+        stream(copy_stream),
+        device(device_buffer),
+        host(host_buffer),
+        deferred_status(RUSTINFER_CUDA_STATUS_SUCCESS),
+        deferred_error{},
+        completed(false) {
+    deferred_error.struct_size = sizeof(deferred_error);
+  }
+
+  RustInferCudaContext* owner;
+  RustInferCudaStream* stream;
+  RustInferCudaDeviceBuffer* device;
+  RustInferCudaPinnedHostBuffer* host;
+  RustInferCudaStatus deferred_status;
+  RustInferCudaErrorInfo deferred_error;
+  bool completed;
+};
+
 namespace rustinfer_cuda_internal {
+
+class AllocationStatsGuard final {
+ public:
+  explicit AllocationStatsGuard(RustInferCudaContext* context) noexcept
+      : lock_(context->allocation_stats_lock) {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }
+  }
+  AllocationStatsGuard(const AllocationStatsGuard&) = delete;
+  AllocationStatsGuard& operator=(const AllocationStatsGuard&) = delete;
+  ~AllocationStatsGuard() noexcept { lock_.clear(std::memory_order_release); }
+
+ private:
+  std::atomic_flag& lock_;
+};
 
 static_assert(sizeof(RustInferCudaErrorInfo) == 272,
               "RustInferCudaErrorInfo ABI size changed");
@@ -59,6 +141,13 @@ static_assert(sizeof(RustInferCudaDeviceProperties) == 320,
               "RustInferCudaDeviceProperties ABI size changed");
 static_assert(offsetof(RustInferCudaDeviceProperties, name) == 64,
               "RustInferCudaDeviceProperties ABI layout changed");
+static_assert(sizeof(RustInferCudaAllocationStats) == 40,
+              "RustInferCudaAllocationStats ABI size changed");
+static_assert(offsetof(RustInferCudaAllocationStats, device_live_bytes) == 8,
+              "RustInferCudaAllocationStats ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaAllocationStats, pinned_host_live_allocations) == 32,
+    "RustInferCudaAllocationStats ABI tail layout changed");
 
 inline void clear_error(RustInferCudaErrorInfo* error) noexcept {
   if (error == nullptr || error->struct_size < sizeof(*error)) {

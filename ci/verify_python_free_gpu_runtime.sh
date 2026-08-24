@@ -77,11 +77,19 @@ device_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/nvidia-smi-list.txt"
 device_csv="$RUSTINFER_GPU_EVIDENCE_DIR/nvidia-smi-device-metadata.csv"
 test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-list.txt"
 test_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-tests.log"
+memory_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-list.txt"
+memory_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-tests.log"
 checksum_file="$RUSTINFER_GPU_EVIDENCE_DIR/SHA256SUMS"
 sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
+memory_sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
 ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-ldd.txt"
 readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-readelf.txt"
 nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-nm.txt"
+memory_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-ldd.txt"
+memory_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-readelf.txt"
+memory_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-nm.txt"
+test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
+memory_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
 driver_libraries_log="$RUSTINFER_GPU_EVIDENCE_DIR/cuda-driver-libraries.txt"
 
 for output in \
@@ -90,10 +98,19 @@ for output in \
     "$device_csv" \
     "$test_list_log" \
     "$test_log" \
+    "$memory_test_list_log" \
+    "$memory_test_log" \
     "$ldd_log" \
     "$readelf_log" \
     "$nm_log" \
+    "$memory_ldd_log" \
+    "$memory_readelf_log" \
+    "$memory_nm_log" \
+    "$test_binary_checksum_log" \
+    "$memory_test_binary_checksum_log" \
     "$driver_libraries_log" \
+    "$sanitizer_log" \
+    "$memory_sanitizer_log" \
     "$checksum_file"
 do
     if [ -e "$output" ]; then
@@ -101,10 +118,6 @@ do
         exit 1
     fi
 done
-if [ "$sanitizer_enabled" -eq 1 ] && [ -e "$sanitizer_log" ]; then
-    echo "refusing to replace existing GPU evidence: $sanitizer_log" >&2
-    exit 1
-fi
 
 if ! command -v nvidia-smi >/dev/null 2>&1; then
     echo "nvidia-smi is unavailable; run the image with NVIDIA utility capability" >&2
@@ -184,9 +197,41 @@ for test_name in $expected_tests; do
         exit 1
     fi
 done
-test_list_count=$(grep -Ec ': test$' "$test_list_log")
+test_list_count=$(grep -Ec ': test$' "$test_list_log" || true)
 if [ "$test_list_count" -ne 7 ]; then
     echo "expected exactly 7 GPU integration tests, found $test_list_count" >&2
+    exit 1
+fi
+
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda \
+    --test memory_gpu \
+    -- --list --format terse --color never >"$memory_test_list_log" 2>&1
+then
+    cat "$memory_test_list_log"
+    exit 1
+fi
+cat "$memory_test_list_log"
+
+expected_memory_tests='allocation_accounting_returns_to_zero
+zero_byte_allocations_and_copies_are_logical_noops
+pinned_host_device_round_trip_is_exact
+two_stream_copy_handoff_prevents_early_reuse
+copy_ranges_and_context_ownership_are_validated'
+
+for test_name in $expected_memory_tests; do
+    if ! grep -Fqx "$test_name: test" "$memory_test_list_log"; then
+        echo "GPU memory target is missing required test: $test_name" >&2
+        exit 1
+    fi
+done
+memory_test_list_count=$(grep -Ec ': test$' "$memory_test_list_log" || true)
+if [ "$memory_test_list_count" -ne 5 ]; then
+    echo "expected exactly 5 GPU memory tests, found $memory_test_list_count" >&2
     exit 1
 fi
 
@@ -202,6 +247,24 @@ if [ "$binary_count" -ne 1 ]; then
     echo "expected one host_runtime_gpu test executable, found $binary_count" >&2
     exit 1
 fi
+
+memory_test_binary=
+memory_binary_count=0
+for candidate in target/debug/deps/memory_gpu-*; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+        memory_test_binary=$candidate
+        memory_binary_count=$((memory_binary_count + 1))
+    fi
+done
+if [ "$memory_binary_count" -ne 1 ]; then
+    echo "expected one memory_gpu test executable, found $memory_binary_count" >&2
+    exit 1
+fi
+
+sha256sum "$test_binary" >"$test_binary_checksum_log"
+sha256sum "$memory_test_binary" >"$memory_test_binary_checksum_log"
+cat "$test_binary_checksum_log"
+cat "$memory_test_binary_checksum_log"
 
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
@@ -225,6 +288,28 @@ grep -Eq \
     "$test_log"
 grep -Eq 'test result: ok\. 7 passed; 0 failed; 0 ignored;' "$test_log"
 
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda \
+    --test memory_gpu \
+    -- --ignored --test-threads=1 --nocapture --color never >"$memory_test_log" 2>&1
+then
+    cat "$memory_test_log"
+    exit 1
+fi
+cat "$memory_test_log"
+
+memory_accounting_marker='rustinfer-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0'
+memory_marker_count=$(grep -Fxc "$memory_accounting_marker" "$memory_test_log" || true)
+if [ "$memory_marker_count" -ne 1 ]; then
+    echo "expected exactly one all-zero GPU memory accounting marker, found $memory_marker_count" >&2
+    exit 1
+fi
+grep -Eq 'test result: ok\. 5 passed; 0 failed; 0 ignored;' "$memory_test_log"
+
 ldd "$test_binary" >"$ldd_log"
 cat "$ldd_log"
 if grep -Eq '=>[[:space:]]+not found' "$ldd_log"; then
@@ -246,15 +331,37 @@ fi
 nm -D --undefined-only "$test_binary" >"$nm_log"
 cat "$nm_log"
 
+ldd "$memory_test_binary" >"$memory_ldd_log"
+cat "$memory_ldd_log"
+if grep -Eq '=>[[:space:]]+not found' "$memory_ldd_log"; then
+    echo "memory GPU test has an unresolved dynamic dependency" >&2
+    exit 1
+fi
+grep -Eq 'libcudart\.so' "$memory_ldd_log"
+grep -Eq 'libcuda\.so\.1' "$memory_ldd_log"
+
+readelf -d "$memory_test_binary" >"$memory_readelf_log"
+cat "$memory_readelf_log"
+grep -Eq 'NEEDED.*libcudart\.so' "$memory_readelf_log"
+grep -Eq 'NEEDED.*libcuda\.so\.1' "$memory_readelf_log"
+if grep -Eq '(RPATH|RUNPATH).*stubs' "$memory_readelf_log"; then
+    echo "memory GPU test embeds a CUDA driver stubs runtime path" >&2
+    exit 1
+fi
+
+nm -D --undefined-only "$memory_test_binary" >"$memory_nm_log"
+cat "$memory_nm_log"
+
 ldconfig -p >"$driver_libraries_log"
 cat "$driver_libraries_log"
 grep -Eq 'libcuda\.so\.1' "$driver_libraries_log"
 grep -Eq 'libcudart\.so' "$driver_libraries_log"
 
 if grep -Eiq 'python|pytorch|torch|transformers|triton' \
-    "$ldd_log" "$readelf_log" "$nm_log"
+    "$ldd_log" "$readelf_log" "$nm_log" \
+    "$memory_ldd_log" "$memory_readelf_log" "$memory_nm_log"
 then
-    echo "host-runtime test contains a forbidden runtime dependency" >&2
+    echo "GPU integration test contains a forbidden runtime dependency" >&2
     exit 1
 fi
 
@@ -276,6 +383,32 @@ if [ "$sanitizer_enabled" -eq 1 ]; then
     fi
     cat "$sanitizer_log"
     grep -Eq 'ERROR SUMMARY: 0 errors' "$sanitizer_log"
+    grep -Eq 'LEAK SUMMARY:[[:space:]]+0 bytes leaked' "$sanitizer_log"
+    grep -Eq 'test result: ok\. 7 passed; 0 failed; 0 ignored;' "$sanitizer_log"
+
+    if ! compute-sanitizer \
+        --tool memcheck \
+        --leak-check full \
+        --report-api-errors no \
+        --error-exitcode 86 \
+        "$memory_test_binary" \
+        --ignored \
+        --test-threads=1 \
+        --nocapture \
+        --color never >"$memory_sanitizer_log" 2>&1
+    then
+        cat "$memory_sanitizer_log"
+        exit 1
+    fi
+    cat "$memory_sanitizer_log"
+    grep -Eq 'ERROR SUMMARY: 0 errors' "$memory_sanitizer_log"
+    grep -Eq 'LEAK SUMMARY:[[:space:]]+0 bytes leaked' "$memory_sanitizer_log"
+    memory_sanitizer_marker_count=$(grep -Fxc "$memory_accounting_marker" "$memory_sanitizer_log" || true)
+    if [ "$memory_sanitizer_marker_count" -ne 1 ]; then
+        echo "expected exactly one sanitizer all-zero memory marker, found $memory_sanitizer_marker_count" >&2
+        exit 1
+    fi
+    grep -Eq 'test result: ok\. 5 passed; 0 failed; 0 ignored;' "$memory_sanitizer_log"
 fi
 
 (
@@ -288,10 +421,18 @@ host-runtime-tests.log
 host-runtime-ldd.txt
 host-runtime-readelf.txt
 host-runtime-nm.txt
+host-runtime-test-binary.sha256
+memory-test-list.txt
+memory-tests.log
+memory-ldd.txt
+memory-readelf.txt
+memory-nm.txt
+memory-test-binary.sha256
 cuda-driver-libraries.txt'
     if [ "$sanitizer_enabled" -eq 1 ]; then
         evidence_files="$evidence_files
-compute-sanitizer-memcheck.log"
+compute-sanitizer-memcheck.log
+compute-sanitizer-memory-memcheck.log"
     fi
     # File names are fixed above and intentionally contain no whitespace.
     # shellcheck disable=SC2086
@@ -299,4 +440,4 @@ compute-sanitizer-memcheck.log"
 )
 cat "$checksum_file"
 
-echo "Python-free CUDA host-runtime GPU verification passed"
+echo "Python-free CUDA host-runtime and memory GPU verification passed"

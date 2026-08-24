@@ -4,6 +4,7 @@
 
 namespace {
 
+using rustinfer_cuda_internal::AllocationStatsGuard;
 using rustinfer_cuda_internal::CurrentContext;
 using rustinfer_cuda_internal::clear_error;
 using rustinfer_cuda_internal::driver_error;
@@ -319,6 +320,31 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_memory_info(
   return status;
 }
 
+extern "C" RustInferCudaStatus rustinfer_cuda_context_allocation_stats(
+    RustInferCudaContext* context, RustInferCudaAllocationStats* out_stats,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (context == nullptr || out_stats == nullptr ||
+      out_stats->struct_size < sizeof(*out_stats)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "query CUDA allocation stats",
+        "context or out_stats is null, or struct_size is incompatible");
+  }
+  std::memset(out_stats, 0, sizeof(*out_stats));
+  out_stats->struct_size = sizeof(*out_stats);
+  const AllocationStatsGuard guard(context);
+  out_stats->device_live_bytes =
+      context->device_live_bytes.load(std::memory_order_relaxed);
+  out_stats->device_live_allocations =
+      context->device_live_allocations.load(std::memory_order_relaxed);
+  out_stats->pinned_host_live_bytes =
+      context->pinned_host_live_bytes.load(std::memory_order_relaxed);
+  out_stats->pinned_host_live_allocations =
+      context->pinned_host_live_allocations.load(std::memory_order_relaxed);
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RustInferCudaStatus rustinfer_cuda_context_close(
     RustInferCudaContext** context, RustInferCudaErrorInfo* error) noexcept {
   clear_error(error);
@@ -341,11 +367,28 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_close(
   if (live_children != 0) {
     char detail[128]{};
     std::snprintf(detail, sizeof(detail),
-                  "context still owns %u live stream/event/smoke resources",
+                  "context still owns %u live stream/event/buffer/copy resources",
                   live_children);
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA context", detail);
+  }
+  bool has_live_allocation_accounting = false;
+  {
+    const AllocationStatsGuard guard(*context);
+    has_live_allocation_accounting =
+        (*context)->device_live_bytes.load(std::memory_order_relaxed) != 0 ||
+        (*context)->device_live_allocations.load(std::memory_order_relaxed) != 0 ||
+        (*context)->pinned_host_live_bytes.load(std::memory_order_relaxed) != 0 ||
+        (*context)->pinned_host_live_allocations.load(
+            std::memory_order_relaxed) != 0;
+  }
+  if (has_live_allocation_accounting) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+        RUSTINFER_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
+        "context allocation accounting is non-zero; refusing to release the "
+        "primary-context lease");
   }
   const CUresult result = cuDevicePrimaryCtxRelease((*context)->device);
   const RustInferCudaStatus status =
@@ -494,6 +537,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
   }
   if (*stream == nullptr) {
     return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+  if ((*stream)->active_copies.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                            "close CUDA stream",
+                            "stream still owns an active copy token");
   }
   CurrentContext scope((*stream)->owner);
   RustInferCudaStatus status = scope.enter(

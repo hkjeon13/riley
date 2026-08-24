@@ -5,12 +5,13 @@ This crate is the narrow Rust boundary for the production CUDA C ABI. Its
 links the native static archive plus the shared CUDA Runtime and Driver
 libraries, and exposes a safe host-runtime API.
 
-PR 03 supports device metadata, retained primary-context ownership,
+The host runtime supports device metadata, retained primary-context ownership,
 non-default streams, timing events, explicit query/synchronize/close paths,
-and a checked diagnostic fill kernel. The fill is only a lifecycle and
-ordering smoke test; model loading, tensor execution, and inference remain out
-of scope. The stable C contract and ownership rules are documented in
-[`../../docs/cuda-abi-v1.md`](../../docs/cuda-abi-v1.md).
+opaque device and pinned-host byte buffers, coherent allocation accounting,
+and stream-ordered asynchronous H2D/D2H copies. The diagnostic fill kernel is
+only a lifecycle and ordering smoke test; model loading, tensor execution, and
+inference remain out of scope. The stable C contract and ownership rules are
+documented in [`../../docs/cuda-abi-v1.md`](../../docs/cuda-abi-v1.md).
 
 ## Build configuration
 
@@ -60,7 +61,62 @@ required environment variables are described in
 [`../../ci/README.md`](../../ci/README.md). None of these tests loads a model or
 runs inference.
 
-## Safe lifecycle example
+The additive PR 04 memory boundary has a separate five-test remote target. All
+five tests are ignored by default and cover logical zero-byte handles,
+allocation accounting returning to zero, pinned-host/device round trips,
+range/owner validation, and an explicit two-stream completion handoff:
+
+```text
+cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+  --test memory_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+`CudaPendingH2D` and `CudaPendingD2H` borrow their stream, device buffer, and
+pinned host buffer until completion. Native active-use tokens independently
+reject early access, reuse, and close. Forgetting a pending token therefore
+causes a permanent busy/accounted leak instead of exposing a pointer or
+allowing storage to be freed during DMA. Device and pinned buffers are `Send`,
+deliberately `!Sync`, non-cloneable opaque owners; no raw device or host pointer
+is part of the safe API.
+
+## Memory round-trip lifecycle
+
+Run this only on an authorized CUDA host. The completion value retains mutable
+borrows of the stream and both buffers through each asynchronous copy. Explicit
+close keeps free and context-release errors observable, while the accounting
+snapshot proves the logical allocations returned to zero.
+
+```rust,no_run
+use rustinfer_cuda::{CudaResult, CudaRuntime};
+
+fn main() -> CudaResult<()> {
+    let runtime = CudaRuntime::initialize()?;
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut device_buffer = context.allocate_device_buffer(4)?;
+    let mut pinned = context.allocate_pinned_host_buffer(4)?;
+
+    pinned.write(0, &[1, 2, 3, 4])?;
+    device_buffer
+        .copy_from_pinned_async(0, &mut pinned, 0, 4, &mut stream)?
+        .synchronize()?;
+    pinned.write(0, &[0; 4])?;
+    device_buffer
+        .copy_to_pinned_async(0, &mut pinned, 0, 4, &mut stream)?
+        .synchronize()?;
+    assert_eq!(pinned.to_vec()?, [1, 2, 3, 4]);
+
+    device_buffer.close()?;
+    pinned.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    context.close()?;
+    Ok(())
+}
+```
+
+## Diagnostic-kernel lifecycle
 
 Build this example with the `cuda` feature and run it only on an authorized
 CUDA host. `finish` synchronizes the originating stream before copying results

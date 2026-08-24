@@ -289,10 +289,10 @@ impl DeviceProperties {
     }
 }
 
-struct ContextInner {
-    ordinal: u32,
+pub(crate) struct ContextInner {
+    pub(crate) ordinal: u32,
     #[cfg(feature = "cuda")]
-    native: ffi::ContextHandle,
+    pub(crate) native: ffi::ContextHandle,
 }
 
 /// Owning retained lease on a device's primary context.
@@ -301,7 +301,7 @@ struct ContextInner {
 /// the context on the calling host thread. Child resources retain an internal
 /// `Arc`, so the context cannot close before them.
 pub struct CudaContext {
-    inner: Arc<ContextInner>,
+    pub(crate) inner: Arc<ContextInner>,
 }
 
 impl CudaContext {
@@ -397,8 +397,8 @@ impl CudaContext {
     ///
     /// # Errors
     ///
-    /// Returns invalid-state when streams/events/kernels/pending fills still
-    /// retain it, or a translated native close error.
+    /// Returns invalid-state when streams, events, kernels, buffers, or pending
+    /// operations still retain it, or a translated native close error.
     pub fn close(self) -> CudaResult<()> {
         let strong_count = Arc::strong_count(&self.inner);
         let inner = Arc::try_unwrap(self.inner).map_err(|_| {
@@ -435,10 +435,10 @@ impl CudaContext {
 /// ```
 pub struct CudaStream {
     #[cfg(feature = "cuda")]
-    native: ffi::StreamHandle,
+    pub(crate) native: ffi::StreamHandle,
     // Declared after native so drop closes the child before releasing the
     // context Arc; native context close rejects live children by contract.
-    context: Arc<ContextInner>,
+    pub(crate) context: Arc<ContextInner>,
     _not_sync: PhantomData<Cell<()>>,
 }
 
@@ -632,9 +632,9 @@ pub struct CudaKernel {
 impl CudaKernel {
     /// Allocates diagnostic-only storage and enqueues an asynchronous fill.
     ///
-    /// Generic device allocation remains outside this API until PR 04. The
-    /// returned pending value exclusively borrows the stream, preventing early
-    /// stream/context/buffer destruction before explicit completion.
+    /// This diagnostic path remains separate from the generic byte-buffer API.
+    /// The returned pending value exclusively borrows the stream, preventing
+    /// early stream/context/buffer destruction before explicit completion.
     ///
     /// # Errors
     ///
@@ -777,7 +777,7 @@ impl Drop for CudaPendingFill<'_> {
     }
 }
 
-fn ensure_same_context(
+pub(crate) fn ensure_same_context(
     left: &Arc<ContextInner>,
     right: &Arc<ContextInner>,
     operation: &'static str,

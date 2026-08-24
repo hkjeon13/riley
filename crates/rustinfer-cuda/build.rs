@@ -40,16 +40,7 @@ fn build_native_cuda() -> Result<(), String> {
         ));
     }
 
-    for source in [
-        cmake_lists,
-        kernels_dir.join("include/rustinfer_cuda.h"),
-        kernels_dir.join("src/ffi_internal.hpp"),
-        kernels_dir.join("src/host_runtime.cu"),
-        kernels_dir.join("src/smoke_fill.cu"),
-        kernels_dir.join("src/version.cu"),
-    ] {
-        println!("cargo:rerun-if-changed={}", source.display());
-    }
+    emit_native_rerun_inputs(&kernels_dir, cmake_lists);
 
     let toolkit = discover_cuda_toolkit()?;
     let cmake = discover_executable("CMAKE", "cmake")?;
@@ -131,6 +122,20 @@ fn build_native_cuda() -> Result<(), String> {
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=cuda");
     Ok(())
+}
+
+fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
+    for source in [
+        cmake_lists,
+        kernels_dir.join("include/rustinfer_cuda.h"),
+        kernels_dir.join("src/ffi_internal.hpp"),
+        kernels_dir.join("src/host_runtime.cu"),
+        kernels_dir.join("src/memory.cu"),
+        kernels_dir.join("src/smoke_fill.cu"),
+        kernels_dir.join("src/version.cu"),
+    ] {
+        println!("cargo:rerun-if-changed={}", source.display());
+    }
 }
 
 fn discover_cuda_driver(build_dir: &Path, profile: &str) -> Result<PathBuf, String> {

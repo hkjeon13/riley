@@ -1,4 +1,4 @@
-name: Native CUDA compile and link
+name: Native CUDA host runtime and tensor memory
 
 on:
   schedule:
@@ -11,7 +11,7 @@ on:
         default: "89"
         type: string
       run_gpu_tests:
-        description: Run PR 03 smoke tests on the explicitly labelled self-hosted GPU runner
+        description: Run PR 03 host-runtime and PR 04 memory tests on the labelled self-hosted GPU runner
         required: true
         default: false
         type: boolean
@@ -21,7 +21,7 @@ on:
         default: "128"
         type: string
       run_compute_sanitizer:
-        description: Repeat the serial ignored GPU target under Compute Sanitizer memcheck
+        description: Repeat both serial ignored GPU targets under Compute Sanitizer memcheck
         required: true
         default: false
         type: boolean
@@ -31,7 +31,7 @@ permissions:
 
 jobs:
   python-free-build:
-    name: Python-free CUDA AOT and C ABI smoke
+    name: Python-free CUDA AOT, C ABI, and tensor memory compile
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
@@ -49,7 +49,7 @@ jobs:
             .
 
   host-runtime-gpu:
-    name: Python-free CUDA host-runtime GPU smoke
+    name: Python-free CUDA host-runtime and memory GPU smoke
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gpu_tests }}
     needs: python-free-build
     runs-on: [self-hosted, linux, x64, rustinfer-gpu]
@@ -75,7 +75,7 @@ jobs:
             --tag rustinfer-native-cuda:gpu-ci \
             .
 
-      - name: Run serial host-runtime smoke on the GPU
+      - name: Run serial host-runtime and memory tests on the GPU
         run: |
           GPU_EVIDENCE_DIR="${RUNNER_TEMP}/rustinfer-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           SOURCE_ARCHIVE_PATH="${RUNNER_TEMP}/rustinfer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar"
@@ -101,7 +101,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pr03-host-runtime-gpu-${{ github.run_id }}-${{ github.run_attempt }}
+          name: pr04-cuda-memory-gpu-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/rustinfer-gpu-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 14

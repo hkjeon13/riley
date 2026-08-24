@@ -14,6 +14,7 @@ message(STATUS
 
 add_library(rustinfer_cuda_native STATIC
     src/host_runtime.cu
+    src/memory.cu
     src/smoke_fill.cu
     src/version.cu
 )

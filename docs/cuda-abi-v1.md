@@ -66,6 +66,30 @@ message 문자열은 stable parsing interface가 아니다. caller가 error poin
 전체 크기는 320 bytes다. `name`은 NUL-terminated device name이다. 조회가
 실패하면 partially populated output을 사용하지 않는다.
 
+### `RustInferCudaAllocationStats` (PR 04 additive)
+
+| offset | C type | field |
+| ---: | --- | --- |
+| 0 | `uint32_t` | `struct_size` |
+| 4 | `uint32_t` | `reserved` |
+| 8 | `uint64_t` | `device_live_bytes` |
+| 16 | `uint64_t` | `device_live_allocations` |
+| 24 | `uint64_t` | `pinned_host_live_bytes` |
+| 32 | `uint64_t` | `pinned_host_live_allocations` |
+
+전체 크기는 40 bytes다. context 내부의 짧은 non-throwing lock 아래 네 값을 함께
+갱신하고 snapshot하므로 concurrent `CudaContext::allocation_stats`도 서로 다른
+시점의 bytes/count를 섞지 않는다. 정상 explicit close가 모두 성공하면 네 값이
+0으로 돌아간다. zero-byte logical handle은 allocation count 1, bytes 0이다.
+destructive `cudaFree*`가 오류를 반환해 실제 해제 여부를 확정할 수 없으면 해당
+handle은 single-shot으로 소비하되 logical live accounting과 context child lease를
+남긴다. 따라서 불확실한 native allocation을 0으로 거짓 보고하거나 context를
+release하지 않고 fail-closed leak으로 드러낸다. Create가 실패해 caller-visible
+handle을 반환하지 못한 경우에도 rollback `cudaFree*`를 확정하지 못하면 해당 byte와
+allocation count 및 child lease를 영구 보존한다. context close는 live-child 검사와
+별도로 이 네 accounting 값도 lock 아래 확인하며 하나라도 0이 아니면 primary lease
+release를 거부한다.
+
 ## status, domain, stage
 
 모든 operation은 `RustInferCudaStatus`를 반환한다. `SUCCESS (0)`만 성공이고
@@ -100,8 +124,9 @@ owned message를 함께 보존한다.
 ## handle ownership과 context
 
 `RustInferCudaContext`, `RustInferCudaStream`, `RustInferCudaEvent`,
-`RustInferCudaSmokeBuffer`는 incomplete C type인 opaque handle이다. caller는
-그 주소의 내부 layout을 읽거나 복사하지 않는다.
+`RustInferCudaSmokeBuffer`, `RustInferCudaDeviceBuffer`,
+`RustInferCudaPinnedHostBuffer`, `RustInferCudaCopy`는 incomplete C type인 opaque
+handle이다. caller는 그 주소의 내부 layout을 읽거나 복사하지 않는다.
 
 - `*_create` 성공은 caller에게 handle 하나의 소유권을 넘긴다. 실패 시 output
   handle은 `NULL`이다.
@@ -132,6 +157,47 @@ owned message를 함께 보존한다.
 - v1 native handle 자체는 임의 alias를 통한 concurrent mutation을 보장하지
   않는다. safe Rust wrapper가 ownership과 공유 수명을 보존하며, raw handle을
   꺼내거나 임의의 `Send`/`Sync`를 가정하지 않는다.
+
+## PR 04 범용 allocation과 copy token
+
+PR 04 symbol은 ABI version 1에 additive하게 추가되었다. 기존 status 숫자,
+struct layout, PR 03 symbol 의미는 바꾸지 않는다.
+
+- `device_buffer_create`와 `pinned_host_buffer_create`는 `uint64_t byte_len`을 받는
+  untyped byte allocation이다. 0-byte도 non-NULL owning logical handle을 반환하고
+  allocation count를 올리지만 CUDA allocation call은 하지 않는다. raw allocation
+  pointer를 반환하는 symbol은 없다.
+- pinned host CPU access는 `pinned_host_buffer_write/read`만 제공한다. caller slice
+  pointer는 synchronous call 동안만 빌리며 offset+length를 overflow 없이 검사한다.
+  active copy token이 있으면 빈 access를 포함해 `INVALID_STATE`로 거부한다.
+- `copy_h2d_async`/`copy_d2h_async`는 device buffer, pinned buffer, 명시적 non-default
+  stream이 같은 opaque context owner인지 확인한다. non-zero copy는 세 resource의
+  active-use flag를 예약하고 owning `RustInferCudaCopy` token 하나를 반환한다.
+  resource당 동시 copy token은 하나만 허용한다. zero-byte copy는 successful
+  no-op이고 token은 NULL이다.
+- `cudaMemcpyAsync` 호출을 실제 시도한 뒤 관측한 submission/context-restoration
+  오류는 copy token에 owned error로 저장한다. submit ABI는 token을 성공적으로
+  넘겨 caller lifetime을 계속 묶고, `copy_query` 또는 `copy_synchronize`가 stream
+  완료를 확정한 뒤 저장된 오류를 반환한다. pre-attempt 오류만 output NULL과 함께
+  submit에서 즉시 반환한다.
+- query/synchronize는 stream operation이 `cudaSuccess`이고 caller thread의 context
+  stack 복원도 성공한 경우에만 세 active-use flag를 해제하고 `out_complete=1`로
+  commit한다. `NOT_READY`, stream 오류, context restoration 오류에서는 flag와
+  token을 그대로 유지한다. completion이 확정된 token은 deferred submission
+  status가 있더라도 resource guard를 해제하고 그 status를 반환한다.
+- incomplete `copy_close`는 originating stream을 synchronize한다. completion을
+  확정하지 못하면 token을 non-NULL로 유지하며 buffer access/free, 새 copy와 stream
+  close가 계속 실패한다. token 자체를 raw caller 또는 Rust `mem::forget`으로
+  영구 분실하면 이 busy state와 allocation/context accounting도 영구 유지된다.
+  이는 UAF나 DMA data race 대신 의도적인 fail-closed leak이다.
+- safe Rust `CudaPendingH2D`/`CudaPendingD2H`는 `&mut CudaStream`,
+  `&mut CudaDeviceBuffer`, `&mut CudaPinnedHostBuffer`를 실제 보유한다. 정상 lexical
+  lifetime에서는 compile-time borrow가 조기 access/close를 막고, forget/unwind
+  경로에서는 native active-use state와 Rust busy bit가 같은 규칙을 보강한다.
+  buffers와 pending token은 `Send`지만 `!Sync`이며 clone/raw-pointer API가 없다.
+
+Caching allocator, stream-ordered memory pool, unified memory, pageable-host async
+copy, model-specific tensor operation은 이 additive 경계의 범위가 아니다.
 
 context 생성은 target device의 CUDA **primary context에 대한 공유 lease**를
 `cuDevicePrimaryCtxRetain`으로 얻는다. 프로세스에 독점 context를 만들거나
@@ -181,6 +247,14 @@ safe Rust wrapper의 thread/lifetime 계약은 다음과 같다.
   수행하지만 그 오류를 호출자에게 보고할 수 없다. borrowed `CudaStream`과 함께
   host thread 사이로 이동할 수 있는 `Send`지만 shared mutation을 허용하는
   `Sync`는 아니다.
+- `CudaDeviceBuffer`와 `CudaPinnedHostBuffer`는 clone/raw-pointer가 없는 owning
+  opaque byte buffer다. 둘 다 `Send + !Sync`이며 close와 copy는 exclusive borrow를
+  요구한다. `CudaPinnedHostBuffer`의 read/write/to_vec도 active Rust/native token을
+  확인한다.
+- `CudaPendingH2D`와 `CudaPendingD2H`는 originating stream, device buffer, pinned
+  buffer를 모두 exclusive borrow하는 `Send + !Sync` completion owner다. 명시적
+  `synchronize`가 오류 보고 경로이고 Drop은 best-effort다. Drop completion을
+  확정하지 못하거나 값을 forget하면 busy/accounting을 해제하지 않는다.
 
 ## stream, event와 비동기 완료
 
@@ -226,11 +300,11 @@ Rust API는 native error buffer를 호출 중에만 빌려 쓰고 반환 전에 
 symbol을 찾거나 dynamic loading을 시도하지 않고 `Unavailable/Rust/Initialize`
 오류와 `cuda` feature를 켜라는 진단을 반환한다.
 
-## PR 03 경계
+## PR 03 진단 경계와 PR 04 확장
 
-v1의 allocation과 kernel은 lifecycle 및 error propagation을 검증하는
-`RustInferCudaSmokeBuffer`와 fill smoke operation으로 제한한다. 범용 tensor,
-allocator/pool, arbitrary device pointer, model loading/operation, cuBLASLt,
-CUTLASS, NVRTC, Triton, CUDA Graph는 ABI v1의 PR 03 surface가 아니다. 범용
-device allocation과 tensor ownership은 PR 04에서 이 ABI의 ownership과
-stream-ordering 원칙 위에 별도로 정의한다.
+PR 03의 allocation과 kernel은 lifecycle 및 error propagation을 검증하는
+`RustInferCudaSmokeBuffer`와 fill smoke operation으로 제한한다. PR 04는 opaque
+untyped allocation, pinned staging, copy token과 accounting만 additive하게 더한다.
+Tensor shape/layout/view metadata는 Rust tensor crate가 맡으며 C ABI에 tensor
+object나 raw pointer를 추가하지 않는다. allocator pool, unified memory, model
+loading/operation, cuBLASLt, CUTLASS, NVRTC, Triton, CUDA Graph도 아직 범위 밖이다.

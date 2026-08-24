@@ -8,9 +8,13 @@ mod error;
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
 mod ffi;
+mod memory;
 mod runtime;
 
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+pub use memory::{
+    CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
+};
 pub use runtime::{
     CudaContext, CudaDevice, CudaEvent, CudaKernel, CudaPendingFill, CudaRuntime, CudaStream,
     DeviceProperties,

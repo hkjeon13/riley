@@ -1,11 +1,12 @@
-# PR 02–03 native CI contract
+# PR 02–04 native CI contract
 
 The mandatory lane is CPU-only. Native CUDA compilation is a separate
-nightly/manual lane, the PR 03 GPU host-runtime smoke is an explicit
-self-hosted/manual lane, and the Python reference suite is an optional offline
-fake-backend lane. No CI lane loads a model or runs model inference. Only the
-opted-in PR 03 GPU lane initializes a device and launches the small fill smoke
-kernel.
+nightly/manual lane, the cumulative PR 03 host-runtime and PR 04 memory GPU
+tests are an explicit self-hosted/manual lane, and the Python reference suite
+is an optional offline fake-backend lane. No CI lane loads a model or runs
+model inference. Only the opted-in GPU lane initializes a device: PR 03 launches
+the small fill smoke kernel, while PR 04 performs allocation and byte-copy
+lifecycle checks.
 
 ## Production CPU gate
 
@@ -63,10 +64,13 @@ not runtime device behavior. The container gate records or checks:
 2. locked release build plus the plan's exact root command
    `cargo build --release --features cuda,server`;
 3. the host-only C ABI link test and ABI version 1;
-4. CUDA feature-on `rustinfer-cuda` Clippy across all targets with warnings denied;
-5. `rustinfer --version` reporting the linked CUDA ABI;
-6. a clear failure for an explicit nonexistent CUDA toolkit root; and
-7. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
+4. compile-only `host_runtime_gpu` and `memory_gpu` test binaries plus the
+   CUDA-backed `rustinfer-tensor` surface, without device access;
+5. CUDA feature-on `rustinfer-cuda` and `rustinfer-tensor` Clippy across all
+   targets with warnings denied;
+6. `rustinfer --version` reporting the linked CUDA ABI;
+7. a clear failure for an explicit nonexistent CUDA toolkit root; and
+8. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
    Transformers, or Triton runtime dependency.
 
 PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
@@ -84,6 +88,11 @@ export CUDA_HOME=/usr/local/cuda
 export RUSTINFER_CUDA_ARCHITECTURES=89
 cargo build --locked --release --features cuda,server
 cargo test --locked -p rustinfer-cuda --features cuda --test abi_link
+cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+  --test host_runtime_gpu --no-run
+cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+  --test memory_gpu --no-run
+cargo test --locked -p rustinfer-tensor --no-default-features --features cuda --no-run
 ./target/release/rustinfer --version
 ```
 
@@ -91,11 +100,12 @@ cargo test --locked -p rustinfer-cuda --features cuda --test abi_link
 CUDA base-image, Rust-image, toolkit, or architecture change is an explicit CI
 contract change and must update the digest and captured evidence together.
 
-## Python-free CUDA host-runtime GPU gate
+## Python-free CUDA host-runtime and memory GPU gate
 
-The image build compiles `host_runtime_gpu` with `--no-run`. Execution is a
-separate operation and requires NVIDIA Container Toolkit GPU passthrough. On an
-authorized GPU host:
+The image build compiles both `host_runtime_gpu` and `memory_gpu` with
+`--no-run`, together with `rustinfer-tensor --features cuda`. Execution is a
+separate operation and requires NVIDIA Container Toolkit GPU passthrough. On
+an authorized GPU host:
 
 ```sh
 GPU_EVIDENCE_DIR=$(mktemp -d)
@@ -121,10 +131,13 @@ docker run --rm \
 ```
 
 The verifier has no network and no Python executable. It records NVIDIA and
-Rust/CUDA metadata, lists the exact integration tests, then executes the whole
-ignored test target with `--ignored --test-threads=1 --nocapture`. Every GPU
-test is marked `#[ignore = "remote GPU"]`, so an ordinary Cargo test command
-cannot accidentally execute device work. The required tests cover:
+Rust/CUDA metadata, lists both exact integration-test inventories, then
+executes each ignored target separately with
+`--ignored --test-threads=1 --nocapture`. Every GPU test is marked
+`#[ignore = "remote GPU"]`, so an ordinary Cargo test command cannot
+accidentally execute device work.
+
+The PR 03 `host_runtime_gpu` target remains exactly seven tests covering:
 
 - device identity, compute capability, total memory, multiprocessor count,
   driver version, and runtime version;
@@ -136,27 +149,46 @@ cannot accidentally execute device work. The required tests cover:
 - repeated context/stream/event create-drop leak smoke, controlled by
   `RUSTINFER_CUDA_LEAK_ITERATIONS` (32–4096, default 128).
 
-Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
-`nvidia-smi-device-metadata.csv`, `host-runtime-test-list.txt`,
-`host-runtime-tests.log`, dynamic-link inspection from `ldd`/`readelf`/`nm`,
-the injected CUDA driver/runtime library inventory, and `SHA256SUMS`. Existing
-evidence is never overwritten. The workflow also binds this output to the
-checked-out revision, the SHA-256 of `git archive --format=tar HEAD`, and the
-locally built GPU image ID.
+The additive PR 04 `memory_gpu` target is exactly five tests:
 
-Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat the same ignored target
-serially under `compute-sanitizer --tool memcheck --leak-check full`. Its output
-is captured as `compute-sanitizer-memcheck.log` and must report zero memory or
-leak errors. The seven-test target deliberately exercises one invalid launch;
-`--report-api-errors no` prevents that expected, already-asserted CUDA API
-status from polluting memcheck's error summary without suppressing memory-access
-or allocation-leak findings. This optional pass is also exposed as the manual
-workflow input `run_compute_sanitizer`.
+- `allocation_accounting_returns_to_zero`;
+- `zero_byte_allocations_and_copies_are_logical_noops`;
+- `pinned_host_device_round_trip_is_exact`;
+- `two_stream_copy_handoff_prevents_early_reuse`; and
+- `copy_ranges_and_context_ownership_are_validated`.
+
+Its stable accounting marker must report all four values as zero:
+
+```text
+rustinfer-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0
+```
+
+Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
+`nvidia-smi-device-metadata.csv`, the existing `host-runtime-*` test/list/link
+logs, additive `memory-*` test/list/link logs, SHA-256 records for both exact
+test executables, the injected CUDA driver/runtime library inventory, and the
+top-level `SHA256SUMS` manifest. Both binaries receive independent
+`ldd`/`readelf`/`nm` inspection, including resolved `libcuda.so.1` and
+`libcudart.so` checks, no driver-stub RPATH/RUNPATH, and no Python, PyTorch,
+Transformers, or Triton dependency. Existing evidence is never overwritten.
+The workflow also binds this output to the checked-out revision, the SHA-256
+of `git archive --format=tar HEAD`, and the locally built GPU image ID.
+
+Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat both ignored targets serially
+under `compute-sanitizer --tool memcheck --leak-check full`. The PR 03 output
+retains its existing `compute-sanitizer-memcheck.log` name, while PR 04 writes
+`compute-sanitizer-memory-memcheck.log`, so logs cannot collide. Each log must
+independently report `ERROR SUMMARY: 0 errors` and `LEAK SUMMARY: 0 bytes
+leaked`; both are included in `SHA256SUMS`. The seven-test target deliberately
+exercises one invalid launch; `--report-api-errors no` prevents that expected,
+already-asserted CUDA API status from polluting memcheck's error summary without
+suppressing memory-access or allocation-leak findings. This optional pass is
+also exposed as the manual workflow input `run_compute_sanitizer`.
 
 The GitHub GPU job is disabled unless a manual dispatch explicitly selects
 `run_gpu_tests`. It targets only `[self-hosted, linux, x64, rustinfer-gpu]`, so
 standard hosted runners never receive or wait on a GPU job. Scheduled runs
-continue to perform compile/link validation only.
+continue to perform compile/link and feature-on compile validation only.
 
 ## Optional Python reference gate
 
