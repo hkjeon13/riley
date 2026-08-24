@@ -1,6 +1,7 @@
 # PR 01 — 기준선과 재현성 계약
 
-**상태:** Planned  
+**상태:** Active
+
 **선행 조건:** [PR 00](00-pr-contract.md)  
 **다음:** [PR 02 — Workspace와 CI](02-workspace-and-ci.md)
 

@@ -1,0 +1,589 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/reference-fixture-v1.schema.json",
+  "title": "rustinfer Python reference fixture",
+  "description": "Golden SmolLM2 BF16 values produced by the immutable external Python reference lane.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "created_at",
+    "generator",
+    "provenance",
+    "contract",
+    "corpus",
+    "generation",
+    "rng",
+    "cases"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "generator": { "$ref": "#/$defs/generator" },
+    "provenance": { "$ref": "#/$defs/provenance" },
+    "contract": { "$ref": "#/$defs/contract" },
+    "corpus": { "$ref": "#/$defs/corpus" },
+    "generation": { "$ref": "#/$defs/generation" },
+    "rng": { "$ref": "#/$defs/rngContract" },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableString": {
+      "type": ["string", "null"]
+    },
+    "tokenIds": {
+      "type": "array",
+      "items": { "type": "integer", "minimum": 0 },
+      "maxItems": 8192
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "python_version",
+        "python_executable_sha256",
+        "python_platform_system",
+        "python_platform_machine",
+        "torch_version",
+        "transformers_version",
+        "backend",
+        "device",
+        "device_name",
+        "compute_capability",
+        "local_files_only"
+      ],
+      "properties": {
+        "name": { "const": "rustinfer-python-reference" },
+        "version": { "const": "0.1.0" },
+        "python_version": { "const": "3.13.15" },
+        "python_executable_sha256": { "const": "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866" },
+        "python_platform_system": { "const": "linux" },
+        "python_platform_machine": { "const": "x86_64" },
+        "torch_version": { "const": "2.13.0" },
+        "transformers_version": { "const": "5.15.1" },
+        "backend": { "const": "huggingface-transformers-eager" },
+        "device": { "type": "string", "minLength": 1 },
+        "device_name": { "$ref": "#/$defs/nullableString" },
+        "compute_capability": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "local_files_only": { "type": "boolean" }
+      }
+    },
+    "sourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "pythonVersionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "tools/python/reference/.python-version" },
+        "sha256": { "const": "861b3dd8083d28f336ef70f6755bc399538ddad627b1d095820ca34cb953cf14" }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_revision",
+        "git_tree",
+        "git_dirty",
+        "git_status_sha256",
+        "environment_id",
+        "observed_environment",
+        "sources"
+      ],
+      "properties": {
+        "git_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "git_tree": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "git_dirty": { "const": false },
+        "git_status_sha256": { "const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "observed_environment": { "$ref": "#/$defs/environmentSnapshot" },
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "matrix",
+            "prompts",
+            "environment",
+            "lane_manifest",
+            "correctness_gate",
+            "prompt_schema",
+            "fixture_schema",
+            "contract_validator",
+            "dependency_manifest",
+            "dependency_lock",
+            "python_version_file",
+            "constants",
+            "environment_probe",
+            "fixture_generator",
+            "hf_backend",
+            "cli"
+          ],
+          "properties": {
+            "matrix": { "$ref": "#/$defs/sourceRef" },
+            "prompts": { "$ref": "#/$defs/sourceRef" },
+            "environment": { "$ref": "#/$defs/sourceRef" },
+            "lane_manifest": { "$ref": "#/$defs/sourceRef" },
+            "correctness_gate": { "$ref": "#/$defs/sourceRef" },
+            "prompt_schema": { "$ref": "#/$defs/sourceRef" },
+            "fixture_schema": { "$ref": "#/$defs/sourceRef" },
+            "contract_validator": { "$ref": "#/$defs/sourceRef" },
+            "dependency_manifest": { "$ref": "#/$defs/sourceRef" },
+            "dependency_lock": { "$ref": "#/$defs/sourceRef" },
+            "python_version_file": { "$ref": "#/$defs/pythonVersionSource" },
+            "constants": { "$ref": "#/$defs/sourceRef" },
+            "environment_probe": { "$ref": "#/$defs/sourceRef" },
+            "fixture_generator": { "$ref": "#/$defs/sourceRef" },
+            "hf_backend": { "$ref": "#/$defs/sourceRef" },
+            "cli": { "$ref": "#/$defs/sourceRef" }
+          }
+        }
+      }
+    },
+    "environmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "environment_id", "host", "accelerator"],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os_id", "os_version_id", "kernel_release", "machine", "cpu_model", "physical_cpu_cores", "logical_cpu_threads", "ram_bytes", "cpu_governor", "cpu_governor_policy_count", "clock_synchronized"],
+          "properties": {
+            "os_id": { "const": "ubuntu" },
+            "os_version_id": { "const": "22.04" },
+            "kernel_release": { "const": "6.8.0-138-generic" },
+            "machine": { "const": "x86_64" },
+            "cpu_model": { "const": "Intel Core i7-13700K" },
+            "physical_cpu_cores": { "const": 16 },
+            "logical_cpu_threads": { "const": 24 },
+            "ram_bytes": { "const": 67185598464 },
+            "cpu_governor": { "const": "powersave" },
+            "cpu_governor_policy_count": { "const": 24 },
+            "clock_synchronized": { "const": true }
+          }
+        },
+        "accelerator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gpu_count", "gpus", "nvidia_driver_version", "driver_cuda_api_version", "cuda_driver_available", "host_cuda_toolkit_present", "primary_compute_dtype", "persistence_mode", "compute_process_count", "memory_used_mib", "temperature_c", "power_limit_w", "application_graphics_clock_mhz", "application_memory_clock_mhz"],
+          "properties": {
+            "gpu_count": { "const": 1 },
+            "gpus": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/primaryGpuSnapshot" },
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "nvidia_driver_version": { "const": "580.173.02" },
+            "driver_cuda_api_version": { "const": "13.0" },
+            "cuda_driver_available": { "const": true },
+            "host_cuda_toolkit_present": { "const": false },
+            "primary_compute_dtype": { "const": "bf16" },
+            "persistence_mode": { "const": "Disabled" },
+            "compute_process_count": { "const": 0 },
+            "memory_used_mib": { "type": "integer", "minimum": 0, "maximum": 256 },
+            "temperature_c": { "type": "integer", "minimum": 0, "maximum": 50 },
+            "power_limit_w": { "type": "number", "minimum": 0.000001 },
+            "application_graphics_clock_mhz": { "const": "[N/A]" },
+            "application_memory_clock_mhz": { "const": "[N/A]" }
+          }
+        }
+      }
+    },
+    "primaryGpuSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name", "compute_capability", "memory_total_mib", "bf16_compute_supported"],
+      "properties": {
+        "index": { "const": 0 },
+        "name": { "const": "NVIDIA GeForce RTX 4090" },
+        "compute_capability": { "const": "8.9" },
+        "memory_total_mib": { "const": 24564 },
+        "bf16_compute_supported": { "const": true }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_revision",
+        "weights_sha256",
+        "config_sha256",
+        "tokenizer_sha256",
+        "tokenizer_files_sha256",
+        "dtype",
+        "max_context_tokens",
+        "trust_remote_code",
+        "attention_backend",
+        "determinism",
+        "python_version_range",
+        "primary_gpu",
+        "primary_environment_id",
+        "semantic_class",
+        "runtime_dependency_class"
+      ],
+      "properties": {
+        "model_id": { "const": "HuggingFaceTB/SmolLM2-135M" },
+        "model_revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
+        "weights_sha256": { "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1" },
+        "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },
+        "tokenizer_sha256": { "const": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db" },
+        "tokenizer_files_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "merges.txt",
+            "special_tokens_map.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "vocab.json"
+          ],
+          "properties": {
+            "merges.txt": { "const": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510" },
+            "special_tokens_map.json": { "const": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3" },
+            "tokenizer.json": { "const": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c" },
+            "tokenizer_config.json": { "const": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424" },
+            "vocab.json": { "const": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79" }
+          }
+        },
+        "dtype": { "const": "bf16" },
+        "max_context_tokens": { "const": 8192 },
+        "trust_remote_code": { "const": false },
+        "attention_backend": { "const": "eager" },
+        "determinism": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "torch_deterministic_algorithms",
+            "cublas_workspace_config",
+            "tf32"
+          ],
+          "properties": {
+            "torch_deterministic_algorithms": { "const": true },
+            "cublas_workspace_config": { "const": ":4096:8" },
+            "tf32": { "const": false }
+          }
+        },
+        "python_version_range": { "const": ">=3.13,<3.14" },
+        "primary_gpu": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "compute_capability"],
+          "properties": {
+            "name": { "const": "NVIDIA GeForce RTX 4090" },
+            "compute_capability": { "const": "8.9" }
+          }
+        },
+        "primary_environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "semantic_class": { "const": "reference" },
+        "runtime_dependency_class": { "const": "python-reference" }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["contract_version", "sha256", "prompt_count"],
+      "properties": {
+        "contract_version": { "const": "1.0.0" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "prompt_count": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "strategy",
+        "max_new_tokens",
+        "hidden_state_index",
+        "hidden_state_selection",
+        "logits_position",
+        "top_k",
+        "cache_modes",
+        "eos_token_ids"
+      ],
+      "properties": {
+        "strategy": { "const": "greedy" },
+        "max_new_tokens": {
+          "description": "Number of exact BF16 greedy cache-on/off steps. The pinned eager paths are predeclared for a maximum 16-token golden window.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16
+        },
+        "hidden_state_index": { "type": "integer", "minimum": 1 },
+        "hidden_state_selection": { "const": "full-prompt" },
+        "logits_position": { "const": "last-prompt-token" },
+        "top_k": { "type": "integer", "minimum": 1 },
+        "cache_modes": { "const": ["on", "off"] },
+        "eos_token_ids": {
+          "allOf": [
+            { "$ref": "#/$defs/tokenIds" },
+            { "uniqueItems": true }
+          ]
+        }
+      }
+    },
+    "rngContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm_id", "master_seed", "domain", "greedy_draws_consumed"],
+      "properties": {
+        "algorithm_id": { "const": "rustinfer.philox4x32-10.v1" },
+        "master_seed": { "type": "integer", "minimum": 0, "maximum": 18446744073709551615 },
+        "domain": { "const": "token-sampling" },
+        "greedy_draws_consumed": { "const": 0 }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm_id",
+        "derivation_digest_hex",
+        "block",
+        "word_offset",
+        "exhausted"
+      ],
+      "properties": {
+        "algorithm_id": { "const": "rustinfer.philox4x32-10.v1" },
+        "derivation_digest_hex": { "$ref": "#/$defs/sha256" },
+        "block": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]{0,19})$"
+        },
+        "word_offset": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "exhausted": { "type": "boolean" }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max", "mean", "l2_norm"],
+      "properties": {
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "mean": { "type": "number" },
+        "l2_norm": { "type": "number", "minimum": 0 }
+      }
+    },
+    "tensorSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_dtype", "shape", "numel", "sha256", "stats"],
+      "properties": {
+        "canonical_dtype": { "const": "float32-le" },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "numel": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "stats": { "$ref": "#/$defs/stats" }
+      }
+    },
+    "topKEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rank", "token_id", "value"],
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1 },
+        "token_id": { "type": "integer", "minimum": 0 },
+        "value": { "type": "number" }
+      }
+    },
+    "rankedTensorSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["canonical_dtype", "shape", "numel", "sha256", "stats", "top_k"],
+      "properties": {
+        "canonical_dtype": { "const": "float32-le" },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "numel": { "type": "integer", "minimum": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "stats": { "$ref": "#/$defs/stats" },
+        "top_k": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/topKEntry" }
+        }
+      }
+    },
+    "promptMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "category",
+        "language",
+        "target_prompt_tokens",
+        "boundary_kind",
+        "expected_behavior"
+      ],
+      "properties": {
+        "category": {
+          "enum": [
+            "short",
+            "multilingual",
+            "symbols-code",
+            "long-repetition",
+            "context-boundary",
+            "minimal",
+            "early-eos"
+          ]
+        },
+        "language": { "enum": ["ko", "en", "mixed", "code", "none"] },
+        "target_prompt_tokens": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "maximum": 8192
+        },
+        "boundary_kind": { "enum": ["none", "near-max-context"] },
+        "expected_behavior": { "type": "string", "minLength": 1 }
+      }
+    },
+    "caseRng": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stream_id", "domain", "initial_snapshot", "draws_consumed"],
+      "properties": {
+        "stream_id": { "type": "string", "minLength": 1 },
+        "domain": { "const": "token-sampling" },
+        "initial_snapshot": { "$ref": "#/$defs/snapshot" },
+        "draws_consumed": { "const": 0 }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "prompt_id",
+        "prompt_text_sha256",
+        "prompt_metadata",
+        "input",
+        "hidden_state",
+        "final_logits",
+        "processed_log_probs",
+        "rng",
+        "greedy"
+      ],
+      "properties": {
+        "prompt_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "prompt_text_sha256": { "$ref": "#/$defs/sha256" },
+        "prompt_metadata": { "$ref": "#/$defs/promptMetadata" },
+        "input": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["token_ids", "token_count"],
+          "properties": {
+            "token_ids": {
+              "allOf": [
+                { "$ref": "#/$defs/tokenIds" },
+                { "minItems": 1 }
+              ]
+            },
+            "token_count": { "type": "integer", "minimum": 1, "maximum": 8192 }
+          }
+        },
+        "hidden_state": { "$ref": "#/$defs/tensorSummary" },
+        "final_logits": { "$ref": "#/$defs/rankedTensorSummary" },
+        "processed_log_probs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pipeline_id", "tensor"],
+          "properties": {
+            "pipeline_id": { "const": "log-softmax-fp32-v1" },
+            "tensor": { "$ref": "#/$defs/rankedTensorSummary" }
+          }
+        },
+        "rng": { "$ref": "#/$defs/caseRng" },
+        "greedy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cache_on_token_ids",
+            "cache_off_token_ids",
+            "exact_match",
+            "stop_reason"
+          ],
+          "properties": {
+            "cache_on_token_ids": { "$ref": "#/$defs/tokenIds" },
+            "cache_off_token_ids": { "$ref": "#/$defs/tokenIds" },
+            "exact_match": { "const": true },
+            "stop_reason": { "enum": ["eos", "max_new_tokens"] }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "prompt_metadata": {
+                "properties": {
+                  "category": {
+                    "const": "early-eos"
+                  }
+                },
+                "required": [
+                  "category"
+                ]
+              }
+            },
+            "required": [
+              "prompt_metadata"
+            ]
+          },
+          "then": {
+            "properties": {
+              "greedy": {
+                "properties": {
+                  "cache_on_token_ids": {
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "cache_off_token_ids": {
+                    "minItems": 1,
+                    "maxItems": 1
+                  },
+                  "stop_reason": {
+                    "const": "eos"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/correctness-gate.schema.json",
+  "title": "rustinfer E0 correctness gate contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "gate_id",
+    "model",
+    "roles",
+    "corpus",
+    "numeric",
+    "semantic",
+    "reduction_variants",
+    "provenance"
+  ],
+  "properties": {
+    "contract_version": { "const": "1.0.0" },
+    "gate_id": { "const": "smollm2-fp32-bf16-native-e0-v1" },
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "config_sha256", "weights_sha256", "tokenizer_sha256", "tokenizer_files_sha256", "max_context_tokens", "eos_token_ids"],
+      "properties": {
+        "id": { "const": "HuggingFaceTB/SmolLM2-135M" },
+        "revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
+        "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },
+        "weights_sha256": { "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1" },
+        "tokenizer_sha256": { "const": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db" },
+        "tokenizer_files_sha256": {
+          "const": {
+            "merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+            "special_tokens_map.json": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+            "tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+            "tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+            "vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"
+          }
+        },
+        "max_context_tokens": { "const": 8192 },
+        "eos_token_ids": { "const": [0] }
+      }
+    },
+    "roles": {
+      "const": {
+        "fp32_oracle": "numeric-only",
+        "bf16_oracle": "semantic-path-oracle-and-numeric-calibration",
+        "native_candidate": "numeric-vs-fp32-and-semantic-vs-bf16"
+      }
+    },
+    "corpus": {
+      "const": {
+        "source": "benchmarks/prompts.jsonl",
+        "expected_prompt_count": 31,
+        "binding": "ordered-id-text-category-language-target-boundary-behavior"
+      }
+    },
+    "numeric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["relative_error_denominator", "comparison_scope", "gate_aggregation", "threshold_activation", "tensors"],
+      "properties": {
+        "relative_error_denominator": { "const": "max(abs(fp32),1)" },
+        "comparison_scope": { "const": "each-full-tensor-per-prompt-per-candidate-variant" },
+        "gate_aggregation": { "const": "worst-prompt-metric-and-all-prompts-must-pass" },
+        "threshold_activation": {
+          "const": {
+            "status": "predeclared-requires-passing-full-corpus-oracle-report",
+            "predeclaration_basis": "non-activating-five-prompt-rtx4090-probe-with-conservative-headroom",
+            "probe_prompt_count": 5,
+            "probe_observed_worst": {
+              "first_layer_hidden": { "max_abs": 0.270985, "mean_abs": 0.007399, "max_relative": 0.078383, "mean_relative": 0.004708, "cosine_similarity": 0.9999858 },
+              "final_logits": { "max_abs": 5.08951, "mean_abs": 1.00111, "max_relative": 0.89154, "mean_relative": 0.108706, "cosine_similarity": 0.9991663 },
+              "final_log_probs": { "max_abs": 4.34645, "mean_abs": 0.522364, "max_relative": 0.50148, "mean_relative": 0.040599, "cosine_similarity": 0.9989373 }
+            },
+            "activation_evidence": "independent-replayed-full-31-corpus-report",
+            "required_oracle_report_kind": "hf-oracle-calibration",
+            "required_oracle_case_count": 31,
+            "required_oracle_report_status": "pass",
+            "failure_policy": "gate-fail-no-silent-threshold-relaxation"
+          }
+        },
+        "tensors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+          "properties": {
+            "first_layer_hidden": { "$ref": "#/$defs/hiddenTensor" },
+            "final_logits": { "$ref": "#/$defs/logitsTensor" },
+            "final_log_probs": { "$ref": "#/$defs/logProbTensor" }
+          }
+        }
+      }
+    },
+    "semantic": {
+      "const": {
+        "generation_steps": 32,
+        "cross_cache_exact_window": 16,
+        "divergence_step_index_origin": 0,
+        "path_matching": {
+          "native-cache-on": "hf-bf16-cache-on",
+          "native-cache-off": "hf-bf16-cache-off"
+        },
+        "generated_token_ids_comparison": "ordered-exact",
+        "top_1_comparison": "ordered-exact",
+        "top_k": { "k": 10, "comparison": "set-exact" }
+      }
+    },
+    "reduction_variants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["oracle", "required_candidate", "each_candidate_variant_compared_independently", "all_required_variants_must_pass", "alternate_profile_definition"],
+      "properties": {
+        "oracle": { "const": { "variant_id": "hf-eager-default-v1", "partition_kind": "hf-eager-runtime-default", "chunk_elements": null, "remainder_policy": "runtime-default", "merge_order": "runtime-default" } },
+        "required_candidate": {
+          "const": [
+            { "variant_id": "canonical-v1", "partition_kind": "production-default", "chunk_elements": null, "remainder_policy": "implementation-default", "merge_order": "implementation-default" },
+            { "variant_id": "fixed-contiguous-37-balanced-v1", "partition_kind": "fixed-contiguous", "chunk_elements": 37, "remainder_policy": "last-short-chunk", "merge_order": "deterministic-balanced-binary-tree-by-chunk-index" }
+          ]
+        },
+        "each_candidate_variant_compared_independently": { "const": true },
+        "all_required_variants_must_pass": { "const": true },
+        "alternate_profile_definition": {
+          "const": {
+            "applies_to": "all-floating-point-reductions-contributing-to-captured-tensors-or-greedy-logits",
+            "included_reductions": ["matmul-dot-product-sums", "rmsnorm-sum-of-squares", "attention-softmax-max-and-sum", "final-log-softmax-max-and-sum"],
+            "reduction_axis_order": "logical-reduction-index-ascending",
+            "chunk_local_order": "left-fold-in-logical-index-order",
+            "chunk_elements": 37,
+            "remainder_policy": "single-short-final-chunk",
+            "balanced_merge_order": "merge-adjacent-chunk-partials-by-ascending-index-each-level-carry-unpaired-last",
+            "accumulator_dtype_policy": "same-as-canonical-operator-contract"
+          }
+        }
+      }
+    },
+    "provenance": {
+      "const": {
+        "required_hash_bindings": ["candidate-manifest", "matrix", "prompts", "model-config", "model-weights", "tokenizer-artifacts", "dependency-locks", "git-revisions", "environment", "lane-manifests"],
+        "candidate_runtime_dependency_class": "native-production",
+        "candidate_git_dirty": false,
+        "candidate_execution_bindings": ["bundled-executable-sha256", "clean-git-revision", "cargo-lock-sha256", "build-argv", "capture-argv"],
+        "e0_result_acceptance": {
+          "pr01_native_lane_status": "contract-only-reject-e0-success",
+          "future_activation": "raw-evidence-bundle-replay-required",
+          "required_bundle_members": ["fp32-manifest-and-sidecar", "bf16-manifest-and-sidecar", "passing-oracle-calibration-report", "candidate-manifest-sidecar-and-executable", "correctness-report"],
+          "approval_command": "rustinfer-reference calibrate-validate-report"
+        },
+        "result_correctness_report_sha256": "sha256-of-raw-report-file-bytes"
+      }
+    }
+  },
+  "$defs": {
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_abs_max", "mean_abs_max", "max_relative_max", "mean_relative_max", "cosine_min"],
+      "properties": {
+        "max_abs_max": { "type": "number" },
+        "mean_abs_max": { "type": "number" },
+        "max_relative_max": { "type": "number" },
+        "mean_relative_max": { "type": "number" },
+        "cosine_min": { "type": "number" }
+      }
+    },
+    "hiddenTensor": {
+      "const": {
+        "definition": "full-first-transformer-layer-output-all-valid-token-positions",
+        "capture_cache_path": "off",
+        "fp32_sidecar_dtype": "float32",
+        "candidate_sidecar_dtype": "bfloat16",
+        "thresholds": { "max_abs_max": 0.3, "mean_abs_max": 0.0085, "max_relative_max": 0.09, "mean_relative_max": 0.0055, "cosine_min": 0.99998 }
+      }
+    },
+    "logitsTensor": {
+      "const": {
+        "definition": "full-vocabulary-last-valid-position-logits",
+        "capture_cache_path": "off",
+        "fp32_sidecar_dtype": "float32",
+        "candidate_sidecar_dtype": "bfloat16",
+        "thresholds": { "max_abs_max": 5.6, "mean_abs_max": 1.15, "max_relative_max": 1.0, "mean_relative_max": 0.125, "cosine_min": 0.999 }
+      }
+    },
+    "logProbTensor": {
+      "const": {
+        "definition": "full-vocabulary-fp32-log-softmax-of-final-logits",
+        "pipeline_id": "log-softmax-fp32-v1",
+        "capture_cache_path": "off",
+        "fp32_sidecar_dtype": "float32",
+        "candidate_sidecar_dtype": "float32",
+        "thresholds": { "max_abs_max": 4.8, "mean_abs_max": 0.6, "max_relative_max": 0.56, "mean_relative_max": 0.047, "cosine_min": 0.9988 }
+      }
+    }
+  }
+}
