@@ -68,6 +68,13 @@ not runtime device behavior. The container gate records or checks:
 6. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
    Transformers, or Triton runtime dependency.
 
+PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
+compile-only image에는 실제 host driver가 없으므로, `abi_link`와 `--version`처럼
+device/context를 초기화하지 않는 metadata executable에 한해서 toolkit
+`libcuda.so` stub을 임시 SONAME alias로 사용한다. 이 경로는 artifact의
+RPATH/RUNPATH에 기록되지 않아야 한다. 별도 GPU gate는 NVIDIA Container Runtime이
+주입한 실제 `libcuda.so.1`을 `ldd`와 `ldconfig`로 다시 강제한다.
+
 On a host with CUDA 12.8.1 installed, the equivalent direct build contract is:
 
 ```sh
