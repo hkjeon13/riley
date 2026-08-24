@@ -6,6 +6,35 @@
 
 Implementation follows the numbered [deployment plan](deploy/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR, validation, benchmark, and `unsafe`/FFI review contract.
 
+## Production workspace
+
+The production runtime is an explicitly bounded seven-crate Rust workspace; its
+responsibilities and dependency direction are documented in
+[`crates/README.md`](crates/README.md). Python reference tools and Triton
+experiments are intentionally outside that workspace and are never production
+Cargo features or build-script inputs.
+
+The repository pins Rust 1.85.0. A CPU-only checkout needs no CUDA toolkit:
+
+```bash
+cargo fmt --all --check
+cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+cargo test --locked --workspace --no-default-features
+cargo doc --locked --workspace --no-deps --no-default-features
+```
+
+The default member is `rustinfer-server`. A CUDA environment builds the empty
+native ABI boundary and version binary with the exact root command below; PR 02
+does not initialize a CUDA device or run inference.
+
+```bash
+cargo build --locked --release --features cuda,server
+./target/release/rustinfer --version
+```
+
+CUDA compilation/link validation is separate from the mandatory CPU gate. See
+[`ci/README.md`](ci/README.md) for the reproducible local and container commands.
+
 ## 1. Vision
 
 `rustinfer` aims to build a lightweight, high-performance LLM inference engine with a different emphasis from general-purpose engines such as vLLM, SGLang, or TensorRT-LLM.

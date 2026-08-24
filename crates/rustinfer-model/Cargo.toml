@@ -1,0 +1,17 @@
+[package]
+name = "rustinfer-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Canonical model IR boundary for rustinfer"
+
+[features]
+default = []
+
+[dependencies]
+rustinfer-core = { path = "../rustinfer-core" }
+rustinfer-tensor = { path = "../rustinfer-tensor" }
+
+[lints]
+workspace = true

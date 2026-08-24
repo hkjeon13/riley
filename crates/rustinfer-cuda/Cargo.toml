@@ -1,0 +1,23 @@
+[package]
+name = "rustinfer-cuda"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Narrow Rust boundary for the rustinfer native CUDA C ABI"
+build = "build.rs"
+
+[features]
+default = []
+cuda = []
+
+[dependencies]
+rustinfer-core = { path = "../rustinfer-core" }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "abi_link"
+path = "tests/abi_link.rs"
+required-features = ["cuda"]
