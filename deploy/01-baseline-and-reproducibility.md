@@ -10,6 +10,8 @@
 
 코드를 쓰기 전에 비교 대상, 하드웨어, 모델, 입력 corpus, 정확도 기준과 성능 지표를 고정한다. 이후 추가되는 exact 변환, 분포 보존 알고리즘과 근사 최적화가 같은 기준선에서 평가되도록 결과 schema도 먼저 정의한다.
 
+이 단계에서는 Python/PyTorch/Transformers를 **외부 reference lane**으로 사용할 수 있다. 그러나 `rustinfer` benchmark 대상은 별도의 Python-free production lane에서 실행해 reference 환경과 운영 dependency를 혼동하지 않는다.
+
 ## 핵심 결정
 
 ### 1. Primary GPU 한 종류
@@ -46,6 +48,42 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 
 동일 model, dtype, sampling 설정을 강제한다.
 
+## Reference lane과 Production lane
+
+### Python reference lane
+
+허용 dependency:
+
+- Python
+- PyTorch
+- Transformers
+- NumPy/SciPy
+
+목적:
+
+- golden logits와 token 생성
+- hidden-state fixture
+- checkpoint와 tokenizer 분석
+- baseline engine 실행
+
+### rustinfer production lane
+
+허용 dependency:
+
+- Rust release binary/library
+- native CUDA library
+- CUDA driver/runtime와 명시된 NVIDIA library
+- model/tokenizer artifact
+
+금지:
+
+- Python interpreter
+- PyTorch/Transformers import
+- Python subprocess fallback
+- Triton Python JIT
+
+두 lane은 환경 manifest와 명령을 분리하고 결과만 공통 schema로 비교한다.
+
 ## Benchmark matrix
 
 | 차원 | 초기 값 |
@@ -78,6 +116,7 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 semantic_class: reference | E0 | E1 | A1 | M1
 implementation_id: string
 reference_implementation: string
+runtime_dependency_class: python-reference | native-production
 approximation_enabled: bool
 error_budget: null | number
 seed: null | integer
@@ -132,7 +171,7 @@ quantization:
 - sampling에 사용하는 변환 후 logits 또는 log-probability fixture
 - request별 RNG 초기 상태와 알고리즘 ID
 
-전체 대형 tensor를 Git에 넣지 말고, 작은 fixture와 생성 스크립트를 둔다.
+전체 대형 tensor를 Git에 넣지 말고, 작은 fixture와 생성 스크립트를 둔다. Python object나 pickle이 아니라 JSON, safetensors, NumPy의 명시적 export 또는 checksum 형태를 사용한다.
 
 ## 의미 보존 등급별 정확도 기준
 
@@ -214,6 +253,9 @@ benchmarks/
 ├── schemas/
 │   └── result.schema.json
 └── results/.gitkeep
+
+tools/python/reference/
+└── Python reference 생성 도구
 ```
 
 ## 비범위
@@ -225,17 +267,20 @@ benchmarks/
 - quantization 실행
 - speculative decoding 실행
 - approximate attention 실행
+- Python을 production runtime에 포함
 
 ## 완료 기준
 
 - [ ] primary GPU, dtype, checkpoint 고정
+- [ ] Python reference lane의 dependency와 실행 명령 고정
+- [ ] Python-free rustinfer production lane의 dependency와 실행 명령 고정
 - [ ] baseline 실행 명령 재현 가능
 - [ ] benchmark matrix 파일화
 - [ ] golden corpus와 reference 생성 절차 문서화
-- [ ] 의미 보존 등급을 포함한 raw result schema 정의
+- [ ] 의미 보존 등급과 runtime dependency class를 포함한 raw result schema 정의
 - [ ] RNG 알고리즘과 seed 기록 방식 정의
 - [ ] 같은 환경에서 baseline 반복 실행 편차 확인
 
-**중단 조건:** benchmark 결과가 반복 실행마다 크게 흔들리면 다음 PR로 가지 않고 환경 안정화부터 수행한다.
+**중단 조건:** benchmark 결과가 반복 실행마다 크게 흔들리거나 두 lane의 model/dtype/sampling 조건이 다르면 다음 PR로 가지 않는다.
 
 [← 이전](00-pr-contract.md) | [목차](README.md) | [다음 →](02-workspace-and-ci.md)

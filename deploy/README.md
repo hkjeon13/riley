@@ -6,6 +6,7 @@
 
 - [프로젝트 비전](../README.md)
 - [Transformers 연산 모듈 분석](../docs/transformers-model-operation-analysis.md)
+- [구현 언어·라이브러리와 Runtime Dependency 경계](../docs/implementation-stack-and-runtime-boundaries.md)
 
 현재 원칙은 **구현보다 기존 구조 분석과 검증 계약을 먼저 확정하는 것**이다. 앞 단계의 승인 기준을 통과하지 못하면 다음 단계로 넘어가지 않는다.
 
@@ -22,23 +23,54 @@
 | 순서 | 문서 | PR의 한 가지 목적 | 완료 시 얻는 결과 |
 |---:|---|---|---|
 | 00 | [PR 계약](00-pr-contract.md) | 모든 PR의 크기·검증·롤백 규칙과 수학적 최적화 등급 확정 | 리뷰 가능한 공통 작업 방식 |
-| 01 | [기준선과 재현성](01-baseline-and-reproducibility.md) | 하드웨어·모델·정확도·성능·근사 허용 기준 고정 | 비교 가능한 benchmark contract |
-| 02 | [Workspace와 CI](02-workspace-and-ci.md) | Rust/CUDA 프로젝트 뼈대만 구축 | 빌드·정적검사·테스트 기반 |
-| 03 | [CUDA Host Runtime](03-cuda-host-runtime.md) | Rust에서 CUDA를 안전하게 호출 | device/stream/event/FFI smoke path |
+| 01 | [기준선과 재현성](01-baseline-and-reproducibility.md) | Python reference와 Python-free runtime 기준선 분리 | 비교 가능한 benchmark contract |
+| 02 | [Workspace와 CI](02-workspace-and-ci.md) | Rust/CUDA production과 optional 연구 도구의 workspace 경계 구축 | 빌드·정적검사·테스트 기반 |
+| 03 | [CUDA Host Runtime](03-cuda-host-runtime.md) | Rust에서 CUDA C++를 C ABI로 안전하게 호출 | device/stream/event/FFI smoke path |
 | 04 | [Tensor와 메모리](04-tensor-and-memory.md) | GPU 메모리 lifetime과 layout 정의 | `DeviceBuffer`, `TensorView`, workspace |
-| 05 | [모델 로딩과 Canonical IR](05-model-loading-and-ir.md) | HF 설정·가중치를 실행 가능한 IR로 변환 | Llama 계열 모델 기술자와 weight map |
-| 06 | [핵심 Primitive](06-core-primitives.md) | 모델 조립 전 핵심 연산 정확도 확보 | GEMM adapter, embedding, norm, RoPE 등 |
+| 05 | [모델 로딩과 Canonical IR](05-model-loading-and-ir.md) | Python 없이 HF artifact를 실행 가능한 IR로 변환 | Llama 계열 모델 기술자와 weight map |
+| 06 | [핵심 Primitive](06-core-primitives.md) | cuBLASLt와 CUDA C++ primitive 정확도 확보 | GEMM adapter, embedding, norm, RoPE 등 |
 | 07 | [Llama 기준 Forward](07-llama-reference-forward.md) | cache 없는 단일 prefill logits 일치 | 최초 end-to-end GPU forward |
-| 08 | [Prefill Attention](08-prefill-attention.md) | online softmax를 포함한 정확한 attention backend 분리 | score matrix를 만들지 않는 prefill 경로 |
+| 08 | [Prefill Attention](08-prefill-attention.md) | native online-softmax attention backend 분리 | score matrix를 만들지 않는 prefill 경로 |
 | 09 | [단일 요청 Decode](09-single-request-decode.md) | 결합 가능한 부분합 기반 decode와 연속 KV cache | 단일 요청 autoregressive core |
 | 10 | [Paged KV 관리](10-paged-kv-manager.md) | block 단위 KV 할당·회수와 확장 가능한 metadata ABI | batching·후속 page 최적화용 cache substrate |
 | 11 | [Sampling과 Generation](11-sampling-and-generation.md) | 재현 가능한 RNG 계약과 token generation 완성 | 단일 요청 생성 API core |
 | 12 | [Qwen 호환성](12-qwen-compatibility.md) | 두 번째 모델 family로 IR 재사용 검증 | 모델별 복제 없는 확장성 검증 |
 | 13 | [Scheduler와 Continuous Batching](13-scheduler-and-batching.md) | 여러 요청을 GPU step으로 구성 | Rust-native serving control plane |
 | 14 | [API와 Streaming](14-api-and-streaming.md) | OpenAI 호환 서비스 경계 제공 | 취소·backpressure 포함 서버 |
-| 15 | [Profiling과 최적화](15-profiling-and-optimization.md) | 측정된 병목만 exact fusion 또는 명시적 오차 예산으로 개선 | 성능 회귀 방지와 최적 fast path |
-| 16 | [신뢰성 및 Release Gate](16-reliability-and-release.md) | 의미 보존 등급별 장시간 안정성과 배포 가능성 검증 | 첫 release candidate |
+| 15 | [Profiling과 최적화](15-profiling-and-optimization.md) | cuBLASLt→CUTLASS/custom CUDA 순으로 측정된 병목 개선 | 성능 회귀 방지와 최적 fast path |
+| 16 | [신뢰성 및 Release Gate](16-reliability-and-release.md) | Python-free runtime과 의미 보존 등급별 배포 검증 | 첫 release candidate |
 | 17 | [확장 Gate](17-extension-gates.md) | Quantization 변환, speculative, sparse attention, SSM 등 진입 조건 정의 | 범위 폭증 방지용 후속 로드맵 |
+
+## Production 기술 경계
+
+```text
+Rust
+→ API, Scheduler, KV Metadata, Model Runtime, CUDA orchestration
+
+CUDA C++
+→ Production custom GPU kernels
+
+cuBLASLt
+→ Dense GEMM 기본 경로
+
+CUTLASS
+→ 측정으로 필요성이 입증된 fused/quantized/grouped GEMM
+
+Triton
+→ Optional prototype와 비교 실험; 초기 production dependency 아님
+
+Python
+→ Reference, Transformers 분석, checkpoint 변환, calibration, SVD, benchmark 분석
+→ Runtime·inference module에는 포함하지 않음
+```
+
+필수 원칙:
+
+1. `cargo build --release`와 server 실행은 Python 없이 가능해야 한다.
+2. production server는 Python subprocess, PyTorch, Transformers를 호출하지 않는다.
+3. Python 도구의 출력은 JSON, safetensors, CSV/JSONL 같은 명시적 artifact로 전달한다.
+4. 운영 fallback은 Python 모델이 아니라 native reference/exact path다.
+5. Triton prototype의 성과는 production CUDA C++/CUTLASS 이식 또는 별도 승인 전까지 실험으로 유지한다.
 
 ## 수학적 최적화 배치 원칙
 
@@ -85,6 +117,10 @@ PR 14에서 취소, 연결 종료, 과부하, 오류 응답이 GPU 자원 누수
 
 PR 16의 soak test와 성능 회귀 gate를 통과해야 release tag를 만든다. `A1` 근사는 첫 릴리스 기본 경로가 아니다.
 
+### Gate F — Python-free production
+
+PR 16에서 Python이 설치되지 않은 release 환경으로 model load, prefill, decode, sampling, streaming과 cancellation을 검증한다.
+
 ## 실행 규칙
 
 1. 번호 순서대로 진행한다.
@@ -96,5 +132,6 @@ PR 16의 soak test와 성능 회귀 gate를 통과해야 release tag를 만든�
 7. 한 PR에서 correctness와 aggressive optimization을 동시에 하지 않는다.
 8. `E0`, `E1`, `A1`, `M1` 중 의미 보존 등급을 선언하지 않은 최적화는 병합하지 않는다.
 9. 근사 최적화는 error budget, exact fallback, feature flag와 결과 표기를 가져야 한다.
+10. production crate가 `tools/python` 또는 `experiments/triton`에 의존하면 병합하지 않는다.
 
 다음 문서: [00 — PR 계약](00-pr-contract.md)

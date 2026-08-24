@@ -8,15 +8,35 @@
 
 ## 목적
 
-Rust에서 CUDA device, context, stream, event와 kernel launch를 예측 가능하게 제어하는 최소 host runtime을 만든다.
+Rust에서 CUDA device, context, stream, event와 CUDA C++ kernel launch를 예측 가능하게 제어하는 최소 host runtime을 만든다.
+
+## 언어 경계
+
+```text
+Rust
+→ ownership, validation, device/context/stream/event lifetime
+
+extern "C" ABI
+→ 고정 폭 type과 status code를 사용하는 연결 규약
+
+CUDA C++
+→ 실제 smoke kernel과 향후 production GPU operation
+```
+
+`extern "C"`는 ABI를 의미하며 kernel 구현 언어가 C라는 뜻이 아니다. 이 단계의 native source는 CUDA C++로 작성한다.
+
+Python, PyTorch extension, Triton JIT를 통해 CUDA를 호출하는 우회 경로는 만들지 않는다.
 
 ## 설계 원칙
 
-- CUDA C/C++와 Rust 사이에는 좁은 `extern "C"` ABI를 둔다.
+- CUDA C++와 Rust 사이에는 좁은 `extern "C"` ABI를 둔다.
 - raw CUDA error code는 즉시 Rust error로 변환한다.
 - global implicit context보다 명시적 device/context ownership을 선호한다.
 - default stream 의미에 의존하지 않는다.
 - destructor에서 실패를 숨길 수 있는 작업은 explicit close/synchronize API도 제공한다.
+- C++ exception이 ABI를 넘어오지 않게 한다.
+- Rust panic이 ABI를 넘어가지 않게 한다.
+- FFI function은 Python object나 PyTorch tensor를 받지 않는다.
 
 ## 최소 타입
 
@@ -38,6 +58,26 @@ DeviceProperties
 - drop 시 동작
 - async 작업과의 lifetime 관계
 
+## C ABI 기본 규칙
+
+- opaque handle 또는 CUDA native handle의 소유권을 명시
+- `void*`는 device pointer인지 host pointer인지 함수명·문서로 구분
+- shape와 byte length는 overflow를 검사할 수 있는 고정 폭 정수 사용
+- return은 status code, 상세 오류는 별도 조회 또는 caller buffer 사용
+- ABI version과 library build metadata 제공
+- struct padding에 의존하는 복잡한 C++ type 노출 금지
+
+예:
+
+```cpp
+extern "C" RustInferStatus rustinfer_fill_f32(
+    float* device_output,
+    std::uint64_t element_count,
+    float value,
+    cudaStream_t stream
+);
+```
+
 ## 구현 범위
 
 1. device enumerate와 property 조회
@@ -45,8 +85,9 @@ DeviceProperties
 3. stream 생성·동기화
 4. event record/wait/elapsed time
 5. host callback 또는 동등한 완료 확인 수단
-6. 아주 작은 smoke kernel launch
+6. CUDA C++ smoke kernel launch
 7. kernel launch 직후와 sync 시점 오류 구분
+8. native library ABI/build version 조회
 
 Smoke kernel은 성능 목적이 아니다. vector add 또는 buffer fill 정도로 제한한다.
 
@@ -58,7 +99,9 @@ Smoke kernel은 성능 목적이 아니다. vector add 또는 buffer fill 정도
 - [ ] stream handle lifetime 보장
 - [ ] launch parameter 범위 검사
 - [ ] CUDA error 문자열 포함
+- [ ] C++ exception이 ABI를 넘지 않음
 - [ ] panic이 FFI 경계를 넘어가지 않음
+- [ ] Python 또는 PyTorch object가 API에 없음
 
 ## 테스트
 
@@ -67,6 +110,7 @@ Smoke kernel은 성능 목적이 아니다. vector add 또는 buffer fill 정도
 - CUDA 비활성 build
 - 오류 enum/format
 - invalid device index
+- native library가 없을 때 명확한 오류
 
 ### GPU
 
@@ -75,21 +119,27 @@ Smoke kernel은 성능 목적이 아니다. vector add 또는 buffer fill 정도
 - async kernel 후 명시적 sync
 - 잘못된 launch가 오류로 전달되는지 확인
 - 반복 생성/drop 시 resource leak smoke
+- Python이 없는 환경에서 동일 테스트 실행
 
 ## 비범위
 
 - 범용 tensor
 - allocator pool
 - cuBLASLt
+- CUTLASS
 - model operation
 - CUDA Graph
+- Triton
+- NVRTC
 
 ## 완료 기준
 
 - [ ] Rust에서 device/stream/event lifecycle이 safe API로 노출됨
 - [ ] `unsafe`가 FFI module 밖으로 새지 않음
-- [ ] smoke kernel 결과가 정확함
+- [ ] CUDA C++ smoke kernel 결과가 정확함
+- [ ] C ABI와 ABI version이 문서화됨
 - [ ] compute capability와 memory 정보가 benchmark metadata로 출력됨
+- [ ] Python 없는 환경에서 host runtime test 통과
 - [ ] CUDA 미설치 환경 오류가 명확함
 
 [← 이전](02-workspace-and-ci.md) | [목차](README.md) | [다음 →](04-tensor-and-memory.md)

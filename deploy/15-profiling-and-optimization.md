@@ -8,9 +8,56 @@
 
 ## 목적
 
-작동하는 서비스의 trace를 기준으로 가장 큰 병목 하나씩만 최적화한다. 이 문서는 하나의 거대 PR을 의미하지 않으며, 아래 항목은 각각 독립 PR 후보이다.
+작동하는 Python-free native 서비스의 trace를 기준으로 가장 큰 병목 하나씩만 최적화한다. 이 문서는 하나의 거대 PR을 의미하지 않으며, 아래 항목은 각각 독립 PR 후보이다.
 
 모든 후보는 [PR 00](00-pr-contract.md)의 의미 보존 등급을 선언한다. `E0`과 `A1`을 같은 PR에서 섞지 않는다.
+
+## 기술 선택 Escalation Gate
+
+최적화 기술은 복잡한 것부터 선택하지 않는다.
+
+### Dense GEMM
+
+```text
+cuBLASLt baseline
+→ algorithm/layout/epilogue tuning
+→ CUTLASS prototype와 비교
+→ end-to-end 이점이 있을 때 CUTLASS production
+→ universal custom GEMM은 원칙적으로 제외
+```
+
+### Non-GEMM/Fusion
+
+```text
+분리된 CUDA C++ reference
+→ profiler evidence
+→ fused CUDA C++ 또는 CUTLASS epilogue
+→ native exact fallback 유지
+```
+
+### Triton
+
+Triton은 `experiments/triton/`에서 prototype과 성능 상한 탐색에 사용한다.
+
+```text
+Triton prototype
+→ correctness
+→ Nsight/benchmark
+→ CUDA C++ 또는 CUTLASS port
+→ production integration
+```
+
+초기 production binary가 Triton Python compiler나 PyTorch를 요구하도록 만들지 않는다. Triton을 production에 유지하려면 별도 PR에서 Python-free AOT artifact, version pin, cache, cold-start, CUDA Graph와 stream semantics를 검증한다.
+
+### NVRTC
+
+NVRTC runtime specialization은 다음이 모두 확인되기 전에는 도입하지 않는다.
+
+- 미리 compile할 shape/kernel 조합이 운영상 과도함
+- specialization 이점이 end-to-end에서 큼
+- compile timeout과 failure fallback 존재
+- cubin/PTX cache provenance와 invalidation 정책 존재
+- release 환경 compiler dependency가 승인됨
 
 ## 먼저 측정할 것
 
@@ -28,6 +75,7 @@
 - CUDA API synchronization
 - context 길이별 KV bytes read
 - page 또는 chunk partial-state merge overhead
+- backend/library cold-load 및 dispatch overhead
 
 ## 최적화 후보 우선순위
 
@@ -39,6 +87,8 @@
 - reference parity 확보
 - FP32 reduction semantics 유지
 - register pressure가 허용 범위
+
+구현 기본값은 CUDA C++다. CUTLASS epilogue로 옮기려면 GEMM 경계와 실제 이점이 확인되어야 한다.
 
 검증:
 
@@ -55,6 +105,8 @@
 - paged block offset 정확성 검증
 - dynamic/multimodal RoPE는 unsupported 또는 별도 path로 명시
 
+Production 구현은 CUDA C++와 C ABI 경계를 따른다.
+
 ### 후보 C — GPU Sampling (`E0` 또는 sampling contract 보존)
 
 조건:
@@ -63,6 +115,8 @@
 - PR 11의 logits processing 순서 유지
 - request별 deterministic RNG contract 유지
 - CPU reference와 probability 및 token 결과 검증
+
+Python sampling은 reference일 뿐 운영 fallback이 아니다.
 
 ### 후보 D — CUDA Graph decode fast path (`E0`)
 
@@ -159,19 +213,24 @@ missing_probability_upper
 
 1. profiler evidence
 2. 의미 보존 등급
-3. 가설
-4. reference implementation
-5. optimized implementation
-6. correctness 또는 error-budget 결과
-7. microbenchmark
-8. end-to-end 결과
-9. regression range
-10. runtime flag와 rollback
+3. technology choice와 더 단순한 대안 검토
+4. 가설
+5. reference implementation
+6. optimized implementation
+7. correctness 또는 error-budget 결과
+8. microbenchmark
+9. end-to-end 결과
+10. runtime dependency 변화
+11. regression range
+12. runtime flag와 rollback
 
 ## 금지
 
 - profiler 없이 fusion 선택
 - 여러 fusion을 한 PR에서 동시 적용
+- cuBLASLt 비교 없이 복잡한 CUTLASS GEMM 도입
+- Triton prototype을 자동으로 production dependency로 승격
+- Python/PyTorch fallback을 운영 경로에 추가
 - `A1` 결과를 exact optimization으로 표현
 - omitted mass bound를 곧바로 output absolute error라고 표현
 - 평균만 보고 p95/p99 악화 무시
@@ -185,10 +244,13 @@ missing_probability_upper
 
 - [ ] target workload의 top bottleneck이 설명됨
 - [ ] 적용한 각 최적화가 end-to-end에서 유효
+- [ ] cuBLASLt/CUTLASS/custom CUDA 선택 근거가 기록됨
 - [ ] 각 최적화의 의미 보존 등급이 기록됨
 - [ ] performance regression suite 존재
-- [ ] exact fallback path parity 유지
+- [ ] exact native fallback path parity 유지
 - [ ] `A1` 후보는 기본 비활성이고 error-quality-latency curve가 존재
+- [ ] production path가 Python-free로 유지됨
+- [ ] Triton/NVRTC를 사용한 경우 별도 production dependency 결정이 존재
 - [ ] 최적화별 memory trade-off 기록
 - [ ] baseline engine과 동일 조건 비교 갱신
 
