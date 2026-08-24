@@ -130,6 +130,22 @@ Python이 설치되지 않은 clean container 또는 host에서 다음을 수행
 - Python fallback/subprocess 기동
 - 민감 정보 로그 노출
 
+#### PR 04 CUDA memory fault-injection gate
+
+PR 04의 정상·validation 경로와 Compute Sanitizer만으로 직접 만들 수 없는 다음 native
+실패 분기는 test-only injectable backend로 강제한다.
+
+- allocation create가 실패한 뒤 rollback `cudaFree`/`cudaFreeHost` 결과가 모호한 경우
+- explicit close의 `cudaFree*` 결과가 모호한 경우
+- async copy의 deferred query/synchronize 오류와 current-context 복원 실패
+
+각 fault case는 shared primary context와 같은 process의 후속 leak gate를 오염시키지
+않도록 별도 subprocess에서 실행한다. Allocation 해제가 확인되지 않으면 live
+bytes/count 또는 context child가 남아 context close를 거부해야 한다. Copy 완료가
+확인되지 않으면 stream/device/pinned active token과 Rust busy 상태가 남아 reuse/free를
+거부해야 한다. 각 subprocess evidence는 double decrement/free가 없고 성공으로 잘못
+보고되지 않았음을 함께 검증한다.
+
 ### 의미 보존 등급별 검증
 
 #### `E0`
