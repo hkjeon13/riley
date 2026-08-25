@@ -422,6 +422,8 @@ impl error::Error for ValidationError {}
 pub enum ApiError {
     /// Request validation failed before admission.
     InvalidRequest(ValidationError),
+    /// Backend validation rejected a request against loaded-model constraints.
+    BackendInvalidRequest,
     /// The bounded admission queue is full.
     Overloaded,
     /// The request deadline elapsed.
@@ -439,7 +441,7 @@ impl ApiError {
     #[must_use]
     pub const fn status_code(&self) -> u16 {
         match self {
-            Self::InvalidRequest(_) => 400,
+            Self::InvalidRequest(_) | Self::BackendInvalidRequest => 400,
             Self::Overloaded => 429,
             Self::Timeout | Self::Cancelled => 408,
             Self::ShuttingDown => 503,
@@ -456,6 +458,12 @@ impl ApiError {
                 "invalid_request_error",
                 Some(source.parameter()),
                 source.code().as_str(),
+            ),
+            Self::BackendInvalidRequest => (
+                "the request is incompatible with the loaded model",
+                "invalid_request_error",
+                None,
+                "invalid_request",
             ),
             Self::Overloaded => (
                 "the server is at capacity; retry later",
@@ -497,6 +505,7 @@ impl ApiError {
 impl From<ServiceErrorClass> for ApiError {
     fn from(value: ServiceErrorClass) -> Self {
         match value {
+            ServiceErrorClass::InvalidRequest => Self::BackendInvalidRequest,
             ServiceErrorClass::Overloaded => Self::Overloaded,
             ServiceErrorClass::Timeout => Self::Timeout,
             ServiceErrorClass::ShuttingDown => Self::ShuttingDown,

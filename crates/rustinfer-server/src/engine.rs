@@ -1725,12 +1725,12 @@ mod cuda_backend {
             request: &GenerationRequest,
         ) -> Result<(), BackendError> {
             if request.model_id != self.metadata.model_id {
-                return Err(internal("request selected a different model"));
+                return Err(private_request_error("request selected a different model"));
             }
             if request.max_new_tokens == 0
                 || request.max_new_tokens > self.metadata.max_output_tokens
             {
-                return Err(internal(
+                return Err(private_request_error(
                     "requested output token count is outside server bounds",
                 ));
             }
@@ -1747,9 +1747,11 @@ mod cuda_backend {
             let total_tokens = prompt_token_ids
                 .len()
                 .checked_add(request.max_new_tokens)
-                .ok_or_else(|| internal("request token count overflowed"))?;
+                .ok_or_else(|| private_request_error("request token count overflowed"))?;
             if total_tokens > self.model.spec().max_sequence_length() {
-                return Err(internal("request exceeds model context window"));
+                return Err(private_request_error(
+                    "request exceeds model context window",
+                ));
             }
             let prompt_tokens = u64::try_from(prompt_token_ids.len())
                 .map_err(|_| internal("prompt token count overflowed"))?;

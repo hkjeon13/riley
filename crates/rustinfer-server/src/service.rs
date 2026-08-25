@@ -1318,6 +1318,7 @@ fn write_http_read_error(stream: &mut TcpStream, error: &HttpReadError) -> io::R
         _ => error.status_code(),
     };
     let (code, message) = match status {
+        405 => ("method_not_allowed", "the HTTP method is not supported"),
         408 => ("request_timeout", "request framing timed out"),
         411 => ("length_required", "Content-Length is required"),
         413 => ("request_too_large", "request body exceeds the server limit"),
@@ -1770,6 +1771,17 @@ mod tests {
         let malformed_body = std::str::from_utf8(response_body(&malformed)).expect("error UTF-8");
         assert!(malformed_body.contains("invalid_json"));
         assert!(!malformed_body.contains("line 1"));
+
+        let unsupported_method = send_request(
+            server.local_address(),
+            b"PUT /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&unsupported_method), 405);
+        assert!(
+            std::str::from_utf8(response_body(&unsupported_method))
+                .expect("error UTF-8")
+                .contains("method_not_allowed")
+        );
 
         let oversized_prompt = serde_json::to_vec(&json!({
             "model": "fixture-model",

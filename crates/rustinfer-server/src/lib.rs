@@ -3,9 +3,13 @@
 #[cfg(feature = "server")]
 pub mod domain;
 #[cfg(feature = "server")]
+pub mod engine;
+#[cfg(feature = "server")]
 pub mod http;
 #[cfg(feature = "server")]
 pub mod openai;
+#[cfg(feature = "server")]
+pub mod service;
 
 /// Returns a stable, human-readable version line without starting a server.
 ///

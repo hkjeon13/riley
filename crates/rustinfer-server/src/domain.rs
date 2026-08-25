@@ -303,6 +303,8 @@ pub enum FinishReason {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum ServiceErrorClass {
+    /// A normalized request is incompatible with loaded-model constraints.
+    InvalidRequest,
     /// Admission capacity was exhausted.
     Overloaded,
     /// The configured request deadline elapsed.
