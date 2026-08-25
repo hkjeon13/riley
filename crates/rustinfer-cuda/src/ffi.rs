@@ -2531,7 +2531,7 @@ pub(super) struct PackedBatchRawV1 {
     pub(super) block_size: u32,
 }
 
-fn raw_packed_batch_v1(batch: PackedBatchRawV1) -> RawPackedBatchV1 {
+fn raw_packed_batch_v1(batch: &PackedBatchRawV1) -> RawPackedBatchV1 {
     RawPackedBatchV1 {
         struct_size: PACKED_BATCH_V1_SIZE,
         format_version: PACKED_BATCH_VERSION,
@@ -2556,7 +2556,7 @@ pub(super) fn ragged_paged_kv_cache_write_execute(
     value_source: RawBufferSpan,
     key_pool: RawBufferSpan,
     value_pool: RawBufferSpan,
-    batch: PackedBatchRawV1,
+    batch: &PackedBatchRawV1,
     key_value_head_count: u64,
     head_size: u64,
     stream: &mut StreamHandle,
@@ -2590,7 +2590,7 @@ pub(super) fn ragged_paged_attention_execute(
     key_pool: RawBufferSpan,
     value_pool: RawBufferSpan,
     output: RawBufferSpan,
-    batch: PackedBatchRawV1,
+    batch: &PackedBatchRawV1,
     query_head_count: u64,
     key_value_head_count: u64,
     head_size: u64,

@@ -594,12 +594,13 @@ pub fn ragged_paged_kv_cache_write(
 
     #[cfg(feature = "cuda")]
     {
+        let batch = params.batch.raw();
         ffi::ragged_paged_kv_cache_write_execute(
             params.key_source.raw(),
             params.value_source.raw(),
             params.key_pool.raw(),
             params.value_pool.raw(),
-            params.batch.raw(),
+            &batch,
             params.key_value_head_count,
             params.head_size,
             &mut stream.native,
@@ -735,12 +736,13 @@ pub fn ragged_paged_attention(
 
     #[cfg(feature = "cuda")]
     {
+        let batch = params.batch.raw();
         ffi::ragged_paged_attention_execute(
             params.query.raw(),
             params.key_pool.raw(),
             params.value_pool.raw(),
             params.output.raw(),
-            params.batch.raw(),
+            &batch,
             params.query_head_count,
             params.key_value_head_count,
             params.head_size,
