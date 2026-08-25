@@ -1,7 +1,12 @@
 //! Remote-only PR13 fixed-M continuous-batch GPU gates.
 
 #![cfg(feature = "cuda")]
-#![allow(clippy::cast_precision_loss, clippy::float_cmp, clippy::too_many_lines)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::float_cmp,
+    clippy::similar_names,
+    clippy::too_many_lines
+)]
 
 use std::error::Error;
 use std::path::PathBuf;
