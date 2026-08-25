@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import re
 import stat
@@ -71,6 +72,61 @@ EXPECTED_OPTIMIZATION_TOKENS = [
     4052, 2025, 284, 965, 6497, 288, 1492, 418,
     260, 16438, 30, 198, 198, 504, 16438, 314,
 ]
+SOAK_CONTRACT_ID = "pr16-release-soak-v1"
+SOAK_TEMPLATE_CANONICAL_SHA256 = (
+    "5ef79434e79e6ac36e6fab4a54b2466572a62b98f972059a20fa59d4f8e7a096"
+)
+SOAK_SCENARIOS = {
+    "steady": ("steady", 14_400),
+    "burst-idle": ("burst-idle", 3_600),
+    "mixed-short-long": ("mixed", 3_600),
+    "invalid": ("invalid", 300),
+    "overload": ("overload", 600),
+    "cancellation-disconnect": ("cancellation-disconnect", 900),
+    "near-kv": ("near-kv", 1_800),
+    "graceful-restart": ("graceful-restart", 300),
+    "rollback-iteration-batch": ("rollback", 300),
+    "rollback-per-operation": ("rollback", 300),
+}
+SOAK_COMMON_SCENARIO_CHECKS = {
+    "complete",
+    "execution_completion",
+    "service_counters_monotonic",
+    "samples",
+    "requests",
+    "duration_seconds",
+    "sample_coverage_seconds",
+    "sample_gap_ms",
+    "rss_plateau_growth",
+    "rss_slope_per_hour",
+    "vram_plateau_growth",
+    "vram_slope_per_hour",
+    "request_outcomes",
+}
+SOAK_GOLDEN_SCENARIOS = {
+    "steady",
+    "burst-idle",
+    "graceful-restart",
+    "rollback-iteration-batch",
+    "rollback-per-operation",
+}
+SOAK_GLOBAL_CHECKS = {
+    "run_boundaries",
+    "final_sample_position",
+    "initial_target_pid_binding",
+    "final_quiescence",
+    "no_python_children",
+    "no_dropped_samples",
+    "no_failure_events",
+    "cancellations_observed",
+    "disconnects_observed",
+    "overloads_observed",
+    "service_cancellations_observed",
+    "service_disconnects_observed",
+    "service_overloads_observed",
+    "graceful_restart_golden_parity",
+    "rollback_golden_parity",
+}
 
 
 class CandidateError(ValueError):
@@ -168,6 +224,15 @@ def _revision(value: Any, path: str) -> str:
     if revision == "0" * 40:
         _fail(path, "all-zero placeholder revision is forbidden")
     return revision
+
+
+def _finite_number(value: Any, path: str, *, minimum: float | None = None) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        _fail(path, "must be a finite number")
+    result = float(value)
+    if not math.isfinite(result) or (minimum is not None and result < minimum):
+        _fail(path, "is outside the finite reviewed range")
+    return result
 
 
 def _file_sha256(path: Path) -> str:
@@ -755,8 +820,26 @@ def _validate_soak(
     if row["errors"] != []:
         _fail(f"{path}.errors", "must be empty")
     bindings = _exact(
-        row["bindings"], {"manifest_sha256", "binding_sha256", "source"}, f"{path}.bindings"
+        row["bindings"],
+        {
+            "contract_id",
+            "reviewed_manifest_template_canonical_sha256",
+            "manifest_sha256",
+            "binding_sha256",
+            "source",
+        },
+        f"{path}.bindings",
     )
+    if bindings["contract_id"] != SOAK_CONTRACT_ID:
+        _fail(f"{path}.bindings.contract_id", "reviewed soak contract mismatch")
+    if (
+        bindings["reviewed_manifest_template_canonical_sha256"]
+        != SOAK_TEMPLATE_CANONICAL_SHA256
+    ):
+        _fail(
+            f"{path}.bindings.reviewed_manifest_template_canonical_sha256",
+            "reviewed soak manifest digest mismatch",
+        )
     _sha256(bindings["manifest_sha256"], f"{path}.bindings.manifest_sha256")
     _sha256(bindings["binding_sha256"], f"{path}.bindings.binding_sha256")
     source = _exact(
@@ -780,7 +863,132 @@ def _validate_soak(
     _sha256(source["model_sha256"], f"{path}.bindings.source.model_sha256")
     _string(source["model_id"], f"{path}.bindings.source.model_id")
     _string(source["model_revision"], f"{path}.bindings.source.model_revision")
-    _all_checks_pass(row["checks"], f"{path}.checks")
+
+    summaries = row["scenario_summaries"]
+    if not isinstance(summaries, list) or len(summaries) != len(SOAK_SCENARIOS):
+        _fail(f"{path}.scenario_summaries", "exact reviewed scenario inventory required")
+    observed_scenarios: set[str] = set()
+    for index, value in enumerate(summaries):
+        summary_path = f"{path}.scenario_summaries[{index}]"
+        summary = _exact(
+            value,
+            {
+                "scenario_id",
+                "kind",
+                "events",
+                "samples",
+                "requests",
+                "maximum_sample_gap_ms",
+                "observed_duration_seconds",
+                "sample_span_seconds",
+                "rss_slope_bytes_per_hour",
+                "vram_slope_bytes_per_hour",
+            },
+            summary_path,
+        )
+        scenario_id = _string(summary["scenario_id"], f"{summary_path}.scenario_id")
+        if scenario_id in observed_scenarios or scenario_id not in SOAK_SCENARIOS:
+            _fail(f"{summary_path}.scenario_id", "duplicate or unreviewed scenario")
+        observed_scenarios.add(scenario_id)
+        expected_kind, expected_duration = SOAK_SCENARIOS[scenario_id]
+        if summary["kind"] != expected_kind:
+            _fail(f"{summary_path}.kind", "reviewed scenario kind mismatch")
+        for field in ("events", "samples", "requests"):
+            value = summary[field]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                _fail(f"{summary_path}.{field}", "must be a positive integer")
+        maximum_gap = _finite_number(
+            summary["maximum_sample_gap_ms"],
+            f"{summary_path}.maximum_sample_gap_ms",
+            minimum=0,
+        )
+        if maximum_gap > 2_500:
+            _fail(f"{summary_path}.maximum_sample_gap_ms", "exceeds reviewed bound")
+        observed_duration = _finite_number(
+            summary["observed_duration_seconds"],
+            f"{summary_path}.observed_duration_seconds",
+            minimum=0,
+        )
+        if observed_duration < expected_duration:
+            _fail(f"{summary_path}.observed_duration_seconds", "scenario was truncated")
+        sample_span = _finite_number(
+            summary["sample_span_seconds"],
+            f"{summary_path}.sample_span_seconds",
+            minimum=0,
+        )
+        if sample_span < expected_duration - 2.5:
+            _fail(f"{summary_path}.sample_span_seconds", "samples do not span scenario")
+        for field in ("rss_slope_bytes_per_hour", "vram_slope_bytes_per_hour"):
+            slope = _finite_number(summary[field], f"{summary_path}.{field}")
+            if slope > 33_554_432:
+                _fail(f"{summary_path}.{field}", "exceeds reviewed slope bound")
+    if observed_scenarios != set(SOAK_SCENARIOS):
+        _fail(f"{path}.scenario_summaries", "reviewed scenario set mismatch")
+
+    expected_checks = set(SOAK_GLOBAL_CHECKS)
+    for scenario_id in SOAK_SCENARIOS:
+        expected_checks.update(
+            f"{scenario_id}.{suffix}" for suffix in SOAK_COMMON_SCENARIO_CHECKS
+        )
+        if scenario_id in SOAK_GOLDEN_SCENARIOS:
+            expected_checks.add(f"{scenario_id}.golden_parity")
+    checks = row["checks"]
+    if not isinstance(checks, list):
+        _fail(f"{path}.checks", "must be an array")
+    observed_checks: set[str] = set()
+    for index, value in enumerate(checks):
+        check_path = f"{path}.checks[{index}]"
+        check = _exact(value, {"name", "passed", "observed", "threshold"}, check_path)
+        name = _string(check["name"], f"{check_path}.name")
+        if name in observed_checks:
+            _fail(f"{check_path}.name", "duplicate check")
+        observed_checks.add(name)
+        if check["passed"] is not True:
+            _fail(f"{check_path}.passed", "must be true")
+    if observed_checks != expected_checks:
+        _fail(f"{path}.checks", "exact reviewed soak check inventory mismatch")
+
+    observations = _exact(
+        row["observations"],
+        {"event_count", "outcome_counts", "service_counter_maxima", "final"},
+        f"{path}.observations",
+    )
+    event_count = observations["event_count"]
+    if isinstance(event_count, bool) or not isinstance(event_count, int) or event_count < 1:
+        _fail(f"{path}.observations.event_count", "must be a positive integer")
+    for field, minimums in (
+        (
+            "outcome_counts",
+            {"cancelled": 100, "disconnected": 100, "overload": 20},
+        ),
+        (
+            "service_counter_maxima",
+            {"cancellations": 100, "disconnects": 100, "overloads": 20},
+        ),
+    ):
+        counters = _object(observations[field], f"{path}.observations.{field}")
+        for name, minimum in minimums.items():
+            value = counters.get(name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+                _fail(
+                    f"{path}.observations.{field}.{name}",
+                    f"must be an integer >= {minimum}",
+                )
+    final = _exact(
+        observations["final"],
+        {
+            "active_requests",
+            "waiting_requests",
+            "kv_allocated_blocks",
+            "device_live_count",
+            "device_live_bytes",
+            "pinned_live_count",
+            "pinned_live_bytes",
+        },
+        f"{path}.observations.final",
+    )
+    if any(value != 0 for value in final.values()):
+        _fail(f"{path}.observations.final", "all final resource values must be zero")
 
 
 def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> None:

@@ -642,7 +642,15 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
         passed = all(check["passed"] for check in checks)
         report.update({
             "status": "passed" if passed else "failed", "passed": passed,
-            "bindings": {"manifest_sha256": run["manifest_sha256"], "binding_sha256": run["binding_sha256"], "source": run["source"]},
+            "bindings": {
+                "contract_id": manifest["contract_id"],
+                "reviewed_manifest_template_canonical_sha256": (
+                    REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256
+                ),
+                "manifest_sha256": run["manifest_sha256"],
+                "binding_sha256": run["binding_sha256"],
+                "source": run["source"],
+            },
             "observations": {"event_count": len(rows), "outcome_counts": dict(sorted(outcome_counts.items())), "service_counter_maxima": dict(sorted(metric_counter_maxima.items())), "final": final_values},
             "checks": checks,
         })

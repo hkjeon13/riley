@@ -23,6 +23,12 @@ from check_release_candidate import (  # noqa: E402
     NATIVE_REPLAY_VERSION,
     OPTIMIZATION_LOGS,
     PYTHON_FREE_CHECKS,
+    SOAK_COMMON_SCENARIO_CHECKS,
+    SOAK_CONTRACT_ID,
+    SOAK_GLOBAL_CHECKS,
+    SOAK_GOLDEN_SCENARIOS,
+    SOAK_SCENARIOS,
+    SOAK_TEMPLATE_CANONICAL_SHA256,
     evaluate,
 )
 from test_release import EPOCH, fixture_elf  # noqa: E402
@@ -338,11 +344,38 @@ class CandidateFixture:
             "checks": [{"name": "all_regressions", "passed": True}],
             "errors": [],
         }
+        soak_checks = set(SOAK_GLOBAL_CHECKS)
+        soak_summaries = []
+        for scenario_id, (kind, duration) in SOAK_SCENARIOS.items():
+            soak_checks.update(
+                f"{scenario_id}.{suffix}"
+                for suffix in SOAK_COMMON_SCENARIO_CHECKS
+            )
+            if scenario_id in SOAK_GOLDEN_SCENARIOS:
+                soak_checks.add(f"{scenario_id}.golden_parity")
+            soak_summaries.append(
+                {
+                    "scenario_id": scenario_id,
+                    "kind": kind,
+                    "events": duration + 2,
+                    "samples": duration,
+                    "requests": 1,
+                    "maximum_sample_gap_ms": 1000.0,
+                    "observed_duration_seconds": float(duration),
+                    "sample_span_seconds": max(0.0, duration - 1.0),
+                    "rss_slope_bytes_per_hour": 0.0,
+                    "vram_slope_bytes_per_hour": 0.0,
+                }
+            )
         self.documents["soak"] = {
             "schema_version": "rustinfer.reliability-soak-report.v1",
             "status": "passed",
             "passed": True,
             "bindings": {
+                "contract_id": SOAK_CONTRACT_ID,
+                "reviewed_manifest_template_canonical_sha256": (
+                    SOAK_TEMPLATE_CANONICAL_SHA256
+                ),
                 "manifest_sha256": digest(b"soak manifest"),
                 "binding_sha256": digest(b"soak binding"),
                 "source": {
@@ -356,9 +389,38 @@ class CandidateFixture:
                     "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
                 },
             },
-            "scenario_summaries": [{}],
-            "observations": {},
-            "checks": [{"name": "all_scenarios", "passed": True}],
+            "scenario_summaries": soak_summaries,
+            "observations": {
+                "event_count": sum(summary["events"] for summary in soak_summaries),
+                "outcome_counts": {
+                    "cancelled": 100,
+                    "disconnected": 100,
+                    "overload": 20,
+                },
+                "service_counter_maxima": {
+                    "cancellations": 100,
+                    "disconnects": 100,
+                    "overloads": 20,
+                },
+                "final": {
+                    "active_requests": 0,
+                    "waiting_requests": 0,
+                    "kv_allocated_blocks": 0,
+                    "device_live_count": 0,
+                    "device_live_bytes": 0,
+                    "pinned_live_count": 0,
+                    "pinned_live_bytes": 0,
+                },
+            },
+            "checks": [
+                {
+                    "name": name,
+                    "passed": True,
+                    "observed": True,
+                    "threshold": True,
+                }
+                for name in sorted(soak_checks)
+            ],
             "errors": [],
         }
 
@@ -557,6 +619,41 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("required check set mismatch", report["errors"][0])
+
+    def test_soak_contract_and_duration_checks_cannot_be_self_asserted(self) -> None:
+        self.fixture.documents["soak"]["bindings"][
+            "reviewed_manifest_template_canonical_sha256"
+        ] = digest(b"easier soak contract")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("reviewed soak manifest digest", report["errors"][0])
+
+        second_root = Path(self.temporary.name) / "second"
+        second_root.mkdir()
+        second_fixture = CandidateFixture(second_root)
+        checks = second_fixture.documents["soak"]["checks"]
+        checks[:] = [
+            check
+            for check in checks
+            if check["name"] != "steady.duration_seconds"
+        ]
+        second_fixture.refresh_manifest()
+        report = second_fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("exact reviewed soak check inventory", report["errors"][0])
+
+    def test_soak_summary_must_span_the_reviewed_duration(self) -> None:
+        summary = next(
+            summary
+            for summary in self.fixture.documents["soak"]["scenario_summaries"]
+            if summary["scenario_id"] == "steady"
+        )
+        summary["observed_duration_seconds"] = 60.0
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("scenario was truncated", report["errors"][0])
 
 
 if __name__ == "__main__":
