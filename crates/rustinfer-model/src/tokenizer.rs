@@ -58,7 +58,7 @@ pub trait Tokenizer {
 
     /// Returns the exact number of raw decoded bytes for a token sequence.
     ///
-    /// ByteLevel bytes are counted before UTF-8 validation or lossy decoding,
+    /// `ByteLevel` bytes are counted before UTF-8 validation or lossy decoding,
     /// so an incomplete multi-token UTF-8 sequence remains representable.
     ///
     /// # Errors
@@ -86,7 +86,7 @@ pub trait Tokenizer {
 
     /// Decodes a token sequence into caller-owned raw byte storage.
     ///
-    /// ByteLevel bytes from adjacent tokens are concatenated without applying
+    /// `ByteLevel` bytes from adjacent tokens are concatenated without applying
     /// UTF-8 replacement. On success only `destination[..returned_length]` is
     /// written, and the successful path performs no heap allocation.
     ///
