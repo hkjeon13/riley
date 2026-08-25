@@ -14,5 +14,13 @@ cuda = ["rustinfer-runtime/cuda"]
 rustinfer-core = { path = "../rustinfer-core" }
 rustinfer-runtime = { path = "../rustinfer-runtime" }
 
+[dev-dependencies]
+rustinfer-model = { path = "../rustinfer-model" }
+
 [lints]
 workspace = true
+
+[[test]]
+name = "llama_iteration_gpu"
+path = "tests/llama_iteration_gpu.rs"
+required-features = ["cuda"]

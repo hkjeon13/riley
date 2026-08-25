@@ -23,7 +23,10 @@ pub use kernel::{
 };
 
 #[cfg(feature = "cuda")]
-pub use rustinfer_cuda::{AttentionBackend, AttentionPreference, AttentionSelectionTrace};
+pub use rustinfer_cuda::{
+    AttentionBackend, AttentionPreference, AttentionSelectionTrace, CudaContext, CudaError,
+    CudaRuntime, CudaStream,
+};
 
 /// Static build information that does not initialize a CUDA device.
 #[derive(Clone, Debug, Eq, PartialEq)]

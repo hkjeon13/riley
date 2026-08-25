@@ -2,12 +2,19 @@
 
 pub mod config;
 pub mod error;
+pub mod execution;
 pub mod metrics;
 pub mod plan;
 mod scheduler;
 
 pub use config::{OverloadPolicy, SchedulerConfig};
 pub use error::{SchedulerError, SchedulerResult};
+pub use execution::{
+    DownloadedLlamaIteration, IterationAdapterError, IterationAdapterResult,
+    IterationCommitFailure, IterationTiming, PreparedLlamaIteration, SampledIterationToken,
+};
+#[cfg(feature = "cuda")]
+pub use execution::{IterationExecutionFailure, execute_llama_iteration};
 pub use metrics::{
     IterationMetricSample, MetricWindowSnapshot, SchedulerGauges, SchedulerMetricsSnapshot,
 };

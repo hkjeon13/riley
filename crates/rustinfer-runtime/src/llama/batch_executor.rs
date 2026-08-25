@@ -575,6 +575,28 @@ impl PreparedLlamaBatchExecutor {
         self.config
     }
 
+    /// Vocabulary width of every gathered output row.
+    #[must_use]
+    pub const fn vocabulary_size(&self) -> usize {
+        self.forward.plan.dimensions().vocabulary_size()
+    }
+
+    /// Number of absolute positions represented by the cold-prepared `RoPE` tables.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the owned table byte shape is inconsistent or cannot be
+    /// represented as a host `usize`.
+    pub fn maximum_position_count(&self) -> LlamaBatchExecutorResult<usize> {
+        let positions = model_max_position(
+            &self.absolute_rope_cos,
+            self.forward.plan.dimensions().head_dimension(),
+        )?;
+        usize::try_from(positions).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::RopeCos,
+        })
+    }
+
     #[must_use]
     pub const fn kv_layout(&self) -> KvLayout {
         self.layout
@@ -685,14 +707,31 @@ impl PreparedLlamaBatchExecutor {
     /// Returns when the output shape cannot be represented as a host byte
     /// length.
     pub fn output_byte_len(&self) -> LlamaBatchExecutorResult<usize> {
-        let bytes = self
-            .output_count
-            .checked_mul(self.forward.plan.dimensions().vocabulary_size())
+        self.output_byte_len_for(self.output_count)
+    }
+
+    /// Exact BF16 byte length needed for a prospective `[output_count,V]` download.
+    ///
+    /// This pre-dispatch query lets orchestration allocate its destination
+    /// before any reserved KV range can be mutated.
+    ///
+    /// # Errors
+    ///
+    /// Returns when `output_count` exceeds the cold-prepared bound or the byte
+    /// length cannot be represented as a host `usize`.
+    pub fn output_byte_len_for(&self, output_count: usize) -> LlamaBatchExecutorResult<usize> {
+        if output_count > self.config.metadata.max_output_slots() {
+            return Err(LlamaBatchExecutorError::InvalidBatch {
+                field: "output_count",
+                reason: "prospective output count exceeds the cold-prepared bound",
+            });
+        }
+        output_count
+            .checked_mul(self.vocabulary_size())
             .and_then(|elements| elements.checked_mul(BF16_BYTES_USIZE))
             .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
                 resource: LlamaBatchExecutorResource::GatheredLogits,
-            })?;
-        Ok(bytes)
+            })
     }
 
     /// Downloads only gathered sampled rows `[O,V]`, in dense output-slot order.
