@@ -1,4 +1,11 @@
-//! Binary-facing build information; the HTTP service arrives in PR 14.
+//! Binary-facing build information and the bounded PR 14 serving surface.
+
+#[cfg(feature = "server")]
+pub mod domain;
+#[cfg(feature = "server")]
+pub mod http;
+#[cfg(feature = "server")]
+pub mod openai;
 
 /// Returns a stable, human-readable version line without starting a server.
 ///
