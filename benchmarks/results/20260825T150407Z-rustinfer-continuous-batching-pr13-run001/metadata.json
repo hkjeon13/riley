@@ -1,0 +1,122 @@
+{
+  "artifact_kind": "rustinfer-pr13-continuous-batching-evidence",
+  "created_at_utc": "2026-08-25T15:04:07Z",
+  "schema_id": "rustinfer.pr13.continuous-batching-evidence.v1",
+  "status": "passed",
+  "benchmark_scope": "functional-validation",
+  "scope_note": "Scheduler determinism, bounded ownership, E0 model parity, long-run allocation accounting, and sanitizer evidence; no performance claim.",
+  "semantic_class": "E0",
+  "source": {
+    "branch": "codex/pr-13-scheduler-batching",
+    "git_dirty": false,
+    "git_revision": "a303a23633baf465f625154b688cafc4009801b6",
+    "source_tar_bytes": 29739989,
+    "source_tar_sha256": "854c784fd5620446e2fbfce81ea219c034a8b60b5a9b05ff5cf9b6a5e48d2eb3"
+  },
+  "environment": {
+    "host": "server-4096",
+    "host_os": "Ubuntu 22.04.5 LTS",
+    "host_kernel": "Linux 6.8.0-138-generic x86_64",
+    "cpu": "13th Gen Intel Core i7-13700K",
+    "logical_cpu_count": 24,
+    "ram_bytes": 67185598464,
+    "container_network": "disabled",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_mib": 24564,
+    "compute_capability": "8.9",
+    "nvidia_driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architectures": "89",
+    "rustc_version": "1.85.0",
+    "cargo_version": "1.85.0"
+  },
+  "models": [
+    {
+      "id": "HuggingFaceTB/SmolLM2-135M",
+      "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+      "dtype": "bfloat16",
+      "checkpoint_manifest_sha256": "feb8977cf0ee1840ad2e8aa44203948a7380c242da99d061fa35633f46a012b8"
+    },
+    {
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+      "dtype": "bfloat16",
+      "checkpoint_manifest_sha256": "69065d1cae54c007e3204255f8e7d7ba77bc5cd391d395ad8fc0a3965bc653b4"
+    }
+  ],
+  "batch_contract": {
+    "maximum_validated_concurrent_requests": 2,
+    "fixed_m": 8,
+    "block_size_tokens": 16,
+    "policies": ["FCFS admission", "decode first", "bounded waiting-time aging", "chunked prefill"],
+    "immutable_iteration_plan": true,
+    "dense_output_slots": true,
+    "cross_request_physical_block_alias_rejected": true,
+    "serial_per_request_dispatch": false,
+    "post_execute_error_requires_stream_quiescence": true
+  },
+  "numeric_contract": {
+    "source": "PR01 E0 v2 immutable final-logit bounds",
+    "cosine_min": 0.9979035305495393,
+    "max_abs_max": 5.852936458587647,
+    "mean_abs_max": 1.151280319263363,
+    "smollm2": {
+      "parity_rows": 33,
+      "worst_cosine": 0.998494007581,
+      "worst_max_abs": 0.53125,
+      "worst_mean_abs": 0.273596887,
+      "top1_mismatches": 0
+    },
+    "qwen2_5": {
+      "parity_rows": 33,
+      "worst_cosine": 0.999260337367,
+      "worst_max_abs": 0.546875,
+      "worst_mean_abs": 0.094341452,
+      "top1_mismatches": 0
+    },
+    "tolerance_changed_after_failure": false
+  },
+  "validation": {
+    "remote_strict_clippy_all_features": "passed",
+    "remote_workspace_all_targets_all_features": "237 passed, 0 failed, 65 ignored",
+    "remote_workspace_doctests_all_features": "13 passed, 0 failed",
+    "scheduler_unit_tests": "21 passed",
+    "scheduler_simulation_tests": "14 passed",
+    "low_level_batch_gpu": "4 passed",
+    "smollm2_batch_gpu": "5 passed; 32-step top-1 exact",
+    "qwen_batch_gpu": "5 passed; 32-step top-1 exact",
+    "scheduler_cuda_e2e": "prefill then decode passed; scheduler blocks and runtime CUDA allocations zero after close",
+    "long_run": "1001 iterations passed; stable allocation report and zero after close",
+    "memcheck": "0 errors",
+    "racecheck": "0 hazards, 0 errors, 0 warnings"
+  },
+  "performance": {
+    "claim": null,
+    "warmup_count": null,
+    "measurement_count": null,
+    "ttft_ms": null,
+    "itl_ms": null,
+    "throughput_tokens_per_second": null,
+    "peak_vram_bytes": null,
+    "not_applicable_reason": "PR13 is functional E0 validation; PR15 owns profiling and optimization measurement."
+  },
+  "provenance": {
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr13/a303a23633baf465f625154b688cafc4009801b6/run-20260825T150407Z",
+    "remote_payload_lines": 15,
+    "remote_regular_file_count_including_checksum": 16,
+    "remote_regular_file_bytes": 29822854,
+    "remote_root_apparent_bytes": 29826950,
+    "remote_checksum_file": "SHA256SUMS",
+    "remote_sha256sums_sha256": "0af9140e388ca386b989b4825cca039178253bae72c379ec2ea8d1d4978b9604"
+  },
+  "limitations": [
+    "This is functional validation and makes no latency, throughput, or performance-improvement claim.",
+    "Validated production model batching covers at most two requests with fixed M=8.",
+    "Synthetic CUDA device-loss or injected kernel-failure testing was not performed.",
+    "Runtime allocation accounting is not process peak VRAM or CUDA-driver internal allocation accounting.",
+    "GPU compatibility was validated only on the recorded single sm89 device, driver, toolkit, and checkpoints."
+  ]
+}

@@ -25,7 +25,7 @@ rustinfer-cuda   -> rustinfer-core
 | `rustinfer-tensor` | tensor shape/layout/view/storage ownership 경계 | model architecture, HTTP |
 | `rustinfer-model` | 향후 canonical model IR 경계 | scheduler, HTTP |
 | `rustinfer-runtime` | model/tensor/backend orchestration 경계 | scheduler, HTTP |
-| `rustinfer-scheduler` | 향후 admission/batching state 경계 | HTTP representation |
+| `rustinfer-scheduler` | bounded admission과 continuous-batching state 경계 | HTTP representation |
 | `rustinfer-server` | binary와 server feature 소유 | native C ABI 세부 구현 |
 
 `tools/python`, `tools/native`, `experiments/triton`은 workspace member가 아니다.

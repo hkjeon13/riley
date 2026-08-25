@@ -112,6 +112,12 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
 }
 
 EXPECTED_DEV_DEPENDENCIES = {
+    ("rustinfer-scheduler", "rustinfer-model"): {
+        "req": "*",
+        "default_features": True,
+        "features": [],
+        "path": "crates/rustinfer-model",
+    },
     ("rustinfer-runtime", "rustinfer-cuda"): {
         "req": "*",
         "default_features": True,
