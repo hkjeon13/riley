@@ -3,11 +3,11 @@
 use std::error::Error;
 
 use rustinfer_cuda::{
-    CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
-    CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream, EmbeddingError,
-    EmbeddingParams, GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams,
-    RopeParams, SiluParams, cast, embedding, gated_multiply, residual_add, residual_rms_norm,
-    rms_norm, rope, silu,
+    CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaCommandBatch, CudaContext, CudaDType,
+    CudaDevice, CudaDeviceBuffer, CudaError, CudaErrorKind, CudaPinnedHostBuffer, CudaResult,
+    CudaRuntime, CudaStream, EmbeddingError, EmbeddingParams, GatedMultiplyParams,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, SiluParams, cast,
+    embedding, gated_multiply, residual_add, residual_rms_norm, rms_norm, rope, silu,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -139,6 +139,40 @@ impl ExactFloat {
 
 fn assert_error_kind(error: &rustinfer_cuda::CudaError, expected: CudaErrorKind, label: &str) {
     assert_eq!(error.kind(), expected, "{label}: {error}");
+}
+
+fn enqueue_command_batch_chain_with_validation_error(
+    batch: &mut CudaCommandBatch<'_>,
+    left: &CudaDeviceBuffer,
+    right: &CudaDeviceBuffer,
+    intermediate: &mut CudaDeviceBuffer,
+    output: &mut CudaDeviceBuffer,
+) -> CudaResult<CudaError> {
+    {
+        let mut residual = ResidualAddParams {
+            left: CudaBufferSpan::new(left, CudaDType::BF16, 0, 12)?,
+            right: CudaBufferSpan::new(right, CudaDType::BF16, 0, 12)?,
+            output: CudaBufferSpanMut::new(intermediate, CudaDType::BF16, 0, 12)?,
+            element_count: 6,
+        };
+        residual_add(&mut residual, batch.stream_mut())?;
+    }
+    {
+        let mut activation = SiluParams {
+            input: CudaBufferSpan::new(intermediate, CudaDType::BF16, 0, 12)?,
+            output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, 12)?,
+            element_count: 6,
+        };
+        silu(&mut activation, batch.stream_mut())?;
+    }
+    let mut invalid = ResidualAddParams {
+        left: CudaBufferSpan::new(left, CudaDType::BF16, 0, 12)?,
+        right: CudaBufferSpan::new(right, CudaDType::BF16, 0, 12)?,
+        output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, 12)?,
+        element_count: 7,
+    };
+    Ok(residual_add(&mut invalid, batch.stream_mut())
+        .expect_err("oversized command must fail validation without ending the batch"))
 }
 
 #[derive(Clone, Copy)]
@@ -487,6 +521,73 @@ fn norm_and_elementwise_bf16_match_f32_reference() -> TestResult {
     weight.close()?;
     output.close()?;
     product.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn command_batch_releases_multi_primitive_resource_ledger_after_validation_error() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(4_096)?;
+
+    let left_host = [1.0_f32, -2.0, 3.0, -4.0, 5.0, -6.0];
+    let right_host = [-1.0_f32, 2.0, -3.0, 4.0, -5.0, 6.0];
+    let left = upload(&context, &mut stream, &mut staging, &bf16_bytes(&left_host))?;
+    let right = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &bf16_bytes(&right_host),
+    )?;
+    let mut intermediate = context.allocate_device_buffer(12)?;
+    let mut output = context.allocate_device_buffer(12)?;
+    let stable = context.allocation_stats()?;
+
+    let mut batch = stream.begin_command_batch()?;
+    let body_result = enqueue_command_batch_chain_with_validation_error(
+        &mut batch,
+        &left,
+        &right,
+        &mut intermediate,
+        &mut output,
+    );
+    let finish_result = batch.finish();
+    finish_result?;
+    let validation_error = body_result?;
+    assert_eq!(validation_error.kind(), CudaErrorKind::OutOfRange);
+
+    let zeros = bf16_bytes(&[0.0; 6]);
+    assert_eq!(
+        download(&context, &mut stream, &mut output)?,
+        zeros,
+        "the queued residual-add and SiLU chain must complete exactly"
+    );
+    assert_eq!(context.allocation_stats()?, stable);
+
+    {
+        let mut residual = ResidualAddParams {
+            left: CudaBufferSpan::new(&left, CudaDType::BF16, 0, 12)?,
+            right: CudaBufferSpan::new(&right, CudaDType::BF16, 0, 12)?,
+            output: CudaBufferSpanMut::new(&mut intermediate, CudaDType::BF16, 0, 12)?,
+            element_count: 6,
+        };
+        residual_add(&mut residual, &mut stream)?;
+    }
+    assert_eq!(
+        download(&context, &mut stream, &mut intermediate)?,
+        zeros,
+        "finished command batch must release resource leases for immediate reuse"
+    );
+    assert_eq!(context.allocation_stats()?, stable);
+
+    left.close()?;
+    right.close()?;
+    intermediate.close()?;
+    output.close()?;
     staging.close()?;
     stream.close()?;
     close_context(context)
