@@ -28,3 +28,8 @@ workspace = true
 name = "rustinfer"
 path = "src/main.rs"
 required-features = ["server"]
+
+[[test]]
+name = "api_gpu"
+path = "tests/api_gpu.rs"
+required-features = ["server", "cuda"]
