@@ -562,6 +562,7 @@ def _validate_source_archive(path: Path, source_revision: str, source_date_epoch
     _regular_path(path, "canonical source archive")
     names: list[str] = []
     seen_names: set[str] = set()
+    previous_archive_name: str | None = None
     total_size = 0
     required = {"Cargo.lock", "Cargo.toml", "ci/release/Dockerfile"}
     try:
@@ -574,7 +575,12 @@ def _validate_source_archive(path: Path, source_revision: str, source_date_epoch
                 _safe_member_path(member.name, "source archive")
                 if member.name in seen_names:
                     _fail(f"source archive repeats member {member.name}")
-                if names and member.name < names[-1]:
+                # tarfile normalizes a directory header's trailing slash away.
+                # Git archive sorts the original header names, so restore the
+                # slash before comparing (for example: vllm.json precedes
+                # vllm/ because '.' sorts before '/').
+                archive_name = member.name + "/" if member.isdir() else member.name
+                if previous_archive_name is not None and archive_name < previous_archive_name:
                     _fail("source archive members are not bytewise sorted")
                 if member.pax_headers != {"comment": source_revision}:
                     _fail(f"source archive member has unreviewed PAX metadata: {member.name}")
@@ -594,6 +600,7 @@ def _validate_source_archive(path: Path, source_revision: str, source_date_epoch
                     _fail("source archive exceeds its total size bound")
                 names.append(member.name)
                 seen_names.add(member.name)
+                previous_archive_name = archive_name
     except tarfile.TarError as error:
         raise ReleaseContractError(f"source archive is not an uncompressed git tar: {error}") from error
     if not names:

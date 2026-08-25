@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from build_release_bundle import build_bundle  # noqa: E402
 from check_reproducible_build import (  # noqa: E402
     GATE_ID,
+    _validate_source_archive,
     check_reproducible_build,
 )
 from package_reproducible_build_evidence import package_evidence  # noqa: E402
@@ -129,6 +130,11 @@ def write_source_archive(path: Path, revision: str = REVISION) -> None:
     entries = [
         _source_member("Cargo.lock", b"# fixture lock\n"),
         _source_member("Cargo.toml", b"[workspace]\nmembers=[]\n"),
+        _source_member("benchmarks/", None),
+        _source_member("benchmarks/lanes/", None),
+        _source_member("benchmarks/lanes/vllm.json", b"{}\n"),
+        _source_member("benchmarks/lanes/vllm/", None),
+        _source_member("benchmarks/lanes/vllm/README.md", b"fixture\n"),
         _source_member("ci/", None),
         _source_member("ci/release/", None),
         _source_member("ci/release/Dockerfile", b"FROM scratch\n"),
@@ -292,6 +298,9 @@ class ReproducibleBuildGateTests(unittest.TestCase):
             canonical_json_bytes(report),
             canonical_json_bytes(json.loads(canonical_json_bytes(report))),
         )
+
+    def test_git_archive_file_then_same_prefix_directory_order_is_accepted(self) -> None:
+        _validate_source_archive(self.source_archive, REVISION, EPOCH)
 
     def test_structurally_valid_b_build_with_different_bytes_fails(self) -> None:
         second_binary, second_bundle, second_native = self.make_release(
