@@ -335,7 +335,7 @@ impl<CallbackError: fmt::Display> fmt::Display for LlamaGenerationFailure<Callba
 /// Structured generation failure plus fail-closed cleanup evidence.
 #[derive(Debug)]
 pub struct LlamaGenerationError<CallbackError = Infallible> {
-    failure: LlamaGenerationFailure<CallbackError>,
+    failure: Box<LlamaGenerationFailure<CallbackError>>,
     first_cleanup_failure: Option<LlamaGenerationCleanupError>,
     additional_cleanup_failures: usize,
 }
@@ -343,8 +343,8 @@ pub struct LlamaGenerationError<CallbackError = Infallible> {
 impl<CallbackError> LlamaGenerationError<CallbackError> {
     /// Primary preparation, execution, callback, or lifecycle failure.
     #[must_use]
-    pub const fn failure(&self) -> &LlamaGenerationFailure<CallbackError> {
-        &self.failure
+    pub fn failure(&self) -> &LlamaGenerationFailure<CallbackError> {
+        self.failure.as_ref()
     }
 
     /// First cleanup failure after every owned resource was attempted.
@@ -361,7 +361,7 @@ impl<CallbackError> LlamaGenerationError<CallbackError> {
 
     fn new(failure: LlamaGenerationFailure<CallbackError>, cleanup: CleanupFailures) -> Self {
         Self {
-            failure,
+            failure: Box::new(failure),
             first_cleanup_failure: cleanup.first,
             additional_cleanup_failures: cleanup.additional,
         }
@@ -387,7 +387,7 @@ where
     CallbackError: error::Error + 'static,
 {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match &self.failure {
+        match self.failure.as_ref() {
             LlamaGenerationFailure::Generation(source) => Some(source),
             LlamaGenerationFailure::Sampling(source) => Some(source),
             LlamaGenerationFailure::Rng(source) => Some(source),
