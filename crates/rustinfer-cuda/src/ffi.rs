@@ -50,6 +50,7 @@ const QK_GQA_PARAMS_SIZE: u32 = 216;
 const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
 const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
 const AV_GQA_PARAMS_SIZE: u32 = 216;
+const PREFILL_ATTENTION_PARAMS_SIZE: u32 = 288;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 
@@ -57,6 +58,9 @@ pub(super) const DTYPE_F32: i32 = 1;
 pub(super) const DTYPE_BF16: i32 = 2;
 pub(super) const DTYPE_U32: i32 = 3;
 pub(super) const DTYPE_U8: i32 = 4;
+
+pub(super) const PREFILL_MASK_CAUSAL: u32 = 1;
+pub(super) const PREFILL_MASK_CAUSAL_LOCAL: u32 = 2;
 
 const GEMM_TRANSPOSE_N: u32 = 0;
 const GEMM_TRANSPOSE_T: u32 = 1;
@@ -384,6 +388,25 @@ struct RawAvGqaParams {
 }
 
 #[repr(C)]
+struct RawPrefillAttentionParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    batch_size: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    mask_kind: u32,
+    local_window: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
 struct RawGemmConfig {
     struct_size: u32,
     flags: u32,
@@ -701,6 +724,11 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_av_gqa_execute(
         params: *const RawAvGqaParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_prefill_attention_execute(
+        params: *const RawPrefillAttentionParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1694,6 +1722,152 @@ pub(super) fn av_gqa_execute(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn prefill_attention_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    batch_size: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    mask_kind: u32,
+    local_window: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPrefillAttentionParams {
+        struct_size: PREFILL_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key,
+        value,
+        output,
+        batch_size,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        mask_kind,
+        local_window,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA online prefill attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and all opaque resources remain live for the
+            // synchronously completing native call.
+            unsafe { rustinfer_cuda_prefill_attention_execute(&params, stream, error) }
+        },
+    )
+}
+
+/// Runs the existing staged-BF16 primitives for every dense batch while
+/// reusing one `[QH,S,S]` score/probability workspace.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn prefill_attention_reference_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    workspace: RawBufferSpan,
+    batch_size: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    const OPERATION: &str = "execute CUDA materialized prefill attention";
+    let query_batch_bytes =
+        raw_bf16_product(OPERATION, &[token_count, query_head_count, head_size])?;
+    let key_value_batch_bytes =
+        raw_bf16_product(OPERATION, &[token_count, key_value_head_count, head_size])?;
+
+    for batch in 0..batch_size {
+        let query_offset = batch.checked_mul(query_batch_bytes).ok_or_else(|| {
+            CudaError::out_of_range(OPERATION, "query batch offset overflows u64")
+        })?;
+        let key_value_offset = batch.checked_mul(key_value_batch_bytes).ok_or_else(|| {
+            CudaError::out_of_range(OPERATION, "key/value batch offset overflows u64")
+        })?;
+        let query_batch = raw_subspan(query, query_offset, query_batch_bytes, OPERATION)?;
+        let key_batch = raw_subspan(key, key_value_offset, key_value_batch_bytes, OPERATION)?;
+        let value_batch = raw_subspan(value, key_value_offset, key_value_batch_bytes, OPERATION)?;
+        let output_batch = raw_subspan(output, query_offset, query_batch_bytes, OPERATION)?;
+
+        qk_gqa_execute(
+            query_batch,
+            key_batch,
+            workspace,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            stream,
+        )?;
+        scale_causal_mask_in_place_execute(
+            workspace,
+            token_count,
+            query_head_count,
+            scale,
+            stream,
+        )?;
+        causal_softmax_in_place_execute(workspace, token_count, query_head_count, stream)?;
+        av_gqa_execute(
+            workspace,
+            value_batch,
+            output_batch,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            stream,
+        )?;
+    }
+    Ok(())
+}
+
+fn raw_bf16_product(operation: &'static str, factors: &[u64]) -> CudaResult<u64> {
+    factors
+        .iter()
+        .copied()
+        .chain([2])
+        .try_fold(1_u64, |product, factor| {
+            product.checked_mul(factor).ok_or_else(|| {
+                CudaError::out_of_range(operation, "BF16 byte-length arithmetic overflow")
+            })
+        })
+}
+
+fn raw_subspan(
+    mut span: RawBufferSpan,
+    relative_offset: u64,
+    byte_len: u64,
+    operation: &'static str,
+) -> CudaResult<RawBufferSpan> {
+    let relative_end = relative_offset
+        .checked_add(byte_len)
+        .ok_or_else(|| CudaError::out_of_range(operation, "batch subspan range overflows u64"))?;
+    if relative_end > span.byte_len {
+        return Err(CudaError::out_of_range(
+            operation,
+            "batch subspan exceeds the declared parent span",
+        ));
+    }
+    span.byte_offset = span
+        .byte_offset
+        .checked_add(relative_offset)
+        .ok_or_else(|| CudaError::out_of_range(operation, "batch byte offset overflows u64"))?;
+    span.byte_len = byte_len;
+    Ok(span)
+}
+
 fn primitive_status(
     operation: &'static str,
     stream: &mut StreamHandle,
@@ -2053,6 +2227,12 @@ const _: () = assert!(offset_of!(RawCausalSoftmaxParams, reserved) == 72);
 const _: () = assert!(size_of::<RawAvGqaParams>() == 216);
 const _: () = assert!(offset_of!(RawAvGqaParams, token_count) == 152);
 const _: () = assert!(offset_of!(RawAvGqaParams, reserved) == 184);
+const _: () = assert!(size_of::<RawPrefillAttentionParams>() == 288);
+const _: () = assert!(offset_of!(RawPrefillAttentionParams, query) == 8);
+const _: () = assert!(offset_of!(RawPrefillAttentionParams, batch_size) == 200);
+const _: () = assert!(offset_of!(RawPrefillAttentionParams, scale) == 240);
+const _: () = assert!(offset_of!(RawPrefillAttentionParams, local_window) == 248);
+const _: () = assert!(offset_of!(RawPrefillAttentionParams, reserved) == 256);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);

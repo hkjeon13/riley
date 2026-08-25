@@ -1,4 +1,5 @@
 #include "ffi_internal.hpp"
+#include "attention_online.hpp"
 
 #include <cuda_bf16.h>
 #include <math_constants.h>
@@ -21,8 +22,12 @@ using rustinfer_cuda_internal::validation_error;
 
 constexpr uint32_t kThreads = 256;
 constexpr uint32_t kMaximumBlocks = 65535;
-constexpr size_t kMaximumAttentionBuffers = 3;
+constexpr size_t kMaximumAttentionBuffers = 4;
 constexpr uint32_t kCausalMaskBf16AsF32Bits = 0xff7f0000U;
+constexpr uint64_t kOnlineHeadSize = 64;
+constexpr uint64_t kOnlineQueriesPerBlock = 8;
+constexpr uint64_t kMaximumGridX = 2147483647;
+constexpr uint64_t kMaximumGridYOrZ = 65535;
 
 struct ResolvedSpan {
   RustInferCudaDeviceBuffer* buffer;
@@ -35,6 +40,11 @@ struct GqaByteCounts {
   uint64_t query;
   uint64_t key_value;
   uint64_t scores;
+};
+
+struct PrefillByteCounts {
+  uint64_t query;
+  uint64_t key_value;
 };
 
 bool checked_multiply(uint64_t left, uint64_t right,
@@ -120,6 +130,39 @@ RustInferCudaStatus gqa_byte_counts(uint64_t token_count,
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     status = score_bytes(token_count, query_head_count, &output->scores, error,
                          operation);
+  }
+  return status;
+}
+
+RustInferCudaStatus prefill_byte_counts(
+    uint64_t batch_count, uint64_t token_count,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t head_size, PrefillByteCounts* output,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  if (output == nullptr) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          operation,
+                          "internal prefill byte counts are null");
+  }
+  uint64_t batch_tokens = 0;
+  uint64_t query_rows = 0;
+  uint64_t key_value_rows = 0;
+  uint64_t query_elements = 0;
+  uint64_t key_value_elements = 0;
+  if (!checked_multiply(batch_count, token_count, &batch_tokens) ||
+      !checked_multiply(batch_tokens, query_head_count, &query_rows) ||
+      !checked_multiply(query_rows, head_size, &query_elements) ||
+      !checked_multiply(batch_tokens, key_value_head_count, &key_value_rows) ||
+      !checked_multiply(key_value_rows, head_size, &key_value_elements)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "prefill attention tensor shape overflows uint64_t");
+  }
+  RustInferCudaStatus status =
+      bf16_bytes(query_elements, &output->query, error, operation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = bf16_bytes(key_value_elements, &output->key_value, error,
+                        operation);
   }
   return status;
 }
@@ -496,6 +539,57 @@ RustInferCudaStatus validate_score_dimensions(
   return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
+RustInferCudaStatus validate_prefill_dimensions_and_mask(
+    const RustInferCudaPrefillAttentionParams& params,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  if (params.batch_count == 0 || params.token_count == 0 ||
+      params.query_head_count == 0 || params.key_value_head_count == 0 ||
+      params.head_size == 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "all prefill attention dimensions must be greater than zero");
+  }
+  if (params.head_size != kOnlineHeadSize) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "online prefill supports head_size=64 only");
+  }
+  if (params.query_head_count % params.key_value_head_count != 0) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "key_value_head_count must divide query_head_count");
+  }
+  const uint64_t query_tile_count =
+      ((params.token_count - 1) / kOnlineQueriesPerBlock) + 1;
+  if (query_tile_count > kMaximumGridX ||
+      params.query_head_count > kMaximumGridYOrZ ||
+      params.batch_count > kMaximumGridYOrZ) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "prefill launch dimensions exceed the CUDA grid contract");
+  }
+  if (!std::isfinite(params.scale) || params.scale <= 0.0F) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "scale must be finite and greater than zero");
+  }
+  if (params.mask_kind != RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL &&
+      params.mask_kind != RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL_LOCAL) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "online prefill supports causal and causal-local masks only");
+  }
+  if (params.mask_kind == RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL &&
+      params.local_window_size != 0) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "causal attention requires local_window_size=0");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
 }  // namespace
 
 extern "C" RustInferCudaStatus rustinfer_cuda_qk_gqa_execute(
@@ -815,6 +909,109 @@ extern "C" RustInferCudaStatus rustinfer_cuda_av_gqa_execute(
         params->query_head_count, params->key_value_head_count,
         params->head_size, output_elements);
     status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_prefill_attention_execute(
+    const RustInferCudaPrefillAttentionParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute online prefill attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaPrefillAttentionParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+
+  RustInferCudaStatus status =
+      validate_prefill_dimensions_and_mask(*params, error, kOperation);
+  PrefillByteCounts bytes{};
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = prefill_byte_counts(
+        params->batch_count, params->token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key{};
+  ResolvedSpan value{};
+  ResolvedSpan output{};
+  status = resolve_bf16_span(params->query, bytes.query, &query, error,
+                             kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_bf16_span(params->key, bytes.key_value, &key, error,
+                               kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_bf16_span(params->value, bytes.key_value, &value, error,
+                               kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_bf16_span(params->output, bytes.query, &output, error,
+                               kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, query, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, key, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, value, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  const ResolvedSpan spans[] = {query, key, value, output};
+  status = validate_contexts(stream, spans, 4, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key.buffer) ||
+      !uses.add(value.buffer) || !uses.add(output.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "attention buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    const bool causal_local =
+        params->mask_kind == RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL_LOCAL;
+    const cudaError_t launch_result =
+        rustinfer_cuda_attention_online::launch_bf16_gqa_prefill(
+            query.data, key.data, value.data, output.data,
+            params->batch_count, params->token_count,
+            params->query_head_count, params->key_value_head_count,
+            params->scale, causal_local, params->local_window_size,
+            stream->stream);
+    status = runtime_error(launch_result, error,
+                           RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);

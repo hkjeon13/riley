@@ -14,6 +14,7 @@ message(STATUS
 
 add_library(rustinfer_cuda_native STATIC
     src/attention_reference.cu
+    src/attention_online.cu
     src/gemm.cu
     src/host_runtime.cu
     src/memory.cu
@@ -22,7 +23,7 @@ add_library(rustinfer_cuda_native STATIC
     src/version.cu
 )
 
-# This target compiles the installed header as C11 and pins every public PR 07
+# This target compiles the installed header as C11 and pins every public PR 08
 # struct layout independently of the CUDA implementation's C++ assertions.
 add_library(rustinfer_cuda_abi_checks OBJECT
     tests/abi_layout.c

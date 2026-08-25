@@ -281,6 +281,40 @@ typedef struct RustInferCudaAvGqaParams {
   uint64_t reserved[4];
 } RustInferCudaAvGqaParams;
 
+#define RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL 1u
+#define RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL_LOCAL 2u
+
+// Allocation-free online-softmax GQA prefill over dense contiguous BF16
+// tensors. Query and output use [batch_count, token_count, query_head_count,
+// head_size]; key and value use [batch_count, token_count,
+// key_value_head_count, head_size]. The initial implementation supports
+// head_size=64 and maps each query head to
+// q_head / (query_head_count / key_value_head_count).
+//
+// CAUSAL requires local_window_size=0. CAUSAL_LOCAL admits the current token
+// plus at most local_window_size-1 preceding tokens; a zero local window masks
+// every key and produces an all-zero BF16 row from the empty online state. The
+// implementation keeps the online maximum, denominator, and value numerator
+// in F32 and writes BF16 output. It requires no workspace and never
+// materializes a [S,S] score matrix in HBM.
+typedef struct RustInferCudaPrefillAttentionParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key;
+  RustInferCudaBufferSpan value;
+  RustInferCudaBufferSpan output;
+  uint64_t batch_count;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  float scale;
+  uint32_t mask_kind;
+  uint64_t local_window_size;
+  uint64_t reserved[4];
+} RustInferCudaPrefillAttentionParams;
+
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
 #define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
@@ -599,6 +633,13 @@ RustInferCudaStatus rustinfer_cuda_causal_softmax_in_place_execute(
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_av_gqa_execute(
     const RustInferCudaAvGqaParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Executes the dense online-softmax prefill contract above synchronously on
+// stream. Unsupported head dimensions return NOT_SUPPORTED before launching.
+RustInferCudaStatus rustinfer_cuda_prefill_attention_execute(
+    const RustInferCudaPrefillAttentionParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

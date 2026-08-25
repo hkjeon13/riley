@@ -11,6 +11,7 @@ mod error;
 mod ffi;
 mod gemm;
 mod memory;
+mod prefill;
 mod primitives;
 mod runtime;
 
@@ -22,6 +23,12 @@ pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaR
 pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
+};
+pub use prefill::{
+    AttentionBackend, AttentionBackendAvailability, AttentionCapability, AttentionLayout,
+    AttentionMask, AttentionMode, AttentionPreference, AttentionScoreMaterialization,
+    AttentionSelectionReason, AttentionSelectionTrace, OnlineSoftmaxError, OnlineSoftmaxState,
+    PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention,
 };
 pub use primitives::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
@@ -38,6 +45,14 @@ pub const CRATE_ROLE: &str = "native CUDA C ABI and host-runtime boundary";
 
 /// Whether this build includes the native CUDA feature.
 pub const CUDA_ENABLED: bool = cfg!(feature = "cuda");
+
+/// Normalized `CMAKE_CUDA_ARCHITECTURES` used for the native archive.
+///
+/// Plain numeric entries contain real and virtual code, while `-real` and
+/// `-virtual` preserve their `CMake` meanings. When [`CUDA_ENABLED`] is false,
+/// this reports the targets configured for a corresponding CUDA build without
+/// claiming that the native archive is linked.
+pub const CUDA_COMPILED_ARCHITECTURES: &str = env!("RUSTINFER_CUDA_COMPILED_ARCHITECTURES");
 
 /// ABI version expected by this Rust wrapper.
 pub const EXPECTED_ABI_VERSION: u32 = 1;

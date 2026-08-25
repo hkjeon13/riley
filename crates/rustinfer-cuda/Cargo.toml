@@ -47,3 +47,8 @@ required-features = ["cuda"]
 name = "attention_gpu"
 path = "tests/attention_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "prefill_attention_gpu"
+path = "tests/prefill_attention_gpu.rs"
+required-features = ["cuda"]

@@ -169,6 +169,7 @@ impl CudaDevice {
             Ok(CudaContext {
                 inner: Arc::new(ContextInner {
                     ordinal: self.ordinal(),
+                    compute_capability: self.properties.compute_capability(),
                     native,
                 }),
             })
@@ -291,6 +292,7 @@ impl DeviceProperties {
 
 pub(crate) struct ContextInner {
     pub(crate) ordinal: u32,
+    pub(crate) compute_capability: (u32, u32),
     #[cfg(feature = "cuda")]
     pub(crate) native: ffi::ContextHandle,
 }
@@ -309,6 +311,16 @@ impl CudaContext {
     #[must_use]
     pub fn device_ordinal(&self) -> u32 {
         self.inner.ordinal
+    }
+
+    /// Cached compute capability of the context's device.
+    ///
+    /// This is captured from [`CudaDevice::properties`] before the context is
+    /// created, so cold backend selection does not reinitialize the runtime or
+    /// perform another device-properties query.
+    #[must_use]
+    pub fn compute_capability(&self) -> (u32, u32) {
+        self.inner.compute_capability
     }
 
     /// Creates a non-blocking, non-default CUDA stream.

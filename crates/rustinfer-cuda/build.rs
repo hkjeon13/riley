@@ -7,17 +7,27 @@ use std::process::Command;
 const DEFAULT_CUDA_ARCHITECTURES: &str = "89";
 
 fn main() {
+    println!("cargo:rerun-if-env-changed=RUSTINFER_CUDA_ARCHITECTURES");
+    let architectures = match cuda_architectures() {
+        Ok(architectures) => architectures,
+        Err(error) => {
+            eprintln!("error: rustinfer-cuda architecture configuration failed: {error}");
+            std::process::exit(1);
+        }
+    };
+    println!("cargo:rustc-env=RUSTINFER_CUDA_COMPILED_ARCHITECTURES={architectures}");
+
     if env::var_os("CARGO_FEATURE_CUDA").is_none() {
         return;
     }
 
-    if let Err(error) = build_native_cuda() {
+    if let Err(error) = build_native_cuda(&architectures) {
         eprintln!("error: rustinfer-cuda native build failed: {error}");
         std::process::exit(1);
     }
 }
 
-fn build_native_cuda() -> Result<(), String> {
+fn build_native_cuda(architectures: &str) -> Result<(), String> {
     for variable in [
         "CUDAToolkit_ROOT",
         "CUDA_HOME",
@@ -25,7 +35,6 @@ fn build_native_cuda() -> Result<(), String> {
         "NVCC",
         "CUDACXX",
         "CMAKE",
-        "RUSTINFER_CUDA_ARCHITECTURES",
     ] {
         println!("cargo:rerun-if-env-changed={variable}");
     }
@@ -44,7 +53,6 @@ fn build_native_cuda() -> Result<(), String> {
 
     let toolkit = discover_cuda_toolkit()?;
     let cmake = discover_executable("CMAKE", "cmake")?;
-    let architectures = cuda_architectures()?;
     let profile = cmake_profile();
     let out_dir = required_path("OUT_DIR")?;
     let build_dir = out_dir.join("cuda-native-build");
@@ -139,6 +147,8 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         cmake_lists,
         kernels_dir.join("include/rustinfer_cuda.h"),
         kernels_dir.join("src/ffi_internal.hpp"),
+        kernels_dir.join("src/attention_online.cu"),
+        kernels_dir.join("src/attention_online.hpp"),
         kernels_dir.join("src/attention_reference.cu"),
         kernels_dir.join("src/gemm.cu"),
         kernels_dir.join("src/host_runtime.cu"),
@@ -493,18 +503,31 @@ fn cuda_architectures() -> Result<String, String> {
                 .to_owned(),
         );
     }
-    for token in &tokens {
-        let numeric = token
-            .strip_suffix("-real")
-            .or_else(|| token.strip_suffix("-virtual"))
-            .unwrap_or(token);
-        if numeric.is_empty() || !numeric.bytes().all(|byte| byte.is_ascii_digit()) {
+    let mut canonical = Vec::with_capacity(tokens.len());
+    for token in tokens {
+        let (numeric, suffix) = if let Some(numeric) = token.strip_suffix("-real") {
+            (numeric, "-real")
+        } else if let Some(numeric) = token.strip_suffix("-virtual") {
+            (numeric, "-virtual")
+        } else {
+            (token, "")
+        };
+        let architecture = numeric.parse::<u32>().map_err(|_| {
+            format!(
+                "invalid CUDA architecture {token:?}; use numeric targets such as 80, 89, 90-real, or 90-virtual (runtime-dependent 'native' is intentionally unsupported)"
+            )
+        })?;
+        if architecture < 10 {
             return Err(format!(
-                "invalid CUDA architecture {token:?}; use numeric AOT targets such as 80, 89, 90-real, or 90-virtual (runtime-dependent 'native' is intentionally unsupported)"
+                "invalid CUDA architecture {token:?}; the target must encode a major and minor compute capability"
             ));
         }
+        let canonical_token = format!("{architecture}{suffix}");
+        if !canonical.contains(&canonical_token) {
+            canonical.push(canonical_token);
+        }
     }
-    Ok(tokens.join(";"))
+    Ok(canonical.join(";"))
 }
 
 fn discover_executable(variable: &str, fallback: &str) -> Result<PathBuf, String> {

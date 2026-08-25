@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 _Static_assert(RUSTINFER_CUDA_ABI_VERSION == 1,
-               "PR 07 additions must preserve ABI v1");
+               "PR 08 additions must preserve ABI v1");
 _Static_assert(sizeof(void*) * 8 == RUSTINFER_CUDA_ABI_POINTER_WIDTH,
                "rustinfer CUDA ABI requires 64-bit pointers");
 _Static_assert(sizeof(RustInferCudaDType) == 4,
@@ -81,6 +81,25 @@ _Static_assert(offsetof(RustInferCudaAvGqaParams, token_count) == 152,
                "AV GQA dimension offset changed");
 _Static_assert(offsetof(RustInferCudaAvGqaParams, reserved) == 184,
                "AV GQA reserved tail changed");
+_Static_assert(RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL == 1 &&
+                   RUSTINFER_CUDA_ATTENTION_MASK_CAUSAL_LOCAL == 2,
+               "prefill attention mask discriminants changed");
+_Static_assert(sizeof(RustInferCudaPrefillAttentionParams) == 288,
+               "prefill attention params ABI size changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams, query) == 8,
+               "prefill attention query offset changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams, output) == 152,
+               "prefill attention output offset changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams, batch_count) ==
+                   200,
+               "prefill attention dimension offset changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams, scale) == 240,
+               "prefill attention scale offset changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams,
+                        local_window_size) == 248,
+               "prefill attention local-window offset changed");
+_Static_assert(offsetof(RustInferCudaPrefillAttentionParams, reserved) == 256,
+               "prefill attention reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -153,6 +172,9 @@ static RustInferCudaStatus (*const causal_softmax_symbol)(
 static RustInferCudaStatus (*const av_gqa_symbol)(
     const RustInferCudaAvGqaParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_av_gqa_execute;
+static RustInferCudaStatus (*const prefill_attention_symbol)(
+    const RustInferCudaPrefillAttentionParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_prefill_attention_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -178,6 +200,7 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&cast_symbol,           (const void*)&qk_gqa_symbol,
     (const void*)&scale_causal_mask_symbol,
     (const void*)&causal_softmax_symbol, (const void*)&av_gqa_symbol,
+    (const void*)&prefill_attention_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
