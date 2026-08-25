@@ -458,7 +458,7 @@ pub struct CudaStream {
 impl CudaStream {
     /// Begins a native command batch on this stream.
     ///
-    /// Primitive calls made through [`CudaCommandBatch::stream_mut`] remain
+    /// Primitive calls made through [`CudaCommandBatch::commands`] remain
     /// ordered on the stream, while their native wrappers may defer per-command
     /// synchronization until the batch ends. The guard holds the stream's
     /// exclusive mutable borrow, preventing direct stream use for its lifetime.
@@ -591,13 +591,17 @@ pub struct CudaCommandBatch<'stream> {
     _not_send_or_sync: PhantomData<Rc<()>>,
 }
 
-impl CudaCommandBatch<'_> {
-    /// Reborrows the exclusively held stream for ordered CUDA operations.
+impl<'stream> CudaCommandBatch<'stream> {
+    /// Returns a batch-scoped target accepted by CUDA execution operations.
     ///
-    /// The returned borrow cannot outlive this guard. Native lifecycle checks
-    /// reject attempts to begin a nested command batch.
-    pub fn stream_mut(&mut self) -> &mut CudaStream {
-        self.stream
+    /// The proxy deliberately exposes no underlying [`CudaStream`] reference,
+    /// so safe code cannot move, swap, replace, close, or begin another batch
+    /// on the stream while this guard owns its native command batch.
+    pub fn commands(&mut self) -> CudaCommandStream<'_, 'stream> {
+        CudaCommandStream {
+            batch: self,
+            _not_send_or_sync: PhantomData,
+        }
     }
 
     /// Ends the command batch exactly once and reports completion errors.
@@ -630,6 +634,69 @@ impl CudaCommandBatch<'_> {
             Err(CudaError::unavailable("CudaCommandBatch::finish"))
         }
     }
+}
+
+/// Batch-scoped CUDA execution target.
+///
+/// Primitive, packed-batch, and prepared-GEMM operations accept this proxy in
+/// place of a direct [`CudaStream`]. It intentionally has no accessor for the
+/// guarded stream and is `!Send + !Sync`, matching native thread ownership.
+///
+/// ```compile_fail
+/// fn cannot_replace_guarded_stream(
+///     commands: &mut rustinfer_cuda::CudaCommandStream<'_, '_>,
+///     other: &mut rustinfer_cuda::CudaStream,
+/// ) {
+///     std::mem::swap(commands, other);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<rustinfer_cuda::CudaCommandStream<'static, 'static>>();
+/// ```
+pub struct CudaCommandStream<'batch, 'stream> {
+    batch: &'batch mut CudaCommandBatch<'stream>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+mod execution_stream_sealed {
+    use super::{CudaCommandStream, CudaStream};
+
+    pub trait Sealed {
+        fn cuda_stream_mut(&mut self) -> &mut CudaStream;
+    }
+
+    impl Sealed for CudaStream {
+        fn cuda_stream_mut(&mut self) -> &mut CudaStream {
+            self
+        }
+    }
+
+    impl Sealed for CudaCommandStream<'_, '_> {
+        fn cuda_stream_mut(&mut self) -> &mut CudaStream {
+            self.batch.stream
+        }
+    }
+}
+
+/// Sealed execution target implemented by [`CudaStream`] and
+/// [`CudaCommandStream`].
+///
+/// CUDA operations use this bound to preserve existing direct-stream callers
+/// while accepting the non-replaceable command-batch proxy. External crates
+/// cannot implement the trait or recover the underlying stream from it.
+#[allow(private_bounds)]
+pub trait CudaExecutionStream: execution_stream_sealed::Sealed {}
+
+impl CudaExecutionStream for CudaStream {}
+impl CudaExecutionStream for CudaCommandStream<'_, '_> {}
+
+pub(crate) fn execution_stream_mut<S>(stream: &mut S) -> &mut CudaStream
+where
+    S: CudaExecutionStream + ?Sized,
+{
+    execution_stream_sealed::Sealed::cuda_stream_mut(stream)
 }
 
 impl Drop for CudaCommandBatch<'_> {

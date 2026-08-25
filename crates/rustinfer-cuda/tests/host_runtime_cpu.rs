@@ -70,3 +70,11 @@ fn public_ownership_types_keep_their_thread_movement_contracts() {
     assert_send::<CudaPendingD2H<'static>>();
     assert_send_sync::<CudaAllocationStats>();
 }
+
+#[test]
+fn command_batch_api_exposes_only_the_non_replaceable_proxy() {
+    let source = include_str!("../src/runtime.rs");
+    assert!(source.contains("pub fn commands(&mut self) -> CudaCommandStream"));
+    assert!(!source.contains("pub fn stream_mut(&mut self) -> &mut CudaStream"));
+    assert!(source.contains("pub trait CudaExecutionStream"));
+}

@@ -148,6 +148,7 @@ fn enqueue_command_batch_chain_with_validation_error(
     intermediate: &mut CudaDeviceBuffer,
     output: &mut CudaDeviceBuffer,
 ) -> CudaResult<CudaError> {
+    let mut commands = batch.commands();
     {
         let mut residual = ResidualAddParams {
             left: CudaBufferSpan::new(left, CudaDType::BF16, 0, 12)?,
@@ -155,7 +156,7 @@ fn enqueue_command_batch_chain_with_validation_error(
             output: CudaBufferSpanMut::new(intermediate, CudaDType::BF16, 0, 12)?,
             element_count: 6,
         };
-        residual_add(&mut residual, batch.stream_mut())?;
+        residual_add(&mut residual, &mut commands)?;
     }
     {
         let mut activation = SiluParams {
@@ -163,7 +164,7 @@ fn enqueue_command_batch_chain_with_validation_error(
             output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, 12)?,
             element_count: 6,
         };
-        silu(&mut activation, batch.stream_mut())?;
+        silu(&mut activation, &mut commands)?;
     }
     let mut invalid = ResidualAddParams {
         left: CudaBufferSpan::new(left, CudaDType::BF16, 0, 12)?,
@@ -171,7 +172,7 @@ fn enqueue_command_batch_chain_with_validation_error(
         output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, 12)?,
         element_count: 7,
     };
-    Ok(residual_add(&mut invalid, batch.stream_mut())
+    Ok(residual_add(&mut invalid, &mut commands)
         .expect_err("oversized command must fail validation without ending the batch"))
 }
 

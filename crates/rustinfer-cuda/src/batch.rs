@@ -1,7 +1,7 @@
 use crate::error::{CudaError, CudaResult};
 use crate::memory::CudaDeviceBuffer;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
-use crate::runtime::{CudaStream, ensure_same_context};
+use crate::runtime::{CudaExecutionStream, CudaStream, ensure_same_context, execution_stream_mut};
 
 #[cfg(feature = "cuda")]
 use crate::ffi;
@@ -323,8 +323,12 @@ pub struct IndexedRopeParams<'a> {
 ///
 /// Returns before launch for malformed mirrored positions, dtype/capacity,
 /// shape, context, or buffer-idle violations, or for native execution failure.
-pub fn indexed_rope(params: &mut IndexedRopeParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+pub fn indexed_rope<S: CudaExecutionStream + ?Sized>(
+    params: &mut IndexedRopeParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "indexed_rope";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "head_count", params.head_count)?;
     require_nonzero(OPERATION, "head_size", params.head_size)?;
     require_nonzero(OPERATION, "rotary_dimension", params.rotary_dimension)?;
@@ -440,8 +444,12 @@ pub struct RowGatherParams<'a> {
 ///
 /// Returns before launch for duplicate/out-of-range mirrored indices,
 /// dtype/capacity/context/idle violations, or native execution failure.
-pub fn row_gather(params: &mut RowGatherParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+pub fn row_gather<S: CudaExecutionStream + ?Sized>(
+    params: &mut RowGatherParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "row_gather";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "input_row_count", params.input_row_count)?;
     require_nonzero(OPERATION, "column_count", params.column_count)?;
     validate_gather_indices(params.row_indices_host, params.input_row_count)?;
@@ -537,11 +545,12 @@ pub struct RaggedPagedKvCacheWriteParams<'a> {
 /// # Errors
 ///
 /// Returns for dtype/capacity/context/idle violations or native failure.
-pub fn ragged_paged_kv_cache_write(
+pub fn ragged_paged_kv_cache_write<S: CudaExecutionStream + ?Sized>(
     params: &mut RaggedPagedKvCacheWriteParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> CudaResult<()> {
     const OPERATION: &str = "ragged_paged_kv_cache_write";
+    let stream = execution_stream_mut(stream);
     require_nonzero(
         OPERATION,
         "key_value_head_count",
@@ -646,11 +655,12 @@ pub struct RaggedPagedAttentionParams<'a> {
 /// and positive, `M >= T`, and all spans satisfy dtype, capacity, context, and
 /// idle-state requirements.
 #[allow(clippy::too_many_lines)]
-pub fn ragged_paged_attention(
+pub fn ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
     params: &mut RaggedPagedAttentionParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> CudaResult<()> {
     const OPERATION: &str = "ragged_paged_attention";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "query_head_count", params.query_head_count)?;
     require_nonzero(
         OPERATION,

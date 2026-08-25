@@ -7,7 +7,10 @@ use std::sync::Arc;
 use crate::error::{CudaError, CudaResult};
 use crate::memory::CudaDeviceBuffer;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
-use crate::runtime::{ContextInner, CudaContext, CudaStream, ensure_same_context};
+use crate::runtime::{
+    ContextInner, CudaContext, CudaExecutionStream, CudaStream, ensure_same_context,
+    execution_stream_mut,
+};
 
 #[cfg(feature = "cuda")]
 use crate::error::{CudaErrorDomain, CudaErrorKind, CudaErrorStage};
@@ -417,12 +420,13 @@ impl CudaPreparedGemm {
     /// context, alias, workspace, busy-buffer, or poisoned-plan violations.
     /// Native launch, cuBLASLt, synchronization, and restoration failures are
     /// translated with their status domain and lifecycle stage.
-    pub fn execute(
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
         &mut self,
         params: &mut GemmParams<'_>,
-        stream: &mut CudaStream,
+        stream: &mut S,
     ) -> CudaResult<()> {
         const OPERATION: &str = "CudaPreparedGemm::execute";
+        let stream = execution_stream_mut(stream);
         if self.poisoned {
             return Err(CudaError::invalid_state(
                 OPERATION,

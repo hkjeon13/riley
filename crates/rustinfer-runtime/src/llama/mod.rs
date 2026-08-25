@@ -335,18 +335,30 @@ mod source_contract_tests {
             .find("let mut command_batch = stream")
             .expect("iteration completion begins explicitly");
         let body_result = hot
-            .find("let body_result = execute_iteration_body(command_batch.stream_mut());")
-            .expect("iteration body uses the guarded stream");
+            .find("let body_result = {")
+            .expect("iteration body result is retained through completion");
+        let command_proxy = hot
+            .find("let mut commands = command_batch.commands();")
+            .expect("iteration body uses the non-replaceable command proxy");
+        let body_call = hot
+            .find("execute_iteration_body(&mut commands)")
+            .expect("iteration body dispatches through the command proxy");
         let command_finish = hot
             .find("let completion_result = command_batch")
             .expect("iteration completion finishes explicitly");
 
         assert!(metadata_upload < command_begin);
         assert!(command_begin < body_result);
+        assert!(body_result < command_proxy);
+        assert!(command_proxy < body_call);
         assert!(body_result < command_finish);
         assert!(
-            hot[body_result..command_finish].contains("command_batch.stream_mut()"),
+            hot[body_result..command_finish].contains("command_batch.commands()"),
             "body errors must be retained without skipping command-batch finish"
+        );
+        assert!(
+            !hot.contains("command_batch.stream_mut()"),
+            "the guarded CudaStream must not be exposed for replacement"
         );
         assert!(hot.contains("LlamaOp::IterationCompletion"));
     }

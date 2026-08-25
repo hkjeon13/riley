@@ -3,7 +3,7 @@ use std::fmt;
 
 use crate::error::{CudaError, CudaResult};
 use crate::memory::CudaDeviceBuffer;
-use crate::runtime::{CudaStream, ensure_same_context};
+use crate::runtime::{CudaExecutionStream, CudaStream, ensure_same_context, execution_stream_mut};
 
 #[cfg(feature = "cuda")]
 use crate::ffi;
@@ -335,11 +335,12 @@ impl From<CudaError> for EmbeddingError {
 ///
 /// Returns structured token OOB information or a CUDA validation/execution
 /// error. All descriptors are validated before any device write.
-pub fn embedding(
+pub fn embedding<S: CudaExecutionStream + ?Sized>(
     params: &mut EmbeddingParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> Result<(), EmbeddingError> {
     const OPERATION: &str = "embedding";
+    let stream = execution_stream_mut(stream);
     validate_embedding_params(params, stream)?;
 
     #[cfg(feature = "cuda")]
@@ -404,8 +405,12 @@ pub struct RmsNormParams<'a> {
 /// # Errors
 ///
 /// Returns a descriptor, dtype, shape, launch, or synchronization error.
-pub fn rms_norm(params: &mut RmsNormParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+pub fn rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "rms_norm";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "hidden_size", params.hidden_size)?;
     if !params.epsilon.is_finite() || params.epsilon <= 0.0 {
         return Err(CudaError::invalid_argument(
@@ -476,8 +481,12 @@ pub struct ResidualAddParams<'a> {
 /// # Errors
 ///
 /// Returns a descriptor, dtype, range, launch, or synchronization error.
-pub fn residual_add(params: &mut ResidualAddParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+pub fn residual_add<S: CudaExecutionStream + ?Sized>(
+    params: &mut ResidualAddParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "residual_add";
+    let stream = execution_stream_mut(stream);
     validate_matching_elementwise(
         OPERATION,
         params.left,
@@ -543,11 +552,12 @@ pub struct ResidualRmsNormParams<'a> {
 ///
 /// Returns a descriptor, dtype, shape, overlap, launch, or synchronization
 /// error.
-pub fn residual_rms_norm(
+pub fn residual_rms_norm<S: CudaExecutionStream + ?Sized>(
     params: &mut ResidualRmsNormParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> CudaResult<()> {
     const OPERATION: &str = "residual_rms_norm";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "hidden_size", params.hidden_size)?;
     if !params.epsilon.is_finite() || params.epsilon <= 0.0 {
         return Err(CudaError::invalid_argument(
@@ -647,11 +657,12 @@ pub struct RowBiasAddInPlaceParams<'a> {
 ///
 /// Returns a dtype, zero-column, checked shape/byte overflow, span-capacity,
 /// context, launch, or synchronization error.
-pub fn row_bias_add_in_place(
+pub fn row_bias_add_in_place<S: CudaExecutionStream + ?Sized>(
     params: &mut RowBiasAddInPlaceParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> CudaResult<()> {
     const OPERATION: &str = "row_bias_add_in_place";
+    let stream = execution_stream_mut(stream);
     require_nonzero(OPERATION, "column_count", params.column_count)?;
     require_dtype(OPERATION, "matrix", params.matrix.dtype, CudaDType::BF16)?;
     require_dtype(OPERATION, "bias", params.bias.dtype, CudaDType::BF16)?;
@@ -702,8 +713,12 @@ pub struct SiluParams<'a> {
 /// # Errors
 ///
 /// Returns a descriptor, dtype, range, launch, or synchronization error.
-pub fn silu(params: &mut SiluParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+pub fn silu<S: CudaExecutionStream + ?Sized>(
+    params: &mut SiluParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
     const OPERATION: &str = "silu";
+    let stream = execution_stream_mut(stream);
     require_float(OPERATION, "input", params.input.dtype)?;
     require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
     let required = required_vector_bytes(OPERATION, params.element_count, params.input.dtype)?;
@@ -748,11 +763,12 @@ pub struct GatedMultiplyParams<'a> {
 /// # Errors
 ///
 /// Returns a descriptor, dtype, range, launch, or synchronization error.
-pub fn gated_multiply(
+pub fn gated_multiply<S: CudaExecutionStream + ?Sized>(
     params: &mut GatedMultiplyParams<'_>,
-    stream: &mut CudaStream,
+    stream: &mut S,
 ) -> CudaResult<()> {
     const OPERATION: &str = "gated_multiply";
+    let stream = execution_stream_mut(stream);
     validate_matching_elementwise(
         OPERATION,
         params.activated_gate,

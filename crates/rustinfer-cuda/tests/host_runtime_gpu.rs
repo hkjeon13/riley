@@ -69,21 +69,16 @@ fn device_metadata_is_reported() -> Result<(), Box<dyn Error>> {
 
 #[test]
 #[ignore = "remote GPU"]
-fn command_batch_guard_is_one_shot_and_drop_restores_stream_use() -> Result<(), Box<dyn Error>> {
+fn command_batch_proxy_is_one_shot_and_drop_restores_stream_use() -> Result<(), Box<dyn Error>> {
     let (_runtime, device) = first_device()?;
     let context = device.create_context()?;
     let mut stream = context.create_stream()?;
 
     {
         let mut batch = stream.begin_command_batch()?;
-        let nested = match batch.stream_mut().begin_command_batch() {
-            Ok(unexpected) => {
-                drop(unexpected);
-                panic!("nested command batch unexpectedly succeeded");
-            }
-            Err(error) => error,
-        };
-        assert_eq!(nested.kind(), CudaErrorKind::InvalidState);
+        {
+            let _commands = batch.commands();
+        }
         batch.finish()?;
     }
     stream.synchronize()?;

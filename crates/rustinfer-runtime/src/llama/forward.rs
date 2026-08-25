@@ -9,11 +9,12 @@ use std::mem;
 use rustinfer_cuda::{
     AttentionBackend, AttentionBackendAvailability, AttentionMask, AttentionPreference,
     AttentionSelectionTrace, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
-    CudaDeviceBuffer, CudaError, CudaErrorStage, CudaGemmConfig, CudaPinnedHostBuffer,
-    CudaPreparedGemm, CudaStream, EmbeddingError, EmbeddingParams, GatedMultiplyParams, GemmParams,
-    PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams,
-    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, embedding, gated_multiply,
-    residual_add, rms_norm, rope, row_bias_add_in_place, silu,
+    CudaDeviceBuffer, CudaError, CudaErrorStage, CudaExecutionStream, CudaGemmConfig,
+    CudaPinnedHostBuffer, CudaPreparedGemm, CudaStream, EmbeddingError, EmbeddingParams,
+    GatedMultiplyParams, GemmParams, PrefillAttentionParams, PrefillAttentionRequest,
+    PreparedPrefillAttention, ResidualAddParams, RmsNormParams, RopeParams,
+    RowBiasAddInPlaceParams, SiluParams, embedding, gated_multiply, residual_add, rms_norm, rope,
+    row_bias_add_in_place, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -396,13 +397,13 @@ fn record_close(
     }
 }
 
-pub(super) fn execute_gemm(
+pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
     plan: &mut CudaPreparedGemm,
     input: &CudaDeviceBuffer,
     weight: CudaBufferSpan<'_>,
     output: &mut CudaDeviceBuffer,
     workspace: &mut Option<CudaDeviceBuffer>,
-    stream: &mut CudaStream,
+    stream: &mut S,
     site: ExecutionSite,
 ) -> LlamaForwardResult<()> {
     let config = plan.config();
@@ -428,13 +429,13 @@ pub(super) fn execute_gemm(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
-pub(super) fn execute_projection_bias(
+pub(super) fn execute_projection_bias<S: CudaExecutionStream + ?Sized>(
     weights: &CudaUploadedWeights,
     bias_id: Option<PhysicalWeightId>,
     output: &mut CudaDeviceBuffer,
     row_count: u64,
     column_count: u64,
-    stream: &mut CudaStream,
+    stream: &mut S,
     site: ExecutionSite,
 ) -> LlamaForwardResult<()> {
     let Some(bias_id) = bias_id else {
