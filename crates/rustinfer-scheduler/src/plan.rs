@@ -359,6 +359,7 @@ impl IterationPlan {
     ///
     /// Returns [`SchedulerError::UnsupportedSchemaVersion`] unless `schema_version`
     /// is [`ITERATION_SCHEMA_VERSION`], or another checked plan validation error.
+    #[allow(clippy::too_many_lines)]
     pub fn from_version(
         schema_version: u16,
         iteration_id: IterationId,
@@ -380,6 +381,8 @@ impl IterationPlan {
                 field: "iteration item count",
             },
         )?;
+        let mut referenced_block_tables =
+            validate_iteration_block_tables(&block_tables, item_count)?;
         let mut request_ids = HashSet::new();
         request_ids
             .try_reserve(item_count)
@@ -413,6 +416,12 @@ impl IterationPlan {
                         reason: "item is stored in the wrong stage vector",
                     });
                 }
+                if expected_kind == WorkKind::Decode && item.output_slot.is_none() {
+                    return Err(SchedulerError::InvalidPlan {
+                        field: "output_slots",
+                        reason: "decode work must request one sampled output",
+                    });
+                }
                 if !request_ids.insert(item.request_id) {
                     return Err(SchedulerError::InvalidPlan {
                         field: "request_id",
@@ -425,6 +434,13 @@ impl IterationPlan {
                         reason: "work item references a missing block table",
                     },
                 )?;
+                if referenced_block_tables[item.block_table_index] {
+                    return Err(SchedulerError::InvalidPlan {
+                        field: "block_table_index",
+                        reason: "each block table must be referenced exactly once",
+                    });
+                }
+                referenced_block_tables[item.block_table_index] = true;
                 if table.request_id != item.request_id {
                     return Err(SchedulerError::InvalidPlan {
                         field: "block_table_index",
@@ -452,6 +468,25 @@ impl IterationPlan {
                     output_slots.push(slot);
                 }
             }
+        }
+        if referenced_block_tables.iter().any(|referenced| !referenced) {
+            return Err(SchedulerError::InvalidPlan {
+                field: "block_tables",
+                reason: "each block table must be referenced exactly once",
+            });
+        }
+        let output_slot_bound =
+            u32::try_from(output_slots.len()).map_err(|_| SchedulerError::ArithmeticOverflow {
+                field: "iteration output slot count",
+            })?;
+        if output_slots
+            .iter()
+            .any(|slot| slot.get() >= output_slot_bound)
+        {
+            return Err(SchedulerError::InvalidPlan {
+                field: "output_slots",
+                reason: "output slots must be dense and zero-based",
+            });
         }
 
         Ok(Self {
@@ -512,6 +547,54 @@ impl IterationPlan {
     pub fn batch_size(&self) -> usize {
         self.prefill_items.len() + self.decode_items.len()
     }
+}
+
+fn validate_iteration_block_tables(
+    block_tables: &[OwnedBlockTable],
+    item_count: usize,
+) -> SchedulerResult<Vec<bool>> {
+    if block_tables.len() != item_count {
+        return Err(SchedulerError::InvalidPlan {
+            field: "block_tables",
+            reason: "each work item must own exactly one referenced block table",
+        });
+    }
+
+    let block_entry_count = block_tables.iter().try_fold(0_usize, |count, table| {
+        count.checked_add(table.physical_block_ids.len())
+    });
+    let Some(block_entry_count) = block_entry_count else {
+        return Err(SchedulerError::ArithmeticOverflow {
+            field: "iteration physical block entry count",
+        });
+    };
+    let mut physical_block_ids = HashSet::new();
+    physical_block_ids
+        .try_reserve(block_entry_count)
+        .map_err(|_| SchedulerError::HostAllocation {
+            resource: "iteration physical block identity set",
+            requested_elements: block_entry_count,
+        })?;
+    for table in block_tables {
+        for &physical_block_id in &table.physical_block_ids {
+            if !physical_block_ids.insert(physical_block_id) {
+                return Err(SchedulerError::InvalidPlan {
+                    field: "block_tables",
+                    reason: "physical block IDs must be unique across the iteration",
+                });
+            }
+        }
+    }
+
+    let mut referenced_block_tables = Vec::new();
+    referenced_block_tables
+        .try_reserve_exact(block_tables.len())
+        .map_err(|_| SchedulerError::HostAllocation {
+            resource: "iteration block table reference map",
+            requested_elements: block_tables.len(),
+        })?;
+    referenced_block_tables.resize(block_tables.len(), false);
+    Ok(referenced_block_tables)
 }
 
 /// Runtime output routed back to one stable plan slot.
@@ -620,6 +703,33 @@ impl IterationResult {
         })
     }
 
+    /// Builds feedback from an internal producer that already proved outputs
+    /// are ordered densely by slot in `0..outputs.len()`.
+    ///
+    /// This allocation-free path is crate-private so external transports must
+    /// continue through [`Self::new`] or [`Self::from_version`].
+    #[must_use]
+    pub(crate) fn from_dense_outputs(
+        iteration_id: IterationId,
+        outputs: Vec<IterationOutput>,
+        gpu_execution_ns: u64,
+        gpu_idle_gap_ns: u64,
+    ) -> Self {
+        debug_assert!(
+            outputs
+                .iter()
+                .enumerate()
+                .all(|(index, output)| { u32::try_from(index).ok() == Some(output.slot().get()) })
+        );
+        Self {
+            schema_version: ITERATION_SCHEMA_VERSION,
+            iteration_id,
+            outputs,
+            gpu_execution_ns,
+            gpu_idle_gap_ns,
+        }
+    }
+
     /// Transport schema version.
     #[must_use]
     pub const fn schema_version(&self) -> u16 {
@@ -667,9 +777,47 @@ fn validate_schema(resource: &'static str, actual: u16) -> SchedulerResult<()> {
 mod tests {
     use rustinfer_runtime::paged_kv::BLOCK_TABLE_V1_VERSION;
 
+    use crate::SchedulerError;
+
     use super::{
-        IterationId, IterationOutput, IterationResult, OutputSlot, OwnedBlockTable, RequestId,
+        IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot, OwnedBlockTable,
+        RequestId, WorkItem, WorkKind,
     };
+
+    fn table(request: u64, physical_block_id: u32) -> OwnedBlockTable {
+        OwnedBlockTable::new(
+            RequestId::new(request).unwrap(),
+            BLOCK_TABLE_V1_VERSION,
+            vec![physical_block_id],
+            vec![1],
+            1,
+        )
+        .unwrap()
+    }
+
+    fn prefill(request: u64, block_table_index: usize) -> WorkItem {
+        WorkItem::new(
+            RequestId::new(request).unwrap(),
+            WorkKind::Prefill,
+            vec![u32::try_from(request).unwrap()],
+            1,
+            block_table_index,
+            None,
+        )
+        .unwrap()
+    }
+
+    fn decode(request: u64, block_table_index: usize, output_slot: Option<u32>) -> WorkItem {
+        WorkItem::new(
+            RequestId::new(request).unwrap(),
+            WorkKind::Decode,
+            vec![u32::try_from(request).unwrap()],
+            1,
+            block_table_index,
+            output_slot.map(OutputSlot::new),
+        )
+        .unwrap()
+    }
 
     #[test]
     fn zero_is_reserved_for_scheduler_ids() {
@@ -708,6 +856,116 @@ mod tests {
                 17,
             )
             .is_err()
+        );
+    }
+
+    #[test]
+    fn iteration_rejects_physical_block_aliases_across_requests() {
+        let error = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![prefill(1, 0), prefill(2, 1)],
+            Vec::new(),
+            vec![table(1, 7), table(2, 7)],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            SchedulerError::InvalidPlan {
+                field: "block_tables",
+                reason: "physical block IDs must be unique across the iteration",
+            }
+        );
+    }
+
+    #[test]
+    fn iteration_requires_one_block_table_per_work_item() {
+        let error = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![prefill(1, 0)],
+            Vec::new(),
+            vec![table(1, 7), table(2, 8)],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            SchedulerError::InvalidPlan {
+                field: "block_tables",
+                reason: "each work item must own exactly one referenced block table",
+            }
+        );
+    }
+
+    #[test]
+    fn iteration_rejects_duplicate_block_table_references() {
+        let error = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![prefill(1, 0), prefill(2, 0)],
+            Vec::new(),
+            vec![table(1, 7), table(2, 8)],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            SchedulerError::InvalidPlan {
+                field: "block_table_index",
+                reason: "each block table must be referenced exactly once",
+            }
+        );
+    }
+
+    #[test]
+    fn iteration_accepts_permuted_exactly_once_block_table_references() {
+        let plan = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![prefill(1, 1), prefill(2, 0)],
+            Vec::new(),
+            vec![table(2, 8), table(1, 7)],
+        )
+        .unwrap();
+
+        assert_eq!(plan.batch_size(), 2);
+        assert_eq!(plan.prefill_items()[0].block_table_index(), 1);
+        assert_eq!(plan.prefill_items()[1].block_table_index(), 0);
+    }
+
+    #[test]
+    fn iteration_requires_a_sampled_output_for_decode_work() {
+        let error = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            Vec::new(),
+            vec![decode(1, 0, None)],
+            vec![table(1, 7)],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            SchedulerError::InvalidPlan {
+                field: "output_slots",
+                reason: "decode work must request one sampled output",
+            }
+        );
+    }
+
+    #[test]
+    fn iteration_requires_dense_zero_based_output_slots() {
+        let error = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            Vec::new(),
+            vec![decode(1, 0, Some(1))],
+            vec![table(1, 7)],
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            SchedulerError::InvalidPlan {
+                field: "output_slots",
+                reason: "output slots must be dense and zero-based",
+            }
         );
     }
 }
