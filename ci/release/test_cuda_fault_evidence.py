@@ -24,7 +24,9 @@ from check_cuda_fault_evidence import (  # noqa: E402
     SANITIZER_FILES,
     SUMMARY,
     CudaFaultEvidenceError,
+    load_raw_evidence_archive,
     produce,
+    replay_raw_evidence,
     validate,
 )
 from test_release import EPOCH, fixture_elf  # noqa: E402
@@ -249,6 +251,76 @@ class CudaFaultEvidenceTests(unittest.TestCase):
             )
             for member in archive.getmembers():
                 self.assertEqual((member.uid, member.gid, member.mtime, member.mode), (0, 0, 0, 0o644))
+
+    def test_preserved_raw_archive_replays_to_exact_attestation(self) -> None:
+        expected, raw, _ = self.fixture.produce()
+        files, environment, raw_sha256 = load_raw_evidence_archive(raw)
+        self.assertEqual(set(files), BASE_EVIDENCE_FILES)
+        self.assertEqual(environment["gpu_image_id"], BUILD_IMAGE_ID)
+        self.assertEqual(raw_sha256, digest(raw.read_bytes()))
+        replayed = replay_raw_evidence(
+            raw,
+            source_revision=REVISION,
+            source_archive=self.fixture.source_archive,
+            build_image_id=BUILD_IMAGE_ID,
+            release_binary=self.fixture.release_binary,
+            release_bundle=self.fixture.release_bundle,
+            release_image_id=RELEASE_IMAGE_ID,
+        )
+        self.assertEqual(replayed, expected)
+
+    def test_preserved_raw_archive_rejects_payload_tampering(self) -> None:
+        _, raw, _ = self.fixture.produce()
+        contents = raw.read_bytes()
+        self.assertIn(b"fixture evidence\n", contents)
+        raw.write_bytes(contents.replace(b"fixture evidence\n", b"fixture evidencf\n", 1))
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "digest mismatch"):
+            replay_raw_evidence(
+                raw,
+                source_revision=REVISION,
+                source_archive=self.fixture.source_archive,
+                build_image_id=BUILD_IMAGE_ID,
+                release_binary=self.fixture.release_binary,
+                release_bundle=self.fixture.release_bundle,
+                release_image_id=RELEASE_IMAGE_ID,
+            )
+
+    def test_preserved_raw_archive_rejects_noncanonical_metadata(self) -> None:
+        _, raw, _ = self.fixture.produce()
+        files, _, _ = load_raw_evidence_archive(raw)
+        noncanonical = self.fixture.root / "noncanonical.tar"
+        with tarfile.open(noncanonical, "w", format=tarfile.PAX_FORMAT) as archive:
+            for name in sorted(files):
+                member = tarfile.TarInfo(name)
+                member.size = len(files[name])
+                member.mode = 0o644
+                member.uid = 1
+                member.gid = 0
+                member.uname = "root"
+                member.gname = "root"
+                member.mtime = 0
+                archive.addfile(member, io.BytesIO(files[name]))
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "non-canonical metadata"):
+            load_raw_evidence_archive(noncanonical)
+
+    def test_preserved_raw_archive_rejects_trailing_tar_record(self) -> None:
+        _, raw, _ = self.fixture.produce()
+        raw.write_bytes(raw.read_bytes() + b"\0" * 10240)
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "end-of-archive padding"):
+            load_raw_evidence_archive(raw)
+
+    def test_preserved_raw_archive_rebinds_build_image(self) -> None:
+        _, raw, _ = self.fixture.produce()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "gpu_image_id"):
+            replay_raw_evidence(
+                raw,
+                source_revision=REVISION,
+                source_archive=self.fixture.source_archive,
+                build_image_id="sha256:" + "f" * 64,
+                release_binary=self.fixture.release_binary,
+                release_bundle=self.fixture.release_bundle,
+                release_image_id=RELEASE_IMAGE_ID,
+            )
 
     def test_checksum_tampering_is_rejected(self) -> None:
         (self.fixture.evidence / "memory-fault-tests.log").write_bytes(b"tampered\n")

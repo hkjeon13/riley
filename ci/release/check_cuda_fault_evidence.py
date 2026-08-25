@@ -108,6 +108,7 @@ MARKER_RE = re.compile(
 
 MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
 MAX_EVIDENCE_TOTAL_BYTES = 256 * 1024 * 1024
+MAX_RAW_EVIDENCE_ARCHIVE_BYTES = MAX_EVIDENCE_TOTAL_BYTES + 4 * 1024 * 1024
 MAX_SOURCE_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024
 MAX_RELEASE_BINARY_BYTES = 2 * 1024 * 1024 * 1024
 
@@ -354,6 +355,43 @@ def _validate_release_logs(files: dict[str, bytes]) -> None:
         _fail("release ELF evidence", "contains a forbidden runtime dependency")
 
 
+def _validate_evidence_files(
+    files: dict[str, bytes],
+    *,
+    inventory_label: str,
+) -> dict[str, str]:
+    if "environment.txt" not in files:
+        _fail(inventory_label, "closed inventory is missing environment.txt")
+    environment = _parse_environment(files["environment.txt"])
+    expected = set(BASE_EVIDENCE_FILES)
+    if environment["compute_sanitizer"] == "1":
+        expected.update(SANITIZER_FILES)
+
+    observed = set(files)
+    if observed != expected:
+        _fail(
+            inventory_label,
+            f"closed inventory mismatch; missing={sorted(expected - observed)}, "
+            f"extra={sorted(observed - expected)}",
+        )
+    total = sum(len(contents) for contents in files.values())
+    oversized = sorted(
+        name for name, contents in files.items()
+        if len(contents) > MAX_EVIDENCE_FILE_BYTES
+    )
+    if oversized:
+        _fail(inventory_label, f"members exceed the per-file bound: {oversized}")
+    if total > MAX_EVIDENCE_TOTAL_BYTES:
+        _fail(inventory_label, f"exceeds the {MAX_EVIDENCE_TOTAL_BYTES}-byte total bound")
+
+    checksums = _parse_checksums(files["SHA256SUMS"], expected - {"SHA256SUMS"})
+    for name, expected_digest in checksums.items():
+        actual = hashlib.sha256(files[name]).hexdigest()
+        if actual != expected_digest:
+            _fail("SHA256SUMS", f"digest mismatch for {name}: {actual}")
+    return environment
+
+
 def _read_evidence_directory(root: Path) -> tuple[dict[str, bytes], dict[str, str]]:
     try:
         metadata = root.lstat()
@@ -400,12 +438,94 @@ def _read_evidence_directory(root: Path) -> tuple[dict[str, bytes], dict[str, st
             _fail("--evidence-dir", f"exceeds the {MAX_EVIDENCE_TOTAL_BYTES}-byte total bound")
         files[name] = contents
 
-    checksums = _parse_checksums(files["SHA256SUMS"], expected - {"SHA256SUMS"})
-    for name, expected_digest in checksums.items():
-        actual = hashlib.sha256(files[name]).hexdigest()
-        if actual != expected_digest:
-            _fail("SHA256SUMS", f"digest mismatch for {name}: {actual}")
-    return files, environment
+    return files, _validate_evidence_files(files, inventory_label="--evidence-dir")
+
+
+def load_raw_evidence_archive(
+    path: Path,
+) -> tuple[dict[str, bytes], dict[str, str], str]:
+    """Load and verify the canonical, closed CUDA fault raw-evidence tar."""
+
+    label = "--raw-evidence"
+    raw_path = _regular_file(path, label, MAX_RAW_EVIDENCE_ARCHIVE_BYTES)
+    try:
+        archive_bytes = raw_path.read_bytes()
+    except OSError as error:
+        _fail(label, f"cannot read {path}: {error}")
+    if not archive_bytes:
+        _fail(label, "must not be empty")
+
+    files: dict[str, bytes] = {}
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:") as archive:
+            if archive.pax_headers:
+                _fail(label, "global PAX headers are forbidden")
+            members = archive.getmembers()
+            names = [member.name for member in members]
+            if names != sorted(names):
+                _fail(label, "members must be bytewise sorted")
+            expected_offset = 0
+            for member in members:
+                name = member.name
+                if (
+                    name in files
+                    or name not in BASE_EVIDENCE_FILES | SANITIZER_FILES
+                    or "/" in name
+                    or PurePosixPath(name).name != name
+                ):
+                    _fail(label, f"unexpected or duplicate member {name!r}")
+                if not member.isreg():
+                    _fail(label, f"member must be a regular file: {name}")
+                if member.pax_headers:
+                    _fail(label, f"member PAX headers are forbidden: {name}")
+                if (
+                    member.uid != 0
+                    or member.gid != 0
+                    or member.uname != "root"
+                    or member.gname != "root"
+                    or member.mode != 0o644
+                    or member.mtime != 0
+                    or member.linkname != ""
+                    or member.devmajor != 0
+                    or member.devminor != 0
+                ):
+                    _fail(label, f"non-canonical metadata for {name}")
+                if member.size > MAX_EVIDENCE_FILE_BYTES:
+                    _fail(label, f"member exceeds the per-file bound: {name}")
+                if member.offset != expected_offset or member.offset_data != expected_offset + 512:
+                    _fail(label, f"non-canonical header layout for {name}")
+
+                expected_info = tarfile.TarInfo(name)
+                expected_info.size = member.size
+                expected_info.mode = 0o644
+                expected_info.uid = 0
+                expected_info.gid = 0
+                expected_info.uname = "root"
+                expected_info.gname = "root"
+                expected_info.mtime = 0
+                expected_header = expected_info.tobuf(format=tarfile.PAX_FORMAT)
+                actual_header = archive_bytes[member.offset:member.offset_data]
+                if actual_header != expected_header:
+                    _fail(label, f"non-canonical tar header for {name}")
+
+                data_end = member.offset_data + member.size
+                padded_end = member.offset_data + ((member.size + 511) // 512) * 512
+                if data_end > len(archive_bytes):
+                    _fail(label, f"truncated member {name}")
+                if any(archive_bytes[data_end:padded_end]):
+                    _fail(label, f"non-zero data padding for {name}")
+                files[name] = archive_bytes[member.offset_data:data_end]
+                expected_offset = padded_end
+    except CudaFaultEvidenceError:
+        raise
+    except (OSError, tarfile.TarError, UnicodeError, ValueError) as error:
+        _fail(label, f"is not a readable canonical uncompressed tar: {error}")
+
+    canonical_size = ((expected_offset + 1024 + 10239) // 10240) * 10240
+    if len(archive_bytes) != canonical_size or any(archive_bytes[expected_offset:]):
+        _fail(label, "has non-canonical end-of-archive padding")
+    environment = _validate_evidence_files(files, inventory_label=label)
+    return files, environment, hashlib.sha256(archive_bytes).hexdigest()
 
 
 def _validate_source_archive(path: Path, revision: str) -> str:
@@ -489,8 +609,9 @@ def _image_digest(value: str, label: str) -> str:
     return match.group(1)
 
 
-def validate(
-    evidence_dir: Path,
+def _validate_bound_evidence(
+    files: dict[str, bytes],
+    environment: dict[str, str],
     *,
     source_revision: str,
     source_archive: Path,
@@ -498,8 +619,8 @@ def validate(
     release_binary: Path,
     release_bundle: Path,
     release_image_id: str,
-) -> tuple[dict[str, bytes], dict[str, Any]]:
-    """Validate all raw inputs and return bytes plus attestation source bindings."""
+) -> dict[str, Any]:
+    """Bind already-validated raw files to the immutable candidate artifacts."""
 
     if GIT_RE.fullmatch(source_revision) is None:
         _fail("--source-revision", "must be a lowercase 40-character Git SHA")
@@ -527,7 +648,6 @@ def validate(
         source_revision=source_revision,
     )
 
-    files, environment = _read_evidence_directory(evidence_dir)
     expected_environment = {
         "source_revision": source_revision,
         "source_archive_sha256": source_archive_sha256,
@@ -582,7 +702,73 @@ def validate(
         "release_bundle_sha256": release_bundle_sha256,
         "release_image_sha256": release_image_sha256,
     }
+    return source
+
+
+def validate(
+    evidence_dir: Path,
+    *,
+    source_revision: str,
+    source_archive: Path,
+    build_image_id: str,
+    release_binary: Path,
+    release_bundle: Path,
+    release_image_id: str,
+) -> tuple[dict[str, bytes], dict[str, Any]]:
+    """Validate all raw inputs and return bytes plus attestation source bindings."""
+
+    files, environment = _read_evidence_directory(evidence_dir)
+    source = _validate_bound_evidence(
+        files,
+        environment,
+        source_revision=source_revision,
+        source_archive=source_archive,
+        build_image_id=build_image_id,
+        release_binary=release_binary,
+        release_bundle=release_bundle,
+        release_image_id=release_image_id,
+    )
     return files, source
+
+
+def _attestation(source: dict[str, Any], raw_sha256: str) -> dict[str, Any]:
+    return {
+        "schema_version": ATTESTATION_VERSION,
+        "gate": GATE,
+        "status": "passed",
+        "source": source,
+        "raw_evidence_sha256": raw_sha256,
+        "checks": [
+            {"id": check_id, "passed": True}
+            for check_id in sorted(CHECK_IDS)
+        ],
+    }
+
+
+def replay_raw_evidence(
+    raw_evidence: Path,
+    *,
+    source_revision: str,
+    source_archive: Path,
+    build_image_id: str,
+    release_binary: Path,
+    release_bundle: Path,
+    release_image_id: str,
+) -> dict[str, Any]:
+    """Replay preserved raw evidence against the exact release candidate."""
+
+    files, environment, raw_sha256 = load_raw_evidence_archive(raw_evidence)
+    source = _validate_bound_evidence(
+        files,
+        environment,
+        source_revision=source_revision,
+        source_archive=source_archive,
+        build_image_id=build_image_id,
+        release_binary=release_binary,
+        release_bundle=release_bundle,
+        release_image_id=release_image_id,
+    )
+    return _attestation(source, raw_sha256)
 
 
 def _new_output_path(output: Path, label: str) -> None:
@@ -654,17 +840,7 @@ def produce(
         release_image_id=release_image_id,
     )
     raw_sha256 = _write_raw_archive(files, raw_evidence)
-    attestation = {
-        "schema_version": ATTESTATION_VERSION,
-        "gate": GATE,
-        "status": "passed",
-        "source": source,
-        "raw_evidence_sha256": raw_sha256,
-        "checks": [
-            {"id": check_id, "passed": True}
-            for check_id in sorted(CHECK_IDS)
-        ],
-    }
+    attestation = _attestation(source, raw_sha256)
     try:
         with report.open("xb") as destination:
             destination.write(canonical_json_bytes(attestation))
