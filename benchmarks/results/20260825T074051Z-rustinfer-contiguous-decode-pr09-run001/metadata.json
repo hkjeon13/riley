@@ -1,0 +1,203 @@
+{
+  "artifact_kind": "rustinfer-pr09-contiguous-decode-evidence",
+  "created_at_utc": "2026-08-25T07:40:51Z",
+  "schema_id": "rustinfer.pr09.contiguous-decode-evidence.v1",
+  "status": "passed",
+  "source": {
+    "branch": "codex/pr-09-single-request-decode",
+    "git_dirty": false,
+    "git_revision": "d5a30e5b863b606ffdd6bee6592dcb92cd88902b",
+    "source_tar_sha256": "f3e3dee283c6ef9ee74b689d43b163cf7bbf58e0fd9f4f0803b588dc78c78fc8"
+  },
+  "environment": {
+    "cargo_version": "1.85.0",
+    "compute_capability": "8.9",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "cuda_architectures": "89",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "gpu_memory_mib": 24564,
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "host": "server-4096",
+    "network": "disabled",
+    "nsight_compute_version": "2025.1.1.0",
+    "nsight_systems": "absent",
+    "nvidia_driver_version": "580.173.02",
+    "python": "absent",
+    "python3": "absent",
+    "rustc_version": "1.85.0"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bfloat16",
+    "batch_size": 1,
+    "layers": 30,
+    "query_heads": 9,
+    "key_value_heads": 3,
+    "head_size": 64,
+    "maximum_sequence_length": 8192
+  },
+  "cache_contract": {
+    "layout": "separate K/V BF16 [layer, kv_head, max_seq, head_dim]",
+    "allocation": "request-start fixed capacity",
+    "logical_commit": "after all layers complete successfully",
+    "capacity_error": "before mutation",
+    "reset": "reuse allocation and clear logical state",
+    "steady_state_device_allocation": false,
+    "maximum_cache_bytes": 188743680
+  },
+  "implementations": [
+    {
+      "backend": "reference",
+      "implementation_id": "rustinfer.cuda.materialized-gqa-decode.bf16",
+      "implementation_version": 1,
+      "attention_kernel_count": 4,
+      "score_materialization": "BF16 qk/scale/probability staging"
+    },
+    {
+      "backend": "optimized",
+      "implementation_id": "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64",
+      "implementation_version": 1,
+      "attention_kernel_count": 2,
+      "tokens_per_partition": 128,
+      "partial_state": "FP32 (max_score, exp_sum, weighted_value_sum[D])",
+      "normalization": "once after ordered range merge",
+      "approximate": false,
+      "bit_exact_with_reference": false
+    }
+  ],
+  "correctness": {
+    "full_pr01_gate_reactivated": false,
+    "classification": "semantic greedy parity plus direct attention numeric gates",
+    "direct_attention_gates": {
+      "materialized_vs_cpu_max_abs_tolerance": "0.031250000",
+      "optimized_vs_materialized_max_abs_tolerance": "0.062500000",
+      "one_range_vs_multi_range_logical_length": 33,
+      "one_range_vs_multi_range_max_abs": "0.000000000"
+    },
+    "cache_vs_full_32": {
+      "rows": 33,
+      "top1_mismatches": 0,
+      "prefill_byte_exact": true,
+      "worst_cosine": "0.997812344493",
+      "maximum_abs": "0.593750000",
+      "maximum_mean_abs": "0.280234733"
+    },
+    "cache_vs_full_128": {
+      "rows": 129,
+      "top1_mismatches": 0,
+      "prefill_byte_exact": true,
+      "worst_cosine": "0.997812375627",
+      "maximum_abs": "1.500000000",
+      "maximum_mean_abs": "0.455652977"
+    },
+    "optimized_vs_reference_32": {
+      "rows": 33,
+      "top1_mismatches": 0,
+      "worst_cosine": "0.998950330082",
+      "maximum_abs": "0.507812500",
+      "maximum_mean_abs": "0.261816807"
+    }
+  },
+  "performance": {
+    "timing_boundary": "decode call wall time; native primitive calls synchronize the stream; logits download excluded",
+    "runs": [
+      {
+        "name": "optimized_cache_full_parity",
+        "samples": 32,
+        "p50_ns": 3424913,
+        "p95_ns": 3681939,
+        "p99_ns": 3866996,
+        "event_p50_ns": 3420928,
+        "event_p95_ns": 3678272,
+        "call_return_p50_ns": 3420451,
+        "call_return_p95_ns": 3677411,
+        "host_outside_event_p50_ns": 3976,
+        "host_outside_event_p95_ns": 4407
+      },
+      {
+        "name": "materialized_reference_paired",
+        "samples": 32,
+        "p50_ns": 3309245,
+        "p95_ns": 3466826,
+        "p99_ns": 3486636
+      },
+      {
+        "name": "optimized_paired",
+        "samples": 32,
+        "p50_ns": 3412714,
+        "p95_ns": 3569305,
+        "p99_ns": 3620120,
+        "p50_delta_vs_reference_percent": "3.1267",
+        "p95_delta_vs_reference_percent": "2.9560"
+      },
+      {
+        "name": "optimized_128_step",
+        "samples": 128,
+        "p50_ns": 4202020,
+        "p95_ns": 5083333,
+        "p99_ns": 5175827
+      },
+      {
+        "name": "optimized_near_limit",
+        "samples": 128,
+        "p50_ns": 10914296,
+        "p95_ns": 11003411,
+        "p99_ns": 11985214
+      }
+    ],
+    "launches": {
+      "attention_reference_observed": 4,
+      "attention_optimized_observed": 2,
+      "whole_token_reference_source_lower_bound_if_one_kernel_per_cublaslt_call": 606,
+      "whole_token_optimized_source_lower_bound_if_one_kernel_per_cublaslt_call": 546,
+      "profiler_wide_exact_count_captured": false
+    },
+    "near_limit_first_layer_profile": {
+      "logical_length": 8065,
+      "logical_kv_bytes": 6193920,
+      "active_partial_state_bytes": 152064,
+      "producer_duration_ns": 121184,
+      "producer_dram_read_bytes": 6203520,
+      "producer_registers_per_thread": 26,
+      "reducer_duration_ns": 244448,
+      "reducer_dram_read_bytes": 181760,
+      "reducer_registers_per_thread": 29,
+      "aggregate_duration_ns": 365632,
+      "aggregate_dram_read_bytes": 6385280,
+      "producer_logical_bandwidth_gbps": "51.111698",
+      "aggregate_logical_bandwidth_gbps": "16.940312",
+      "aggregate_measured_dram_bandwidth_gbps": "17.463679"
+    }
+  },
+  "validation": {
+    "workspace_all_features": "111 passed, 0 failed, 40 ignored",
+    "strict_clippy_all_features": "passed",
+    "direct_gpu_tests": "4 passed",
+    "model_core_gpu_tests": "3 passed",
+    "model_128_step_gpu_test": "1 passed",
+    "model_near_limit_gpu_test": "1 passed",
+    "compute_sanitizer_memcheck": "0 errors, 0 bytes leaked",
+    "compute_sanitizer_racecheck": "0 hazards, 0 errors, 0 warnings",
+    "capacity_8192_reached": true,
+    "capacity_error_pre_mutation": true,
+    "reset_allocation_stable": true,
+    "same_prompt_replay_byte_exact": true,
+    "different_prompt_fresh_byte_exact": true,
+    "implicit_drop_accounting_zero": true,
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr09/d5a30e5b863b606ffdd6bee6592dcb92cd88902b",
+    "remote_sha256sums_sha256": "ba73fab1901058a3271998508588ffa718660a208f717d102e1198dedc4244d5"
+  },
+  "limitations": [
+    "The PR01 FP32/relative-error/31-prompt gate was not rerun or reactivated.",
+    "Native primitive and GEMM calls synchronize the stream, so GPU event time can contain CPU-induced idle gaps.",
+    "Nsight Systems was absent; whole-call exact launch count and CPU-launch/GPU-idle decomposition were not captured.",
+    "The paired functional run was not a clock-controlled performance benchmark.",
+    "Only single-request batch 1 and D64 optimized attention are implemented.",
+    "Sampling and EOS stopping policy are outside this PR.",
+    "Allocation accounting is owned device-buffer bytes, not observed peak VRAM.",
+    "Only sm89 with the recorded CUDA toolkit and driver was validated."
+  ]
+}
