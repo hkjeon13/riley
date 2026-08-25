@@ -21,7 +21,7 @@ serve options:
   --batch-token-budget N         tokens per CUDA iteration (default: 512)
   --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
-  --residual-rmsnorm MODE        fused E0 path or separate rollback (default: fused)
+  --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
@@ -241,7 +241,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         batch_token_budget: batch_token_budget.unwrap_or(512),
         prefill_chunk_tokens: prefill_chunk_tokens.unwrap_or(512),
         physical_kv_blocks,
-        residual_rmsnorm: residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Fused),
+        residual_rmsnorm: residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate),
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
     }))
@@ -542,7 +542,7 @@ mod tests {
                 batch_token_budget: 512,
                 prefill_chunk_tokens: 512,
                 physical_kv_blocks: None,
-                residual_rmsnorm: ResidualRmsNormMode::Fused,
+                residual_rmsnorm: ResidualRmsNormMode::Separate,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
