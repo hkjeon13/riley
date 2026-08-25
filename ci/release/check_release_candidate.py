@@ -25,6 +25,8 @@ PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
 SOAK_VERSION = "rustinfer.reliability-soak-report.v1"
 CORRECTNESS_VERSION = "1.0.0"
 CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
+NATIVE_REPLAY_VERSION = "rustinfer.native-correctness-replay-validation.v1"
+OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
@@ -58,6 +60,17 @@ CUDA_FAULT_CHECKS = {
     "subprocess_isolation",
     "production_fault_symbols_absent",
 }
+OPTIMIZATION_LOGS = {
+    "cuda-compile-only": "cuda-compile-only.log",
+    "workspace-all-features-all-targets": "workspace-all-features-all-targets.log",
+    "command-batch-lifecycle": "command-batch-lifecycle-gpu.log",
+    "command-batch-resource-ledger": "command-batch-primitives-gpu.log",
+    "smollm2-multi-step-greedy-exact": "iteration-command-batch-model-parity-gpu.log",
+}
+EXPECTED_OPTIMIZATION_TOKENS = [
+    4052, 2025, 284, 965, 6497, 288, 1492, 418,
+    260, 16438, 30, 198, 198, 504, 16438, 314,
+]
 
 
 class CandidateError(ValueError):
@@ -166,6 +179,53 @@ def _file_sha256(path: Path) -> str:
     except OSError as error:
         _fail(str(path), f"cannot hash artifact: {error}")
     return digest.hexdigest()
+
+
+def _safe_tar_members(archive: tarfile.TarFile, path: str) -> list[tarfile.TarInfo]:
+    members = archive.getmembers()
+    if not members:
+        _fail(path, "archive is empty")
+    names: set[str] = set()
+    for member in members:
+        name = member.name
+        pure = PurePosixPath(name)
+        if (
+            not name
+            or "\\" in name
+            or "//" in name
+            or pure.is_absolute()
+            or any(part in {"", ".", ".."} for part in pure.parts)
+        ):
+            _fail(path, f"unsafe archive member path: {name!r}")
+        if name in names:
+            _fail(path, f"duplicate archive member path: {name}")
+        names.add(name)
+        if member.issym() or member.islnk() or member.isdev() or member.isfifo():
+            _fail(path, f"links and special archive members are forbidden: {name}")
+        if not member.isdir() and not member.isreg():
+            _fail(path, f"unsupported archive member type: {name}")
+    return members
+
+
+def _verify_source_archive(path: Path, revision: str) -> None:
+    """Require the commit marker emitted by `git archive --format=tar`."""
+
+    try:
+        with tarfile.open(path, "r:") as archive:
+            members = _safe_tar_members(archive, "manifest.source.archive")
+            if archive.pax_headers != {"comment": revision}:
+                _fail(
+                    "manifest.source.archive",
+                    "missing or mismatched git-archive pax global comment",
+                )
+            for member in members:
+                if member.pax_headers.get("comment") != revision:
+                    _fail(
+                        "manifest.source.archive",
+                        f"member lacks the exact git commit marker: {member.name}",
+                    )
+    except (OSError, tarfile.TarError) as error:
+        _fail("manifest.source.archive", f"not a readable git tar archive: {error}")
 
 
 def _resolve_artifact(
@@ -362,6 +422,267 @@ def _validate_correctness(
                     )
 
 
+def _validate_native_replay(
+    report: dict[str, Any],
+    path: str,
+    *,
+    revision: str,
+    archive_sha256: str,
+    correctness_sha256: str,
+    raw_replay_sha256: str,
+) -> None:
+    row = _exact(
+        report,
+        {
+            "schema_version", "status", "source", "correctness_report_sha256",
+            "raw_replay_sha256", "case_count", "failure_count", "checks",
+        },
+        path,
+    )
+    if row["schema_version"] != NATIVE_REPLAY_VERSION or row["status"] != "passed":
+        _fail(path, "native correctness replay validation did not pass")
+    source = _exact(
+        row["source"],
+        {"git_revision", "git_dirty", "source_archive_sha256"},
+        f"{path}.source",
+    )
+    if source != {
+        "git_revision": revision,
+        "git_dirty": False,
+        "source_archive_sha256": archive_sha256,
+    }:
+        _fail(f"{path}.source", "does not exactly match candidate source")
+    if row["correctness_report_sha256"] != correctness_sha256:
+        _fail(f"{path}.correctness_report_sha256", "native report digest mismatch")
+    if row["raw_replay_sha256"] != raw_replay_sha256:
+        _fail(f"{path}.raw_replay_sha256", "raw replay bundle digest mismatch")
+    if row["case_count"] != 31 or row["failure_count"] != 0:
+        _fail(path, "native replay must pass exactly 31 cases with zero failures")
+    checks = row["checks"]
+    if not isinstance(checks, list):
+        _fail(f"{path}.checks", "must be an array")
+    required = {
+        "schema-closed-validation",
+        "raw-input-hashes-replayed",
+        "all-cases-replayed",
+        "summary-recomputed",
+    }
+    observed: set[str] = set()
+    for index, raw in enumerate(checks):
+        check = _exact(raw, {"id", "passed"}, f"{path}.checks[{index}]")
+        check_id = _string(check["id"], f"{path}.checks[{index}].id", ID_RE)
+        if check_id in observed:
+            _fail(f"{path}.checks[{index}].id", "duplicate check id")
+        observed.add(check_id)
+        if check["passed"] is not True:
+            _fail(f"{path}.checks[{index}].passed", "must be true")
+    if observed != required:
+        _fail(f"{path}.checks", f"required replay check set mismatch: {sorted(observed)}")
+
+
+def _optimization_test(
+    value: Any, path: str, test_id: str, expected: dict[str, Any]
+) -> str:
+    row = _exact(value, {"id", "result", "log_sha256", *expected}, path)
+    if row["id"] != test_id or row["result"] != "passed":
+        _fail(path, "test id/result mismatch")
+    for key, expected_value in expected.items():
+        if row[key] != expected_value:
+            _fail(f"{path}.{key}", f"must be {expected_value!r}")
+    return _sha256(row["log_sha256"], f"{path}.log_sha256")
+
+
+def _optimization_log_hashes(path: Path) -> dict[str, str]:
+    try:
+        with tarfile.open(path, "r:*") as archive:
+            members = _safe_tar_members(archive, "optimization_correctness.raw_evidence")
+            files = [member for member in members if member.isreg()]
+            by_basename: dict[str, tarfile.TarInfo] = {}
+            for member in files:
+                basename = PurePosixPath(member.name).name
+                if basename in by_basename:
+                    _fail(
+                        "optimization_correctness.raw_evidence",
+                        f"duplicate log basename: {basename}",
+                    )
+                by_basename[basename] = member
+            expected_files = set(OPTIMIZATION_LOGS.values())
+            if set(by_basename) != expected_files:
+                _fail(
+                    "optimization_correctness.raw_evidence",
+                    f"exact log inventory mismatch: {sorted(by_basename)}",
+                )
+            result: dict[str, str] = {}
+            for test_id, filename in OPTIMIZATION_LOGS.items():
+                source = archive.extractfile(by_basename[filename])
+                if source is None:
+                    _fail("optimization_correctness.raw_evidence", f"cannot read {filename}")
+                result[test_id] = hashlib.sha256(source.read()).hexdigest()
+            return result
+    except (OSError, tarfile.TarError) as error:
+        _fail("optimization_correctness.raw_evidence", f"cannot read log archive: {error}")
+
+
+def _verify_native_replay_archive(path: Path) -> None:
+    try:
+        with tarfile.open(path, "r:*") as archive:
+            members = _safe_tar_members(archive, "native_correctness.raw_replay")
+            if not any(member.isreg() for member in members):
+                _fail("native_correctness.raw_replay", "must contain replay evidence files")
+    except (OSError, tarfile.TarError) as error:
+        _fail("native_correctness.raw_replay", f"cannot read replay archive: {error}")
+
+
+def _validate_optimization_correctness(
+    report: dict[str, Any],
+    path: str,
+    *,
+    revision: str,
+    archive_sha256: str,
+    raw_evidence_path: Path,
+) -> str:
+    row = _exact(
+        report,
+        {
+            "schema_version", "gate_id", "recorded_at_utc", "status", "semantic_class",
+            "source", "build", "gpu", "model", "implementations", "tests",
+        },
+        path,
+    )
+    if row["schema_version"] != 1 or row["gate_id"] != OPTIMIZATION_GATE:
+        _fail(path, "optimizer equivalence schema/gate mismatch")
+    if row["status"] != "passed" or row["semantic_class"] != "E0":
+        _fail(path, "optimizer equivalence must be a passed E0 gate")
+    _string(row["recorded_at_utc"], f"{path}.recorded_at_utc")
+    source = _exact(
+        row["source"], {"git_commit", "git_dirty", "archive_sha256"}, f"{path}.source"
+    )
+    if source != {
+        "git_commit": revision,
+        "git_dirty": False,
+        "archive_sha256": archive_sha256,
+    }:
+        _fail(f"{path}.source", "does not exactly match candidate source")
+    build = _exact(
+        row["build"],
+        {
+            "container_image_sha256", "network", "cargo_locked", "cargo_offline",
+            "rustc", "cuda_toolkit", "cuda_architecture",
+        },
+        f"{path}.build",
+    )
+    profile_image_sha256 = _sha256(
+        build["container_image_sha256"], f"{path}.build.container_image_sha256"
+    )
+    expected_build = {
+        "network": "none",
+        "cargo_locked": True,
+        "cargo_offline": True,
+        "cuda_architecture": "89",
+    }
+    for key, expected in expected_build.items():
+        if build[key] != expected:
+            _fail(f"{path}.build.{key}", f"must be {expected!r}")
+    _string(build["rustc"], f"{path}.build.rustc")
+    _string(build["cuda_toolkit"], f"{path}.build.cuda_toolkit")
+    gpu = _exact(
+        row["gpu"],
+        {"model", "uuid", "pci_bus_id", "compute_capability", "vram_mib", "driver_version"},
+        f"{path}.gpu",
+    )
+    for key in ("model", "uuid", "pci_bus_id", "compute_capability", "driver_version"):
+        _string(gpu[key], f"{path}.gpu.{key}")
+    if not isinstance(gpu["vram_mib"], int) or isinstance(gpu["vram_mib"], bool) or gpu["vram_mib"] <= 0:
+        _fail(f"{path}.gpu.vram_mib", "must be a positive integer")
+    model = _exact(
+        row["model"],
+        {"model_id", "revision", "dtype", "manifest_sha256", "weights_sha256", "tokenizer_sha256"},
+        f"{path}.model",
+    )
+    expected_model = {
+        "model_id": "HuggingFaceTB/SmolLM2-135M",
+        "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+        "dtype": "bf16",
+        "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+        "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+    }
+    for key, expected in expected_model.items():
+        if model[key] != expected:
+            _fail(f"{path}.model.{key}", f"must be {expected!r}")
+    _sha256(model["manifest_sha256"], f"{path}.model.manifest_sha256")
+    implementations = _exact(
+        row["implementations"],
+        {"baseline", "candidate", "residual_rmsnorm", "rollback"},
+        f"{path}.implementations",
+    )
+    expected_implementations = {
+        "baseline": "per-operation",
+        "candidate": "iteration-batch",
+        "residual_rmsnorm": "separate",
+        "rollback": "--execution-completion per-operation",
+    }
+    if implementations != expected_implementations:
+        _fail(f"{path}.implementations", "runtime flag/rollback contract mismatch")
+    tests = row["tests"]
+    if not isinstance(tests, list) or len(tests) != len(OPTIMIZATION_LOGS):
+        _fail(f"{path}.tests", "exact optimizer test inventory is required")
+    by_id: dict[str, dict[str, Any]] = {}
+    for index, raw in enumerate(tests):
+        test = _object(raw, f"{path}.tests[{index}]")
+        test_id = _string(test.get("id"), f"{path}.tests[{index}].id", ID_RE)
+        if test_id in by_id:
+            _fail(f"{path}.tests[{index}].id", "duplicate test id")
+        by_id[test_id] = test
+    if set(by_id) != set(OPTIMIZATION_LOGS):
+        _fail(f"{path}.tests", f"test id set mismatch: {sorted(by_id)}")
+    declared = {
+        "cuda-compile-only": _optimization_test(
+            by_id["cuda-compile-only"], f"{path}.tests.cuda-compile-only",
+            "cuda-compile-only", {},
+        ),
+        "workspace-all-features-all-targets": _optimization_test(
+            by_id["workspace-all-features-all-targets"],
+            f"{path}.tests.workspace-all-features-all-targets",
+            "workspace-all-features-all-targets", {},
+        ),
+        "command-batch-lifecycle": _optimization_test(
+            by_id["command-batch-lifecycle"], f"{path}.tests.command-batch-lifecycle",
+            "command-batch-lifecycle",
+            {"one_shot_finish": True, "drop_restores_stream": True},
+        ),
+        "command-batch-resource-ledger": _optimization_test(
+            by_id["command-batch-resource-ledger"],
+            f"{path}.tests.command-batch-resource-ledger",
+            "command-batch-resource-ledger",
+            {
+                "validation_fail_closed": True,
+                "queued_chain_raw_byte_mismatches": 0,
+                "hot_loop_allocation_delta": 0,
+                "stream_reuse_after_finish": True,
+                "owner_close_allocation_count": 0,
+            },
+        ),
+        "smollm2-multi-step-greedy-exact": _optimization_test(
+            by_id["smollm2-multi-step-greedy-exact"],
+            f"{path}.tests.smollm2-multi-step-greedy-exact",
+            "smollm2-multi-step-greedy-exact",
+            {
+                "decode_steps": 16,
+                "committed_iterations": 16,
+                "raw_logit_mismatches": 0,
+                "generated_token_ids": EXPECTED_OPTIMIZATION_TOKENS,
+                "token_id_mismatches": 0,
+                "hot_loop_allocation_delta": 0,
+                "owner_close_allocation_count": 0,
+            },
+        ),
+    }
+    actual = _optimization_log_hashes(raw_evidence_path)
+    if declared != actual:
+        _fail(f"{path}.tests", "declared log hashes do not match exact raw log inventory")
+    return profile_image_sha256
+
+
 def _validate_performance(
     report: dict[str, Any],
     path: str,
@@ -370,7 +691,9 @@ def _validate_performance(
     archive_sha256: str,
     binary_sha256: str,
     image_sha256: str,
-    correctness_sha256: str,
+    optimization_sha256: str,
+    optimization_gate_id: str,
+    optimization_profile_image_sha256: str,
 ) -> None:
     row = _exact(
         report,
@@ -401,15 +724,15 @@ def _validate_performance(
         "source_archive_sha256": archive_sha256,
         "release_binary_sha256": binary_sha256,
         "release_image_sha256": image_sha256,
-        "correctness_report_sha256": correctness_sha256,
+        "correctness_report_sha256": optimization_sha256,
+        "correctness_gate_id": optimization_gate_id,
+        "profile_image_sha256": optimization_profile_image_sha256,
         "semantic_class": "E0",
     }
     for key, value in expected.items():
         if binding.get(key) != value:
             _fail(f"{path}.candidate.source.{key}", "candidate binding mismatch")
     _sha256(binding["profile_binary_sha256"], f"{path}.candidate.source.profile_binary_sha256")
-    _sha256(binding["profile_image_sha256"], f"{path}.candidate.source.profile_image_sha256")
-    _string(binding["correctness_gate_id"], f"{path}.candidate.source.correctness_gate_id")
     _all_checks_pass(row["checks"], f"{path}.checks")
 
 
@@ -529,13 +852,17 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
         image_sha256 = _sha256(image_digest.removeprefix("sha256:"), "manifest.release.image_digest")
         evidence_row = _exact(
             row["evidence"],
-            {"python_free_e2e", "cuda_fault", "correctness", "performance", "reliability_soak"},
+            {
+                "python_free_e2e", "cuda_fault", "native_correctness",
+                "optimization_correctness", "performance", "reliability_soak",
+            },
             "manifest.evidence",
         )
         seen_paths: set[str] = set()
-        _, archive_sha256, _ = _resolve_artifact(
+        archive_path, archive_sha256, _ = _resolve_artifact(
             source_row["archive"], "manifest.source.archive", evidence_root, seen_paths
         )
+        _verify_source_archive(archive_path, revision)
         binary_path, binary_sha256, _ = _resolve_artifact(
             release_row["binary"], "manifest.release.binary", evidence_root, seen_paths
         )
@@ -565,13 +892,52 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
             raw_hashes[gate_name] = raw_sha
-        for gate_name in ("correctness", "performance", "reliability_soak"):
+        for gate_name in ("performance", "reliability_soak"):
             gate = _exact(evidence_row[gate_name], {"report"}, f"manifest.evidence.{gate_name}")
             report_path, report_sha, _ = _resolve_artifact(
                 gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
             )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
+
+        native = _exact(
+            evidence_row["native_correctness"],
+            {"report", "raw_replay", "replay_validation"},
+            "manifest.evidence.native_correctness",
+        )
+        for field in ("report", "raw_replay", "replay_validation"):
+            native_path, native_sha, _ = _resolve_artifact(
+                native[field], f"manifest.evidence.native_correctness.{field}",
+                evidence_root, seen_paths,
+            )
+            if field == "raw_replay":
+                raw_hashes["native_correctness"] = native_sha
+                _verify_native_replay_archive(native_path)
+            else:
+                native_document, _ = _load_json(native_path, f"native_correctness {field}")
+                loaded[f"native_correctness_{field}"] = (native_document, native_sha)
+
+        optimization = _exact(
+            evidence_row["optimization_correctness"],
+            {"report", "raw_evidence"},
+            "manifest.evidence.optimization_correctness",
+        )
+        optimization_report_path, optimization_report_sha, _ = _resolve_artifact(
+            optimization["report"], "manifest.evidence.optimization_correctness.report",
+            evidence_root, seen_paths,
+        )
+        optimization_raw_path, optimization_raw_sha, _ = _resolve_artifact(
+            optimization["raw_evidence"],
+            "manifest.evidence.optimization_correctness.raw_evidence",
+            evidence_root, seen_paths,
+        )
+        optimization_report, _ = _load_json(
+            optimization_report_path, "optimization_correctness report"
+        )
+        loaded["optimization_correctness"] = (
+            optimization_report, optimization_report_sha
+        )
+        raw_hashes["optimization_correctness"] = optimization_raw_sha
 
         _validate_attestation(
             loaded["python_free_e2e"][0], "python_free_e2e",
@@ -583,12 +949,32 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             gate="cuda-fault-injection", required_checks=CUDA_FAULT_CHECKS,
             source=source, release=release, raw_sha256=raw_hashes["cuda_fault"],
         )
-        correctness_sha256 = loaded["correctness"][1]
-        _validate_correctness(loaded["correctness"][0], "correctness", revision)
+        native_correctness_sha256 = loaded["native_correctness_report"][1]
+        _validate_correctness(
+            loaded["native_correctness_report"][0], "native_correctness", revision
+        )
+        _validate_native_replay(
+            loaded["native_correctness_replay_validation"][0],
+            "native_correctness.replay_validation",
+            revision=revision,
+            archive_sha256=archive_sha256,
+            correctness_sha256=native_correctness_sha256,
+            raw_replay_sha256=raw_hashes["native_correctness"],
+        )
+        optimization_profile_image_sha256 = _validate_optimization_correctness(
+            loaded["optimization_correctness"][0],
+            "optimization_correctness",
+            revision=revision,
+            archive_sha256=archive_sha256,
+            raw_evidence_path=optimization_raw_path,
+        )
         _validate_performance(
             loaded["performance"][0], "performance", revision=revision,
             archive_sha256=archive_sha256, binary_sha256=binary_sha256,
-            image_sha256=image_sha256, correctness_sha256=correctness_sha256,
+            image_sha256=image_sha256,
+            optimization_sha256=optimization_report_sha,
+            optimization_gate_id=OPTIMIZATION_GATE,
+            optimization_profile_image_sha256=optimization_profile_image_sha256,
         )
         _validate_soak(
             loaded["reliability_soak"][0], "reliability_soak", revision=revision,
@@ -615,7 +1001,8 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
                     {"name": name, "passed": True}
                     for name in (
                         "release_bundle", "python_free_e2e", "cuda_fault",
-                        "correctness", "performance", "reliability_soak", "cross_bindings",
+                        "native_correctness", "optimization_correctness",
+                        "performance", "reliability_soak", "cross_bindings",
                     )
                 ],
             }

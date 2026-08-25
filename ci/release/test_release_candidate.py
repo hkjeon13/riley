@@ -5,8 +5,10 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +20,8 @@ from check_release_candidate import (  # noqa: E402
     ATTESTATION_VERSION,
     CUDA_FAULT_CHECKS,
     MANIFEST_VERSION,
+    NATIVE_REPLAY_VERSION,
+    OPTIMIZATION_LOGS,
     PYTHON_FREE_CHECKS,
     evaluate,
 )
@@ -54,11 +58,19 @@ class CandidateFixture:
             "cuda_raw": root / "cuda-fault-evidence.tar",
             "python_report": root / "python-free-report.json",
             "cuda_report": root / "cuda-fault-report.json",
-            "correctness": root / "correctness-report.json",
+            "native_correctness": root / "native-correctness-report.json",
+            "native_replay": root / "native-correctness-replay.tar",
+            "native_replay_validation": root / "native-replay-validation.json",
+            "optimization_correctness": root / "optimization-correctness-report.json",
+            "optimization_raw": root / "optimization-correctness-evidence.tar",
             "performance": root / "performance-report.json",
             "soak": root / "soak-report.json",
         }
-        self.paths["source"].write_bytes(b"exact source archive fixture")
+        self._write_tar(
+            self.paths["source"],
+            {"README.md": b"exact source archive fixture"},
+            pax_headers={"comment": REVISION},
+        )
         self.paths["binary"].write_bytes(fixture_elf())
         self.paths["binary"].chmod(0o755)
         build_bundle(
@@ -70,12 +82,50 @@ class CandidateFixture:
         )
         self.paths["python_raw"].write_bytes(b"python-free raw evidence")
         self.paths["cuda_raw"].write_bytes(b"cuda fault raw evidence")
+        self._write_tar(
+            self.paths["native_replay"],
+            {"replay-summary.json": b'{"status":"passed"}\n'},
+        )
+        self.optimization_logs = {
+            test_id: f"raw log for {test_id}\n".encode()
+            for test_id in OPTIMIZATION_LOGS
+        }
+        self._write_tar(
+            self.paths["optimization_raw"],
+            {
+                OPTIMIZATION_LOGS[test_id]: contents
+                for test_id, contents in self.optimization_logs.items()
+            },
+        )
         self.image_sha = digest(b"release image")
         self.documents: dict[str, dict[str, object]] = {}
         self._build_documents()
         self.write_reports()
         self.manifest_path = root / "release-candidate.json"
         self.refresh_manifest()
+
+    @staticmethod
+    def _write_tar(
+        path: Path,
+        files: dict[str, bytes],
+        *,
+        pax_headers: dict[str, str] | None = None,
+    ) -> None:
+        with tarfile.open(
+            path,
+            "w",
+            format=tarfile.PAX_FORMAT,
+            pax_headers=pax_headers,
+        ) as archive:
+            for name, contents in sorted(files.items()):
+                member = tarfile.TarInfo(name)
+                member.size = len(contents)
+                member.mtime = EPOCH
+                member.uid = 0
+                member.gid = 0
+                member.uname = "root"
+                member.gname = "root"
+                archive.addfile(member, io.BytesIO(contents))
 
     def _binding(self) -> dict[str, object]:
         return {
@@ -122,7 +172,7 @@ class CandidateFixture:
             "semantic": {"pass": True},
             "pass": True,
         }
-        self.documents["correctness"] = {
+        self.documents["native_correctness"] = {
             "schema_version": "1.0.0",
             "gate_id": "smollm2-fp32-bf16-native-e0-v2",
             "created_at": "2026-08-26T00:00:00Z",
@@ -158,8 +208,107 @@ class CandidateFixture:
                 for index in range(31)
             ],
         }
-        correctness_sha = digest(
-            (json.dumps(self.documents["correctness"], sort_keys=True, indent=2) + "\n").encode()
+        native_correctness_sha = digest(
+            (json.dumps(self.documents["native_correctness"], sort_keys=True, indent=2) + "\n").encode()
+        )
+        self.documents["native_replay_validation"] = {
+            "schema_version": NATIVE_REPLAY_VERSION,
+            "status": "passed",
+            "source": {
+                "git_revision": REVISION,
+                "git_dirty": False,
+                "source_archive_sha256": self._binding()["source_archive_sha256"],
+            },
+            "correctness_report_sha256": native_correctness_sha,
+            "raw_replay_sha256": digest(self.paths["native_replay"].read_bytes()),
+            "case_count": 31,
+            "failure_count": 0,
+            "checks": [
+                {"id": check_id, "passed": True}
+                for check_id in sorted(
+                    {
+                        "schema-closed-validation",
+                        "raw-input-hashes-replayed",
+                        "all-cases-replayed",
+                        "summary-recomputed",
+                    }
+                )
+            ],
+        }
+        log_hashes = {
+            test_id: digest(contents)
+            for test_id, contents in self.optimization_logs.items()
+        }
+        self.documents["optimization_correctness"] = {
+            "schema_version": 1,
+            "gate_id": "pr15-iteration-command-batch-exact-v1",
+            "recorded_at_utc": "2026-08-26T00:00:00Z",
+            "status": "passed",
+            "semantic_class": "E0",
+            "source": {
+                "git_commit": REVISION,
+                "git_dirty": False,
+                "archive_sha256": self._binding()["source_archive_sha256"],
+            },
+            "build": {
+                "container_image_sha256": digest(b"profile image"),
+                "network": "none",
+                "cargo_locked": True,
+                "cargo_offline": True,
+                "rustc": "1.85.0",
+                "cuda_toolkit": "12.8.93",
+                "cuda_architecture": "89",
+            },
+            "gpu": {
+                "model": "NVIDIA GeForce RTX 4090",
+                "uuid": "GPU-fixture",
+                "pci_bus_id": "00000000:01:00.0",
+                "compute_capability": "8.9",
+                "vram_mib": 24564,
+                "driver_version": "580.173.02",
+            },
+            "model": {
+                "model_id": "HuggingFaceTB/SmolLM2-135M",
+                "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+                "dtype": "bf16",
+                "manifest_sha256": digest(b"model manifest"),
+                "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+                "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+            },
+            "implementations": {
+                "baseline": "per-operation",
+                "candidate": "iteration-batch",
+                "residual_rmsnorm": "separate",
+                "rollback": "--execution-completion per-operation",
+            },
+            "tests": [
+                {"id": "cuda-compile-only", "result": "passed", "log_sha256": log_hashes["cuda-compile-only"]},
+                {"id": "workspace-all-features-all-targets", "result": "passed", "log_sha256": log_hashes["workspace-all-features-all-targets"]},
+                {
+                    "id": "command-batch-lifecycle", "result": "passed",
+                    "one_shot_finish": True, "drop_restores_stream": True,
+                    "log_sha256": log_hashes["command-batch-lifecycle"],
+                },
+                {
+                    "id": "command-batch-resource-ledger", "result": "passed",
+                    "validation_fail_closed": True, "queued_chain_raw_byte_mismatches": 0,
+                    "hot_loop_allocation_delta": 0, "stream_reuse_after_finish": True,
+                    "owner_close_allocation_count": 0,
+                    "log_sha256": log_hashes["command-batch-resource-ledger"],
+                },
+                {
+                    "id": "smollm2-multi-step-greedy-exact", "result": "passed",
+                    "decode_steps": 16, "committed_iterations": 16,
+                    "raw_logit_mismatches": 0,
+                    "generated_token_ids": [4052, 2025, 284, 965, 6497, 288, 1492, 418, 260, 16438, 30, 198, 198, 504, 16438, 314],
+                    "token_id_mismatches": 0, "hot_loop_allocation_delta": 0,
+                    "owner_close_allocation_count": 0,
+                    "log_sha256": log_hashes["smollm2-multi-step-greedy-exact"],
+                },
+            ],
+        }
+        optimization_sha = digest(
+            (json.dumps(self.documents["optimization_correctness"], sort_keys=True, indent=2) + "\n").encode()
         )
         self.documents["performance"] = {
             "schema_version": "rustinfer.release-performance-report.v1",
@@ -178,8 +327,8 @@ class CandidateFixture:
                     "profile_image_sha256": digest(b"profile image"),
                     "release_image_sha256": self.image_sha,
                     "semantic_class": "E0",
-                    "correctness_gate_id": "pr16-release-correctness-v1",
-                    "correctness_report_sha256": correctness_sha,
+                    "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
+                    "correctness_report_sha256": optimization_sha,
                 },
                 "metrics": {},
                 "run_summary": {},
@@ -214,7 +363,10 @@ class CandidateFixture:
         }
 
     def write_reports(self) -> None:
-        for name in ("python_report", "cuda_report", "correctness", "performance", "soak"):
+        for name in (
+            "python_report", "cuda_report", "native_correctness",
+            "native_replay_validation", "optimization_correctness", "performance", "soak",
+        ):
             self.paths[name].write_text(
                 json.dumps(self.documents[name], sort_keys=True, indent=2) + "\n",
                 encoding="utf-8",
@@ -243,7 +395,15 @@ class CandidateFixture:
             "evidence": {
                 "python_free_e2e": {"report": artifact("python_report"), "raw_evidence": artifact("python_raw")},
                 "cuda_fault": {"report": artifact("cuda_report"), "raw_evidence": artifact("cuda_raw")},
-                "correctness": {"report": artifact("correctness")},
+                "native_correctness": {
+                    "report": artifact("native_correctness"),
+                    "raw_replay": artifact("native_replay"),
+                    "replay_validation": artifact("native_replay_validation"),
+                },
+                "optimization_correctness": {
+                    "report": artifact("optimization_correctness"),
+                    "raw_evidence": artifact("optimization_raw"),
+                },
                 "performance": {"report": artifact("performance")},
                 "reliability_soak": {"report": artifact("soak")},
             },
@@ -272,7 +432,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["bindings"]["git_revision"], REVISION)
-        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 7)
+        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 11)
 
     def test_failed_or_missing_gate_fails_closed(self) -> None:
         del self.fixture.documents["performance"]["status"]
@@ -288,6 +448,53 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("release_binary_sha256", report["errors"][0])
+
+    def test_performance_must_bind_optimization_not_native_report(self) -> None:
+        native_bytes = (
+            json.dumps(
+                self.fixture.documents["native_correctness"], sort_keys=True, indent=2
+            )
+            + "\n"
+        ).encode()
+        source = self.fixture.documents["performance"]["candidate"]["source"]
+        source["correctness_report_sha256"] = digest(native_bytes)
+        source["correctness_gate_id"] = "smollm2-fp32-bf16-native-e0-v2"
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("correctness_report_sha256", report["errors"][0])
+
+    def test_optimizer_log_hashes_must_match_exact_raw_inventory(self) -> None:
+        logs = {
+            OPTIMIZATION_LOGS[test_id]: contents
+            for test_id, contents in self.fixture.optimization_logs.items()
+        }
+        logs[OPTIMIZATION_LOGS["command-batch-resource-ledger"]] = b"different log\n"
+        self.fixture._write_tar(self.fixture.paths["optimization_raw"], logs)
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("declared log hashes", report["errors"][0])
+
+    def test_native_replay_validation_binds_raw_bundle(self) -> None:
+        self.fixture.documents["native_replay_validation"]["raw_replay_sha256"] = digest(
+            b"unrelated replay"
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("raw replay bundle digest mismatch", report["errors"][0])
+
+    def test_source_archive_requires_exact_git_pax_comment(self) -> None:
+        self.fixture._write_tar(
+            self.fixture.paths["source"],
+            {"README.md": b"exact source archive fixture"},
+            pax_headers={"comment": "f" * 40},
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("git-archive pax global comment", report["errors"][0])
 
     def test_tampered_hashed_artifact_fails_closed(self) -> None:
         self.fixture.paths["cuda_raw"].write_bytes(b"tampered after manifest")
