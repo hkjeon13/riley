@@ -1100,6 +1100,13 @@ class ReproducibilityRunnerStaticTests(unittest.TestCase):
             contents.index("install -m 0755 target/release/rustinfer-profile"),
             contents.index("write_reproducible_build_completion.py"),
         )
+        for forbidden in (
+            "llvm-strip",
+            "objcopy --strip",
+            "CARGO_PROFILE_RELEASE_STRIP",
+            "-Cstrip=",
+        ):
+            self.assertNotIn(forbidden, contents)
 
     def test_builder_environment_is_digest_pinned_and_only_prefetches(self) -> None:
         contents = Path(__file__).with_name("ReproducibleBuild.Dockerfile").read_text(

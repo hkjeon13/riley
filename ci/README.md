@@ -302,6 +302,11 @@ dependency manifest to be byte-identical across A, B, and final. See
 `ci/release/REPRODUCIBLE_BUILD.md` for the remote procedure and exact evidence
 inventory.
 
+The workspace boundary fixes the NVIDIA CUDA compile to
+`--objdir-as-tempdir` while retaining `strip=none`; each raw release ELF also
+rejects process-derived nvcc `tmpxft` file symbols before A/B byte equality is
+accepted.
+
 ## Optional Python reference gate
 
 `python-reference.yml` runs only by manual dispatch. It installs no project

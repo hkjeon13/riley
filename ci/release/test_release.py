@@ -168,6 +168,25 @@ class ReleaseBundleTests(unittest.TestCase):
         binary = fixture_elf() + b"transformers_version ExperimentalTriton"
         self.assertEqual(validate_binary(binary), DEPENDENCIES)
 
+    def test_nvcc_process_named_temporary_symbol_is_rejected(self) -> None:
+        markers = (
+            b"\0tmpxft_000002ab_00000000-6_batch_primitives.cudafe1.cpp\0",
+            b"\0/tmp/tmpxft_000002ab_00000000-6_gemm.cudafe1.cpp\0",
+            b"\0tmpxft_ABCDEF01_0000000A-12_memory.cudafe1.cpp\0",
+            b"\0tmpxft_000002ab_00000000-6_version.cudafe1.stub.c\0",
+        )
+        for marker in markers:
+            with self.subTest(marker=marker):
+                with self.assertRaisesRegex(
+                    ReleaseContractError,
+                    "nondeterministic nvcc temporary symbol",
+                ):
+                    validate_binary(fixture_elf() + marker)
+        self.assertEqual(
+            validate_binary(fixture_elf() + b"\0tmpxft files are discussed here\0"),
+            DEPENDENCIES,
+        )
+
     def test_missing_owner_selected_license_fails_preflight(self) -> None:
         (self.repository / "LICENSE").unlink()
         with self.assertRaisesRegex(ReleaseContractError, "LICENSE"):

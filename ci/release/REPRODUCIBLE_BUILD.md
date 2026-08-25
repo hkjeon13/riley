@@ -24,6 +24,9 @@ The gate fixes all of the following before build A starts:
 - Rust 1.85.0 selected by the exact rustup toolchain override
   `1.85.0-x86_64-unknown-linux-gnu`, CUDA toolkit 12.8.1, nvcc 12.8.93,
   and CUDA architecture 89;
+- nvcc intermediates placed beside their stable object outputs with
+  `--objdir-as-tempdir`, preventing process-derived `tmpxft` file symbols from
+  changing otherwise identical unstripped ELFs;
 - `cargo build --locked --offline --release --features cuda,server` for the
   production server, followed by `cargo build --locked --offline --release
   --features bench,cuda --bin rustinfer-profile` for the profiling subject; and

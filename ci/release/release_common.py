@@ -49,6 +49,11 @@ FORBIDDEN_ARCHIVE_SUFFIXES = (
     ".pkl",
     ".pickle",
 )
+NVCC_TEMPORARY_SYMBOL_RE = re.compile(
+    rb"(?:^|\x00)(?:[A-Za-z0-9_.+/-]*/)?"
+    rb"tmpxft_[0-9A-Fa-f]+_[0-9A-Fa-f]+-[0-9]+_"
+    rb"[A-Za-z0-9_.+-]+\.cudafe[0-9A-Za-z_.+-]*(?:\x00|$)"
+)
 
 
 class ReleaseContractError(RuntimeError):
@@ -308,6 +313,10 @@ def inspect_elf_dynamic(binary: bytes) -> tuple[list[str], list[str]]:
 
 
 def validate_binary(binary: bytes) -> list[str]:
+    if NVCC_TEMPORARY_SYMBOL_RE.search(binary) is not None:
+        raise ReleaseContractError(
+            "CLI binary contains a nondeterministic nvcc temporary symbol name"
+        )
     dependencies, dynamic_paths = inspect_elf_dynamic(binary)
     if any(dynamic_paths):
         raise ReleaseContractError("CLI binary must not contain DT_RPATH or DT_RUNPATH")

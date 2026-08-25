@@ -179,6 +179,16 @@ EXPECTED_LINTS = {
     },
 }
 
+NVCC_REPRODUCIBLE_OBJECT_BLOCK = "\n".join(
+    (
+        'if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")',
+        "target_compile_options(rustinfer_cuda_native PRIVATE",
+        "$<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>",
+        ")",
+        "if(WIN32)",
+    )
+)
+
 EXPECTED_DEFAULT_MEMBERS = ["crates/rustinfer-server"]
 EXPECTED_EXCLUDES = ["tools/python", "tools/native", "experiments/triton"]
 FORBIDDEN_PRODUCTION_FEATURES = {"python", "pytorch", "torch", "transformers", "triton"}
@@ -230,6 +240,40 @@ def load_toml(path: Path) -> dict[str, Any]:
             return tomllib.load(handle)
     except (OSError, tomllib.TOMLDecodeError) as error:
         raise BoundaryError(f"cannot read TOML {path}: {error}") from error
+
+
+def _normalized_cmake(contents: str) -> str:
+    lines: list[str] = []
+    for raw_line in contents.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def validate_native_build_contract_text(contents: str) -> None:
+    normalized = _normalized_cmake(contents)
+    flag = "--objdir-as-tempdir"
+    if normalized.count(flag) != 1:
+        raise BoundaryError(
+            "native CUDA build must select --objdir-as-tempdir exactly once"
+        )
+    if normalized.count(NVCC_REPRODUCIBLE_OBJECT_BLOCK) != 1:
+        raise BoundaryError(
+            "native CUDA reproducibility flag must apply only to the NVIDIA "
+            "compiler, rustinfer_cuda_native target, and CUDA language"
+        )
+
+
+def validate_native_build_contract(root: Path) -> None:
+    path = root / "kernels/CMakeLists.txt"
+    try:
+        contents = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise BoundaryError(
+            f"cannot read native CUDA build contract {path}: {error}"
+        ) from error
+    validate_native_build_contract_text(contents)
 
 
 def parse_rust_version(value: object, context: str) -> tuple[int, int, int]:
@@ -1017,6 +1061,7 @@ def main() -> int:
         validate_dependencies(root, packages, dependency_policy)
         validate_features(packages)
         validate_build_scripts(root)
+        validate_native_build_contract(root)
         validate_production_sources(root)
         if args.locked:
             validate_lockfile(root, packages, dependency_policy)

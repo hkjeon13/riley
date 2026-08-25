@@ -98,3 +98,14 @@ fn memory_fault_injection_is_compile_time_test_only() {
     assert!(header.contains("rustinfer_cuda_test_memory_fault_arm"));
     assert!(header.contains("rustinfer_cuda_test_memory_fault_stats"));
 }
+
+#[test]
+fn native_cuda_intermediate_names_are_reproducible_without_stripping() {
+    let cmake = include_str!("../../../kernels/CMakeLists.txt");
+    let workspace = include_str!("../../../Cargo.toml");
+
+    assert!(cmake.contains("$<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>"));
+    assert!(cmake.contains("CMAKE_CUDA_COMPILER_ID STREQUAL \"NVIDIA\""));
+    assert!(workspace.contains("debug = \"line-tables-only\""));
+    assert!(workspace.contains("strip = \"none\""));
+}

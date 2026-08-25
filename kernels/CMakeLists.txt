@@ -62,6 +62,14 @@ target_link_libraries(rustinfer_cuda_native PRIVATE
 )
 
 if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
+    # nvcc otherwise names generated host intermediates with a process-derived
+    # tmpxft prefix. Those STT_FILE names survive in the final ELF .strtab and
+    # make identical clean builds differ even when code and build IDs match.
+    # Keeping intermediates beside the stable object output gives cudafe files
+    # deterministic object-derived names without stripping release symbols.
+    target_compile_options(rustinfer_cuda_native PRIVATE
+        $<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>
+    )
     if(WIN32)
         target_compile_options(rustinfer_cuda_native PRIVATE
             $<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=/EHs-c->
