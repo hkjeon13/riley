@@ -14,6 +14,7 @@ use crate::runtime::{ContextInner, CudaContext, CudaStream, ensure_same_context}
 use crate::ffi;
 
 const BF16_BYTES: u64 = 2;
+const MINIMUM_HARDWARE_COMPUTE_CAPABILITY: (u32, u32) = (8, 0);
 const ONLINE_HEAD_SIZE: u64 = 64;
 const REFERENCE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.materialized-gqa-prefill.bf16";
 const ONLINE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.online-gqa-prefill.bf16.d64";
@@ -119,6 +120,7 @@ pub struct AttentionCapability {
     input_dtype: CudaDType,
     accumulator_dtype: CudaDType,
     output_dtype: CudaDType,
+    minimum_hardware_compute_capability: (u32, u32),
     compiled_architectures: &'static str,
     head_size: Option<u64>,
     causal: bool,
@@ -180,14 +182,15 @@ impl AttentionCapability {
         self.output_dtype
     }
 
-    /// Lowest `(major, minor)` target in the compiled architecture set.
+    /// Effective hardware floor and lowest compiled `(major, minor)` target.
     ///
     /// This is provenance rather than a complete compatibility predicate:
     /// real-only code is not forward compatible across major versions. Use
     /// [`Self::supports_compute_capability`] for selection decisions.
     #[must_use]
     pub fn minimum_compute_capability(self) -> (u32, u32) {
-        minimum_architecture(self.compiled_architectures)
+        self.minimum_hardware_compute_capability
+            .max(minimum_architecture(self.compiled_architectures))
     }
 
     /// Normalized `CMake` CUDA architecture set compiled into the native archive.
@@ -199,7 +202,8 @@ impl AttentionCapability {
     /// Whether the compiled real/virtual code can execute on `actual`.
     #[must_use]
     pub fn supports_compute_capability(self, actual: (u32, u32)) -> bool {
-        architecture_set_supports(self.compiled_architectures, actual)
+        compute_capability_at_least(actual, self.minimum_hardware_compute_capability)
+            && architecture_set_supports(self.compiled_architectures, actual)
     }
 
     /// Required exact head size, or `None` for any positive head size.
@@ -979,6 +983,7 @@ const REFERENCE_CAPABILITY: AttentionCapability = AttentionCapability {
     input_dtype: CudaDType::BF16,
     accumulator_dtype: CudaDType::F32,
     output_dtype: CudaDType::BF16,
+    minimum_hardware_compute_capability: MINIMUM_HARDWARE_COMPUTE_CAPABILITY,
     compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
     head_size: None,
     causal: true,
@@ -1000,6 +1005,7 @@ const ONLINE_CAPABILITY: AttentionCapability = AttentionCapability {
     input_dtype: CudaDType::BF16,
     accumulator_dtype: CudaDType::F32,
     output_dtype: CudaDType::BF16,
+    minimum_hardware_compute_capability: MINIMUM_HARDWARE_COMPUTE_CAPABILITY,
     compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
     head_size: Some(ONLINE_HEAD_SIZE),
     causal: true,
@@ -1107,8 +1113,11 @@ fn require_reference_support(
         return Err(not_supported(
             "select_prefill_attention",
             format!(
-                "compute capability {}.{} is not covered by compiled CUDA architectures {CUDA_COMPILED_ARCHITECTURES}",
-                compute_capability.0, compute_capability.1
+                "compute capability {}.{} does not satisfy the prefill hardware floor {}.{} and compiled CUDA architectures {CUDA_COMPILED_ARCHITECTURES}",
+                compute_capability.0,
+                compute_capability.1,
+                MINIMUM_HARDWARE_COMPUTE_CAPABILITY.0,
+                MINIMUM_HARDWARE_COMPUTE_CAPABILITY.1,
             ),
         ));
     }
@@ -1397,6 +1406,11 @@ mod tests {
         assert!(architecture_set_supports("80", (10, 0)));
         assert!(architecture_set_supports("90-real;89-real", (8, 9)));
         assert_eq!(minimum_architecture("90-real;89-real"), (8, 9));
+        assert!(!ONLINE_CAPABILITY.supports_compute_capability((7, 9)));
+        assert!(compute_capability_at_least(
+            ONLINE_CAPABILITY.minimum_compute_capability(),
+            MINIMUM_HARDWARE_COMPUTE_CAPABILITY
+        ));
     }
 
     #[test]
