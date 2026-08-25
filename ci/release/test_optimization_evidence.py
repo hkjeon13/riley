@@ -7,6 +7,7 @@ import copy
 import hashlib
 import io
 import json
+import struct
 import sys
 import tarfile
 import tempfile
@@ -28,6 +29,7 @@ from check_optimization_evidence import (  # noqa: E402
     REPORT_FILE,
     TEST_BINARIES,
     OptimizationEvidenceError,
+    _json,
     load_raw_evidence_archive,
     produce,
     replay_raw_evidence,
@@ -43,6 +45,12 @@ BUILD_IMAGE_ID = "sha256:" + hashlib.sha256(b"builder image").hexdigest()
 
 def digest(contents: bytes) -> str:
     return hashlib.sha256(contents).hexdigest()
+
+
+def executable_fixture_elf() -> bytes:
+    binary = bytearray(fixture_elf())
+    struct.pack_into("<Q", binary, 24, 0x400040)
+    return bytes(binary)
 
 
 SUMMARY = (
@@ -61,7 +69,7 @@ class Fixture:
         self.counter = 0
 
         self.profile_binary.write_bytes(
-            fixture_elf()
+            executable_fixture_elf()
             + b"\0pr15-iteration-command-batch-exact-v1\0per-operation\0iteration-batch\0"
         )
         self.profile_binary.chmod(0o755)
@@ -81,7 +89,10 @@ class Fixture:
         }
         for name, markers in binary_markers.items():
             (self.evidence / name).write_bytes(
-                fixture_elf() + b"\0" + b"\0".join(marker.encode() for marker in markers) + b"\0"
+                executable_fixture_elf()
+                + b"\0"
+                + b"\0".join(marker.encode() for marker in markers)
+                + b"\0"
             )
 
         self.logs = self._logs()
@@ -130,8 +141,8 @@ class Fixture:
             "test command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... "
             "pr16-command-batch-resource-ledger schema_version=1 "
             "validation_fail_closed=true queued_chain_raw_byte_mismatches=0 "
-            "hot_loop_allocation_delta=0 stream_reuse_after_finish=true "
-            "owner_close_allocation_count=0 status=passed\n"
+            "cuda_live_allocation_delta=0 stream_reuse_after_finish=true "
+            "owner_close_live_allocation_count=0 status=passed\n"
             "ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=5)
         ).encode()
@@ -142,7 +153,7 @@ class Fixture:
             "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ... "
             "pr15-execution-completion-parity schema_version=1 decode_steps=16 "
             "committed_iterations=16 raw_logit_mismatches=0 token_id_mismatches=0 "
-            "hot_loop_allocation_delta=0 owner_close_allocation_count=0 "
+            "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
             f"generated_token_ids=[{token_text}] status=passed\n"
             "ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=6)
@@ -179,9 +190,9 @@ class Fixture:
                 "result": "passed",
                 "validation_fail_closed": True,
                 "queued_chain_raw_byte_mismatches": 0,
-                "hot_loop_allocation_delta": 0,
+                "cuda_live_allocation_delta": 0,
                 "stream_reuse_after_finish": True,
-                "owner_close_allocation_count": 0,
+                "owner_close_live_allocation_count": 0,
                 "log_sha256": digest(self.logs["command-batch-resource-ledger"]),
             },
             {
@@ -192,8 +203,8 @@ class Fixture:
                 "raw_logit_mismatches": 0,
                 "generated_token_ids": EXPECTED_TOKENS,
                 "token_id_mismatches": 0,
-                "hot_loop_allocation_delta": 0,
-                "owner_close_allocation_count": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
                 "log_sha256": digest(self.logs["smollm2-multi-step-greedy-exact"]),
             },
         ]
@@ -339,6 +350,10 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.assertEqual(raw_sha, digest(first_raw.read_bytes()))
         self.assertEqual(first["profile_binary_sha256"], digest(self.fixture.profile_binary.read_bytes()))
 
+    def test_overflowing_json_float_is_rejected(self) -> None:
+        with self.assertRaisesRegex(OptimizationEvidenceError, "non-finite"):
+            _json(b'{"value":1e309}', "fixture")
+
     def test_empty_synthetic_logs_are_rejected(self) -> None:
         self.fixture.refresh_log("command-batch-lifecycle", b"\n")
         with self.assertRaisesRegex(OptimizationEvidenceError, "marker|Cargo test summary"):
@@ -386,7 +401,7 @@ class OptimizationEvidenceTests(unittest.TestCase):
         _, raw = self.fixture.produce()
         substitute = self.fixture.root / "substitute"
         substitute.write_bytes(
-            fixture_elf()
+            executable_fixture_elf()
             + b"\0pr15-iteration-command-batch-exact-v1\0per-operation\0iteration-batch\0substitute"
         )
         with self.assertRaisesRegex(OptimizationEvidenceError, "profile binary differs"):
@@ -402,6 +417,25 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.fixture.receipt["commands"][0]["argv"] = ["true"]  # type: ignore[index]
         self.fixture._write_receipt()
         with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_command_order_is_closed(self) -> None:
+        commands = self.fixture.receipt["commands"]  # type: ignore[index]
+        commands[0], commands[1] = commands[1], commands[0]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "execution order"):
+            self.fixture.produce()
+
+    def test_zero_entry_test_binary_is_rejected(self) -> None:
+        path = self.fixture.evidence / "host-runtime-gpu-test"
+        path.write_bytes(
+            fixture_elf()
+            + b"\0command_batch_proxy_is_one_shot_and_drop_restores_stream_use"
+            + b"\0pr16-command-batch-lifecycle\0"
+        )
+        self.fixture.receipt = self.fixture._receipt()
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "executable Linux x86-64"):
             self.fixture.produce()
 
     def test_source_and_build_image_are_external_bindings(self) -> None:

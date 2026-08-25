@@ -45,6 +45,19 @@ struct LogitMetrics {
 struct GreedyExecutionTrace {
     generated_token_ids: Vec<u32>,
     logits_by_iteration: Vec<Vec<u8>>,
+    cuda_live_allocation_delta: i128,
+    owner_close_live_allocation_count: u64,
+}
+
+fn live_allocation_count(stats: CudaAllocationStats) -> u64 {
+    stats
+        .device_live_allocations()
+        .checked_add(stats.pinned_host_live_allocations())
+        .expect("CUDA live allocation count overflow")
+}
+
+fn live_allocation_delta(before: CudaAllocationStats, after: CudaAllocationStats) -> i128 {
+    i128::from(live_allocation_count(after)) - i128::from(live_allocation_count(before))
 }
 
 fn checkpoint_path() -> PathBuf {
@@ -334,6 +347,8 @@ fn greedy_execution_trace(
     let mut trace = GreedyExecutionTrace {
         generated_token_ids: Vec::with_capacity(decode_steps),
         logits_by_iteration: Vec::with_capacity(decode_steps + 1),
+        cuda_live_allocation_delta: 0,
+        owner_close_live_allocation_count: 0,
     };
     trace.logits_by_iteration.push(logits.clone());
 
@@ -355,17 +370,21 @@ fn greedy_execution_trace(
         batch.execute(&rows, &mut stream)?;
         batch.download_logits(&mut logits, &mut stream)?;
         trace.logits_by_iteration.push(logits.clone());
+        let current = context.allocation_stats()?;
         assert_eq!(
-            context.allocation_stats()?,
+            current,
             stable,
             "{residual_norm:?}/{execution_completion:?} allocation changed after committed decode step {}",
             step + 1,
         );
+        trace.cuda_live_allocation_delta = live_allocation_delta(stable, current);
     }
 
     batch.close()?;
+    let after_owner_close = context.allocation_stats()?;
+    trace.owner_close_live_allocation_count = live_allocation_count(after_owner_close);
     assert!(
-        context.allocation_stats()?.is_zero(),
+        after_owner_close.is_zero(),
         "{residual_norm:?}/{execution_completion:?} executor close leaked CUDA allocations"
     );
     stream.close()?;
@@ -475,20 +494,40 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         DECODE_STEPS,
     )?;
 
-    assert_eq!(
-        iteration_batch.generated_token_ids, per_operation.generated_token_ids,
-        "iteration-batch and per-operation greedy token IDs differ"
-    );
+    let token_id_mismatches = iteration_batch
+        .generated_token_ids
+        .iter()
+        .zip(&per_operation.generated_token_ids)
+        .filter(|(actual, expected)| actual != expected)
+        .count()
+        + iteration_batch
+            .generated_token_ids
+            .len()
+            .abs_diff(per_operation.generated_token_ids.len());
+    assert_eq!(token_id_mismatches, 0);
     assert_eq!(
         iteration_batch.logits_by_iteration.len(),
         per_operation.logits_by_iteration.len()
     );
+    let mut raw_logit_mismatches = 0_usize;
     for (iteration, (batched_logits, per_operation_logits)) in iteration_batch
         .logits_by_iteration
         .iter()
         .zip(&per_operation.logits_by_iteration)
         .enumerate()
     {
+        raw_logit_mismatches = raw_logit_mismatches
+            .checked_add(
+                batched_logits
+                    .iter()
+                    .zip(per_operation_logits)
+                    .filter(|(actual, expected)| actual != expected)
+                    .count(),
+            )
+            .and_then(|count| {
+                count.checked_add(batched_logits.len().abs_diff(per_operation_logits.len()))
+            })
+            .expect("raw logit mismatch count overflow");
         assert_exact_bytes(
             &format!("execution-completion iteration {iteration}"),
             batched_logits,
@@ -500,12 +539,16 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
             "iteration {iteration} top-1 differs"
         );
     }
+    assert_eq!(raw_logit_mismatches, 0);
     println!(
         "pr15-execution-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
-committed_iterations={} raw_logit_mismatches=0 token_id_mismatches=0 \
-hot_loop_allocation_delta=0 owner_close_allocation_count=0 \
+committed_iterations={} raw_logit_mismatches={raw_logit_mismatches} \
+token_id_mismatches={token_id_mismatches} \
+cuda_live_allocation_delta={} owner_close_live_allocation_count={} \
 generated_token_ids={:?} status=passed",
         iteration_batch.logits_by_iteration.len() - 1,
+        iteration_batch.cuda_live_allocation_delta,
+        iteration_batch.owner_close_live_allocation_count,
         iteration_batch.generated_token_ids,
     );
     Ok(())

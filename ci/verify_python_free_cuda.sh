@@ -58,7 +58,7 @@ cat "$build_log"
 
 # Execute the plan's exact root command spelling as a second, cached smoke.
 # The first command proves that its dependency resolution is lockfile-closed.
-cargo build --release --features cuda,server
+cargo build --locked --offline --release --features cuda,server
 
 # Compile and link the native benchmark evidence producer without executing a
 # model or initializing a device. Its bench+CUDA-only surface belongs to the

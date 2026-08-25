@@ -562,12 +562,19 @@ fn command_batch_releases_multi_primitive_resource_ledger_after_validation_error
     assert_eq!(validation_error.kind(), CudaErrorKind::OutOfRange);
 
     let zeros = bf16_bytes(&[0.0; 6]);
+    let queued_chain_output = download(&context, &mut stream, &mut output)?;
+    let queued_chain_raw_byte_mismatches = queued_chain_output
+        .iter()
+        .zip(&zeros)
+        .filter(|(actual, expected)| actual != expected)
+        .count()
+        + queued_chain_output.len().abs_diff(zeros.len());
     assert_eq!(
-        download(&context, &mut stream, &mut output)?,
-        zeros,
+        queued_chain_output, zeros,
         "the queued residual-add and SiLU chain must complete exactly"
     );
-    assert_eq!(context.allocation_stats()?, stable);
+    let after_queued_chain = context.allocation_stats()?;
+    assert_eq!(after_queued_chain, stable);
 
     {
         let mut residual = ResidualAddParams {
@@ -583,20 +590,39 @@ fn command_batch_releases_multi_primitive_resource_ledger_after_validation_error
         zeros,
         "finished command batch must release resource leases for immediate reuse"
     );
-    assert_eq!(context.allocation_stats()?, stable);
+    let after_reuse = context.allocation_stats()?;
+    assert_eq!(after_reuse, stable);
+    let cuda_live_allocation_delta = i128::from(
+        after_reuse
+            .device_live_allocations()
+            .checked_add(after_reuse.pinned_host_live_allocations())
+            .ok_or("CUDA live allocation count overflow")?,
+    ) - i128::from(
+        stable
+            .device_live_allocations()
+            .checked_add(stable.pinned_host_live_allocations())
+            .ok_or("CUDA live allocation count overflow")?,
+    );
 
     left.close()?;
     right.close()?;
     intermediate.close()?;
     output.close()?;
     staging.close()?;
+    let after_owner_close = context.allocation_stats()?;
+    let owner_close_live_allocation_count = after_owner_close
+        .device_live_allocations()
+        .checked_add(after_owner_close.pinned_host_live_allocations())
+        .ok_or("CUDA live allocation count overflow")?;
+    assert!(after_owner_close.is_zero());
     stream.close()?;
     close_context(context)?;
     println!(
         "pr16-command-batch-resource-ledger schema_version=1 \
-validation_fail_closed=true queued_chain_raw_byte_mismatches=0 \
-hot_loop_allocation_delta=0 stream_reuse_after_finish=true \
-owner_close_allocation_count=0 status=passed"
+validation_fail_closed=true \
+queued_chain_raw_byte_mismatches={queued_chain_raw_byte_mismatches} \
+cuda_live_allocation_delta={cuda_live_allocation_delta} stream_reuse_after_finish=true \
+owner_close_live_allocation_count={owner_close_live_allocation_count} status=passed"
     );
     Ok(())
 }

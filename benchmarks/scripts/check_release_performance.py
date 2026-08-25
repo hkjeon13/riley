@@ -675,8 +675,8 @@ def _validate_optimization_correctness(
             "log_sha256",
             "result",
             "queued_chain_raw_byte_mismatches",
-            "hot_loop_allocation_delta",
-            "owner_close_allocation_count",
+            "cuda_live_allocation_delta",
+            "owner_close_live_allocation_count",
             "validation_fail_closed",
             "stream_reuse_after_finish",
         },
@@ -692,8 +692,8 @@ def _validate_optimization_correctness(
     )
     for field in (
         "queued_chain_raw_byte_mismatches",
-        "hot_loop_allocation_delta",
-        "owner_close_allocation_count",
+        "cuda_live_allocation_delta",
+        "owner_close_live_allocation_count",
     ):
         _literal(
             ledger[field],
@@ -719,8 +719,8 @@ def _validate_optimization_correctness(
             "generated_token_ids",
             "raw_logit_mismatches",
             "token_id_mismatches",
-            "hot_loop_allocation_delta",
-            "owner_close_allocation_count",
+            "cuda_live_allocation_delta",
+            "owner_close_live_allocation_count",
         },
     )
     _literal(
@@ -746,8 +746,8 @@ def _validate_optimization_correctness(
     for field in (
         "raw_logit_mismatches",
         "token_id_mismatches",
-        "hot_loop_allocation_delta",
-        "owner_close_allocation_count",
+        "cuda_live_allocation_delta",
+        "owner_close_live_allocation_count",
     ):
         _literal(
             parity[field],

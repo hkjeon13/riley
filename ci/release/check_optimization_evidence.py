@@ -13,8 +13,10 @@ import argparse
 import hashlib
 import io
 import json
+import math
 import re
 import stat
+import struct
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
@@ -154,8 +156,8 @@ TEST_SUMMARY_RE = re.compile(
 PARITY_RE = re.compile(
     r"pr15-execution-completion-parity schema_version=1 decode_steps=(?P<steps>[0-9]+) "
     r"committed_iterations=(?P<iterations>[0-9]+) raw_logit_mismatches=(?P<logits>[0-9]+) "
-    r"token_id_mismatches=(?P<tokens>[0-9]+) hot_loop_allocation_delta=(?P<hot>-?[0-9]+) "
-    r"owner_close_allocation_count=(?P<close>[0-9]+) "
+    r"token_id_mismatches=(?P<tokens>[0-9]+) cuda_live_allocation_delta=(?P<hot>-?[0-9]+) "
+    r"owner_close_live_allocation_count=(?P<close>[0-9]+) "
     r"generated_token_ids=\[(?P<ids>[0-9, ]+)\] status=passed"
 )
 
@@ -186,6 +188,13 @@ def _nonfinite(value: str) -> NoReturn:
     _fail("JSON", f"non-finite number {value!r}")
 
 
+def _finite_float(value: str) -> float:
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        _fail("JSON", f"non-finite number {value!r}")
+    return parsed
+
+
 def _json(contents: bytes, label: str) -> dict[str, Any]:
     if not contents or len(contents) > MAX_JSON_BYTES:
         _fail(label, "must be nonempty and within the JSON size bound")
@@ -194,6 +203,7 @@ def _json(contents: bytes, label: str) -> dict[str, Any]:
             contents,
             object_pairs_hook=_pairs,
             parse_constant=_nonfinite,
+            parse_float=_finite_float,
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail(label, f"is not strict UTF-8 JSON: {error}")
@@ -249,9 +259,42 @@ def _validate_test_binary(contents: bytes, filename: str, markers: Sequence[str]
         validate_binary(contents)
     except ReleaseContractError as error:
         _fail(filename, f"is not a valid Linux x86_64 dynamic ELF: {error}")
+    _validate_executable_elf(contents, filename)
     for marker in markers:
         if marker.encode("ascii") not in contents:
             _fail(filename, f"does not contain reviewed test marker {marker!r}")
+
+
+def _validate_executable_elf(contents: bytes, label: str) -> None:
+    """Reject dynamic ELF fixtures that cannot actually be executed."""
+
+    if len(contents) < 64 or contents[:4] != b"\x7fELF":
+        _fail(label, "is not an ELF file")
+    if contents[4:7] != bytes((2, 1, 1)) or contents[7] not in (0, 3):
+        _fail(label, "must be a 64-bit little-endian Linux/System-V ELF")
+    try:
+        header = struct.unpack_from("<HHIQQQIHHHHHH", contents, 16)
+    except struct.error as error:
+        _fail(label, f"has a truncated ELF header: {error}")
+    elf_type, machine, version = header[:3]
+    entry, phoff, phentsize, phnum = header[3], header[4], header[8], header[9]
+    if elf_type not in (2, 3) or machine != 62 or version != 1 or entry == 0:
+        _fail(label, "must be an executable Linux x86-64 ET_EXEC/ET_DYN ELF")
+    if phentsize != 56 or phnum == 0 or phoff + phentsize * phnum > len(contents):
+        _fail(label, "has an invalid ELF program-header table")
+    executable_load = False
+    for index in range(phnum):
+        try:
+            segment = struct.unpack_from("<IIQQQQQQ", contents, phoff + index * phentsize)
+        except struct.error as error:
+            _fail(label, f"has a truncated program header: {error}")
+        segment_type, flags, offset, file_size = segment[0], segment[1], segment[2], segment[5]
+        if offset + file_size > len(contents):
+            _fail(label, "contains an out-of-range ELF segment")
+        if segment_type == 1 and flags & 1 and file_size > 0:
+            executable_load = True
+    if not executable_load:
+        _fail(label, "does not contain an executable PT_LOAD segment")
 
 
 def _validate_summaries(text: str, label: str, *, minimum: int = 1) -> list[re.Match[str]]:
@@ -336,8 +379,8 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
     ledger_marker = (
         "pr16-command-batch-resource-ledger schema_version=1 "
         "validation_fail_closed=true queued_chain_raw_byte_mismatches=0 "
-        "hot_loop_allocation_delta=0 stream_reuse_after_finish=true "
-        "owner_close_allocation_count=0 status=passed"
+        "cuda_live_allocation_delta=0 stream_reuse_after_finish=true "
+        "owner_close_live_allocation_count=0 status=passed"
     )
     _single_marker(ledger, ledger_test, LOG_FILES["command-batch-resource-ledger"])
     _single_marker(ledger, ledger_marker, LOG_FILES["command-batch-resource-ledger"])
@@ -379,8 +422,8 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
         "committed_iterations": int(match.group("iterations")),
         "raw_logit_mismatches": int(match.group("logits")),
         "token_id_mismatches": int(match.group("tokens")),
-        "hot_loop_allocation_delta": int(match.group("hot")),
-        "owner_close_allocation_count": int(match.group("close")),
+        "cuda_live_allocation_delta": int(match.group("hot")),
+        "owner_close_live_allocation_count": int(match.group("close")),
         "generated_token_ids": ids,
     }
     expected_derived = {
@@ -388,8 +431,8 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
         "committed_iterations": 16,
         "raw_logit_mismatches": 0,
         "token_id_mismatches": 0,
-        "hot_loop_allocation_delta": 0,
-        "owner_close_allocation_count": 0,
+        "cuda_live_allocation_delta": 0,
+        "owner_close_live_allocation_count": 0,
         "generated_token_ids": EXPECTED_TOKENS,
     }
     if derived != expected_derived:
@@ -422,9 +465,9 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
     expected_ledger = {
         "validation_fail_closed": True,
         "queued_chain_raw_byte_mismatches": 0,
-        "hot_loop_allocation_delta": 0,
+        "cuda_live_allocation_delta": 0,
         "stream_reuse_after_finish": True,
-        "owner_close_allocation_count": 0,
+        "owner_close_live_allocation_count": 0,
     }
     for field, value in expected_ledger.items():
         if by_id["command-batch-resource-ledger"].get(field) != value:
@@ -516,6 +559,7 @@ def _validate_receipt(
     if not isinstance(commands, list) or len(commands) != len(EXPECTED_COMMANDS):
         _fail(RECEIPT_FILE, "exact command inventory is required")
     observed: dict[str, Mapping[str, Any]] = {}
+    command_order: list[str] = []
     for index, value in enumerate(commands):
         command = _closed(
             value,
@@ -526,8 +570,11 @@ def _validate_receipt(
         if not isinstance(command_id, str) or command_id in observed:
             _fail(RECEIPT_FILE, "command id is invalid or duplicated")
         observed[command_id] = command
+        command_order.append(command_id)
     if set(observed) != set(EXPECTED_COMMANDS):
         _fail(RECEIPT_FILE, f"command id set mismatch: {sorted(observed)}")
+    if command_order != list(EXPECTED_COMMANDS):
+        _fail(RECEIPT_FILE, "commands are not in the reviewed execution order")
     for command_id, argv in EXPECTED_COMMANDS.items():
         command = observed[command_id]
         expected_environment = {
@@ -683,6 +730,7 @@ def replay_raw_evidence(
         validate_binary(profile_bytes)
     except ReleaseContractError as error:
         _fail("--profile-binary", f"is not a valid Linux x86_64 dynamic ELF: {error}")
+    _validate_executable_elf(profile_bytes, "--profile-binary")
     for marker in (GATE_ID, "per-operation", "iteration-batch"):
         if marker.encode("ascii") not in profile_bytes:
             _fail("--profile-binary", f"missing reviewed profile marker {marker!r}")

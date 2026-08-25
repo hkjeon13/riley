@@ -561,8 +561,8 @@ class CandidateFixture:
                 {
                     "id": "command-batch-resource-ledger", "result": "passed",
                     "validation_fail_closed": True, "queued_chain_raw_byte_mismatches": 0,
-                    "hot_loop_allocation_delta": 0, "stream_reuse_after_finish": True,
-                    "owner_close_allocation_count": 0,
+                    "cuda_live_allocation_delta": 0, "stream_reuse_after_finish": True,
+                    "owner_close_live_allocation_count": 0,
                     "log_sha256": log_hashes["command-batch-resource-ledger"],
                 },
                 {
@@ -570,8 +570,8 @@ class CandidateFixture:
                     "decode_steps": 16, "committed_iterations": 16,
                     "raw_logit_mismatches": 0,
                     "generated_token_ids": [4052, 2025, 284, 965, 6497, 288, 1492, 418, 260, 16438, 30, 198, 198, 504, 16438, 314],
-                    "token_id_mismatches": 0, "hot_loop_allocation_delta": 0,
-                    "owner_close_allocation_count": 0,
+                    "token_id_mismatches": 0, "cuda_live_allocation_delta": 0,
+                    "owner_close_live_allocation_count": 0,
                     "log_sha256": log_hashes["smollm2-multi-step-greedy-exact"],
                 },
             ],

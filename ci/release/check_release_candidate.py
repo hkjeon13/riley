@@ -885,9 +885,9 @@ def _validate_optimization_correctness(
             {
                 "validation_fail_closed": True,
                 "queued_chain_raw_byte_mismatches": 0,
-                "hot_loop_allocation_delta": 0,
+                "cuda_live_allocation_delta": 0,
                 "stream_reuse_after_finish": True,
-                "owner_close_allocation_count": 0,
+                "owner_close_live_allocation_count": 0,
             },
         ),
         "smollm2-multi-step-greedy-exact": _optimization_test(
@@ -900,8 +900,8 @@ def _validate_optimization_correctness(
                 "raw_logit_mismatches": 0,
                 "generated_token_ids": EXPECTED_OPTIMIZATION_TOKENS,
                 "token_id_mismatches": 0,
-                "hot_loop_allocation_delta": 0,
-                "owner_close_allocation_count": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
             },
         ),
     }
