@@ -17,7 +17,7 @@ use rustinfer_cuda::{
 };
 use rustinfer_model::LoadedModel;
 
-use super::decode::ContiguousKvCache;
+use super::decode::PrefillKvCacheSink;
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError, PhysicalWeightId,
 };
@@ -1140,23 +1140,7 @@ impl PreparedLlamaForward {
         self.poisoned
     }
 
-    /// Validates and uploads exactly the plan's fixed token vector.
-    ///
-    /// Host conversion, pinned staging, and the device allocation are all
-    /// prepared already, so this method performs no allocation.
-    ///
-    /// # Errors
-    ///
-    /// Returns for a poisoned owner, wrong token count, out-of-range token, or
-    /// CUDA copy/synchronization failure.
-    pub fn upload_tokens(
-        &mut self,
-        token_ids: &[u32],
-        stream: &mut CudaStream,
-    ) -> LlamaForwardResult<()> {
-        if self.poisoned {
-            return Err(LlamaForwardError::Poisoned);
-        }
+    pub(super) fn validate_token_ids(&self, token_ids: &[u32]) -> LlamaForwardResult<()> {
         if token_ids.len() != self.plan.sequence_length() {
             return Err(LlamaForwardError::InvalidTokenCount {
                 expected: self.plan.sequence_length(),
@@ -1176,6 +1160,27 @@ impl PreparedLlamaForward {
                 });
             }
         }
+        Ok(())
+    }
+
+    /// Validates and uploads exactly the plan's fixed token vector.
+    ///
+    /// Host conversion, pinned staging, and the device allocation are all
+    /// prepared already, so this method performs no allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a poisoned owner, wrong token count, out-of-range token, or
+    /// CUDA copy/synchronization failure.
+    pub fn upload_tokens(
+        &mut self,
+        token_ids: &[u32],
+        stream: &mut CudaStream,
+    ) -> LlamaForwardResult<()> {
+        if self.poisoned {
+            return Err(LlamaForwardError::Poisoned);
+        }
+        self.validate_token_ids(token_ids)?;
         for (destination, &token_id) in self.token_bytes.chunks_exact_mut(4).zip(token_ids) {
             destination.copy_from_slice(&token_id.to_ne_bytes());
         }
@@ -1236,14 +1241,14 @@ impl PreparedLlamaForward {
     }
 
     /// Executes the fixed prompt graph while copying each layer's rotated K
-    /// and raw V tensors into a caller-owned contiguous decode cache.
+    /// and raw V tensors into the caller-selected decode cache.
     ///
-    /// This is a crate-private PR09 entry point. The public cache-free
+    /// This is a crate-private PR09/PR10 entry point. The public cache-free
     /// [`Self::execute`] path continues to pass no cache sink and therefore
     /// launches exactly the PR08 graph.
     pub(super) fn execute_prefill_into_cache(
         &mut self,
-        cache: &mut ContiguousKvCache,
+        cache: PrefillKvCacheSink<'_>,
         stream: &mut CudaStream,
     ) -> LlamaForwardResult<()> {
         if self.poisoned {
@@ -1435,7 +1440,7 @@ impl PreparedLlamaForward {
         &mut self,
         stream: &mut CudaStream,
         mut trace: Option<&mut PreparedLlamaTrace>,
-        mut cache: Option<&mut ContiguousKvCache>,
+        mut cache: Option<PrefillKvCacheSink<'_>>,
     ) -> LlamaForwardResult<()> {
         let plan = &self.plan;
         let weights = &self.weights;
@@ -1684,7 +1689,7 @@ impl PreparedLlamaForward {
                     .map_err(|source| LlamaForwardError::cuda(key_rope_site, source))?;
             }
 
-            if let Some(cache) = cache.as_deref_mut() {
+            if let Some(cache) = cache.as_mut() {
                 let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
                 cache
                     .append_layer(

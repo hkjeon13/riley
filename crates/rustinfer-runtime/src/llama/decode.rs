@@ -8,13 +8,22 @@ use std::mem;
 
 use rustinfer_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
-    CudaGemmConfig, CudaPreparedGemm, CudaStream, DecodeAttentionBackend,
-    DecodeAttentionBackendAvailability, DecodeAttentionParams, DecodeAttentionPreference,
-    DecodeAttentionRequest, EmbeddingError, EmbeddingParams, GatedMultiplyParams,
-    KvCacheAppendParams, PreparedDecodeAttention, ResidualAddParams, RmsNormParams, RopeParams,
-    SiluParams, embedding, gated_multiply, kv_cache_append, residual_add, rms_norm, rope, silu,
+    CudaGemmConfig, CudaPinnedHostBuffer, CudaPreparedGemm, CudaStream, DecodeAttentionBackend,
+    DecodeAttentionBackendAvailability, DecodeAttentionCapability, DecodeAttentionParams,
+    DecodeAttentionPreference, DecodeAttentionRequest, DecodeAttentionSelectionTrace,
+    EmbeddingError, EmbeddingParams, GatedMultiplyParams, KvCacheAppendParams, PAGED_KV_BLOCK_SIZE,
+    PAGED_KV_BLOCK_TABLE_VERSION, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
+    PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
+    PreparedDecodeAttention, PreparedPagedDecodeAttention, ResidualAddParams, RmsNormParams,
+    RopeParams, SiluParams, embedding, gated_multiply, kv_cache_append, paged_kv_cache_append,
+    residual_add, rms_norm, rope, silu,
 };
 use rustinfer_model::LoadedModel;
+
+use crate::paged_kv::{
+    BLOCK_TABLE_V1_VERSION, BlockId, KV_BLOCK_SIZE, KvBlockPool, KvBlockPoolStats, KvLayout,
+    PagedKvError, SequenceReservation, SequenceState,
+};
 
 use super::forward::{
     LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
@@ -26,9 +35,13 @@ use super::{ExecutionSite, LlamaOp};
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const U32_BYTES: u64 = 4;
-const CACHE_ALLOCATION_COUNT: u64 = 2;
+const CONTIGUOUS_CACHE_ALLOCATION_COUNT: u64 = 2;
+const PAGED_CACHE_ALLOCATION_COUNT: u64 = 4;
+const PAGED_CACHE_PINNED_ALLOCATION_COUNT: u64 = 1;
 const ROPE_ALLOCATION_COUNT: u64 = 2;
 const ATTENTION_ALLOCATION_COUNT: u64 = 1;
+const _: () = assert!(KV_BLOCK_SIZE as u64 == PAGED_KV_BLOCK_SIZE);
+const _: () = assert!(BLOCK_TABLE_V1_VERSION as u32 == PAGED_KV_BLOCK_TABLE_VERSION);
 
 /// Result type for PR09 single-request preparation and execution.
 pub type LlamaDecodeResult<T> = Result<T, LlamaDecodeError>;
@@ -40,6 +53,11 @@ pub enum LlamaDecodeResource {
     KeyCache,
     ValueCache,
     CacheLayerOffsets,
+    BlockTableHostEncoding,
+    BlockTableDuplicateScratch,
+    BlockTableDeviceIds,
+    BlockTableDeviceValidTokens,
+    BlockTablePinnedStaging,
     RopeCos,
     RopeSin,
     AttentionWorkspace,
@@ -57,6 +75,11 @@ impl LlamaDecodeResource {
             Self::KeyCache => "key_cache",
             Self::ValueCache => "value_cache",
             Self::CacheLayerOffsets => "cache_layer_offsets",
+            Self::BlockTableHostEncoding => "block_table_host_encoding",
+            Self::BlockTableDuplicateScratch => "block_table_duplicate_scratch",
+            Self::BlockTableDeviceIds => "block_table_device_ids",
+            Self::BlockTableDeviceValidTokens => "block_table_device_valid_tokens",
+            Self::BlockTablePinnedStaging => "block_table_pinned_staging",
             Self::RopeCos => "decode_rope_cos",
             Self::RopeSin => "decode_rope_sin",
             Self::AttentionWorkspace => "decode_attention_workspace",
@@ -132,6 +155,10 @@ pub enum LlamaDecodeError {
         resource: LlamaDecodeResource,
         requested_bytes: u64,
     },
+    PagedKv {
+        operation: &'static str,
+        source: PagedKvError,
+    },
     ArithmeticOverflow {
         resource: LlamaDecodeResource,
     },
@@ -158,7 +185,7 @@ impl LlamaDecodeError {
         match self {
             Self::Cuda { source, .. } => LlamaForwardError::cuda(site, source),
             _ => LlamaForwardError::InvalidConfiguration {
-                field: "contiguous_kv_cache",
+                field: "decode_kv_cache",
                 reason: "validated cache metadata no longer matches the prefill plan",
             },
         }
@@ -217,6 +244,9 @@ impl fmt::Display for LlamaDecodeError {
                 formatter,
                 "could not reserve {requested_bytes} host bytes for {resource}"
             ),
+            Self::PagedKv { operation, source } => {
+                write!(formatter, "paged-KV {operation}: {source}")
+            }
             Self::ArithmeticOverflow { resource } => {
                 write!(formatter, "decode byte arithmetic overflow for {resource}")
             }
@@ -235,6 +265,7 @@ impl error::Error for LlamaDecodeError {
             Self::Forward(source) => Some(source),
             Self::Cuda { source, .. } | Self::Cleanup { source, .. } => Some(source),
             Self::Embedding { source, .. } => Some(source),
+            Self::PagedKv { source, .. } => Some(source),
             _ => None,
         }
     }
@@ -381,11 +412,65 @@ impl LlamaKvCacheLayout {
     }
 }
 
+/// Physical cache layout fixed during cold decode preparation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LlamaKvCacheStorageLayout {
+    /// PR09 request-local head-major contiguous K/V allocations.
+    Contiguous(LlamaKvCacheLayout),
+    /// PR10 layer-major fixed-block K/V pool.
+    Paged(KvLayout),
+}
+
+impl LlamaKvCacheStorageLayout {
+    #[must_use]
+    pub const fn is_paged(self) -> bool {
+        matches!(self, Self::Paged(_))
+    }
+
+    #[must_use]
+    pub const fn total_kv_bytes(self) -> u64 {
+        match self {
+            Self::Contiguous(layout) => layout.total_bytes(),
+            Self::Paged(layout) => layout.total_bytes(),
+        }
+    }
+}
+
+/// Cold-selected KV address-translation policy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LlamaKvCachePolicy {
+    /// Preserve the PR09 contiguous cache as an exact reference/rollback path.
+    Contiguous,
+    /// Use a version-1 block table and a fixed physical pool.
+    ///
+    /// `physical_block_count=None` provisions exactly enough 16-token blocks
+    /// for the configured maximum sequence. A smaller explicit pool is useful
+    /// for deterministic OOM/rollback validation.
+    Paged { physical_block_count: Option<usize> },
+}
+
+impl LlamaKvCachePolicy {
+    #[must_use]
+    pub const fn paged() -> Self {
+        Self::Paged {
+            physical_block_count: None,
+        }
+    }
+
+    #[must_use]
+    pub const fn paged_with_blocks(physical_block_count: usize) -> Self {
+        Self::Paged {
+            physical_block_count: Some(physical_block_count),
+        }
+    }
+}
+
 /// Cold-path settings for one fixed-prompt decode owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PreparedLlamaDecodeConfig {
     forward: PreparedLlamaForwardConfig,
     decode_attention_preference: DecodeAttentionPreference,
+    kv_cache_policy: LlamaKvCachePolicy,
 }
 
 impl PreparedLlamaDecodeConfig {
@@ -394,6 +479,7 @@ impl PreparedLlamaDecodeConfig {
         Self {
             forward,
             decode_attention_preference: DecodeAttentionPreference::Optimized,
+            kv_cache_policy: LlamaKvCachePolicy::paged(),
         }
     }
 
@@ -409,6 +495,27 @@ impl PreparedLlamaDecodeConfig {
         self
     }
 
+    /// Selects the PR10 exact paged cache with one block per capacity slice.
+    #[must_use]
+    pub const fn with_paged_kv_cache(mut self) -> Self {
+        self.kv_cache_policy = LlamaKvCachePolicy::paged();
+        self
+    }
+
+    /// Selects a paged pool with an explicit physical-block budget.
+    #[must_use]
+    pub const fn with_paged_kv_cache_blocks(mut self, physical_block_count: usize) -> Self {
+        self.kv_cache_policy = LlamaKvCachePolicy::paged_with_blocks(physical_block_count);
+        self
+    }
+
+    /// Selects the PR09 contiguous reference cache.
+    #[must_use]
+    pub const fn with_contiguous_kv_cache(mut self) -> Self {
+        self.kv_cache_policy = LlamaKvCachePolicy::Contiguous;
+        self
+    }
+
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
@@ -418,6 +525,11 @@ impl PreparedLlamaDecodeConfig {
     pub const fn decode_attention_preference(self) -> DecodeAttentionPreference {
         self.decode_attention_preference
     }
+
+    #[must_use]
+    pub const fn kv_cache_policy(self) -> LlamaKvCachePolicy {
+        self.kv_cache_policy
+    }
 }
 
 impl Default for PreparedLlamaDecodeConfig {
@@ -426,11 +538,14 @@ impl Default for PreparedLlamaDecodeConfig {
     }
 }
 
-/// Exact owned CUDA allocation totals after decode preparation.
+/// Owned device, pinned-host, and paged-metadata payload after preparation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PreparedLlamaDecodeAllocationReport {
     forward: PreparedLlamaAllocationReport,
     kv_cache_bytes: u64,
+    block_table_device_bytes: u64,
+    block_table_host_bytes: u64,
+    cache_unused_capacity_bytes: u64,
     rope_table_bytes: u64,
     attention_workspace_bytes: u64,
     decode_gemm_workspace_bytes: u64,
@@ -449,6 +564,22 @@ impl PreparedLlamaDecodeAllocationReport {
     #[must_use]
     pub const fn kv_cache_bytes(self) -> u64 {
         self.kv_cache_bytes
+    }
+    #[must_use]
+    pub const fn block_table_device_bytes(self) -> u64 {
+        self.block_table_device_bytes
+    }
+    #[must_use]
+    pub const fn block_table_host_bytes(self) -> u64 {
+        self.block_table_host_bytes
+    }
+    /// Paged-pool VRAM beyond the configured maximum logical length.
+    ///
+    /// This includes whole-block rounding and any explicit overprovisioning;
+    /// it is static, unlike the owner's current tail-block fragmentation.
+    #[must_use]
+    pub const fn cache_unused_capacity_bytes(self) -> u64 {
+        self.cache_unused_capacity_bytes
     }
     #[must_use]
     pub const fn rope_table_bytes(self) -> u64 {
@@ -620,12 +751,631 @@ impl ContiguousKvCache {
     }
 }
 
+struct PagedKvCache {
+    key: CudaDeviceBuffer,
+    value: CudaDeviceBuffer,
+    device_block_ids: CudaDeviceBuffer,
+    device_valid_tokens: CudaDeviceBuffer,
+    table_staging: CudaPinnedHostBuffer,
+    encoded_block_ids: Box<[u8]>,
+    encoded_valid_tokens: Box<[u8]>,
+    duplicate_scratch: Box<[u8]>,
+    layout: KvLayout,
+    pool: KvBlockPool,
+    sequence: SequenceState,
+}
+
+impl PagedKvCache {
+    fn prepare(
+        context: &CudaContext,
+        layout: KvLayout,
+        maximum_sequence_length: usize,
+    ) -> LlamaDecodeResult<Self> {
+        let mut pool = KvBlockPool::new(layout).map_err(|source| LlamaDecodeError::PagedKv {
+            operation: "prepare pool",
+            source,
+        })?;
+        let sequence = pool
+            .create_sequence(maximum_sequence_length)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "prepare sequence table",
+                source,
+            })?;
+        let table_capacity = layout.physical_block_count();
+        let block_id_bytes = checked_host_bytes(
+            table_capacity,
+            mem::size_of::<u32>(),
+            LlamaDecodeResource::BlockTableHostEncoding,
+        )?;
+        let valid_token_bytes = checked_host_bytes(
+            table_capacity,
+            mem::size_of::<u16>(),
+            LlamaDecodeResource::BlockTableHostEncoding,
+        )?;
+        let encoded_block_ids =
+            decode_boxed_zeroed(block_id_bytes, LlamaDecodeResource::BlockTableHostEncoding)?;
+        let encoded_valid_tokens = decode_boxed_zeroed(
+            valid_token_bytes,
+            LlamaDecodeResource::BlockTableHostEncoding,
+        )?;
+        let duplicate_scratch = decode_boxed_zeroed(
+            table_capacity,
+            LlamaDecodeResource::BlockTableDuplicateScratch,
+        )?;
+        let site = ExecutionSite::layer(0, LlamaOp::KvCacheWrite);
+        let key = context
+            .allocate_device_buffer(layout.bytes_per_kind())
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let value = context
+            .allocate_device_buffer(layout.bytes_per_kind())
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let device_block_ids = context
+            .allocate_device_buffer(decode_u64(
+                block_id_bytes,
+                LlamaDecodeResource::BlockTableDeviceIds,
+            )?)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let device_valid_tokens = context
+            .allocate_device_buffer(decode_u64(
+                valid_token_bytes,
+                LlamaDecodeResource::BlockTableDeviceValidTokens,
+            )?)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let table_staging = context
+            .allocate_pinned_host_buffer(decode_u64(
+                block_id_bytes.max(valid_token_bytes),
+                LlamaDecodeResource::BlockTablePinnedStaging,
+            )?)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        Ok(Self {
+            key,
+            value,
+            device_block_ids,
+            device_valid_tokens,
+            table_staging,
+            encoded_block_ids,
+            encoded_valid_tokens,
+            duplicate_scratch,
+            layout,
+            pool,
+            sequence,
+        })
+    }
+
+    fn reserve_to(&mut self, target: usize) -> LlamaDecodeResult<SequenceReservation> {
+        self.sequence
+            .reserve_to(&mut self.pool, target)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "reserve",
+                source,
+            })
+    }
+
+    fn upload_reserved_table(
+        &mut self,
+        reservation: &SequenceReservation,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        let table = self
+            .sequence
+            .reserved_block_table(reservation)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "read reserved table",
+                source,
+            })?;
+        let committed_length = usize::try_from(self.sequence.logical_length()).map_err(|_| {
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::BlockTableHostEncoding,
+            }
+        })?;
+        let committed_blocks = committed_length.div_ceil(KV_BLOCK_SIZE);
+        let target_blocks = table.block_count();
+        let first_valid_block =
+            if reservation.target_logical_length() > self.sequence.logical_length() {
+                committed_length / KV_BLOCK_SIZE
+            } else {
+                target_blocks
+            };
+
+        for index in committed_blocks..target_blocks {
+            let start = index.checked_mul(mem::size_of::<u32>()).ok_or(
+                LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::BlockTableHostEncoding,
+                },
+            )?;
+            self.encoded_block_ids[start..start + mem::size_of::<u32>()]
+                .copy_from_slice(&table.physical_block_ids()[index].to_ne_bytes());
+        }
+        for index in first_valid_block..target_blocks {
+            let start = index.checked_mul(mem::size_of::<u16>()).ok_or(
+                LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::BlockTableHostEncoding,
+                },
+            )?;
+            self.encoded_valid_tokens[start..start + mem::size_of::<u16>()]
+                .copy_from_slice(&table.valid_tokens()[index].to_ne_bytes());
+        }
+
+        let block_id_start = committed_blocks.checked_mul(mem::size_of::<u32>()).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::BlockTableDeviceIds,
+            },
+        )?;
+        let block_id_end = target_blocks.checked_mul(mem::size_of::<u32>()).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::BlockTableDeviceIds,
+            },
+        )?;
+        if block_id_start != block_id_end {
+            self.device_block_ids
+                .upload_from_slice(
+                    decode_u64(block_id_start, LlamaDecodeResource::BlockTableDeviceIds)?,
+                    &self.encoded_block_ids[block_id_start..block_id_end],
+                    &mut self.table_staging,
+                    stream,
+                )
+                .map_err(|source| {
+                    LlamaDecodeError::cuda(ExecutionSite::layer(0, LlamaOp::KvCacheWrite), source)
+                })?;
+        }
+        let valid_start = first_valid_block.checked_mul(mem::size_of::<u16>()).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::BlockTableDeviceValidTokens,
+            },
+        )?;
+        let valid_end = target_blocks.checked_mul(mem::size_of::<u16>()).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::BlockTableDeviceValidTokens,
+            },
+        )?;
+        if valid_start != valid_end {
+            self.device_valid_tokens
+                .upload_from_slice(
+                    decode_u64(
+                        valid_start,
+                        LlamaDecodeResource::BlockTableDeviceValidTokens,
+                    )?,
+                    &self.encoded_valid_tokens[valid_start..valid_end],
+                    &mut self.table_staging,
+                    stream,
+                )
+                .map_err(|source| {
+                    LlamaDecodeError::cuda(ExecutionSite::layer(0, LlamaOp::KvCacheWrite), source)
+                })?;
+        }
+        Ok(())
+    }
+
+    fn begin_execution<'a>(
+        &'a mut self,
+        reservation: &SequenceReservation,
+    ) -> LlamaDecodeResult<PagedKvExecution<'a>> {
+        let Self {
+            key,
+            value,
+            device_block_ids,
+            device_valid_tokens,
+            duplicate_scratch,
+            layout,
+            sequence,
+            ..
+        } = self;
+        let table = sequence
+            .reserved_block_table(reservation)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "bind reserved table",
+                source,
+            })?;
+        let host = PagedKvBlockTableHostV1::new_with_duplicate_scratch(
+            table.physical_block_ids(),
+            table.valid_tokens(),
+            u64::from(table.logical_length()),
+            decode_u64(layout.physical_block_count(), LlamaDecodeResource::KeyCache)?,
+            duplicate_scratch,
+        )
+        .map_err(|source| {
+            LlamaDecodeError::cuda(ExecutionSite::layer(0, LlamaOp::KvCacheWrite), source)
+        })?;
+        Ok(PagedKvExecution {
+            key,
+            value,
+            device_block_ids,
+            device_valid_tokens,
+            layout: *layout,
+            host,
+        })
+    }
+
+    fn commit(&mut self, reservation: SequenceReservation) -> LlamaDecodeResult<()> {
+        self.sequence
+            .commit(&mut self.pool, reservation)
+            .map(|_| ())
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "commit",
+                source,
+            })
+    }
+
+    fn poison(&mut self, reservation: SequenceReservation) -> LlamaDecodeResult<()> {
+        self.sequence
+            .poison(&mut self.pool, reservation)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "poison reservation",
+                source,
+            })
+    }
+
+    fn reset(&mut self) -> LlamaDecodeResult<()> {
+        self.sequence
+            .reset(&mut self.pool)
+            .map_err(|source| LlamaDecodeError::PagedKv {
+                operation: "reset",
+                source,
+            })
+    }
+
+    fn stats(&self) -> KvBlockPoolStats {
+        self.pool.stats()
+    }
+
+    fn block_id(&self, logical_block_index: usize) -> Option<BlockId> {
+        self.sequence.block_id(logical_block_index)
+    }
+
+    fn block_table_device_bytes(&self) -> u64 {
+        self.device_block_ids
+            .byte_len()
+            .saturating_add(self.device_valid_tokens.byte_len())
+    }
+
+    fn block_table_host_bytes(&self) -> u64 {
+        self.sequence
+            .host_state_capacity_bytes()
+            .saturating_add(u64::try_from(self.encoded_block_ids.len()).unwrap_or(u64::MAX))
+            .saturating_add(u64::try_from(self.encoded_valid_tokens.len()).unwrap_or(u64::MAX))
+            .saturating_add(u64::try_from(self.duplicate_scratch.len()).unwrap_or(u64::MAX))
+            .saturating_add(self.pool.stats().host_pool_metadata_bytes())
+    }
+}
+
+pub(super) struct PagedKvExecution<'a> {
+    key: &'a mut CudaDeviceBuffer,
+    value: &'a mut CudaDeviceBuffer,
+    device_block_ids: &'a CudaDeviceBuffer,
+    device_valid_tokens: &'a CudaDeviceBuffer,
+    layout: KvLayout,
+    host: PagedKvBlockTableHostV1<'a>,
+}
+
+impl PagedKvExecution<'_> {
+    fn native_table(&self, site: ExecutionSite) -> LlamaDecodeResult<PagedKvBlockTableV1<'_>> {
+        let block_ids = CudaBufferSpan::new(
+            self.device_block_ids,
+            CudaDType::U32,
+            0,
+            self.device_block_ids.byte_len(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let valid_tokens = CudaBufferSpan::new(
+            self.device_valid_tokens,
+            CudaDType::U16,
+            0,
+            self.device_valid_tokens.byte_len(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        PagedKvBlockTableV1::new(self.host, block_ids, valid_tokens)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))
+    }
+
+    fn append_layer(
+        &mut self,
+        layer_index: usize,
+        key_source: &CudaDeviceBuffer,
+        value_source: &CudaDeviceBuffer,
+        source_token_count: u64,
+        destination_token_start: u64,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        let site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
+        let offset = self.layout.layer_byte_offset(layer_index).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            },
+        )?;
+        let key_value_heads = decode_u64(
+            self.layout.key_value_head_count(),
+            LlamaDecodeResource::KeyCache,
+        )?;
+        let head_size = decode_u64(self.layout.head_dimension(), LlamaDecodeResource::KeyCache)?;
+        let source_bytes = source_token_count
+            .checked_mul(key_value_heads)
+            .and_then(|elements| elements.checked_mul(head_size))
+            .and_then(|elements| elements.checked_mul(BF16_BYTES))
+            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            })?;
+        let block_ids = CudaBufferSpan::new(
+            self.device_block_ids,
+            CudaDType::U32,
+            0,
+            self.device_block_ids.byte_len(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let valid_tokens = CudaBufferSpan::new(
+            self.device_valid_tokens,
+            CudaDType::U16,
+            0,
+            self.device_valid_tokens.byte_len(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let table = PagedKvBlockTableV1::new(self.host, block_ids, valid_tokens)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let key_pool = CudaBufferSpanMut::new(
+            self.key,
+            CudaDType::BF16,
+            offset,
+            self.layout.layer_stride_bytes(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let value_pool = CudaBufferSpanMut::new(
+            self.value,
+            CudaDType::BF16,
+            offset,
+            self.layout.layer_stride_bytes(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let mut params = PagedKvCacheAppendParams {
+            key_source: CudaBufferSpan::new(key_source, CudaDType::BF16, 0, source_bytes)
+                .map_err(|source| LlamaDecodeError::cuda(site, source))?,
+            value_source: CudaBufferSpan::new(value_source, CudaDType::BF16, 0, source_bytes)
+                .map_err(|source| LlamaDecodeError::cuda(site, source))?,
+            key_pool,
+            value_pool,
+            block_table: table,
+            source_token_count,
+            destination_token_start,
+            key_value_head_count: key_value_heads,
+            head_size,
+        };
+        paged_kv_cache_append(&mut params, stream)
+            .map_err(|source| LlamaDecodeError::cuda(site, source))
+    }
+
+    fn layer_spans(
+        &self,
+        layer_index: usize,
+    ) -> LlamaDecodeResult<(CudaBufferSpan<'_>, CudaBufferSpan<'_>)> {
+        let offset = self.layout.layer_byte_offset(layer_index).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
+                resource: LlamaDecodeResource::KeyCache,
+            },
+        )?;
+        let site = ExecutionSite::layer(layer_index, LlamaOp::DecodeAttention);
+        let key = CudaBufferSpan::new(
+            self.key,
+            CudaDType::BF16,
+            offset,
+            self.layout.layer_stride_bytes(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        let value = CudaBufferSpan::new(
+            self.value,
+            CudaDType::BF16,
+            offset,
+            self.layout.layer_stride_bytes(),
+        )
+        .map_err(|source| LlamaDecodeError::cuda(site, source))?;
+        Ok((key, value))
+    }
+}
+
+#[allow(clippy::large_enum_variant)]
+enum KvCacheStorage {
+    Contiguous(ContiguousKvCache),
+    Paged(PagedKvCache),
+}
+
+enum KvCacheReservation {
+    Contiguous,
+    Paged(SequenceReservation),
+}
+
+impl KvCacheStorage {
+    fn is_poisoned(&self) -> bool {
+        match self {
+            Self::Contiguous(_) => false,
+            Self::Paged(cache) => cache.sequence.is_poisoned(),
+        }
+    }
+
+    fn reserve_to(&mut self, target: usize) -> LlamaDecodeResult<KvCacheReservation> {
+        match self {
+            Self::Contiguous(_) => Ok(KvCacheReservation::Contiguous),
+            Self::Paged(cache) => cache.reserve_to(target).map(KvCacheReservation::Paged),
+        }
+    }
+
+    fn upload_reserved_table(
+        &mut self,
+        reservation: &KvCacheReservation,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        match (self, reservation) {
+            (Self::Contiguous(_), KvCacheReservation::Contiguous) => Ok(()),
+            (Self::Paged(cache), KvCacheReservation::Paged(reservation)) => {
+                cache.upload_reserved_table(reservation, stream)
+            }
+            _ => Err(LlamaDecodeError::InvalidConfiguration {
+                field: "kv_cache_reservation",
+                reason: "reservation policy differs from prepared cache",
+            }),
+        }
+    }
+
+    fn begin_execution<'a>(
+        &'a mut self,
+        reservation: &KvCacheReservation,
+    ) -> LlamaDecodeResult<PrefillKvCacheSink<'a>> {
+        match (self, reservation) {
+            (Self::Contiguous(cache), KvCacheReservation::Contiguous) => {
+                Ok(PrefillKvCacheSink::Contiguous(cache))
+            }
+            (Self::Paged(cache), KvCacheReservation::Paged(reservation)) => cache
+                .begin_execution(reservation)
+                .map(PrefillKvCacheSink::Paged),
+            _ => Err(LlamaDecodeError::InvalidConfiguration {
+                field: "kv_cache_reservation",
+                reason: "reservation policy differs from prepared cache",
+            }),
+        }
+    }
+
+    fn commit(&mut self, reservation: KvCacheReservation) -> LlamaDecodeResult<()> {
+        match (self, reservation) {
+            (Self::Contiguous(_), KvCacheReservation::Contiguous) => Ok(()),
+            (Self::Paged(cache), KvCacheReservation::Paged(reservation)) => {
+                cache.commit(reservation)
+            }
+            _ => Err(LlamaDecodeError::InvalidConfiguration {
+                field: "kv_cache_reservation",
+                reason: "reservation policy differs from prepared cache",
+            }),
+        }
+    }
+
+    fn poison(&mut self, reservation: KvCacheReservation) -> LlamaDecodeResult<()> {
+        match (self, reservation) {
+            (Self::Contiguous(_), KvCacheReservation::Contiguous) => Ok(()),
+            (Self::Paged(cache), KvCacheReservation::Paged(reservation)) => {
+                cache.poison(reservation)
+            }
+            _ => Err(LlamaDecodeError::InvalidConfiguration {
+                field: "kv_cache_reservation",
+                reason: "reservation policy differs from prepared cache",
+            }),
+        }
+    }
+
+    fn reset(&mut self) -> LlamaDecodeResult<()> {
+        match self {
+            Self::Contiguous(_) => Ok(()),
+            Self::Paged(cache) => cache.reset(),
+        }
+    }
+}
+
+/// One cold-selected destination for prefill K/V publication.
+///
+/// Keeping the sink as a closed enum avoids heap allocation and confines the
+/// cache-layout branch to the existing per-layer publication point. PR10 adds
+/// the paged variant without changing the public cache-free forward path.
+pub(super) enum PrefillKvCacheSink<'a> {
+    Contiguous(&'a mut ContiguousKvCache),
+    Paged(PagedKvExecution<'a>),
+}
+
+impl PrefillKvCacheSink<'_> {
+    pub(super) fn append_layer(
+        &mut self,
+        layer_index: usize,
+        key_source: &CudaDeviceBuffer,
+        value_source: &CudaDeviceBuffer,
+        source_token_count: u64,
+        destination_token_start: u64,
+        stream: &mut CudaStream,
+    ) -> LlamaDecodeResult<()> {
+        match self {
+            Self::Contiguous(cache) => cache.append_layer(
+                layer_index,
+                key_source,
+                value_source,
+                source_token_count,
+                destination_token_start,
+                stream,
+            ),
+            Self::Paged(cache) => cache.append_layer(
+                layer_index,
+                key_source,
+                value_source,
+                source_token_count,
+                destination_token_start,
+                stream,
+            ),
+        }
+    }
+}
+
 struct DecodeGemmPlans {
     hidden: CudaPreparedGemm,
     key_value: CudaPreparedGemm,
     intermediate: CudaPreparedGemm,
     down: CudaPreparedGemm,
     lm_head: CudaPreparedGemm,
+}
+
+/// Prepared attention plan matching the selected cache address space.
+#[derive(Clone, Debug)]
+pub enum PreparedLlamaDecodeAttention {
+    Contiguous(PreparedDecodeAttention),
+    Paged(PreparedPagedDecodeAttention),
+}
+
+impl PreparedLlamaDecodeAttention {
+    #[must_use]
+    pub const fn backend(&self) -> DecodeAttentionBackend {
+        match self {
+            Self::Contiguous(attention) => attention.backend(),
+            Self::Paged(attention) => attention.backend(),
+        }
+    }
+
+    #[must_use]
+    pub const fn capability(&self) -> DecodeAttentionCapability {
+        match self {
+            Self::Contiguous(attention) => attention.capability(),
+            Self::Paged(attention) => attention.capability(),
+        }
+    }
+
+    #[must_use]
+    pub const fn selection_trace(&self) -> DecodeAttentionSelectionTrace {
+        match self {
+            Self::Contiguous(attention) => attention.selection_trace(),
+            Self::Paged(attention) => attention.selection_trace(),
+        }
+    }
+
+    #[must_use]
+    pub const fn workspace_bytes(&self) -> u64 {
+        match self {
+            Self::Contiguous(attention) => attention.workspace_bytes(),
+            Self::Paged(attention) => attention.workspace_bytes(),
+        }
+    }
+
+    #[must_use]
+    pub const fn workspace_dtype(&self) -> CudaDType {
+        match self {
+            Self::Contiguous(attention) => attention.workspace_dtype(),
+            Self::Paged(attention) => attention.workspace_dtype(),
+        }
+    }
+
+    #[must_use]
+    pub const fn partial_state_capacity(&self) -> u64 {
+        match self {
+            Self::Contiguous(attention) => attention.partial_state_capacity(),
+            Self::Paged(attention) => attention.partial_state_capacity(),
+        }
+    }
+
+    #[must_use]
+    pub const fn tokens_per_partition(&self) -> u64 {
+        match self {
+            Self::Contiguous(attention) => attention.tokens_per_partition(),
+            Self::Paged(attention) => attention.tokens_per_partition(),
+        }
+    }
 }
 
 impl DecodeGemmPlans {
@@ -652,7 +1402,7 @@ impl DecodeGemmPlans {
 }
 
 struct DecodeBuffers {
-    cache: ContiguousKvCache,
+    cache: KvCacheStorage,
     rope_cos: CudaDeviceBuffer,
     rope_sin: CudaDeviceBuffer,
     attention_workspace: CudaDeviceBuffer,
@@ -670,11 +1420,12 @@ enum LatestOutput {
 pub struct PreparedLlamaDecode {
     forward: PreparedLlamaForward,
     gemms: DecodeGemmPlans,
-    attention: PreparedDecodeAttention,
+    attention: PreparedLlamaDecodeAttention,
     buffers: DecodeBuffers,
-    layout: LlamaKvCacheLayout,
+    cache_layout: LlamaKvCacheStorageLayout,
     allocation_report: PreparedLlamaDecodeAllocationReport,
     prompt_length: usize,
+    maximum_sequence_length: usize,
     logical_length: usize,
     phase: LlamaDecodePhase,
     latest_output: Option<LatestOutput>,
@@ -686,7 +1437,8 @@ impl fmt::Debug for PreparedLlamaDecode {
             .debug_struct("PreparedLlamaDecode")
             .field("prompt_length", &self.prompt_length)
             .field("logical_length", &self.logical_length)
-            .field("maximum_length", &self.layout.maximum_sequence_length())
+            .field("maximum_length", &self.maximum_sequence_length)
+            .field("cache_layout", &self.cache_layout)
             .field("phase", &self.phase)
             .field("attention_backend", &self.attention.backend())
             .field("allocation_report", &self.allocation_report)
@@ -738,49 +1490,108 @@ impl PreparedLlamaDecode {
         let mut forward =
             PreparedLlamaForward::prepare(model, context, stream, prompt_length, config.forward())?;
         let dimensions = forward.plan.dimensions();
-        let layout = LlamaKvCacheLayout::checked(
-            forward.plan.layers().len(),
-            dimensions.key_value_heads(),
-            maximum_sequence_length,
-            dimensions.head_dimension(),
-        )?;
-
         let head_size = decode_u64(
             dimensions.head_dimension(),
             LlamaDecodeResource::AttentionWorkspace,
         )?;
-        let request = DecodeAttentionRequest::new(
-            decode_u64(
-                maximum_sequence_length,
-                LlamaDecodeResource::AttentionWorkspace,
-            )?,
-            decode_u64(
-                dimensions.query_heads(),
-                LlamaDecodeResource::AttentionWorkspace,
-            )?,
-            decode_u64(
-                dimensions.key_value_heads(),
-                LlamaDecodeResource::AttentionWorkspace,
-            )?,
-            head_size,
-            1.0 / (head_size as f32).sqrt(),
-        );
-        let attention = PreparedDecodeAttention::select(
-            context,
-            request,
-            config.decode_attention_preference(),
-            DecodeAttentionBackendAvailability::linked(),
-        )
-        .map_err(|source| {
-            LlamaDecodeError::cuda(ExecutionSite::layer(0, LlamaOp::DecodeAttention), source)
-        })?;
+        let maximum = decode_u64(
+            maximum_sequence_length,
+            LlamaDecodeResource::AttentionWorkspace,
+        )?;
+        let query_heads = decode_u64(
+            dimensions.query_heads(),
+            LlamaDecodeResource::AttentionWorkspace,
+        )?;
+        let key_value_heads = decode_u64(
+            dimensions.key_value_heads(),
+            LlamaDecodeResource::AttentionWorkspace,
+        )?;
+        let scale = 1.0 / (head_size as f32).sqrt();
+        let (cache, cache_layout, attention) = match config.kv_cache_policy() {
+            LlamaKvCachePolicy::Contiguous => {
+                let layout = LlamaKvCacheLayout::checked(
+                    forward.plan.layers().len(),
+                    dimensions.key_value_heads(),
+                    maximum_sequence_length,
+                    dimensions.head_dimension(),
+                )?;
+                let request = DecodeAttentionRequest::new(
+                    maximum,
+                    query_heads,
+                    key_value_heads,
+                    head_size,
+                    scale,
+                );
+                let attention = PreparedDecodeAttention::select(
+                    context,
+                    request,
+                    config.decode_attention_preference(),
+                    DecodeAttentionBackendAvailability::linked(),
+                )
+                .map_err(|source| {
+                    LlamaDecodeError::cuda(
+                        ExecutionSite::layer(0, LlamaOp::DecodeAttention),
+                        source,
+                    )
+                })?;
+                (
+                    KvCacheStorage::Contiguous(ContiguousKvCache::prepare(context, layout)?),
+                    LlamaKvCacheStorageLayout::Contiguous(layout),
+                    PreparedLlamaDecodeAttention::Contiguous(attention),
+                )
+            }
+            LlamaKvCachePolicy::Paged {
+                physical_block_count,
+            } => {
+                let required_blocks = maximum_sequence_length.div_ceil(KV_BLOCK_SIZE);
+                let physical_blocks = physical_block_count.unwrap_or(required_blocks);
+                let layout = KvLayout::checked(
+                    forward.plan.layers().len(),
+                    physical_blocks,
+                    dimensions.key_value_heads(),
+                    dimensions.head_dimension(),
+                )
+                .map_err(|source| LlamaDecodeError::PagedKv {
+                    operation: "validate pool layout",
+                    source,
+                })?;
+                let request = PagedDecodeAttentionRequest::new(
+                    maximum,
+                    decode_u64(physical_blocks, LlamaDecodeResource::AttentionWorkspace)?,
+                    query_heads,
+                    key_value_heads,
+                    head_size,
+                    scale,
+                );
+                let attention = PreparedPagedDecodeAttention::select(
+                    context,
+                    request,
+                    config.decode_attention_preference(),
+                    DecodeAttentionBackendAvailability::linked(),
+                )
+                .map_err(|source| {
+                    LlamaDecodeError::cuda(
+                        ExecutionSite::layer(0, LlamaOp::DecodeAttention),
+                        source,
+                    )
+                })?;
+                (
+                    KvCacheStorage::Paged(PagedKvCache::prepare(
+                        context,
+                        layout,
+                        maximum_sequence_length,
+                    )?),
+                    LlamaKvCacheStorageLayout::Paged(layout),
+                    PreparedLlamaDecodeAttention::Paged(attention),
+                )
+            }
+        };
         let gemms = prepare_decode_gemms(
             context,
             &forward,
             config.forward().gemm_workspace_cap_bytes(),
         )?;
         let decode_gemm_workspace_bytes = gemms.maximum_workspace_bytes();
-        let cache = ContiguousKvCache::prepare(context, layout)?;
         let rope_table_bytes_per_kind =
             rope_table_bytes(maximum_sequence_length, dimensions.head_dimension())?;
         let rope_site = ExecutionSite::layer(0, LlamaOp::QueryRope);
@@ -824,7 +1635,7 @@ impl PreparedLlamaDecode {
 
         let allocation_report = build_decode_allocation_report(
             forward.allocation_report(),
-            layout,
+            decode_cache_allocation(&cache, maximum_sequence_length)?,
             rope_table_bytes_per_kind,
             attention.workspace_bytes(),
             decode_gemm_workspace_bytes,
@@ -841,9 +1652,10 @@ impl PreparedLlamaDecode {
                 gemm_workspace,
                 rope_table_bytes_per_kind,
             },
-            layout,
+            cache_layout,
             allocation_report,
             prompt_length,
+            maximum_sequence_length,
             logical_length: 0,
             phase: LlamaDecodePhase::Empty,
             latest_output: None,
@@ -862,7 +1674,7 @@ impl PreparedLlamaDecode {
 
     #[must_use]
     pub const fn maximum_length(&self) -> usize {
-        self.layout.maximum_sequence_length()
+        self.maximum_sequence_length
     }
 
     #[must_use]
@@ -871,8 +1683,8 @@ impl PreparedLlamaDecode {
     }
 
     #[must_use]
-    pub const fn cache_layout(&self) -> LlamaKvCacheLayout {
-        self.layout
+    pub const fn cache_layout(&self) -> LlamaKvCacheStorageLayout {
+        self.cache_layout
     }
 
     #[must_use]
@@ -881,13 +1693,46 @@ impl PreparedLlamaDecode {
     }
 
     #[must_use]
-    pub const fn prepared_attention(&self) -> &PreparedDecodeAttention {
+    pub const fn prepared_attention(&self) -> &PreparedLlamaDecodeAttention {
         &self.attention
     }
 
     #[must_use]
+    pub fn paged_pool_stats(&self) -> Option<KvBlockPoolStats> {
+        match &self.buffers.cache {
+            KvCacheStorage::Contiguous(_) => None,
+            KvCacheStorage::Paged(cache) => Some(cache.stats()),
+        }
+    }
+
+    #[must_use]
+    pub fn paged_block_id(&self, logical_block_index: usize) -> Option<BlockId> {
+        match &self.buffers.cache {
+            KvCacheStorage::Contiguous(_) => None,
+            KvCacheStorage::Paged(cache) => cache.block_id(logical_block_index),
+        }
+    }
+
+    /// Current bytes in the committed tail block that hold no logical token.
+    #[must_use]
+    pub fn paged_internal_fragmentation_bytes(&self) -> Option<u64> {
+        match &self.buffers.cache {
+            KvCacheStorage::Contiguous(_) => None,
+            KvCacheStorage::Paged(cache) => {
+                let unused_tokens = u64::try_from(cache.sequence.internal_fragmentation_tokens())
+                    .expect("a paged tail has fewer than 16 unused tokens");
+                Some(
+                    unused_tokens
+                        .checked_mul(cache.layout.bytes_per_physical_block() / PAGED_KV_BLOCK_SIZE)
+                        .expect("tail fragmentation is bounded by one physical block"),
+                )
+            }
+        }
+    }
+
+    #[must_use]
     pub fn is_poisoned(&self) -> bool {
-        self.forward.poisoned || self.gemms.any_poisoned()
+        self.forward.poisoned || self.gemms.any_poisoned() || self.buffers.cache.is_poisoned()
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.
@@ -901,10 +1746,39 @@ impl PreparedLlamaDecode {
             return Err(LlamaDecodeError::Poisoned);
         }
         validate_prefill_request(self.phase, self.prompt_length, prompt.len())?;
-        self.forward.upload_tokens(prompt, stream)?;
-        self.latest_output = None;
         self.forward
-            .execute_prefill_into_cache(&mut self.buffers.cache, stream)?;
+            .validate_token_ids(prompt)
+            .map_err(LlamaDecodeError::Forward)?;
+        let reservation = self.buffers.cache.reserve_to(self.prompt_length)?;
+        if let Err(error) = self
+            .buffers
+            .cache
+            .upload_reserved_table(&reservation, stream)
+        {
+            return Err(self.abort_cache_reservation(reservation, error));
+        }
+        if let Err(source) = self.forward.upload_tokens(prompt, stream) {
+            return Err(
+                self.abort_cache_reservation(reservation, LlamaDecodeError::Forward(source))
+            );
+        }
+        self.latest_output = None;
+        let execution = self
+            .buffers
+            .cache
+            .begin_execution(&reservation)
+            .and_then(|cache| {
+                self.forward
+                    .execute_prefill_into_cache(cache, stream)
+                    .map_err(LlamaDecodeError::Forward)
+            });
+        if let Err(error) = execution {
+            return Err(self.abort_cache_reservation(reservation, error));
+        }
+        if let Err(error) = self.buffers.cache.commit(reservation) {
+            self.forward.poisoned = true;
+            return Err(error);
+        }
         self.logical_length = self.prompt_length;
         self.phase = LlamaDecodePhase::Prefilled;
         self.latest_output = Some(LatestOutput::Prefill);
@@ -924,6 +1798,7 @@ impl PreparedLlamaDecode {
         if self.is_poisoned() {
             return Err(LlamaDecodeError::Poisoned);
         }
+        self.buffers.cache.reset()?;
         self.logical_length = 0;
         self.phase = LlamaDecodePhase::Empty;
         self.latest_output = None;
@@ -956,19 +1831,37 @@ impl PreparedLlamaDecode {
             });
         }
 
+        let target_length =
+            self.logical_length
+                .checked_add(1)
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
+        let reservation = self.buffers.cache.reserve_to(target_length)?;
+        if let Err(error) = self
+            .buffers
+            .cache
+            .upload_reserved_table(&reservation, stream)
+        {
+            return Err(self.abort_cache_reservation(reservation, error));
+        }
+
         if let Err(error) = self.upload_decode_token(token_id, stream) {
-            self.poison_from_decode_error(&error);
-            return Err(error);
+            return Err(self.abort_cache_reservation(reservation, error));
         }
         self.latest_output = None;
         self.forward.output_ready = false;
         let position = self.logical_length;
-        if let Err(error) = self.execute_decode_inner(position, stream) {
-            self.poison_from_decode_error(&error);
+        if let Err(error) = self.execute_decode_inner(position, &reservation, stream) {
+            let error = self.abort_cache_reservation(reservation, error);
             self.forward.poisoned |= self.gemms.any_poisoned();
             return Err(error);
         }
-        self.logical_length += 1;
+        if let Err(error) = self.buffers.cache.commit(reservation) {
+            self.forward.poisoned = true;
+            return Err(error);
+        }
+        self.logical_length = target_length;
         self.phase = LlamaDecodePhase::Decoding;
         self.latest_output = Some(LatestOutput::Decode);
         self.forward.output_ready = true;
@@ -998,6 +1891,7 @@ impl PreparedLlamaDecode {
     fn execute_decode_inner(
         &mut self,
         position: usize,
+        reservation: &KvCacheReservation,
         stream: &mut CudaStream,
     ) -> LlamaDecodeResult<()> {
         let forward = &mut self.forward;
@@ -1007,6 +1901,7 @@ impl PreparedLlamaDecode {
         let gemms = &mut self.gemms;
         let attention = &self.attention;
         let decode_buffers = &mut self.buffers;
+        let mut cache = decode_buffers.cache.begin_execution(reservation)?;
         let dimensions = plan.dimensions();
         let hidden = decode_u64(dimensions.hidden_size(), LlamaDecodeResource::GemmWorkspace)?;
         let intermediate = decode_u64(
@@ -1183,7 +2078,7 @@ impl PreparedLlamaDecode {
                     head_size,
                     rotary_dimension: head_size,
                     table_position_count: decode_u64(
-                        self.layout.maximum_sequence_length(),
+                        self.maximum_sequence_length,
                         LlamaDecodeResource::RopeCos,
                     )?,
                     position_offset: position,
@@ -1223,7 +2118,7 @@ impl PreparedLlamaDecode {
                     head_size,
                     rotary_dimension: head_size,
                     table_position_count: decode_u64(
-                        self.layout.maximum_sequence_length(),
+                        self.maximum_sequence_length,
                         LlamaDecodeResource::RopeSin,
                     )?,
                     position_offset: position,
@@ -1232,7 +2127,7 @@ impl PreparedLlamaDecode {
                     .map_err(|source| LlamaDecodeError::cuda(key_rope_site, source))?;
             }
 
-            decode_buffers.cache.append_layer(
+            cache.append_layer(
                 layer_index,
                 &buffers.key_rotary,
                 &buffers.value_raw,
@@ -1243,37 +2138,80 @@ impl PreparedLlamaDecode {
 
             let attention_site = ExecutionSite::layer(layer_index, LlamaOp::DecodeAttention);
             {
-                let (key_cache, value_cache) = decode_buffers.cache.layer_spans(layer_index)?;
-                let workspace_dtype = match attention.backend() {
-                    DecodeAttentionBackend::MaterializedReference => CudaDType::BF16,
-                    DecodeAttentionBackend::ChunkedOnline => CudaDType::F32,
-                };
-                let mut params = DecodeAttentionParams {
-                    query: span(
-                        &buffers.hidden_rotary,
-                        CudaDType::BF16,
-                        hidden_bytes,
-                        attention_site,
-                    )?,
-                    key_cache,
-                    value_cache,
-                    output: span_mut(
-                        &mut buffers.hidden_context,
-                        CudaDType::BF16,
-                        hidden_bytes,
-                        attention_site,
-                    )?,
-                    workspace: CudaBufferSpanMut::new(
-                        &mut decode_buffers.attention_workspace,
-                        workspace_dtype,
-                        0,
-                        attention.workspace_bytes(),
-                    )
-                    .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?,
-                };
-                attention
-                    .execute(logical_token_count, &mut params, stream)
-                    .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                match (attention, &mut cache) {
+                    (
+                        PreparedLlamaDecodeAttention::Contiguous(attention),
+                        PrefillKvCacheSink::Contiguous(cache),
+                    ) => {
+                        let (key_cache, value_cache) = cache.layer_spans(layer_index)?;
+                        let mut params = DecodeAttentionParams {
+                            query: span(
+                                &buffers.hidden_rotary,
+                                CudaDType::BF16,
+                                hidden_bytes,
+                                attention_site,
+                            )?,
+                            key_cache,
+                            value_cache,
+                            output: span_mut(
+                                &mut buffers.hidden_context,
+                                CudaDType::BF16,
+                                hidden_bytes,
+                                attention_site,
+                            )?,
+                            workspace: CudaBufferSpanMut::new(
+                                &mut decode_buffers.attention_workspace,
+                                attention.workspace_dtype(),
+                                0,
+                                attention.workspace_bytes(),
+                            )
+                            .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?,
+                        };
+                        attention
+                            .execute(logical_token_count, &mut params, stream)
+                            .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                    }
+                    (
+                        PreparedLlamaDecodeAttention::Paged(attention),
+                        PrefillKvCacheSink::Paged(cache),
+                    ) => {
+                        let (key_pool, value_pool) = cache.layer_spans(layer_index)?;
+                        let block_table = cache.native_table(attention_site)?;
+                        let mut params = PagedDecodeAttentionParams {
+                            query: span(
+                                &buffers.hidden_rotary,
+                                CudaDType::BF16,
+                                hidden_bytes,
+                                attention_site,
+                            )?,
+                            key_pool,
+                            value_pool,
+                            output: span_mut(
+                                &mut buffers.hidden_context,
+                                CudaDType::BF16,
+                                hidden_bytes,
+                                attention_site,
+                            )?,
+                            workspace: CudaBufferSpanMut::new(
+                                &mut decode_buffers.attention_workspace,
+                                attention.workspace_dtype(),
+                                0,
+                                attention.workspace_bytes(),
+                            )
+                            .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?,
+                            block_table,
+                        };
+                        attention
+                            .execute(&mut params, stream)
+                            .map_err(|source| LlamaDecodeError::cuda(attention_site, source))?;
+                    }
+                    _ => {
+                        return Err(LlamaDecodeError::InvalidConfiguration {
+                            field: "decode_attention_cache_layout",
+                            reason: "prepared attention and cache layouts differ",
+                        });
+                    }
+                }
             }
 
             let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
@@ -1501,10 +2439,28 @@ impl PreparedLlamaDecode {
                 poison_for_cuda_error(&mut self.forward.poisoned, source.cuda_error());
             }
             LlamaDecodeError::ArithmeticOverflow { .. }
-            | LlamaDecodeError::InvalidConfiguration { .. } => {
+            | LlamaDecodeError::InvalidConfiguration { .. }
+            | LlamaDecodeError::PagedKv { .. } => {
                 self.forward.poisoned = true;
             }
             _ => {}
+        }
+    }
+
+    fn abort_cache_reservation(
+        &mut self,
+        reservation: KvCacheReservation,
+        primary: LlamaDecodeError,
+    ) -> LlamaDecodeError {
+        self.poison_from_decode_error(&primary);
+        match self.buffers.cache.poison(reservation) {
+            Ok(()) => primary,
+            Err(cleanup) => {
+                // A failed fail-closed transition is the actionable invariant
+                // violation, so it takes priority over the original error.
+                self.forward.poisoned = true;
+                cleanup
+            }
         }
     }
     // HOT_DECODE_END
@@ -1574,9 +2530,10 @@ impl PreparedLlamaDecode {
             gemms,
             attention: _,
             buffers,
-            layout: _,
+            cache_layout: _,
             allocation_report: _,
             prompt_length: _,
+            maximum_sequence_length: _,
             logical_length: _,
             phase: _,
             latest_output: _,
@@ -1596,12 +2553,6 @@ impl PreparedLlamaDecode {
             gemm_workspace,
             rope_table_bytes_per_kind: _,
         } = buffers;
-        let ContiguousKvCache {
-            key,
-            value,
-            layout: _,
-            layer_offsets: _,
-        } = cache;
         let mut first = None;
         record_decode_close(&mut first, LlamaDecodeResource::HiddenGemm, hidden.close());
         record_decode_close(
@@ -1616,8 +2567,58 @@ impl PreparedLlamaDecode {
         );
         record_decode_close(&mut first, LlamaDecodeResource::DownGemm, down.close());
         record_decode_close(&mut first, LlamaDecodeResource::LmHeadGemm, lm_head.close());
-        record_decode_close(&mut first, LlamaDecodeResource::KeyCache, key.close());
-        record_decode_close(&mut first, LlamaDecodeResource::ValueCache, value.close());
+        match cache {
+            KvCacheStorage::Contiguous(cache) => {
+                let ContiguousKvCache {
+                    key,
+                    value,
+                    layout: _,
+                    layer_offsets: _,
+                } = cache;
+                record_decode_close(&mut first, LlamaDecodeResource::KeyCache, key.close());
+                record_decode_close(&mut first, LlamaDecodeResource::ValueCache, value.close());
+            }
+            KvCacheStorage::Paged(cache) => {
+                let PagedKvCache {
+                    key,
+                    value,
+                    device_block_ids,
+                    device_valid_tokens,
+                    table_staging,
+                    encoded_block_ids: _,
+                    encoded_valid_tokens: _,
+                    duplicate_scratch: _,
+                    layout: _,
+                    mut pool,
+                    mut sequence,
+                } = cache;
+                if let Err(source) = sequence.close(&mut pool) {
+                    if first.is_none() {
+                        first = Some(LlamaDecodeError::PagedKv {
+                            operation: "close sequence",
+                            source,
+                        });
+                    }
+                }
+                record_decode_close(&mut first, LlamaDecodeResource::KeyCache, key.close());
+                record_decode_close(&mut first, LlamaDecodeResource::ValueCache, value.close());
+                record_decode_close(
+                    &mut first,
+                    LlamaDecodeResource::BlockTableDeviceIds,
+                    device_block_ids.close(),
+                );
+                record_decode_close(
+                    &mut first,
+                    LlamaDecodeResource::BlockTableDeviceValidTokens,
+                    device_valid_tokens.close(),
+                );
+                record_decode_close(
+                    &mut first,
+                    LlamaDecodeResource::BlockTablePinnedStaging,
+                    table_staging.close(),
+                );
+            }
+        }
         record_decode_close(&mut first, LlamaDecodeResource::RopeCos, rope_cos.close());
         record_decode_close(&mut first, LlamaDecodeResource::RopeSin, rope_sin.close());
         record_decode_close(
@@ -1773,9 +2774,63 @@ fn build_decode_rope_tables(
     Ok((cos, sin))
 }
 
+#[derive(Clone, Copy)]
+struct DecodeCacheAllocation {
+    kv_cache_bytes: u64,
+    block_table_device_bytes: u64,
+    block_table_host_bytes: u64,
+    unused_capacity_bytes: u64,
+    device_allocation_count: u64,
+    pinned_host_bytes: u64,
+    pinned_host_allocation_count: u64,
+}
+
+fn decode_cache_allocation(
+    cache: &KvCacheStorage,
+    maximum_sequence_length: usize,
+) -> LlamaDecodeResult<DecodeCacheAllocation> {
+    match cache {
+        KvCacheStorage::Contiguous(cache) => Ok(DecodeCacheAllocation {
+            kv_cache_bytes: cache.layout.total_bytes(),
+            block_table_device_bytes: 0,
+            block_table_host_bytes: 0,
+            unused_capacity_bytes: 0,
+            device_allocation_count: CONTIGUOUS_CACHE_ALLOCATION_COUNT,
+            pinned_host_bytes: 0,
+            pinned_host_allocation_count: 0,
+        }),
+        KvCacheStorage::Paged(cache) => {
+            let physical_tokens = cache
+                .layout
+                .physical_block_count()
+                .checked_mul(KV_BLOCK_SIZE)
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
+            let unused_tokens =
+                physical_tokens.saturating_sub(maximum_sequence_length.min(physical_tokens));
+            let bytes_per_token = cache.layout.bytes_per_physical_block() / PAGED_KV_BLOCK_SIZE;
+            let unused_capacity_bytes = decode_u64(unused_tokens, LlamaDecodeResource::KeyCache)?
+                .checked_mul(bytes_per_token)
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
+            Ok(DecodeCacheAllocation {
+                kv_cache_bytes: cache.layout.total_bytes(),
+                block_table_device_bytes: cache.block_table_device_bytes(),
+                block_table_host_bytes: cache.block_table_host_bytes(),
+                unused_capacity_bytes,
+                device_allocation_count: PAGED_CACHE_ALLOCATION_COUNT,
+                pinned_host_bytes: cache.table_staging.byte_len(),
+                pinned_host_allocation_count: PAGED_CACHE_PINNED_ALLOCATION_COUNT,
+            })
+        }
+    }
+}
+
 fn build_decode_allocation_report(
     forward: PreparedLlamaAllocationReport,
-    layout: LlamaKvCacheLayout,
+    cache: DecodeCacheAllocation,
     rope_table_bytes_per_kind: u64,
     attention_workspace_bytes: u64,
     decode_gemm_workspace_bytes: u64,
@@ -1786,9 +2841,10 @@ fn build_decode_allocation_report(
             .ok_or(LlamaDecodeError::ArithmeticOverflow {
                 resource: LlamaDecodeResource::RopeSin,
             })?;
-    let additional_device_bytes = layout
-        .total_bytes()
-        .checked_add(rope_table_bytes)
+    let additional_device_bytes = cache
+        .kv_cache_bytes
+        .checked_add(cache.block_table_device_bytes)
+        .and_then(|bytes| bytes.checked_add(rope_table_bytes))
         .and_then(|bytes| bytes.checked_add(attention_workspace_bytes))
         .and_then(|bytes| bytes.checked_add(decode_gemm_workspace_bytes))
         .ok_or(LlamaDecodeError::ArithmeticOverflow {
@@ -1800,7 +2856,8 @@ fn build_decode_allocation_report(
         .ok_or(LlamaDecodeError::ArithmeticOverflow {
             resource: LlamaDecodeResource::GemmWorkspace,
         })?;
-    let additional_allocations = CACHE_ALLOCATION_COUNT
+    let additional_allocations = cache
+        .device_allocation_count
         .checked_add(ROPE_ALLOCATION_COUNT)
         .and_then(|count| count.checked_add(ATTENTION_ALLOCATION_COUNT))
         .and_then(|count| count.checked_add(u64::from(decode_gemm_workspace_bytes != 0)))
@@ -1813,18 +2870,58 @@ fn build_decode_allocation_report(
         .ok_or(LlamaDecodeError::ArithmeticOverflow {
             resource: LlamaDecodeResource::GemmWorkspace,
         })?;
+    let pinned_host_bytes = forward
+        .pinned_host_bytes()
+        .checked_add(cache.pinned_host_bytes)
+        .ok_or(LlamaDecodeError::ArithmeticOverflow {
+            resource: LlamaDecodeResource::BlockTablePinnedStaging,
+        })?;
+    let pinned_host_allocation_count = forward
+        .pinned_host_allocation_count()
+        .checked_add(cache.pinned_host_allocation_count)
+        .ok_or(LlamaDecodeError::ArithmeticOverflow {
+            resource: LlamaDecodeResource::BlockTablePinnedStaging,
+        })?;
     Ok(PreparedLlamaDecodeAllocationReport {
         forward,
-        kv_cache_bytes: layout.total_bytes(),
+        kv_cache_bytes: cache.kv_cache_bytes,
+        block_table_device_bytes: cache.block_table_device_bytes,
+        block_table_host_bytes: cache.block_table_host_bytes,
+        cache_unused_capacity_bytes: cache.unused_capacity_bytes,
         rope_table_bytes,
         attention_workspace_bytes,
         decode_gemm_workspace_bytes,
         additional_device_bytes,
         total_device_bytes,
         device_allocation_count,
-        pinned_host_bytes: forward.pinned_host_bytes(),
-        pinned_host_allocation_count: forward.pinned_host_allocation_count(),
+        pinned_host_bytes,
+        pinned_host_allocation_count,
     })
+}
+
+fn checked_host_bytes(
+    count: usize,
+    element_size: usize,
+    resource: LlamaDecodeResource,
+) -> LlamaDecodeResult<usize> {
+    count
+        .checked_mul(element_size)
+        .ok_or(LlamaDecodeError::ArithmeticOverflow { resource })
+}
+
+fn decode_boxed_zeroed(
+    byte_len: usize,
+    resource: LlamaDecodeResource,
+) -> LlamaDecodeResult<Box<[u8]>> {
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(byte_len)
+        .map_err(|_| LlamaDecodeError::HostAllocation {
+            resource,
+            requested_bytes: u64::try_from(byte_len).unwrap_or(u64::MAX),
+        })?;
+    bytes.resize(byte_len, 0);
+    Ok(bytes.into_boxed_slice())
 }
 
 fn decode_u64(value: usize, resource: LlamaDecodeResource) -> LlamaDecodeResult<u64> {

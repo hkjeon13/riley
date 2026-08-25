@@ -27,7 +27,8 @@ pub use forward::{
 #[cfg(feature = "cuda")]
 pub use decode::{
     LlamaDecodeError, LlamaDecodePhase, LlamaDecodeResource, LlamaDecodeResult, LlamaKvCacheLayout,
-    PreparedLlamaDecode, PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeConfig,
+    LlamaKvCachePolicy, LlamaKvCacheStorageLayout, PreparedLlamaDecode,
+    PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeAttention, PreparedLlamaDecodeConfig,
 };
 
 #[cfg(feature = "cuda")]
@@ -38,6 +39,7 @@ pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
 
 #[cfg(test)]
 mod source_contract_tests {
+    use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
     use rustinfer_cuda::AttentionPreference;
 
@@ -55,6 +57,16 @@ mod source_contract_tests {
         assert_eq!(
             defaults.with_optimized_attention().attention_preference(),
             AttentionPreference::Optimized
+        );
+    }
+
+    #[test]
+    fn exact_paged_cache_is_default_and_contiguous_is_explicit() {
+        let defaults = PreparedLlamaDecodeConfig::default();
+        assert_eq!(defaults.kv_cache_policy(), LlamaKvCachePolicy::paged());
+        assert_eq!(
+            defaults.with_contiguous_kv_cache().kv_cache_policy(),
+            LlamaKvCachePolicy::Contiguous
         );
     }
 
@@ -77,6 +89,9 @@ mod source_contract_tests {
             "serde_json",
             "json!",
             "Vec::",
+            "Box::",
+            "vec!",
+            ".collect(",
             "String::",
             "format!",
             "allocate_device_buffer",
@@ -116,6 +131,9 @@ mod source_contract_tests {
 
         for forbidden in [
             "Vec::",
+            "Box::",
+            "vec!",
+            ".collect(",
             "String::",
             "format!",
             "BTreeMap",

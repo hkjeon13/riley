@@ -318,10 +318,12 @@ U16 `valid_tokens[block_count]`는 마지막 block만 1..16일 수 있으며 그
 
 safe Rust wrapper는 device array와 함께 immutable host mirror를 요구한다.
 `PagedKvBlockTableHostV1` 생성 때 version, 두 배열 길이, valid-token 값,
-out-of-pool ID, duplicate/stale ID를 allocation 없이 한 번 검사한다. 이후 layer별
-append/decode hot path는 이 validated type invariant를 신뢰해 O(block_count²)
-검사를 반복하지 않는다. host/device mirror의 upload 완료와 generation lifetime은
-상위 runtime이 소유한다. Raw C caller가 잘못된 device content를 전달해도 kernel은
+out-of-pool ID, duplicate ID를 allocation 없이 검사한다. prepared runtime은 cold-path에서
+physical-block당 1 byte scratch를 만들고 매 실행의 host mirror를 O(physical blocks +
+logical blocks)에 검증한다. 이후 layer별 append/decode는 이 validated type invariant를
+신뢰해 검사를 반복하지 않는다. generation/cookie stale-handle 검증, host/device mirror의
+upload 완료와 lifetime은 상위 runtime block manager가 별도로 소유한다. Raw C caller가
+잘못된 device content를 전달해도 kernel은
 pool 밖을 역참조하지 않지만, 성공적인 의미 결과를 얻으려면 같은 table invariant를
 외부에서 지켜야 한다.
 

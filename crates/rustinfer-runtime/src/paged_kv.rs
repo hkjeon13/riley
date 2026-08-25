@@ -10,6 +10,7 @@ use std::error;
 use std::fmt;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 /// Fixed token capacity of every PR10 physical block.
 pub const KV_BLOCK_SIZE: usize = 16;
@@ -431,12 +432,34 @@ impl KvLayout {
 
 /// Pool-local request identity assigned without caller-controlled aliasing.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct SequenceId(u64);
+pub struct SequenceId {
+    pool_cookie: u64,
+    value: u64,
+}
 
 impl SequenceId {
     #[must_use]
+    pub const fn pool_cookie(self) -> u64 {
+        self.pool_cookie
+    }
+
+    #[must_use]
     pub const fn value(self) -> u64 {
-        self.0
+        self.value
+    }
+}
+
+/// Non-cloneable proof that no live [`SequenceState`] remains for an owner.
+#[derive(Debug)]
+#[must_use = "pass the orphan token back to its pool to reclaim physical blocks"]
+pub struct SequenceReclaimToken {
+    owner: SequenceId,
+}
+
+impl SequenceReclaimToken {
+    #[must_use]
+    pub const fn sequence_id(&self) -> SequenceId {
+        self.owner
     }
 }
 
@@ -586,6 +609,9 @@ pub struct KvBlockPoolStats {
     host_pool_metadata_bytes: u64,
     sidecar_count: usize,
     sidecar_device_bytes: u64,
+    lifetime_allocation_count: u64,
+    total_allocation_latency_ns: u64,
+    maximum_allocation_latency_ns: u64,
 }
 
 impl KvBlockPoolStats {
@@ -609,6 +635,7 @@ impl KvBlockPoolStats {
         self.high_water_mark
     }
 
+    /// Total preallocated K/V pool capacity, not current logical usage.
     #[must_use]
     pub const fn usable_kv_bytes(self) -> u64 {
         self.usable_kv_bytes
@@ -624,9 +651,31 @@ impl KvBlockPoolStats {
         self.sidecar_count
     }
 
+    /// Sum of declared sidecar device-view lengths.
+    ///
+    /// Overlapping or shared opaque views are counted once per descriptor, so
+    /// this is metadata accounting rather than unique physical allocation.
     #[must_use]
     pub const fn sidecar_device_bytes(self) -> u64 {
         self.sidecar_device_bytes
+    }
+
+    /// Number of successful physical-block leases over this pool's lifetime.
+    #[must_use]
+    pub const fn lifetime_allocation_count(self) -> u64 {
+        self.lifetime_allocation_count
+    }
+
+    /// Saturating sum of successful free-list pop, generation, and owner-bind latency.
+    #[must_use]
+    pub const fn total_allocation_latency_ns(self) -> u64 {
+        self.total_allocation_latency_ns
+    }
+
+    /// Largest successful free-list pop, generation, and owner-bind latency.
+    #[must_use]
+    pub const fn maximum_allocation_latency_ns(self) -> u64 {
+        self.maximum_allocation_latency_ns
     }
 }
 
@@ -641,6 +690,9 @@ pub struct KvBlockPool {
     next_sequence_id: u64,
     sidecar_count: usize,
     sidecar_device_bytes: u64,
+    lifetime_allocation_count: u64,
+    total_allocation_latency_ns: u64,
+    maximum_allocation_latency_ns: u64,
 }
 
 impl fmt::Debug for KvBlockPool {
@@ -706,6 +758,9 @@ impl KvBlockPool {
             next_sequence_id: 1,
             sidecar_count: 0,
             sidecar_device_bytes: 0,
+            lifetime_allocation_count: 0,
+            total_allocation_latency_ns: 0,
+            maximum_allocation_latency_ns: 0,
         })
     }
 
@@ -735,6 +790,9 @@ impl KvBlockPool {
             host_pool_metadata_bytes: per_block,
             sidecar_count: self.sidecar_count,
             sidecar_device_bytes: self.sidecar_device_bytes,
+            lifetime_allocation_count: self.lifetime_allocation_count,
+            total_allocation_latency_ns: self.total_allocation_latency_ns,
+            maximum_allocation_latency_ns: self.maximum_allocation_latency_ns,
         }
     }
 
@@ -764,7 +822,14 @@ impl KvBlockPool {
         let next = sequence_value
             .checked_add(1)
             .ok_or(PagedKvError::SequenceIdExhausted)?;
-        let sequence = SequenceState::new(self.cookie, SequenceId(sequence_value), maximum)?;
+        let sequence = SequenceState::new(
+            self.cookie,
+            SequenceId {
+                pool_cookie: self.cookie,
+                value: sequence_value,
+            },
+            maximum,
+        )?;
         self.next_sequence_id = next;
         Ok(sequence)
     }
@@ -776,6 +841,12 @@ impl KvBlockPool {
     /// Distinguishes foreign, stale, already-freed, and wrong-owner handles.
     pub fn validate_block(&self, block: BlockId, owner: SequenceId) -> PagedKvResult<()> {
         self.validate_block_index(block)?;
+        if owner.pool_cookie() != self.cookie {
+            return Err(PagedKvError::ForeignPool {
+                expected_cookie: self.cookie,
+                actual_cookie: owner.pool_cookie(),
+            });
+        }
         let slot = &self.slots[block.physical_index as usize];
         if slot.generation != block.generation {
             return Err(PagedKvError::StaleBlock {
@@ -798,13 +869,23 @@ impl KvBlockPool {
         }
     }
 
-    /// Reclaims every block owned by a sequence whose state owner was dropped.
+    /// Reclaims every block owned by a consumed sequence state.
     ///
     /// Normal owners should use [`SequenceState::close`] or `reset`. This scan
-    /// is the explicit cancellation/drop recovery seam for a higher-level
-    /// owner that could not retain the sequence table.
-    #[must_use]
-    pub fn reclaim_sequence(&mut self, owner: SequenceId) -> usize {
+    /// is the explicit cancellation seam for a higher-level owner that first
+    /// consumed the state with [`SequenceState::abandon_for_reclaim`].
+    ///
+    /// # Errors
+    ///
+    /// Returns when the orphan proof belongs to another pool.
+    pub fn reclaim_sequence(&mut self, token: &SequenceReclaimToken) -> PagedKvResult<usize> {
+        let owner = token.owner;
+        if owner.pool_cookie() != self.cookie {
+            return Err(PagedKvError::ForeignPool {
+                expected_cookie: self.cookie,
+                actual_cookie: owner.pool_cookie(),
+            });
+        }
         let mut released = 0;
         for index in (0..self.slots.len()).rev() {
             if self.slots[index].owner == Some(owner) {
@@ -812,7 +893,7 @@ impl KvBlockPool {
                 released += 1;
             }
         }
-        released
+        Ok(released)
     }
 
     fn validate_block_index(&self, block: BlockId) -> PagedKvResult<()> {
@@ -832,6 +913,16 @@ impl KvBlockPool {
     }
 
     fn allocate_block(&mut self, owner: SequenceId) -> PagedKvResult<BlockId> {
+        let started = Instant::now();
+        let block = self.allocate_block_inner(owner)?;
+        let elapsed = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        self.lifetime_allocation_count = self.lifetime_allocation_count.saturating_add(1);
+        self.total_allocation_latency_ns = self.total_allocation_latency_ns.saturating_add(elapsed);
+        self.maximum_allocation_latency_ns = self.maximum_allocation_latency_ns.max(elapsed);
+        Ok(block)
+    }
+
+    fn allocate_block_inner(&mut self, owner: SequenceId) -> PagedKvResult<BlockId> {
         let physical_index = self.free_list.pop().ok_or(PagedKvError::OutOfBlocks {
             requested_blocks: 1,
             free_blocks: 0,
@@ -1118,6 +1209,18 @@ impl SequenceState {
         u64::try_from(self.maximum_block_count())
             .ok()
             .and_then(|blocks| blocks.checked_mul(6))
+            .unwrap_or(u64::MAX)
+    }
+
+    /// Preallocated host payload for handles plus the exact U32/U16 V1 table.
+    #[must_use]
+    pub fn host_state_capacity_bytes(&self) -> u64 {
+        let bytes_per_block = mem::size_of::<Option<BlockId>>()
+            .checked_add(mem::size_of::<u32>())
+            .and_then(|bytes| bytes.checked_add(mem::size_of::<u16>()));
+        bytes_per_block
+            .and_then(|bytes| bytes.checked_mul(self.maximum_block_count()))
+            .and_then(|bytes| u64::try_from(bytes).ok())
             .unwrap_or(u64::MAX)
     }
 
@@ -1414,13 +1517,25 @@ impl SequenceState {
         Ok(())
     }
 
-    /// Consumes the sequence after returning every physical block.
+    /// Returns every physical block while retaining retryable empty host state.
     ///
     /// # Errors
     ///
     /// Returns the same cleanup failures as [`Self::reset`].
-    pub fn close(mut self, pool: &mut KvBlockPool) -> PagedKvResult<()> {
+    pub fn close(&mut self, pool: &mut KvBlockPool) -> PagedKvResult<()> {
         self.reset(pool)
+    }
+
+    /// Consumes the host table without releasing its blocks and returns the
+    /// only token accepted by the pool's orphan-reclamation scan.
+    ///
+    /// This models cancellation after ownership transfer: once called, safe
+    /// code cannot continue reading a stale block table for the reclaimed
+    /// sequence. Prefer [`Self::close`] when ordinary cleanup is available.
+    pub fn abandon_for_reclaim(self) -> SequenceReclaimToken {
+        SequenceReclaimToken {
+            owner: self.sequence_id,
+        }
     }
 
     /// Associates optional V1 metadata with one committed block generation.
@@ -1720,6 +1835,18 @@ mod tests {
         assert_eq!(stats.allocated_block_count(), 0);
         assert_eq!(stats.free_block_count(), 9);
         assert_eq!(stats.high_water_mark(), 9);
+        assert_eq!(stats.lifetime_allocation_count(), 29);
+        assert!(stats.total_allocation_latency_ns() >= stats.maximum_allocation_latency_ns());
+        assert_eq!(
+            sequence.host_state_capacity_bytes(),
+            u64::try_from(
+                sequence.maximum_block_count()
+                    * (mem::size_of::<Option<BlockId>>()
+                        + mem::size_of::<u32>()
+                        + mem::size_of::<u16>())
+            )
+            .expect("small test payload")
+        );
     }
 
     #[test]
@@ -1771,12 +1898,65 @@ mod tests {
     }
 
     #[test]
+    fn device_failure_poison_rolls_back_tentative_blocks_and_invalidates_sidecars() {
+        let mut pool = pool(3);
+        let mut sequence = pool.create_sequence(32).expect("sequence");
+        reserve_and_commit(&mut sequence, &mut pool, 15);
+        sequence
+            .attach_sidecar(
+                &mut pool,
+                0,
+                OptionalBlockMetadata::new(
+                    OPTIONAL_BLOCK_METADATA_V1_VERSION,
+                    MetadataKind::KEY_BOUNDS,
+                    OpaqueDeviceView::new(0x1000, 64),
+                ),
+            )
+            .expect("sidecar");
+        let reservation = sequence.reserve_to(&mut pool, 17).expect("tentative block");
+        assert_eq!(pool.stats().allocated_block_count(), 2);
+        sequence
+            .poison(&mut pool, reservation)
+            .expect("poison and rollback");
+        assert!(sequence.is_poisoned());
+        assert!(!sequence.has_pending_reservation());
+        assert_eq!(sequence.logical_length(), 15);
+        assert_eq!(sequence.allocated_block_count(), 1);
+        assert_eq!(pool.stats().allocated_block_count(), 1);
+        assert_eq!(pool.stats().free_block_count(), 2);
+        assert_eq!(pool.stats().sidecar_count(), 0);
+        assert_eq!(sequence.block_table(), Err(PagedKvError::Poisoned));
+
+        sequence.reset(&mut pool).expect("reset clears poison");
+        assert!(!sequence.is_poisoned());
+        assert_eq!(sequence.logical_length(), 0);
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+        assert_eq!(pool.stats().free_block_count(), 3);
+    }
+
+    #[test]
     fn stale_double_free_wrong_owner_and_foreign_pool_are_distinct() {
         let mut first_pool = pool(1);
         let mut first = first_pool.create_sequence(16).expect("first sequence");
         let second = first_pool.create_sequence(16).expect("second sequence");
         reserve_and_commit(&mut first, &mut first_pool, 1);
         let old = first.block_id(0).expect("block");
+        let mut other_pool = pool(1);
+        let foreign_owner = other_pool
+            .create_sequence(16)
+            .expect("foreign first sequence");
+        assert_eq!(
+            first.sequence_id().value(),
+            foreign_owner.sequence_id().value()
+        );
+        assert_ne!(first.sequence_id(), foreign_owner.sequence_id());
+        assert_eq!(
+            first_pool.validate_block(old, foreign_owner.sequence_id()),
+            Err(PagedKvError::ForeignPool {
+                expected_cookie: first_pool.cookie(),
+                actual_cookie: foreign_owner.sequence_id().pool_cookie(),
+            })
+        );
         assert_eq!(
             first_pool.validate_block(old, second.sequence_id()),
             Err(PagedKvError::WrongOwner {
@@ -1806,7 +1986,6 @@ mod tests {
                 current_generation: current.generation(),
             })
         );
-        let other_pool = pool(1);
         assert_eq!(
             other_pool.validate_block(current, reused.sequence_id()),
             Err(PagedKvError::ForeignPool {
@@ -1911,6 +2090,22 @@ mod tests {
         let mut sequence = pool.create_sequence(64).expect("sequence");
         reserve_and_commit(&mut sequence, &mut pool, 49);
         assert_eq!(pool.stats().allocated_block_count(), 4);
+        let mut wrong_pool = self::pool(1);
+        assert_eq!(
+            sequence.close(&mut wrong_pool),
+            Err(PagedKvError::ForeignPool {
+                expected_cookie: pool.cookie(),
+                actual_cookie: wrong_pool.cookie(),
+            })
+        );
+        assert_eq!(pool.stats().allocated_block_count(), 4);
+        assert_eq!(
+            sequence
+                .block_table()
+                .expect("close failure preserves owner")
+                .logical_length(),
+            49
+        );
         sequence.truncate_to(&mut pool, 16).expect("truncate");
         assert_eq!(sequence.block_table().expect("table").valid_tokens(), &[16]);
         assert_eq!(pool.stats().allocated_block_count(), 1);
@@ -1918,14 +2113,36 @@ mod tests {
         assert_eq!(pool.stats().allocated_block_count(), 0);
 
         let mut dropped = pool.create_sequence(32).expect("dropped owner");
-        let owner = dropped.sequence_id();
         reserve_and_commit(&mut dropped, &mut pool, 17);
-        drop(dropped);
+        let reclaim = dropped.abandon_for_reclaim();
         assert_eq!(pool.stats().allocated_block_count(), 2);
-        assert_eq!(pool.reclaim_sequence(owner), 2);
-        assert_eq!(pool.reclaim_sequence(owner), 0);
+        assert_eq!(pool.reclaim_sequence(&reclaim).expect("reclaim orphan"), 2);
+        assert_eq!(
+            pool.reclaim_sequence(&reclaim).expect("idempotent reclaim"),
+            0
+        );
         assert_eq!(pool.stats().allocated_block_count(), 0);
         assert_eq!(pool.stats().free_block_count(), 6);
+
+        let mut foreign_pool = self::pool(1);
+        let mut foreign = foreign_pool.create_sequence(16).expect("foreign owner");
+        reserve_and_commit(&mut foreign, &mut foreign_pool, 1);
+        let foreign_cookie = foreign.sequence_id().pool_cookie();
+        let foreign_reclaim = foreign.abandon_for_reclaim();
+        assert_eq!(
+            pool.reclaim_sequence(&foreign_reclaim),
+            Err(PagedKvError::ForeignPool {
+                expected_cookie: pool.cookie(),
+                actual_cookie: foreign_cookie,
+            })
+        );
+        assert_eq!(pool.stats().allocated_block_count(), 0);
+        assert_eq!(
+            foreign_pool
+                .reclaim_sequence(&foreign_reclaim)
+                .expect("foreign token remains usable with its owner pool"),
+            1
+        );
     }
 
     #[test]

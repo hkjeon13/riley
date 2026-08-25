@@ -1,4 +1,4 @@
-//! Remote-only PR09 contiguous-KV Llama decode validation and evidence markers.
+//! Remote-only PR09 contiguous and PR10 paged-KV Llama decode validation.
 
 #![cfg(feature = "cuda")]
 #![allow(clippy::cast_precision_loss, clippy::float_cmp, clippy::too_many_lines)]
@@ -12,10 +12,11 @@ use rustinfer_cuda::{
 };
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
-    LlamaDecodeError, LlamaDecodePhase, PreparedLlamaAllocationReport, PreparedLlamaDecode,
-    PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeConfig, PreparedLlamaForward,
-    PreparedLlamaForwardConfig,
+    LlamaDecodeError, LlamaDecodePhase, LlamaForwardError, PreparedLlamaAllocationReport,
+    PreparedLlamaDecode, PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeConfig,
+    PreparedLlamaForward, PreparedLlamaForwardConfig,
 };
+use rustinfer_runtime::paged_kv::{BlockId, KV_BLOCK_SIZE, PagedKvError};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -26,6 +27,37 @@ const DEFAULT_PARITY_DECODE_CALLS: usize = 32;
 const LONG_PARITY_DECODE_CALLS: usize = 128;
 const REFERENCE_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.materialized-gqa-decode.bf16";
 const OPTIMIZED_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64";
+const PAGED_REFERENCE_DECODE_IMPLEMENTATION: &str =
+    "rustinfer.cuda.paged-materialized-gqa-decode.bf16.block16";
+const PAGED_OPTIMIZED_DECODE_IMPLEMENTATION: &str =
+    "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TestKvCachePolicy {
+    Contiguous,
+    Paged,
+    PagedWithBlocks(usize),
+}
+
+impl TestKvCachePolicy {
+    const fn is_paged(self) -> bool {
+        !matches!(self, Self::Contiguous)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ChainEvidence {
+    Pr09,
+    Quiet,
+}
+
+struct CachedChainOptions<'a> {
+    decode_calls: usize,
+    reference_decode: bool,
+    teacher_tokens: Option<&'a [u32]>,
+    cache_policy: TestKvCachePolicy,
+    evidence: ChainEvidence,
+}
 
 #[derive(Clone, Copy, Debug)]
 struct NumericMetrics {
@@ -174,6 +206,7 @@ fn assert_decode_report_matches_context(
     assert_eq!(
         report.additional_device_bytes(),
         report.kv_cache_bytes()
+            + report.block_table_device_bytes()
             + report.rope_table_bytes()
             + report.attention_workspace_bytes()
             + report.decode_gemm_workspace_bytes()
@@ -200,15 +233,29 @@ fn assert_forward_report_matches_context(
     );
 }
 
-fn decode_config(reference: bool) -> PreparedLlamaDecodeConfig {
+fn decode_config_with_cache(
+    reference: bool,
+    cache_policy: TestKvCachePolicy,
+) -> PreparedLlamaDecodeConfig {
     let config = PreparedLlamaDecodeConfig::new(
         PreparedLlamaForwardConfig::default().with_optimized_attention(),
     );
+    let config = match cache_policy {
+        TestKvCachePolicy::Contiguous => config.with_contiguous_kv_cache(),
+        TestKvCachePolicy::Paged => config.with_paged_kv_cache(),
+        TestKvCachePolicy::PagedWithBlocks(physical_block_count) => {
+            config.with_paged_kv_cache_blocks(physical_block_count)
+        }
+    };
     if reference {
         config.with_reference_decode_attention()
     } else {
         config.with_optimized_decode_attention()
     }
+}
+
+fn decode_config(reference: bool) -> PreparedLlamaDecodeConfig {
+    decode_config_with_cache(reference, TestKvCachePolicy::Contiguous)
 }
 
 fn percentile_nearest_rank(sorted: &[u64], percentile: usize) -> u64 {
@@ -229,6 +276,35 @@ fn run_cached_chain(
     reference_decode: bool,
     teacher_tokens: Option<&[u32]>,
 ) -> TestResult<CachedChainOutcome> {
+    run_cached_chain_with_cache(
+        model,
+        context,
+        stream,
+        prompt,
+        CachedChainOptions {
+            decode_calls,
+            reference_decode,
+            teacher_tokens,
+            cache_policy: TestKvCachePolicy::Contiguous,
+            evidence: ChainEvidence::Pr09,
+        },
+    )
+}
+
+fn run_cached_chain_with_cache(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    prompt: &[u32],
+    options: CachedChainOptions<'_>,
+) -> TestResult<CachedChainOutcome> {
+    let CachedChainOptions {
+        decode_calls,
+        reference_decode,
+        teacher_tokens,
+        cache_policy,
+        evidence,
+    } = options;
     assert!(context.allocation_stats()?.is_zero());
     if let Some(tokens) = teacher_tokens {
         assert_eq!(tokens.len(), decode_calls);
@@ -243,21 +319,30 @@ fn run_cached_chain(
         stream,
         prompt.len(),
         maximum_length,
-        decode_config(reference_decode),
+        decode_config_with_cache(reference_decode, cache_policy),
     )?;
+    assert_eq!(decode.cache_layout().is_paged(), cache_policy.is_paged());
     let trace = decode.prepared_attention().selection_trace();
     let expected_backend = if reference_decode {
         assert_eq!(
             decode.prepared_attention().backend(),
             DecodeAttentionBackend::MaterializedReference
         );
-        REFERENCE_DECODE_IMPLEMENTATION
+        if cache_policy.is_paged() {
+            PAGED_REFERENCE_DECODE_IMPLEMENTATION
+        } else {
+            REFERENCE_DECODE_IMPLEMENTATION
+        }
     } else {
         assert_eq!(
             decode.prepared_attention().backend(),
             DecodeAttentionBackend::ChunkedOnline
         );
-        OPTIMIZED_DECODE_IMPLEMENTATION
+        if cache_policy.is_paged() {
+            PAGED_OPTIMIZED_DECODE_IMPLEMENTATION
+        } else {
+            OPTIMIZED_DECODE_IMPLEMENTATION
+        }
     };
     assert_eq!(trace.implementation_id(), expected_backend);
     let report = decode.allocation_report();
@@ -267,8 +352,9 @@ fn run_cached_chain(
     assert_eq!(decode.logical_length(), 0);
     assert_eq!(decode.phase(), LlamaDecodePhase::Empty);
 
-    println!(
-        "pr09-llama-decode-metadata schema_version=1 implementation_id={} \
+    if evidence == ChainEvidence::Pr09 {
+        println!(
+            "pr09-llama-decode-metadata schema_version=1 implementation_id={} \
 implementation_version={} native_dependency={} compiled_architectures={} \
 device_ordinal={} compute_capability={}.{} prompt_length={} maximum_length={} \
 decode_calls={} workspace_bytes={} materialized_score_bytes={} partial_state_bytes={} \
@@ -276,27 +362,28 @@ partial_state_capacity={} tokens_per_partition={} kv_cache_bytes={} rope_table_b
 decode_gemm_workspace_bytes={} total_device_bytes={} device_allocation_count={} \
 timing_boundary=decode_call_plus_event_synchronize native_completion=per_primitive_stream_synchronize \
 sampling=greedy_test_harness",
-        trace.implementation_id(),
-        trace.implementation_version(),
-        trace.native_dependency(),
-        trace.compiled_architectures(),
-        trace.device_ordinal(),
-        trace.compute_capability().0,
-        trace.compute_capability().1,
-        prompt.len(),
-        maximum_length,
-        decode_calls,
-        trace.workspace_bytes(),
-        trace.materialized_score_bytes(),
-        trace.partial_state_bytes(),
-        trace.partial_state_capacity(),
-        trace.tokens_per_partition(),
-        report.kv_cache_bytes(),
-        report.rope_table_bytes(),
-        report.decode_gemm_workspace_bytes(),
-        report.total_device_bytes(),
-        report.device_allocation_count(),
-    );
+            trace.implementation_id(),
+            trace.implementation_version(),
+            trace.native_dependency(),
+            trace.compiled_architectures(),
+            trace.device_ordinal(),
+            trace.compute_capability().0,
+            trace.compute_capability().1,
+            prompt.len(),
+            maximum_length,
+            decode_calls,
+            trace.workspace_bytes(),
+            trace.materialized_score_bytes(),
+            trace.partial_state_bytes(),
+            trace.partial_state_capacity(),
+            trace.tokens_per_partition(),
+            report.kv_cache_bytes(),
+            report.rope_table_bytes(),
+            report.decode_gemm_workspace_bytes(),
+            report.total_device_bytes(),
+            report.device_allocation_count(),
+        );
+    }
 
     let prefill_started = Instant::now();
     decode.prefill(prompt, stream)?;
@@ -306,13 +393,15 @@ sampling=greedy_test_harness",
     assert_decode_report_matches_context(report, stable_allocations);
     assert_eq!(decode.logical_length(), prompt.len());
     assert_eq!(decode.phase(), LlamaDecodePhase::Prefilled);
-    println!(
-        "pr09-llama-prefill-raw schema_version=1 implementation_id={} prompt_length={} \
+    if evidence == ChainEvidence::Pr09 {
+        println!(
+            "pr09-llama-prefill-raw schema_version=1 implementation_id={} prompt_length={} \
 latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
-        trace.implementation_id(),
-        prompt.len(),
-        prefill_latency_ns,
-    );
+            trace.implementation_id(),
+            prompt.len(),
+            prefill_latency_ns,
+        );
+    }
 
     let row_bytes = row_bytes(model)?;
     let row_count = decode_calls
@@ -372,27 +461,29 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
             "decode call {} changed CUDA allocation accounting",
             decode_call + 1
         );
-        println!(
-            "pr09-llama-decode-raw schema_version=1 implementation_id={} decode_call={} \
+        if evidence == ChainEvidence::Pr09 {
+            println!(
+                "pr09-llama-decode-raw schema_version=1 implementation_id={} decode_call={} \
 logical_before={} logical_after={} token_id={} latency_ns={} gpu_stream_elapsed_ns={} \
 decode_call_return_ns={} host_outside_event_ns={} \
 timing_boundary=decode_call_plus_event_synchronize native_completion=per_primitive_stream_synchronize \
 logits_download_excluded=true",
-            trace.implementation_id(),
-            decode_call + 1,
-            logical_before,
-            decode.logical_length(),
-            token_id,
-            wall_latency_ns,
-            gpu_stream_latency_ns,
-            decode_call_return_latency_ns,
-            host_outside_event_latency_ns,
-        );
+                trace.implementation_id(),
+                decode_call + 1,
+                logical_before,
+                decode.logical_length(),
+                token_id,
+                wall_latency_ns,
+                gpu_stream_latency_ns,
+                decode_call_return_latency_ns,
+                host_outside_event_latency_ns,
+            );
+        }
     }
     assert_eq!(decode.logical_length(), maximum_length);
     assert_eq!(context.allocation_stats()?, stable_allocations);
 
-    if !wall_latencies_ns.is_empty() {
+    if evidence == ChainEvidence::Pr09 && !wall_latencies_ns.is_empty() {
         wall_latencies_ns.sort_unstable();
         gpu_stream_latencies_ns.sort_unstable();
         decode_call_return_latencies_ns.sort_unstable();
@@ -558,6 +649,102 @@ decode_calls={} parity_rows={} greedy_tokens={} status=passed",
         }
     }
     Ok(())
+}
+
+fn assert_contiguous_paged_parity(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    decode_calls: usize,
+) -> TestResult {
+    let contiguous = run_cached_chain_with_cache(
+        model,
+        context,
+        stream,
+        &PINNED_TOKENS_A,
+        CachedChainOptions {
+            decode_calls,
+            reference_decode: false,
+            teacher_tokens: None,
+            cache_policy: TestKvCachePolicy::Contiguous,
+            evidence: ChainEvidence::Quiet,
+        },
+    )?;
+    let paged = run_cached_chain_with_cache(
+        model,
+        context,
+        stream,
+        &PINNED_TOKENS_A,
+        CachedChainOptions {
+            decode_calls,
+            reference_decode: false,
+            teacher_tokens: Some(&contiguous.consumed_tokens),
+            cache_policy: TestKvCachePolicy::Paged,
+            evidence: ChainEvidence::Quiet,
+        },
+    )?;
+    assert_eq!(contiguous.row_bytes, paged.row_bytes);
+    assert_eq!(contiguous.consumed_tokens, paged.consumed_tokens);
+    assert_eq!(
+        &contiguous.logits[..contiguous.row_bytes],
+        &paged.logits[..paged.row_bytes],
+        "contiguous and paged cache sinks must preserve byte-exact prefill logits"
+    );
+
+    let mut worst_max_abs = 0.0_f64;
+    let mut worst_mean_abs = 0.0_f64;
+    let mut worst_cosine = 1.0_f64;
+    for causal_row in 0..=decode_calls {
+        let start = causal_row * contiguous.row_bytes;
+        let end = start + contiguous.row_bytes;
+        let contiguous_logits = &contiguous.logits[start..end];
+        let paged_logits = &paged.logits[start..end];
+        let metrics = assert_semantic_logits(
+            &format!("contiguous/paged causal row {causal_row}"),
+            paged_logits,
+            contiguous_logits,
+        );
+        worst_max_abs = worst_max_abs.max(metrics.max_abs);
+        worst_mean_abs = worst_mean_abs.max(metrics.mean_abs);
+        worst_cosine = worst_cosine.min(metrics.cosine);
+        println!(
+            "pr10-llama-cache-parity schema_version=1 contiguous_implementation={} \
+paged_implementation={} decode_calls_target={} causal_row={} cosine={:.12} \
+max_abs={:.9} mean_abs={:.9} contiguous_top1={} paged_top1={} \
+prefill_byte_exact=true is_prefill_row={} semantic_gate=top1-exact \
+numeric_metrics=diagnostic-only exact_attention=true",
+            contiguous.implementation_id,
+            paged.implementation_id,
+            decode_calls,
+            causal_row,
+            metrics.cosine,
+            metrics.max_abs,
+            metrics.mean_abs,
+            top1(contiguous_logits),
+            top1(paged_logits),
+            causal_row == 0,
+        );
+    }
+    println!(
+        "pr10-llama-cache-parity-summary schema_version=1 decode_calls={} parity_rows={} \
+top1_mismatches=0 prefill_byte_exact=true worst_cosine={worst_cosine:.12} \
+worst_max_abs={worst_max_abs:.9} worst_mean_abs={worst_mean_abs:.9} status=passed",
+        decode_calls,
+        decode_calls + 1,
+    );
+    Ok(())
+}
+
+fn paged_block_table_snapshot(decode: &PreparedLlamaDecode) -> Vec<BlockId> {
+    assert!(decode.cache_layout().is_paged());
+    let block_count = decode.logical_length().div_ceil(KV_BLOCK_SIZE);
+    (0..block_count)
+        .map(|logical_block| {
+            decode
+                .paged_block_id(logical_block)
+                .expect("each committed paged logical block must have a generation-bound ID")
+        })
+        .collect()
 }
 
 #[test]
@@ -836,6 +1023,386 @@ logical_after={} token_id={} latency_ns={} timing_boundary=decode_plus_stream_sy
         "pr09-llama-near-limit-summary schema_version=1 prompt_length={prompt_length} \
 decode_calls={LONG_PARITY_DECODE_CALLS} final_logical_length={maximum_length} \
 capacity_error_pre_mutation=true allocation_stable=true"
+    );
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn pinned_smollm2_contiguous_and_paged_32_decode_rows_preserve_top1() -> TestResult {
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let (context, mut stream) = first_context()?;
+    assert_contiguous_paged_parity(&model, &context, &mut stream, DEFAULT_PARITY_DECODE_CALLS)?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote long-running 128-call SmolLM2 paged parity on server-4096"]
+fn pinned_smollm2_contiguous_and_paged_128_decode_rows_preserve_top1_when_enabled() -> TestResult {
+    if !env_enabled("RUSTINFER_PR10_LONG_STEPS") {
+        eprintln!("pr10-llama-long-parity-skipped env=RUSTINFER_PR10_LONG_STEPS expected=true");
+        return Ok(());
+    }
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let (context, mut stream) = first_context()?;
+    assert_contiguous_paged_parity(&model, &context, &mut stream, LONG_PARITY_DECODE_CALLS)?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn pinned_smollm2_paged_reset_reuses_generation_without_contamination() -> TestResult {
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let (context, mut stream) = first_context()?;
+    let maximum_length = PINNED_TOKENS_A.len() + 2;
+    let mut decode = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        PINNED_TOKENS_A.len(),
+        maximum_length,
+        decode_config_with_cache(false, TestKvCachePolicy::Paged),
+    )?;
+    assert!(decode.cache_layout().is_paged());
+    let report = decode.allocation_report();
+    let stable_allocations = context.allocation_stats()?;
+    assert_decode_report_matches_context(report, stable_allocations);
+    assert!(report.block_table_device_bytes() > 0);
+    assert!(report.block_table_host_bytes() > 0);
+    assert!(report.cache_unused_capacity_bytes() > 0);
+    assert_eq!(decode.paged_internal_fragmentation_bytes(), Some(0));
+    let prepared_pool = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(prepared_pool.physical_block_count(), 1);
+    assert_eq!(prepared_pool.allocated_block_count(), 0);
+    assert_eq!(prepared_pool.free_block_count(), 1);
+
+    let mut invalid_prompt = PINNED_TOKENS_A;
+    invalid_prompt[0] = u32::try_from(model.spec().embedding().vocabulary_size())?;
+    let invalid_error = decode
+        .prefill(&invalid_prompt, &mut stream)
+        .expect_err("invalid prompt token must fail before paged reservation or upload");
+    assert!(matches!(
+        invalid_error,
+        LlamaDecodeError::Forward(LlamaForwardError::TokenOutOfRange {
+            position: 0,
+            token_id,
+            vocabulary_size,
+        }) if token_id == invalid_prompt[0]
+            && vocabulary_size == model.spec().embedding().vocabulary_size()
+    ));
+    assert_eq!(decode.logical_length(), 0);
+    assert_eq!(decode.phase(), LlamaDecodePhase::Empty);
+    assert!(!decode.is_poisoned());
+    assert_eq!(decode.paged_pool_stats(), Some(prepared_pool));
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+
+    let row_bytes = row_bytes(&model)?;
+    let mut a_prefill = vec![0_u8; row_bytes];
+    let mut a_decode = vec![0_u8; row_bytes];
+    decode.prefill(&PINNED_TOKENS_A, &mut stream)?;
+    let prefill_fragmentation = decode
+        .paged_internal_fragmentation_bytes()
+        .expect("paged fragmentation metric");
+    assert!(prefill_fragmentation > 0);
+    decode.download_last_logits(&mut a_prefill, &mut stream)?;
+    let a_block = decode
+        .paged_block_id(0)
+        .expect("the prompt must publish its first paged block");
+    let a_token = u32::try_from(top1(&a_prefill))?;
+    decode.decode(a_token, &mut stream)?;
+    let decode_fragmentation = decode
+        .paged_internal_fragmentation_bytes()
+        .expect("paged fragmentation metric");
+    assert!(decode_fragmentation < prefill_fragmentation);
+    decode.download_last_logits(&mut a_decode, &mut stream)?;
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+
+    decode.reset()?;
+    let reset_after_a = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(reset_after_a.allocated_block_count(), 0);
+    assert_eq!(reset_after_a.free_block_count(), 1);
+    assert_eq!(decode.paged_internal_fragmentation_bytes(), Some(0));
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+
+    let mut b_prefill_reused = vec![0_u8; row_bytes];
+    let mut b_decode_reused = vec![0_u8; row_bytes];
+    decode.prefill(&PINNED_TOKENS_B, &mut stream)?;
+    decode.download_last_logits(&mut b_prefill_reused, &mut stream)?;
+    assert_ne!(a_prefill, b_prefill_reused);
+    let b_block = decode
+        .paged_block_id(0)
+        .expect("the reused prompt must publish its first paged block");
+    assert_eq!(b_block.pool_cookie(), a_block.pool_cookie());
+    assert_eq!(b_block.physical_index(), a_block.physical_index());
+    assert!(b_block.generation() > a_block.generation());
+    let b_token = u32::try_from(top1(&b_prefill_reused))?;
+    decode.decode(b_token, &mut stream)?;
+    decode.download_last_logits(&mut b_decode_reused, &mut stream)?;
+
+    decode.reset()?;
+    let mut a_prefill_replayed = vec![0_u8; row_bytes];
+    let mut a_decode_replayed = vec![0_u8; row_bytes];
+    decode.prefill(&PINNED_TOKENS_A, &mut stream)?;
+    decode.download_last_logits(&mut a_prefill_replayed, &mut stream)?;
+    let a_replayed_block = decode
+        .paged_block_id(0)
+        .expect("the replayed prompt must publish its first paged block");
+    assert_eq!(a_replayed_block.pool_cookie(), a_block.pool_cookie());
+    assert_eq!(a_replayed_block.physical_index(), a_block.physical_index());
+    assert!(a_replayed_block.generation() > b_block.generation());
+    decode.decode(a_token, &mut stream)?;
+    decode.download_last_logits(&mut a_decode_replayed, &mut stream)?;
+    assert_eq!(a_prefill_replayed, a_prefill);
+    assert_eq!(a_decode_replayed, a_decode);
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+    let reused_stats = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(reused_stats.lifetime_allocation_count(), 3);
+    assert!(
+        reused_stats.total_allocation_latency_ns() >= reused_stats.maximum_allocation_latency_ns()
+    );
+    decode.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let mut fresh_b = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        PINNED_TOKENS_B.len(),
+        maximum_length,
+        decode_config_with_cache(false, TestKvCachePolicy::Paged),
+    )?;
+    let fresh_allocations = context.allocation_stats()?;
+    assert_decode_report_matches_context(fresh_b.allocation_report(), fresh_allocations);
+    fresh_b.prefill(&PINNED_TOKENS_B, &mut stream)?;
+    let mut b_prefill_fresh = vec![0_u8; row_bytes];
+    let mut b_decode_fresh = vec![0_u8; row_bytes];
+    fresh_b.download_last_logits(&mut b_prefill_fresh, &mut stream)?;
+    fresh_b.decode(b_token, &mut stream)?;
+    fresh_b.download_last_logits(&mut b_decode_fresh, &mut stream)?;
+    assert_eq!(b_prefill_fresh, b_prefill_reused);
+    assert_eq!(b_decode_fresh, b_decode_reused);
+    fresh_b.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let mut dropped_paged = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        PINNED_TOKENS_A.len(),
+        maximum_length,
+        decode_config_with_cache(false, TestKvCachePolicy::Paged),
+    )?;
+    assert_decode_report_matches_context(
+        dropped_paged.allocation_report(),
+        context.allocation_stats()?,
+    );
+    dropped_paged.prefill(&PINNED_TOKENS_A, &mut stream)?;
+    assert_eq!(
+        dropped_paged
+            .paged_pool_stats()
+            .expect("paged pool stats")
+            .allocated_block_count(),
+        1
+    );
+    drop(dropped_paged);
+    assert!(
+        context.allocation_stats()?.is_zero(),
+        "implicit paged Drop must release K/V, device table, staging, and workspaces"
+    );
+
+    println!(
+        "pr10-llama-paged-lifecycle schema_version=1 physical_block={} \
+generation_a={} generation_b={} generation_a_replay={} generation_monotonic=true \
+reset_returns_all_blocks=true cuda_allocation_stable=true same_prompt_replay_byte_exact=true \
+different_prompt_fresh_byte_exact=true invalid_prompt_pre_mutation=true high_water_mark={} \
+allocation_count={} total_allocation_latency_ns={} maximum_allocation_latency_ns={} \
+dynamic_fragmentation=true implicit_paged_drop_accounting_zero=true contamination=false",
+        a_block.physical_index(),
+        a_block.generation(),
+        b_block.generation(),
+        a_replayed_block.generation(),
+        reused_stats.high_water_mark(),
+        reused_stats.lifetime_allocation_count(),
+        reused_stats.total_allocation_latency_ns(),
+        reused_stats.maximum_allocation_latency_ns(),
+    );
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn pinned_smollm2_paged_pool_oom_is_pre_mutation_and_recoverable() -> TestResult {
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let (context, mut stream) = first_context()?;
+    let maximum_length = KV_BLOCK_SIZE + 1;
+    let mut decode = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        PINNED_TOKENS_A.len(),
+        maximum_length,
+        decode_config_with_cache(false, TestKvCachePolicy::PagedWithBlocks(1)),
+    )?;
+    let report = decode.allocation_report();
+    let stable_allocations = context.allocation_stats()?;
+    assert_decode_report_matches_context(report, stable_allocations);
+    let row_bytes = row_bytes(&model)?;
+    let mut initial_prefill = vec![0_u8; row_bytes];
+    decode.prefill(&PINNED_TOKENS_A, &mut stream)?;
+    decode.download_last_logits(&mut initial_prefill, &mut stream)?;
+    for decode_call in 0..(KV_BLOCK_SIZE - PINNED_TOKENS_A.len()) {
+        decode.decode(
+            PINNED_TOKENS_A[decode_call % PINNED_TOKENS_A.len()],
+            &mut stream,
+        )?;
+    }
+    assert_eq!(decode.logical_length(), KV_BLOCK_SIZE);
+    let logical_before = decode.logical_length();
+    let phase_before = decode.phase();
+    let table_before = paged_block_table_snapshot(&decode);
+    let pool_before = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(pool_before.allocated_block_count(), 1);
+    assert_eq!(pool_before.free_block_count(), 0);
+    let mut logits_before = vec![0_u8; row_bytes];
+    decode.download_last_logits(&mut logits_before, &mut stream)?;
+
+    let error = decode
+        .decode(PINNED_TOKENS_A[0], &mut stream)
+        .expect_err("the second logical block must fail its allocation preflight");
+    assert!(matches!(
+        error,
+        LlamaDecodeError::PagedKv {
+            operation: "reserve",
+            source: PagedKvError::OutOfBlocks {
+                requested_blocks: 1,
+                free_blocks: 0,
+            },
+        }
+    ));
+    let mut logits_after = vec![0_u8; row_bytes];
+    decode.download_last_logits(&mut logits_after, &mut stream)?;
+    assert_eq!(logits_after, logits_before);
+    assert_eq!(decode.logical_length(), logical_before);
+    assert_eq!(decode.phase(), phase_before);
+    assert_eq!(paged_block_table_snapshot(&decode), table_before);
+    assert_eq!(decode.paged_pool_stats(), Some(pool_before));
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+    assert!(!decode.is_poisoned());
+
+    decode.reset()?;
+    let reset_pool = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(reset_pool.allocated_block_count(), 0);
+    assert_eq!(reset_pool.free_block_count(), 1);
+    decode.prefill(&PINNED_TOKENS_A, &mut stream)?;
+    let mut replayed_prefill = vec![0_u8; row_bytes];
+    decode.download_last_logits(&mut replayed_prefill, &mut stream)?;
+    assert_eq!(replayed_prefill, initial_prefill);
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+    decode.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    println!(
+        "pr10-llama-paged-oom schema_version=1 physical_blocks=1 logical_before={} \
+requested_blocks=1 free_blocks=0 error_pre_model_mutation=true table_stable=true \
+logits_stable=true pool_accounting_stable=true cuda_allocation_stable=true \
+owner_not_poisoned=true reset_replay_byte_exact=true status=passed",
+        logical_before,
+    );
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote near-model-limit paged cache boundary on server-4096"]
+fn pinned_smollm2_paged_near_limit_preserves_table_and_logits_when_enabled() -> TestResult {
+    if !env_enabled("RUSTINFER_PR10_NEAR_LIMIT") {
+        eprintln!("pr10-llama-near-limit-skipped env=RUSTINFER_PR10_NEAR_LIMIT expected=true");
+        return Ok(());
+    }
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let maximum_length = model.spec().max_sequence_length();
+    let prompt_length = maximum_length
+        .checked_sub(LONG_PARITY_DECODE_CALLS)
+        .ok_or("model context is shorter than the PR10 near-limit decode suffix")?;
+    let prompt: Vec<u32> = (0..prompt_length)
+        .map(|index| PINNED_TOKENS_A[index % PINNED_TOKENS_A.len()])
+        .collect();
+    let (context, mut stream) = first_context()?;
+    let mut decode = PreparedLlamaDecode::prepare(
+        &model,
+        &context,
+        &mut stream,
+        prompt_length,
+        maximum_length,
+        decode_config_with_cache(false, TestKvCachePolicy::Paged),
+    )?;
+    let report = decode.allocation_report();
+    assert_decode_report_matches_context(report, context.allocation_stats()?);
+    let prepared_pool = decode.paged_pool_stats().expect("paged pool stats");
+    let expected_blocks = maximum_length.div_ceil(KV_BLOCK_SIZE);
+    assert_eq!(prepared_pool.physical_block_count(), expected_blocks);
+    assert_eq!(prepared_pool.free_block_count(), expected_blocks);
+    decode.prefill(&prompt, &mut stream)?;
+    let stable_allocations = context.allocation_stats()?;
+    for decode_call in 0..LONG_PARITY_DECODE_CALLS {
+        let token_id = PINNED_TOKENS_A[decode_call % PINNED_TOKENS_A.len()];
+        let logical_before = decode.logical_length();
+        let started = Instant::now();
+        decode.decode(token_id, &mut stream)?;
+        stream.synchronize()?;
+        let latency_ns = u64::try_from(started.elapsed().as_nanos())?;
+        assert_eq!(decode.logical_length(), logical_before + 1);
+        assert_eq!(context.allocation_stats()?, stable_allocations);
+        println!(
+            "pr10-llama-near-limit-raw schema_version=1 cache_policy=paged decode_call={} \
+logical_before={} logical_after={} token_id={} latency_ns={} \
+timing_boundary=decode_plus_stream_synchronize",
+            decode_call + 1,
+            logical_before,
+            decode.logical_length(),
+            token_id,
+            latency_ns,
+        );
+    }
+    assert_eq!(decode.logical_length(), maximum_length);
+    let pool_before_error = decode.paged_pool_stats().expect("paged pool stats");
+    assert_eq!(pool_before_error.allocated_block_count(), expected_blocks);
+    assert_eq!(pool_before_error.free_block_count(), 0);
+    let table_before_error = paged_block_table_snapshot(&decode);
+    assert_eq!(table_before_error.len(), expected_blocks);
+    let row_bytes = row_bytes(&model)?;
+    let mut logits_before_error = vec![0_u8; row_bytes];
+    decode.download_last_logits(&mut logits_before_error, &mut stream)?;
+    let phase_before_error = decode.phase();
+    let error = decode
+        .decode(PINNED_TOKENS_A[0], &mut stream)
+        .expect_err("the first call beyond the model limit must fail before mutation");
+    assert!(matches!(error, LlamaDecodeError::CapacityExceeded { .. }));
+    let mut logits_after_error = vec![0_u8; row_bytes];
+    decode.download_last_logits(&mut logits_after_error, &mut stream)?;
+    assert_eq!(logits_after_error, logits_before_error);
+    assert_eq!(decode.logical_length(), maximum_length);
+    assert_eq!(decode.phase(), phase_before_error);
+    assert_eq!(paged_block_table_snapshot(&decode), table_before_error);
+    assert_eq!(decode.paged_pool_stats(), Some(pool_before_error));
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+    assert!(!decode.is_poisoned());
+    decode.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    println!(
+        "pr10-llama-near-limit-summary schema_version=1 cache_policy=paged \
+prompt_length={prompt_length} decode_calls={LONG_PARITY_DECODE_CALLS} \
+final_logical_length={maximum_length} physical_blocks={expected_blocks} \
+capacity_error_pre_mutation=true table_stable=true logits_stable=true \
+pool_accounting_stable=true cuda_allocation_stable=true status=passed"
     );
     stream.close()?;
     close_context(context)

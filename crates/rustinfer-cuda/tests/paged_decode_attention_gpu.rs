@@ -5,10 +5,11 @@ use std::error::Error;
 use rustinfer_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer,
     CudaPinnedHostBuffer, CudaRuntime, CudaStream, DecodeAttentionBackendAvailability,
-    DecodeAttentionParams, DecodeAttentionPreference, DecodeAttentionRequest, PAGED_KV_BLOCK_SIZE,
+    DecodeAttentionParams, DecodeAttentionPreference, DecodeAttentionRequest,
+    DecodePartialReductionOrder, DecodePartialStateReduceParams, PAGED_KV_BLOCK_SIZE,
     PagedDecodeAttentionParams, PagedDecodeAttentionRequest, PagedKvBlockTableHostV1,
     PagedKvBlockTableV1, PagedKvCacheAppendParams, PreparedDecodeAttention,
-    PreparedPagedDecodeAttention, paged_kv_cache_append,
+    PreparedPagedDecodeAttention, decode_partial_states_reduce, paged_kv_cache_append,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -383,6 +384,7 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
         let mut contiguous_output = context.allocate_device_buffer(output_bytes)?;
         let mut paged_reference_output = context.allocate_device_buffer(output_bytes)?;
         let mut paged_online_output = context.allocate_device_buffer(output_bytes)?;
+        let mut paged_descending_output = context.allocate_device_buffer(output_bytes)?;
         let mut contiguous_workspace =
             context.allocate_device_buffer(contiguous_reference.workspace_bytes())?;
         let mut paged_reference_workspace =
@@ -502,6 +504,27 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
                 &mut stream,
             )?;
         }
+        let descending_output_len = paged_descending_output.byte_len();
+        let mut descending_params = DecodePartialStateReduceParams {
+            partial_states: CudaBufferSpan::new(
+                &paged_online_workspace,
+                CudaDType::F32,
+                0,
+                paged_online.workspace_bytes(),
+            )?,
+            output: CudaBufferSpanMut::new(
+                &mut paged_descending_output,
+                CudaDType::BF16,
+                0,
+                descending_output_len,
+            )?,
+            partial_state_count: u64::try_from(logical_blocks)?,
+            partial_state_capacity: paged_online.partial_state_capacity(),
+            query_head_count: u64::try_from(query_heads)?,
+            head_size: u64::try_from(D)?,
+            order: DecodePartialReductionOrder::LogicalDescending,
+        };
+        decode_partial_states_reduce(&mut descending_params, &mut stream)?;
         assert_eq!(context.allocation_stats()?, before);
 
         let contiguous_actual =
@@ -513,12 +536,19 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
         )?);
         let online_actual =
             decode_bf16(&download(&context, &mut stream, &mut paged_online_output)?);
-        for (index, (((&contiguous, &reference), &online), &expected)) in contiguous_actual
-            .iter()
-            .zip(&reference_actual)
-            .zip(&online_actual)
-            .zip(&expected)
-            .enumerate()
+        let descending_actual = decode_bf16(&download(
+            &context,
+            &mut stream,
+            &mut paged_descending_output,
+        )?);
+        for (index, ((((&contiguous, &reference), &online), &descending), &expected)) in
+            contiguous_actual
+                .iter()
+                .zip(&reference_actual)
+                .zip(&online_actual)
+                .zip(&descending_actual)
+                .zip(&expected)
+                .enumerate()
         {
             assert_eq!(
                 reference.to_bits(),
@@ -532,6 +562,10 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
             assert!(
                 (online - reference).abs() <= ONLINE_REFERENCE_ABS_TOLERANCE,
                 "paged online[{index}] reference {reference}, got {online}"
+            );
+            assert!(
+                (descending - reference).abs() <= ONLINE_REFERENCE_ABS_TOLERANCE,
+                "descending paged reduction[{index}] reference {reference}, got {descending}"
             );
         }
         let active_state_elements = logical_blocks * query_heads * (D + 2);
@@ -547,13 +581,14 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
             "paged online modified the preallocated state-capacity tail"
         );
         println!(
-            "pr10-paged-decode schema_version=1 logical_length={logical} block_count={logical_blocks} physical_blocks={physical_blocks} shuffled_ids=true contiguous_reference_exact=true status=passed"
+            "pr10-paged-decode schema_version=1 logical_length={logical} block_count={logical_blocks} physical_blocks={physical_blocks} shuffled_ids=true contiguous_reference_exact=true descending_reduce_matches=true status=passed"
         );
 
         paged_online_workspace.close()?;
         paged_reference_workspace.close()?;
         contiguous_workspace.close()?;
         paged_online_output.close()?;
+        paged_descending_output.close()?;
         paged_reference_output.close()?;
         contiguous_output.close()?;
         contiguous_value_device.close()?;

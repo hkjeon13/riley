@@ -40,7 +40,9 @@ pub const PAGED_KV_BLOCK_TABLE_VERSION: u32 = 1;
 /// Fixed number of logical tokens in every PR 10 physical KV block.
 pub const PAGED_KV_BLOCK_SIZE: u64 = 16;
 #[cfg(feature = "cuda")]
-const PAGED_KV_BLOCK_SIZE_ABI: u32 = 16;
+const PAGED_KV_BLOCK_SIZE_ABI: u32 = PAGED_KV_BLOCK_SIZE as u32;
+#[cfg(feature = "cuda")]
+const _: () = assert!(PAGED_KV_BLOCK_SIZE <= u32::MAX as u64);
 
 /// One cache write from dense token-major projections into head-major storage.
 #[derive(Debug)]
@@ -201,7 +203,7 @@ impl<'a> PagedKvBlockTableHostV1<'a> {
     /// # Errors
     ///
     /// Returns before CUDA execution for malformed lengths, invalid valid-token
-    /// counts, duplicate/stale physical IDs, or arithmetic overflow.
+    /// counts, duplicate or out-of-pool physical IDs, or arithmetic overflow.
     pub fn new(
         block_ids: &'a [u32],
         valid_tokens: &'a [u16],
@@ -209,6 +211,40 @@ impl<'a> PagedKvBlockTableHostV1<'a> {
         physical_block_count: u64,
     ) -> CudaResult<Self> {
         Self::from_versioned_parts(
+            PAGED_KV_BLOCK_TABLE_VERSION,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+        )
+    }
+
+    /// Creates a version-1 host table using caller-owned duplicate scratch.
+    ///
+    /// This is the allocation-free linear-time validation path for a prepared
+    /// paged owner. `duplicate_scratch` must contain at least one byte per
+    /// physical block; its prior contents are ignored and may be overwritten.
+    ///
+    /// # Errors
+    ///
+    /// Returns for insufficient scratch or the same malformed V1 fields as
+    /// [`Self::new`].
+    pub fn new_with_duplicate_scratch(
+        block_ids: &'a [u32],
+        valid_tokens: &'a [u16],
+        logical_token_count: u64,
+        physical_block_count: u64,
+        duplicate_scratch: &mut [u8],
+    ) -> CudaResult<Self> {
+        validate_paged_block_table_host_with_scratch(
+            PAGED_KV_BLOCK_TABLE_VERSION,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+            duplicate_scratch,
+        )?;
+        Self::from_validated_parts(
             PAGED_KV_BLOCK_TABLE_VERSION,
             block_ids,
             valid_tokens,
@@ -236,6 +272,22 @@ impl<'a> PagedKvBlockTableHostV1<'a> {
             logical_token_count,
             physical_block_count,
         )?;
+        Self::from_validated_parts(
+            format_version,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+        )
+    }
+
+    fn from_validated_parts(
+        format_version: u32,
+        block_ids: &'a [u32],
+        valid_tokens: &'a [u16],
+        logical_token_count: u64,
+        physical_block_count: u64,
+    ) -> CudaResult<Self> {
         let block_count = u64::try_from(block_ids.len()).map_err(|_| {
             CudaError::out_of_range(
                 "PagedKvBlockTableHostV1::from_versioned_parts",
@@ -1337,7 +1389,7 @@ impl PreparedPagedDecodeAttention {
     ///
     /// # Errors
     ///
-    /// Returns before launch for stale/malformed table metadata, incompatible
+    /// Returns before launch for malformed table metadata, incompatible
     /// pool geometry, dtype/capacity/context violations, or native failure.
     pub fn execute(
         &self,
@@ -1983,6 +2035,88 @@ fn validate_paged_block_table_host(
     physical_block_count: u64,
 ) -> CudaResult<()> {
     const OPERATION: &str = "validate_paged_block_table";
+    validate_paged_block_table_shape(
+        format_version,
+        block_ids,
+        valid_tokens,
+        logical_token_count,
+        physical_block_count,
+    )?;
+    for (logical_index, (&physical_id, &valid)) in block_ids.iter().zip(valid_tokens).enumerate() {
+        validate_paged_block_entry(
+            block_ids.len(),
+            logical_index,
+            physical_id,
+            valid,
+            logical_token_count,
+            physical_block_count,
+        )?;
+        if block_ids[..logical_index].contains(&physical_id) {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!("physical block id {physical_id} appears more than once"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_paged_block_table_host_with_scratch(
+    format_version: u32,
+    block_ids: &[u32],
+    valid_tokens: &[u16],
+    logical_token_count: u64,
+    physical_block_count: u64,
+    duplicate_scratch: &mut [u8],
+) -> CudaResult<()> {
+    const OPERATION: &str = "validate_paged_block_table";
+    validate_paged_block_table_shape(
+        format_version,
+        block_ids,
+        valid_tokens,
+        logical_token_count,
+        physical_block_count,
+    )?;
+    let physical_blocks = usize::try_from(physical_block_count).map_err(|_| {
+        CudaError::out_of_range(OPERATION, "physical_block_count does not fit host usize")
+    })?;
+    if duplicate_scratch.len() < physical_blocks {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            "duplicate scratch is smaller than physical_block_count",
+        ));
+    }
+    duplicate_scratch[..physical_blocks].fill(0);
+    for (logical_index, (&physical_id, &valid)) in block_ids.iter().zip(valid_tokens).enumerate() {
+        validate_paged_block_entry(
+            block_ids.len(),
+            logical_index,
+            physical_id,
+            valid,
+            logical_token_count,
+            physical_block_count,
+        )?;
+        let physical_index = usize::try_from(physical_id)
+            .expect("a U32 physical block ID fits any supported host usize");
+        if duplicate_scratch[physical_index] != 0 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!("physical block id {physical_id} appears more than once"),
+            ));
+        }
+        duplicate_scratch[physical_index] = 1;
+    }
+    Ok(())
+}
+
+fn validate_paged_block_table_shape(
+    format_version: u32,
+    block_ids: &[u32],
+    valid_tokens: &[u16],
+    logical_token_count: u64,
+    physical_block_count: u64,
+) -> CudaResult<()> {
+    const OPERATION: &str = "validate_paged_block_table";
     if format_version != PAGED_KV_BLOCK_TABLE_VERSION {
         return Err(not_supported(
             OPERATION,
@@ -2009,33 +2143,37 @@ fn validate_paged_block_table_host(
             "logical block count exceeds physical_block_count",
         ));
     }
-    for (logical_index, (&physical_id, &valid)) in block_ids.iter().zip(valid_tokens).enumerate() {
-        if u64::from(physical_id) >= physical_block_count {
-            return Err(CudaError::out_of_range(
-                OPERATION,
-                format!("physical block id {physical_id} is outside the pool"),
-            ));
-        }
-        if block_ids[..logical_index].contains(&physical_id) {
-            return Err(CudaError::invalid_argument(
-                OPERATION,
-                format!("physical block id {physical_id} appears more than once"),
-            ));
-        }
-        let expected_valid = if logical_index + 1 == block_ids.len() {
-            u16::try_from(((logical_token_count - 1) % PAGED_KV_BLOCK_SIZE) + 1)
-                .expect("fixed block size fits u16")
-        } else {
-            u16::try_from(PAGED_KV_BLOCK_SIZE).expect("fixed block size fits u16")
-        };
-        if valid != expected_valid {
-            return Err(CudaError::invalid_argument(
-                OPERATION,
-                format!(
-                    "logical block {logical_index} has {valid} valid tokens; expected {expected_valid}"
-                ),
-            ));
-        }
+    Ok(())
+}
+
+fn validate_paged_block_entry(
+    block_count: usize,
+    logical_index: usize,
+    physical_id: u32,
+    valid: u16,
+    logical_token_count: u64,
+    physical_block_count: u64,
+) -> CudaResult<()> {
+    const OPERATION: &str = "validate_paged_block_table";
+    if u64::from(physical_id) >= physical_block_count {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            format!("physical block id {physical_id} is outside the pool"),
+        ));
+    }
+    let expected_valid = if logical_index + 1 == block_count {
+        u16::try_from(((logical_token_count - 1) % PAGED_KV_BLOCK_SIZE) + 1)
+            .expect("fixed block size fits u16")
+    } else {
+        u16::try_from(PAGED_KV_BLOCK_SIZE).expect("fixed block size fits u16")
+    };
+    if valid != expected_valid {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            format!(
+                "logical block {logical_index} has {valid} valid tokens; expected {expected_valid}"
+            ),
+        ));
     }
     Ok(())
 }
@@ -2639,7 +2777,7 @@ mod tests {
     }
 
     #[test]
-    fn paged_host_table_rejects_version_shape_validity_and_stale_ids() {
+    fn paged_host_table_rejects_version_shape_validity_and_invalid_ids() {
         assert_eq!(
             PagedKvBlockTableHostV1::from_versioned_parts(2, &[0], &[1], 1, 1)
                 .unwrap_err()
@@ -2678,6 +2816,45 @@ mod tests {
                 expected
             );
         }
+    }
+
+    #[test]
+    fn paged_host_table_duplicate_scratch_is_linear_reusable_and_checked() {
+        let ids = [7, 1, 5];
+        let valid = [16, 16, 1];
+        let mut scratch = [0xFF; 8];
+        let table =
+            PagedKvBlockTableHostV1::new_with_duplicate_scratch(&ids, &valid, 33, 8, &mut scratch)
+                .expect("shuffled unique table");
+        assert_eq!(table.block_ids(), ids);
+        assert_eq!(table.valid_tokens(), valid);
+
+        assert_eq!(
+            PagedKvBlockTableHostV1::new_with_duplicate_scratch(
+                &[7, 1, 7],
+                &valid,
+                33,
+                8,
+                &mut scratch,
+            )
+            .expect_err("duplicate table")
+            .kind(),
+            CudaErrorKind::InvalidArgument
+        );
+        PagedKvBlockTableHostV1::new_with_duplicate_scratch(&ids, &valid, 33, 8, &mut scratch)
+            .expect("scratch is reset before reuse");
+        assert_eq!(
+            PagedKvBlockTableHostV1::new_with_duplicate_scratch(
+                &ids,
+                &valid,
+                33,
+                8,
+                &mut scratch[..7],
+            )
+            .expect_err("undersized scratch")
+            .kind(),
+            CudaErrorKind::OutOfRange
+        );
     }
 
     #[test]
