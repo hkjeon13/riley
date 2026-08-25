@@ -29,12 +29,13 @@ dominate their configured interval.
 
 ## Target contract
 
-Run the driver in the production process namespace.  For a CLI artifact this
+Run the driver in the production process namespace. For a CLI artifact this
 is the release host; for an image it is a Python-free test layer derived from
-the exact immutable release image.  That layer may add Bash, jq, curl, procps,
+the exact immutable release image. That layer may add Bash, jq, curl, procps,
 util-linux, coreutils and `nvidia-smi`, but must not replace the production
-binary or model.  Set `target.kind` to `container` in the materialized manifest
-for the latter case.
+binary or model. The reviewed v1 manifest keeps `target.kind=process` because
+the driver runs inside that test layer and observes the real server process
+directly; changing the target kind would change the pinned release contract.
 
 `GET /metrics` must return this closed JSON object (all values are nonnegative
 integers):
@@ -86,6 +87,12 @@ monotonic timestamps.
 ## Run and check
 
 Use a new repository-external output directory and provide exact bindings:
+
+`RUSTINFER_MODEL_SHA256` is the same canonical model-tree digest used by the
+Python-free E2E gate: SHA-256 of bytewise path-sorted lines formatted as
+`<file-sha256><two spaces><relative POSIX path>\n`. The driver recomputes it
+from a symlink-free regular-file tree before starting the server, and the final
+candidate requires the soak value to equal the E2E model-tree binding.
 
 ```bash
 RUSTINFER_SOAK_MANIFEST=/var/tmp/rustinfer-soak-manifest.json \

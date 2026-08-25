@@ -215,8 +215,9 @@ The remaining cross-bindings are:
   hashes, then recomputes the R7 metrics, baseline ratios, and thresholds;
 - `rustinfer.reliability-soak-report.v1`: must be `passed`, have no errors and
   only passing checks, and bind the same clean revision, archive, release
-  binary, and runtime image. The report must also bind the canonical reviewed
-  `pr16-release-soak-v1` template, retain the exact 10-scenario/150-check
+  binary, runtime image, model ID/revision, and canonical model-tree digest as
+  the Python-free E2E raw evidence. The report must also bind the canonical
+  reviewed `pr16-release-soak-v1` template, retain the exact 10-scenario/150-check
   inventory, show every scenario ran for its reviewed duration with samples
   spanning that interval, and retain the reviewed cancellation/disconnect/
   overload and resource-slope bounds. A shortened or threshold-relaxed soak

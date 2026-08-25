@@ -484,7 +484,7 @@ def _validate_python_free_e2e_replay(
     native_correctness: dict[str, Any],
     native_correctness_sha256: str,
     optimization_correctness: dict[str, Any],
-) -> None:
+) -> dict[str, Any]:
     try:
         archive = python_free_e2e.load_raw_evidence_archive(raw_evidence_path)
     except (python_free_e2e.EvidenceError, OSError) as error:
@@ -532,6 +532,7 @@ def _validate_python_free_e2e_replay(
                 f"python_free_e2e.raw.model.{field}",
                 "does not match optimizer/model provenance",
             )
+    return raw_model
 
 
 def _validate_cuda_fault_replay(
@@ -1109,6 +1110,7 @@ def _validate_soak(
     archive_sha256: str,
     binary_sha256: str,
     image_sha256: str,
+    model: dict[str, Any],
     raw_evidence_path: Path,
 ) -> None:
     try:
@@ -1164,6 +1166,9 @@ def _validate_soak(
         "source_archive_sha256": archive_sha256,
         "binary_sha256": binary_sha256,
         "image_sha256": image_sha256,
+        "model_sha256": model.get("model_tree_sha256"),
+        "model_id": model.get("model_id"),
+        "model_revision": model.get("model_revision"),
     }
     for key, value in expected.items():
         if source.get(key) != value:
@@ -1568,7 +1573,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             archive_sha256=archive_sha256,
             raw_evidence_path=optimization_raw_path,
         )
-        _validate_python_free_e2e_replay(
+        python_free_model = _validate_python_free_e2e_replay(
             loaded["python_free_e2e"][0],
             raw_paths["python_free_e2e"],
             revision=revision,
@@ -1593,6 +1598,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             loaded["reliability_soak"][0], "reliability_soak", revision=revision,
             archive_sha256=archive_sha256, binary_sha256=binary_sha256,
             image_sha256=image_sha256,
+            model=python_free_model,
             raw_evidence_path=raw_paths["reliability_soak"],
         )
         evidence_hashes = {name: digest for name, (_, digest) in loaded.items()}

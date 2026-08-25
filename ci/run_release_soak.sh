@@ -16,7 +16,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 : "${RUSTINFER_MODEL_REVISION:?set the immutable model revision}"
 : "${RUSTINFER_SOAK_FINAL_METRICS_JSON:?set the shutdown metrics artifact path}"
 
-for tool in bash jq curl sha256sum awk ps flock nvidia-smi readlink find wc date env; do
+for tool in bash jq curl sha256sum awk ps flock nvidia-smi readlink find sort grep wc date env; do
     command -v "$tool" >/dev/null 2>&1 || { echo "required host tool is unavailable: $tool" >&2; exit 2; }
 done
 case "$RUSTINFER_SOAK_OUTPUT" in /*) ;; *) echo "RUSTINFER_SOAK_OUTPUT must be absolute" >&2; exit 2 ;; esac
@@ -51,7 +51,28 @@ bind=${RUSTINFER_SOAK_BIND:-$(jq -er '.target.bind' "$RUSTINFER_SOAK_MANIFEST")}
 target_kind=$(jq -er '.target.kind' "$RUSTINFER_SOAK_MANIFEST")
 test -x "$binary"
 test "$(sha256sum "$binary" | awk '{print $1}')" = "$RUSTINFER_BINARY_SHA256"
-test -e "$model_path"
+test -d "$model_path"
+test ! -L "$model_path"
+if find "$model_path" -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
+    echo "model tree contains a symlink or non-regular entry" >&2
+    exit 2
+fi
+model_manifest=$(
+    while IFS= read -r -d '' model_file; do
+        relative=${model_file#"$model_path"/}
+        [[ $relative =~ ^[A-Za-z0-9._/+@=-]+$ ]] || {
+            echo "model paths must use the safe ASCII path alphabet" >&2
+            exit 2
+        }
+        printf '%s  %s\n' "$(sha256sum "$model_file" | awk '{print $1}')" "$relative"
+    done < <(find "$model_path" -type f -print0 | sort -z)
+)
+test -n "$model_manifest"
+computed_model_sha256=$(printf '%s\n' "$model_manifest" | sha256sum | awk '{print $1}')
+test "$computed_model_sha256" = "$RUSTINFER_MODEL_SHA256" || {
+    echo "model tree differs from RUSTINFER_MODEL_SHA256" >&2
+    exit 2
+}
 manifest_sha=$(sha256sum "$RUSTINFER_SOAK_MANIFEST" | awk '{print $1}')
 source_json=$(jq -cnS \
     --arg git_commit "$RUSTINFER_SOURCE_REVISION" \

@@ -492,5 +492,20 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         self.assertFalse(output.exists())
 
 
+class SoakRunnerStaticTests(unittest.TestCase):
+    def test_runner_recomputes_the_canonical_model_tree_binding(self) -> None:
+        repository = Path(__file__).resolve().parents[3]
+        runner = (repository / "ci/run_release_soak.sh").read_text(encoding="utf-8")
+        self.assertIn('test -d "$model_path"', runner)
+        self.assertIn('test ! -L "$model_path"', runner)
+        self.assertIn('find "$model_path" -mindepth 1 ! -type d ! -type f', runner)
+        self.assertIn("-type f -print0 | sort -z", runner)
+        self.assertIn("printf '%s  %s\\n'", runner)
+        self.assertIn(
+            'test "$computed_model_sha256" = "$RUSTINFER_MODEL_SHA256"',
+            runner,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

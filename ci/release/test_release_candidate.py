@@ -278,6 +278,7 @@ class CandidateFixture:
             "correctness_report_sha256": native_correctness_sha256,
             "correctness_golden_sha256": digest(golden_bytes),
         }
+        self.e2e_model_tree_sha256 = raw["model"]["model_tree_sha256"]
         raw["observations"]["models"]["model_ids"] = [golden["model_id"]]
         raw_bytes = (json.dumps(raw, sort_keys=True, indent=2) + "\n").encode()
         payloads = {
@@ -693,7 +694,7 @@ class CandidateFixture:
                     "source_archive_sha256": self._binding()["source_archive_sha256"],
                     "binary_sha256": self._binding()["release_binary_sha256"],
                     "image_sha256": self.image_sha,
-                    "model_sha256": digest(b"model"),
+                    "model_sha256": self.e2e_model_tree_sha256,
                     "model_id": "HuggingFaceTB/SmolLM2-135M",
                     "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
                 },
@@ -1065,6 +1066,15 @@ class ReleaseCandidateTests(unittest.TestCase):
             report = evaluate(self.fixture.manifest_path, self.fixture.root)
         self.assertFalse(report["passed"])
         self.assertIn("differs from the raw-replayed report", report["errors"][0])
+
+    def test_soak_model_tree_must_match_python_free_e2e(self) -> None:
+        self.fixture.documents["soak"]["bindings"]["source"][
+            "model_sha256"
+        ] = digest(b"substituted soak model")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("model_sha256", report["errors"][0])
 
     def test_soak_summary_must_span_the_reviewed_duration(self) -> None:
         summary = next(
