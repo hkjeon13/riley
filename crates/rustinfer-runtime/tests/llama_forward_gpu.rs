@@ -88,7 +88,10 @@ fn tolerance(point: LlamaTracePoint) -> Option<NumericTolerance> {
         mean_abs_max: 0.35,
     };
     match point {
-        LlamaTracePoint::Embedding => None,
+        // Embeddings are checked byte-for-byte by the caller. The unnormalized
+        // final residual stream is diagnostic-only; FinalNormOutput below is
+        // the gated final hidden state and actual LM-head input.
+        LlamaTracePoint::Embedding | LlamaTracePoint::FinalNormInput => None,
         LlamaTracePoint::Layer0AttentionProbabilities => Some(NumericTolerance {
             cosine_min: 0.999,
             max_abs_max: 0.02,
@@ -103,10 +106,6 @@ fn tolerance(point: LlamaTracePoint) -> Option<NumericTolerance> {
         LlamaTracePoint::Layer14Output | LlamaTracePoint::FinalNormOutput => {
             Some(cumulative_hidden)
         }
-        // This unnormalized residual stream is retained only to locate
-        // cumulative divergence. The gated final hidden state is the following
-        // FinalNormOutput tensor, which is the actual LM-head input.
-        LlamaTracePoint::FinalNormInput => None,
         // Predeclared final-logits threshold from the immutable PR01 E0 v2 matrix.
         LlamaTracePoint::LastLogits => Some(NumericTolerance {
             cosine_min: 0.997_903_530_549_539_3,
