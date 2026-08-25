@@ -199,6 +199,93 @@ struct layout, PR 03 symbol 의미는 바꾸지 않는다.
 Caching allocator, stream-ordered memory pool, unified memory, pageable-host async
 copy, model-specific tensor operation은 이 additive 경계의 범위가 아니다.
 
+## PR 09 연속 KV cache와 decode partial-state ABI
+
+PR 09는 ABI version을 올리지 않고 다음 네 symbol과 각 parameter struct를
+additive하게 추가한다.
+
+- `rustinfer_cuda_kv_cache_write_execute`
+- `rustinfer_cuda_decode_attention_reference_execute`
+- `rustinfer_cuda_decode_attention_execute`
+- `rustinfer_cuda_decode_partial_state_reduce_execute`
+
+`RustInferCudaKvCacheWriteParams`,
+`RustInferCudaDecodeAttentionReferenceParams`,
+`RustInferCudaDecodeAttentionParams`,
+`RustInferCudaDecodePartialStateReduceParams`의 전체 크기는 64-bit ABI에서 각각
+272, 328, 344, 176 bytes다. C11, C++와 Rust의 독립된 compile-time assertion이
+크기와 핵심 offset을 고정한다. 모든 입력 `reserved` field는 0이어야 하며 기존
+v1 symbol과 struct의 layout이나 의미는 바뀌지 않는다.
+
+### 연속 cache layout과 publish 규칙
+
+K와 V는 서로 다른 BF16 allocation이며 각 allocation의 논리 layout은
+`[layer, key_value_head, maximum_token_count, head_size]`다. ABI 호출 하나에는
+한 layer view `[key_value_head, maximum_token_count, head_size]`가 전달된다.
+projection 결과는 token-major `[source_token_count, key_value_head, head_size]`이고
+cache-write symbol이 지정한 token interval로 bit-preserving scatter한다.
+
+cache span은 실제로 읽는 logical prefix보다 큰 전체 fixed-stride capacity를
+선언해야 한다. 호출자는 모든 layer의 write와 후속 연산이 성공하기 전에는
+logical length를 publish하지 않는다. reset은 logical metadata만 0으로 되돌려도
+된다. 다음 prefill이 publish할 prompt prefix를 전부 덮어쓰고 decode가 committed
+prefix만 읽으므로 capacity tail의 오래된 byte는 관측할 수 없다.
+
+### `DecodePartialState` version 1
+
+`RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION == 1`인 device storage는 F32 packed
+array이며 shape과 offset은 다음과 같다.
+
+```text
+shape = [partial_state_capacity, query_head_count, head_size + 2]
+offset(partition, query_head) =
+    (partition * query_head_count + query_head) * (head_size + 2)
+row = [m, l, n[0], ..., n[head_size - 1]]
+```
+
+KV logical partition `p`는 고정 partition size `P`에 대해
+`[p * P, min(logical_token_count, (p + 1) * P))`를 뜻한다. Storage slot 순서는
+cache의 physical 주소나 향후 page allocation 순서가 아니라 이 logical KV 순서를
+따른다. PR 10의 paged producer도 page table을 따라 K/V를 읽을 수는 있지만, reducer에
+넘기는 slot `p`에는 logical partition `p`의 상태를 써야 한다. 따라서 contiguous와
+paged producer는 같은 standalone reducer와 storage ABI를 공유할 수 있다.
+
+한 범위 `C`의 state는 정규화 전 FP32 accumulator다.
+
+```text
+m_C = max(score in C)
+l_C = sum(exp(score - m_C))
+n_C = sum(exp(score - m_C) * value)
+```
+
+빈 범위와 fully-masked 범위의 canonical 표현은 `m=-inf`, `l=0`, `n=0`이다.
+Reducer는 `l=0` state를 identity로 취급한다. 두 state `A`, `B`는 다음처럼
+merge하며 부분 output을 먼저 normalize하지 않는다.
+
+```text
+m = max(m_A, m_B)
+l = exp(m_A - m) * l_A + exp(m_B - m) * l_B
+n = exp(m_A - m) * n_A + exp(m_B - m) * n_B
+```
+
+모든 logical state를 ascending 또는 descending 순서로 merge한 뒤 마지막 한 번만
+`n/l`을 계산해 BF16 output을 쓴다. `partial_state_count == 0`은 유효하며 zero
+output을 쓴다. Capacity와 query/head dimension은 0일 수 없다. 순서가 달라도 실수
+수학의 결과는 같지만 FP32 연산 순서 차이는 허용 tolerance로 검증한다.
+
+현재 optimized producer는 `head_size == 64`인 query-length-one MHA/GQA를 지원하고
+active partition만 쓴다. Capacity tail은 수정하지 않는다. Standalone reducer는
+positive `head_size` 전반을 지원하므로 PR 10 producer가 D64 제한과 독립적으로 같은
+ABI를 사용할 수 있다. 이 경로가 "exact"라는 말은 모든 committed KV를 읽고
+online-softmax 공식을 적용한다는 뜻이며, warp reduction과 FP32 recurrence가
+materialized BF16 reference와 bit-exact하다는 뜻은 아니다.
+
+네 호출은 device allocation을 하지 않고 explicit non-default stream과 모든 distinct
+buffer를 exclusive-use로 잡는다. Writable span은 다른 touched span과 겹칠 수 없다.
+호출은 stream synchronize와 context-stack 복원까지 성공한 뒤에만 반환하고 active-use
+guard를 해제한다. 완료를 확정하지 못하면 기존 copy-token 규칙처럼 UAF 대신
+fail-closed busy/accounting leak을 선택한다.
+
 context 생성은 target device의 CUDA **primary context에 대한 공유 lease**를
 `cuDevicePrimaryCtxRetain`으로 얻는다. 프로세스에 독점 context를 만들거나
 primary context를 reset하지 않는다. close는 해당 lease의 release를 정확히 한

@@ -61,6 +61,43 @@ required environment variables are described in
 [`../../ci/README.md`](../../ci/README.md). None of these tests loads a model or
 runs inference.
 
+## Query-length-one decode
+
+`PreparedDecodeAttention` cold-selects either a materialized BF16 reference or
+the D64 chunked-online implementation. Selection fixes the backend, workspace
+dtype and byte size, partition capacity, and provenance trace before the hot
+path. `execute` never allocates and never changes backend. Both implementations
+consume a BF16 query `[QH,D]` and head-major BF16 caches `[KVH,max_seq,D]`, and
+write BF16 `[QH,D]`; GQA requires `KVH` to divide `QH`.
+
+The reference workspace reserves `QH*max_seq*2` bytes once. For a call with
+logical length `T`, its active prefix is densely packed BF16 `[QH,T]`; callers
+must treat the remaining capacity as opaque scratch rather than a strided
+`[QH,max_seq]` tensor.
+
+The online workspace is packed F32
+`[partition_capacity,QH,D+2]`. Each row is version-1 `(m,l,n[D])`: `m` is the
+range maximum, `l` is the unnormalized exponential sum, and `n` is the
+unnormalized weighted-value sum. Empty rows use `m=-inf`, `l=0`, and zero `n`.
+Reducers merge logical slots in an explicit ascending or descending order and
+normalize once at the end. The public CPU `DecodePartialState` follows the same
+contract so producer/reducer arithmetic can be checked without CUDA.
+
+`kv_cache_append` performs one validated, bit-preserving paired scatter from
+token-major K/V `[T,KVH,D]` into cache positions of head-major
+`[KVH,max_seq,D]`. It synchronizes before returning; callers should advance
+their logical cache length only after every layer append succeeds.
+
+The decode GPU integration target is remote-only and ignored by default. It
+covers exact cache placement and sentinels, MHA/GQA reference-versus-online
+comparisons across partition boundaries, allocation stability, and standalone
+reducer order/empty-state behavior:
+
+```text
+cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+  --test decode_attention_gpu -- --ignored --test-threads=1 --nocapture
+```
+
 The additive PR 04 memory boundary has a separate five-test remote target. All
 five tests are ignored by default and cover logical zero-byte handles,
 allocation accounting returning to zero, pinned-host/device round trips,

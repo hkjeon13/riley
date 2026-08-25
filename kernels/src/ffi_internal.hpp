@@ -209,6 +209,66 @@ static_assert(sizeof(RustInferCudaAvGqaParams) == 216,
               "RustInferCudaAvGqaParams ABI size changed");
 static_assert(offsetof(RustInferCudaAvGqaParams, token_count) == 152,
               "RustInferCudaAvGqaParams ABI layout changed");
+static_assert(sizeof(RustInferCudaKvCacheWriteParams) == 272,
+              "RustInferCudaKvCacheWriteParams ABI size changed");
+static_assert(offsetof(RustInferCudaKvCacheWriteParams, key_source) == 8,
+              "KV cache write source ABI layout changed");
+static_assert(offsetof(RustInferCudaKvCacheWriteParams, key_cache) == 104,
+              "KV cache write destination ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaKvCacheWriteParams, source_token_count) == 200,
+    "KV cache write dimension ABI layout changed");
+static_assert(offsetof(RustInferCudaKvCacheWriteParams, reserved) == 240,
+              "KV cache write ABI tail changed");
+static_assert(sizeof(RustInferCudaDecodeAttentionReferenceParams) == 328,
+              "RustInferCudaDecodeAttentionReferenceParams ABI size changed");
+static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, query) == 8,
+    "decode reference query ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, output) == 200,
+    "decode reference output ABI layout changed");
+static_assert(offsetof(RustInferCudaDecodeAttentionReferenceParams,
+                       maximum_token_count) == 248,
+              "decode reference dimension ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, scale) == 288,
+    "decode reference scale ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, reserved) == 296,
+    "decode reference ABI tail changed");
+static_assert(RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION == 1 &&
+                  RUSTINFER_CUDA_DECODE_REDUCTION_ASCENDING == 1 &&
+                  RUSTINFER_CUDA_DECODE_REDUCTION_DESCENDING == 2,
+              "decode partial-state ABI constants changed");
+static_assert(sizeof(RustInferCudaDecodeAttentionParams) == 344,
+              "RustInferCudaDecodeAttentionParams ABI size changed");
+static_assert(offsetof(RustInferCudaDecodeAttentionParams, query) == 8,
+              "decode attention query ABI layout changed");
+static_assert(offsetof(RustInferCudaDecodeAttentionParams, output) == 200,
+              "decode attention output ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodeAttentionParams, maximum_token_count) == 248,
+    "decode attention dimension ABI layout changed");
+static_assert(offsetof(RustInferCudaDecodeAttentionParams, scale) == 304,
+              "decode attention scale ABI layout changed");
+static_assert(offsetof(RustInferCudaDecodeAttentionParams, reserved) == 312,
+              "decode attention ABI tail changed");
+static_assert(sizeof(RustInferCudaDecodePartialStateReduceParams) == 176,
+              "RustInferCudaDecodePartialStateReduceParams ABI size changed");
+static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams, partial_states) == 8,
+    "decode reducer partial-state ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams,
+             partial_state_count) == 104,
+    "decode reducer dimension ABI layout changed");
+static_assert(offsetof(RustInferCudaDecodePartialStateReduceParams,
+                       reduction_order) == 136,
+              "decode reducer order ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams, reserved) == 144,
+    "decode reducer ABI tail changed");
 static_assert(sizeof(RustInferCudaGemmConfig) == 112,
               "RustInferCudaGemmConfig ABI size changed");
 static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&

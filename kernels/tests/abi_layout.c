@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 _Static_assert(RUSTINFER_CUDA_ABI_VERSION == 1,
-               "PR 08 additions must preserve ABI v1");
+               "PR 09 additions must preserve ABI v1");
 _Static_assert(sizeof(void*) * 8 == RUSTINFER_CUDA_ABI_POINTER_WIDTH,
                "rustinfer CUDA ABI requires 64-bit pointers");
 _Static_assert(sizeof(RustInferCudaDType) == 4,
@@ -100,6 +100,67 @@ _Static_assert(offsetof(RustInferCudaPrefillAttentionParams,
                "prefill attention local-window offset changed");
 _Static_assert(offsetof(RustInferCudaPrefillAttentionParams, reserved) == 256,
                "prefill attention reserved tail changed");
+_Static_assert(sizeof(RustInferCudaKvCacheWriteParams) == 272,
+               "KV cache write params ABI size changed");
+_Static_assert(offsetof(RustInferCudaKvCacheWriteParams, key_source) == 8,
+               "KV cache write source offset changed");
+_Static_assert(offsetof(RustInferCudaKvCacheWriteParams, key_cache) == 104,
+               "KV cache write cache offset changed");
+_Static_assert(
+    offsetof(RustInferCudaKvCacheWriteParams, source_token_count) == 200,
+    "KV cache write dimension offset changed");
+_Static_assert(offsetof(RustInferCudaKvCacheWriteParams, reserved) == 240,
+               "KV cache write reserved tail changed");
+_Static_assert(sizeof(RustInferCudaDecodeAttentionReferenceParams) == 328,
+               "decode reference params ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, query) == 8,
+    "decode reference query offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, output) == 200,
+    "decode reference output offset changed");
+_Static_assert(offsetof(RustInferCudaDecodeAttentionReferenceParams,
+                        maximum_token_count) == 248,
+               "decode reference dimension offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, scale) == 288,
+    "decode reference scale offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodeAttentionReferenceParams, reserved) == 296,
+    "decode reference reserved tail changed");
+_Static_assert(RUSTINFER_CUDA_DECODE_REDUCTION_ASCENDING == 1 &&
+                   RUSTINFER_CUDA_DECODE_REDUCTION_DESCENDING == 2,
+               "decode reduction-order discriminants changed");
+_Static_assert(RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION == 1,
+               "decode partial-state ABI version changed");
+_Static_assert(sizeof(RustInferCudaDecodeAttentionParams) == 344,
+               "decode attention params ABI size changed");
+_Static_assert(offsetof(RustInferCudaDecodeAttentionParams, query) == 8,
+               "decode attention query offset changed");
+_Static_assert(offsetof(RustInferCudaDecodeAttentionParams, output) == 200,
+               "decode attention output offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodeAttentionParams, maximum_token_count) == 248,
+    "decode attention dimension offset changed");
+_Static_assert(offsetof(RustInferCudaDecodeAttentionParams, scale) == 304,
+               "decode attention scale offset changed");
+_Static_assert(offsetof(RustInferCudaDecodeAttentionParams, reserved) == 312,
+               "decode attention reserved tail changed");
+_Static_assert(sizeof(RustInferCudaDecodePartialStateReduceParams) == 176,
+               "decode reducer params ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams, partial_states) == 8,
+    "decode reducer partial-state offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams,
+             partial_state_count) == 104,
+    "decode reducer dimension offset changed");
+_Static_assert(offsetof(RustInferCudaDecodePartialStateReduceParams,
+                        reduction_order) == 136,
+               "decode reducer order offset changed");
+_Static_assert(
+    offsetof(RustInferCudaDecodePartialStateReduceParams, reserved) == 144,
+    "decode reducer reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -175,6 +236,20 @@ static RustInferCudaStatus (*const av_gqa_symbol)(
 static RustInferCudaStatus (*const prefill_attention_symbol)(
     const RustInferCudaPrefillAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_prefill_attention_execute;
+static RustInferCudaStatus (*const kv_cache_write_symbol)(
+    const RustInferCudaKvCacheWriteParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_kv_cache_write_execute;
+static RustInferCudaStatus (*const decode_attention_reference_symbol)(
+    const RustInferCudaDecodeAttentionReferenceParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_decode_attention_reference_execute;
+static RustInferCudaStatus (*const decode_attention_symbol)(
+    const RustInferCudaDecodeAttentionParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_decode_attention_execute;
+static RustInferCudaStatus (*const decode_partial_state_reduce_symbol)(
+    const RustInferCudaDecodePartialStateReduceParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_decode_partial_state_reduce_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -201,6 +276,10 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&scale_causal_mask_symbol,
     (const void*)&causal_softmax_symbol, (const void*)&av_gqa_symbol,
     (const void*)&prefill_attention_symbol,
+    (const void*)&kv_cache_write_symbol,
+    (const void*)&decode_attention_reference_symbol,
+    (const void*)&decode_attention_symbol,
+    (const void*)&decode_partial_state_reduce_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,

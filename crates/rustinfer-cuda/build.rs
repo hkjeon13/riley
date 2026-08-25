@@ -150,6 +150,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/attention_online.cu"),
         kernels_dir.join("src/attention_online.hpp"),
         kernels_dir.join("src/attention_reference.cu"),
+        kernels_dir.join("src/decode_attention.cu"),
         kernels_dir.join("src/gemm.cu"),
         kernels_dir.join("src/host_runtime.cu"),
         kernels_dir.join("src/memory.cu"),

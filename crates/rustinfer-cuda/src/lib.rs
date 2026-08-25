@@ -5,6 +5,7 @@
 //! remain confined to the private FFI module.
 
 mod attention;
+mod decode;
 mod error;
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
@@ -18,6 +19,14 @@ mod runtime;
 pub use attention::{
     AvGqaParams, CausalSoftmaxInPlaceParams, QkGqaParams, ScaleCausalMaskInPlaceParams, av_gqa,
     causal_softmax_in_place, qk_gqa, scale_causal_mask_in_place,
+};
+pub use decode::{
+    DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,
+    DecodeAttentionCapability, DecodeAttentionParams, DecodeAttentionPreference,
+    DecodeAttentionRequest, DecodeAttentionSelectionReason, DecodeAttentionSelectionTrace,
+    DecodePartialReductionOrder, DecodePartialState, DecodePartialStateError,
+    DecodePartialStateLayout, DecodePartialStateReduceParams, KvCacheAppendParams,
+    PreparedDecodeAttention, decode_partial_states_reduce, kv_cache_append,
 };
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};

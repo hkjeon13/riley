@@ -51,6 +51,10 @@ const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
 const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
 const AV_GQA_PARAMS_SIZE: u32 = 216;
 const PREFILL_ATTENTION_PARAMS_SIZE: u32 = 288;
+const KV_CACHE_WRITE_PARAMS_SIZE: u32 = 272;
+const DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 328;
+const DECODE_ATTENTION_PARAMS_SIZE: u32 = 344;
+const DECODE_PARTIAL_STATE_REDUCE_PARAMS_SIZE: u32 = 176;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 
@@ -61,6 +65,8 @@ pub(super) const DTYPE_U8: i32 = 4;
 
 pub(super) const PREFILL_MASK_CAUSAL: u32 = 1;
 pub(super) const PREFILL_MASK_CAUSAL_LOCAL: u32 = 2;
+pub(super) const DECODE_REDUCTION_LOGICAL_ASCENDING: u32 = 1;
+pub(super) const DECODE_REDUCTION_LOGICAL_DESCENDING: u32 = 2;
 
 const GEMM_TRANSPOSE_N: u32 = 0;
 const GEMM_TRANSPOSE_T: u32 = 1;
@@ -407,6 +413,77 @@ struct RawPrefillAttentionParams {
 }
 
 #[repr(C)]
+struct RawKvCacheWriteParams {
+    struct_size: u32,
+    reserved0: u32,
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    source_token_count: u64,
+    destination_token_start: u64,
+    maximum_token_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawDecodeAttentionReferenceParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawDecodeAttentionParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    tokens_per_partition: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawDecodePartialStateReduceParams {
+    struct_size: u32,
+    reserved0: u32,
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    partial_state_count: u64,
+    partial_state_capacity: u64,
+    query_head_count: u64,
+    head_size: u64,
+    reduction_order: u32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
 struct RawGemmConfig {
     struct_size: u32,
     flags: u32,
@@ -729,6 +806,26 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_prefill_attention_execute(
         params: *const RawPrefillAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_kv_cache_write_execute(
+        params: *const RawKvCacheWriteParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_decode_attention_reference_execute(
+        params: *const RawDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_decode_attention_execute(
+        params: *const RawDecodeAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_decode_partial_state_reduce_execute(
+        params: *const RawDecodePartialStateReduceParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1766,6 +1863,166 @@ pub(super) fn prefill_attention_execute(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn kv_cache_write_execute(
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    source_token_count: u64,
+    destination_token_start: u64,
+    maximum_token_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawKvCacheWriteParams {
+        struct_size: KV_CACHE_WRITE_PARAMS_SIZE,
+        reserved0: 0,
+        key_source,
+        value_source,
+        key_cache,
+        value_cache,
+        source_token_count,
+        destination_token_start,
+        maximum_token_count,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("write CUDA contiguous KV cache", stream, |stream, error| {
+        // SAFETY: the descriptor and every borrowed opaque resource remain
+        // live for the synchronously completing native operation.
+        unsafe { rustinfer_cuda_kv_cache_write_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn decode_attention_reference_execute(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionReferenceParams {
+        struct_size: DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        score_workspace,
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA materialized decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: all fixed-layout descriptors and opaque resources live
+            // through the synchronous native execution.
+            unsafe { rustinfer_cuda_decode_attention_reference_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn decode_attention_execute(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    tokens_per_partition: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionParams {
+        struct_size: DECODE_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        partial_states,
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        tokens_per_partition,
+        partial_state_capacity,
+        scale,
+        reduction_order,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA chunked decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: all fixed-layout descriptors and opaque resources live
+            // through the synchronous native execution.
+            unsafe { rustinfer_cuda_decode_attention_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn decode_partial_state_reduce_execute(
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    partial_state_count: u64,
+    partial_state_capacity: u64,
+    query_head_count: u64,
+    head_size: u64,
+    reduction_order: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodePartialStateReduceParams {
+        struct_size: DECODE_PARTIAL_STATE_REDUCE_PARAMS_SIZE,
+        reserved0: 0,
+        partial_states,
+        output,
+        partial_state_count,
+        partial_state_capacity,
+        query_head_count,
+        head_size,
+        reduction_order,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "reduce CUDA decode partial states",
+        stream,
+        |stream, error| {
+            // SAFETY: the packed F32 state and BF16 output remain borrowed for
+            // the synchronously completing native reducer.
+            unsafe { rustinfer_cuda_decode_partial_state_reduce_execute(&params, stream, error) }
+        },
+    )
+}
+
 /// Runs the existing staged-BF16 primitives for every dense batch while
 /// reusing one `[QH,S,S]` score/probability workspace.
 #[allow(clippy::too_many_arguments)]
@@ -2233,6 +2490,25 @@ const _: () = assert!(offset_of!(RawPrefillAttentionParams, batch_size) == 200);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, scale) == 240);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, local_window) == 248);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, reserved) == 256);
+const _: () = assert!(size_of::<RawKvCacheWriteParams>() == 272);
+const _: () = assert!(offset_of!(RawKvCacheWriteParams, key_source) == 8);
+const _: () = assert!(offset_of!(RawKvCacheWriteParams, source_token_count) == 200);
+const _: () = assert!(offset_of!(RawKvCacheWriteParams, reserved) == 240);
+const _: () = assert!(size_of::<RawDecodeAttentionReferenceParams>() == 328);
+const _: () = assert!(offset_of!(RawDecodeAttentionReferenceParams, query) == 8);
+const _: () = assert!(offset_of!(RawDecodeAttentionReferenceParams, maximum_token_count) == 248);
+const _: () = assert!(offset_of!(RawDecodeAttentionReferenceParams, scale) == 288);
+const _: () = assert!(offset_of!(RawDecodeAttentionReferenceParams, reserved) == 296);
+const _: () = assert!(size_of::<RawDecodeAttentionParams>() == 344);
+const _: () = assert!(offset_of!(RawDecodeAttentionParams, query) == 8);
+const _: () = assert!(offset_of!(RawDecodeAttentionParams, maximum_token_count) == 248);
+const _: () = assert!(offset_of!(RawDecodeAttentionParams, scale) == 304);
+const _: () = assert!(offset_of!(RawDecodeAttentionParams, reserved) == 312);
+const _: () = assert!(size_of::<RawDecodePartialStateReduceParams>() == 176);
+const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, partial_states) == 8);
+const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, partial_state_count) == 104);
+const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, reduction_order) == 136);
+const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, reserved) == 144);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);

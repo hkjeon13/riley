@@ -315,6 +315,108 @@ typedef struct RustInferCudaPrefillAttentionParams {
   uint64_t reserved[4];
 } RustInferCudaPrefillAttentionParams;
 
+// Copies paired BF16 K/V rows from dense single-request source layout
+// [source_token_count, key_value_head_count, head_size] into the contiguous
+// cache layout [key_value_head_count, maximum_token_count, head_size]. The
+// destination token interval starts at destination_token_start. Source rows
+// are bit-preserving; no arithmetic conversion is performed. Every dimension,
+// including source_token_count, must be non-zero.
+typedef struct RustInferCudaKvCacheWriteParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan key_source;
+  RustInferCudaBufferSpan value_source;
+  RustInferCudaBufferSpan key_cache;
+  RustInferCudaBufferSpan value_cache;
+  uint64_t source_token_count;
+  uint64_t destination_token_start;
+  uint64_t maximum_token_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[4];
+} RustInferCudaKvCacheWriteParams;
+
+// Correctness-first single-query decode over contiguous BF16 caches. Query
+// and output are [query_head_count, head_size]; key_cache and value_cache are
+// [key_value_head_count, maximum_token_count, head_size]. The first
+// logical_token_count cache positions participate. score_workspace is BF16
+// [query_head_count, logical_token_count] and is materialized through four
+// stages: QK, scale, stable softmax, and AV. QK and scaling each round to BF16;
+// softmax probabilities and the final output also round to BF16. NaN scores
+// propagate; positive-infinity maxima share equal probability and an all
+// negative-infinity row produces zero output, matching the online-state rules.
+typedef struct RustInferCudaDecodeAttentionReferenceParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_cache;
+  RustInferCudaBufferSpan value_cache;
+  RustInferCudaBufferSpan score_workspace;
+  RustInferCudaBufferSpan output;
+  uint64_t maximum_token_count;
+  uint64_t logical_token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  float scale;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaDecodeAttentionReferenceParams;
+
+#define RUSTINFER_CUDA_DECODE_REDUCTION_ASCENDING 1u
+#define RUSTINFER_CUDA_DECODE_REDUCTION_DESCENDING 2u
+#define RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION 1u
+
+// Partitioned online-softmax decode. The optimized producer supports
+// head_size=64 and writes F32 partial_states with packed logical layout
+// [partial_state_capacity, query_head_count, head_size + 2]. Within each
+// packed row element 0 is max_score (m), element 1 is exp_sum (l), and elements
+// [2, head_size+2) are the unnormalized weighted_value_sum (n). Only the first
+// ceil(logical_token_count / tokens_per_partition) partitions are written;
+// capacity tail bytes remain untouched. The selected ordered reducer merges
+// those states and normalizes exactly once into BF16 output
+// [query_head_count, head_size].
+typedef struct RustInferCudaDecodeAttentionParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_cache;
+  RustInferCudaBufferSpan value_cache;
+  RustInferCudaBufferSpan partial_states;
+  RustInferCudaBufferSpan output;
+  uint64_t maximum_token_count;
+  uint64_t logical_token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t tokens_per_partition;
+  uint64_t partial_state_capacity;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RustInferCudaDecodeAttentionParams;
+
+// Standalone ordered merge for the packed F32 partial-state ABI above. This
+// reducer supports every positive head_size, so PR 10 paged producers can
+// reuse it. It reads the first partial_state_count states from a buffer sized
+// for partial_state_capacity, merges without normalizing intermediate states,
+// then writes BF16 [query_head_count, head_size]. An empty state is encoded as
+// (m=-inf, l=0, n=0); well-formed producer states use l>0 otherwise. A zero
+// partial_state_count is valid and writes an all-zero output.
+typedef struct RustInferCudaDecodePartialStateReduceParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan partial_states;
+  RustInferCudaBufferSpan output;
+  uint64_t partial_state_count;
+  uint64_t partial_state_capacity;
+  uint64_t query_head_count;
+  uint64_t head_size;
+  uint32_t reduction_order;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaDecodePartialStateReduceParams;
+
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
 #define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
@@ -640,6 +742,28 @@ RustInferCudaStatus rustinfer_cuda_av_gqa_execute(
 // stream. Unsupported head dimensions return NOT_SUPPORTED before launching.
 RustInferCudaStatus rustinfer_cuda_prefill_attention_execute(
     const RustInferCudaPrefillAttentionParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// These single-request cache/decode calls are allocation-free, exclusively
+// borrow every distinct opaque buffer and the explicit stream, and synchronize
+// that stream before returning. Writable spans may not overlap any other
+// touched span. Cache reads use only the logical prefix but cache spans must
+// declare the complete maximum-token strided capacity.
+RustInferCudaStatus rustinfer_cuda_kv_cache_write_execute(
+    const RustInferCudaKvCacheWriteParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_decode_attention_reference_execute(
+    const RustInferCudaDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
+    const RustInferCudaDecodeAttentionParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_decode_partial_state_reduce_execute(
+    const RustInferCudaDecodePartialStateReduceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
