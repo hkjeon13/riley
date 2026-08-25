@@ -31,6 +31,7 @@ pub struct KernelKey {
     op: OpId,
     input_dtype: DType,
     weight_dtype: Option<DType>,
+    accumulator_dtype: Option<DType>,
     output_dtype: DType,
 }
 
@@ -41,12 +42,14 @@ impl KernelKey {
         op: OpId,
         input_dtype: DType,
         weight_dtype: Option<DType>,
+        accumulator_dtype: Option<DType>,
         output_dtype: DType,
     ) -> Self {
         Self {
             op,
             input_dtype,
             weight_dtype,
+            accumulator_dtype,
             output_dtype,
         }
     }
@@ -67,6 +70,12 @@ impl KernelKey {
     #[must_use]
     pub const fn weight_dtype(self) -> Option<DType> {
         self.weight_dtype
+    }
+
+    /// Returns the optional accumulator dtype used by reduction operations.
+    #[must_use]
+    pub const fn accumulator_dtype(self) -> Option<DType> {
+        self.accumulator_dtype
     }
 
     /// Returns the output dtype.
@@ -357,8 +366,13 @@ impl error::Error for KernelRegistryError {}
 mod tests {
     use super::*;
 
-    const GEMM_F32: KernelKey =
-        KernelKey::new(OpId::Gemm, DType::F32, Some(DType::F32), DType::F32);
+    const GEMM_BF16_BF16_F32ACC_BF16: KernelKey = KernelKey::new(
+        OpId::Gemm,
+        DType::BF16,
+        Some(DType::BF16),
+        Some(DType::F32),
+        DType::BF16,
+    );
 
     fn implementation(
         id: &'static str,
@@ -368,7 +382,7 @@ mod tests {
         KernelImplementation::new(
             id,
             origin,
-            KernelCapability::new(GEMM_F32, deterministic, true),
+            KernelCapability::new(GEMM_BF16_BF16_F32ACC_BF16, deterministic, true),
         )
     }
 
@@ -387,7 +401,7 @@ mod tests {
             .unwrap();
 
         let selected = registry
-            .select(GEMM_F32, KernelPreference::Reference)
+            .select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Reference)
             .unwrap();
         assert_eq!(selected.id(), "reference");
     }
@@ -412,7 +426,7 @@ mod tests {
 
         for registry in [&first, &reversed] {
             let selected = registry
-                .select(GEMM_F32, KernelPreference::Optimized)
+                .select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Optimized)
                 .unwrap();
             assert_eq!(selected.id(), "cublas-a");
         }
@@ -427,7 +441,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             reference_only
-                .select(GEMM_F32, KernelPreference::Optimized)
+                .select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Optimized,)
                 .unwrap()
                 .origin(),
             KernelOrigin::ReferenceCpu
@@ -445,7 +459,7 @@ mod tests {
             ))
             .unwrap();
         assert!(matches!(
-            registry.select(GEMM_F32, KernelPreference::Optimized),
+            registry.select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Optimized),
             Err(KernelRegistryError::ExperimentalTritonRejected { .. })
         ));
 
@@ -453,9 +467,45 @@ mod tests {
             .register(implementation("cublas", KernelOrigin::CuBlasLt, false))
             .unwrap();
         assert!(matches!(
-            registry.select(GEMM_F32, KernelPreference::Optimized),
+            registry.select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Optimized),
             Err(KernelRegistryError::ExperimentalTritonRejected { .. })
         ));
+    }
+
+    #[test]
+    fn gemm_selection_requires_exact_accumulator_dtype() {
+        assert_eq!(
+            GEMM_BF16_BF16_F32ACC_BF16.accumulator_dtype(),
+            Some(DType::F32)
+        );
+
+        let mut registry = KernelRegistry::new();
+        registry
+            .register(implementation(
+                "cublaslt-bf16-f32acc-bf16-v1",
+                KernelOrigin::CuBlasLt,
+                true,
+            ))
+            .unwrap();
+
+        let bf16_accumulator = KernelKey::new(
+            OpId::Gemm,
+            DType::BF16,
+            Some(DType::BF16),
+            Some(DType::BF16),
+            DType::BF16,
+        );
+        assert!(matches!(
+            registry.select(bf16_accumulator, KernelPreference::Optimized),
+            Err(KernelRegistryError::NoDeterministicImplementation { .. })
+        ));
+        assert_eq!(
+            registry
+                .select(GEMM_BF16_BF16_F32ACC_BF16, KernelPreference::Optimized,)
+                .unwrap()
+                .id(),
+            "cublaslt-bf16-f32acc-bf16-v1"
+        );
     }
 
     #[test]
@@ -473,7 +523,7 @@ mod tests {
             Err(KernelRegistryError::DuplicateImplementationId { id: "same" })
         ));
 
-        let cast_key = KernelKey::new(OpId::Cast, DType::F32, None, DType::BF16);
+        let cast_key = KernelKey::new(OpId::Cast, DType::F32, None, None, DType::BF16);
         registry
             .register(KernelImplementation::new(
                 "same",
