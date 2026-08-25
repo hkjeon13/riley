@@ -5,7 +5,7 @@
 
 use std::error::Error;
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use rustinfer_cuda::{
     CudaAllocationStats, CudaContext, CudaRuntime, CudaStream, DecodeAttentionBackend,
@@ -327,7 +327,12 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
     assert_eq!(context.allocation_stats()?, stable_allocations);
 
     let mut consumed_tokens = Vec::with_capacity(decode_calls);
-    let mut latencies_ns = Vec::with_capacity(decode_calls);
+    let mut wall_latencies_ns = Vec::with_capacity(decode_calls);
+    let mut gpu_stream_latencies_ns = Vec::with_capacity(decode_calls);
+    let mut cpu_enqueue_latencies_ns = Vec::with_capacity(decode_calls);
+    let mut host_outside_event_latencies_ns = Vec::with_capacity(decode_calls);
+    let mut decode_start_event = context.create_event()?;
+    let mut decode_end_event = context.create_event()?;
     for decode_call in 0..decode_calls {
         let current_start = decode_call * row_bytes;
         let current_end = current_start + row_bytes;
@@ -337,11 +342,23 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
         )?;
         consumed_tokens.push(token_id);
         let logical_before = decode.logical_length();
-        let started = Instant::now();
+        let wall_started = Instant::now();
+        decode_start_event.record(stream)?;
+        let enqueue_started = Instant::now();
         decode.decode(token_id, stream)?;
-        stream.synchronize()?;
-        let latency_ns = u64::try_from(started.elapsed().as_nanos())?;
-        latencies_ns.push(latency_ns);
+        let cpu_enqueue_latency_ns = u64::try_from(enqueue_started.elapsed().as_nanos())?;
+        decode_end_event.record(stream)?;
+        decode_end_event.synchronize()?;
+        let wall_latency_ns = u64::try_from(wall_started.elapsed().as_nanos())?;
+        let gpu_elapsed_seconds =
+            f64::from(decode_start_event.elapsed_ms(&decode_end_event)?) / 1_000.0;
+        let gpu_stream_latency_ns =
+            u64::try_from(Duration::try_from_secs_f64(gpu_elapsed_seconds)?.as_nanos())?;
+        let host_outside_event_latency_ns = wall_latency_ns.saturating_sub(gpu_stream_latency_ns);
+        wall_latencies_ns.push(wall_latency_ns);
+        gpu_stream_latencies_ns.push(gpu_stream_latency_ns);
+        cpu_enqueue_latencies_ns.push(cpu_enqueue_latency_ns);
+        host_outside_event_latencies_ns.push(host_outside_event_latency_ns);
         let next_start = current_end;
         let next_end = next_start + row_bytes;
         decode.download_last_logits(&mut logits[next_start..next_end], stream)?;
@@ -355,36 +372,52 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
         );
         println!(
             "pr09-llama-decode-raw schema_version=1 implementation_id={} decode_call={} \
-logical_before={} logical_after={} token_id={} latency_ns={} \
-timing_boundary=decode_plus_stream_synchronize logits_download_excluded=true",
+logical_before={} logical_after={} token_id={} latency_ns={} gpu_stream_elapsed_ns={} \
+cpu_enqueue_ns={} host_outside_event_ns={} \
+timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=true",
             trace.implementation_id(),
             decode_call + 1,
             logical_before,
             decode.logical_length(),
             token_id,
-            latency_ns,
+            wall_latency_ns,
+            gpu_stream_latency_ns,
+            cpu_enqueue_latency_ns,
+            host_outside_event_latency_ns,
         );
     }
     assert_eq!(decode.logical_length(), maximum_length);
     assert_eq!(context.allocation_stats()?, stable_allocations);
 
-    if !latencies_ns.is_empty() {
-        let mut sorted = latencies_ns;
-        sorted.sort_unstable();
+    if !wall_latencies_ns.is_empty() {
+        wall_latencies_ns.sort_unstable();
+        gpu_stream_latencies_ns.sort_unstable();
+        cpu_enqueue_latencies_ns.sort_unstable();
+        host_outside_event_latencies_ns.sort_unstable();
         println!(
             "pr09-llama-decode-summary schema_version=1 implementation_id={} samples={} \
-median_ns={} p95_ns={} first_logical_length={} final_logical_length={} \
-timing_boundary=decode_plus_stream_synchronize logits_download_excluded=true",
+median_ns={} p95_ns={} median_gpu_stream_elapsed_ns={} p95_gpu_stream_elapsed_ns={} \
+median_cpu_enqueue_ns={} p95_cpu_enqueue_ns={} median_host_outside_event_ns={} \
+p95_host_outside_event_ns={} first_logical_length={} final_logical_length={} \
+timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=true",
             trace.implementation_id(),
-            sorted.len(),
-            percentile_nearest_rank(&sorted, 50),
-            percentile_nearest_rank(&sorted, 95),
+            wall_latencies_ns.len(),
+            percentile_nearest_rank(&wall_latencies_ns, 50),
+            percentile_nearest_rank(&wall_latencies_ns, 95),
+            percentile_nearest_rank(&gpu_stream_latencies_ns, 50),
+            percentile_nearest_rank(&gpu_stream_latencies_ns, 95),
+            percentile_nearest_rank(&cpu_enqueue_latencies_ns, 50),
+            percentile_nearest_rank(&cpu_enqueue_latencies_ns, 95),
+            percentile_nearest_rank(&host_outside_event_latencies_ns, 50),
+            percentile_nearest_rank(&host_outside_event_latencies_ns, 95),
             prompt.len(),
             maximum_length,
         );
     }
 
     let implementation_id = trace.implementation_id();
+    decode_start_event.close()?;
+    decode_end_event.close()?;
     decode.close()?;
     assert!(
         context.allocation_stats()?.is_zero(),
