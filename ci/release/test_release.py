@@ -19,6 +19,7 @@ from build_release_bundle import build_bundle  # noqa: E402
 from release_common import (  # noqa: E402
     ALLOWED_NATIVE_DEPENDENCIES,
     ReleaseContractError,
+    validate_binary,
 )
 from verify_release_bundle import verify_bundle  # noqa: E402
 from verify_runtime_dockerfile import verify_dockerfile  # noqa: E402
@@ -162,6 +163,10 @@ class ReleaseBundleTests(unittest.TestCase):
         second = self.build("second.tar.gz")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         verify_bundle(first)
+
+    def test_safe_application_strings_are_not_runtime_dependencies(self) -> None:
+        binary = fixture_elf() + b"transformers_version ExperimentalTriton"
+        self.assertEqual(validate_binary(binary), DEPENDENCIES)
 
     def test_missing_owner_selected_license_fails_preflight(self) -> None:
         (self.repository / "LICENSE").unlink()

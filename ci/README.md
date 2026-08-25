@@ -46,7 +46,9 @@ and it is not part of a production artifact. The checker fails closed unless:
   license expression, MSRV, and dependency edges;
 - no git dependency is present, and every approved package's MSRV is at most
   the workspace Rust 1.85 MSRV; and
-- no production build script invokes Python or Triton.
+- no production build script invokes Python or Triton; and
+- production crate sources do not launch external processes. The only allowed
+  `std::process` uses are the server's `ExitCode` and evidence-directory PID.
 
 The approved dependency manifest is a reviewed allowlist, not a discovery
 output. Adding or upgrading a package requires updating its exact resolved
@@ -243,7 +245,11 @@ deterministic archive with a reviewed release/configuration/rollback manifest,
 an ELF-derived native dependency manifest, and closed `SHA256SUMS` coverage.
 `verify_release_bundle.py` treats the archive as hostile and rejects traversal,
 links, extra files, forbidden Python artifacts, unreviewed or mismatched ELF
-dependencies, non-canonical metadata, and checksum errors.
+dependencies, non-canonical metadata, and checksum errors. Runtime dependency
+validation is derived from ELF `DT_NEEDED` entries and an exact allowlist;
+ordinary application strings such as model configuration keys are not treated
+as dependencies. The workspace boundary checker separately rejects external
+process launching from production crate sources.
 
 `ci/release/Dockerfile` separates the CUDA builder from a digest-pinned CUDA
 runtime stage and copies only the verified bundle payload. The final stage

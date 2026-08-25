@@ -312,10 +312,6 @@ def validate_binary(binary: bytes) -> list[str]:
     if any(dynamic_paths):
         raise ReleaseContractError("CLI binary must not contain DT_RPATH or DT_RUNPATH")
     native_manifest_bytes(dependencies)
-    lowered = binary.lower()
-    forbidden_binary_terms = (b"libpython", b"pytorch", b"transformers", b"triton", b"pickle")
-    if any(term in lowered for term in forbidden_binary_terms):
-        raise ReleaseContractError("CLI binary contains a forbidden Python runtime marker")
     return dependencies
 
 

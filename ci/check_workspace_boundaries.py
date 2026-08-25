@@ -212,6 +212,12 @@ FORBIDDEN_BUILD_COMMAND = re.compile(
     r"Command\s*::\s*new\s*\(\s*[br#]*[\"'](?:python(?:3(?:\.\d+)*)?|triton)[\"']",
     re.IGNORECASE,
 )
+FORBIDDEN_RUNTIME_PROCESS = re.compile(
+    r"(?:std\s*::\s*)?process\s*::\s*(?!ExitCode\b|id\b)|"
+    r"\buse\s+std\s*::\s*process\b(?!\s*::\s*ExitCode\s*;)|"
+    r"\buse\s+std\s*::\s*\{[^}]*\bprocess\b",
+    re.DOTALL,
+)
 
 
 class BoundaryError(RuntimeError):
@@ -822,6 +828,17 @@ def validate_build_scripts(root: Path) -> None:
             )
 
 
+def validate_production_sources(root: Path) -> None:
+    for relative_dir in EXPECTED_CRATES:
+        source_root = root / relative_dir / "src"
+        for source_path in sorted(source_root.rglob("*.rs")):
+            source = source_path.read_text(encoding="utf-8")
+            if FORBIDDEN_RUNTIME_PROCESS.search(source):
+                raise BoundaryError(
+                    f"{source_path}: production sources may not launch external processes"
+                )
+
+
 def lock_dependency_name(reference: object, context: str) -> tuple[str, str | None]:
     if not isinstance(reference, str):
         raise BoundaryError(f"{context}: Cargo.lock dependency must be a string")
@@ -1000,6 +1017,7 @@ def main() -> int:
         validate_dependencies(root, packages, dependency_policy)
         validate_features(packages)
         validate_build_scripts(root)
+        validate_production_sources(root)
         if args.locked:
             validate_lockfile(root, packages, dependency_policy)
             resolved_metadata = cargo_metadata(root, True, no_deps=False)
@@ -1023,6 +1041,7 @@ def main() -> int:
     if args.locked:
         print("  resolved source/checksum/license/MSRV/dependency edges: exact allowlist")
     print("  production Python/Triton build invocations: 0")
+    print("  production runtime process-launch paths: 0")
     return 0
 
 
