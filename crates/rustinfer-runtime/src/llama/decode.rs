@@ -1719,13 +1719,10 @@ impl PreparedLlamaDecode {
         match &self.buffers.cache {
             KvCacheStorage::Contiguous(_) => None,
             KvCacheStorage::Paged(cache) => {
-                let unused_tokens = u64::try_from(cache.sequence.internal_fragmentation_tokens())
-                    .expect("a paged tail has fewer than 16 unused tokens");
-                Some(
-                    unused_tokens
-                        .checked_mul(cache.layout.bytes_per_physical_block() / PAGED_KV_BLOCK_SIZE)
-                        .expect("tail fragmentation is bounded by one physical block"),
-                )
+                let unused_tokens =
+                    u64::try_from(cache.sequence.internal_fragmentation_tokens()).ok()?;
+                unused_tokens
+                    .checked_mul(cache.layout.bytes_per_physical_block() / PAGED_KV_BLOCK_SIZE)
             }
         }
     }
