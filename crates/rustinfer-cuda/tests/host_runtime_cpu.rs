@@ -4,10 +4,10 @@ use std::error::Error as _;
 use std::hint::black_box;
 
 use rustinfer_cuda::{
-    CRATE_ROLE, CUDA_ENABLED, CudaAllocationStats, CudaCommandBatch, CudaContext, CudaDevice,
-    CudaDeviceBuffer, CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaEvent,
-    CudaKernel, CudaPendingD2H, CudaPendingFill, CudaPendingH2D, CudaPinnedHostBuffer, CudaRuntime,
-    CudaStream, DeviceProperties, EXPECTED_ABI_VERSION,
+    CRATE_ROLE, CUDA_ENABLED, CudaAllocationStats, CudaContext, CudaDevice, CudaDeviceBuffer,
+    CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaEvent, CudaKernel,
+    CudaPendingD2H, CudaPendingFill, CudaPendingH2D, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
+    DeviceProperties, EXPECTED_ABI_VERSION,
 };
 
 fn assert_send<T: Send>() {}
@@ -62,7 +62,6 @@ fn public_ownership_types_keep_their_thread_movement_contracts() {
     assert_standard_error::<CudaError>();
 
     assert_send::<CudaStream>();
-    assert_send::<CudaCommandBatch<'static>>();
     assert_send::<CudaEvent>();
     assert_send::<CudaPendingFill<'static>>();
     assert_send::<CudaDeviceBuffer>();

@@ -1,8 +1,8 @@
 use std::error::Error;
 
 use rustinfer_cuda::{
-    CudaCommandBatch, CudaContext, CudaDevice, CudaErrorKind, CudaErrorStage, CudaEvent,
-    CudaKernel, CudaPendingFill, CudaRuntime, CudaStream, DeviceProperties,
+    CudaContext, CudaDevice, CudaErrorKind, CudaErrorStage, CudaEvent, CudaKernel, CudaPendingFill,
+    CudaRuntime, CudaStream, DeviceProperties,
 };
 
 const LEAK_TOLERANCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -45,7 +45,6 @@ fn device_metadata_is_reported() -> Result<(), Box<dyn Error>> {
     assert_send::<CudaKernel>();
     assert_sync::<CudaKernel>();
     assert_send::<CudaStream>();
-    assert_send::<CudaCommandBatch<'static>>();
     assert_send::<CudaEvent>();
     assert_send::<CudaPendingFill<'static>>();
 

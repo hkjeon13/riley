@@ -1,6 +1,7 @@
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::mem::size_of;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use crate::error::{CudaError, CudaResult};
@@ -476,6 +477,7 @@ impl CudaStream {
             Ok(CudaCommandBatch {
                 stream: self,
                 active: true,
+                _not_send_or_sync: PhantomData,
             })
         }
         #[cfg(not(feature = "cuda"))]
@@ -560,9 +562,10 @@ impl CudaStream {
 
 /// Exclusive RAII guard for one native stream command batch.
 ///
-/// The guard is `Send` when its borrowed stream is `Send`, but it remains
-/// deliberately `!Sync`. Its mutable borrow prevents the stream from being
-/// accessed directly until [`Self::finish`] returns or the guard is dropped.
+/// The guard is deliberately `!Send + !Sync` because the native batch is owned
+/// by the host thread that began it. Its mutable borrow also prevents the stream
+/// from being accessed directly until [`Self::finish`] returns or the guard is
+/// dropped.
 ///
 /// ```compile_fail
 /// fn cannot_alias(stream: &mut rustinfer_cuda::CudaStream) {
@@ -571,10 +574,21 @@ impl CudaStream {
 ///     drop(batch);
 /// }
 /// ```
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<rustinfer_cuda::CudaCommandBatch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<rustinfer_cuda::CudaCommandBatch<'static>>();
+/// ```
 #[must_use = "finish the command batch explicitly to observe completion errors"]
 pub struct CudaCommandBatch<'stream> {
     stream: &'stream mut CudaStream,
     active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
 }
 
 impl CudaCommandBatch<'_> {
