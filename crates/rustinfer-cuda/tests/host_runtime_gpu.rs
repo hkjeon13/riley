@@ -1,8 +1,8 @@
 use std::error::Error;
 
 use rustinfer_cuda::{
-    CudaContext, CudaDevice, CudaErrorKind, CudaErrorStage, CudaEvent, CudaKernel, CudaPendingFill,
-    CudaRuntime, CudaStream, DeviceProperties,
+    CudaCommandBatch, CudaContext, CudaDevice, CudaErrorKind, CudaErrorStage, CudaEvent,
+    CudaKernel, CudaPendingFill, CudaRuntime, CudaStream, DeviceProperties,
 };
 
 const LEAK_TOLERANCE_BYTES: u64 = 64 * 1024 * 1024;
@@ -45,6 +45,7 @@ fn device_metadata_is_reported() -> Result<(), Box<dyn Error>> {
     assert_send::<CudaKernel>();
     assert_sync::<CudaKernel>();
     assert_send::<CudaStream>();
+    assert_send::<CudaCommandBatch<'static>>();
     assert_send::<CudaEvent>();
     assert_send::<CudaPendingFill<'static>>();
 
@@ -65,6 +66,37 @@ fn device_metadata_is_reported() -> Result<(), Box<dyn Error>> {
     assert_eq!(null_error.kind(), CudaErrorKind::InvalidArgument);
     assert_eq!(null_error.stage(), CudaErrorStage::Validation);
     Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn command_batch_guard_is_one_shot_and_drop_restores_stream_use() -> Result<(), Box<dyn Error>> {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+
+    {
+        let mut batch = stream.begin_command_batch()?;
+        let nested = match batch.stream_mut().begin_command_batch() {
+            Ok(unexpected) => {
+                drop(unexpected);
+                panic!("nested command batch unexpectedly succeeded");
+            }
+            Err(error) => error,
+        };
+        assert_eq!(nested.kind(), CudaErrorKind::InvalidState);
+        batch.finish()?;
+    }
+    stream.synchronize()?;
+
+    {
+        let _batch = stream.begin_command_batch()?;
+    }
+    stream.begin_command_batch()?.finish()?;
+    stream.synchronize()?;
+
+    stream.close()?;
+    close_context(context)
 }
 
 #[test]

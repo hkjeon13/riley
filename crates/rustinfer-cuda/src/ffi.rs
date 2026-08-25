@@ -846,6 +846,14 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_stream_synchronize(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn rustinfer_cuda_stream_command_batch_begin(
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_stream_command_batch_end(
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_stream_wait_event(
         stream: *mut RawStream,
         event: *mut RawEvent,
@@ -1322,6 +1330,23 @@ impl StreamHandle {
         // SAFETY: self uniquely owns the live stream handle.
         let status = unsafe { rustinfer_cuda_stream_synchronize(self.as_ptr(), &mut error) };
         status_result(status, "synchronize CUDA stream", &error)
+    }
+
+    pub(super) fn command_batch_begin(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle. The native
+        // boundary validates lifecycle state before enabling command batching.
+        let status =
+            unsafe { rustinfer_cuda_stream_command_batch_begin(self.as_ptr(), &mut error) };
+        status_result(status, "begin CUDA stream command batch", &error)
+    }
+
+    pub(super) fn command_batch_end(&mut self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the live stream handle. The native end
+        // call owns completion and any fail-closed post-error lifecycle state.
+        let status = unsafe { rustinfer_cuda_stream_command_batch_end(self.as_ptr(), &mut error) };
+        status_result(status, "end CUDA stream command batch", &error)
     }
 
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {

@@ -55,8 +55,8 @@ pub use primitives::{
     residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
 };
 pub use runtime::{
-    CudaContext, CudaDevice, CudaEvent, CudaKernel, CudaPendingFill, CudaRuntime, CudaStream,
-    DeviceProperties,
+    CudaCommandBatch, CudaContext, CudaDevice, CudaEvent, CudaKernel, CudaPendingFill, CudaRuntime,
+    CudaStream, DeviceProperties,
 };
 
 /// The crate's responsibility in the production dependency graph.

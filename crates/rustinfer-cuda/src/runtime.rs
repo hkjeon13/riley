@@ -455,6 +455,35 @@ pub struct CudaStream {
 }
 
 impl CudaStream {
+    /// Begins a native command batch on this stream.
+    ///
+    /// Primitive calls made through [`CudaCommandBatch::stream_mut`] remain
+    /// ordered on the stream, while their native wrappers may defer per-command
+    /// synchronization until the batch ends. The guard holds the stream's
+    /// exclusive mutable borrow, preventing direct stream use for its lifetime.
+    /// Call [`CudaCommandBatch::finish`] to surface completion errors; dropping
+    /// the guard performs the same native end operation on a best-effort basis.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`crate::CudaErrorKind::Unavailable`] when compiled without the
+    /// `cuda` feature, or a native lifecycle error when the stream cannot enter
+    /// command-batch mode (including an already-active batch).
+    pub fn begin_command_batch(&mut self) -> CudaResult<CudaCommandBatch<'_>> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.command_batch_begin()?;
+            Ok(CudaCommandBatch {
+                stream: self,
+                active: true,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("CudaStream::begin_command_batch"))
+        }
+    }
+
     /// Non-blocking completion check.
     ///
     /// Native `cudaErrorNotReady` is returned as `Ok(false)`.
@@ -526,6 +555,72 @@ impl CudaStream {
             let _ = self;
             Err(CudaError::unavailable("CudaStream::close"))
         }
+    }
+}
+
+/// Exclusive RAII guard for one native stream command batch.
+///
+/// The guard is `Send` when its borrowed stream is `Send`, but it remains
+/// deliberately `!Sync`. Its mutable borrow prevents the stream from being
+/// accessed directly until [`Self::finish`] returns or the guard is dropped.
+///
+/// ```compile_fail
+/// fn cannot_alias(stream: &mut rustinfer_cuda::CudaStream) {
+///     let batch = stream.begin_command_batch().unwrap();
+///     let _ = stream.synchronize();
+///     drop(batch);
+/// }
+/// ```
+#[must_use = "finish the command batch explicitly to observe completion errors"]
+pub struct CudaCommandBatch<'stream> {
+    stream: &'stream mut CudaStream,
+    active: bool,
+}
+
+impl CudaCommandBatch<'_> {
+    /// Reborrows the exclusively held stream for ordered CUDA operations.
+    ///
+    /// The returned borrow cannot outlive this guard. Native lifecycle checks
+    /// reject attempts to begin a nested command batch.
+    pub fn stream_mut(&mut self) -> &mut CudaStream {
+        self.stream
+    }
+
+    /// Ends the command batch exactly once and reports completion errors.
+    ///
+    /// The guard marks the end operation consumed before entering native code,
+    /// so its destructor never retries an end call that returned an error.
+    /// The native boundary owns fail-closed resource retention after ambiguous
+    /// completion; retrying the lifecycle transition would be unsafe.
+    ///
+    /// # Errors
+    ///
+    /// Returns the translated native end/synchronization error. A dropped guard
+    /// cannot report this error, so callers that require reliable completion
+    /// diagnostics must call `finish`.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.end_once()
+    }
+
+    fn end_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            self.stream.native.command_batch_end()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("CudaCommandBatch::finish"))
+        }
+    }
+}
+
+impl Drop for CudaCommandBatch<'_> {
+    fn drop(&mut self) {
+        let _ = self.end_once();
     }
 }
 
