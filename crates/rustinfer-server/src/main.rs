@@ -666,6 +666,32 @@ mod tests {
                 "/a",
                 "--residual-rmsnorm",
                 "fused",
+                "--execution-completion",
+                "iteration-batch",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--execution-completion",
+                "unknown",
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn fused_residual_norm_requires_explicit_per_operation_completion() {
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--residual-rmsnorm",
+                "fused",
             ]))
             .is_err()
         );
@@ -696,28 +722,6 @@ mod tests {
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
-        );
-        assert!(
-            parse_arguments(args(&[
-                "serve",
-                "--model",
-                "/a",
-                "--residual-rmsnorm",
-                "fused",
-                "--execution-completion",
-                "iteration-batch",
-            ]))
-            .is_err()
-        );
-        assert!(
-            parse_arguments(args(&[
-                "serve",
-                "--model",
-                "/a",
-                "--execution-completion",
-                "unknown",
-            ]))
-            .is_err()
         );
     }
 }
