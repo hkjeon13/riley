@@ -49,6 +49,60 @@ pub trait Tokenizer {
     /// vocabulary and merge table.
     fn encode(&self, input: &str, options: EncodeOptions) -> ModelResult<Vec<u32>>;
 
+    /// Returns an upper bound for the raw decoded bytes of one token.
+    ///
+    /// The bound includes special tokens before `skip_special_tokens` is
+    /// applied and allows callers to allocate one reusable streaming buffer.
+    #[must_use]
+    fn maximum_decoded_token_bytes(&self) -> usize;
+
+    /// Returns the exact number of raw decoded bytes for a token sequence.
+    ///
+    /// ByteLevel bytes are counted before UTF-8 validation or lossy decoding,
+    /// so an incomplete multi-token UTF-8 sequence remains representable.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an unknown token ID or length overflow.
+    fn decoded_bytes_len(&self, ids: &[u32], options: DecodeOptions) -> ModelResult<usize>;
+
+    /// Decodes one token into caller-owned raw byte storage.
+    ///
+    /// On success only `destination[..returned_length]` is written. A skipped
+    /// special token returns zero and leaves the destination untouched. The
+    /// successful path performs no heap allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error for an unknown ID, an insufficient
+    /// destination, or an internal tokenizer invariant violation. Validation
+    /// completes before the first destination write.
+    fn decode_token_bytes_into(
+        &self,
+        id: u32,
+        options: DecodeOptions,
+        destination: &mut [u8],
+    ) -> ModelResult<usize>;
+
+    /// Decodes a token sequence into caller-owned raw byte storage.
+    ///
+    /// ByteLevel bytes from adjacent tokens are concatenated without applying
+    /// UTF-8 replacement. On success only `destination[..returned_length]` is
+    /// written, and the successful path performs no heap allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a structured error for an unknown ID, length overflow, an
+    /// insufficient destination, or an internal tokenizer invariant
+    /// violation. The complete sequence and destination length are validated
+    /// before the first destination write.
+    fn decode_bytes(
+        &self,
+        ids: &[u32],
+        options: DecodeOptions,
+        destination: &mut [u8],
+    ) -> ModelResult<usize>;
+
     /// Decodes model token IDs into UTF-8 text.
     ///
     /// # Errors
@@ -66,6 +120,7 @@ pub struct SmolLm2Tokenizer {
     added_trie: AddedTrie,
     byte_encoder: [char; 256],
     byte_decoder: BTreeMap<char, u8>,
+    maximum_decoded_token_bytes: usize,
 }
 
 impl SmolLm2Tokenizer {
@@ -111,6 +166,11 @@ impl SmolLm2Tokenizer {
             validate_added_tokens(raw.added_tokens, &vocab, vocab_by_id.len())?;
         validate_byte_alphabet(&vocab, &special_ids, &byte_decoder)?;
         let merge_ranks = validate_merges(raw.model.merges, &vocab)?;
+        let maximum_decoded_token_bytes = vocab_by_id
+            .iter()
+            .map(|token| DecodedToken::classify(token, &byte_decoder).byte_len())
+            .max()
+            .unwrap_or(0);
 
         Ok(Self {
             vocab,
@@ -120,6 +180,7 @@ impl SmolLm2Tokenizer {
             added_trie,
             byte_encoder,
             byte_decoder,
+            maximum_decoded_token_bytes,
         })
     }
 
@@ -213,6 +274,70 @@ impl SmolLm2Tokenizer {
         }
         Ok(ids)
     }
+
+    fn decoded_token(
+        &self,
+        id: u32,
+        options: DecodeOptions,
+    ) -> ModelResult<Option<DecodedToken<'_>>> {
+        let token = self
+            .token_for_id(id)
+            .ok_or(ModelError::InvalidTokenId { id })?;
+        if self.is_special_id(id) && options.skip_special_tokens {
+            return Ok(None);
+        }
+        Ok(Some(DecodedToken::classify(token, &self.byte_decoder)))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DecodedToken<'a> {
+    ByteLevel(&'a str),
+    Raw(&'a [u8]),
+}
+
+impl<'a> DecodedToken<'a> {
+    fn classify(token: &'a str, byte_decoder: &BTreeMap<char, u8>) -> Self {
+        if token
+            .chars()
+            .all(|character| byte_decoder.contains_key(&character))
+        {
+            Self::ByteLevel(token)
+        } else {
+            Self::Raw(token.as_bytes())
+        }
+    }
+
+    fn byte_len(self) -> usize {
+        match self {
+            Self::ByteLevel(token) => token.chars().count(),
+            Self::Raw(bytes) => bytes.len(),
+        }
+    }
+
+    fn write_into(
+        self,
+        byte_decoder: &BTreeMap<char, u8>,
+        destination: &mut [u8],
+    ) -> ModelResult<usize> {
+        match self {
+            Self::ByteLevel(token) => {
+                for (index, character) in token.chars().enumerate() {
+                    let byte = byte_decoder.get(&character).copied().ok_or_else(|| {
+                        invalid(format!(
+                            "validated ByteLevel token contains unmapped character {character:?}"
+                        ))
+                    })?;
+                    destination[index] = byte;
+                }
+                Ok(token.chars().count())
+            }
+            Self::Raw(bytes) => {
+                destination[..bytes.len()].copy_from_slice(bytes);
+                Ok(bytes.len())
+            }
+        }
+    }
 }
 
 impl Tokenizer for SmolLm2Tokenizer {
@@ -231,27 +356,75 @@ impl Tokenizer for SmolLm2Tokenizer {
         Ok(output)
     }
 
-    fn decode(&self, ids: &[u32], options: DecodeOptions) -> ModelResult<String> {
-        let mut decoded_bytes = Vec::new();
+    fn maximum_decoded_token_bytes(&self) -> usize {
+        self.maximum_decoded_token_bytes
+    }
+
+    fn decoded_bytes_len(&self, ids: &[u32], options: DecodeOptions) -> ModelResult<usize> {
+        let mut byte_len = 0_usize;
         for &id in ids {
-            let token = self
-                .token_for_id(id)
-                .ok_or(ModelError::InvalidTokenId { id })?;
-            if self.is_special_id(id) && options.skip_special_tokens {
-                continue;
-            }
-            let mapped = token
-                .chars()
-                .map(|character| self.byte_decoder.get(&character).copied())
-                .collect::<Option<Vec<_>>>();
-            if let Some(mapped) = mapped {
-                decoded_bytes.extend(mapped);
-            } else {
-                decoded_bytes.extend_from_slice(token.as_bytes());
-            }
+            let token_bytes = self
+                .decoded_token(id, options)?
+                .map_or(0, DecodedToken::byte_len);
+            byte_len =
+                byte_len
+                    .checked_add(token_bytes)
+                    .ok_or_else(|| ModelError::NumericOverflow {
+                        field: "decoded token bytes".to_owned(),
+                    })?;
         }
+        Ok(byte_len)
+    }
+
+    fn decode_token_bytes_into(
+        &self,
+        id: u32,
+        options: DecodeOptions,
+        destination: &mut [u8],
+    ) -> ModelResult<usize> {
+        let Some(decoded) = self.decoded_token(id, options)? else {
+            return Ok(0);
+        };
+        let required = decoded.byte_len();
+        ensure_decode_destination(required, destination.len())?;
+        decoded.write_into(&self.byte_decoder, destination)
+    }
+
+    fn decode_bytes(
+        &self,
+        ids: &[u32],
+        options: DecodeOptions,
+        destination: &mut [u8],
+    ) -> ModelResult<usize> {
+        let required = self.decoded_bytes_len(ids, options)?;
+        ensure_decode_destination(required, destination.len())?;
+
+        let mut written = 0_usize;
+        for &id in ids {
+            written += self.decode_token_bytes_into(id, options, &mut destination[written..])?;
+        }
+        debug_assert_eq!(written, required);
+        Ok(written)
+    }
+
+    fn decode(&self, ids: &[u32], options: DecodeOptions) -> ModelResult<String> {
+        let byte_len = self.decoded_bytes_len(ids, options)?;
+        let mut decoded_bytes = vec![0_u8; byte_len];
+        let written = self.decode_bytes(ids, options, &mut decoded_bytes)?;
+        debug_assert_eq!(written, byte_len);
         Ok(String::from_utf8_lossy(&decoded_bytes).into_owned())
     }
+}
+
+fn ensure_decode_destination(required: usize, actual: usize) -> ModelResult<()> {
+    if actual < required {
+        return Err(ModelError::LimitExceeded {
+            resource: "token decode destination",
+            limit: usize_to_u64(actual),
+            actual: Some(usize_to_u64(required)),
+        });
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -1292,6 +1465,131 @@ mod tests {
                 .expect("raw-token fallback"),
             "π"
         );
+    }
+
+    #[test]
+    fn caller_buffer_decode_preserves_raw_bytes_across_token_boundaries() {
+        let tokenizer = tokenizer();
+        assert_eq!(tokenizer.maximum_decoded_token_bytes(), 7);
+        assert_eq!(
+            tokenizer
+                .decoded_bytes_len(&[24, 25], DecodeOptions::default())
+                .unwrap(),
+            2
+        );
+
+        let mut token_bytes = [0xa5_u8; 4];
+        assert_eq!(
+            tokenizer
+                .decode_token_bytes_into(24, DecodeOptions::default(), &mut token_bytes)
+                .unwrap(),
+            1
+        );
+        assert_eq!(token_bytes, [0xc3, 0xa5, 0xa5, 0xa5]);
+
+        token_bytes.fill(0xa5);
+        assert_eq!(
+            tokenizer
+                .decode_token_bytes_into(26, DecodeOptions::default(), &mut token_bytes)
+                .unwrap(),
+            2
+        );
+        assert_eq!(token_bytes, [0xc3, 0xa9, 0xa5, 0xa5]);
+
+        token_bytes.fill(0xa5);
+        assert_eq!(
+            tokenizer
+                .decode_bytes(&[24, 25], DecodeOptions::default(), &mut token_bytes)
+                .unwrap(),
+            2
+        );
+        assert_eq!(token_bytes, [0xc3, 0xa9, 0xa5, 0xa5]);
+        assert_eq!(
+            tokenizer
+                .decode(&[24, 25], DecodeOptions::default())
+                .unwrap(),
+            "é"
+        );
+    }
+
+    #[test]
+    fn caller_buffer_decode_preserves_special_skip_and_raw_fallback() {
+        let byte_alphabet_special = FIXTURE.replace("<|end|>", "é");
+        let tokenizer = SmolLm2Tokenizer::from_json_slice(byte_alphabet_special.as_bytes())
+            .expect("non-ASCII ByteLevel special token");
+        let mut destination = [0xa5_u8; 4];
+        assert_eq!(
+            tokenizer
+                .decode_token_bytes_into(0, DecodeOptions::default(), &mut destination)
+                .unwrap(),
+            1
+        );
+        assert_eq!(destination, [0xe9, 0xa5, 0xa5, 0xa5]);
+
+        let raw_special = FIXTURE.replace("<|end|>", "π");
+        let tokenizer = SmolLm2Tokenizer::from_json_slice(raw_special.as_bytes())
+            .expect("special token outside the ByteLevel alphabet");
+        destination.fill(0xa5);
+        assert_eq!(
+            tokenizer
+                .decode_token_bytes_into(0, DecodeOptions::default(), &mut destination)
+                .unwrap(),
+            "π".len()
+        );
+        assert_eq!(&destination[.."π".len()], "π".as_bytes());
+        assert_eq!(destination["π".len()..], [0xa5, 0xa5]);
+
+        destination.fill(0xa5);
+        assert_eq!(
+            tokenizer
+                .decode_token_bytes_into(
+                    0,
+                    DecodeOptions {
+                        skip_special_tokens: true,
+                    },
+                    &mut destination,
+                )
+                .unwrap(),
+            0
+        );
+        assert_eq!(destination, [0xa5; 4]);
+    }
+
+    #[test]
+    fn caller_buffer_decode_validates_before_writing() {
+        let tokenizer = tokenizer();
+
+        let mut too_small = [0xa5_u8; 1];
+        assert!(matches!(
+            tokenizer.decode_token_bytes_into(26, DecodeOptions::default(), &mut too_small),
+            Err(ModelError::LimitExceeded {
+                resource: "token decode destination",
+                limit: 1,
+                actual: Some(2),
+            })
+        ));
+        assert_eq!(too_small, [0xa5]);
+
+        let mut sequence = [0xa5_u8; 4];
+        assert!(matches!(
+            tokenizer.decode_bytes(&[24, 999], DecodeOptions::default(), &mut sequence),
+            Err(ModelError::InvalidTokenId { id: 999 })
+        ));
+        assert_eq!(sequence, [0xa5; 4]);
+
+        assert!(matches!(
+            tokenizer.decode_bytes(&[24, 25], DecodeOptions::default(), &mut too_small,),
+            Err(ModelError::LimitExceeded {
+                resource: "token decode destination",
+                limit: 1,
+                actual: Some(2),
+            })
+        ));
+        assert_eq!(too_small, [0xa5]);
+        assert!(matches!(
+            tokenizer.decoded_bytes_len(&[999], DecodeOptions::default()),
+            Err(ModelError::InvalidTokenId { id: 999 })
+        ));
     }
 
     #[test]
