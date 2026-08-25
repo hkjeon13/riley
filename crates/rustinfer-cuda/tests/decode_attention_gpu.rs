@@ -15,6 +15,7 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const D: usize = 64;
 const SCALE: f32 = 0.125;
+const ONLINE_REFERENCE_ABS_TOLERANCE: f32 = 0.0625;
 
 fn first_context() -> TestResult<(CudaContext, CudaStream)> {
     let runtime = CudaRuntime::initialize()?;
@@ -252,6 +253,8 @@ fn kv_cache_scatter_is_bit_exact_and_preserves_unwritten_positions() -> TestResu
 fn materialized_and_chunked_decode_cover_gqa_boundaries_without_allocating() -> TestResult {
     let (context, mut stream) = first_context()?;
     let mut staging = context.allocate_pinned_host_buffer(1 << 20)?;
+    let mut multi_range_output = None;
+    let mut one_range_output = None;
     for &(logical, maximum, query_heads, key_value_heads, chunk) in &[
         (1, 1, 9, 9, 1),
         (2, 7, 6, 2, 1),
@@ -391,9 +394,16 @@ fn materialized_and_chunked_decode_cover_gqa_boundaries_without_allocating() -> 
                 "reference[{index}] expected {expected}, got {reference}"
             );
             assert!(
-                (online - reference).abs() <= 0.0625,
+                (online - reference).abs() <= ONLINE_REFERENCE_ABS_TOLERANCE,
                 "online[{index}] reference {reference}, got {online}"
             );
+        }
+        if (logical, maximum, query_heads, key_value_heads) == (33, 40, 9, 3) {
+            match chunk {
+                7 => multi_range_output = Some(online_values.clone()),
+                64 => one_range_output = Some(online_values.clone()),
+                _ => {}
+            }
         }
         let active_partitions = logical / chunk + usize::from(logical % chunk != 0);
         let active_state_elements = active_partitions * query_heads * (D + 2);
@@ -414,6 +424,24 @@ fn materialized_and_chunked_decode_cover_gqa_boundaries_without_allocating() -> 
         key.close()?;
         query.close()?;
     }
+    let multi_range_output = multi_range_output.ok_or("missing chunk-7 decode output")?;
+    let one_range_output = one_range_output.ok_or("missing chunk-64 decode output")?;
+    let mut maximum_difference = 0.0_f32;
+    for (index, (&multi_range, &one_range)) in
+        multi_range_output.iter().zip(&one_range_output).enumerate()
+    {
+        let difference = (multi_range - one_range).abs();
+        maximum_difference = maximum_difference.max(difference);
+        assert!(
+            difference <= ONLINE_REFERENCE_ABS_TOLERANCE,
+            "multi-range output[{index}] {multi_range} differs from one-range {one_range}"
+        );
+    }
+    println!(
+        "pr09-decode-range-parity schema_version=1 logical_length=33 \
+multi_range_partition_tokens=7 one_range_partition_tokens=64 max_abs={maximum_difference:.9} \
+tolerance={ONLINE_REFERENCE_ABS_TOLERANCE:.9} status=passed"
+    );
     staging.close()?;
     stream.close()?;
     close_context(context)
