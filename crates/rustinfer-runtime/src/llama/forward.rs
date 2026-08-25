@@ -709,9 +709,8 @@ impl fmt::Display for LlamaForwardError {
             Self::OutputNotReady => {
                 formatter.write_str("logits are unavailable before a successful forward")
             }
-            Self::Poisoned => formatter.write_str(
-                "the Llama forward was poisoned by an unconfirmed CUDA execution failure",
-            ),
+            Self::Poisoned => formatter
+                .write_str("the Llama forward was poisoned by a native CUDA execution failure"),
             Self::InvalidDownloadLength {
                 expected_bytes,
                 actual_bytes,
@@ -879,6 +878,16 @@ struct GemmPlans {
     intermediate: CudaPreparedGemm,
     down: CudaPreparedGemm,
     lm_head: CudaPreparedGemm,
+}
+
+impl GemmPlans {
+    fn any_poisoned(&self) -> bool {
+        self.hidden.is_poisoned()
+            || self.key_value.is_poisoned()
+            || self.intermediate.is_poisoned()
+            || self.down.is_poisoned()
+            || self.lm_head.is_poisoned()
+    }
 }
 
 struct ForwardBuffers {
@@ -1086,7 +1095,7 @@ impl PreparedLlamaForward {
         self.output_ready
     }
 
-    /// Whether a launch/synchronization failure disabled reuse.
+    /// Whether a native execution failure or nested owner poison disabled reuse.
     #[must_use]
     pub const fn is_poisoned(&self) -> bool {
         self.poisoned
@@ -1181,6 +1190,7 @@ impl PreparedLlamaForward {
             }
             Err(error) => {
                 poison_for_forward_error(&mut self.poisoned, &error);
+                self.poisoned |= self.gemms.any_poisoned();
                 Err(error)
             }
         }
@@ -1218,6 +1228,7 @@ impl PreparedLlamaForward {
             }
             Err(error) => {
                 poison_for_forward_error(&mut self.poisoned, &error);
+                self.poisoned |= self.gemms.any_poisoned();
                 Err(error)
             }
         }

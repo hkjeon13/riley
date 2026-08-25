@@ -371,6 +371,12 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
         .tensor(LlamaTracePoint::LastLogits)
         .expect("last logits were captured");
     let expected_logits = golden.last().expect("golden trace contains last logits");
+    if let Some((point, metrics, tolerance)) = first_numeric_divergence {
+        panic!(
+            "first divergent PR07 checkpoint {}: metrics={metrics:?}, tolerance={tolerance:?}",
+            point.name()
+        );
+    }
     let actual_top = top_k(actual_logits, 10);
     let expected_top = top_k(expected_logits, 10);
     assert_eq!(actual_top[0], expected_top[0], "golden greedy next token");
@@ -379,12 +385,6 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
         expected_top.into_iter().collect::<BTreeSet<_>>(),
         "golden top-10 token set"
     );
-    if let Some((point, metrics, tolerance)) = first_numeric_divergence {
-        panic!(
-            "first divergent PR07 checkpoint {}: metrics={metrics:?}, tolerance={tolerance:?}",
-            point.name()
-        );
-    }
 }
 
 fn assert_report_matches_context(
