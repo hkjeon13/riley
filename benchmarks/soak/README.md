@@ -110,5 +110,5 @@ non-contiguous events, clock or sample gaps, missing scenarios, request or
 failure events outside each scenario's policy, Python descendants, nonzero
 final active/waiting/KV/native allocation state, insufficient cancellation,
 disconnect or overload evidence, RSS/VRAM plateau or slope excess, dropped
-samples, unbounded restart, and restart/rollback mismatch with the bound
-golden.
+samples, drift in every success from a golden-only scenario, unbounded restart,
+and restart/rollback mismatch with the bound golden.

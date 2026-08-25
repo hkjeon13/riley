@@ -454,6 +454,8 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
         outcome_counts: Counter[str] = Counter()
         metric_counter_maxima: Counter[str] = Counter()
         rollback_hashes: dict[str, set[str]] = {}
+        golden_profile = manifest["golden"]["request_profile"]
+        expected_golden = manifest["golden"]["generated_sha256"]
         for scenario_id, scenario in scenarios.items():
             events = by_scenario[scenario_id]
             kinds = Counter(event["kind"] for event in events)
@@ -510,6 +512,23 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
                 allowed = {"success", "cancelled", "disconnected"}
             unexpected = Counter(request["outcome"] for request in requests if request["outcome"] not in allowed)
             checks.append(_check(f"{scenario_id}.request_outcomes", not unexpected, dict(unexpected), sorted(allowed)))
+            golden_only = scenario["request_profile"] == golden_profile and scenario.get(
+                "secondary_request_profile", golden_profile
+            ) == golden_profile
+            if golden_only:
+                successful_hashes = {
+                    request["generated_sha256"]
+                    for request in requests
+                    if request["outcome"] == "success"
+                }
+                checks.append(
+                    _check(
+                        f"{scenario_id}.golden_parity",
+                        successful_hashes == {expected_golden},
+                        sorted(successful_hashes),
+                        [expected_golden],
+                    )
+                )
             if scenario["kind"] == "rollback":
                 hashes = {request["generated_sha256"] for request in requests if request["outcome"] == "success"}
                 rollback_hashes[scenario["execution_completion"]] = hashes
@@ -554,7 +573,6 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
             _check("service_overloads_observed", metric_counter_maxima["overloads"] >= thresholds["minimum_overloads"], metric_counter_maxima["overloads"], thresholds["minimum_overloads"]),
         ])
         restarts = [event for event in rows if event["kind"] == "restart"]
-        expected_golden = manifest["golden"]["generated_sha256"]
         restart_ok = len(restarts) == 1 and restarts[0]["graceful"] and restarts[0]["exit_code"] == 0 and restarts[0]["elapsed_ms"] <= thresholds["graceful_shutdown_deadline_ms"] and restarts[0]["before_generated_sha256"] == expected_golden and restarts[0]["after_generated_sha256"] == expected_golden
         checks.append(_check("graceful_restart_golden_parity", restart_ok, restarts, "one bounded graceful exact-parity restart"))
         left = rollback_hashes.get("iteration-batch", set())

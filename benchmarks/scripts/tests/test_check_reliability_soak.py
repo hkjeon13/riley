@@ -60,11 +60,17 @@ class SoakFixture:
     def _manifest(self) -> dict[str, object]:
         scenarios = []
         for scenario_id, kind, mode in self.KINDS:
+            request_profile = {
+                "invalid": "invalid",
+                "overload": "long",
+                "cancellation-disconnect": "long",
+                "near-kv": "near_kv",
+            }.get(kind, "short")
             scenario = {
                 "id": scenario_id, "kind": kind, "required": True,
                 "duration_seconds": 2, "concurrency": 2,
                 "cycle_interval_ms": 1000 if kind == "burst-idle" else 0,
-                "request_profile": "short", "execution_completion": mode,
+                "request_profile": request_profile, "execution_completion": mode,
             }
             if kind == "mixed":
                 scenario["secondary_request_profile"] = "long"
@@ -271,6 +277,24 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         names = {check["name"] for check in report["checks"] if not check["passed"]}
         self.assertIn("graceful_restart_golden_parity", names)
         self.assertIn("rollback_golden_parity", names)
+
+    def test_steady_short_requests_must_match_bound_golden(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            request = next(
+                event
+                for event in fixture.events
+                if event["scenario_id"] == "steady" and event["kind"] == "request"
+            )
+            request["generated_sha256"] = digest("drifted completion")
+
+        report = self.evaluate(mutate)
+        self.assertFalse(
+            next(
+                check
+                for check in report["checks"]
+                if check["name"] == "steady.golden_parity"
+            )["passed"]
+        )
 
     def test_source_binding_mismatch_is_an_input_error(self) -> None:
         def mutate(fixture: SoakFixture) -> None:
