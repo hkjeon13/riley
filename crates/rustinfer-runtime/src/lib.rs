@@ -2,6 +2,7 @@
 
 mod kernel;
 pub mod llama;
+pub mod paged_kv;
 pub mod reference;
 
 #[cfg(any(feature = "cuda", test))]
