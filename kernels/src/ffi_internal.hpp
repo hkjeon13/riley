@@ -193,6 +193,22 @@ static_assert(offsetof(RustInferCudaRopeParams, token_count) == 200,
               "RoPE params ABI dimension offset changed");
 static_assert(sizeof(RustInferCudaCastParams) == 152,
               "RustInferCudaCastParams ABI size changed");
+static_assert(sizeof(RustInferCudaQkGqaParams) == 216,
+              "RustInferCudaQkGqaParams ABI size changed");
+static_assert(offsetof(RustInferCudaQkGqaParams, token_count) == 152,
+              "RustInferCudaQkGqaParams ABI layout changed");
+static_assert(sizeof(RustInferCudaScaleCausalMaskParams) == 112,
+              "RustInferCudaScaleCausalMaskParams ABI size changed");
+static_assert(offsetof(RustInferCudaScaleCausalMaskParams, scale) == 72,
+              "RustInferCudaScaleCausalMaskParams ABI layout changed");
+static_assert(sizeof(RustInferCudaCausalSoftmaxParams) == 112,
+              "RustInferCudaCausalSoftmaxParams ABI size changed");
+static_assert(offsetof(RustInferCudaCausalSoftmaxParams, reserved) == 72,
+              "RustInferCudaCausalSoftmaxParams ABI layout changed");
+static_assert(sizeof(RustInferCudaAvGqaParams) == 216,
+              "RustInferCudaAvGqaParams ABI size changed");
+static_assert(offsetof(RustInferCudaAvGqaParams, token_count) == 152,
+              "RustInferCudaAvGqaParams ABI layout changed");
 static_assert(sizeof(RustInferCudaGemmConfig) == 112,
               "RustInferCudaGemmConfig ABI size changed");
 static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&

@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 _Static_assert(RUSTINFER_CUDA_ABI_VERSION == 1,
-               "PR 06 additions must preserve ABI v1");
+               "PR 07 additions must preserve ABI v1");
 _Static_assert(sizeof(void*) * 8 == RUSTINFER_CUDA_ABI_POINTER_WIDTH,
                "rustinfer CUDA ABI requires 64-bit pointers");
 _Static_assert(sizeof(RustInferCudaDType) == 4,
@@ -51,6 +51,36 @@ _Static_assert(offsetof(RustInferCudaRopeParams, reserved) == 248,
                "RoPE reserved tail changed");
 _Static_assert(sizeof(RustInferCudaCastParams) == 152,
                "cast params ABI size changed");
+_Static_assert(sizeof(RustInferCudaQkGqaParams) == 216,
+               "QK GQA params ABI size changed");
+_Static_assert(offsetof(RustInferCudaQkGqaParams, query) == 8,
+               "QK GQA query offset changed");
+_Static_assert(offsetof(RustInferCudaQkGqaParams, token_count) == 152,
+               "QK GQA dimension offset changed");
+_Static_assert(offsetof(RustInferCudaQkGqaParams, reserved) == 184,
+               "QK GQA reserved tail changed");
+_Static_assert(sizeof(RustInferCudaScaleCausalMaskParams) == 112,
+               "scale/mask params ABI size changed");
+_Static_assert(offsetof(RustInferCudaScaleCausalMaskParams, scores) == 8,
+               "scale/mask scores offset changed");
+_Static_assert(offsetof(RustInferCudaScaleCausalMaskParams, scale) == 72,
+               "scale/mask scalar offset changed");
+_Static_assert(offsetof(RustInferCudaScaleCausalMaskParams, reserved) == 80,
+               "scale/mask reserved tail changed");
+_Static_assert(sizeof(RustInferCudaCausalSoftmaxParams) == 112,
+               "causal-softmax params ABI size changed");
+_Static_assert(offsetof(RustInferCudaCausalSoftmaxParams, scores) == 8,
+               "causal-softmax scores offset changed");
+_Static_assert(offsetof(RustInferCudaCausalSoftmaxParams, reserved) == 72,
+               "causal-softmax reserved tail changed");
+_Static_assert(sizeof(RustInferCudaAvGqaParams) == 216,
+               "AV GQA params ABI size changed");
+_Static_assert(offsetof(RustInferCudaAvGqaParams, probabilities) == 8,
+               "AV GQA probabilities offset changed");
+_Static_assert(offsetof(RustInferCudaAvGqaParams, token_count) == 152,
+               "AV GQA dimension offset changed");
+_Static_assert(offsetof(RustInferCudaAvGqaParams, reserved) == 184,
+               "AV GQA reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -109,6 +139,20 @@ static RustInferCudaStatus (*const rope_symbol)(
 static RustInferCudaStatus (*const cast_symbol)(
     const RustInferCudaCastParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_cast_execute;
+static RustInferCudaStatus (*const qk_gqa_symbol)(
+    const RustInferCudaQkGqaParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_qk_gqa_execute;
+static RustInferCudaStatus (*const scale_causal_mask_symbol)(
+    const RustInferCudaScaleCausalMaskParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_scale_causal_mask_in_place_execute;
+static RustInferCudaStatus (*const causal_softmax_symbol)(
+    const RustInferCudaCausalSoftmaxParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_causal_softmax_in_place_execute;
+static RustInferCudaStatus (*const av_gqa_symbol)(
+    const RustInferCudaAvGqaParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_av_gqa_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -131,7 +175,10 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&residual_add_symbol,   (const void*)&silu_symbol,
     (const void*)&gated_multiply_symbol, (const void*)&rope_symbol,
-    (const void*)&cast_symbol,           (const void*)&gemm_plan_create_symbol,
+    (const void*)&cast_symbol,           (const void*)&qk_gqa_symbol,
+    (const void*)&scale_causal_mask_symbol,
+    (const void*)&causal_softmax_symbol, (const void*)&av_gqa_symbol,
+    (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
     (const void*)&gemm_plan_close_symbol,

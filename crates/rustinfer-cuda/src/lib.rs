@@ -4,6 +4,7 @@
 //! loading or probing CUDA. With it enabled, all raw pointers and unsafe calls
 //! remain confined to the private FFI module.
 
+mod attention;
 mod error;
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
@@ -13,6 +14,10 @@ mod memory;
 mod primitives;
 mod runtime;
 
+pub use attention::{
+    AvGqaParams, CausalSoftmaxInPlaceParams, QkGqaParams, ScaleCausalMaskInPlaceParams, av_gqa,
+    causal_softmax_in_place, qk_gqa, scale_causal_mask_in_place,
+};
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};
 pub use memory::{

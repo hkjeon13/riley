@@ -46,6 +46,10 @@ const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
 const ROPE_PARAMS_SIZE: u32 = 288;
 const CAST_PARAMS_SIZE: u32 = 152;
+const QK_GQA_PARAMS_SIZE: u32 = 216;
+const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
+const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
+const AV_GQA_PARAMS_SIZE: u32 = 216;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 
@@ -327,6 +331,56 @@ struct RawCastParams {
     output: RawBufferSpan,
     element_count: u64,
     reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawQkGqaParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawScaleCausalMaskParams {
+    struct_size: u32,
+    reserved0: u32,
+    scores: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    scale: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawCausalSoftmaxParams {
+    struct_size: u32,
+    reserved0: u32,
+    scores: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawAvGqaParams {
+    struct_size: u32,
+    reserved0: u32,
+    probabilities: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 4],
 }
 
 #[repr(C)]
@@ -627,6 +681,26 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_cast_execute(
         params: *const RawCastParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_qk_gqa_execute(
+        params: *const RawQkGqaParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_scale_causal_mask_in_place_execute(
+        params: *const RawScaleCausalMaskParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_causal_softmax_in_place_execute(
+        params: *const RawCausalSoftmaxParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_av_gqa_execute(
+        params: *const RawAvGqaParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1511,6 +1585,115 @@ pub(super) fn cast_execute(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn qk_gqa_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawQkGqaParams {
+        struct_size: QK_GQA_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key,
+        output,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("execute CUDA QK GQA", stream, |stream, error| {
+        // SAFETY: the fixed-layout descriptor and every borrowed native handle
+        // remain live for the synchronously completing native call.
+        unsafe { rustinfer_cuda_qk_gqa_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn scale_causal_mask_in_place_execute(
+    scores: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawScaleCausalMaskParams {
+        struct_size: SCALE_CAUSAL_MASK_PARAMS_SIZE,
+        reserved0: 0,
+        scores,
+        token_count,
+        query_head_count,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA attention scale and causal mask",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and exclusively borrowed score buffer
+            // remain live for the synchronously completing native call.
+            unsafe { rustinfer_cuda_scale_causal_mask_in_place_execute(&params, stream, error) }
+        },
+    )
+}
+
+pub(super) fn causal_softmax_in_place_execute(
+    scores: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawCausalSoftmaxParams {
+        struct_size: CAUSAL_SOFTMAX_PARAMS_SIZE,
+        reserved0: 0,
+        scores,
+        token_count,
+        query_head_count,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA causal softmax", stream, |stream, error| {
+        // SAFETY: the descriptor and exclusively borrowed score buffer
+        // remain live for the synchronously completing native call.
+        unsafe { rustinfer_cuda_causal_softmax_in_place_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn av_gqa_execute(
+    probabilities: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawAvGqaParams {
+        struct_size: AV_GQA_PARAMS_SIZE,
+        reserved0: 0,
+        probabilities,
+        value,
+        output,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("execute CUDA AV GQA", stream, |stream, error| {
+        // SAFETY: the fixed-layout descriptor and every borrowed native handle
+        // remain live for the synchronously completing native call.
+        unsafe { rustinfer_cuda_av_gqa_execute(&params, stream, error) }
+    })
+}
+
 fn primitive_status(
     operation: &'static str,
     stream: &mut StreamHandle,
@@ -1859,6 +2042,17 @@ const _: () = assert!(size_of::<RawGatedMultiplyParams>() == 200);
 const _: () = assert!(size_of::<RawRopeParams>() == 288);
 const _: () = assert!(offset_of!(RawRopeParams, position_offset) == 240);
 const _: () = assert!(size_of::<RawCastParams>() == 152);
+const _: () = assert!(size_of::<RawQkGqaParams>() == 216);
+const _: () = assert!(offset_of!(RawQkGqaParams, token_count) == 152);
+const _: () = assert!(offset_of!(RawQkGqaParams, reserved) == 184);
+const _: () = assert!(size_of::<RawScaleCausalMaskParams>() == 112);
+const _: () = assert!(offset_of!(RawScaleCausalMaskParams, scale) == 72);
+const _: () = assert!(offset_of!(RawScaleCausalMaskParams, reserved) == 80);
+const _: () = assert!(size_of::<RawCausalSoftmaxParams>() == 112);
+const _: () = assert!(offset_of!(RawCausalSoftmaxParams, reserved) == 72);
+const _: () = assert!(size_of::<RawAvGqaParams>() == 216);
+const _: () = assert!(offset_of!(RawAvGqaParams, token_count) == 152);
+const _: () = assert!(offset_of!(RawAvGqaParams, reserved) == 184);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);

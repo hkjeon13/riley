@@ -219,6 +219,68 @@ typedef struct RustInferCudaCastParams {
   uint64_t reserved[5];
 } RustInferCudaCastParams;
 
+// Correctness-first materialized GQA attention. Query is BF16
+// [token_count, query_head_count, head_size], key is BF16
+// [token_count, key_value_head_count, head_size], and output is BF16
+// [query_head_count, token_count, token_count]. Each query head maps to
+// q_head / (query_head_count / key_value_head_count).
+typedef struct RustInferCudaQkGqaParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key;
+  RustInferCudaBufferSpan output;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[4];
+} RustInferCudaQkGqaParams;
+
+// In-place BF16 scaling followed by an additive causal mask on materialized
+// [query_head_count, token_count, token_count] scores. The scaled value is
+// rounded to BF16 before the BF16 mask is added. Strictly future positions use
+// the finite BF16 minimum bit pattern 0xff7f; allowed positions add +0.
+typedef struct RustInferCudaScaleCausalMaskParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan scores;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  float scale;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaScaleCausalMaskParams;
+
+// Stable causal softmax in place over the last dimension of BF16 materialized
+// [query_head_count, token_count, token_count] scores. Max and sum reductions
+// are F32; each resulting probability is rounded to BF16.
+typedef struct RustInferCudaCausalSoftmaxParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan scores;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t reserved[5];
+} RustInferCudaCausalSoftmaxParams;
+
+// Materialized BF16 probabilities are [query_head_count, token_count,
+// token_count], value is BF16 [token_count, key_value_head_count, head_size],
+// and output is BF16 [token_count, query_head_count, head_size]. Accumulation
+// is F32 and uses the same GQA head mapping as RustInferCudaQkGqaParams.
+typedef struct RustInferCudaAvGqaParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan probabilities;
+  RustInferCudaBufferSpan value;
+  RustInferCudaBufferSpan output;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[4];
+} RustInferCudaAvGqaParams;
+
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
 #define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
@@ -516,6 +578,27 @@ RustInferCudaStatus rustinfer_cuda_rope_execute(
 // overlap is rejected.
 RustInferCudaStatus rustinfer_cuda_cast_execute(
     const RustInferCudaCastParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// These four allocation-free calls expose the deliberately materialized PR 07
+// reference-attention boundary. All spans must be BF16. Unlike the general PR
+// 06 primitives, every attention dimension must be non-zero. QK and AV use F32
+// accumulators and round their BF16 outputs once per completed dot product.
+RustInferCudaStatus rustinfer_cuda_qk_gqa_execute(
+    const RustInferCudaQkGqaParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_scale_causal_mask_in_place_execute(
+    const RustInferCudaScaleCausalMaskParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_causal_softmax_in_place_execute(
+    const RustInferCudaCausalSoftmaxParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_av_gqa_execute(
+    const RustInferCudaAvGqaParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

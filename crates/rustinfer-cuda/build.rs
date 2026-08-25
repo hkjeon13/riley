@@ -139,6 +139,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         cmake_lists,
         kernels_dir.join("include/rustinfer_cuda.h"),
         kernels_dir.join("src/ffi_internal.hpp"),
+        kernels_dir.join("src/attention_reference.cu"),
         kernels_dir.join("src/gemm.cu"),
         kernels_dir.join("src/host_runtime.cu"),
         kernels_dir.join("src/memory.cu"),
