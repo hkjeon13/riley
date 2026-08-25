@@ -101,7 +101,7 @@ pub enum GenerationError {
         /// Maximum declared at state construction.
         maximum_byte_len: usize,
     },
-    /// Decoded token bytes cannot form one strict UTF-8 output stream.
+    /// An internal emission boundary was not strict UTF-8.
     InvalidUtf8 {
         /// Valid prefix length in the currently withheld byte buffer.
         valid_up_to: usize,
@@ -229,6 +229,10 @@ pub struct GenerationRequest {
     /// Normative CPU logits-processing and sampling parameters.
     pub sampling_params: SamplingParams,
     /// Number of non-stop generated tokens required before stops are enabled.
+    ///
+    /// A stop string must start in bytes decoded from a token accepted after
+    /// this gate opens. A prefix that began while stops were disabled is not
+    /// reactivated later.
     pub min_new_tokens: usize,
     /// Maximum number of sampled tokens retained for this request.
     pub max_new_tokens: usize,
@@ -283,9 +287,12 @@ impl GenerationRequest {
 
 /// Reusable UTF-8 and stop-string state for one request.
 ///
-/// Decoded bytes that could become a stop-string prefix or an incomplete
-/// UTF-8 scalar are withheld in [`Self::pending_bytes`]. Only complete strict
-/// UTF-8 reaches [`Self::text`] or [`Self::last_text_delta`].
+/// Decoded bytes that could become a stop-string prefix or cannot yet be
+/// represented as strict UTF-8 are withheld in [`Self::pending_bytes`]. After
+/// the first definitively invalid byte, the complete remaining raw tail stays
+/// withheld so visible text never reorders or silently drops bytes. Only a
+/// complete strict UTF-8 prefix reaches [`Self::text`] or
+/// [`Self::last_text_delta`].
 #[derive(Debug)]
 pub struct StopState {
     stop_strings: Vec<Vec<u8>>,
@@ -294,6 +301,9 @@ pub struct StopState {
     last_delta: String,
     maximum_output_bytes: usize,
     matched_stop_string_index: Option<usize>,
+    // Bytes before this pending-buffer offset were accepted while string
+    // stops were disabled and remain permanently ineligible for matching.
+    stop_search_start: usize,
 }
 
 impl StopState {
@@ -311,8 +321,10 @@ impl StopState {
 
     /// Bytes withheld for UTF-8 completion or stop-prefix disambiguation.
     ///
-    /// A terminal state can retain an incomplete UTF-8 scalar here. The raw
-    /// bytes remain lossless while [`Self::text`] stays strict UTF-8.
+    /// A state can retain an incomplete or definitively invalid UTF-8 tail
+    /// here. The raw bytes remain lossless while [`Self::text`] stays strict
+    /// UTF-8. Logically, visible text bytes followed by this slice are the raw
+    /// decoded output retained before any matched stop string.
     #[must_use]
     pub fn pending_bytes(&self) -> &[u8] {
         &self.pending
@@ -349,6 +361,7 @@ impl StopState {
             last_delta: reserve_string(maximum_output_bytes, "text delta")?,
             maximum_output_bytes,
             matched_stop_string_index: None,
+            stop_search_start: 0,
         })
     }
 
@@ -378,17 +391,31 @@ impl StopState {
             });
         }
         let previous_pending_len = self.pending.len();
+        let previous_stop_search_start = self.stop_search_start;
         self.pending.extend_from_slice(decoded_bytes);
 
         let result = self.process_pending(stop_enabled, flush_at_end);
-        if result.is_err() {
-            // Every fallible validation in `process_pending` runs before its
-            // corresponding emission. The pre-existing prefix is therefore
-            // intact and truncation makes a failed token acceptance
-            // transactional.
-            self.pending.truncate(previous_pending_len);
+        match result {
+            Ok(matched) => {
+                if !stop_enabled {
+                    // The minimum-token gate is monotonic. Any raw tail
+                    // retained while it is closed must never become eligible
+                    // for a later stop match merely because it could not be
+                    // represented in the strict text view.
+                    self.stop_search_start = self.pending.len();
+                }
+                Ok(matched)
+            }
+            Err(error) => {
+                // Every fallible validation in `process_pending` runs before
+                // its corresponding emission. The pre-existing prefix is
+                // therefore intact and truncation makes a failed token
+                // acceptance transactional.
+                self.pending.truncate(previous_pending_len);
+                self.stop_search_start = previous_stop_search_start;
+                Err(error)
+            }
         }
-        result
     }
 
     fn process_pending(
@@ -398,8 +425,11 @@ impl StopState {
     ) -> GenerationResult<bool> {
         if stop_enabled {
             if let Some((start, pattern_index)) = self.first_stop_match() {
-                self.emit_prefix(start)?;
-                self.pending.clear();
+                // Bytes at and after the stop are excluded. A strict prefix is
+                // emitted; any unrepresentable raw bytes before the stop stay
+                // losslessly retained in `pending`.
+                self.pending.truncate(start);
+                self.emit_valid_prefix()?;
                 self.matched_stop_string_index = Some(pattern_index);
                 return Ok(true);
             }
@@ -410,23 +440,27 @@ impl StopState {
             return Ok(false);
         }
 
-        let overlap = self.longest_stop_prefix_suffix();
+        let overlap = if stop_enabled {
+            self.longest_stop_prefix_suffix()
+        } else {
+            0
+        };
         let candidate_end = self.pending.len() - overlap;
         let emit_end = match str::from_utf8(&self.pending[..candidate_end]) {
             Ok(_) => candidate_end,
-            Err(source) if source.error_len().is_none() => source.valid_up_to(),
-            Err(source) => return Err(invalid_utf8(source)),
+            Err(source) => source.valid_up_to(),
         };
         self.emit_prefix(emit_end)?;
         Ok(false)
     }
 
     fn finish_pending(&mut self) -> GenerationResult<()> {
-        let emit_end = match str::from_utf8(&self.pending) {
-            Ok(_) => self.pending.len(),
-            Err(source) if source.error_len().is_none() => source.valid_up_to(),
-            Err(source) => return Err(invalid_utf8(source)),
-        };
+        self.emit_valid_prefix()
+    }
+
+    fn emit_valid_prefix(&mut self) -> GenerationResult<()> {
+        let emit_end = str::from_utf8(&self.pending)
+            .map_or_else(|source| source.valid_up_to(), |_| self.pending.len());
         self.emit_prefix(emit_end)
     }
 
@@ -439,14 +473,17 @@ impl StopState {
         self.last_delta.push_str(decoded);
         self.pending.copy_within(byte_len.., 0);
         self.pending.truncate(self.pending.len() - byte_len);
+        self.stop_search_start = self.stop_search_start.saturating_sub(byte_len);
         Ok(())
     }
 
     fn first_stop_match(&self) -> Option<(usize, usize)> {
         let mut first = None;
+        let eligible = self.pending.get(self.stop_search_start..)?;
         for (pattern_index, pattern) in self.stop_strings.iter().enumerate() {
-            for (start, candidate) in self.pending.windows(pattern.len()).enumerate() {
+            for (relative_start, candidate) in eligible.windows(pattern.len()).enumerate() {
                 if candidate == pattern {
+                    let start = self.stop_search_start + relative_start;
                     let end = start + pattern.len();
                     let replace = first.is_none_or(|(best_end, best_start, best_pattern)| {
                         (end, start, pattern_index) < (best_end, best_start, best_pattern)
@@ -465,8 +502,9 @@ impl StopState {
 
     fn longest_stop_prefix_suffix(&self) -> usize {
         let mut longest = 0;
+        let eligible_len = self.pending.len().saturating_sub(self.stop_search_start);
         for pattern in &self.stop_strings {
-            let maximum = self.pending.len().min(pattern.len().saturating_sub(1));
+            let maximum = eligible_len.min(pattern.len().saturating_sub(1));
             for byte_len in (longest + 1..=maximum).rev() {
                 if self.pending[self.pending.len() - byte_len..] == pattern[..byte_len] {
                     longest = byte_len;
@@ -752,7 +790,8 @@ impl GenerationState {
     /// # Errors
     ///
     /// Returns for a terminal state, out-of-range token, missing or oversized
-    /// decoded bytes, invalid UTF-8, or a violated preallocated output bound.
+    /// decoded bytes, a violated preallocated output bound, or an internal
+    /// strict UTF-8 emission-boundary invariant.
     pub fn accept_token<'state>(
         &'state mut self,
         token_id: u32,
@@ -828,14 +867,15 @@ impl GenerationState {
     /// Cancels between model steps without drawing another RNG word.
     ///
     /// Any valid text retained solely as a possible stop prefix is flushed and
-    /// returned as the final delta. An incomplete trailing UTF-8 scalar stays
-    /// losslessly available through [`StopState::pending_bytes`] and is not
-    /// replaced in the strict UTF-8 text view.
+    /// returned as the final delta. An incomplete or definitively invalid raw
+    /// UTF-8 tail stays losslessly available through
+    /// [`StopState::pending_bytes`] and is not replaced in the strict UTF-8
+    /// text view.
     ///
     /// # Errors
     ///
-    /// Returns after an existing terminal transition or when withheld bytes
-    /// contain a definitively invalid UTF-8 sequence.
+    /// Returns after an existing terminal transition or an internal strict
+    /// UTF-8 emission-boundary invariant violation.
     pub fn cancel(&mut self) -> GenerationResult<&str> {
         self.pre_step()?;
         self.stop_state.clear_delta();
@@ -1090,6 +1130,48 @@ mod tests {
     }
 
     #[test]
+    fn minimum_token_gate_never_reactivates_past_raw_stop_bytes() {
+        let mut invalid_request = request(b"minimum-invalid-stop-watermark");
+        invalid_request.min_new_tokens = 2;
+        invalid_request.max_new_tokens = 4;
+        invalid_request.stop_strings = vec!["END".to_owned()];
+        let mut state =
+            GenerationState::new(invalid_request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
+
+        state.accept_token(10, None, Some(b"\xffEND")).unwrap();
+        state.accept_token(11, None, Some(b"x")).unwrap();
+        assert!(state.stop_conditions_enabled());
+        assert_eq!(state.stop_state().pending_bytes(), b"\xffENDx");
+
+        let token = state.accept_token(12, None, Some(b"y")).unwrap();
+        assert_eq!(token.finish_reason(), None);
+        assert_eq!(state.stop_state().pending_bytes(), b"\xffENDxy");
+
+        let token = state.accept_token(13, None, Some(b"ENDdiscarded")).unwrap();
+        assert_eq!(token.finish_reason(), Some(FinishReason::StopString));
+        assert_eq!(state.stop_state().pending_bytes(), b"\xffENDxy");
+        assert_eq!(state.generated_token_ids(), &[10, 11, 12, 13]);
+
+        let mut crossing_request = request(b"minimum-valid-stop-boundary");
+        crossing_request.min_new_tokens = 2;
+        crossing_request.stop_strings = vec!["END".to_owned()];
+        let mut crossing =
+            GenerationState::new(crossing_request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
+        crossing.accept_token(10, None, Some(b"prefix")).unwrap();
+        assert_eq!(
+            crossing
+                .accept_token(11, None, Some(b"E"))
+                .unwrap()
+                .text_delta(),
+            "E"
+        );
+        let token = crossing.accept_token(12, None, Some(b"ND")).unwrap();
+        assert_eq!(token.text_delta(), "ND");
+        assert_eq!(token.finish_reason(), None);
+        assert_eq!(crossing.text(), "prefixEND");
+    }
+
+    #[test]
     fn finish_precedence_and_hidden_token_history_are_exact() {
         let mut state = state(b"precedence-eos");
         let token = state.accept_token(3, Some(-0.25), None).unwrap();
@@ -1185,7 +1267,23 @@ mod tests {
     }
 
     #[test]
-    fn split_utf8_is_withheld_without_replacement_and_invalid_bytes_fail() {
+    fn stop_strings_match_raw_bytes_after_an_unrenderable_utf8_tail() {
+        let mut request = request(b"stop-after-invalid-utf8");
+        request.stop_strings = vec!["END".to_owned()];
+        let mut state = GenerationState::new(request, VOCABULARY_SIZE, 32).unwrap();
+        let token = state
+            .accept_token(10, None, Some(b"visible\xffrawENDdiscarded"))
+            .unwrap();
+        assert_eq!(token.text_delta(), "visible");
+        assert_eq!(token.finish_reason(), Some(FinishReason::StopString));
+        assert_eq!(state.text(), "visible");
+        assert_eq!(state.stop_state().pending_bytes(), b"\xffraw");
+        assert_eq!(state.stop_state().matched_stop_string_index(), Some(0));
+        assert_eq!(state.generated_token_ids(), &[10]);
+    }
+
+    #[test]
+    fn split_and_invalid_utf8_tails_are_withheld_without_replacement() {
         let mut split_state = state(b"utf8-split");
         let first = split_state
             .accept_token(10, None, Some(b"caf\xc3"))
@@ -1197,15 +1295,16 @@ mod tests {
         assert_eq!(split_state.text(), "café!");
 
         let mut invalid = state(b"utf8-invalid");
-        assert_eq!(
-            invalid.accept_token(10, None, Some(b"\xff")).unwrap_err(),
-            GenerationError::InvalidUtf8 {
-                valid_up_to: 0,
-                error_len: Some(1),
-            }
-        );
-        assert_eq!(invalid.finish_reason(), Some(FinishReason::Error));
-        assert!(invalid.failure().is_some());
+        let first = invalid
+            .accept_token(10, None, Some(b"visible\xff"))
+            .unwrap();
+        assert_eq!(first.text_delta(), "visible");
+        assert_eq!(first.finish_reason(), None);
+        assert_eq!(invalid.stop_state().pending_bytes(), b"\xff");
+        let second = invalid.accept_token(11, None, Some(b"later")).unwrap();
+        assert_eq!(second.text_delta(), "");
+        assert_eq!(invalid.text(), "visible");
+        assert_eq!(invalid.stop_state().pending_bytes(), b"\xfflater");
     }
 
     #[test]
@@ -1273,11 +1372,11 @@ mod tests {
     }
 
     #[test]
-    fn terminal_incomplete_utf8_is_retained_without_lossy_replacement() {
-        let mut request = request(b"utf8-length");
-        request.max_new_tokens = 1;
+    fn terminal_unrenderable_utf8_is_retained_without_lossy_replacement() {
+        let mut length_request = request(b"utf8-length");
+        length_request.max_new_tokens = 1;
         let mut length_state =
-            GenerationState::new(request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
+            GenerationState::new(length_request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
         let token = length_state
             .accept_token(10, None, Some(b"visible\xe2\x82"))
             .unwrap();
@@ -1286,6 +1385,18 @@ mod tests {
         assert_eq!(length_state.generated_token_ids(), &[10]);
         assert_eq!(length_state.text(), "visible");
         assert_eq!(length_state.stop_state().pending_bytes(), b"\xe2\x82");
+
+        let mut invalid_request = request(b"utf8-invalid-length");
+        invalid_request.max_new_tokens = 1;
+        let mut invalid =
+            GenerationState::new(invalid_request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
+        let token = invalid
+            .accept_token(10, None, Some(b"visible\xfflater"))
+            .unwrap();
+        assert_eq!(token.text_delta(), "visible");
+        assert_eq!(token.finish_reason(), Some(FinishReason::Length));
+        assert_eq!(invalid.text(), "visible");
+        assert_eq!(invalid.stop_state().pending_bytes(), b"\xfflater");
 
         let mut eos = state(b"utf8-eos");
         assert_eq!(
