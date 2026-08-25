@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import io
 import json
 import sys
@@ -30,11 +31,27 @@ from check_release_candidate import (  # noqa: E402
     SOAK_SCENARIOS,
     SOAK_TEMPLATE_CANONICAL_SHA256,
     evaluate,
+    release_performance,
 )
 from test_release import EPOCH, fixture_elf  # noqa: E402
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+PERFORMANCE_BASELINE = (
+    REPOSITORY_ROOT / "benchmarks/release/performance-baseline-v1.json"
+)
+PROFILE_FIXTURE_SCRIPT = (
+    REPOSITORY_ROOT
+    / "benchmarks/scripts/tests/test_check_native_profile_pair.py"
+)
+PROFILE_FIXTURE_SPEC = importlib.util.spec_from_file_location(
+    "release_candidate_native_profile_fixture", PROFILE_FIXTURE_SCRIPT
+)
+assert PROFILE_FIXTURE_SPEC is not None and PROFILE_FIXTURE_SPEC.loader is not None
+profile_fixture_module = importlib.util.module_from_spec(PROFILE_FIXTURE_SPEC)
+sys.modules[PROFILE_FIXTURE_SPEC.name] = profile_fixture_module
+PROFILE_FIXTURE_SPEC.loader.exec_module(profile_fixture_module)
 
 
 def digest(contents: bytes) -> str:
@@ -70,6 +87,7 @@ class CandidateFixture:
             "optimization_correctness": root / "optimization-correctness-report.json",
             "optimization_raw": root / "optimization-correctness-evidence.tar",
             "performance": root / "performance-report.json",
+            "performance_raw": root / "performance-evidence.tar",
             "soak": root / "soak-report.json",
         }
         self._write_tar(
@@ -151,6 +169,181 @@ class CandidateFixture:
             "source": self._binding(),
             "raw_evidence_sha256": digest(self.paths[raw].read_bytes()),
             "checks": [{"id": check, "passed": True} for check in sorted(checks)],
+        }
+
+    def _build_performance_document(self, optimization_sha: str) -> dict[str, object]:
+        baseline = json.loads(PERFORMANCE_BASELINE.read_text(encoding="utf-8"))
+        raw_root = self.root / "performance-runs"
+        raw_root.mkdir()
+        fixture = profile_fixture_module.ProfilePairFixture(raw_root)
+        profile_binary_sha = digest(b"profile binary")
+        profile_image_sha = digest(b"profile image")
+        for run_index, run in enumerate(fixture.candidate):
+            run["source"] = {
+                "git_commit": REVISION,
+                "git_dirty": False,
+                "executable_sha256": profile_binary_sha,
+                "implementation_id": "native-iteration-command-batch",
+                "runtime_flag": {
+                    "name": "execution_completion",
+                    "value": "iteration-batch",
+                },
+                "semantic_class": "E0",
+                "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
+                "correctness_report_sha256": optimization_sha,
+            }
+            run["environment"]["gpu"]["uuid"] = baseline["environment"]["gpu_uuid"]
+            run["environment"]["gpu"]["compute_capability"] = baseline["environment"][
+                "compute_capability"
+            ]
+            run["environment"]["host"]["environment_id"] = baseline["environment"][
+                "environment_id"
+            ]
+            software = run["environment"]["software"]
+            software["nvidia_driver_version"] = baseline["environment"]["driver_version"]
+            software["cuda_runtime_version"] = baseline["environment"][
+                "cuda_runtime_version"
+            ]
+            software["cuda_toolkit_version"] = baseline["environment"][
+                "cuda_toolkit_version"
+            ]
+            software["container_image_sha256"] = profile_image_sha
+            workload = run["workload"]
+            workload.update(
+                {
+                    "workload_id": baseline["workload"]["workload_id"],
+                    "model_id": baseline["model"]["model_id"],
+                    "model_revision": baseline["model"]["model_revision"],
+                    "weights_sha256": baseline["model"]["weights_sha256"],
+                    "tokenizer_sha256": baseline["model"]["tokenizer_sha256"],
+                    "dtype": baseline["model"]["dtype"],
+                    "concurrency": baseline["workload"]["concurrency"],
+                    "prompt_tokens": baseline["workload"]["prompt_tokens"],
+                    "output_tokens": baseline["workload"]["output_tokens"],
+                    "warmups": baseline["workload"]["warmups_per_run"],
+                    "measured_iterations": baseline["workload"][
+                        "measured_iterations_per_run"
+                    ],
+                    "sampling_id": baseline["workload"]["sampling"],
+                    "seed": None,
+                }
+            )
+            run_factor = 1.0 + (run_index - 2) * 0.002
+            for request_index, request in enumerate(run["requests"]):
+                request_factor = 1.0 + request_index * 0.0005
+                request["ttft_ms"] = 5.4 * run_factor * request_factor
+                request["tpot_ms"] = 7.0 * run_factor * request_factor
+                request["e2e_ms"] = 225.0 * run_factor * request_factor
+            run["aggregate"]["throughput_output_tokens_per_second"] = (
+                140.0 / run_factor
+            )
+        fixture.write()
+        self.performance_fixture = fixture
+
+        candidate: dict[str, object] = {
+            "candidate_id": "fixture",
+            "recorded_at_utc": "2026-08-26T00:00:00Z",
+            "source": {
+                "git_commit": REVISION,
+                "git_dirty": False,
+                "source_archive_sha256": self._binding()["source_archive_sha256"],
+                "profile_binary_sha256": profile_binary_sha,
+                "release_binary_sha256": self._binding()["release_binary_sha256"],
+                "profile_image_sha256": profile_image_sha,
+                "release_image_sha256": self.image_sha,
+                "semantic_class": "E0",
+                "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
+                "correctness_report_sha256": optimization_sha,
+            },
+            "model": copy.deepcopy(baseline["model"]),
+            "environment": copy.deepcopy(baseline["environment"]),
+            "workload": copy.deepcopy(baseline["workload"]),
+            "metrics": {},
+            "run_summary": {},
+            "raw_runs": [
+                {
+                    "pair_index": run["pair_index"],
+                    "run_id": run["run_id"],
+                    "sha256": digest(path.read_bytes()),
+                }
+                for path, run in zip(
+                    fixture.candidate_paths, fixture.candidate, strict=True
+                )
+            ],
+        }
+        workload = fixture.candidate[0]["workload"]
+        candidate["run_summary"] = {
+            "independent_runs": len(fixture.candidate),
+            "warmups_per_run": workload["warmups"],
+            "measured_iterations_per_run": workload["measured_iterations"],
+            "failure_count": 0,
+            "dropped_trace_records": 0,
+        }
+        requests = [
+            request
+            for run in fixture.candidate
+            for request in run["requests"]
+        ]
+        candidate["metrics"] = {
+            "ttft_p95_ms": release_performance.native_profile.r7(
+                [request["ttft_ms"] for request in requests], 0.95
+            ),
+            "tpot_p95_ms": release_performance.native_profile.r7(
+                [request["tpot_ms"] for request in requests], 0.95
+            ),
+            "e2e_median_ms": release_performance.native_profile.r7(
+                [request["e2e_ms"] for request in requests], 0.50
+            ),
+            "throughput_median_output_tokens_per_second": (
+                release_performance.native_profile.r7(
+                    [
+                        run["aggregate"]["throughput_output_tokens_per_second"]
+                        for run in fixture.candidate
+                    ],
+                    0.50,
+                )
+            ),
+        }
+        self._write_tar(
+            self.paths["performance_raw"],
+            {
+                f"candidate-{index}.json": raw_path.read_bytes()
+                for index, raw_path in enumerate(fixture.candidate_paths, 1)
+            },
+        )
+        ratios = {
+            metric: candidate["metrics"][metric] / baseline["metrics"][metric]
+            for metric in release_performance.METRIC_FIELDS
+        }
+        return {
+            "schema_version": "rustinfer.release-performance-report.v1",
+            "status": "passed",
+            "passed": True,
+            "baseline": {
+                "baseline_id": baseline["baseline_id"],
+                "sha256": release_performance.BASELINE_SHA256,
+                "metrics": baseline["metrics"],
+            },
+            "candidate": candidate,
+            "ratios": ratios,
+            "checks": [
+                release_performance._check(
+                    "ttft_p95_regression", ratios["ttft_p95_ms"], "<=", 1.05
+                ),
+                release_performance._check(
+                    "tpot_p95_regression", ratios["tpot_p95_ms"], "<=", 1.05
+                ),
+                release_performance._check(
+                    "e2e_median_regression", ratios["e2e_median_ms"], "<=", 1.05
+                ),
+                release_performance._check(
+                    "throughput_median_regression",
+                    ratios["throughput_median_output_tokens_per_second"],
+                    ">=",
+                    0.95,
+                ),
+            ],
+            "errors": [],
         }
 
     def _build_documents(self) -> None:
@@ -316,34 +509,9 @@ class CandidateFixture:
         optimization_sha = digest(
             (json.dumps(self.documents["optimization_correctness"], sort_keys=True, indent=2) + "\n").encode()
         )
-        self.documents["performance"] = {
-            "schema_version": "rustinfer.release-performance-report.v1",
-            "status": "passed",
-            "passed": True,
-            "baseline": {},
-            "candidate": {
-                "candidate_id": "fixture",
-                "recorded_at_utc": "2026-08-26T00:00:00Z",
-                "source": {
-                    "git_commit": REVISION,
-                    "git_dirty": False,
-                    "source_archive_sha256": self._binding()["source_archive_sha256"],
-                    "profile_binary_sha256": digest(b"profile binary"),
-                    "release_binary_sha256": self._binding()["release_binary_sha256"],
-                    "profile_image_sha256": digest(b"profile image"),
-                    "release_image_sha256": self.image_sha,
-                    "semantic_class": "E0",
-                    "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
-                    "correctness_report_sha256": optimization_sha,
-                },
-                "metrics": {},
-                "run_summary": {},
-                "raw_runs": [],
-            },
-            "ratios": {},
-            "checks": [{"name": "all_regressions", "passed": True}],
-            "errors": [],
-        }
+        self.documents["performance"] = self._build_performance_document(
+            optimization_sha
+        )
         soak_checks = set(SOAK_GLOBAL_CHECKS)
         soak_summaries = []
         for scenario_id, (kind, duration) in SOAK_SCENARIOS.items():
@@ -466,7 +634,10 @@ class CandidateFixture:
                     "report": artifact("optimization_correctness"),
                     "raw_evidence": artifact("optimization_raw"),
                 },
-                "performance": {"report": artifact("performance")},
+                "performance": {
+                    "report": artifact("performance"),
+                    "raw_evidence": artifact("performance_raw"),
+                },
                 "reliability_soak": {"report": artifact("soak")},
             },
         }
@@ -494,7 +665,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["bindings"]["git_revision"], REVISION)
-        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 11)
+        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 12)
 
     def test_failed_or_missing_gate_fails_closed(self) -> None:
         del self.fixture.documents["performance"]["status"]
@@ -524,7 +695,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("correctness_report_sha256", report["errors"][0])
+        self.assertIn("correctness_gate_id", report["errors"][0])
 
     def test_optimizer_log_hashes_must_match_exact_raw_inventory(self) -> None:
         logs = {
@@ -537,6 +708,29 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("declared log hashes", report["errors"][0])
+
+    def test_performance_metrics_are_recomputed_from_raw_runs(self) -> None:
+        self.fixture.documents["performance"]["candidate"]["metrics"][
+            "ttft_p95_ms"
+        ] *= 0.5
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("raw-derived R7 metrics", report["errors"][0])
+
+    def test_performance_raw_inventory_is_closed(self) -> None:
+        files = {
+            f"candidate-{index}.json": path.read_bytes()
+            for index, path in enumerate(
+                self.fixture.performance_fixture.candidate_paths, 1
+            )
+        }
+        files["self-asserted-summary.json"] = b'{"passed":true}\n'
+        self.fixture._write_tar(self.fixture.paths["performance_raw"], files)
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("must contain only", report["errors"][0])
 
     def test_native_replay_validation_binds_raw_bundle(self) -> None:
         self.fixture.documents["native_replay_validation"]["raw_replay_sha256"] = digest(

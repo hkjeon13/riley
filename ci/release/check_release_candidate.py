@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -17,6 +18,21 @@ from typing import Any, NoReturn, Sequence
 
 from release_common import ReleaseContractError
 from verify_release_bundle import verify_bundle
+
+
+_PERFORMANCE_CHECKER_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "benchmarks/scripts/check_release_performance.py"
+)
+_PERFORMANCE_SPEC = importlib.util.spec_from_file_location(
+    "rustinfer_final_candidate_performance_contract",
+    _PERFORMANCE_CHECKER_PATH,
+)
+if _PERFORMANCE_SPEC is None or _PERFORMANCE_SPEC.loader is None:  # pragma: no cover
+    raise RuntimeError(f"cannot load performance contract: {_PERFORMANCE_CHECKER_PATH}")
+release_performance = importlib.util.module_from_spec(_PERFORMANCE_SPEC)
+sys.modules[_PERFORMANCE_SPEC.name] = release_performance
+_PERFORMANCE_SPEC.loader.exec_module(release_performance)
 
 
 MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v1"
@@ -36,6 +52,21 @@ PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 MAX_JSON_BYTES = 64 * 1024 * 1024
+PERFORMANCE_BASELINE_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "benchmarks/release/performance-baseline-v1.json"
+)
+PERFORMANCE_RAW_FILES = {f"candidate-{index}.json" for index in range(1, 6)}
+PERFORMANCE_CHECKS = {
+    "ttft_p95_regression": ("ttft_p95_ms", "<=", 1.05),
+    "tpot_p95_regression": ("tpot_p95_ms", "<=", 1.05),
+    "e2e_median_regression": ("e2e_median_ms", "<=", 1.05),
+    "throughput_median_regression": (
+        "throughput_median_output_tokens_per_second",
+        ">=",
+        0.95,
+    ),
+}
 
 PYTHON_FREE_CHECKS = {
     "release_bundle_verified",
@@ -588,6 +619,57 @@ def _optimization_log_hashes(path: Path) -> dict[str, str]:
         _fail("optimization_correctness.raw_evidence", f"cannot read log archive: {error}")
 
 
+def _performance_raw_payloads(path: Path) -> list[tuple[str, bytes]]:
+    evidence_path = "performance.raw_evidence"
+    try:
+        with tarfile.open(path, "r:*") as archive:
+            members = _safe_tar_members(archive, evidence_path)
+            files: dict[str, tarfile.TarInfo] = {}
+            for member in members:
+                if not member.isreg() or member.name not in PERFORMANCE_RAW_FILES:
+                    _fail(
+                        evidence_path,
+                        "must contain only candidate-1.json through candidate-5.json",
+                    )
+                if member.size <= 0 or member.size > release_performance.native_profile.MAX_EVIDENCE_BYTES:
+                    _fail(
+                        evidence_path,
+                        f"raw run is empty or exceeds the evidence bound: {member.name}",
+                    )
+                files[member.name] = member
+            if set(files) != PERFORMANCE_RAW_FILES:
+                _fail(
+                    evidence_path,
+                    f"exact raw run inventory mismatch: {sorted(files)}",
+                )
+            payloads: list[tuple[str, bytes]] = []
+            for name in sorted(files):
+                source = archive.extractfile(files[name])
+                if source is None:
+                    _fail(evidence_path, f"cannot read {name}")
+                raw = source.read(
+                    release_performance.native_profile.MAX_EVIDENCE_BYTES + 1
+                )
+                if len(raw) != files[name].size:
+                    _fail(evidence_path, f"truncated or oversized raw run: {name}")
+                payloads.append((f"{evidence_path}:{name}", raw))
+            return payloads
+    except CandidateError:
+        raise
+    except (OSError, tarfile.TarError) as error:
+        _fail(evidence_path, f"cannot read raw run archive: {error}")
+
+
+def _reviewed_performance_baseline() -> dict[str, Any]:
+    try:
+        document, raw = release_performance._load_json_bytes(
+            PERFORMANCE_BASELINE_PATH, "reviewed performance baseline"
+        )
+        return release_performance._validate_baseline(document, raw)
+    except (release_performance.InputError, OSError) as error:
+        _fail("performance.baseline", str(error))
+
+
 def _verify_native_replay_archive(path: Path) -> None:
     try:
         with tarfile.open(path, "r:*") as archive:
@@ -759,6 +841,7 @@ def _validate_performance(
     optimization_sha256: str,
     optimization_gate_id: str,
     optimization_profile_image_sha256: str,
+    raw_evidence_path: Path,
 ) -> None:
     row = _exact(
         report,
@@ -771,11 +854,25 @@ def _validate_performance(
         _fail(f"{path}.errors", "must be empty")
     candidate = _exact(
         row["candidate"],
-        {"candidate_id", "recorded_at_utc", "source", "metrics", "run_summary", "raw_runs"},
+        {
+            "candidate_id", "recorded_at_utc", "source", "model",
+            "environment", "workload", "metrics", "run_summary", "raw_runs",
+        },
         f"{path}.candidate",
     )
+    try:
+        validated_candidate = release_performance._validate_candidate(
+            {
+                "schema_version": release_performance.CANDIDATE_SCHEMA,
+                "baseline_sha256": release_performance.BASELINE_SHA256,
+                "status": "success",
+                **candidate,
+            }
+        )
+    except (release_performance.InputError, release_performance.ComparabilityError) as error:
+        _fail(f"{path}.candidate", str(error))
     binding = _exact(
-        candidate["source"],
+        validated_candidate["source"],
         {
             "git_commit", "git_dirty", "source_archive_sha256", "profile_binary_sha256",
             "release_binary_sha256", "profile_image_sha256", "release_image_sha256",
@@ -798,7 +895,72 @@ def _validate_performance(
         if binding.get(key) != value:
             _fail(f"{path}.candidate.source.{key}", "candidate binding mismatch")
     _sha256(binding["profile_binary_sha256"], f"{path}.candidate.source.profile_binary_sha256")
-    _all_checks_pass(row["checks"], f"{path}.checks")
+
+    baseline = _reviewed_performance_baseline()
+    declared_baseline = _exact(
+        row["baseline"], {"baseline_id", "sha256", "metrics"}, f"{path}.baseline"
+    )
+    expected_baseline = {
+        "baseline_id": baseline["baseline_id"],
+        "sha256": release_performance.BASELINE_SHA256,
+        "metrics": baseline["metrics"],
+    }
+    if declared_baseline != expected_baseline:
+        _fail(f"{path}.baseline", "does not equal the reviewed baseline")
+    for field in ("model", "environment", "workload"):
+        if validated_candidate[field] != baseline[field]:
+            _fail(
+                f"{path}.candidate.{field}",
+                "differs from the reviewed release lane",
+            )
+
+    payloads = _performance_raw_payloads(raw_evidence_path)
+    try:
+        release_performance.validate_raw_run_payloads(
+            payloads, validated_candidate
+        )
+    except (release_performance.InputError, release_performance.ComparabilityError) as error:
+        _fail(f"{path}.raw_evidence", str(error))
+
+    ratios = _exact(
+        row["ratios"], set(release_performance.METRIC_FIELDS), f"{path}.ratios"
+    )
+    expected_ratios: dict[str, float] = {}
+    for metric in release_performance.METRIC_FIELDS:
+        expected_ratios[metric] = (
+            validated_candidate["metrics"][metric] / baseline["metrics"][metric]
+        )
+        observed = _finite_number(ratios[metric], f"{path}.ratios.{metric}", minimum=0)
+        if observed != expected_ratios[metric]:
+            _fail(f"{path}.ratios.{metric}", "does not equal the raw-derived ratio")
+
+    checks = row["checks"]
+    if not isinstance(checks, list) or len(checks) != len(PERFORMANCE_CHECKS):
+        _fail(f"{path}.checks", "exact four-check inventory is required")
+    by_name: dict[str, dict[str, Any]] = {}
+    for index, raw in enumerate(checks):
+        check_path = f"{path}.checks[{index}]"
+        check = _exact(
+            raw, {"name", "passed", "observed", "operator", "limit"}, check_path
+        )
+        name = _string(check["name"], f"{check_path}.name", ID_RE)
+        if name in by_name:
+            _fail(f"{check_path}.name", "duplicate performance check")
+        by_name[name] = check
+    if set(by_name) != set(PERFORMANCE_CHECKS):
+        _fail(f"{path}.checks", f"performance check set mismatch: {sorted(by_name)}")
+    for name, (metric, operator, limit) in PERFORMANCE_CHECKS.items():
+        check = by_name[name]
+        observed = _finite_number(
+            check["observed"], f"{path}.checks.{name}.observed", minimum=0
+        )
+        if observed != expected_ratios[metric]:
+            _fail(f"{path}.checks.{name}.observed", "raw-derived ratio mismatch")
+        if check["operator"] != operator or check["limit"] != limit:
+            _fail(f"{path}.checks.{name}", "reviewed threshold contract mismatch")
+        passed = observed <= limit if operator == "<=" else observed >= limit
+        if check["passed"] is not True or not passed:
+            _fail(f"{path}.checks.{name}.passed", "performance threshold did not pass")
 
 
 def _validate_soak(
@@ -1089,18 +1251,45 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
 
         loaded: dict[str, tuple[dict[str, Any], str]] = {}
         raw_hashes: dict[str, str] = {}
+        raw_paths: dict[str, Path] = {}
         for gate_name in ("python_free_e2e", "cuda_fault"):
             gate = _exact(evidence_row[gate_name], {"report", "raw_evidence"}, f"manifest.evidence.{gate_name}")
             report_path, report_sha, _ = _resolve_artifact(
                 gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
             )
-            _, raw_sha, _ = _resolve_artifact(
+            raw_path, raw_sha, _ = _resolve_artifact(
                 gate["raw_evidence"], f"manifest.evidence.{gate_name}.raw_evidence", evidence_root, seen_paths
             )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
             raw_hashes[gate_name] = raw_sha
-        for gate_name in ("performance", "reliability_soak"):
+            raw_paths[gate_name] = raw_path
+
+        performance = _exact(
+            evidence_row["performance"],
+            {"report", "raw_evidence"},
+            "manifest.evidence.performance",
+        )
+        performance_report_path, performance_report_sha, _ = _resolve_artifact(
+            performance["report"],
+            "manifest.evidence.performance.report",
+            evidence_root,
+            seen_paths,
+        )
+        performance_raw_path, performance_raw_sha, _ = _resolve_artifact(
+            performance["raw_evidence"],
+            "manifest.evidence.performance.raw_evidence",
+            evidence_root,
+            seen_paths,
+        )
+        performance_report, _ = _load_json(
+            performance_report_path, "performance report"
+        )
+        loaded["performance"] = (performance_report, performance_report_sha)
+        raw_hashes["performance"] = performance_raw_sha
+        raw_paths["performance"] = performance_raw_path
+
+        for gate_name in ("reliability_soak",):
             gate = _exact(evidence_row[gate_name], {"report"}, f"manifest.evidence.{gate_name}")
             report_path, report_sha, _ = _resolve_artifact(
                 gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
@@ -1183,6 +1372,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             optimization_sha256=optimization_report_sha,
             optimization_gate_id=OPTIMIZATION_GATE,
             optimization_profile_image_sha256=optimization_profile_image_sha256,
+            raw_evidence_path=raw_paths["performance"],
         )
         _validate_soak(
             loaded["reliability_soak"][0], "reliability_soak", revision=revision,

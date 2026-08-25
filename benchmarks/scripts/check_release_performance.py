@@ -70,13 +70,21 @@ def _pairs_no_duplicates(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return result
 
 
+def _reject_nonfinite(value: str) -> None:
+    raise InputError(f"non-finite JSON number {value!r} is forbidden")
+
+
 def _load_json_bytes(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
     try:
         raw = path.read_bytes()
     except OSError as error:
         raise InputError(f"cannot read {label} {path}: {error}") from error
     try:
-        value = json.loads(raw, object_pairs_hook=_pairs_no_duplicates)
+        value = json.loads(
+            raw,
+            object_pairs_hook=_pairs_no_duplicates,
+            parse_constant=_reject_nonfinite,
+        )
     except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
         raise InputError(f"invalid {label} JSON {path}: {error}") from error
     if not isinstance(value, dict):
@@ -772,24 +780,38 @@ def _empty_report() -> dict[str, Any]:
     }
 
 
-def _load_raw_runs(
-    paths: Sequence[Path | str], candidate: Mapping[str, Any]
+def validate_raw_run_payloads(
+    payloads: Sequence[tuple[str, bytes]], candidate: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
-    run_paths = [Path(path) for path in paths]
-    if len(run_paths) != 5:
+    """Validate five raw candidate runs supplied as immutable byte payloads."""
+
+    if len(payloads) != 5:
         raise InputError(
-            f"candidate: expected exactly 5 independent run files, got {len(run_paths)}"
+            f"candidate: expected exactly 5 independent run files, got {len(payloads)}"
         )
-    loaded: list[tuple[Path, dict[str, Any], str]] = []
+    loaded: list[tuple[str, dict[str, Any], str]] = []
     try:
-        for path in run_paths:
-            run, raw = _load_json_bytes(path, "raw native profile run")
-            native_profile._validate_run(run, str(path))
+        for label, raw in payloads:
+            if len(raw) > native_profile.MAX_EVIDENCE_BYTES:
+                raise InputError(
+                    f"{label}: exceeds the raw native profile evidence bound"
+                )
+            try:
+                run = json.loads(
+                    raw,
+                    object_pairs_hook=_pairs_no_duplicates,
+                    parse_constant=_reject_nonfinite,
+                )
+            except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+                raise InputError(f"{label}: invalid raw native profile JSON: {error}") from error
+            if not isinstance(run, dict):
+                raise InputError(f"{label}: raw native profile root must be an object")
+            native_profile._validate_run(run, label)
             if run["role"] != "candidate":
                 raise InputError(
-                    f"{path}.role: expected 'candidate', got {run['role']!r}"
+                    f"{label}.role: expected 'candidate', got {run['role']!r}"
                 )
-            loaded.append((path, run, _digest_bytes(raw)))
+            loaded.append((label, run, _digest_bytes(raw)))
         if sorted(run["pair_index"] for _, run, _ in loaded) != list(range(1, 6)):
             raise InputError("candidate: pair_index values must be exactly 1..5")
         loaded.sort(key=lambda row: row[1]["pair_index"])
@@ -926,6 +948,19 @@ def _load_raw_runs(
     return runs, derived_summary, derived_metrics
 
 
+def _load_raw_runs(
+    paths: Sequence[Path | str], candidate: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
+    payloads: list[tuple[str, bytes]] = []
+    for value in paths:
+        path = Path(value)
+        try:
+            payloads.append((str(path), path.read_bytes()))
+        except OSError as error:
+            raise InputError(f"cannot read raw native profile run {path}: {error}") from error
+    return validate_raw_run_payloads(payloads, candidate)
+
+
 def evaluate(
     baseline_path: Path | str,
     candidate_path: Path | str,
@@ -1044,6 +1079,9 @@ def evaluate(
                     "candidate_id": candidate["candidate_id"],
                     "recorded_at_utc": candidate["recorded_at_utc"],
                     "source": candidate["source"],
+                    "model": candidate["model"],
+                    "environment": candidate["environment"],
+                    "workload": candidate["workload"],
                     "metrics": candidate_metrics,
                     "run_summary": summary,
                     "raw_runs": candidate["raw_runs"],

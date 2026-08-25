@@ -17,7 +17,7 @@ python3 ci/release/check_release_candidate.py \
 
 The report path is create-only. Only `status=passed` and `passed=true` exits
 zero. A passed report binds the SHA-256 of the exact input manifest, source
-archive, release binary, release bundle, six gate decisions, four raw/replay
+archive, release binary, release bundle, six gate decisions, five raw/replay
 archives, and the immutable release image digest.
 
 ## Closed candidate manifest
@@ -61,7 +61,10 @@ shape is:
       "report": {"path": "optimization-correctness-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_evidence": {"path": "optimization-correctness-evidence.tar", "sha256": "LOWERCASE_SHA256"}
     },
-    "performance": {"report": {"path": "release-performance-report.json", "sha256": "LOWERCASE_SHA256"}},
+    "performance": {
+      "report": {"path": "release-performance-report.json", "sha256": "LOWERCASE_SHA256"},
+      "raw_evidence": {"path": "release-performance-evidence.tar", "sha256": "LOWERCASE_SHA256"}
+    },
     "reliability_soak": {"report": {"path": "reliability-soak-report.json", "sha256": "LOWERCASE_SHA256"}}
   }
 }
@@ -186,11 +189,14 @@ The closed native replay validation shape is:
 The remaining cross-bindings are:
 
 - `rustinfer.release-performance-report.v1`: must be `passed`, have no errors,
-  have only passing checks, select semantic class E0, bind the exact source
+  have the exact four reviewed passing checks, select semantic class E0, bind the exact source
   archive/release binary/runtime image, and bind the exact optimizer
   equivalence report bytes and gate ID. Its profile image must equal the
   optimizer report's build image. It must not bind the native 31-case report
-  in that field;
+  in that field. Its raw evidence tar must contain only
+  `candidate-1.json` through `candidate-5.json`; the final gate revalidates the
+  closed native profile schema and all source/model/environment/workload/raw
+  hashes, then recomputes the R7 metrics, baseline ratios, and thresholds;
 - `rustinfer.reliability-soak-report.v1`: must be `passed`, have no errors and
   only passing checks, and bind the same clean revision, archive, release
   binary, and runtime image. The report must also bind the canonical reviewed
