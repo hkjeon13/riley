@@ -42,6 +42,8 @@ pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, Gemm
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
 };
+#[cfg(feature = "cuda-test-fault-injection")]
+pub use memory::{CudaMemoryFault, CudaMemoryFaultStats};
 pub use prefill::{
     AttentionBackend, AttentionBackendAvailability, AttentionCapability, AttentionLayout,
     AttentionMask, AttentionMode, AttentionPreference, AttentionScoreMaterialization,

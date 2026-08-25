@@ -16,6 +16,53 @@ using rustinfer_cuda_internal::same_context;
 using rustinfer_cuda_internal::set_error;
 using rustinfer_cuda_internal::validation_error;
 
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+struct MemoryFaultInjector final {
+  std::atomic<RustInferCudaContext*> owner{nullptr};
+  std::atomic<uint32_t> armed{0};
+  std::atomic<uint64_t> faults_fired{0};
+  std::atomic<uint64_t> device_free_attempts{0};
+  std::atomic<uint64_t> pinned_free_attempts{0};
+  std::atomic<uint64_t> copy_use_release_attempts{0};
+};
+
+static_assert(sizeof(RustInferCudaTestMemoryFaultStats) == 64,
+              "test memory fault stats ABI drift");
+
+MemoryFaultInjector g_memory_faults;
+
+bool injector_owns(RustInferCudaContext* context) noexcept {
+  return g_memory_faults.owner.load(std::memory_order_acquire) == context;
+}
+
+bool fault_is_armed(RustInferCudaContext* context, uint32_t fault) noexcept {
+  return injector_owns(context) &&
+         g_memory_faults.armed.load(std::memory_order_acquire) == fault;
+}
+
+bool consume_fault(RustInferCudaContext* context, uint32_t fault) noexcept {
+  if (!injector_owns(context)) {
+    return false;
+  }
+  uint32_t expected = fault;
+  if (!g_memory_faults.armed.compare_exchange_strong(
+          expected, 0, std::memory_order_acq_rel, std::memory_order_acquire)) {
+    return false;
+  }
+  g_memory_faults.faults_fired.fetch_add(1, std::memory_order_relaxed);
+  return true;
+}
+
+RustInferCudaStatus injected_runtime_error(RustInferCudaErrorInfo* error,
+                                           uint32_t stage,
+                                           const char* operation) noexcept {
+  return set_error(error, RUSTINFER_CUDA_STATUS_RUNTIME_ERROR,
+                   static_cast<int32_t>(cudaErrorUnknown),
+                   RUSTINFER_CUDA_ERROR_DOMAIN_RUNTIME, stage, operation,
+                   "test-injected ambiguous CUDA result");
+}
+#endif
+
 bool valid_range(uint64_t total, uint64_t offset, uint64_t length) noexcept {
   return offset <= total && length <= total - offset;
 }
@@ -88,11 +135,27 @@ bool free_device_after_failed_create(RustInferCudaContext* context,
       "cleanup device allocation after create");
   bool free_confirmed = false;
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (injector_owns(context)) {
+      g_memory_faults.device_free_attempts.fetch_add(1,
+                                                      std::memory_order_relaxed);
+    }
+#endif
     const cudaError_t result = cudaFree(allocation);
     free_confirmed = result == cudaSuccess;
     status = runtime_error(result, &ignored,
                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                            "cleanup device allocation after create");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (consume_fault(
+            context,
+            RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
+      free_confirmed = false;
+      status = injected_runtime_error(
+          &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+          "cleanup device allocation after injected create failure");
+    }
+#endif
   }
   (void)cleanup.leave(status, &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                       "cleanup device allocation after create");
@@ -112,11 +175,27 @@ bool free_pinned_after_failed_create(RustInferCudaContext* context,
       "cleanup pinned allocation after create");
   bool free_confirmed = false;
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (injector_owns(context)) {
+      g_memory_faults.pinned_free_attempts.fetch_add(1,
+                                                      std::memory_order_relaxed);
+    }
+#endif
     const cudaError_t result = cudaFreeHost(allocation);
     free_confirmed = result == cudaSuccess;
     status = runtime_error(result, &ignored,
                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                            "cleanup pinned allocation after create");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (consume_fault(
+            context,
+            RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
+      free_confirmed = false;
+      status = injected_runtime_error(
+          &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+          "cleanup pinned allocation after injected create failure");
+    }
+#endif
   }
   (void)cleanup.leave(status, &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                       "cleanup pinned allocation after create");
@@ -143,6 +222,12 @@ bool release_copy_uses(RustInferCudaCopy* copy) noexcept {
       copy->host->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
   }
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+  if (injector_owns(copy->owner)) {
+    g_memory_faults.copy_use_release_attempts.fetch_add(
+        1, std::memory_order_relaxed);
+  }
+#endif
   // Raw C callers must serialize mutation of opaque handles. Under that ABI
   // rule this precheck makes the three-resource state transition all-or-none.
   copy->stream->active_uses.store(0, std::memory_order_release);
@@ -285,6 +370,16 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
           &operation_error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
           direction == cudaMemcpyHostToDevice ? "enqueue pinned host-to-device copy"
                                                : "enqueue device-to-pinned-host copy");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+          consume_fault(
+              device->owner,
+              RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR)) {
+        status = injected_runtime_error(
+            &operation_error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
+            "enqueue test-injected deferred CUDA copy error");
+      }
+#endif
     }
     status = scope.leave(status, &operation_error,
                          RUSTINFER_CUDA_ERROR_STAGE_COPY,
@@ -354,6 +449,16 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_create(
           cudaMalloc(&allocation, static_cast<size_t>(byte_len));
       status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
                              "allocate CUDA device buffer");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+          fault_is_armed(
+              context,
+              RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
+        status = injected_runtime_error(
+            error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+            "create test-injected CUDA device buffer failure");
+      }
+#endif
     }
     status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
                          "create CUDA device buffer");
@@ -423,10 +528,26 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
                          "close CUDA device buffer");
     if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
       free_attempted = true;
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (injector_owns((*buffer)->owner)) {
+        g_memory_faults.device_free_attempts.fetch_add(
+            1, std::memory_order_relaxed);
+      }
+#endif
       const cudaError_t result = cudaFree((*buffer)->device_data);
       free_confirmed = result == cudaSuccess;
       status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                              "free CUDA device buffer");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (consume_fault(
+              (*buffer)->owner,
+              RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS)) {
+        free_confirmed = false;
+        status = injected_runtime_error(
+            error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+            "close test-injected CUDA device buffer");
+      }
+#endif
       // cudaFree may surface an earlier asynchronous error after performing
       // its destructive side effect. Never retry an attempted free.
       (*buffer)->device_data = nullptr;
@@ -501,6 +622,16 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
           &allocation, static_cast<size_t>(byte_len), cudaHostAllocDefault);
       status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
                              "allocate pinned host buffer");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+          fault_is_armed(
+              context,
+              RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
+        status = injected_runtime_error(
+            error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+            "create test-injected CUDA pinned host buffer failure");
+      }
+#endif
     }
     status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
                          "create pinned host buffer");
@@ -632,10 +763,26 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
                          "close pinned host buffer");
     if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
       free_attempted = true;
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (injector_owns((*buffer)->owner)) {
+        g_memory_faults.pinned_free_attempts.fetch_add(
+            1, std::memory_order_relaxed);
+      }
+#endif
       const cudaError_t result = cudaFreeHost((*buffer)->host_data);
       free_confirmed = result == cudaSuccess;
       status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                              "free pinned host buffer");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (consume_fault(
+              (*buffer)->owner,
+              RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS)) {
+        free_confirmed = false;
+        status = injected_runtime_error(
+            error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+            "close test-injected CUDA pinned host buffer");
+      }
+#endif
       // cudaFreeHost is likewise single-shot when its reported error may be
       // deferred from earlier work.
       (*buffer)->host_data = nullptr;
@@ -753,6 +900,21 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_synchronize(
     status = runtime_error(result, error,
                            RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
                            "synchronize CUDA copy stream");
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+        consume_fault(
+            copy->owner,
+            RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS)) {
+      // Model an unconfirmable current-context restoration after the device work
+      // has completed. Completion is deliberately not published: resources and
+      // the context remain poisoned/busy rather than risking early reuse.
+      copy->owner->restoration_failed.store(true, std::memory_order_release);
+      completion_observed = false;
+      status = injected_runtime_error(
+          error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+          "synchronize test-injected CUDA copy with ambiguous restoration");
+    }
+#endif
   }
   status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
                        "synchronize CUDA copy");
@@ -801,3 +963,82 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_close(
   }
   return status;
 }
+
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_reset(
+    RustInferCudaContext* context, RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (context == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "reset CUDA memory fault injector",
+                            "context is null");
+  }
+  g_memory_faults.armed.store(0, std::memory_order_release);
+  g_memory_faults.faults_fired.store(0, std::memory_order_relaxed);
+  g_memory_faults.device_free_attempts.store(0, std::memory_order_relaxed);
+  g_memory_faults.pinned_free_attempts.store(0, std::memory_order_relaxed);
+  g_memory_faults.copy_use_release_attempts.store(0,
+                                                   std::memory_order_relaxed);
+  g_memory_faults.owner.store(context, std::memory_order_release);
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_arm(
+    RustInferCudaContext* context, uint32_t fault,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (context == nullptr || !injector_owns(context)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "arm CUDA memory fault injector",
+                            "injector is not reset for this context");
+  }
+  if (fault <
+          RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS ||
+      fault >
+          RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "arm CUDA memory fault injector",
+                            "unknown fault identifier");
+  }
+  uint32_t expected = 0;
+  if (!g_memory_faults.armed.compare_exchange_strong(
+          expected, fault, std::memory_order_acq_rel,
+          std::memory_order_acquire)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "arm CUDA memory fault injector",
+                            "another one-shot fault is still armed");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_stats(
+    RustInferCudaContext* context, RustInferCudaTestMemoryFaultStats* out_stats,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (context == nullptr || !injector_owns(context) || out_stats == nullptr ||
+      out_stats->struct_size < sizeof(*out_stats)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "query CUDA memory fault injector",
+                            "context/session/output is invalid");
+  }
+  const uint32_t struct_size = out_stats->struct_size;
+  std::memset(out_stats, 0, sizeof(*out_stats));
+  out_stats->struct_size = struct_size;
+  out_stats->armed_fault =
+      g_memory_faults.armed.load(std::memory_order_acquire);
+  out_stats->faults_fired =
+      g_memory_faults.faults_fired.load(std::memory_order_relaxed);
+  out_stats->device_free_attempts =
+      g_memory_faults.device_free_attempts.load(std::memory_order_relaxed);
+  out_stats->pinned_free_attempts =
+      g_memory_faults.pinned_free_attempts.load(std::memory_order_relaxed);
+  out_stats->copy_use_release_attempts =
+      g_memory_faults.copy_use_release_attempts.load(std::memory_order_relaxed);
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+#endif

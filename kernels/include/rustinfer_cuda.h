@@ -76,6 +76,27 @@ typedef struct RustInferCudaAllocationStats {
   uint64_t pinned_host_live_allocations;
 } RustInferCudaAllocationStats;
 
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+// Destructive test-only ABI. These declarations and their symbols are absent
+// from ordinary archives. Enabling this definition in production is unsupported.
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS 1u
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS 2u
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS 3u
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS 4u
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR 5u
+#define RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS 6u
+
+typedef struct RustInferCudaTestMemoryFaultStats {
+  uint32_t struct_size;
+  uint32_t armed_fault;
+  uint64_t faults_fired;
+  uint64_t device_free_attempts;
+  uint64_t pinned_free_attempts;
+  uint64_t copy_use_release_attempts;
+  uint64_t reserved[3];
+} RustInferCudaTestMemoryFaultStats;
+#endif
+
 typedef struct RustInferCudaContext RustInferCudaContext;
 typedef struct RustInferCudaStream RustInferCudaStream;
 typedef struct RustInferCudaEvent RustInferCudaEvent;
@@ -901,6 +922,23 @@ RustInferCudaStatus rustinfer_cuda_copy_synchronize(
 RustInferCudaStatus rustinfer_cuda_copy_close(
     RustInferCudaCopy** copy,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+// One process-local injector session is bound to one context. Reset clears all
+// counters; arm is one-shot. Ambiguous cases intentionally poison/leak their
+// subprocess, so callers must isolate every case in a fresh process.
+RustInferCudaStatus rustinfer_cuda_test_memory_fault_reset(
+    RustInferCudaContext* context,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_test_memory_fault_arm(
+    RustInferCudaContext* context,
+    uint32_t fault,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_test_memory_fault_stats(
+    RustInferCudaContext* context,
+    RustInferCudaTestMemoryFaultStats* out_stats,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+#endif
 
 // Core primitive calls are synchronously complete even though their device
 // work is enqueued on the explicit stream: each call validates and exclusively

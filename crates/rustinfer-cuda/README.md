@@ -46,7 +46,7 @@ Feature-off CPU checks are safe on any development host:
 cargo test --locked -p rustinfer-cuda --no-default-features
 ```
 
-The `host_runtime_gpu` integration target contains exactly seven tests marked
+The `host_runtime_gpu` integration target contains exactly eight tests marked
 `#[ignore = "remote GPU"]`. Run them only in an explicitly authorized remote
 NVIDIA GPU environment; ordinary Cargo test invocations do not execute device
 work:

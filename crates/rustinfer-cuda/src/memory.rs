@@ -24,6 +24,81 @@ pub struct CudaAllocationStats {
     pinned_host_live_allocations: u64,
 }
 
+/// One-shot native memory-lifecycle fault identifier.
+///
+/// This API exists only with `cuda-test-fault-injection`. It deliberately
+/// creates fail-closed leaks/poisoned contexts and is unsupported in production.
+#[cfg(feature = "cuda-test-fault-injection")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum CudaMemoryFault {
+    DeviceCreateRollbackAmbiguous = 1,
+    PinnedCreateRollbackAmbiguous = 2,
+    DeviceCloseAmbiguous = 3,
+    PinnedCloseAmbiguous = 4,
+    CopyDeferredSubmissionError = 5,
+    CopyCompletionRestoreAmbiguous = 6,
+}
+
+#[cfg(feature = "cuda-test-fault-injection")]
+impl CudaMemoryFault {
+    const fn from_raw(raw: u32) -> Option<Self> {
+        match raw {
+            1 => Some(Self::DeviceCreateRollbackAmbiguous),
+            2 => Some(Self::PinnedCreateRollbackAmbiguous),
+            3 => Some(Self::DeviceCloseAmbiguous),
+            4 => Some(Self::PinnedCloseAmbiguous),
+            5 => Some(Self::CopyDeferredSubmissionError),
+            6 => Some(Self::CopyCompletionRestoreAmbiguous),
+            _ => None,
+        }
+    }
+}
+
+/// Process-local diagnostic counters for the test-only fault injector.
+#[cfg(feature = "cuda-test-fault-injection")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CudaMemoryFaultStats {
+    armed_fault: Option<CudaMemoryFault>,
+    faults_fired: u64,
+    device_free_attempts: u64,
+    pinned_free_attempts: u64,
+    copy_use_release_attempts: u64,
+}
+
+#[cfg(feature = "cuda-test-fault-injection")]
+impl CudaMemoryFaultStats {
+    /// Currently armed one-shot fault, if any.
+    #[must_use]
+    pub const fn armed_fault(self) -> Option<CudaMemoryFault> {
+        self.armed_fault
+    }
+
+    /// Number of one-shot faults consumed since reset.
+    #[must_use]
+    pub const fn faults_fired(self) -> u64 {
+        self.faults_fired
+    }
+
+    /// Number of `cudaFree` attempts observed by this session.
+    #[must_use]
+    pub const fn device_free_attempts(self) -> u64 {
+        self.device_free_attempts
+    }
+
+    /// Number of `cudaFreeHost` attempts observed by this session.
+    #[must_use]
+    pub const fn pinned_free_attempts(self) -> u64 {
+        self.pinned_free_attempts
+    }
+
+    /// Number of all-or-none native copy reservation releases attempted.
+    #[must_use]
+    pub const fn copy_use_release_attempts(self) -> u64 {
+        self.copy_use_release_attempts
+    }
+}
+
 impl CudaAllocationStats {
     /// Bytes currently accounted to opaque device buffers.
     #[must_use]
@@ -60,6 +135,44 @@ impl CudaAllocationStats {
 }
 
 impl CudaContext {
+    /// Starts a fresh process-local test fault session for this context.
+    ///
+    /// # Errors
+    ///
+    /// Returns a native validation error. Call only in a disposable subprocess.
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub fn reset_memory_fault_injection(&self) -> CudaResult<()> {
+        self.inner.native.reset_memory_fault_injection()
+    }
+
+    /// Arms exactly one destructive test fault. The fault is consumed once.
+    ///
+    /// # Errors
+    ///
+    /// Returns invalid-state if the session was not reset for this context or a
+    /// previous fault remains armed.
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub fn arm_memory_fault(&self, fault: CudaMemoryFault) -> CudaResult<()> {
+        self.inner.native.arm_memory_fault(fault as u32)
+    }
+
+    /// Returns the current test-only injector counters.
+    ///
+    /// # Errors
+    ///
+    /// Returns a native validation error if no session belongs to this context.
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub fn memory_fault_stats(&self) -> CudaResult<CudaMemoryFaultStats> {
+        let stats = self.inner.native.memory_fault_stats()?;
+        Ok(CudaMemoryFaultStats {
+            armed_fault: CudaMemoryFault::from_raw(stats.armed_fault),
+            faults_fired: stats.faults_fired,
+            device_free_attempts: stats.device_free_attempts,
+            pinned_free_attempts: stats.pinned_free_attempts,
+            copy_use_release_attempts: stats.copy_use_release_attempts,
+        })
+    }
+
     /// Allocates an opaque byte-addressed device buffer.
     ///
     /// A zero-byte request returns an owned logical handle and is included in

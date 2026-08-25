@@ -78,3 +78,23 @@ fn command_batch_api_exposes_only_the_non_replaceable_proxy() {
     assert!(!source.contains("pub fn stream_mut(&mut self) -> &mut CudaStream"));
     assert!(source.contains("pub trait CudaExecutionStream"));
 }
+
+#[test]
+fn memory_fault_injection_is_compile_time_test_only() {
+    let manifest = include_str!("../Cargo.toml");
+    let build = include_str!("../build.rs");
+    let cmake = include_str!("../../../kernels/CMakeLists.txt");
+    let header = include_str!("../../../kernels/include/rustinfer_cuda.h");
+    let native = include_str!("../../../kernels/src/memory.cu");
+
+    assert!(manifest.contains("cuda-test-fault-injection = [\"cuda\"]"));
+    assert!(build.contains("CARGO_FEATURE_CUDA_TEST_FAULT_INJECTION"));
+    assert!(cmake.contains("RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION"));
+    assert!(cmake.contains("FAULT_INJECTION\n    \"Build destructive test-only"));
+    for source in [header, native] {
+        assert!(source.contains("#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)"));
+    }
+    assert!(header.contains("rustinfer_cuda_test_memory_fault_reset"));
+    assert!(header.contains("rustinfer_cuda_test_memory_fault_arm"));
+    assert!(header.contains("rustinfer_cuda_test_memory_fault_stats"));
+}

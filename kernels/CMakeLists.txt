@@ -4,6 +4,9 @@ project(rustinfer_cuda_native VERSION 0.1.0 LANGUAGES C CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 
+option(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION
+    "Build destructive test-only CUDA memory fault injection hooks" OFF)
+
 if(NOT CMAKE_CUDA_ARCHITECTURES)
     message(FATAL_ERROR
         "CMAKE_CUDA_ARCHITECTURES must contain explicit AOT compile targets")
@@ -43,6 +46,11 @@ target_include_directories(rustinfer_cuda_native
 )
 
 target_compile_features(rustinfer_cuda_native PUBLIC cuda_std_17)
+
+if(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    target_compile_definitions(rustinfer_cuda_native PRIVATE
+        RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION=1)
+endif()
 
 # Static archives do not carry transitive linker directives into Cargo. Keep
 # the CMake dependencies accurate and emit the toolkit-selected linker files

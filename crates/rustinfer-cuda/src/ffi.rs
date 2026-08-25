@@ -37,6 +37,8 @@ const DEVICE_NAME_CAPACITY: usize = 256;
 const ERROR_INFO_SIZE: u32 = 272;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
 const ALLOCATION_STATS_SIZE: u32 = 40;
+#[cfg(feature = "cuda-test-fault-injection")]
+const TEST_MEMORY_FAULT_STATS_SIZE: u32 = 64;
 const BUFFER_SPAN_SIZE: u32 = 48;
 const EMBEDDING_ERROR_REPORT_SIZE: u32 = 32;
 const EMBEDDING_PARAMS_SIZE: u32 = 256;
@@ -172,6 +174,43 @@ pub(super) struct NativeAllocationStats {
     pub(super) device_live_allocations: u64,
     pub(super) pinned_host_live_bytes: u64,
     pub(super) pinned_host_live_allocations: u64,
+}
+
+#[cfg(feature = "cuda-test-fault-injection")]
+#[repr(C)]
+struct RawTestMemoryFaultStats {
+    struct_size: u32,
+    armed_fault: u32,
+    faults_fired: u64,
+    device_free_attempts: u64,
+    pinned_free_attempts: u64,
+    copy_use_release_attempts: u64,
+    reserved: [u64; 3],
+}
+
+#[cfg(feature = "cuda-test-fault-injection")]
+impl RawTestMemoryFaultStats {
+    const fn new() -> Self {
+        Self {
+            struct_size: TEST_MEMORY_FAULT_STATS_SIZE,
+            armed_fault: 0,
+            faults_fired: 0,
+            device_free_attempts: 0,
+            pinned_free_attempts: 0,
+            copy_use_release_attempts: 0,
+            reserved: [0; 3],
+        }
+    }
+}
+
+#[cfg(feature = "cuda-test-fault-injection")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeTestMemoryFaultStats {
+    pub(super) armed_fault: u32,
+    pub(super) faults_fired: u64,
+    pub(super) device_free_attempts: u64,
+    pub(super) pinned_free_attempts: u64,
+    pub(super) copy_use_release_attempts: u64,
 }
 
 #[derive(Debug)]
@@ -948,6 +987,23 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_copy_close(copy: *mut *mut RawCopy, error: *mut ErrorInfo) -> i32;
+    #[cfg(feature = "cuda-test-fault-injection")]
+    fn rustinfer_cuda_test_memory_fault_reset(
+        context: *mut RawContext,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-test-fault-injection")]
+    fn rustinfer_cuda_test_memory_fault_arm(
+        context: *mut RawContext,
+        fault: u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    #[cfg(feature = "cuda-test-fault-injection")]
+    fn rustinfer_cuda_test_memory_fault_stats(
+        context: *mut RawContext,
+        out_stats: *mut RawTestMemoryFaultStats,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_embedding_execute(
         params: *const RawEmbeddingParams,
         stream: *mut RawStream,
@@ -1266,6 +1322,44 @@ impl ContextHandle {
             device_live_allocations: allocation_snapshot.device_live_allocations,
             pinned_host_live_bytes: allocation_snapshot.pinned_host_live_bytes,
             pinned_host_live_allocations: allocation_snapshot.pinned_host_live_allocations,
+        })
+    }
+
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub(super) fn reset_memory_fault_injection(&self) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: this build links the test-only native ABI and the context is
+        // kept alive for the synchronous session reset.
+        let status = unsafe { rustinfer_cuda_test_memory_fault_reset(self.as_ptr(), &mut error) };
+        status_result(status, "reset CUDA memory fault injector", &error)
+    }
+
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub(super) fn arm_memory_fault(&self, fault: u32) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the native boundary validates the test-only fault id and the
+        // live context/session identity.
+        let status =
+            unsafe { rustinfer_cuda_test_memory_fault_arm(self.as_ptr(), fault, &mut error) };
+        status_result(status, "arm CUDA memory fault injector", &error)
+    }
+
+    #[cfg(feature = "cuda-test-fault-injection")]
+    pub(super) fn memory_fault_stats(&self) -> CudaResult<NativeTestMemoryFaultStats> {
+        let mut stats = RawTestMemoryFaultStats::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: stats is a correctly sized repr(C) output and both it and the
+        // live context remain valid for the synchronous snapshot.
+        let status = unsafe {
+            rustinfer_cuda_test_memory_fault_stats(self.as_ptr(), &mut stats, &mut error)
+        };
+        status_result(status, "query CUDA memory fault injector", &error)?;
+        Ok(NativeTestMemoryFaultStats {
+            armed_fault: stats.armed_fault,
+            faults_fired: stats.faults_fired,
+            device_free_attempts: stats.device_free_attempts,
+            pinned_free_attempts: stats.pinned_free_attempts,
+            copy_use_release_attempts: stats.copy_use_release_attempts,
         })
     }
 

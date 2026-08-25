@@ -123,6 +123,16 @@ cargo test \
     --test memory_gpu \
     --no-run
 
+# Compile, but never execute, the subprocess-only destructive fault gate while
+# building the reusable image. Its native symbols exist only for this feature.
+cargo test \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda-test-fault-injection \
+    --test memory_fault_injection_gpu \
+    --no-run
+
 # Compile the tensor metadata and CUDA-backed ownership adapters without
 # executing any GPU target or model operation.
 cargo test \
@@ -207,6 +217,10 @@ cat "$readelf_log"
     nm -D --undefined-only "$abi_link_binary"
 } >"$nm_log"
 cat "$nm_log"
+if grep -Fq 'rustinfer_cuda_test_memory_fault_' "$nm_log"; then
+    echo "production artifact unexpectedly exposes CUDA test fault injection" >&2
+    exit 1
+fi
 
 if grep -Eiq '=>[[:space:]]+not found' "$ldd_log"; then
     echo "production artifact has an unresolved shared-library dependency" >&2

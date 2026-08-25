@@ -79,6 +79,8 @@ test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-list.txt"
 test_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-tests.log"
 memory_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-list.txt"
 memory_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-tests.log"
+memory_fault_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
+memory_fault_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-tests.log"
 checksum_file="$RUSTINFER_GPU_EVIDENCE_DIR/SHA256SUMS"
 sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
 memory_sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
@@ -100,6 +102,8 @@ for output in \
     "$test_log" \
     "$memory_test_list_log" \
     "$memory_test_log" \
+    "$memory_fault_test_list_log" \
+    "$memory_fault_test_log" \
     "$ldd_log" \
     "$readelf_log" \
     "$nm_log" \
@@ -184,6 +188,7 @@ fi
 cat "$test_list_log"
 
 expected_tests='device_metadata_is_reported
+command_batch_proxy_is_one_shot_and_drop_restores_stream_use
 invalid_device_is_rejected
 two_stream_event_ordering_is_explicit
 async_fill_is_correct_after_sync
@@ -198,8 +203,8 @@ for test_name in $expected_tests; do
     fi
 done
 test_list_count=$(grep -Ec ': test$' "$test_list_log" || true)
-if [ "$test_list_count" -ne 7 ]; then
-    echo "expected exactly 7 GPU integration tests, found $test_list_count" >&2
+if [ "$test_list_count" -ne 8 ]; then
+    echo "expected exactly 8 GPU integration tests, found $test_list_count" >&2
     exit 1
 fi
 
@@ -232,6 +237,27 @@ done
 memory_test_list_count=$(grep -Ec ': test$' "$memory_test_list_log" || true)
 if [ "$memory_test_list_count" -ne 5 ]; then
     echo "expected exactly 5 GPU memory tests, found $memory_test_list_count" >&2
+    exit 1
+fi
+
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda-test-fault-injection \
+    --test memory_fault_injection_gpu \
+    -- --list --format terse --color never >"$memory_fault_test_list_log" 2>&1
+then
+    cat "$memory_fault_test_list_log"
+    exit 1
+fi
+cat "$memory_fault_test_list_log"
+grep -Fqx 'memory_fault_cases_are_subprocess_isolated: test' "$memory_fault_test_list_log"
+grep -Fqx 'memory_fault_subprocess: test' "$memory_fault_test_list_log"
+memory_fault_test_count=$(grep -Ec ': test$' "$memory_fault_test_list_log" || true)
+if [ "$memory_fault_test_count" -ne 2 ]; then
+    echo "expected exactly 2 GPU memory fault harness tests, found $memory_fault_test_count" >&2
     exit 1
 fi
 
@@ -286,7 +312,7 @@ grep -Eq \
 grep -Eq \
     "rustinfer-cuda-leak-smoke iterations=${RUSTINFER_CUDA_LEAK_ITERATIONS}( |$)" \
     "$test_log"
-grep -Eq 'test result: ok\. 7 passed; 0 failed; 0 ignored;' "$test_log"
+grep -Eq 'test result: ok\. 8 passed; 0 failed; 0 ignored;' "$test_log"
 
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
@@ -309,6 +335,24 @@ if [ "$memory_marker_count" -ne 1 ]; then
     exit 1
 fi
 grep -Eq 'test result: ok\. 5 passed; 0 failed; 0 ignored;' "$memory_test_log"
+
+# Only the parent harness is selected. It starts each destructive ambiguity case
+# in a fresh child process so a poisoned primary context is never reused.
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package rustinfer-cuda \
+    --no-default-features \
+    --features cuda-test-fault-injection \
+    --test memory_fault_injection_gpu \
+    -- --ignored --exact memory_fault_cases_are_subprocess_isolated \
+    --test-threads=1 --nocapture --color never >"$memory_fault_test_log" 2>&1
+then
+    cat "$memory_fault_test_log"
+    exit 1
+fi
+cat "$memory_fault_test_log"
+grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out;' "$memory_fault_test_log"
 
 ldd "$test_binary" >"$ldd_log"
 cat "$ldd_log"
@@ -384,7 +428,7 @@ if [ "$sanitizer_enabled" -eq 1 ]; then
     cat "$sanitizer_log"
     grep -Eq 'ERROR SUMMARY: 0 errors' "$sanitizer_log"
     grep -Eq 'LEAK SUMMARY:[[:space:]]+0 bytes leaked' "$sanitizer_log"
-    grep -Eq 'test result: ok\. 7 passed; 0 failed; 0 ignored;' "$sanitizer_log"
+    grep -Eq 'test result: ok\. 8 passed; 0 failed; 0 ignored;' "$sanitizer_log"
 
     if ! compute-sanitizer \
         --tool memcheck \
@@ -424,6 +468,8 @@ host-runtime-nm.txt
 host-runtime-test-binary.sha256
 memory-test-list.txt
 memory-tests.log
+memory-fault-test-list.txt
+memory-fault-tests.log
 memory-ldd.txt
 memory-readelf.txt
 memory-nm.txt

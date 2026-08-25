@@ -11,6 +11,9 @@ links = "rustinfer_cuda_native"
 [features]
 default = []
 cuda = []
+# Test infrastructure only. This deliberately changes the native archive and
+# must never be enabled in a production build.
+cuda-test-fault-injection = ["cuda"]
 
 [dependencies]
 rustinfer-core = { path = "../rustinfer-core" }
@@ -32,6 +35,11 @@ required-features = ["cuda"]
 name = "memory_gpu"
 path = "tests/memory_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "memory_fault_injection_gpu"
+path = "tests/memory_fault_injection_gpu.rs"
+required-features = ["cuda-test-fault-injection"]
 
 [[test]]
 name = "primitives_gpu"
