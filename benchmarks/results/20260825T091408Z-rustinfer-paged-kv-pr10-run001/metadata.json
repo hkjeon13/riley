@@ -1,0 +1,202 @@
+{
+  "artifact_kind": "rustinfer-pr10-exact-paged-kv-evidence",
+  "created_at_utc": "2026-08-25T09:14:08Z",
+  "schema_id": "rustinfer.pr10.exact-paged-kv-evidence.v1",
+  "status": "passed",
+  "benchmark_scope": "microbenchmark",
+  "scope_note": "Correctness, lifecycle, sanitizer, and launch-structure evidence; no end-to-end performance claim.",
+  "semantic_class": "reference",
+  "source": {
+    "branch": "codex/pr-10-paged-kv-manager",
+    "git_dirty": false,
+    "git_revision": "b0f45eb0ac6b3fd73d198f09eef58375a85f2349",
+    "source_tar_sha256": "ffadca38bc96170e4858b36f97b0d6ff9d403af29b7d8ca5a56a61aa7d3e2a88"
+  },
+  "environment": {
+    "host": "server-4096",
+    "host_cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+    "host_logical_cpus": 24,
+    "host_ram_bytes": 67185598464,
+    "host_kernel": "Linux 6.8.0-138-generic x86_64",
+    "container_os": "Ubuntu 22.04",
+    "container_network": "disabled",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_mib": 24564,
+    "compute_capability": "8.9",
+    "nvidia_driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architectures": "89",
+    "rustc_version": "1.85.0",
+    "cargo_version": "1.85.0",
+    "nsight_compute_version": "2025.1.1",
+    "compute_sanitizer": "available"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bfloat16",
+    "batch_size": 1,
+    "layers": 30,
+    "query_heads": 9,
+    "key_value_heads": 3,
+    "head_size": 64,
+    "maximum_sequence_length": 8192,
+    "sampling": "greedy test harness; generation policy remains PR11 scope"
+  },
+  "implementation": {
+    "implementation_id": "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16",
+    "implementation_version": 1,
+    "block_table_format_version": 1,
+    "block_size_tokens": 16,
+    "device_block_id_encoding": "u32 physical index",
+    "device_valid_tokens_encoding": "u16",
+    "device_logical_length_encoding": "u32",
+    "host_block_identity": "pool cookie + u32 physical index + u64 generation",
+    "layout": "separate K/V BF16 [layer, physical_block, kv_head, token_in_block, head_dim]",
+    "allocation_policy": "deterministic fixed-capacity LIFO free list",
+    "transaction": "reserve, upload table, execute model, commit",
+    "error_policy": "preflight OOM rolls back without poison; post-reservation execution error reclaims tentative blocks and poisons owner",
+    "cache_default": "paged exact",
+    "rollback": "explicit contiguous cache policy",
+    "optional_sidecar": "versioned opaque descriptor bound to host BlockId generation; absent in measured execution",
+    "exact_attention": true,
+    "bit_exact_with_contiguous_model_logits": false
+  },
+  "memory_contract": {
+    "bytes_per_logical_token": 23040,
+    "bytes_per_physical_block": 368640,
+    "near_limit_physical_blocks": 512,
+    "near_limit_usable_kv_bytes": 188743680,
+    "near_limit_block_table_device_bytes": 3072,
+    "near_limit_block_table_pinned_staging_bytes": 2048,
+    "paged_cache_device_allocations": 4,
+    "paged_cache_pinned_host_allocations": 1,
+    "usable_kv_bytes_definition": "Total preallocated physical K/V pool capacity, not current logical usage.",
+    "cache_unused_capacity_bytes_definition": "Prepared physical capacity beyond configured maximum logical length, including block rounding/overprovision.",
+    "dynamic_internal_fragmentation_definition": "Committed tail-block token slots not occupied by logical tokens, reported separately at runtime.",
+    "sidecar_device_bytes_definition": "Sum of declared opaque device-view lengths; shared or overlapping descriptors are not deduplicated into unique physical bytes.",
+    "allocation_latency_definition": "Successful free-list pop, generation increment, and owner bind only; excludes preflight/OOM, table writes, and CUDA allocation."
+  },
+  "correctness": {
+    "low_level_boundary_lengths": [1, 15, 16, 17, 31, 32, 33, 128, 129],
+    "low_level_contiguous_reference_exact_all": true,
+    "low_level_descending_reduce_matches_all": true,
+    "paged_vs_contiguous_32": {
+      "rows": 33,
+      "top1_mismatches": 0,
+      "prefill_byte_exact": true,
+      "worst_cosine": "0.999664329560",
+      "maximum_abs": "0.312500000",
+      "maximum_mean_abs": "0.136817740"
+    },
+    "paged_vs_contiguous_128": {
+      "rows": 129,
+      "top1_mismatches": 0,
+      "prefill_byte_exact": true,
+      "worst_cosine": "0.998526788174",
+      "maximum_abs": "1.625000000",
+      "maximum_mean_abs": "0.501330264"
+    },
+    "numeric_metrics_role": "diagnostic only; semantic gate is prefill byte parity plus every-row greedy top-1 parity"
+  },
+  "lifecycle": {
+    "physical_block": 0,
+    "generations": [1, 2, 3],
+    "reset_returns_all_blocks": true,
+    "invalid_prompt_pre_mutation": true,
+    "same_prompt_replay_byte_exact": true,
+    "different_prompt_fresh_byte_exact": true,
+    "contamination": false,
+    "high_water_mark": 1,
+    "successful_physical_lease_count": 3,
+    "total_allocation_latency_ns": 1533,
+    "maximum_allocation_latency_ns": 599,
+    "implicit_paged_drop_accounting_zero": true,
+    "oom_recoverable_without_poison": true,
+    "near_limit_final_logical_length": 8192,
+    "near_limit_capacity_error_pre_mutation": true
+  },
+  "validation": {
+    "strict_clippy_all_features": "passed",
+    "workspace_all_features": "125 passed, 0 failed, 46 ignored",
+    "workspace_doctests": "13 passed, 0 failed",
+    "independent_c11_abi": "passed with -Werror -pedantic",
+    "pr09_contiguous_regression": "3 passed",
+    "low_level_paged_gpu": "1 test; 9 shapes passed",
+    "model_parity_32": "1 passed",
+    "model_parity_128": "1 passed",
+    "model_lifecycle": "1 passed",
+    "model_oom": "1 passed",
+    "model_near_limit": "1 passed",
+    "compute_sanitizer_low_level_memcheck": "0 errors, 0 bytes leaked",
+    "compute_sanitizer_low_level_racecheck": "0 hazards, 0 errors, 0 warnings",
+    "compute_sanitizer_model_lifecycle_memcheck": "0 errors, 0 bytes leaked",
+    "ncu_classification": "launch-evidence-only",
+    "ncu_metrics_collected": false,
+    "ncu_warning": "No metrics to collect found in sections."
+  },
+  "launch_evidence": [
+    {
+      "case": "logical_length_129_producer",
+      "block": [32, 1, 1],
+      "grid": [9, 9, 1],
+      "grid_blocks": 81,
+      "threads": 2592,
+      "waves_per_sm": "0.03"
+    },
+    {
+      "case": "logical_length_129_reducer",
+      "block": [256, 1, 1],
+      "grid": [1, 1, 1],
+      "grid_blocks": 1,
+      "threads": 256,
+      "waves_per_sm": "0.00"
+    },
+    {
+      "case": "logical_length_8065_producer",
+      "block": [32, 1, 1],
+      "grid": [505, 9, 1],
+      "grid_blocks": 4545,
+      "threads": 145440,
+      "waves_per_sm": "1.48"
+    },
+    {
+      "case": "logical_length_8065_reducer",
+      "block": [256, 1, 1],
+      "grid": [1, 1, 1],
+      "grid_blocks": 1,
+      "threads": 256,
+      "waves_per_sm": "0.00"
+    }
+  ],
+  "performance": {
+    "claim": null,
+    "reason": "Functional validation and launch evidence used debug binaries without fixed clocks or a warmup/measurement benchmark protocol.",
+    "ttft_ms": null,
+    "itl_ms": null,
+    "throughput_tokens_per_second": null,
+    "peak_vram_bytes": null,
+    "warmup_count": null,
+    "measurement_count": null,
+    "failure_count": 0
+  },
+  "provenance": {
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr10/b0f45eb/full",
+    "remote_payload_entries": 34,
+    "remote_regular_file_count": 36,
+    "remote_regular_file_bytes": 49001755,
+    "remote_root_apparent_bytes": 49026331,
+    "remote_sha256sums_sha256": "868ea7d12278f576965c1651a294dbc92e672459063f3d9301e2f6b2eea73150"
+  },
+  "limitations": [
+    "Single request and batch one only; no scheduler, prefix sharing, eviction, or offload.",
+    "Host cookie/generation is validated before upload and protected by reservation lifetime; it is not present in the V1 device payload.",
+    "Only the D64 optimized paged attention capability was validated on sm89.",
+    "The successful Rust library hot path is structurally preallocated and source-guarded; CUDA driver/library internals are outside that no-allocation claim.",
+    "Runtime allocation accounting is not observed peak VRAM.",
+    "NCU rows are launch-structure evidence, not a clock-controlled performance benchmark."
+  ]
+}
