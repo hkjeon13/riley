@@ -29,6 +29,25 @@ BASELINE_SCHEMA = "rustinfer.release-performance-baseline.v1"
 CANDIDATE_SCHEMA = "rustinfer.release-performance-candidate.v1"
 REPORT_SCHEMA = "rustinfer.release-performance-report.v1"
 BASELINE_SHA256 = "38ac9581c68ef1b229849529574755326f21d94a0b6787bc1e9f69c2cb9f6209"
+CORRECTNESS_GATE_ID = "pr15-iteration-command-batch-exact-v1"
+OPTIMIZATION_GOLDEN_TOKEN_IDS = [
+    4052,
+    2025,
+    284,
+    965,
+    6497,
+    288,
+    1492,
+    418,
+    260,
+    16438,
+    30,
+    198,
+    198,
+    504,
+    16438,
+    314,
+]
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -351,6 +370,11 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
         raise InputError("candidate.source.git_commit: invalid commit")
     _literal(source["git_dirty"], False, "candidate.source.git_dirty")
     _literal(source["semantic_class"], "E0", "candidate.source.semantic_class")
+    _literal(
+        source["correctness_gate_id"],
+        CORRECTNESS_GATE_ID,
+        "candidate.source.correctness_gate_id",
+    )
     source_result = {
         "git_commit": commit,
         "git_dirty": False,
@@ -438,6 +462,290 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
         "metrics": _validate_metrics(row["metrics"], "candidate.metrics"),
         "raw_runs": sorted(raw_result, key=lambda binding: binding["pair_index"]),
     }
+
+
+def _validate_optimization_correctness(
+    document: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> None:
+    row = _closed_object(
+        document,
+        "correctness_report",
+        {
+            "schema_version",
+            "gate_id",
+            "recorded_at_utc",
+            "status",
+            "semantic_class",
+            "source",
+            "model",
+            "gpu",
+            "build",
+            "implementations",
+            "tests",
+        },
+    )
+    _literal(row["schema_version"], 1, "correctness_report.schema_version")
+    _literal(row["gate_id"], CORRECTNESS_GATE_ID, "correctness_report.gate_id")
+    _literal(row["status"], "passed", "correctness_report.status")
+    _literal(row["semantic_class"], "E0", "correctness_report.semantic_class")
+    recorded = _string(row["recorded_at_utc"], "correctness_report.recorded_at_utc")
+    if UTC_RE.fullmatch(recorded) is None:
+        raise InputError(
+            "correctness_report.recorded_at_utc: expected YYYY-MM-DDTHH:MM:SSZ"
+        )
+
+    source = _closed_object(
+        row["source"],
+        "correctness_report.source",
+        {"git_commit", "git_dirty", "archive_sha256"},
+    )
+    expected_source = {
+        "git_commit": candidate["source"]["git_commit"],
+        "git_dirty": False,
+        "archive_sha256": candidate["source"]["source_archive_sha256"],
+    }
+    if source != expected_source:
+        raise InputError("correctness_report.source: candidate source binding mismatch")
+
+    model = _closed_object(
+        row["model"],
+        "correctness_report.model",
+        {
+            "model_id",
+            "revision",
+            "dtype",
+            "manifest_sha256",
+            "weights_sha256",
+            "tokenizer_sha256",
+        },
+    )
+    expected_model = {
+        "model_id": candidate["model"]["model_id"],
+        "revision": candidate["model"]["model_revision"],
+        "dtype": candidate["model"]["dtype"],
+        "weights_sha256": candidate["model"]["weights_sha256"],
+        "tokenizer_sha256": candidate["model"]["tokenizer_sha256"],
+    }
+    for field, expected in expected_model.items():
+        _literal(model[field], expected, f"correctness_report.model.{field}")
+    _sha256(model["manifest_sha256"], "correctness_report.model.manifest_sha256")
+
+    environment = candidate["environment"]
+    gpu = _closed_object(
+        row["gpu"],
+        "correctness_report.gpu",
+        {
+            "model",
+            "uuid",
+            "pci_bus_id",
+            "compute_capability",
+            "vram_mib",
+            "driver_version",
+        },
+    )
+    for field in ("model", "pci_bus_id"):
+        _string(gpu[field], f"correctness_report.gpu.{field}")
+    _integer(gpu["vram_mib"], "correctness_report.gpu.vram_mib", 1)
+    for report_field, environment_field in (
+        ("uuid", "gpu_uuid"),
+        ("compute_capability", "compute_capability"),
+        ("driver_version", "driver_version"),
+    ):
+        _literal(
+            gpu[report_field],
+            environment[environment_field],
+            f"correctness_report.gpu.{report_field}",
+        )
+
+    build = _closed_object(
+        row["build"],
+        "correctness_report.build",
+        {
+            "rustc",
+            "cuda_toolkit",
+            "cuda_architecture",
+            "container_image_sha256",
+            "network",
+            "cargo_locked",
+            "cargo_offline",
+        },
+    )
+    expected_build = {
+        "rustc": "1.85.0",
+        "cuda_toolkit": environment["cuda_toolkit_version"],
+        "cuda_architecture": environment["cuda_architecture"],
+        "container_image_sha256": candidate["source"]["profile_image_sha256"],
+        "network": "none",
+        "cargo_locked": True,
+        "cargo_offline": True,
+    }
+    if build != expected_build:
+        raise InputError(
+            "correctness_report.build: reviewed offline build binding mismatch"
+        )
+
+    implementations = _closed_object(
+        row["implementations"],
+        "correctness_report.implementations",
+        {"baseline", "candidate", "residual_rmsnorm", "rollback"},
+    )
+    expected_implementations = {
+        "baseline": "per-operation",
+        "candidate": "iteration-batch",
+        "residual_rmsnorm": "separate",
+        "rollback": "--execution-completion per-operation",
+    }
+    if implementations != expected_implementations:
+        raise InputError("correctness_report.implementations: exact E0 pair mismatch")
+
+    tests = row["tests"]
+    if not isinstance(tests, list) or len(tests) != 5:
+        raise InputError("correctness_report.tests: expected exactly five checks")
+    tests_by_id: dict[str, Mapping[str, Any]] = {}
+    for index, value in enumerate(tests):
+        test = _closed_object(
+            value,
+            f"correctness_report.tests[{index}]",
+            set(value) if isinstance(value, dict) else set(),
+        )
+        test_id = _string(test.get("id"), f"correctness_report.tests[{index}].id")
+        if test_id in tests_by_id:
+            raise InputError(f"correctness_report.tests[{index}].id: duplicate check")
+        tests_by_id[test_id] = test
+    expected_ids = {
+        "cuda-compile-only",
+        "workspace-all-features-all-targets",
+        "command-batch-lifecycle",
+        "command-batch-resource-ledger",
+        "smollm2-multi-step-greedy-exact",
+    }
+    if set(tests_by_id) != expected_ids:
+        raise InputError("correctness_report.tests: exact check inventory mismatch")
+
+    for test_id in ("cuda-compile-only", "workspace-all-features-all-targets"):
+        test = _closed_object(
+            tests_by_id[test_id],
+            f"correctness_report.tests.{test_id}",
+            {"id", "log_sha256", "result"},
+        )
+        _literal(
+            test["result"],
+            "passed",
+            f"correctness_report.tests.{test_id}.result",
+        )
+        _sha256(
+            test["log_sha256"],
+            f"correctness_report.tests.{test_id}.log_sha256",
+        )
+
+    lifecycle = _closed_object(
+        tests_by_id["command-batch-lifecycle"],
+        "correctness_report.tests.command-batch-lifecycle",
+        {"id", "log_sha256", "result", "one_shot_finish", "drop_restores_stream"},
+    )
+    for field in ("one_shot_finish", "drop_restores_stream"):
+        _literal(
+            lifecycle[field],
+            True,
+            f"correctness_report.tests.command-batch-lifecycle.{field}",
+        )
+    _literal(
+        lifecycle["result"],
+        "passed",
+        "correctness_report.tests.command-batch-lifecycle.result",
+    )
+    _sha256(
+        lifecycle["log_sha256"],
+        "correctness_report.tests.command-batch-lifecycle.log_sha256",
+    )
+
+    ledger = _closed_object(
+        tests_by_id["command-batch-resource-ledger"],
+        "correctness_report.tests.command-batch-resource-ledger",
+        {
+            "id",
+            "log_sha256",
+            "result",
+            "queued_chain_raw_byte_mismatches",
+            "hot_loop_allocation_delta",
+            "owner_close_allocation_count",
+            "validation_fail_closed",
+            "stream_reuse_after_finish",
+        },
+    )
+    _literal(
+        ledger["result"],
+        "passed",
+        "correctness_report.tests.command-batch-resource-ledger.result",
+    )
+    _sha256(
+        ledger["log_sha256"],
+        "correctness_report.tests.command-batch-resource-ledger.log_sha256",
+    )
+    for field in (
+        "queued_chain_raw_byte_mismatches",
+        "hot_loop_allocation_delta",
+        "owner_close_allocation_count",
+    ):
+        _literal(
+            ledger[field],
+            0,
+            f"correctness_report.tests.command-batch-resource-ledger.{field}",
+        )
+    for field in ("validation_fail_closed", "stream_reuse_after_finish"):
+        _literal(
+            ledger[field],
+            True,
+            f"correctness_report.tests.command-batch-resource-ledger.{field}",
+        )
+
+    parity = _closed_object(
+        tests_by_id["smollm2-multi-step-greedy-exact"],
+        "correctness_report.tests.smollm2-multi-step-greedy-exact",
+        {
+            "id",
+            "log_sha256",
+            "result",
+            "decode_steps",
+            "committed_iterations",
+            "generated_token_ids",
+            "raw_logit_mismatches",
+            "token_id_mismatches",
+            "hot_loop_allocation_delta",
+            "owner_close_allocation_count",
+        },
+    )
+    _literal(
+        parity["result"],
+        "passed",
+        "correctness_report.tests.smollm2-multi-step-greedy-exact.result",
+    )
+    _sha256(
+        parity["log_sha256"],
+        "correctness_report.tests.smollm2-multi-step-greedy-exact.log_sha256",
+    )
+    for field in ("decode_steps", "committed_iterations"):
+        _literal(
+            parity[field],
+            16,
+            f"correctness_report.tests.smollm2-multi-step-greedy-exact.{field}",
+        )
+    _literal(
+        parity["generated_token_ids"],
+        OPTIMIZATION_GOLDEN_TOKEN_IDS,
+        "correctness_report.tests.smollm2-multi-step-greedy-exact.generated_token_ids",
+    )
+    for field in (
+        "raw_logit_mismatches",
+        "token_id_mismatches",
+        "hot_loop_allocation_delta",
+        "owner_close_allocation_count",
+    ):
+        _literal(
+            parity[field],
+            0,
+            f"correctness_report.tests.smollm2-multi-step-greedy-exact.{field}",
+        )
 
 
 def _check(name: str, observed: float, operator: str, limit: float) -> dict[str, Any]:
@@ -642,6 +950,11 @@ def evaluate(
         candidate = _validate_candidate(candidate_doc)
         if candidate["baseline_sha256"] != baseline["sha256"]:
             raise InputError("candidate does not bind the reviewed baseline bytes")
+        for field in ["model", "environment", "workload"]:
+            if candidate[field] != baseline[field]:
+                raise ComparabilityError(
+                    f"candidate {field} differs from baseline lane"
+                )
 
         if not profile_image_id.startswith("sha256:"):
             raise InputError("--profile-image-id: expected sha256:<lowercase digest>")
@@ -677,13 +990,17 @@ def evaluate(
         if candidate["model"]["weights_sha256"] != weights_digest:
             raise InputError("candidate.model.weights_sha256 does not match --weights")
         if candidate["model"]["tokenizer_sha256"] != tokenizer_digest:
-            raise InputError("candidate.model.tokenizer_sha256 does not match --tokenizer")
+            raise InputError(
+                "candidate.model.tokenizer_sha256 does not match --tokenizer"
+            )
+
+        correctness_doc, _ = _load_json_bytes(
+            Path(correctness_report), "optimization correctness report"
+        )
+        _validate_optimization_correctness(correctness_doc, candidate)
 
         _runs, raw_summary, raw_metrics = _load_raw_runs(run_paths, candidate)
 
-        for field in ["model", "environment", "workload"]:
-            if candidate[field] != baseline[field]:
-                raise ComparabilityError(f"candidate {field} differs from baseline lane")
         summary = raw_summary
         workload = baseline["workload"]
         for field in [

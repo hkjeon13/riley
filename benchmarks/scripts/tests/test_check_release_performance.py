@@ -66,7 +66,7 @@ class ReleaseFixture:
                     "value": "iteration-batch",
                 },
                 "semantic_class": "E0",
-                "correctness_gate_id": "pr16-release-correctness-v1",
+                "correctness_gate_id": checker.CORRECTNESS_GATE_ID,
                 "correctness_report_sha256": self.digests["correctness_report"],
             }
             run["environment"]["gpu"]["uuid"] = baseline["environment"][
@@ -135,7 +135,7 @@ class ReleaseFixture:
                 "profile_image_sha256": self.profile_image_digest,
                 "release_image_sha256": self.release_image_digest,
                 "semantic_class": "E0",
-                "correctness_gate_id": "pr16-release-correctness-v1",
+                "correctness_gate_id": checker.CORRECTNESS_GATE_ID,
                 "correctness_report_sha256": self.digests["correctness_report"],
             },
             "model": copy.deepcopy(baseline["model"]),
@@ -150,7 +150,108 @@ class ReleaseFixture:
         self.candidate_path = root / "candidate.json"
         for path in self.paths.values():
             path.write_bytes(b"fixture artifact")
+        self.write_correctness_report()
         self.refresh()
+
+    def optimization_correctness_report(self) -> dict[str, object]:
+        source = self.candidate["source"]
+        model = self.candidate["model"]
+        environment = self.candidate["environment"]
+        return {
+            "schema_version": 1,
+            "gate_id": checker.CORRECTNESS_GATE_ID,
+            "recorded_at_utc": "2026-08-26T12:30:00Z",
+            "status": "passed",
+            "semantic_class": "E0",
+            "source": {
+                "git_commit": source["git_commit"],
+                "git_dirty": False,
+                "archive_sha256": source["source_archive_sha256"],
+            },
+            "model": {
+                "model_id": model["model_id"],
+                "revision": model["model_revision"],
+                "dtype": model["dtype"],
+                "manifest_sha256": digest("model manifest"),
+                "weights_sha256": model["weights_sha256"],
+                "tokenizer_sha256": model["tokenizer_sha256"],
+            },
+            "gpu": {
+                "model": "NVIDIA GeForce RTX 4090",
+                "uuid": environment["gpu_uuid"],
+                "pci_bus_id": "00000000:01:00.0",
+                "compute_capability": environment["compute_capability"],
+                "vram_mib": 24564,
+                "driver_version": environment["driver_version"],
+            },
+            "build": {
+                "rustc": "1.85.0",
+                "cuda_toolkit": environment["cuda_toolkit_version"],
+                "cuda_architecture": environment["cuda_architecture"],
+                "container_image_sha256": source["profile_image_sha256"],
+                "network": "none",
+                "cargo_locked": True,
+                "cargo_offline": True,
+            },
+            "implementations": {
+                "baseline": "per-operation",
+                "candidate": "iteration-batch",
+                "residual_rmsnorm": "separate",
+                "rollback": "--execution-completion per-operation",
+            },
+            "tests": [
+                {
+                    "id": "cuda-compile-only",
+                    "result": "passed",
+                    "log_sha256": digest("cuda compile log"),
+                },
+                {
+                    "id": "workspace-all-features-all-targets",
+                    "result": "passed",
+                    "log_sha256": digest("workspace test log"),
+                },
+                {
+                    "id": "command-batch-lifecycle",
+                    "result": "passed",
+                    "log_sha256": digest("lifecycle log"),
+                    "one_shot_finish": True,
+                    "drop_restores_stream": True,
+                },
+                {
+                    "id": "command-batch-resource-ledger",
+                    "result": "passed",
+                    "log_sha256": digest("resource ledger log"),
+                    "queued_chain_raw_byte_mismatches": 0,
+                    "hot_loop_allocation_delta": 0,
+                    "owner_close_allocation_count": 0,
+                    "validation_fail_closed": True,
+                    "stream_reuse_after_finish": True,
+                },
+                {
+                    "id": "smollm2-multi-step-greedy-exact",
+                    "result": "passed",
+                    "log_sha256": digest("smollm2 exact log"),
+                    "decode_steps": 16,
+                    "committed_iterations": 16,
+                    "generated_token_ids": list(
+                        checker.OPTIMIZATION_GOLDEN_TOKEN_IDS
+                    ),
+                    "raw_logit_mismatches": 0,
+                    "token_id_mismatches": 0,
+                    "hot_loop_allocation_delta": 0,
+                    "owner_close_allocation_count": 0,
+                },
+            ],
+        }
+
+    def write_correctness_report(self) -> None:
+        self.paths["correctness_report"].write_text(
+            json.dumps(
+                self.optimization_correctness_report(), sort_keys=True, indent=2
+            )
+            + "\n",
+            encoding="utf-8",
+        )
 
     def refresh(self) -> None:
         self.profile_fixture.write()
@@ -312,6 +413,29 @@ class ReleasePerformanceTests(unittest.TestCase):
             report = fixture.evaluate()
             self.assertEqual(report["status"], "error")
             self.assertIn("unknown fields", report["errors"][0])
+
+    def test_correctness_report_is_semantically_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            correctness = fixture.optimization_correctness_report()
+            correctness["gate_id"] = "self-asserted-gate"
+            fixture.paths["correctness_report"].write_text(
+                json.dumps(correctness), encoding="utf-8"
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("correctness_report.gate_id", report["errors"][0])
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            correctness = fixture.optimization_correctness_report()
+            correctness["tests"][-1]["generated_token_ids"][-1] += 1
+            fixture.paths["correctness_report"].write_text(
+                json.dumps(correctness), encoding="utf-8"
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("generated_token_ids", report["errors"][0])
 
     def test_cli_refuses_to_overwrite_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
