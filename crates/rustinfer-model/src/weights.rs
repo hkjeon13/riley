@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use rustinfer_tensor::{DType, TensorView};
 use serde::Serialize;
 
+use crate::artifact::VerifiedArtifactSession;
 use crate::checkpoint::PhysicalCheckpoint;
 use crate::{CheckpointProvenance, LoadLimits, ModelError, ModelResult, ModelSpec};
 
@@ -182,6 +183,18 @@ impl LoadedWeights {
         provenance: CheckpointProvenance,
         limits: LoadLimits,
     ) -> ModelResult<Self> {
+        let mut session = VerifiedArtifactSession::with_provenance(root, provenance)?;
+        let loaded = Self::load_verified_subset(&mut session, spec, limits)?;
+        session.finish_exact()?;
+        Ok(loaded)
+    }
+
+    pub(crate) fn load_verified_subset(
+        session: &mut VerifiedArtifactSession,
+        spec: &ModelSpec,
+        limits: LoadLimits,
+    ) -> ModelResult<Self> {
+        let provenance = session.provenance().clone();
         if provenance.dtype() != spec.dtype() {
             return Err(ModelError::InvalidArtifact {
                 artifact: "rustinfer-checkpoint.json".to_owned(),
@@ -192,8 +205,7 @@ impl LoadedWeights {
                 ),
             });
         }
-        let physical = PhysicalCheckpoint::load(root, &provenance, limits)?;
-        provenance.require_exact_file_set(physical.observed_paths())?;
+        let physical = PhysicalCheckpoint::load(session, limits)?;
         let bindings = bind_canonical_weights(spec, &physical)?;
         Ok(Self {
             physical,

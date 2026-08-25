@@ -1,10 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use crate::artifact::{ArtifactBytes, read_bounded_file};
+use crate::artifact::{ArtifactBytes, VerifiedArtifactSession};
 use crate::safetensors::{ParsedShard, ParsedTensor};
 use crate::shard_index::ShardIndex;
-use crate::{CheckpointProvenance, LoadLimits, ModelError, ModelResult};
+use crate::{LoadLimits, ModelError, ModelResult, PROVENANCE_FILENAME};
 
 pub(crate) const SINGLE_SHARD_FILENAME: &str = "model.safetensors";
 pub(crate) const SHARD_INDEX_FILENAME: &str = "model.safetensors.index.json";
@@ -17,40 +17,34 @@ pub(crate) struct PhysicalCheckpoint {
 
 impl PhysicalCheckpoint {
     pub(crate) fn load(
-        root: &Path,
-        provenance: &CheckpointProvenance,
+        session: &mut VerifiedArtifactSession,
         limits: LoadLimits,
     ) -> ModelResult<Self> {
-        let single_exists = path_exists(&root.join(SINGLE_SHARD_FILENAME))?;
-        let index_exists = path_exists(&root.join(SHARD_INDEX_FILENAME))?;
-        match (single_exists, index_exists) {
+        let files = session.provenance().files();
+        let single_declared = files.contains_key(Path::new(SINGLE_SHARD_FILENAME));
+        let index_declared = files.contains_key(Path::new(SHARD_INDEX_FILENAME));
+        match (single_declared, index_declared) {
             (true, true) => Err(ModelError::InvalidArtifact {
-                artifact: root.display().to_string(),
-                reason: "both single-file and sharded checkpoint layouts are present".to_owned(),
+                artifact: PROVENANCE_FILENAME.to_owned(),
+                reason: "both single-file and sharded checkpoint layouts are declared".to_owned(),
             }),
             (false, false) => Err(ModelError::InvalidArtifact {
-                artifact: root.display().to_string(),
-                reason: "neither model.safetensors nor model.safetensors.index.json is present"
+                artifact: PROVENANCE_FILENAME.to_owned(),
+                reason: "neither model.safetensors nor model.safetensors.index.json is declared"
                     .to_owned(),
             }),
-            (true, false) => Self::load_single(root, provenance, limits),
-            (false, true) => Self::load_sharded(root, provenance, limits),
+            (true, false) => Self::load_single(session, limits),
+            (false, true) => Self::load_sharded(session, limits),
         }
     }
 
-    fn load_single(
-        root: &Path,
-        provenance: &CheckpointProvenance,
-        limits: LoadLimits,
-    ) -> ModelResult<Self> {
+    fn load_single(session: &mut VerifiedArtifactSession, limits: LoadLimits) -> ModelResult<Self> {
         let path = PathBuf::from(SINGLE_SHARD_FILENAME);
-        let artifact = read_bounded_file(
-            root,
+        let artifact = session.read_once(
             &path,
             limits.shard_bytes().min(limits.total_weight_bytes()),
             "safetensors shard",
         )?;
-        provenance.verify_artifact(&artifact)?;
         let shard = owned_shard(path.clone(), artifact, limits)?;
         let (inventory, data_bytes) = build_inventory(std::slice::from_ref(&shard), None)?;
         enforce_total_weight_limit(data_bytes, limits)?;
@@ -62,18 +56,12 @@ impl PhysicalCheckpoint {
     }
 
     fn load_sharded(
-        root: &Path,
-        provenance: &CheckpointProvenance,
+        session: &mut VerifiedArtifactSession,
         limits: LoadLimits,
     ) -> ModelResult<Self> {
         let index_path = PathBuf::from(SHARD_INDEX_FILENAME);
-        let index_artifact = read_bounded_file(
-            root,
-            &index_path,
-            limits.index_bytes(),
-            "safetensors shard index",
-        )?;
-        provenance.verify_artifact(&index_artifact)?;
+        let index_artifact =
+            session.read_once(&index_path, limits.index_bytes(), "safetensors shard index")?;
         let index = ShardIndex::from_json_slice(index_artifact.bytes(), limits)?;
         let mut observed_paths = BTreeSet::from([index_path]);
         let mut shards = Vec::with_capacity(index.shards().len());
@@ -87,13 +75,11 @@ impl PhysicalCheckpoint {
                     limit: limits.total_weight_bytes(),
                     actual: Some(total_file_bytes),
                 })?;
-            let artifact = read_bounded_file(
-                root,
+            let artifact = session.read_once(
                 path,
                 limits.shard_bytes().min(remaining),
                 "safetensors shard",
             )?;
-            provenance.verify_artifact(&artifact)?;
             total_file_bytes = total_file_bytes
                 .checked_add(artifact.byte_len())
                 .ok_or_else(|| ModelError::NumericOverflow {
@@ -227,14 +213,6 @@ fn build_inventory(
         }
     }
     Ok((inventory, data_bytes))
-}
-
-fn path_exists(path: &Path) -> ModelResult<bool> {
-    path.try_exists().map_err(|error| ModelError::Io {
-        operation: "inspect checkpoint layout",
-        path: path.to_owned(),
-        reason: error.to_string(),
-    })
 }
 
 fn enforce_total_weight_limit(actual: u64, limits: LoadLimits) -> ModelResult<()> {

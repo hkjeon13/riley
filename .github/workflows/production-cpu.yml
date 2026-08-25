@@ -40,6 +40,9 @@ jobs:
       - name: Unit tests
         run: cargo test --locked --workspace --no-default-features
 
+      - name: Python-free synthetic model loading
+        run: ci/verify_python_free_model_loading.sh
+
       - name: Documentation
         env:
           RUSTDOCFLAGS: -D warnings

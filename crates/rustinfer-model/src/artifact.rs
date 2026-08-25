@@ -1,10 +1,11 @@
+use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::{ErrorKind, Read};
 use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
-use crate::{ModelError, ModelResult};
+use crate::{CheckpointProvenance, LoadLimits, ModelError, ModelResult};
 
 const LOWER_HEX: &[u8; 16] = b"0123456789abcdef";
 
@@ -12,6 +13,68 @@ pub(crate) struct ArtifactBytes {
     relative_path: PathBuf,
     bytes: Box<[u8]>,
     sha256: String,
+}
+
+pub(crate) struct VerifiedArtifactSession {
+    root: PathBuf,
+    provenance: CheckpointProvenance,
+    observed: BTreeSet<PathBuf>,
+}
+
+impl VerifiedArtifactSession {
+    pub(crate) fn open(root: &Path, limits: LoadLimits) -> ModelResult<Self> {
+        let root = canonicalize_artifact_root(root)?;
+        let provenance = CheckpointProvenance::load(&root, limits)?;
+        Ok(Self {
+            root,
+            provenance,
+            observed: BTreeSet::new(),
+        })
+    }
+
+    pub(crate) fn with_provenance(
+        root: &Path,
+        provenance: CheckpointProvenance,
+    ) -> ModelResult<Self> {
+        Ok(Self {
+            root: canonicalize_artifact_root(root)?,
+            provenance,
+            observed: BTreeSet::new(),
+        })
+    }
+
+    pub(crate) const fn provenance(&self) -> &CheckpointProvenance {
+        &self.provenance
+    }
+
+    pub(crate) fn read_once(
+        &mut self,
+        relative_path: &Path,
+        limit: u64,
+        resource: &'static str,
+    ) -> ModelResult<ArtifactBytes> {
+        if self.observed.contains(relative_path) {
+            return Err(ModelError::InvalidArtifact {
+                artifact: relative_path.display().to_string(),
+                reason: "artifact was consumed more than once".to_owned(),
+            });
+        }
+        if !self.provenance.files().contains_key(relative_path) {
+            return Err(ModelError::InvalidArtifact {
+                artifact: relative_path.display().to_string(),
+                reason: "file is absent from provenance manifest".to_owned(),
+            });
+        }
+        let artifact = read_bounded_file(&self.root, relative_path, limit, resource)?;
+        self.provenance.verify_artifact(&artifact)?;
+        self.observed.insert(relative_path.to_owned());
+        Ok(artifact)
+    }
+
+    pub(crate) fn finish_exact(self) -> ModelResult<BTreeSet<PathBuf>> {
+        self.provenance.require_exact_file_set(&self.observed)?;
+        Ok(self.observed)
+    }
 }
 
 impl ArtifactBytes {
@@ -63,18 +126,7 @@ pub(crate) fn read_bounded_file(
     resource: &'static str,
 ) -> ModelResult<ArtifactBytes> {
     validate_relative_file(relative_path)?;
-    let canonical_root = root.canonicalize().map_err(|error| ModelError::Io {
-        operation: "canonicalize checkpoint root",
-        path: root.to_owned(),
-        reason: error.to_string(),
-    })?;
-    if !canonical_root.is_dir() {
-        return Err(ModelError::InvalidArtifact {
-            artifact: root.display().to_string(),
-            reason: "checkpoint root is not a directory".to_owned(),
-        });
-    }
-
+    let canonical_root = canonicalize_artifact_root(root)?;
     let requested = canonical_root.join(relative_path);
     let requested_metadata = requested
         .symlink_metadata()
@@ -163,6 +215,21 @@ pub(crate) fn read_bounded_file(
         bytes: bytes.into_boxed_slice(),
         sha256,
     })
+}
+
+fn canonicalize_artifact_root(root: &Path) -> ModelResult<PathBuf> {
+    let canonical_root = root.canonicalize().map_err(|error| ModelError::Io {
+        operation: "canonicalize checkpoint root",
+        path: root.to_owned(),
+        reason: error.to_string(),
+    })?;
+    if !canonical_root.is_dir() {
+        return Err(ModelError::InvalidArtifact {
+            artifact: root.display().to_string(),
+            reason: "checkpoint root is not a directory".to_owned(),
+        });
+    }
+    Ok(canonical_root)
 }
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {

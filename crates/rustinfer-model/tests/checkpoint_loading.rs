@@ -271,14 +271,58 @@ fn shard_index_must_match_the_physical_inventory() {
 }
 
 #[test]
+fn shard_index_cannot_reference_a_shard_absent_from_provenance() {
+    let checkpoint = TempCheckpoint::new("index-undeclared-shard");
+    write_sharded_checkpoint(checkpoint.root(), &canonical_tensors(false, true));
+    let index = fs::read(checkpoint.root().join("model.safetensors.index.json")).unwrap();
+    let first = fs::read(checkpoint.root().join("model-00001-of-00002.safetensors")).unwrap();
+    write_manifest(
+        checkpoint.root(),
+        &[
+            file_assertion("model.safetensors.index.json", &index),
+            file_assertion("model-00001-of-00002.safetensors", &first),
+        ],
+    );
+
+    let provenance = CheckpointProvenance::load(checkpoint.root(), LoadLimits::default()).unwrap();
+    let Err(error) = LoadedWeights::load_weight_only(
+        checkpoint.root(),
+        &model_spec(false),
+        provenance,
+        LoadLimits::default(),
+    ) else {
+        panic!("an index must not smuggle in a shard absent from provenance");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("model-00002-of-00002.safetensors")
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("absent from provenance manifest")
+    );
+}
+
+#[test]
 fn ambiguous_single_and_sharded_layout_is_rejected_before_loading() {
     let checkpoint = TempCheckpoint::new("ambiguous");
     write_single_checkpoint(checkpoint.root(), &canonical_tensors(true, false));
+    let model = fs::read(checkpoint.root().join("model.safetensors")).unwrap();
+    let index = b"{}";
     fs::write(
         checkpoint.root().join("model.safetensors.index.json"),
-        b"{}",
+        index,
     )
     .unwrap();
+    write_manifest(
+        checkpoint.root(),
+        &[
+            file_assertion("model.safetensors", &model),
+            file_assertion("model.safetensors.index.json", index),
+        ],
+    );
     let provenance = CheckpointProvenance::load(checkpoint.root(), LoadLimits::default()).unwrap();
     let Err(error) = LoadedWeights::load_weight_only(
         checkpoint.root(),

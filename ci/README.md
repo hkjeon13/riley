@@ -17,6 +17,7 @@ cargo fmt --all -- --check
 python3 ci/check_workspace_boundaries.py --locked
 cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
 cargo test --locked --workspace --no-default-features
+ci/verify_python_free_model_loading.sh
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
 ci/check_feature_matrix.sh
 ci/check_workspace_without_research_tools.sh
@@ -46,6 +47,14 @@ closure and re-reviewing every changed checksum, license, and MSRV entry.
 The final shell check copies the current tree to a temporary directory without
 the excluded tool/research roots, then runs locked metadata and an all-targets
 CPU build there.
+
+The Python-free model-loading gate rejects process-launch code in the production
+model crate, builds one synthetic CPU-only integration test in an isolated Cargo
+target directory, inspects the resulting executable's dynamic dependencies, and
+then invokes that executable directly under `env -i`. Its only `PATH` entry is a
+newly created empty directory, so the test cannot discover Python, Pip, PyTorch,
+Transformers, or Triton executables. The fixture contains no real model weights
+and performs no CUDA or GPU operation.
 
 ## Python-free CUDA compile and link
 

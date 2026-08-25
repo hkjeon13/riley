@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rustinfer_tensor::DType;
 use serde::Deserialize;
@@ -88,7 +88,7 @@ impl LlamaConfig {
         }
 
         let raw: RawLlamaConfig = strict_json::from_slice(input, ArtifactKind::Config)?;
-        Self::try_from(raw)
+        Self::from_raw(raw, limits)
     }
 
     /// Converts the already validated configuration into canonical execution IR.
@@ -149,6 +149,46 @@ impl LlamaConfig {
     pub const fn dtype(&self) -> DType {
         self.dtype
     }
+
+    fn from_raw(raw: RawLlamaConfig, limits: LoadLimits) -> ModelResult<Self> {
+        if let Some((field, value)) = raw.unknown.iter().next() {
+            return Err(ModelError::UnsupportedConfig {
+                field: field.clone(),
+                value: stable_value(value),
+            });
+        }
+        let (source_architecture, dtype) = validate_identity(&raw)?;
+        let dimensions = ValidatedDimensions::from_raw(&raw, limits)?;
+        let rope_theta = validate_execution_values(&raw)?;
+        let warnings = collect_warnings(&raw);
+        let (bos_token_id, eos_token_ids) = validated_special_tokens(
+            raw.bos_token_id,
+            raw.eos_token_id,
+            dimensions.vocabulary_size,
+            limits.added_tokens(),
+        )?;
+
+        Ok(Self {
+            dtype,
+            hidden_size: dimensions.hidden_size,
+            intermediate_size: dimensions.intermediate_size,
+            layer_count: dimensions.layer_count,
+            query_heads: dimensions.query_heads,
+            key_value_heads: dimensions.key_value_heads,
+            head_dimension: dimensions.head_dimension,
+            vocabulary_size: dimensions.vocabulary_size,
+            max_sequence_length: dimensions.max_sequence_length,
+            norm_epsilon: raw.rms_norm_eps,
+            rope_theta,
+            attention_bias: raw.attention_bias.unwrap_or(false),
+            mlp_bias: raw.mlp_bias.unwrap_or(false),
+            tied_embeddings: raw.tie_word_embeddings.unwrap_or(false),
+            bos_token_id,
+            eos_token_ids,
+            source_architecture,
+            warnings,
+        })
+    }
 }
 
 #[derive(Deserialize)]
@@ -195,49 +235,6 @@ enum OneOrManyIds {
     Many(Vec<u64>),
 }
 
-impl TryFrom<RawLlamaConfig> for LlamaConfig {
-    type Error = ModelError;
-
-    fn try_from(raw: RawLlamaConfig) -> ModelResult<Self> {
-        if let Some((field, value)) = raw.unknown.iter().next() {
-            return Err(ModelError::UnsupportedConfig {
-                field: field.clone(),
-                value: stable_value(value),
-            });
-        }
-        let (source_architecture, dtype) = validate_identity(&raw)?;
-        let dimensions = ValidatedDimensions::from_raw(&raw)?;
-        let rope_theta = validate_execution_values(&raw)?;
-        let warnings = collect_warnings(&raw);
-        let (bos_token_id, eos_token_ids) = validated_special_tokens(
-            raw.bos_token_id,
-            raw.eos_token_id,
-            dimensions.vocabulary_size,
-        )?;
-
-        Ok(Self {
-            dtype,
-            hidden_size: dimensions.hidden_size,
-            intermediate_size: dimensions.intermediate_size,
-            layer_count: dimensions.layer_count,
-            query_heads: dimensions.query_heads,
-            key_value_heads: dimensions.key_value_heads,
-            head_dimension: dimensions.head_dimension,
-            vocabulary_size: dimensions.vocabulary_size,
-            max_sequence_length: dimensions.max_sequence_length,
-            norm_epsilon: raw.rms_norm_eps,
-            rope_theta,
-            attention_bias: raw.attention_bias.unwrap_or(false),
-            mlp_bias: raw.mlp_bias.unwrap_or(false),
-            tied_embeddings: raw.tie_word_embeddings.unwrap_or(false),
-            bos_token_id,
-            eos_token_ids,
-            source_architecture,
-            warnings,
-        })
-    }
-}
-
 struct ValidatedDimensions {
     hidden_size: usize,
     intermediate_size: usize,
@@ -250,12 +247,24 @@ struct ValidatedDimensions {
 }
 
 impl ValidatedDimensions {
-    fn from_raw(raw: &RawLlamaConfig) -> ModelResult<Self> {
-        let hidden_size = positive_usize("hidden_size", raw.hidden_size)?;
-        let query_heads = positive_usize("num_attention_heads", raw.num_attention_heads)?;
-        let key_value_heads = positive_usize(
+    fn from_raw(raw: &RawLlamaConfig, limits: LoadLimits) -> ModelResult<Self> {
+        let hidden_size = bounded_positive_usize(
+            "hidden_size",
+            "model dimension",
+            raw.hidden_size,
+            limits.model_dimension(),
+        )?;
+        let query_heads = bounded_positive_usize(
+            "num_attention_heads",
+            "attention heads",
+            raw.num_attention_heads,
+            limits.attention_heads(),
+        )?;
+        let key_value_heads = bounded_positive_usize(
             "num_key_value_heads",
+            "attention heads",
             raw.num_key_value_heads.unwrap_or(raw.num_attention_heads),
+            limits.attention_heads(),
         )?;
         if query_heads % key_value_heads != 0 {
             return invalid(
@@ -264,7 +273,12 @@ impl ValidatedDimensions {
             );
         }
         let head_dimension = if let Some(value) = raw.head_dim {
-            positive_usize("head_dim", value)?
+            bounded_positive_usize(
+                "head_dim",
+                "attention head dimension",
+                value,
+                limits.head_dimension(),
+            )?
         } else {
             if hidden_size % query_heads != 0 {
                 return invalid(
@@ -274,6 +288,13 @@ impl ValidatedDimensions {
             }
             hidden_size / query_heads
         };
+        if head_dimension > limits.head_dimension() {
+            return Err(ModelError::LimitExceeded {
+                resource: "attention head dimension",
+                limit: u64::try_from(limits.head_dimension()).unwrap_or(u64::MAX),
+                actual: u64::try_from(head_dimension).ok(),
+            });
+        }
         let projected =
             query_heads
                 .checked_mul(head_dimension)
@@ -292,15 +313,32 @@ impl ValidatedDimensions {
 
         Ok(Self {
             hidden_size,
-            intermediate_size: positive_usize("intermediate_size", raw.intermediate_size)?,
-            layer_count: positive_usize("num_hidden_layers", raw.num_hidden_layers)?,
+            intermediate_size: bounded_positive_usize(
+                "intermediate_size",
+                "model dimension",
+                raw.intermediate_size,
+                limits.model_dimension(),
+            )?,
+            layer_count: bounded_positive_usize(
+                "num_hidden_layers",
+                "decoder layers",
+                raw.num_hidden_layers,
+                limits.model_layers(),
+            )?,
             query_heads,
             key_value_heads,
             head_dimension,
-            vocabulary_size: positive_usize("vocab_size", raw.vocab_size)?,
-            max_sequence_length: positive_usize(
+            vocabulary_size: bounded_positive_usize(
+                "vocab_size",
+                "tokenizer vocabulary",
+                raw.vocab_size,
+                limits.vocabulary_entries(),
+            )?,
+            max_sequence_length: bounded_positive_usize(
                 "max_position_embeddings",
+                "model sequence length",
                 raw.max_position_embeddings,
+                limits.sequence_length(),
             )?,
         })
     }
@@ -361,6 +399,7 @@ fn validated_special_tokens(
     bos: Option<u64>,
     eos: Option<OneOrManyIds>,
     vocabulary_size: usize,
+    maximum_eos_tokens: usize,
 ) -> ModelResult<(Option<u32>, Vec<u32>)> {
     let bos = bos
         .map(|id| checked_token_id("bos_token_id", id, vocabulary_size))
@@ -374,10 +413,18 @@ fn validated_special_tokens(
             if ids.is_empty() {
                 return invalid("eos_token_id", "list must not be empty");
             }
+            if ids.len() > maximum_eos_tokens {
+                return Err(ModelError::LimitExceeded {
+                    resource: "config EOS token IDs",
+                    limit: u64::try_from(maximum_eos_tokens).unwrap_or(u64::MAX),
+                    actual: u64::try_from(ids.len()).ok(),
+                });
+            }
             let mut checked = Vec::with_capacity(ids.len());
+            let mut seen = BTreeSet::new();
             for id in ids {
                 let id = checked_token_id("eos_token_id", id, vocabulary_size)?;
-                if checked.contains(&id) {
+                if !seen.insert(id) {
                     return invalid("eos_token_id", "list contains duplicate IDs");
                 }
                 checked.push(id);
@@ -449,9 +496,22 @@ fn require_finite_positive(field: &str, value: f64) -> ModelResult<()> {
     }
 }
 
-fn positive_usize(field: &str, value: u64) -> ModelResult<usize> {
+fn bounded_positive_usize(
+    field: &str,
+    resource: &'static str,
+    value: u64,
+    limit: usize,
+) -> ModelResult<usize> {
     if value == 0 {
         return invalid(field, "must be positive");
+    }
+    let limit = u64::try_from(limit).unwrap_or(u64::MAX);
+    if value > limit {
+        return Err(ModelError::LimitExceeded {
+            resource,
+            limit,
+            actual: Some(value),
+        });
     }
     usize::try_from(value).map_err(|_| ModelError::NumericOverflow {
         field: field.to_owned(),
@@ -647,5 +707,33 @@ mod tests {
         );
         let error = LlamaConfig::from_json_slice(changed.as_bytes()).unwrap_err();
         assert!(matches!(error, ModelError::InvalidJson { .. }));
+    }
+
+    #[test]
+    fn rejects_dimensions_before_canonical_ir_allocation() {
+        let layers = SMOL_CONFIG.replace(
+            "\"num_hidden_layers\": 30",
+            "\"num_hidden_layers\": 18446744073709551615",
+        );
+        let error = LlamaConfig::from_json_slice(layers.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::LimitExceeded {
+                resource: "decoder layers",
+                limit: 1024,
+                actual: Some(u64::MAX),
+            }
+        ));
+
+        let vocabulary = SMOL_CONFIG.replace("\"vocab_size\": 49152", "\"vocab_size\": 1000001");
+        let error = LlamaConfig::from_json_slice(vocabulary.as_bytes()).unwrap_err();
+        assert!(matches!(
+            error,
+            ModelError::LimitExceeded {
+                resource: "tokenizer vocabulary",
+                limit: 1_000_000,
+                actual: Some(1_000_001),
+            }
+        ));
     }
 }

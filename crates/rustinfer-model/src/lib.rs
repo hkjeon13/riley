@@ -11,10 +11,12 @@ mod config;
 mod error;
 mod ir;
 mod limits;
+mod model;
 mod provenance;
 mod safetensors;
 mod shard_index;
 mod strict_json;
+mod tokenizer;
 mod weights;
 
 pub use config::{ConfigWarning, LlamaConfig};
@@ -24,7 +26,9 @@ pub use ir::{
     ModelArchitecture, ModelSpec, NormKind, NormSpec, RopeLayout, RopeSpec, SpecialTokenSpec,
 };
 pub use limits::LoadLimits;
+pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_FILENAME};
 pub use provenance::{CheckpointProvenance, PROVENANCE_FILENAME, ProvenanceFile};
+pub use tokenizer::{DecodeOptions, EncodeOptions, SmolLm2Tokenizer, Tokenizer};
 pub use weights::{
     BoundWeight, DecoderWeight, LoadedWeights, TensorSource, WeightBinding, WeightSlot,
 };

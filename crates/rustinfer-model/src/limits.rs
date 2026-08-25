@@ -11,6 +11,11 @@ pub struct LoadLimits {
     shards: usize,
     tensors: usize,
     tensor_rank: usize,
+    model_layers: usize,
+    model_dimension: usize,
+    attention_heads: usize,
+    head_dimension: usize,
+    sequence_length: usize,
     shard_bytes: u64,
     total_weight_bytes: u64,
     vocabulary_entries: usize,
@@ -31,6 +36,11 @@ impl LoadLimits {
             shards: 256,
             tensors: 100_000,
             tensor_rank: 16,
+            model_layers: 1024,
+            model_dimension: 1024 * 1024,
+            attention_heads: 16 * 1024,
+            head_dimension: 64 * 1024,
+            sequence_length: 1024 * 1024,
             shard_bytes: 512 * 1024 * 1024,
             total_weight_bytes: 512 * 1024 * 1024,
             vocabulary_entries: 1_000_000,
@@ -85,6 +95,36 @@ impl LoadLimits {
     #[must_use]
     pub const fn tensor_rank(self) -> usize {
         self.tensor_rank
+    }
+
+    /// Returns the maximum number of decoder layers represented in canonical IR.
+    #[must_use]
+    pub const fn model_layers(self) -> usize {
+        self.model_layers
+    }
+
+    /// Returns the maximum hidden or intermediate model dimension.
+    #[must_use]
+    pub const fn model_dimension(self) -> usize {
+        self.model_dimension
+    }
+
+    /// Returns the maximum query or key/value attention-head count.
+    #[must_use]
+    pub const fn attention_heads(self) -> usize {
+        self.attention_heads
+    }
+
+    /// Returns the maximum dimension of one attention head.
+    #[must_use]
+    pub const fn head_dimension(self) -> usize {
+        self.head_dimension
+    }
+
+    /// Returns the maximum configured context length.
+    #[must_use]
+    pub const fn sequence_length(self) -> usize {
+        self.sequence_length
     }
 
     /// Returns the maximum bytes in one checkpoint shard.
