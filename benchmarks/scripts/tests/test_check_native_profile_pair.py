@@ -82,7 +82,7 @@ class ProfilePairFixture:
                     "value": "fused" if candidate else "separate",
                 },
                 "semantic_class": "E0",
-                "correctness_gate_id": "smollm2-native-e0-v2",
+                "correctness_gate_id": "pr15-fused-residual-rmsnorm-exact-v1",
                 "correctness_report_sha256": "c" * 64,
             },
             "environment": {
@@ -275,7 +275,7 @@ class NativeProfilePairTests(unittest.TestCase):
                 self.assertEqual(report["status"], "incomparable", report)
                 self.assertIn(expected, report["errors"][0])
 
-    def test_runtime_flag_is_bound_to_separate_and_fused_residual_rmsnorm(self) -> None:
+    def test_runtime_flag_is_bound_to_supported_baseline_candidate_pair(self) -> None:
         mutations = {
             "baseline": lambda fixture: [
                 row["source"]["runtime_flag"].__setitem__("value", "fused")
@@ -299,7 +299,50 @@ class NativeProfilePairTests(unittest.TestCase):
                     fixture.baseline_paths, fixture.candidate_paths
                 )
                 self.assertEqual(report["status"], "incomparable")
-                self.assertIn("residual_rmsnorm", report["errors"][0])
+                self.assertIn("runtime_flag", report["errors"][0])
+
+    def test_iteration_completion_pair_is_supported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ProfilePairFixture(Path(directory))
+            for row in fixture.baseline:
+                row["source"]["implementation_id"] = "native-per-operation"
+                row["source"]["runtime_flag"] = {
+                    "name": "execution_completion",
+                    "value": "per-operation",
+                }
+                row["source"]["correctness_gate_id"] = (
+                    "pr15-iteration-command-batch-exact-v1"
+                )
+            for row in fixture.candidate:
+                row["source"]["implementation_id"] = "native-iteration-batch"
+                row["source"]["runtime_flag"] = {
+                    "name": "execution_completion",
+                    "value": "iteration-batch",
+                }
+                row["source"]["correctness_gate_id"] = (
+                    "pr15-iteration-command-batch-exact-v1"
+                )
+            fixture.write()
+            report = checker.evaluate(
+                fixture.baseline_paths, fixture.candidate_paths
+            )
+            self.assertTrue(report["passed"], report)
+            self.assertEqual(
+                report["bindings"]["candidate_runtime"]["runtime_flag"],
+                {"name": "execution_completion", "value": "iteration-batch"},
+            )
+
+    def test_runtime_pair_requires_its_exact_correctness_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ProfilePairFixture(Path(directory))
+            for row in fixture.baseline + fixture.candidate:
+                row["source"]["correctness_gate_id"] = "wrong-exact-gate"
+            fixture.write()
+            report = checker.evaluate(
+                fixture.baseline_paths, fixture.candidate_paths
+            )
+            self.assertEqual(report["status"], "incomparable")
+            self.assertIn("correctness_gate_id", report["errors"][0])
 
     def test_success_request_must_generate_the_exact_fixed_output_length(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

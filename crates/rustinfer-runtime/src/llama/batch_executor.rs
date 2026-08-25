@@ -757,6 +757,16 @@ impl PreparedLlamaBatchExecutor {
                 Ok(())
             }
             Err(error) => {
+                // Once an iteration command batch has begun, even a native
+                // validation-stage error (for example a cold ledger-capacity
+                // failure) can follow earlier enqueued KV writes. Completion
+                // is still drained by the guard, but semantic state may be
+                // partial, so this owner must never be reused.
+                if config.execution_completion == ExecutionCompletionImplementation::IterationBatch
+                {
+                    *poisoned = true;
+                    forward.poisoned = true;
+                }
                 poison_for_batch_error(poisoned, forward, &error);
                 Err(error)
             }

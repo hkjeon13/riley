@@ -35,6 +35,10 @@ MAX_WARMUPS = 100
 MAX_MEASURED_ITERATIONS = 100
 U64_MAX = 18_446_744_073_709_551_615
 CANONICAL_PRIMARY_METRIC = "aggregate.host.execute_ns"
+CORRECTNESS_GATES = {
+    "residual_rmsnorm": "pr15-fused-residual-rmsnorm-exact-v1",
+    "execution_completion": "pr15-iteration-command-batch-exact-v1",
+}
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_COMMIT_RE = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
@@ -759,17 +763,33 @@ def _bind_pair(
     )
     baseline_flag = baseline_runtime["runtime_flag"]
     candidate_flag = candidate_runtime["runtime_flag"]
-    expected_baseline_flag = {"name": "residual_rmsnorm", "value": "separate"}
-    expected_candidate_flag = {"name": "residual_rmsnorm", "value": "fused"}
-    if baseline_flag != expected_baseline_flag:
+    flag_pairs = {
+        "residual_rmsnorm": ("separate", "fused"),
+        "execution_completion": ("per-operation", "iteration-batch"),
+    }
+    baseline_name = baseline_flag["name"]
+    candidate_name = candidate_flag["name"]
+    if baseline_name != candidate_name or baseline_name not in flag_pairs:
         _incomparable(
             "source.runtime_flag",
-            "baseline must bind residual_rmsnorm=separate",
+            "both arms must bind one supported runtime flag",
         )
-    if candidate_flag != expected_candidate_flag:
+    expected_baseline, expected_candidate = flag_pairs[baseline_name]
+    if baseline_flag["value"] != expected_baseline:
         _incomparable(
             "source.runtime_flag",
-            "candidate must bind residual_rmsnorm=fused",
+            f"baseline must bind {baseline_name}={expected_baseline}",
+        )
+    if candidate_flag["value"] != expected_candidate:
+        _incomparable(
+            "source.runtime_flag",
+            f"candidate must bind {baseline_name}={expected_candidate}",
+        )
+    expected_correctness_gate = CORRECTNESS_GATES[baseline_name]
+    if common_source["correctness_gate_id"] != expected_correctness_gate:
+        _incomparable(
+            "source.correctness_gate_id",
+            f"{baseline_name} requires {expected_correctness_gate}",
         )
     if baseline_runtime["implementation_id"] == candidate_runtime["implementation_id"]:
         _incomparable(

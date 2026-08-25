@@ -31,6 +31,8 @@ const MAX_OUTPUT_TOKENS: usize = 512;
 const MAX_TRIAL_COUNT: usize = 100;
 const SCHEMA_VERSION: &str = "rustinfer.native-profile-run.v1";
 const PRIMARY_METRIC: &str = "aggregate.host.execute_ns";
+const RESIDUAL_RMSNORM_CORRECTNESS_GATE: &str = "pr15-fused-residual-rmsnorm-exact-v1";
+const EXECUTION_COMPLETION_CORRECTNESS_GATE: &str = "pr15-iteration-command-batch-exact-v1";
 
 const USAGE: &str = "\
 usage: rustinfer-profile [options]
@@ -51,8 +53,8 @@ source provenance (all required):
   --git-dirty false
   --executable-sha256 SHA256
   --implementation-id ID
-  --runtime-flag-name residual_rmsnorm
-  --runtime-flag-value separate|fused
+  --runtime-flag-name residual_rmsnorm|execution_completion
+  --runtime-flag-value separate|fused|per-operation|iteration-batch
   --semantic-class E0
   --correctness-gate-id ID
   --correctness-report-sha256 SHA256
@@ -136,6 +138,18 @@ enum Role {
 enum ResidualRmsNormMode {
     Separate,
     Fused,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExecutionCompletionMode {
+    PerOperation,
+    IterationBatch,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeSelection {
+    ResidualRmsNorm(ResidualRmsNormMode),
+    ExecutionCompletion(ExecutionCompletionMode),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -228,11 +242,26 @@ struct Options {
 }
 
 impl Options {
-    fn residual_mode(&self) -> ResidualRmsNormMode {
-        match self.source.runtime_flag.value.as_str() {
-            "separate" => ResidualRmsNormMode::Separate,
-            "fused" => ResidualRmsNormMode::Fused,
-            _ => unreachable!("runtime flag value was validated"),
+    fn runtime_selection(&self) -> Result<RuntimeSelection, String> {
+        match (
+            self.source.runtime_flag.name.as_str(),
+            self.source.runtime_flag.value.as_str(),
+        ) {
+            ("residual_rmsnorm", "separate") => Ok(RuntimeSelection::ResidualRmsNorm(
+                ResidualRmsNormMode::Separate,
+            )),
+            ("residual_rmsnorm", "fused") => Ok(RuntimeSelection::ResidualRmsNorm(
+                ResidualRmsNormMode::Fused,
+            )),
+            ("execution_completion", "per-operation") => Ok(RuntimeSelection::ExecutionCompletion(
+                ExecutionCompletionMode::PerOperation,
+            )),
+            ("execution_completion", "iteration-batch") => Ok(
+                RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
+            ),
+            _ => Err("runtime flag must be residual_rmsnorm=separate|fused or \
+                 execution_completion=per-operation|iteration-batch"
+                .to_owned()),
         }
     }
 
@@ -246,9 +275,6 @@ impl Options {
         validate_sha256("--executable-sha256", &self.source.executable_sha256)?;
         validate_id("--implementation-id", &self.source.implementation_id)?;
         validate_id("--runtime-flag-name", &self.source.runtime_flag.name)?;
-        if self.source.runtime_flag.name != "residual_rmsnorm" {
-            return Err("--runtime-flag-name must be residual_rmsnorm".to_owned());
-        }
         if self.source.semantic_class != "E0" {
             return Err("--semantic-class must be E0".to_owned());
         }
@@ -257,14 +283,33 @@ impl Options {
             "--correctness-report-sha256",
             &self.source.correctness_report_sha256,
         )?;
-        match (self.role, self.residual_mode()) {
-            (Role::Baseline, ResidualRmsNormMode::Separate)
-            | (Role::Candidate, ResidualRmsNormMode::Fused) => {}
-            (Role::Baseline, ResidualRmsNormMode::Fused) => {
-                return Err("baseline requires --runtime-flag-value separate".to_owned());
-            }
-            (Role::Candidate, ResidualRmsNormMode::Separate) => {
-                return Err("candidate requires --runtime-flag-value fused".to_owned());
+        let runtime_selection = self.runtime_selection()?;
+        let expected_correctness_gate = match runtime_selection {
+            RuntimeSelection::ResidualRmsNorm(_) => RESIDUAL_RMSNORM_CORRECTNESS_GATE,
+            RuntimeSelection::ExecutionCompletion(_) => EXECUTION_COMPLETION_CORRECTNESS_GATE,
+        };
+        if self.source.correctness_gate_id != expected_correctness_gate {
+            return Err(format!(
+                "--correctness-gate-id must be {expected_correctness_gate} for the selected runtime flag"
+            ));
+        }
+        match (self.role, runtime_selection) {
+            (Role::Baseline, RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate))
+            | (Role::Candidate, RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused))
+            | (
+                Role::Baseline,
+                RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation),
+            )
+            | (
+                Role::Candidate,
+                RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
+            ) => {}
+            _ => {
+                return Err(
+                    "runtime flag must bind baseline/candidate to separate/fused or \
+                     per-operation/iteration-batch"
+                        .to_owned(),
+                );
             }
         }
 
@@ -399,8 +444,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
         _ => return Err("--git-dirty requires true or false".to_owned()),
     };
     let runtime_flag_value = take_required(&mut values, "--runtime-flag-value")?;
-    if !matches!(runtime_flag_value.as_str(), "separate" | "fused") {
-        return Err("--runtime-flag-value requires separate or fused".to_owned());
+    if !matches!(
+        runtime_flag_value.as_str(),
+        "separate" | "fused" | "per-operation" | "iteration-batch"
+    ) {
+        return Err(
+            "--runtime-flag-value requires separate, fused, per-operation, or iteration-batch"
+                .to_owned(),
+        );
     }
     let seed = match take_required(&mut values, "--seed")?.as_str() {
         "none" => None,
@@ -868,9 +919,19 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
         batch_metadata,
         PreparedLlamaForwardConfig::default(),
     );
-    let executor = match options.residual_mode() {
-        ResidualRmsNormMode::Separate => executor.with_separate_residual_norm(),
-        ResidualRmsNormMode::Fused => executor.with_fused_residual_norm(),
+    let executor = match options.runtime_selection()? {
+        RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate) => executor
+            .with_separate_residual_norm()
+            .with_per_operation_completion(),
+        RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused) => executor
+            .with_fused_residual_norm()
+            .with_per_operation_completion(),
+        RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation) => executor
+            .with_separate_residual_norm()
+            .with_per_operation_completion(),
+        RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch) => executor
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion(),
     };
     Ok(NativeBenchmarkConfig {
         device_ordinal: options.environment.gpu.device_index,
@@ -1391,15 +1452,19 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        Command, Measurement, ResidualRmsNormMode, Role, parse_arguments, request_latency_ms,
-        resize_token_ids, validate_rfc3339_utc,
+        Command, ExecutionCompletionMode, Measurement, ResidualRmsNormMode, Role, RuntimeSelection,
+        parse_arguments, request_latency_ms, resize_token_ids, validate_rfc3339_utc,
     };
 
     const SHA_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const SHA_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const GIT_COMMIT: &str = "cccccccccccccccccccccccccccccccccccccccc";
 
-    fn valid_arguments(role: &str, mode: &str) -> Vec<OsString> {
+    fn valid_arguments(role: &str, flag_name: &str, flag_value: &str) -> Vec<OsString> {
+        let correctness_gate = match flag_name {
+            "execution_completion" => "pr15-iteration-command-batch-exact-v1",
+            _ => "pr15-fused-residual-rmsnorm-exact-v1",
+        };
         let pairs = [
             ("--model", "/models/smollm2"),
             ("--prompts", "/repo/benchmarks/prompts.jsonl"),
@@ -1411,10 +1476,10 @@ mod tests {
             ("--git-dirty", "false"),
             ("--executable-sha256", SHA_A),
             ("--implementation-id", "rustinfer.fused"),
-            ("--runtime-flag-name", "residual_rmsnorm"),
-            ("--runtime-flag-value", mode),
+            ("--runtime-flag-name", flag_name),
+            ("--runtime-flag-value", flag_value),
             ("--semantic-class", "E0"),
-            ("--correctness-gate-id", "smollm2.native.e0.v2"),
+            ("--correctness-gate-id", correctness_gate),
             ("--correctness-report-sha256", SHA_B),
             ("--gpu-model", "NVIDIA GeForce RTX 4090"),
             ("--gpu-uuid", "GPU-fixture"),
@@ -1459,13 +1524,16 @@ mod tests {
 
     #[test]
     fn parser_binds_candidate_to_fused_and_preserves_explicit_metadata() {
-        let command = parse_arguments(valid_arguments("candidate", "fused"))
+        let command = parse_arguments(valid_arguments("candidate", "residual_rmsnorm", "fused"))
             .expect("strict candidate arguments");
         let Command::Run(options) = command else {
             panic!("expected run command");
         };
         assert_eq!(options.role, Role::Candidate);
-        assert_eq!(options.residual_mode(), ResidualRmsNormMode::Fused);
+        assert_eq!(
+            options.runtime_selection().expect("validated runtime flag"),
+            RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused)
+        );
         assert_eq!(options.pair_index, 3);
         assert_eq!(options.workload.measured_iterations, 30);
         assert_eq!(options.environment.gpu.device_index, 0);
@@ -1474,17 +1542,50 @@ mod tests {
 
     #[test]
     fn parser_rejects_swapped_roles_duplicates_and_non_greedy_metadata() {
-        assert!(parse_arguments(valid_arguments("baseline", "fused")).is_err());
-        let mut duplicate = valid_arguments("candidate", "fused");
+        assert!(parse_arguments(valid_arguments("baseline", "residual_rmsnorm", "fused")).is_err());
+        let mut duplicate = valid_arguments("candidate", "residual_rmsnorm", "fused");
         duplicate.extend([OsString::from("--role"), OsString::from("candidate")]);
         assert!(parse_arguments(duplicate).is_err());
-        let mut non_greedy = valid_arguments("candidate", "fused");
+        let mut non_greedy = valid_arguments("candidate", "residual_rmsnorm", "fused");
         let position = non_greedy
             .iter()
             .position(|value| value.to_str() == Some("greedy"))
             .expect("sampling value");
         non_greedy[position] = OsString::from("random");
         assert!(parse_arguments(non_greedy).is_err());
+    }
+
+    #[test]
+    fn parser_binds_iteration_completion_candidate_independently_from_fusion() {
+        let command = parse_arguments(valid_arguments(
+            "candidate",
+            "execution_completion",
+            "iteration-batch",
+        ))
+        .expect("strict iteration-batch candidate arguments");
+        let Command::Run(options) = command else {
+            panic!("expected run command");
+        };
+        assert_eq!(
+            options.runtime_selection().expect("validated runtime flag"),
+            RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch)
+        );
+        assert!(
+            parse_arguments(valid_arguments(
+                "baseline",
+                "execution_completion",
+                "iteration-batch",
+            ))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(valid_arguments(
+                "candidate",
+                "residual_rmsnorm",
+                "iteration-batch",
+            ))
+            .is_err()
+        );
     }
 
     #[test]

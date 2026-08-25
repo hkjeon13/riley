@@ -14,10 +14,10 @@ use std::path::PathBuf;
 use rustinfer_cuda::{CudaAllocationStats, CudaContext, CudaRuntime, CudaStream};
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
-    LlamaBatchBlockTable, LlamaBatchMetadataConfig, LlamaBatchRow, LlamaBatchRowKind,
-    PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, PreparedLlamaDecode,
-    PreparedLlamaDecodeConfig, PreparedLlamaForward, PreparedLlamaForwardConfig,
-    ResidualNormImplementation,
+    ExecutionCompletionImplementation, LlamaBatchBlockTable, LlamaBatchMetadataConfig,
+    LlamaBatchRow, LlamaBatchRowKind, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
+    PreparedLlamaDecode, PreparedLlamaDecodeConfig, PreparedLlamaForward,
+    PreparedLlamaForwardConfig, ResidualNormImplementation,
 };
 use rustinfer_runtime::paged_kv::{BLOCK_TABLE_V1_VERSION, KV_BLOCK_SIZE};
 
@@ -280,16 +280,17 @@ fn assert_exact_bytes(label: &str, actual: &[u8], expected: &[u8]) {
         .find(|(_, (actual, expected))| actual != expected);
     assert!(
         mismatch.is_none(),
-        "{label} differs at byte {}: fused={} separate={}",
+        "{label} differs at byte {}: actual={} reference={}",
         mismatch.map_or(0, |(index, _)| index),
         mismatch.map_or(0, |(_, (actual, _))| *actual),
         mismatch.map_or(0, |(_, (_, expected))| *expected),
     );
 }
 
-fn greedy_residual_norm_trace(
+fn greedy_execution_trace(
     model: &LoadedModel,
-    implementation: ResidualNormImplementation,
+    residual_norm: ResidualNormImplementation,
+    execution_completion: ExecutionCompletionImplementation,
     decode_steps: usize,
 ) -> TestResult<GreedyExecutionTrace> {
     let maximum_length = TOKENS_A
@@ -298,7 +299,7 @@ fn greedy_residual_norm_trace(
         .ok_or("maximum sequence length overflow")?;
     let physical_blocks = maximum_length.div_ceil(KV_BLOCK_SIZE);
     let (context, mut stream) = first_context()?;
-    let config = match implementation {
+    let config = match residual_norm {
         ResidualNormImplementation::Separate => {
             batch_config(1, TOKENS_A.len(), physical_blocks, 1, physical_blocks)?
                 .with_separate_residual_norm()
@@ -306,6 +307,12 @@ fn greedy_residual_norm_trace(
         ResidualNormImplementation::Fused => {
             batch_config(1, TOKENS_A.len(), physical_blocks, 1, physical_blocks)?
                 .with_fused_residual_norm()
+        }
+    };
+    let config = match execution_completion {
+        ExecutionCompletionImplementation::PerOperation => config.with_per_operation_completion(),
+        ExecutionCompletionImplementation::IterationBatch => {
+            config.with_iteration_batch_completion()
         }
     };
     let mut batch = PreparedLlamaBatchExecutor::prepare(model, &context, &mut stream, config)?;
@@ -351,7 +358,7 @@ fn greedy_residual_norm_trace(
         assert_eq!(
             context.allocation_stats()?,
             stable,
-            "{implementation:?} allocation changed after committed decode step {}",
+            "{residual_norm:?}/{execution_completion:?} allocation changed after committed decode step {}",
             step + 1,
         );
     }
@@ -359,7 +366,7 @@ fn greedy_residual_norm_trace(
     batch.close()?;
     assert!(
         context.allocation_stats()?.is_zero(),
-        "{implementation:?} executor close leaked CUDA allocations"
+        "{residual_norm:?}/{execution_completion:?} executor close leaked CUDA allocations"
     );
     stream.close()?;
     close_context(context)?;
@@ -403,10 +410,18 @@ fn concurrency_one_matches_the_single_request_forward() -> TestResult {
 fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResult {
     const DECODE_STEPS: usize = 16;
     let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
-    let separate =
-        greedy_residual_norm_trace(&model, ResidualNormImplementation::Separate, DECODE_STEPS)?;
-    let fused =
-        greedy_residual_norm_trace(&model, ResidualNormImplementation::Fused, DECODE_STEPS)?;
+    let separate = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::PerOperation,
+        DECODE_STEPS,
+    )?;
+    let fused = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Fused,
+        ExecutionCompletionImplementation::PerOperation,
+        DECODE_STEPS,
+    )?;
 
     assert_eq!(
         &fused.generated_token_ids, &separate.generated_token_ids,
@@ -438,6 +453,58 @@ fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResul
 committed_iterations={} raw_logit_mismatches=0 generated_token_ids={:?} status=passed",
         fused.logits_by_iteration.len() - 1,
         fused.generated_token_ids,
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() -> TestResult {
+    const DECODE_STEPS: usize = 16;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
+    let per_operation = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::PerOperation,
+        DECODE_STEPS,
+    )?;
+    let iteration_batch = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::IterationBatch,
+        DECODE_STEPS,
+    )?;
+
+    assert_eq!(
+        iteration_batch.generated_token_ids, per_operation.generated_token_ids,
+        "iteration-batch and per-operation greedy token IDs differ"
+    );
+    assert_eq!(
+        iteration_batch.logits_by_iteration.len(),
+        per_operation.logits_by_iteration.len()
+    );
+    for (iteration, (batched_logits, per_operation_logits)) in iteration_batch
+        .logits_by_iteration
+        .iter()
+        .zip(&per_operation.logits_by_iteration)
+        .enumerate()
+    {
+        assert_exact_bytes(
+            &format!("execution-completion iteration {iteration}"),
+            batched_logits,
+            per_operation_logits,
+        );
+        assert_eq!(
+            top1(batched_logits),
+            top1(per_operation_logits),
+            "iteration {iteration} top-1 differs"
+        );
+    }
+    println!(
+        "pr15-execution-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
+committed_iterations={} raw_logit_mismatches=0 generated_token_ids={:?} status=passed",
+        iteration_batch.logits_by_iteration.len() - 1,
+        iteration_batch.generated_token_ids,
     );
     Ok(())
 }

@@ -22,6 +22,7 @@ serve options:
   --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
+  --execution-completion MODE    per-operation or iteration-batch (default: per-operation)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
@@ -47,6 +48,7 @@ struct ServeOptions {
     prefill_chunk_tokens: usize,
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
+    execution_completion: ExecutionCompletionMode,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
 }
@@ -55,6 +57,12 @@ struct ServeOptions {
 enum ResidualRmsNormMode {
     Fused,
     Separate,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExecutionCompletionMode {
+    PerOperation,
+    IterationBatch,
 }
 
 fn main() -> ExitCode {
@@ -121,6 +129,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut prefill_chunk_tokens = None;
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
+    let mut execution_completion = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
 
@@ -211,6 +220,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_residual_rmsnorm(next_value(&mut arguments, "--residual-rmsnorm")?)?,
                 "--residual-rmsnorm",
             )?,
+            "--execution-completion" => set_once(
+                &mut execution_completion,
+                parse_execution_completion(next_value(&mut arguments, "--execution-completion")?)?,
+                "--execution-completion",
+            )?,
             "--max-weight-bytes" => set_once(
                 &mut max_weight_bytes,
                 parse_number(
@@ -229,6 +243,17 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         }
     }
 
+    let residual_rmsnorm = residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate);
+    let execution_completion =
+        execution_completion.unwrap_or(ExecutionCompletionMode::PerOperation);
+    if residual_rmsnorm == ResidualRmsNormMode::Fused
+        && execution_completion == ExecutionCompletionMode::IterationBatch
+    {
+        return Err(
+            "fused residual RMSNorm may only be used with per-operation completion".to_owned(),
+        );
+    }
+
     Ok(CliCommand::Serve(ServeOptions {
         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
         model_id,
@@ -241,7 +266,8 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         batch_token_budget: batch_token_budget.unwrap_or(512),
         prefill_chunk_tokens: prefill_chunk_tokens.unwrap_or(512),
         physical_kv_blocks,
-        residual_rmsnorm: residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate),
+        residual_rmsnorm,
+        execution_completion,
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
     }))
@@ -252,6 +278,14 @@ fn parse_residual_rmsnorm(value: OsString) -> Result<ResidualRmsNormMode, String
         "fused" => Ok(ResidualRmsNormMode::Fused),
         "separate" => Ok(ResidualRmsNormMode::Separate),
         _ => Err("--residual-rmsnorm requires fused or separate".to_owned()),
+    }
+}
+
+fn parse_execution_completion(value: OsString) -> Result<ExecutionCompletionMode, String> {
+    match parse_utf8(value, "--execution-completion")?.as_str() {
+        "per-operation" => Ok(ExecutionCompletionMode::PerOperation),
+        "iteration-batch" => Ok(ExecutionCompletionMode::IterationBatch),
+        _ => Err("--execution-completion requires per-operation or iteration-batch".to_owned()),
     }
 }
 
@@ -314,6 +348,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         options.prefill_chunk_tokens,
         options.physical_kv_blocks,
         options.residual_rmsnorm,
+        options.execution_completion,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
     );
@@ -423,6 +458,10 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         ResidualRmsNormMode::Fused => executor.with_fused_residual_norm(),
         ResidualRmsNormMode::Separate => executor.with_separate_residual_norm(),
     };
+    let executor = match options.execution_completion {
+        ExecutionCompletionMode::PerOperation => executor.with_per_operation_completion(),
+        ExecutionCompletionMode::IterationBatch => executor.with_iteration_batch_completion(),
+    };
     let model_id = options
         .model_id
         .unwrap_or_else(|| model.provenance().source_model().to_owned());
@@ -508,7 +547,8 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ResidualRmsNormMode, ServeOptions, parse_arguments,
+        CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, ResidualRmsNormMode,
+        ServeOptions, parse_arguments,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -543,6 +583,7 @@ mod tests {
                 prefill_chunk_tokens: 512,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
+                execution_completion: ExecutionCompletionMode::PerOperation,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
@@ -578,6 +619,8 @@ mod tests {
             "512",
             "--residual-rmsnorm",
             "separate",
+            "--execution-completion",
+            "iteration-batch",
             "--max-weight-bytes",
             "4096",
             "--shutdown-on-stdin",
@@ -597,6 +640,7 @@ mod tests {
                 prefill_chunk_tokens: 32,
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
+                execution_completion: ExecutionCompletionMode::IterationBatch,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
             }))
@@ -609,6 +653,28 @@ mod tests {
                 "--model",
                 "/a",
                 "--residual-rmsnorm",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--residual-rmsnorm",
+                "fused",
+                "--execution-completion",
+                "iteration-batch",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--execution-completion",
                 "unknown",
             ]))
             .is_err()

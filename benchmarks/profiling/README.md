@@ -40,10 +40,15 @@ target/release/rustinfer-profile --help
 ```
 
 Every source, GPU, host, software, and workload provenance field is a required
-CLI value. `--role baseline` is bound to
-`--runtime-flag-name residual_rmsnorm --runtime-flag-value separate`, while
-`--role candidate` is bound to the `fused` value. Use the exact same release
-binary for both arms. The runner verifies the declared model ID, revision,
+CLI value. The runner accepts two closed E0 comparisons: `residual_rmsnorm`
+binds baseline/candidate to `separate`/`fused`, and `execution_completion`
+binds them to `per-operation`/`iteration-batch`. The latter fixes residual
+RMSNorm to `separate`, so the two arms differ only at the completion boundary.
+The checker also binds these pairs to
+`pr15-fused-residual-rmsnorm-exact-v1` and
+`pr15-iteration-command-batch-exact-v1`, respectively; a performance report
+cannot reuse the other candidate's correctness gate.
+Use the exact same release binary for both arms. The runner verifies the declared model ID, revision,
 dtype, tokenizer checksum, and single-shard weight checksum against the loaded
 checkpoint manifest before initializing CUDA.
 
@@ -92,8 +97,10 @@ path is created exclusively and is never overwritten.
 The remote-only `benchmarks/scripts/profile_http_one_token.sh` sentinel records
 kernel attribution for each arm. It requires the exact source revision, source
 archive SHA-256, container image SHA-256, and correctness-report SHA-256 through
-the corresponding `RUSTINFER_PROFILE_*` environment variables. Its final
-`SHA256SUMS` binds the executable, runtime flag, source/container provenance,
+the corresponding `RUSTINFER_PROFILE_*` environment variables. Both
+`RUSTINFER_PROFILE_RESIDUAL_RMSNORM` and
+`RUSTINFER_PROFILE_EXECUTION_COMPLETION` are recorded and passed explicitly.
+Its final `SHA256SUMS` binds the executable, runtime flags, source/container provenance,
 checkpoint file digests, GPU/toolkit environment, NCU CSV, the validated
 fixed-token HTTP response, and server logs. It refuses to overwrite an evidence file and
 uses bounded response and process-shutdown waits.
@@ -102,5 +109,7 @@ each arm. The first trace isolates prefill-to-first-token work; the incremental
 kernel inventory in the two-token trace contains one decode iteration and is
 the decode/TPOT attribution sentinel. Each trace collects kernel duration,
 registers per thread, register occupancy limit, achieved active-warps ratio,
-and DRAM read/write bytes so the fused kernel's launch saving, register
-pressure, occupancy, and memory traffic can be reviewed together.
+and DRAM read/write bytes so launch saving, register pressure, occupancy, and
+memory traffic can be reviewed together. The completion candidate intentionally
+keeps the kernel inventory unchanged; its benefit is measured by the paired
+host execution metric rather than inferred from kernel duration.

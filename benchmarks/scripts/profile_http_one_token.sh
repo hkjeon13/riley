@@ -13,6 +13,7 @@ model_dir=${RUSTINFER_PROFILE_MODEL_DIR:-/model}
 binary=${RUSTINFER_PROFILE_BINARY:-/usr/local/bin/rustinfer}
 bind_port=${RUSTINFER_PROFILE_PORT:-18080}
 residual_rmsnorm=${RUSTINFER_PROFILE_RESIDUAL_RMSNORM:-separate}
+execution_completion=${RUSTINFER_PROFILE_EXECUTION_COMPLETION:-per-operation}
 output_tokens=${RUSTINFER_PROFILE_OUTPUT_TOKENS:-2}
 source_revision=${RUSTINFER_PROFILE_SOURCE_REVISION:?source revision is required}
 source_archive_sha256=${RUSTINFER_PROFILE_SOURCE_ARCHIVE_SHA256:?source archive SHA-256 is required}
@@ -73,6 +74,17 @@ case "$residual_rmsnorm" in
     exit 2
     ;;
 esac
+case "$execution_completion" in
+  per-operation|iteration-batch) ;;
+  *)
+    echo "profile sentinel: execution completion must be per-operation or iteration-batch" >&2
+    exit 2
+    ;;
+esac
+if [[ "$residual_rmsnorm" == fused && "$execution_completion" != per-operation ]]; then
+  echo "profile sentinel: fused residual RMSNorm may only be profiled with per-operation completion" >&2
+  exit 2
+fi
 case "$output_tokens" in
   1|2) ;;
   *)
@@ -97,7 +109,10 @@ for evidence_name in \
     exit 2
   fi
 done
-printf '%s\n' "$residual_rmsnorm" >"$output_dir/runtime-flag.txt"
+{
+  printf 'residual_rmsnorm=%s\n' "$residual_rmsnorm"
+  printf 'execution_completion=%s\n' "$execution_completion"
+} >"$output_dir/runtime-flag.txt"
 for model_name in rustinfer-checkpoint.json config.json tokenizer.json model.safetensors; do
   if [[ ! -f "$model_dir/$model_name" ]]; then
     echo "profile sentinel: required model artifact $model_name is absent" >&2
@@ -116,6 +131,7 @@ sha256sum \
   printf 'container_image_sha256=%s\n' "$container_image_sha256"
   printf 'correctness_report_sha256=%s\n' "$correctness_report_sha256"
   printf 'runtime_flag=residual_rmsnorm=%s\n' "$residual_rmsnorm"
+  printf 'runtime_flag=execution_completion=%s\n' "$execution_completion"
   printf 'output_tokens=%s\n' "$output_tokens"
   printf 'command_contract=smollm2-c1-seq256-output%s-batch128-prefill128\n' \
     "$output_tokens"
@@ -145,6 +161,7 @@ ncu \
   --batch-token-budget 128 \
   --prefill-chunk-tokens 128 \
   --residual-rmsnorm "$residual_rmsnorm" \
+  --execution-completion "$execution_completion" \
   >"$output_dir/server.stdout" \
   2>"$output_dir/server.stderr" &
 profile_pid=$!
