@@ -1,5 +1,7 @@
 //! Cold, immutable planning contract for a fixed-length Llama forward.
 
+#[cfg(any(feature = "cuda", test))]
+mod decode;
 mod error;
 #[cfg(any(feature = "cuda", test))]
 mod forward;
@@ -20,6 +22,12 @@ pub use forward::{
     LlamaForwardError, LlamaForwardResource, LlamaForwardResult, LlamaTracePoint,
     PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig,
     PreparedLlamaTrace,
+};
+
+#[cfg(feature = "cuda")]
+pub use decode::{
+    LlamaDecodeError, LlamaDecodePhase, LlamaDecodeResource, LlamaDecodeResult, LlamaKvCacheLayout,
+    PreparedLlamaDecode, PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeConfig,
 };
 
 #[cfg(feature = "cuda")]
@@ -88,6 +96,46 @@ mod source_contract_tests {
         assert!(
             hot.contains("let attention = &self.attention;"),
             "hot execute must use the backend fixed during cold preparation"
+        );
+        assert!(
+            source.contains("self.execute_inner(stream, None, None)"),
+            "public cache-free execute must not attach a PR09 cache sink"
+        );
+    }
+
+    #[test]
+    fn decode_hot_source_contains_no_preparation_or_allocation() {
+        let source = include_str!("decode.rs");
+        let begin = source
+            .find("// HOT_DECODE_BEGIN")
+            .expect("hot decode begin marker");
+        let end = source
+            .find("// HOT_DECODE_END")
+            .expect("hot decode end marker");
+        let hot = &source[begin..end];
+
+        for forbidden in [
+            "Vec::",
+            "String::",
+            "format!",
+            "BTreeMap",
+            "HashMap",
+            "allocate_device_buffer",
+            "allocate_pinned_host_buffer",
+            "PreparedDecodeAttention::select",
+            "CudaGemmConfig::new",
+            "prepare_gemm",
+            "build_decode_rope_tables",
+            "try_reserve",
+        ] {
+            assert!(
+                !hot.contains(forbidden),
+                "hot decode source contains forbidden cold-path token {forbidden:?}"
+            );
+        }
+        assert!(
+            hot.contains(".execute(logical_token_count, &mut params, stream)"),
+            "hot decode must use the backend selected during cold preparation"
         );
     }
 

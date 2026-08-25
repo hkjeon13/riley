@@ -17,6 +17,7 @@ use rustinfer_cuda::{
 };
 use rustinfer_model::LoadedModel;
 
+use super::decode::ContiguousKvCache;
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError, PhysicalWeightId,
 };
@@ -395,7 +396,7 @@ fn record_close(
     }
 }
 
-fn execute_gemm(
+pub(super) fn execute_gemm(
     plan: &mut CudaPreparedGemm,
     input: &CudaDeviceBuffer,
     weight: CudaBufferSpan<'_>,
@@ -427,7 +428,7 @@ fn execute_gemm(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
-fn weight_span(
+pub(super) fn weight_span(
     weights: &CudaUploadedWeights,
     id: PhysicalWeightId,
     site: ExecutionSite,
@@ -438,7 +439,7 @@ fn weight_span(
         .map_err(|source| LlamaForwardError::weight(site, source))
 }
 
-fn span(
+pub(super) fn span(
     buffer: &CudaDeviceBuffer,
     dtype: CudaDType,
     byte_len: u64,
@@ -448,7 +449,7 @@ fn span(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
-fn span_mut(
+pub(super) fn span_mut(
     buffer: &mut CudaDeviceBuffer,
     dtype: CudaDType,
     byte_len: u64,
@@ -458,13 +459,13 @@ fn span_mut(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
-fn poison_for_cuda_error(poisoned: &mut bool, source: &CudaError) {
+pub(super) fn poison_for_cuda_error(poisoned: &mut bool, source: &CudaError) {
     if !matches!(source.stage(), CudaErrorStage::Validation) {
         *poisoned = true;
     }
 }
 
-fn poison_for_forward_error(poisoned: &mut bool, error: &LlamaForwardError) {
+pub(super) fn poison_for_forward_error(poisoned: &mut bool, error: &LlamaForwardError) {
     match error {
         LlamaForwardError::Cuda { source, .. } => poison_for_cuda_error(poisoned, source),
         LlamaForwardError::Embedding { source, .. } => {
@@ -658,7 +659,7 @@ pub enum LlamaForwardError {
 }
 
 impl LlamaForwardError {
-    fn cuda(site: ExecutionSite, source: CudaError) -> Self {
+    pub(super) fn cuda(site: ExecutionSite, source: CudaError) -> Self {
         Self::Cuda { site, source }
     }
 
@@ -928,41 +929,41 @@ impl GemmPlans {
     }
 }
 
-struct ForwardBuffers {
-    token_ids: CudaDeviceBuffer,
-    hidden_current: CudaDeviceBuffer,
-    hidden_norm: CudaDeviceBuffer,
-    hidden_projection: CudaDeviceBuffer,
-    hidden_rotary: CudaDeviceBuffer,
-    hidden_context: CudaDeviceBuffer,
-    key_raw: CudaDeviceBuffer,
-    value_raw: CudaDeviceBuffer,
-    key_rotary: CudaDeviceBuffer,
-    gate_raw: CudaDeviceBuffer,
-    up_raw: CudaDeviceBuffer,
-    gate_activated: CudaDeviceBuffer,
-    gated_product: CudaDeviceBuffer,
-    attention_workspace: Option<CudaDeviceBuffer>,
-    rope_cos: CudaDeviceBuffer,
-    rope_sin: CudaDeviceBuffer,
-    logits: CudaDeviceBuffer,
-    embedding_error_scratch: CudaDeviceBuffer,
-    gemm_workspace: Option<CudaDeviceBuffer>,
+pub(super) struct ForwardBuffers {
+    pub(super) token_ids: CudaDeviceBuffer,
+    pub(super) hidden_current: CudaDeviceBuffer,
+    pub(super) hidden_norm: CudaDeviceBuffer,
+    pub(super) hidden_projection: CudaDeviceBuffer,
+    pub(super) hidden_rotary: CudaDeviceBuffer,
+    pub(super) hidden_context: CudaDeviceBuffer,
+    pub(super) key_raw: CudaDeviceBuffer,
+    pub(super) value_raw: CudaDeviceBuffer,
+    pub(super) key_rotary: CudaDeviceBuffer,
+    pub(super) gate_raw: CudaDeviceBuffer,
+    pub(super) up_raw: CudaDeviceBuffer,
+    pub(super) gate_activated: CudaDeviceBuffer,
+    pub(super) gated_product: CudaDeviceBuffer,
+    pub(super) attention_workspace: Option<CudaDeviceBuffer>,
+    pub(super) rope_cos: CudaDeviceBuffer,
+    pub(super) rope_sin: CudaDeviceBuffer,
+    pub(super) logits: CudaDeviceBuffer,
+    pub(super) embedding_error_scratch: CudaDeviceBuffer,
+    pub(super) gemm_workspace: Option<CudaDeviceBuffer>,
 }
 
 /// Owning fixed-S reference forward. All hot execution state is direct-indexed.
 pub struct PreparedLlamaForward {
-    plan: LlamaExecutionPlan,
-    weights: CudaUploadedWeights,
+    pub(super) plan: LlamaExecutionPlan,
+    pub(super) weights: CudaUploadedWeights,
     gemms: GemmPlans,
     attention: PreparedPrefillAttention,
-    buffers: ForwardBuffers,
-    io_staging: CudaPinnedHostBuffer,
-    token_bytes: Box<[u8]>,
+    pub(super) buffers: ForwardBuffers,
+    pub(super) io_staging: CudaPinnedHostBuffer,
+    pub(super) token_bytes: Box<[u8]>,
     allocation_report: PreparedLlamaAllocationReport,
-    tokens_ready: bool,
-    output_ready: bool,
-    poisoned: bool,
+    pub(super) tokens_ready: bool,
+    pub(super) output_ready: bool,
+    pub(super) poisoned: bool,
 }
 
 impl fmt::Debug for PreparedLlamaForward {
@@ -1220,7 +1221,39 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         self.output_ready = false;
-        let result = self.execute_inner(stream, None);
+        let result = self.execute_inner(stream, None, None);
+        match result {
+            Ok(()) => {
+                self.output_ready = true;
+                Ok(())
+            }
+            Err(error) => {
+                poison_for_forward_error(&mut self.poisoned, &error);
+                self.poisoned |= self.gemms.any_poisoned();
+                Err(error)
+            }
+        }
+    }
+
+    /// Executes the fixed prompt graph while copying each layer's rotated K
+    /// and raw V tensors into a caller-owned contiguous decode cache.
+    ///
+    /// This is a crate-private PR09 entry point. The public cache-free
+    /// [`Self::execute`] path continues to pass no cache sink and therefore
+    /// launches exactly the PR08 graph.
+    pub(super) fn execute_prefill_into_cache(
+        &mut self,
+        cache: &mut ContiguousKvCache,
+        stream: &mut CudaStream,
+    ) -> LlamaForwardResult<()> {
+        if self.poisoned {
+            return Err(LlamaForwardError::Poisoned);
+        }
+        if !self.tokens_ready {
+            return Err(LlamaForwardError::TokensNotUploaded);
+        }
+        self.output_ready = false;
+        let result = self.execute_inner(stream, None, Some(cache));
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -1261,7 +1294,7 @@ impl PreparedLlamaForward {
         trace.validate(&self.plan)?;
         trace.reset();
         self.output_ready = false;
-        let result = self.execute_inner(stream, Some(trace));
+        let result = self.execute_inner(stream, Some(trace), None);
         match result {
             Ok(()) => {
                 self.output_ready = true;
@@ -1368,7 +1401,7 @@ impl PreparedLlamaForward {
         self.download_logits_range(offset, destination, stream)
     }
 
-    fn download_logits_range(
+    pub(super) fn download_logits_range(
         &mut self,
         offset: u64,
         destination: &mut [u8],
@@ -1402,6 +1435,7 @@ impl PreparedLlamaForward {
         &mut self,
         stream: &mut CudaStream,
         mut trace: Option<&mut PreparedLlamaTrace>,
+        mut cache: Option<&mut ContiguousKvCache>,
     ) -> LlamaForwardResult<()> {
         let plan = &self.plan;
         let weights = &self.weights;
@@ -1648,6 +1682,20 @@ impl PreparedLlamaForward {
                 };
                 rope(&mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(key_rope_site, source))?;
+            }
+
+            if let Some(cache) = cache.as_deref_mut() {
+                let cache_site = ExecutionSite::layer(layer_index, LlamaOp::KvCacheWrite);
+                cache
+                    .append_layer(
+                        layer_index,
+                        &buffers.key_rotary,
+                        &buffers.value_raw,
+                        sequence,
+                        0,
+                        stream,
+                    )
+                    .map_err(|error| error.into_forward_cache_error(cache_site))?;
             }
 
             let prefill_site = ExecutionSite::layer(layer_index, LlamaOp::PrefillAttention);

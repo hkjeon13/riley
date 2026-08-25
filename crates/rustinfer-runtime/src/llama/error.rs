@@ -32,6 +32,10 @@ pub enum LlamaOp {
     AttentionValue,
     /// Cold-selected full-sequence prefill attention backend.
     PrefillAttention,
+    /// Copy rotated K and raw V into a request-local KV cache.
+    KvCacheWrite,
+    /// Single-query attention over a request-local KV cache.
+    DecodeAttention,
     /// Attention output projection.
     OutputProjection,
     /// Post-attention residual addition.
@@ -73,6 +77,8 @@ impl LlamaOp {
             Self::AttentionSoftmax => "attention_softmax",
             Self::AttentionValue => "attention_value",
             Self::PrefillAttention => "prefill_attention",
+            Self::KvCacheWrite => "kv_cache_write",
+            Self::DecodeAttention => "decode_attention",
             Self::OutputProjection => "output_projection",
             Self::AttentionResidual => "attention_residual",
             Self::PostAttentionNorm => "post_attention_norm",
