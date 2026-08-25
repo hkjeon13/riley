@@ -1356,6 +1356,7 @@ fn not_supported(operation: &'static str, message: impl Into<String>) -> CudaErr
 mod tests {
     use super::*;
 
+    #[cfg(not(feature = "cuda"))]
     fn request(mask: AttentionMask) -> PrefillAttentionRequest {
         PrefillAttentionRequest::new(2, 128, 8, 2, 64, 0.125, mask)
     }
