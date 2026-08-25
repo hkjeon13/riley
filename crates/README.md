@@ -11,6 +11,8 @@ rustinfer-server
           -> rustinfer-tensor
           -> rustinfer-cuda (optional `cuda`)
       -> rustinfer-core
+  -> rustinfer-runtime
+  -> rustinfer-model
   -> rustinfer-core
 
 rustinfer-tensor -> rustinfer-core
@@ -26,7 +28,7 @@ rustinfer-cuda   -> rustinfer-core
 | `rustinfer-model` | 향후 canonical model IR 경계 | scheduler, HTTP |
 | `rustinfer-runtime` | model/tensor/backend orchestration 경계 | scheduler, HTTP |
 | `rustinfer-scheduler` | bounded admission과 continuous-batching state 경계 | HTTP representation |
-| `rustinfer-server` | binary와 server feature 소유 | native C ABI 세부 구현 |
+| `rustinfer-server` | binary, HTTP DTO/transport, model/runtime/scheduler composition root | native C ABI 세부 구현 |
 
 `tools/python`, `tools/native`, `experiments/triton`은 workspace member가 아니다.
 Python/Triton은 Cargo dependency나 build-script 입력도 아니다. Python 결과는
@@ -43,8 +45,10 @@ feature는 server가 소유하고 아래 crate로 명시적으로 전달한다.
 cargo build --locked --release --features cuda,server
 ```
 
-- `server`: `rustinfer` version/build-info binary를 활성화한다.
-- `cuda`: scheduler → runtime/tensor → cuda로 전달한다.
+- `server`: `rustinfer` binary와 정확히 고정된 optional `serde`/`serde_json` HTTP
+  직렬화 경계를 활성화한다.
+- `cuda`: composition root가 scheduler와 runtime 양쪽에 명시적으로 전달하고,
+  runtime/tensor → cuda로 이어진다.
 - `bench`, `experimental`: 아직 구현을 활성화하지 않는 예약 opt-in 경계다.
 
 ## Panic과 error 원칙

@@ -8,14 +8,18 @@ description = "Binary and server feature owner for rustinfer"
 
 [features]
 default = []
-cuda = ["rustinfer-scheduler/cuda"]
-server = []
+cuda = ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"]
+server = ["dep:serde", "dep:serde_json"]
 bench = []
 experimental = []
 
 [dependencies]
 rustinfer-core = { path = "../rustinfer-core" }
+rustinfer-model = { path = "../rustinfer-model" }
+rustinfer-runtime = { path = "../rustinfer-runtime" }
 rustinfer-scheduler = { path = "../rustinfer-scheduler" }
+serde = { version = "=1.0.228", features = ["derive"], optional = true }
+serde_json = { version = "=1.0.145", optional = true }
 
 [lints]
 workspace = true

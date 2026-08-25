@@ -41,7 +41,12 @@ EXPECTED_INTERNAL_DEPENDENCIES = {
         "rustinfer-tensor",
     },
     "rustinfer-scheduler": {"rustinfer-core", "rustinfer-runtime"},
-    "rustinfer-server": {"rustinfer-core", "rustinfer-scheduler"},
+    "rustinfer-server": {
+        "rustinfer-core",
+        "rustinfer-model",
+        "rustinfer-runtime",
+        "rustinfer-scheduler",
+    },
 }
 
 EXPECTED_FEATURES = {
@@ -66,10 +71,10 @@ EXPECTED_FEATURES = {
     },
     "rustinfer-server": {
         "bench": [],
-        "cuda": ["rustinfer-scheduler/cuda"],
+        "cuda": ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"],
         "default": [],
         "experimental": [],
-        "server": [],
+        "server": ["dep:serde", "dep:serde_json"],
     },
 }
 
@@ -80,7 +85,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "rustinfer-model": set(),
     "rustinfer-runtime": {"rustinfer-cuda"},
     "rustinfer-scheduler": set(),
-    "rustinfer-server": set(),
+    "rustinfer-server": {"serde", "serde_json"},
 }
 
 EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
@@ -107,6 +112,16 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
     ("rustinfer-runtime", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
+        "features": [],
+    },
+    ("rustinfer-server", "serde"): {
+        "version": "1.0.228",
+        "default_features": True,
+        "features": ["derive"],
+    },
+    ("rustinfer-server", "serde_json"): {
+        "version": "1.0.145",
+        "default_features": True,
         "features": [],
     },
 }
@@ -265,7 +280,7 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
             "rustinfer-model -> serde, serde_json, sha2, and unicode-normalization plus "
-            "rustinfer-runtime -> sha2"
+            "rustinfer-runtime -> sha2 plus rustinfer-server -> serde and serde_json"
         )
     for dependency in direct_dependencies:
         expected = EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES[
@@ -646,9 +661,12 @@ def validate_dependencies(
                     raise BoundaryError(
                         f"{name} -> {dependency_name}: must be an unconditional normal dependency"
                     )
-                if dependency.get("optional") is not False:
+                expected_optional = (
+                    dependency_name in EXPECTED_OPTIONAL_DEPENDENCIES[name]
+                )
+                if dependency.get("optional") is not expected_optional:
                     raise BoundaryError(
-                        f"{name} -> {dependency_name}: approved dependencies are non-optional"
+                        f"{name} -> {dependency_name}: optional must be {expected_optional}"
                     )
                 if dependency.get("uses_default_features") is not approved["default_features"]:
                     raise BoundaryError(
@@ -976,7 +994,7 @@ def main() -> int:
     print(
         "  approved direct third-party Cargo dependencies: "
         f"{len(dependency_policy['direct_dependencies'])} "
-        "(rustinfer-model and rustinfer-runtime)"
+        "(rustinfer-model, rustinfer-runtime, and rustinfer-server)"
     )
     print(
         "  approved third-party Cargo package closure: "

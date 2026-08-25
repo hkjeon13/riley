@@ -1,4 +1,4 @@
-# Reviewed production Cargo dependency closure for PR 05.
+# Reviewed production Cargo dependency closure through PR 14.
 #
 # Every direct requirement is exact. Every registry package resolved into
 # Cargo.lock is pinned by identity, crates.io source, checksum, license, MSRV,
@@ -42,6 +42,20 @@ owner = "rustinfer-runtime"
 name = "sha2"
 version = "0.11.0"
 default_features = false
+features = []
+
+[[direct_dependencies]]
+owner = "rustinfer-server"
+name = "serde"
+version = "1.0.228"
+default_features = true
+features = ["derive"]
+
+[[direct_dependencies]]
+owner = "rustinfer-server"
+name = "serde_json"
+version = "1.0.145"
+default_features = true
 features = []
 
 [[packages]]

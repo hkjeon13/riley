@@ -139,7 +139,11 @@ name = "rustinfer-server"
 version = "0.1.0"
 dependencies = [
  "rustinfer-core",
+ "rustinfer-model",
+ "rustinfer-runtime",
  "rustinfer-scheduler",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
