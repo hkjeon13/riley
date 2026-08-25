@@ -66,12 +66,17 @@ ci/run_python_free_release_e2e.sh
 The output directory must not exist. The driver verifies all inputs before
 starting CUDA, refuses mutable image references, and creates raw evidence,
 the release-gate attestation, post-SIGTERM shutdown metrics, and SHA256SUMS.
-Before attestation, it creates an uncompressed deterministic
-`python-free-evidence.tar` with exactly six flat regular files:
-`raw-evidence.json`, `correctness-golden.json`, `model-SHA256SUMS`, both
-shutdown metrics files, and an internal checksum manifest over those five
-payloads. The attestation is deliberately outside that tar and binds the tar
-SHA-256, avoiding a circular self-hash.
+Before attestation, it creates an uncompressed deterministic raw-evidence v2
+USTAR. Its fixed inventory contains 34 files plus `SHA256SUMS`: the summary and
+golden, both shutdown metrics, raw Docker image inspect, the executable copied
+from the image, native-manifest/`ldd`/`readelf` output, Python scan output, two
+containers' pre/runtime/post inspect snapshots and pre/runtime process tables,
+the exact greedy/sampling requests, raw JSON/SSE/metrics HTTP responses, and
+the exact cancellation request plus admitted-response prefix. Every regular
+file in the supplied model directory is also archived below `model/`; those
+bytes must exactly match `model-SHA256SUMS`. The checksum manifest closes over
+the complete fixed and dynamic inventory. The attestation remains outside the
+tar and binds the tar SHA-256, avoiding a circular self-hash.
 The container itself proves real checkpoint load through `/readyz` and
 `/v1/models`; greedy prefill/decode and non-stream/SSE parity against the
 approved golden; fixed-seed sampling repeatability across two clean starts
@@ -81,17 +86,24 @@ device, and pinned allocation gauges at zero.
 
 It also records the runtime process inventory, reviewed native dependency
 manifest, dynamic-loader resolution, absence of Python-family executables and
-artifacts, and absence of Python-family processes. The checker re-hashes the
-source archive, standalone binary, release bundle, complete model tree,
-weights, tokenizer, native E0 correctness report, golden, shutdown files, and
-raw evidence; validates the closed schemas; and emits
+artifacts, and absence of Python-family processes. The checker parses the
+archived ELF instead of trusting a producer digest, cross-checks its DT_NEEDED
+entries with both the copied native manifest and `readelf`/`ldd`, replays the
+Docker state transitions, parses the raw HTTP JSON and SSE frames, and derives
+the completion/cancellation claims from those transcripts. It re-hashes the
+source archive, standalone binary, release bundle, every archived and supplied
+model file, native E0 correctness report, golden, shutdown files, and raw
+evidence; validates the closed schemas; and emits
 the exact `rustinfer.release-gate-attestation.v1` check set consumed by the
 final release-candidate gate.
 
 The golden cannot self-authorize a new output: it must bind the exact passing
 `smollm2-fp32-bf16-native-e0-v2` report, clean candidate revision, immutable
 model revision, weights, the native five-file tokenizer aggregate, and the
-exact runtime `tokenizer.json`. The closed raw archive repeats those bindings;
+exact runtime `tokenizer.json`. In addition, any final-candidate replay must
+pass the independently reviewed golden SHA-256 to
+`validate_bound_raw_archive(..., correctness_golden_sha256=...)`; omitting it
+fails closed. The closed raw archive repeats those bindings;
 the checker enforces its exact inventory and metadata, validates its internal
 checksums, recomputes the five-file tokenizer aggregate from the preserved
 model manifest, and is itself SHA-bound by the attestation. The attestation root stays

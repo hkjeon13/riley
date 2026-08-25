@@ -35,7 +35,7 @@ packager="$repo_root/ci/release/package_python_free_e2e_evidence.py"
 : "${RUSTINFER_E2E_BIND:=127.0.0.1:8080}"
 : "${RUSTINFER_E2E_CANCEL_TOKENS:=512}"
 
-for tool in bash docker jq python3 sha256sum find sort awk sed grep tail date mktemp; do
+for tool in bash docker jq python3 sha256sum find sort awk sed grep tail date mktemp readelf wc; do
     command -v "$tool" >/dev/null 2>&1 || {
         echo "required host tool is unavailable: $tool" >&2
         exit 2
@@ -170,6 +170,8 @@ mkdir -m 0700 "$RUSTINFER_E2E_OUTPUT"
 mkdir -m 0777 "$RUSTINFER_E2E_OUTPUT/container-evidence"
 shutdown_metrics="$RUSTINFER_E2E_OUTPUT/container-evidence/shutdown-metrics.json"
 repeat_shutdown_metrics="$RUSTINFER_E2E_OUTPUT/container-evidence/repeat-shutdown-metrics.json"
+image_inspect="$scratch/image-inspect.json"
+docker image inspect "$RUSTINFER_E2E_IMAGE_ID" >"$image_inspect"
 
 launch_container() {
     local metrics_name=$1
@@ -192,6 +194,10 @@ container_ids+=("$container_id")
 [[ $container_id =~ ^[0-9a-f]{64}$ ]]
 network_mode=$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$container_id")
 test "$network_mode" = none
+container_first_pre="$scratch/container-first-pre.json"
+process_first_pre="$scratch/process-first-pre.txt"
+docker inspect "$container_id" >"$container_first_pre"
+docker top "$container_id" -eo pid,ppid,comm,args >"$process_first_pre"
 
 container_http() {
     local method=$1 target=$2 body=$3 output=$4
@@ -249,6 +255,8 @@ test "$models_json" = "[\"$model_id\"]"
 # explicit seed and the stable request stream are reproduced exactly.
 sampling_request=$(jq -cn --arg model "$model_id" --arg prompt "$golden_prompt" \
     '{model:$model,prompt:$prompt,max_tokens:16,temperature:0.8,top_p:0.95,seed:424242,stream:false}')
+request_sampling="$scratch/request-sampling.json"
+printf '%s\n' "$sampling_request" >"$request_sampling"
 sample_first_raw="$scratch/sample-first.raw"
 sample_first_body="$scratch/sample-first.body"
 sample_first_text="$scratch/sample-first.text"
@@ -266,6 +274,10 @@ greedy_request=$(jq -cn --arg model "$model_id" --arg prompt "$golden_prompt" \
     --argjson max_tokens "$golden_max_tokens" \
     '{model:$model,prompt:$prompt,max_tokens:$max_tokens,temperature:0,top_p:1,stream:false}')
 greedy_stream_request=$(jq -c '.stream=true' <<<"$greedy_request")
+request_greedy="$scratch/request-greedy.json"
+request_greedy_stream="$scratch/request-greedy-stream.json"
+printf '%s\n' "$greedy_request" >"$request_greedy"
+printf '%s\n' "$greedy_stream_request" >"$request_greedy_stream"
 greedy_raw="$scratch/greedy.raw"
 greedy_body="$scratch/greedy.body"
 container_http POST /v1/completions "$greedy_request" "$greedy_raw"
@@ -303,14 +315,19 @@ disconnects_before=$(jq -er '.counters.disconnects' "$metrics_before_body")
 cancel_request=$(jq -cn --arg model "$model_id" --arg prompt "$golden_prompt" \
     --argjson max_tokens "$RUSTINFER_E2E_CANCEL_TOKENS" \
     '{model:$model,prompt:$prompt,max_tokens:$max_tokens,temperature:0,top_p:1,stream:true}')
-docker exec --env "RUSTINFER_HTTP_BODY=$cancel_request" "$container_id" /bin/bash -c '
+cancellation_request="$scratch/cancellation-request.raw"
+cancellation_response_prefix="$scratch/cancellation-response-prefix.raw"
+cancel_length=$(printf '%s' "$cancel_request" | wc -c | awk '{print $1}')
+printf 'POST /v1/completions HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s' \
+    "$cancel_length" "$cancel_request" >"$cancellation_request"
+docker exec --interactive "$container_id" /bin/bash -c '
     set -euo pipefail
     export LC_ALL=C
     exec 3<>/dev/tcp/127.0.0.1/8080
-    printf "POST /v1/completions HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s" \
-        "${#RUSTINFER_HTTP_BODY}" "$RUSTINFER_HTTP_BODY" >&3
-    dd bs=1 count=1 <&3 >/dev/null 2>&1
-'
+    cat >&3
+    dd bs=1 count=12 status=none <&3
+' <"$cancellation_request" >"$cancellation_response_prefix"
+test "$(sha_file "$cancellation_response_prefix")" = "$(printf 'HTTP/1.1 200' | sha256sum | awk '{print $1}')"
 
 metrics_after_raw="$scratch/metrics-after.raw"
 metrics_after_body="$scratch/metrics-after.body"
@@ -330,32 +347,41 @@ disconnects_after=$(jq -er '.counters.disconnects' "$metrics_after_body")
 active_after=$(jq -er '.active_requests' "$metrics_after_body")
 waiting_after=$(jq -er '.waiting_requests' "$metrics_after_body")
 
-image_binary_sha256=$(docker exec "$container_id" sha256sum /opt/rustinfer/bin/rustinfer | awk '{print $1}')
+image_binary="$scratch/image-binary"
+image_native_dependencies="$scratch/image-native-dependencies.txt"
+image_ldd="$scratch/image-ldd.txt"
+image_readelf="$scratch/image-readelf.txt"
+image_python_scan="$scratch/image-python-scan.txt"
+docker cp "$container_id:/opt/rustinfer/bin/rustinfer" "$image_binary"
+docker cp "$container_id:/opt/rustinfer/manifest/native-dependencies.txt" "$image_native_dependencies"
+image_binary_sha256=$(sha_file "$image_binary")
 test "$image_binary_sha256" = "$RUSTINFER_E2E_RELEASE_BINARY_SHA256"
-forbidden_executables_json=$(docker exec --user 0 "$container_id" /bin/bash -c '
+readelf --file-header --program-headers --dynamic "$image_binary" >"$image_readelf"
+docker exec "$container_id" ldd /opt/rustinfer/bin/rustinfer >"$image_ldd"
+{
+    printf '[forbidden-executables]\n'
+    docker exec --user 0 "$container_id" /bin/bash -c '
     set -euo pipefail
-    found=()
     for command_name in python python3 pip pip3; do
-        if command -v "$command_name" >/dev/null 2>&1; then found+=("$command_name"); fi
+        if command -v "$command_name" >/dev/null 2>&1; then printf "%s\n" "$command_name"; fi
     done
-    while IFS= read -r path; do found+=("$path"); done < <(
-        find / -xdev -type f -perm /111 \( -iname "python*" -o -iname "pypy*" -o -iname "pip*" \) -print
-    )
-    printf "%s\n" "${found[@]}" | sort -u
-' | jq -Rsc 'split("\n") | map(select(length > 0))')
-test "$forbidden_executables_json" = '[]'
-forbidden_artifact_count=$(docker exec --user 0 "$container_id" /bin/bash -c '
+    find / -xdev -type f -perm /111 \( -iname "python*" -o -iname "pypy*" -o -iname "pip*" \) -print | sort -u
+'
+    printf '[forbidden-artifacts]\n'
+    docker exec --user 0 "$container_id" /bin/bash -c '
     set -euo pipefail
     find / -xdev -type f \( \
         -name "*.py" -o -name "*.pyc" -o -name "*.pyo" -o -name "*.pyd" \
         -o -name "*.whl" -o -name "*.pkl" -o -name "*.pickle" \
         -o -iname "*pytorch*" -o -iname "*torch*" -o -iname "*transformers*" -o -iname "*triton*" \
-    \) -print | wc -l
-')
-test "$forbidden_artifact_count" -eq 0
-manifest_dependencies_json=$(docker exec "$container_id" awk -F= '/^dependency=/{print $2}' \
-    /opt/rustinfer/manifest/native-dependencies.txt | jq -Rsc 'split("\n") | map(select(length > 0)) | sort | unique')
-loader_output=$(docker exec "$container_id" ldd /opt/rustinfer/bin/rustinfer)
+    \) -print | sort -u
+'
+} >"$image_python_scan"
+test "$(sha_file "$image_python_scan")" = "$(printf '[forbidden-executables]\n[forbidden-artifacts]\n' | sha256sum | awk '{print $1}')"
+forbidden_executables_json='[]'
+forbidden_artifact_count=0
+manifest_dependencies_json=$(awk -F= '/^dependency=/{print $2}' "$image_native_dependencies" | jq -Rsc 'split("\n") | map(select(length > 0))')
+loader_output=$(<"$image_ldd")
 loader_dependencies_json=$(printf '%s\n' "$loader_output" | jq -Rsc 'split("\n") | map(select(length > 0))')
 unresolved_dependencies_json=$(printf '%s\n' "$loader_output" | grep -E '=>[[:space:]]+not found' || true)
 unresolved_dependencies_json=$(printf '%s' "$unresolved_dependencies_json" | jq -Rsc 'split("\n") | map(select(length > 0))')
@@ -365,7 +391,11 @@ forbidden_dependency_matches_json=$(printf '%s\n%s\n' "$manifest_dependencies_js
 forbidden_dependency_matches_json=$(printf '%s' "$forbidden_dependency_matches_json" | jq -Rsc 'split("\n") | map(select(length > 0))')
 test "$forbidden_dependency_matches_json" = '[]'
 
-processes_json=$(docker top "$container_id" -eo pid,ppid,comm,args | tail -n +2 | jq -Rsc '
+container_first_runtime="$scratch/container-first-runtime.json"
+process_first_runtime="$scratch/process-first-runtime.txt"
+docker inspect "$container_id" >"$container_first_runtime"
+docker top "$container_id" -eo pid,ppid,comm,args >"$process_first_runtime"
+processes_json=$(tail -n +2 "$process_first_runtime" | jq -Rsc '
     split("\n") | map(select(length > 0) | capture("^\\s*(?<pid>[0-9]+)\\s+(?<ppid>[0-9]+)\\s+(?<comm>[^ ]+)\\s+(?<args>.+)$") |
     {pid:(.pid|tonumber),ppid:(.ppid|tonumber),comm:.comm,args:.args})')
 jq -e 'length >= 1 and any(.comm == "rustinfer") and all((.comm + " " + .args) | test("python|pip|pytorch|torch|transformers|triton|pickle"; "i") | not)' \
@@ -374,6 +404,8 @@ jq -e 'length >= 1 and any(.comm == "rustinfer") and all((.comm + " " + .args) |
 docker kill --signal TERM "$container_id" >/dev/null
 container_exit_code=$(docker wait "$container_id")
 test "$container_exit_code" -eq 0
+container_first_post="$scratch/container-first-post.json"
+docker inspect "$container_id" >"$container_first_post"
 test -f "$shutdown_metrics" && test ! -L "$shutdown_metrics"
 jq -e '
     .active_requests == 0 and .waiting_requests == 0 and .kv_allocated_blocks == 0 and
@@ -389,6 +421,10 @@ container_ids+=("$container_id")
 [[ $container_id =~ ^[0-9a-f]{64}$ ]]
 test "$container_id" != "$first_container_id"
 test "$(docker inspect --format '{{.HostConfig.NetworkMode}}' "$container_id")" = none
+container_second_pre="$scratch/container-second-pre.json"
+process_second_pre="$scratch/process-second-pre.txt"
+docker inspect "$container_id" >"$container_second_pre"
+docker top "$container_id" -eo pid,ppid,comm,args >"$process_second_pre"
 repeat_ready_raw="$scratch/repeat-ready.raw"
 repeat_ready_body="$scratch/repeat-ready.body"
 wait_ready "$repeat_ready_raw" "$repeat_ready_body"
@@ -407,9 +443,15 @@ sample_second_finish_reason=$(jq -er '.choices[0].finish_reason | select(. == "l
 test "$sample_first_sha256" = "$sample_second_sha256"
 test "$sample_first_completion_tokens" -eq "$sample_second_completion_tokens"
 test "$sample_first_finish_reason" = "$sample_second_finish_reason"
+container_second_runtime="$scratch/container-second-runtime.json"
+process_second_runtime="$scratch/process-second-runtime.txt"
+docker inspect "$container_id" >"$container_second_runtime"
+docker top "$container_id" -eo pid,ppid,comm,args >"$process_second_runtime"
 docker kill --signal TERM "$container_id" >/dev/null
 repeat_container_exit_code=$(docker wait "$container_id")
 test "$repeat_container_exit_code" -eq 0
+container_second_post="$scratch/container-second-post.json"
+docker inspect "$container_id" >"$container_second_post"
 test -f "$repeat_shutdown_metrics" && test ! -L "$repeat_shutdown_metrics"
 jq -e '
     .active_requests == 0 and .waiting_requests == 0 and .kv_allocated_blocks == 0 and
@@ -470,7 +512,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     --arg shutdown_metrics_sha256 "$shutdown_metrics_sha256" \
     --arg repeat_shutdown_metrics_sha256 "$repeat_shutdown_metrics_sha256" \
     '{
-      schema_version:"rustinfer.python-free-release-e2e-raw.v1",run_id:$run_id,
+      schema_version:"rustinfer.python-free-release-e2e-raw.v2",run_id:$run_id,
       recorded_at_utc:$recorded_at_utc,status:"success",
       source:{git_revision:$git_revision,git_dirty:false,source_archive_sha256:$source_archive_sha256},
       release:{binary_sha256:$binary_sha256,bundle_sha256:$bundle_sha256,image_sha256:$image_sha256},
@@ -490,11 +532,41 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
 raw_archive="$RUSTINFER_E2E_OUTPUT/python-free-evidence.tar"
 python3 "$packager" \
     --output "$raw_archive" \
+    --model-dir "$RUSTINFER_E2E_MODEL_DIR" \
     --raw-evidence "$raw_evidence" \
     --correctness-golden "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
     --model-manifest "$model_manifest" \
     --shutdown-metrics "$shutdown_metrics" \
-    --repeat-shutdown-metrics "$repeat_shutdown_metrics"
+    --repeat-shutdown-metrics "$repeat_shutdown_metrics" \
+    --image-inspect "$image_inspect" \
+    --image-binary "$image_binary" \
+    --image-native-dependencies "$image_native_dependencies" \
+    --image-ldd "$image_ldd" \
+    --image-readelf "$image_readelf" \
+    --image-python-scan "$image_python_scan" \
+    --container-first-pre "$container_first_pre" \
+    --container-first-runtime "$container_first_runtime" \
+    --container-first-post "$container_first_post" \
+    --container-second-pre "$container_second_pre" \
+    --container-second-runtime "$container_second_runtime" \
+    --container-second-post "$container_second_post" \
+    --process-first-pre "$process_first_pre" \
+    --process-first-runtime "$process_first_runtime" \
+    --process-second-pre "$process_second_pre" \
+    --process-second-runtime "$process_second_runtime" \
+    --request-greedy "$request_greedy" \
+    --request-greedy-stream "$request_greedy_stream" \
+    --request-sampling "$request_sampling" \
+    --http-readyz "$ready_raw" \
+    --http-models "$models_raw" \
+    --http-greedy "$greedy_raw" \
+    --http-greedy-stream "$stream_raw" \
+    --http-sampling-first "$sample_first_raw" \
+    --http-sampling-second "$sample_second_raw" \
+    --http-metrics-before "$metrics_before_raw" \
+    --http-metrics-after "$metrics_after_raw" \
+    --cancellation-request "$cancellation_request" \
+    --cancellation-response-prefix "$cancellation_response_prefix"
 
 python3 "$checker" \
     --evidence "$raw_evidence" \
