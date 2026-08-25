@@ -1,5 +1,6 @@
 //! Cold, immutable planning contract for a fixed-length Llama forward.
 
+mod batch;
 #[cfg(any(feature = "cuda", test))]
 mod decode;
 mod error;
@@ -8,6 +9,12 @@ mod forward;
 #[cfg(feature = "cuda")]
 mod generation;
 mod plan;
+
+pub use batch::{
+    LLAMA_BATCH_METADATA_V1_VERSION, LLAMA_BATCH_NO_OUTPUT_SLOT, LlamaBatchBlockTable,
+    LlamaBatchBufferCapacities, LlamaBatchError, LlamaBatchMetadataConfig, LlamaBatchResult,
+    LlamaBatchRow, LlamaBatchRowKind, LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
+};
 
 pub use error::{
     ExecutionSite, LlamaBufferRole, LlamaDimension, LlamaOp, LlamaPlanError, LlamaPlanResult,
