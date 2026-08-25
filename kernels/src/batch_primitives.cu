@@ -12,6 +12,9 @@ namespace {
 
 using rustinfer_cuda_internal::CurrentContext;
 using rustinfer_cuda_internal::clear_error;
+using rustinfer_cuda_internal::command_batch_is_active;
+using rustinfer_cuda_internal::command_batch_is_owned_by_current_thread;
+using rustinfer_cuda_internal::command_batch_register_use;
 using rustinfer_cuda_internal::internal_error;
 using rustinfer_cuda_internal::release_exclusive_use;
 using rustinfer_cuda_internal::runtime_error;
@@ -314,7 +317,8 @@ class ExclusiveUses final {
         buffers_{},
         buffer_count_(0),
         acquired_count_(0),
-        stream_acquired_(false) {}
+        stream_acquired_(false),
+        command_batch_(false) {}
 
   ExclusiveUses(const ExclusiveUses&) = delete;
   ExclusiveUses& operator=(const ExclusiveUses&) = delete;
@@ -334,6 +338,24 @@ class ExclusiveUses final {
 
   RustInferCudaStatus acquire(RustInferCudaErrorInfo* error,
                               const char* operation) noexcept {
+    if (command_batch_is_active(stream_)) {
+      if (!command_batch_is_owned_by_current_thread(stream_)) {
+        return validation_error(
+            error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+            "an active stream command batch is owned by another thread");
+      }
+      command_batch_ = true;
+      for (size_t index = 0; index < buffer_count_; ++index) {
+        const RustInferCudaStatus status = command_batch_register_use(
+            stream_, &buffers_[index]->active_uses, error, operation,
+            "a batch buffer already has an active asynchronous use");
+        if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+          return status;
+        }
+      }
+      return RUSTINFER_CUDA_STATUS_SUCCESS;
+    }
     for (size_t index = 0; index < buffer_count_; ++index) {
       if (!try_acquire_exclusive_use(buffers_[index]->active_uses)) {
         release_acquired();
@@ -356,6 +378,9 @@ class ExclusiveUses final {
   }
 
   bool release_completed() noexcept {
+    if (command_batch_) {
+      return true;
+    }
     bool valid = true;
     if (stream_acquired_) {
       valid = release_exclusive_use(stream_->active_uses) && valid;
@@ -368,6 +393,8 @@ class ExclusiveUses final {
     }
     return valid;
   }
+
+  bool command_batch() const noexcept { return command_batch_; }
 
  private:
   void release_acquired() noexcept {
@@ -382,6 +409,7 @@ class ExclusiveUses final {
   size_t buffer_count_;
   size_t acquired_count_;
   bool stream_acquired_;
+  bool command_batch_;
 };
 
 uint32_t block_count(uint64_t work_items) noexcept {
@@ -412,6 +440,10 @@ RustInferCudaStatus complete_execution(ExclusiveUses* uses,
                                        bool launch_attempted,
                                        RustInferCudaErrorInfo* error,
                                        const char* operation) noexcept {
+  if (uses->command_batch()) {
+    return scope->leave(operation_status, error,
+                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
+  }
   bool completion_confirmed = !launch_attempted;
   RustInferCudaStatus status = operation_status;
   if (launch_attempted) {

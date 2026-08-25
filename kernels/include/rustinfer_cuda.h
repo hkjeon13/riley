@@ -770,6 +770,17 @@ RustInferCudaStatus rustinfer_cuda_stream_create(
     RustInferCudaContext* context,
     RustInferCudaStream** out_stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// A command batch retains the stream and every unique device-buffer/GEMM-plan
+// used by supported operations on the owning thread. Those operations enqueue
+// without per-operation synchronization; end performs the single completion
+// synchronization. Failed or ambiguous completion deliberately retains all
+// leases. Nested, cross-thread, query/synchronize/wait/close use is rejected.
+RustInferCudaStatus rustinfer_cuda_stream_command_batch_begin(
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_stream_query(
     RustInferCudaStream* stream,
     uint8_t* out_complete,

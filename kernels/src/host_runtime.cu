@@ -7,13 +7,16 @@ namespace {
 using rustinfer_cuda_internal::AllocationStatsGuard;
 using rustinfer_cuda_internal::CurrentContext;
 using rustinfer_cuda_internal::clear_error;
+using rustinfer_cuda_internal::command_batch_thread_token;
 using rustinfer_cuda_internal::driver_error;
 using rustinfer_cuda_internal::internal_error;
+using rustinfer_cuda_internal::release_exclusive_use;
 using rustinfer_cuda_internal::runtime_error;
 using rustinfer_cuda_internal::retain_child;
 using rustinfer_cuda_internal::release_child;
 using rustinfer_cuda_internal::same_context;
 using rustinfer_cuda_internal::set_error;
+using rustinfer_cuda_internal::try_acquire_exclusive_use;
 using rustinfer_cuda_internal::validation_error;
 
 RustInferCudaStatus device_attribute(CUdevice device,
@@ -452,6 +455,131 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_create(
   return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
+extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_begin(
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "begin CUDA stream command batch";
+  clear_error(error);
+  if (stream == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream is null");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream already has an active command batch");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream has an active asynchronous use");
+  }
+  if (stream->command_batch_use_count != 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation,
+                          "inactive command batch retained ledger entries");
+  }
+
+  const void* expected = nullptr;
+  if (!stream->command_batch_owner.compare_exchange_strong(
+          expected, command_batch_thread_token(), std::memory_order_release,
+          std::memory_order_acquire)) {
+    (void)release_exclusive_use(stream->active_uses);
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream already has an active command batch");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "end CUDA stream command batch";
+  clear_error(error);
+  if (stream == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream is null");
+  }
+  const void* owner =
+      stream->command_batch_owner.load(std::memory_order_acquire);
+  if (owner == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream has no active command batch");
+  }
+  if (owner != command_batch_thread_token()) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream command batch is owned by another thread");
+  }
+
+  CurrentContext scope(stream->owner);
+  RustInferCudaStatus status = scope.enter(
+      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
+  bool completion_confirmed = false;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    const cudaError_t synchronize_result =
+        cudaStreamSynchronize(stream->stream);
+    completion_confirmed = synchronize_result == cudaSuccess;
+    status = runtime_error(synchronize_result, error,
+                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
+  }
+  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                       kOperation);
+  const bool restoration_confirmed =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (!completion_confirmed || !restoration_confirmed) {
+    // Completion ambiguity intentionally keeps owner, stream, buffer, and plan
+    // leases live. All later query/sync/close and non-owner work fail closed.
+    return status;
+  }
+
+  // Validate every counter before changing any of them. Only the owner thread
+  // can mutate the ledger and the stream lease excludes all other users.
+  if (stream->active_uses.load(std::memory_order_acquire) != 1) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                          kOperation,
+                          "command-batch stream lease was corrupted");
+  }
+  for (size_t index = 0; index < stream->command_batch_use_count; ++index) {
+    const auto* active = stream->command_batch_uses[index];
+    if (active == nullptr || active->load(std::memory_order_acquire) != 1) {
+      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                            kOperation,
+                            "command-batch resource lease was corrupted");
+    }
+  }
+  while (stream->command_batch_use_count != 0) {
+    --stream->command_batch_use_count;
+    std::atomic<uint32_t>* active =
+        stream->command_batch_uses[stream->command_batch_use_count];
+    stream->command_batch_uses[stream->command_batch_use_count] = nullptr;
+    if (!release_exclusive_use(*active)) {
+      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                            kOperation,
+                            "command-batch resource release was corrupted");
+    }
+  }
+  // Publish inactivity before dropping the stream lease. During this final
+  // window ordinary operations observe the still-busy stream and roll back;
+  // after the release this function never dereferences the stream again.
+  stream->command_batch_owner.store(nullptr, std::memory_order_release);
+  if (!release_exclusive_use(stream->active_uses)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                          kOperation,
+                          "command-batch stream release was corrupted");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RustInferCudaStatus rustinfer_cuda_stream_query(
     RustInferCudaStream* stream, uint8_t* out_complete,
     RustInferCudaErrorInfo* error) noexcept {
@@ -463,7 +591,8 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_query(
                             "stream or out_complete is null");
   }
   *out_complete = 0;
-  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+  if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
+      stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_QUERY,
                             "query CUDA stream",
@@ -492,7 +621,8 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_synchronize(
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "synchronize CUDA stream", "stream is null");
   }
-  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+  if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
+      stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
                             "synchronize CUDA stream",
@@ -527,7 +657,8 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_wait_event(
                             "wait for CUDA event",
                             "stream and event belong to different contexts");
   }
-  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+  if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
+      stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_RECORD,
                             "wait for CUDA event",
@@ -556,7 +687,9 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
   if (*stream == nullptr) {
     return RUSTINFER_CUDA_STATUS_SUCCESS;
   }
-  if ((*stream)->active_uses.load(std::memory_order_acquire) != 0) {
+  if ((*stream)->active_uses.load(std::memory_order_acquire) != 0 ||
+      (*stream)->command_batch_owner.load(std::memory_order_acquire) !=
+          nullptr) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA stream",
@@ -657,7 +790,8 @@ extern "C" RustInferCudaStatus rustinfer_cuda_event_record(
                             "record CUDA event",
                             "event and stream belong to different contexts");
   }
-  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+  if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
+      stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_RECORD,
                             "record CUDA event",

@@ -75,6 +75,9 @@ namespace {
 
 using rustinfer_cuda_internal::CurrentContext;
 using rustinfer_cuda_internal::clear_error;
+using rustinfer_cuda_internal::command_batch_is_active;
+using rustinfer_cuda_internal::command_batch_is_owned_by_current_thread;
+using rustinfer_cuda_internal::command_batch_register_use;
 using rustinfer_cuda_internal::driver_error;
 using rustinfer_cuda_internal::internal_error;
 using rustinfer_cuda_internal::release_child;
@@ -811,7 +814,8 @@ class ExclusiveGemmUses final {
         buffer_count_(0),
         acquired_buffers_(0),
         plan_acquired_(false),
-        stream_acquired_(false) {}
+        stream_acquired_(false),
+        command_batch_(false) {}
 
   ExclusiveGemmUses(const ExclusiveGemmUses&) = delete;
   ExclusiveGemmUses& operator=(const ExclusiveGemmUses&) = delete;
@@ -830,6 +834,32 @@ class ExclusiveGemmUses final {
   }
 
   RustInferCudaStatus acquire(RustInferCudaErrorInfo* error) noexcept {
+    if (command_batch_is_active(stream_)) {
+      if (!command_batch_is_owned_by_current_thread(stream_)) {
+        return validation_error(
+            error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+            "execute cuBLASLt GEMM",
+            "an active stream command batch is owned by another thread");
+      }
+      command_batch_ = true;
+      RustInferCudaStatus status = command_batch_register_use(
+          stream_, &plan_->active_uses, error, "execute cuBLASLt GEMM",
+          "the GEMM plan already has an active use");
+      if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+        return status;
+      }
+      for (size_t index = 0; index < buffer_count_; ++index) {
+        status = command_batch_register_use(
+            stream_, &buffers_[index]->active_uses, error,
+            "execute cuBLASLt GEMM",
+            "a GEMM device buffer already has an active use");
+        if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+          return status;
+        }
+      }
+      return RUSTINFER_CUDA_STATUS_SUCCESS;
+    }
     if (!try_acquire_exclusive_use(plan_->active_uses)) {
       return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                               RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
@@ -870,8 +900,13 @@ class ExclusiveGemmUses final {
 
   bool release_completed() noexcept { return release_acquired(); }
 
+  bool command_batch() const noexcept { return command_batch_; }
+
  private:
   bool release_acquired() noexcept {
+    if (command_batch_) {
+      return true;
+    }
     bool valid = true;
     if (stream_acquired_) {
       valid = release_exclusive_use(stream_->active_uses) && valid;
@@ -897,12 +932,18 @@ class ExclusiveGemmUses final {
   size_t acquired_buffers_;
   bool plan_acquired_;
   bool stream_acquired_;
+  bool command_batch_;
 };
 
 RustInferCudaStatus complete_execution(
     ExclusiveGemmUses* uses, CurrentContext* scope,
     RustInferCudaStream* stream, RustInferCudaStatus operation_status,
     bool matmul_attempted, RustInferCudaErrorInfo* error) noexcept {
+  if (uses->command_batch()) {
+    return scope->leave(operation_status, error,
+                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                        "execute cuBLASLt GEMM");
+  }
   bool completion_confirmed = !matmul_attempted;
   RustInferCudaStatus status = operation_status;
   if (matmul_attempted) {

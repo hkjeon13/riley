@@ -41,15 +41,34 @@ struct RustInferCudaContext {
 };
 
 struct RustInferCudaStream {
+  // SmolLM2 owns roughly 332 physical weight buffers before activation,
+  // cache, metadata, and GEMM-plan handles are counted. Keep a conservative
+  // cold 8 KiB pointer ledger per stream; overflow remains fail-closed.
+  static constexpr size_t kCommandBatchUseCapacity = 1024;
+
   RustInferCudaStream(RustInferCudaContext* owning_context,
                       cudaStream_t native_stream) noexcept
-      : owner(owning_context), stream(native_stream), active_uses(0) {}
+      : owner(owning_context),
+        stream(native_stream),
+        active_uses(0),
+        command_batch_owner(nullptr),
+        command_batch_use_count(0),
+        command_batch_uses{} {}
 
   RustInferCudaContext* owner;
   cudaStream_t stream;
   // One exclusive asynchronous-use lease covers copies and synchronously
   // completing primitives. A stuck value is an intentional fail-closed leak.
   std::atomic<uint32_t> active_uses;
+  // A command batch owns the stream from begin through successful end. Only
+  // the owner thread may touch this cold-preallocated ledger. Each entry is
+  // the active-use counter of one unique buffer or GEMM plan retained by work
+  // enqueued on this stream. A non-null owner after failure is intentional:
+  // ambiguous CUDA completion must keep every opaque resource alive.
+  std::atomic<const void*> command_batch_owner;
+  size_t command_batch_use_count;
+  std::atomic<uint32_t>*
+      command_batch_uses[kCommandBatchUseCapacity];
 };
 
 struct RustInferCudaEvent {
@@ -544,6 +563,68 @@ inline bool release_exclusive_use(std::atomic<uint32_t>& active) noexcept {
   return active.compare_exchange_strong(expected, 0,
                                         std::memory_order_release,
                                         std::memory_order_relaxed);
+}
+
+// The address of this thread-local byte is a process-unique, allocation-free
+// ownership token. Unlike std::thread::id it can be published atomically and
+// compared by native entry points without racing a non-atomic object.
+inline const void* command_batch_thread_token() noexcept {
+  static thread_local const uint8_t token = 0;
+  return &token;
+}
+
+inline bool command_batch_is_active(
+    const RustInferCudaStream* stream) noexcept {
+  return stream != nullptr &&
+         stream->command_batch_owner.load(std::memory_order_acquire) !=
+             nullptr;
+}
+
+inline bool command_batch_is_owned_by_current_thread(
+    const RustInferCudaStream* stream) noexcept {
+  return stream != nullptr &&
+         stream->command_batch_owner.load(std::memory_order_acquire) ==
+             command_batch_thread_token();
+}
+
+// Registers a resource lease in the active command batch. Repeated use of the
+// same counter is reentrant only for the owning stream/thread and consumes no
+// additional ledger entry. Capacity is checked before acquisition, so the hot
+// path never allocates and a full ledger cannot strand an unrecorded lease.
+inline RustInferCudaStatus command_batch_register_use(
+    RustInferCudaStream* stream, std::atomic<uint32_t>* active,
+    RustInferCudaErrorInfo* error, const char* operation,
+    const char* busy_detail) noexcept {
+  if (stream == nullptr || active == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "command-batch stream or resource is null");
+  }
+  if (!command_batch_is_owned_by_current_thread(stream)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "an active stream command batch is owned by another thread");
+  }
+  for (size_t index = 0; index < stream->command_batch_use_count; ++index) {
+    if (stream->command_batch_uses[index] == active) {
+      return RUSTINFER_CUDA_STATUS_SUCCESS;
+    }
+  }
+  if (stream->command_batch_use_count ==
+      RustInferCudaStream::kCommandBatchUseCapacity) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "stream command-batch resource ledger capacity was exceeded");
+  }
+  if (!try_acquire_exclusive_use(*active)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            busy_detail);
+  }
+  stream->command_batch_uses[stream->command_batch_use_count++] = active;
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
 inline bool retain_child(RustInferCudaContext* context) noexcept {
