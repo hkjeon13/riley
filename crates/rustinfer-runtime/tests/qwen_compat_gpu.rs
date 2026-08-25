@@ -107,6 +107,15 @@ fn qwen_load_limits() -> TestResult<LoadLimits> {
     Ok(LoadLimits::default().with_weight_byte_limits(ONE_GIB, ONE_GIB)?)
 }
 
+fn exact_qwen_decode_config() -> PreparedLlamaDecodeConfig {
+    // The optimized online decoder is a tolerance-tested performance path,
+    // not a bit-exact oracle for the staged-BF16 eager attention golden. Keep
+    // the exact-token compatibility gate on the explicit reference policy.
+    PreparedLlamaDecodeConfig::default()
+        .with_paged_kv_cache()
+        .with_reference_decode_attention()
+}
+
 fn load_qwen() -> TestResult<LoadedModel> {
     Ok(LoadedModel::load(
         &qwen_checkpoint_path(),
@@ -604,9 +613,7 @@ fn run_golden_case(
         stream,
         case.prompt_token_ids.len(),
         decode_capacity,
-        PreparedLlamaDecodeConfig::default()
-            .with_paged_kv_cache()
-            .with_optimized_decode_attention(),
+        exact_qwen_decode_config(),
     )?;
     decode.prefill(&case.prompt_token_ids, stream)?;
     assert_eq!(decode.phase(), LlamaDecodePhase::Prefilled);
@@ -638,9 +645,7 @@ fn run_golden_case(
         stream,
         case.prompt_token_ids.len(),
         case.max_new_tokens,
-        PreparedLlamaDecodeConfig::default()
-            .with_paged_kv_cache()
-            .with_optimized_decode_attention(),
+        exact_qwen_decode_config(),
     )?;
     assert_eq!(owner.vocabulary_size(), EXPECTED_VOCABULARY_SIZE);
     assert_eq!(
