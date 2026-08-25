@@ -1,5 +1,6 @@
 //! Model, tensor, and backend orchestration boundary.
 
+pub mod generation;
 mod kernel;
 pub mod llama;
 pub mod paged_kv;
