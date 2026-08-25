@@ -90,7 +90,12 @@ fn command_batch_proxy_is_one_shot_and_drop_restores_stream_use() -> Result<(), 
     stream.synchronize()?;
 
     stream.close()?;
-    close_context(context)
+    close_context(context)?;
+    println!(
+        "pr16-command-batch-lifecycle schema_version=1 one_shot_finish=true \
+drop_restores_stream=true status=passed"
+    );
+    Ok(())
 }
 
 #[test]

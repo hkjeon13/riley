@@ -502,7 +502,9 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
     }
     println!(
         "pr15-execution-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
-committed_iterations={} raw_logit_mismatches=0 generated_token_ids={:?} status=passed",
+committed_iterations={} raw_logit_mismatches=0 token_id_mismatches=0 \
+hot_loop_allocation_delta=0 owner_close_allocation_count=0 \
+generated_token_ids={:?} status=passed",
         iteration_batch.logits_by_iteration.len() - 1,
         iteration_batch.generated_token_ids,
     );

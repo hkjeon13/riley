@@ -591,7 +591,14 @@ fn command_batch_releases_multi_primitive_resource_ledger_after_validation_error
     output.close()?;
     staging.close()?;
     stream.close()?;
-    close_context(context)
+    close_context(context)?;
+    println!(
+        "pr16-command-batch-resource-ledger schema_version=1 \
+validation_fail_closed=true queued_chain_raw_byte_mismatches=0 \
+hot_loop_allocation_delta=0 stream_reuse_after_finish=true \
+owner_close_allocation_count=0 status=passed"
+    );
+    Ok(())
 }
 
 #[test]
