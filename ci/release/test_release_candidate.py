@@ -8,7 +8,9 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 import shutil
+import signal
 import sys
 import tarfile
 import tempfile
@@ -18,6 +20,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import check_release_candidate as release_candidate_module  # noqa: E402
 from build_release_bundle import build_bundle  # noqa: E402
 from check_release_candidate import (  # noqa: E402
     ATTESTATION_VERSION,
@@ -31,10 +34,14 @@ from check_release_candidate import (  # noqa: E402
     SOAK_GOLDEN_SCENARIOS,
     SOAK_SCENARIOS,
     SOAK_TEMPLATE_CANONICAL_SHA256,
+    _validate_python_free_e2e_replay,
     cuda_fault_evidence,
     evaluate,
+    optimization_evidence,
+    python_free_e2e,
     reliability_soak,
     release_performance,
+    reproducible_build_evidence,
 )
 from test_native_correctness_evidence import NativeFixture as NativeEvidenceFixture  # noqa: E402
 from test_cuda_fault_evidence import (  # noqa: E402
@@ -102,12 +109,16 @@ class CandidateFixture:
             "binary": root / "rustinfer",
             "bundle": root / "rustinfer.tar.gz",
             "python_raw": root / "python-free-evidence.tar",
+            "correctness_golden": root / "correctness-golden.json",
             "cuda_raw": root / "cuda-fault-evidence.tar",
             "python_report": root / "python-free-report.json",
             "cuda_report": root / "cuda-fault-report.json",
             "native_correctness": root / "native-correctness-report.json",
             "native_replay": root / "native-correctness-replay.tar",
             "native_executable": root / "rustinfer-native",
+            "repro_build_a": root / "reproducible-build-a.tar",
+            "repro_build_b": root / "reproducible-build-b.tar",
+            "native_manifest": root / "native-dependencies.txt",
             "optimization_correctness": root / "optimization-correctness-report.json",
             "optimization_raw": root / "optimization-correctness-evidence.tar",
             "performance": root / "performance-report.json",
@@ -116,6 +127,7 @@ class CandidateFixture:
             "soak_raw": root / "soak-evidence.tar",
         }
         shutil.copyfile(_NATIVE_TEMPLATE.candidate_source, self.paths["source"])
+        self.trusted_source_sha256 = digest(self.paths["source"].read_bytes())
         shutil.copyfile(
             _NATIVE_TEMPLATE.correctness_report, self.paths["native_correctness"]
         )
@@ -131,6 +143,17 @@ class CandidateFixture:
             source_revision=self.revision,
             source_date_epoch=EPOCH,
         )
+        with tarfile.open(self.paths["bundle"], "r:gz") as archive:
+            native_member = next(
+                member
+                for member in archive.getmembers()
+                if member.name.endswith("/manifest/native-dependencies.txt")
+            )
+            native_source = archive.extractfile(native_member)
+            assert native_source is not None
+            self.paths["native_manifest"].write_bytes(native_source.read())
+        self.paths["repro_build_a"].write_bytes(b"reproducible build A fixture\n")
+        self.paths["repro_build_b"].write_bytes(b"reproducible build B fixture\n")
         self.image_sha = digest(b"release image")
         self.cuda_build_image_id = CUDA_BUILD_IMAGE_ID
         cuda_template_root = root / "cuda-evidence-template"
@@ -178,6 +201,25 @@ class CandidateFixture:
         self.documents: dict[str, dict[str, object]] = {}
         self._build_documents()
         self.write_reports()
+        self.trusted_python_report = copy.deepcopy(self.documents["python_report"])
+        self.trusted_python_raw_model = copy.deepcopy(self.python_raw_model)
+        self.trusted_optimization_report = copy.deepcopy(
+            self.documents["optimization_correctness"]
+        )
+        self.trusted_optimization_report_sha = digest(
+            self.paths["optimization_correctness"].read_bytes()
+        )
+        self.trusted_optimization_raw_sha = digest(
+            self.paths["optimization_raw"].read_bytes()
+        )
+        self.trusted_reproducible_hashes = {
+            "a": digest(self.paths["repro_build_a"].read_bytes()),
+            "b": digest(self.paths["repro_build_b"].read_bytes()),
+            "binary": digest(self.paths["binary"].read_bytes()),
+            "profile_binary": digest(self.paths["native_executable"].read_bytes()),
+            "bundle": digest(self.paths["bundle"].read_bytes()),
+            "native_manifest": digest(self.paths["native_manifest"].read_bytes()),
+        }
         self.manifest_path = root / "release-candidate.json"
         self.refresh_manifest()
 
@@ -230,43 +272,19 @@ class CandidateFixture:
         template_root = self.root / "python-e2e-template"
         template_root.mkdir()
         template = e2e_fixture_module.E2EFixture(template_root)
-        raw = copy.deepcopy(template.raw)
-        binding = self._binding()
-        raw["source"] = {
-            "git_revision": self.revision,
-            "git_dirty": False,
-            "source_archive_sha256": binding["source_archive_sha256"],
-        }
-        raw["release"] = {
-            "binary_sha256": binding["release_binary_sha256"],
-            "bundle_sha256": binding["release_bundle_sha256"],
-            "image_sha256": self.image_sha,
-        }
-        raw["runtime"]["image_id"] = f"sha256:{self.image_sha}"
-        raw["runtime"]["image_binary_sha256"] = binding[
-            "release_binary_sha256"
-        ]
-
-        model_files = {
-            "config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
-            "model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
-            **e2e_fixture_module.checker.TOKENIZER_FILES_SHA256,
-        }
-        model_manifest = b"".join(
-            f"{sha256}  {name}\n".encode("ascii")
-            for name, sha256 in sorted(model_files.items())
-        )
+        shutil.copyfile(template.raw_archive, self.paths["python_raw"])
+        checker = e2e_fixture_module.checker
         golden = {
-            "schema_version": e2e_fixture_module.checker.GOLDEN_SCHEMA,
-            "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "schema_version": checker.GOLDEN_SCHEMA,
+            "correctness_gate_id": checker.CORRECTNESS_GATE,
             "correctness_report_sha256": native_correctness_sha256,
             "source_revision": self.revision,
-            "model_id": "HuggingFaceTB/SmolLM2-135M",
-            "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
-            "config_sha256": model_files["config.json"],
-            "weights_sha256": model_files["model.safetensors"],
-            "tokenizer_aggregate_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
-            "tokenizer_json_sha256": model_files["tokenizer.json"],
+            "model_id": checker.MODEL_ID,
+            "model_revision": checker.MODEL_REVISION,
+            "config_sha256": checker.MODEL_CONFIG_SHA256,
+            "weights_sha256": checker.MODEL_WEIGHTS_SHA256,
+            "tokenizer_aggregate_sha256": checker.TOKENIZER_AGGREGATE_SHA256,
+            "tokenizer_json_sha256": checker.TOKENIZER_JSON_SHA256,
             "prompt": "A bounded release probe",
             "max_tokens": 8,
             "expected_greedy_text_sha256": template.expected_text_sha256,
@@ -274,10 +292,12 @@ class CandidateFixture:
         golden_bytes = (
             json.dumps(golden, sort_keys=True, indent=2) + "\n"
         ).encode()
-        raw["model"] = {
+        self.paths["correctness_golden"].write_bytes(golden_bytes)
+        self.correctness_golden_sha256 = digest(golden_bytes)
+        self.python_raw_model = {
             "model_id": golden["model_id"],
             "model_revision": golden["model_revision"],
-            "model_tree_sha256": digest(model_manifest),
+            "model_tree_sha256": digest(b"model manifest"),
             "config_sha256": golden["config_sha256"],
             "weights_sha256": golden["weights_sha256"],
             "tokenizer_aggregate_sha256": golden["tokenizer_aggregate_sha256"],
@@ -286,45 +306,24 @@ class CandidateFixture:
             "correctness_report_sha256": native_correctness_sha256,
             "correctness_golden_sha256": digest(golden_bytes),
         }
-        self.e2e_model_tree_sha256 = raw["model"]["model_tree_sha256"]
-        raw["observations"]["models"]["model_ids"] = [golden["model_id"]]
-        raw_bytes = (json.dumps(raw, sort_keys=True, indent=2) + "\n").encode()
-        payloads = {
-            "correctness-golden.json": golden_bytes,
-            "model-SHA256SUMS": model_manifest,
-            "raw-evidence.json": raw_bytes,
-            "repeat-shutdown-metrics.json": template.repeat_shutdown_metrics.read_bytes(),
-            "shutdown-metrics.json": template.shutdown_metrics.read_bytes(),
-        }
-        payloads["SHA256SUMS"] = b"".join(
-            f"{digest(payloads[name])}  {name}\n".encode("ascii")
-            for name in e2e_fixture_module.checker.RAW_ARCHIVE_PAYLOADS
+        self.e2e_model_tree_sha256 = str(
+            self.python_raw_model["model_tree_sha256"]
         )
-        e2e_fixture_module.write_raw_tar(self.paths["python_raw"], payloads)
-        archive = e2e_fixture_module.checker.load_raw_evidence_archive(
-            self.paths["python_raw"]
+        # The final-candidate tests exercise cross-gate binding and mock only the
+        # already unit-tested raw replay boundary. The copied archive remains a
+        # complete v2 fixture, so artifact resolution still handles the real
+        # archive shape instead of the retired synthetic five-file format.
+        return self._attestation(
+            "python-free-clean-runtime-e2e", "python_raw", PYTHON_FREE_CHECKS
         )
-        report, diagnostic = e2e_fixture_module.checker.validate_bound_raw_archive(
-            archive,
-            source_revision=self.revision,
-            source_archive_sha256=binding["source_archive_sha256"],
-            release_binary_sha256=binding["release_binary_sha256"],
-            release_bundle_sha256=binding["release_bundle_sha256"],
-            image_id=f"sha256:{self.image_sha}",
-            correctness_report=self.documents["native_correctness"],
-            correctness_report_sha256=native_correctness_sha256,
-        )
-        if diagnostic is not None:
-            raise AssertionError(diagnostic)
-        return report
 
     def _build_performance_document(self, optimization_sha: str) -> dict[str, object]:
         baseline = json.loads(PERFORMANCE_BASELINE.read_text(encoding="utf-8"))
         raw_root = self.root / "performance-runs"
         raw_root.mkdir()
         fixture = profile_fixture_module.ProfilePairFixture(raw_root)
-        profile_binary_sha = digest(b"profile binary")
-        profile_image_sha = digest(b"profile image")
+        profile_binary_sha = digest(self.paths["native_executable"].read_bytes())
+        profile_image_sha = self.cuda_build_image_id.removeprefix("sha256:")
         for run_index, run in enumerate(fixture.candidate):
             run["source"] = {
                 "git_commit": self.revision,
@@ -520,7 +519,9 @@ class CandidateFixture:
                 "archive_sha256": self._binding()["source_archive_sha256"],
             },
             "build": {
-                "container_image_sha256": digest(b"profile image"),
+                "container_image_sha256": self.cuda_build_image_id.removeprefix(
+                    "sha256:"
+                ),
                 "network": "none",
                 "cargo_locked": True,
                 "cargo_offline": True,
@@ -693,7 +694,11 @@ class CandidateFixture:
                 "image_digest": f"sha256:{self.image_sha}",
             },
             "evidence": {
-                "python_free_e2e": {"report": artifact("python_report"), "raw_evidence": artifact("python_raw")},
+                "python_free_e2e": {
+                    "report": artifact("python_report"),
+                    "raw_evidence": artifact("python_raw"),
+                    "correctness_golden": artifact("correctness_golden"),
+                },
                 "cuda_fault": {
                     "build_image_id": self.cuda_build_image_id,
                     "report": artifact("cuda_report"),
@@ -704,7 +709,15 @@ class CandidateFixture:
                     "raw_replay": artifact("native_replay"),
                     "candidate_executable": artifact("native_executable"),
                 },
+                "reproducible_build": {
+                    "build_image_id": self.cuda_build_image_id,
+                    "source_date_epoch": EPOCH,
+                    "build_a": artifact("repro_build_a"),
+                    "build_b": artifact("repro_build_b"),
+                    "native_manifest": artifact("native_manifest"),
+                },
                 "optimization_correctness": {
+                    "build_image_id": self.cuda_build_image_id,
                     "report": artifact("optimization_correctness"),
                     "raw_evidence": artifact("optimization_raw"),
                 },
@@ -725,14 +738,149 @@ class CandidateFixture:
             json.dumps(self.manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
 
-    def evaluate(self) -> dict[str, object]:
-        replay = {"report": copy.deepcopy(self.documents["soak"])}
+    def reproducibility_replay(self) -> dict[str, object]:
+        commands = reproducible_build_evidence.expected_commands(self.revision, EPOCH)
+        return {
+            "schema_version": reproducible_build_evidence.SCHEMA_VERSION,
+            "gate_id": reproducible_build_evidence.GATE_ID,
+            "status": "passed",
+            "source": {
+                "revision": self.revision,
+                "archive_sha256": self.trusted_source_sha256,
+                "source_date_epoch": EPOCH,
+            },
+            "build": {
+                "image_id": self.cuda_build_image_id,
+                "image_inspect_sha256": digest(b"builder image inspect"),
+                "platform": reproducible_build_evidence.PLATFORM,
+                "network": "none",
+                "cargo_command": commands["build"],
+                "profile_cargo_command": commands["profile_build"],
+                "rust_toolchain": reproducible_build_evidence.RUST_TOOLCHAIN,
+                "cuda_toolkit": reproducible_build_evidence.CUDA_TOOLKIT,
+                "nvcc_version": reproducible_build_evidence.NVCC_VERSION,
+                "cuda_architectures": reproducible_build_evidence.CUDA_ARCHITECTURES,
+                "independent_clean_containers": 2,
+            },
+            "evidence": {
+                "a_sha256": self.trusted_reproducible_hashes["a"],
+                "b_sha256": self.trusted_reproducible_hashes["b"],
+                "a_container_id": "a" * 64,
+                "b_container_id": "b" * 64,
+                "a_workspace_volume": "fixture-a",
+                "b_workspace_volume": "fixture-b",
+                "a_workspace_source": "/fixture/a",
+                "b_workspace_source": "/fixture/b",
+                "a_started_at": "2026-08-26T00:00:00.000000000Z",
+                "a_finished_at": "2026-08-26T00:01:00.000000000Z",
+                "b_started_at": "2026-08-26T00:02:00.000000000Z",
+                "b_finished_at": "2026-08-26T00:03:00.000000000Z",
+            },
+            "artifacts": {
+                "binary_sha256": self.trusted_reproducible_hashes["binary"],
+                "profile_binary_sha256": self.trusted_reproducible_hashes[
+                    "profile_binary"
+                ],
+                "bundle_sha256": self.trusted_reproducible_hashes["bundle"],
+                "native_manifest_sha256": self.trusted_reproducible_hashes[
+                    "native_manifest"
+                ],
+            },
+            "comparisons": {
+                "binary_a_b_final_byte_exact": True,
+                "profile_binary_a_b_final_byte_exact": True,
+                "bundle_a_b_final_byte_exact": True,
+                "native_manifest_a_b_final_byte_exact": True,
+                "source_archive_a_b_final_byte_exact": True,
+            },
+        }
+
+    def optimization_replay(self) -> dict[str, object]:
+        return {
+            "report": copy.deepcopy(self.trusted_optimization_report),
+            "report_sha256": self.trusted_optimization_report_sha,
+            "raw_evidence_sha256": self.trusted_optimization_raw_sha,
+            "profile_binary_sha256": self.trusted_reproducible_hashes[
+                "profile_binary"
+            ],
+            "build_image_sha256": self.cuda_build_image_id.removeprefix("sha256:"),
+            "log_sha256": {},
+            "test_binary_sha256": {},
+        }
+
+    def evaluate(
+        self,
+        *,
+        soak_replay: dict[str, object] | None = None,
+        reproducibility_replay: dict[str, object] | None = None,
+        optimization_replay: dict[str, object] | None = None,
+        **anchor_overrides: str,
+    ) -> dict[str, object]:
+        if soak_replay is None:
+            soak_replay = {"report": copy.deepcopy(self.documents["soak"])}
+        if reproducibility_replay is None:
+            reproducibility_replay = self.reproducibility_replay()
+        if optimization_replay is None:
+            optimization_replay = self.optimization_replay()
+        anchors = {
+            "expected_revision": self.revision,
+            "expected_source_archive_sha256": self.trusted_source_sha256,
+            "expected_release_image_id": f"sha256:{self.image_sha}",
+            "expected_build_image_id": self.cuda_build_image_id,
+            "expected_correctness_golden_sha256": (
+                self.correctness_golden_sha256
+            ),
+        }
+        anchors.update(anchor_overrides)
+        python_archive = {
+            "raw": {"model": copy.deepcopy(self.trusted_python_raw_model)}
+        }
+
+        def replay_python_free(
+            archive: object, **arguments: object
+        ) -> tuple[dict[str, object], None]:
+            if archive is not python_archive:
+                raise AssertionError("candidate did not replay the loaded E2E archive")
+            expected = {
+                "source_revision": self.revision,
+                "source_archive_sha256": digest(self.paths["source"].read_bytes()),
+                "release_binary_sha256": digest(self.paths["binary"].read_bytes()),
+                "release_bundle_sha256": digest(self.paths["bundle"].read_bytes()),
+                "image_id": f"sha256:{self.image_sha}",
+                "correctness_report": self.documents["native_correctness"],
+                "correctness_report_sha256": digest(
+                    self.paths["native_correctness"].read_bytes()
+                ),
+                "correctness_golden_sha256": self.correctness_golden_sha256,
+            }
+            if arguments != expected:
+                raise AssertionError(
+                    f"candidate E2E replay arguments differ: {arguments!r}"
+                )
+            return copy.deepcopy(self.trusted_python_report), None
+
         with mock.patch.object(
             reliability_soak,
             "replay_raw_evidence_archive",
-            return_value=replay,
+            return_value=soak_replay,
+        ), mock.patch.object(
+            reproducible_build_evidence,
+            "check_reproducible_build",
+            return_value=reproducibility_replay,
+        ), mock.patch.object(
+            optimization_evidence,
+            "replay_raw_evidence",
+            return_value=optimization_replay,
+        ), mock.patch.object(
+            python_free_e2e,
+            "load_raw_evidence_archive",
+            return_value=python_archive,
+        ), mock.patch.object(
+            python_free_e2e,
+            "validate_bound_raw_archive",
+            side_effect=replay_python_free,
         ):
-            return evaluate(self.manifest_path, self.root)
+            return evaluate(self.manifest_path, self.root, **anchors)
 
 
 class ReleaseCandidateTests(unittest.TestCase):
@@ -748,7 +896,58 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["bindings"]["git_revision"], self.fixture.revision)
-        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 12)
+        self.assertEqual(
+            set(report["bindings"]["evidence_sha256"]),
+            {
+                "cuda_fault",
+                "cuda_fault_raw",
+                "native_correctness_report",
+                "native_correctness_raw",
+                "optimization_correctness",
+                "optimization_correctness_raw",
+                "performance",
+                "performance_raw",
+                "python_free_e2e",
+                "python_free_e2e_correctness_golden_raw",
+                "python_free_e2e_raw",
+                "reliability_soak",
+                "reliability_soak_raw",
+                "reproducible_build_a_raw",
+                "reproducible_build_b_raw",
+                "reproducible_build_native_manifest_raw",
+            },
+        )
+
+    def test_python_free_v2_archive_replays_through_candidate_boundary(self) -> None:
+        root = self.fixture.root / "candidate-e2e-integration"
+        root.mkdir()
+        e2e = e2e_fixture_module.E2EFixture(root)
+        report, diagnostic = e2e.replay()
+        self.assertIsNone(diagnostic)
+        model = _validate_python_free_e2e_replay(
+            report,
+            e2e.raw_archive,
+            revision=e2e.revision,
+            archive_sha256=e2e.hashes["archive"],
+            binary_sha256=e2e.hashes["binary"],
+            bundle_sha256=e2e.hashes["bundle"],
+            image_sha256=e2e.image_id.removeprefix("sha256:"),
+            native_correctness=json.loads(
+                e2e.correctness_report.read_text(encoding="utf-8")
+            ),
+            native_correctness_sha256=e2e.hashes["correctness"],
+            optimization_correctness={
+                "model": {
+                    "model_id": e2e.model_id,
+                    "revision": e2e.model_revision,
+                    "manifest_sha256": e2e.hashes["model"],
+                    "weights_sha256": e2e.hashes["weights"],
+                    "tokenizer_sha256": e2e.hashes["tokenizer_json"],
+                }
+            },
+            correctness_golden_sha256=e2e.hashes["golden"],
+        )
+        self.assertEqual(model["model_tree_sha256"], e2e.hashes["model"])
 
     def test_failed_or_missing_gate_fails_closed(self) -> None:
         del self.fixture.documents["performance"]["status"]
@@ -780,7 +979,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertIn("correctness_gate_id", report["errors"][0])
 
-    def test_optimizer_log_hashes_must_match_exact_raw_inventory(self) -> None:
+    def test_optimizer_raw_evidence_must_equal_v2_replay(self) -> None:
         logs = {
             OPTIMIZATION_LOGS[test_id]: contents
             for test_id, contents in self.fixture.optimization_logs.items()
@@ -790,7 +989,46 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("declared log hashes", report["errors"][0])
+        self.assertIn("raw_evidence_sha256", report["errors"][0])
+
+    def test_trusted_external_anchors_are_required(self) -> None:
+        cases = {
+            "expected_revision": "f" * 40,
+            "expected_source_archive_sha256": "e" * 64,
+            "expected_release_image_id": "sha256:" + "d" * 64,
+            "expected_build_image_id": "sha256:" + "c" * 64,
+            "expected_correctness_golden_sha256": "b" * 64,
+        }
+        for field, value in cases.items():
+            with self.subTest(field=field):
+                report = self.fixture.evaluate(**{field: value})
+                self.assertFalse(report["passed"])
+                self.assertIn("trusted expected", report["errors"][0])
+
+    def test_optimizer_profile_binary_must_match_native_and_reproducible(self) -> None:
+        replay = self.fixture.optimization_replay()
+        replay["profile_binary_sha256"] = digest(b"substituted profile")
+        report = self.fixture.evaluate(optimization_replay=replay)
+        self.assertFalse(report["passed"])
+        self.assertIn("profile_binary_sha256", report["errors"][0])
+
+    def test_reproducibility_profile_binary_must_match_native(self) -> None:
+        replay = self.fixture.reproducibility_replay()
+        replay["artifacts"]["profile_binary_sha256"] = digest(  # type: ignore[index]
+            b"substituted profile"
+        )
+        report = self.fixture.evaluate(reproducibility_replay=replay)
+        self.assertFalse(report["passed"])
+        self.assertIn("final artifact binding mismatch", report["errors"][0])
+
+    def test_performance_profile_binary_must_match_native(self) -> None:
+        self.fixture.documents["performance"]["candidate"]["source"][
+            "profile_binary_sha256"
+        ] = digest(b"substituted profile")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("profile_binary_sha256", report["errors"][0])
 
     def test_performance_metrics_are_recomputed_from_raw_runs(self) -> None:
         self.fixture.documents["performance"]["candidate"]["metrics"][
@@ -831,7 +1069,11 @@ class ReleaseCandidateTests(unittest.TestCase):
             pax_headers={"comment": "f" * 40},
         )
         self.fixture.refresh_manifest()
-        report = self.fixture.evaluate()
+        report = self.fixture.evaluate(
+            expected_source_archive_sha256=digest(
+                self.fixture.paths["source"].read_bytes()
+            )
+        )
         self.assertFalse(report["passed"])
         self.assertIn("git-archive pax global comment", report["errors"][0])
 
@@ -847,6 +1089,81 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("path traversal", report["errors"][0])
+
+    def test_artifact_path_must_be_exactly_normalized(self) -> None:
+        for relative in (
+            ".",
+            "./rustinfer",
+            "nested/../rustinfer",
+            "rustinfer/",
+            "bad\x00name",
+        ):
+            with self.subTest(relative=relative):
+                self.fixture.manifest["release"]["binary"]["path"] = relative
+                self.fixture.write_manifest()
+                report = self.fixture.evaluate()
+                self.assertFalse(report["passed"])
+                self.assertIn("manifest.release.binary.path", report["errors"][0])
+
+    def test_fifo_artifact_is_rejected_without_blocking(self) -> None:
+        fifo = self.fixture.root / "release-fifo"
+        os.mkfifo(fifo)
+        self.fixture.manifest["release"]["binary"] = {
+            "path": fifo.name,
+            "sha256": digest(b"fifo cannot be hashed"),
+        }
+        self.fixture.write_manifest()
+        previous = signal.signal(
+            signal.SIGALRM,
+            lambda _signum, _frame: (_ for _ in ()).throw(
+                AssertionError("FIFO artifact open blocked")
+            ),
+        )
+        signal.setitimer(signal.ITIMER_REAL, 2.0)
+        try:
+            report = self.fixture.evaluate()
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0.0)
+            signal.signal(signal.SIGALRM, previous)
+        self.assertFalse(report["passed"])
+        self.assertIn("regular file", report["errors"][0])
+
+    def test_evidence_root_inode_swap_is_rejected(self) -> None:
+        substitute = self.fixture.root / "substitute-root"
+        substitute.mkdir()
+        resolved_root = self.fixture.root.resolve()
+        original_open = os.open
+        swapped = False
+
+        def open_with_swapped_root(
+            path: object,
+            flags: int,
+            mode: int = 0o777,
+            *,
+            dir_fd: int | None = None,
+        ) -> int:
+            nonlocal swapped
+            if (
+                not swapped
+                and dir_fd is None
+                and Path(path) == resolved_root
+            ):
+                swapped = True
+                return original_open(substitute, flags, mode)
+            return original_open(path, flags, mode, dir_fd=dir_fd)
+
+        with mock.patch.object(
+            release_candidate_module.os,
+            "open",
+            side_effect=open_with_swapped_root,
+        ) as patched_open, mock.patch.object(
+            release_candidate_module.os,
+            "supports_dir_fd",
+            {patched_open},
+        ):
+            report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("directory changed while it was opened", report["errors"][0])
 
     def test_symlink_artifact_is_rejected(self) -> None:
         link = self.fixture.root / "binary-link"
@@ -871,6 +1188,14 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("duplicate JSON key", report["errors"][0])
+
+    def test_manifest_must_be_utf8_not_utf16_json(self) -> None:
+        self.fixture.manifest_path.write_bytes(
+            json.dumps(self.fixture.manifest, sort_keys=True).encode("utf-16")
+        )
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("strict UTF-8 JSON", report["errors"][0])
 
     def test_placeholder_is_rejected(self) -> None:
         self.fixture.manifest["candidate_id"] = "replace-me"
@@ -926,7 +1251,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.fixture.write_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("gpu_image_id", report["errors"][0])
+        self.assertIn("trusted expected build image ID", report["errors"][0])
 
     def test_python_free_attestation_must_equal_raw_replay(self) -> None:
         self.fixture.documents["python_report"]["checks"].reverse()
@@ -936,28 +1261,32 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertIn("differs from raw replay", report["errors"][0])
 
     def test_python_free_raw_source_cannot_be_self_rebound(self) -> None:
-        payloads = e2e_fixture_module.read_raw_tar(
-            self.fixture.paths["python_raw"]
-        )
-        raw = json.loads(payloads["raw-evidence.json"])
-        raw["source"]["source_archive_sha256"] = digest(b"other source")
-        payloads["raw-evidence.json"] = (
-            json.dumps(raw, sort_keys=True, indent=2) + "\n"
-        ).encode()
-        payloads["SHA256SUMS"] = b"".join(
-            f"{digest(payloads[name])}  {name}\n".encode("ascii")
-            for name in e2e_fixture_module.checker.RAW_ARCHIVE_PAYLOADS
-        )
-        e2e_fixture_module.write_raw_tar(
-            self.fixture.paths["python_raw"], payloads
-        )
+        raw_path = self.fixture.paths["python_raw"]
+        raw_path.write_bytes(raw_path.read_bytes() + b"self-rebound")
         self.fixture.documents["python_report"]["raw_evidence_sha256"] = digest(
-            self.fixture.paths["python_raw"].read_bytes()
+            raw_path.read_bytes()
         )
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("raw.source", report["errors"][0])
+        self.assertIn("differs from raw replay", report["errors"][0])
+
+    def test_python_free_golden_is_an_external_trust_anchor(self) -> None:
+        self.fixture.paths["correctness_golden"].write_bytes(
+            b'{"fabricated":"golden"}\n'
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("trusted expected correctness golden", report["errors"][0])
+
+    def test_python_free_model_tree_must_match_optimizer_manifest(self) -> None:
+        self.fixture.trusted_python_raw_model["model_tree_sha256"] = digest(
+            b"substituted model tree"
+        )
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("model_tree_sha256", report["errors"][0])
 
     def test_soak_contract_and_duration_checks_cannot_be_self_asserted(self) -> None:
         self.fixture.documents["soak"]["bindings"][
@@ -986,12 +1315,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         replayed = copy.deepcopy(self.fixture.documents["soak"])
         self.fixture.documents["soak"]["scenario_summaries"][0]["events"] += 1
         self.fixture.refresh_manifest()
-        with mock.patch.object(
-            reliability_soak,
-            "replay_raw_evidence_archive",
-            return_value={"report": replayed},
-        ):
-            report = evaluate(self.fixture.manifest_path, self.fixture.root)
+        report = self.fixture.evaluate(soak_replay={"report": replayed})
         self.assertFalse(report["passed"])
         self.assertIn("differs from the raw-replayed report", report["errors"][0])
 

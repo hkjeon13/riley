@@ -13,12 +13,16 @@ import re
 import stat
 import sys
 import tarfile
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn, Sequence
 
 import check_cuda_fault_evidence as cuda_fault_evidence
 import check_native_correctness_evidence as native_correctness_evidence
-from release_common import ReleaseContractError
+import check_optimization_evidence as optimization_evidence
+import check_reproducible_build as reproducible_build_evidence
+from release_common import ReleaseContractError, canonical_json_bytes
 from verify_release_bundle import verify_bundle
 
 
@@ -121,13 +125,7 @@ CUDA_FAULT_CHECKS = {
     "subprocess_isolation",
     "production_fault_symbols_absent",
 }
-OPTIMIZATION_LOGS = {
-    "cuda-compile-only": "cuda-compile-only.log",
-    "workspace-all-features-all-targets": "workspace-all-features-all-targets.log",
-    "command-batch-lifecycle": "command-batch-lifecycle-gpu.log",
-    "command-batch-resource-ledger": "command-batch-primitives-gpu.log",
-    "smollm2-multi-step-greedy-exact": "iteration-command-batch-model-parity-gpu.log",
-}
+OPTIMIZATION_LOGS = optimization_evidence.LOG_FILES
 EXPECTED_OPTIMIZATION_TOKENS = [
     4052, 2025, 284, 965, 6497, 288, 1492, 418,
     260, 16438, 30, 198, 198, 504, 16438, 314,
@@ -193,6 +191,12 @@ class CandidateError(ValueError):
     """Release evidence is malformed, failed, unsafe, or inconsistently bound."""
 
 
+@dataclass(frozen=True)
+class _ArtifactSnapshotContext:
+    directory: Path
+    evidence_root_fd: int
+
+
 def _fail(path: str, message: str) -> NoReturn:
     raise CandidateError(f"{path}: {message}")
 
@@ -228,8 +232,9 @@ def _load_json(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
         if metadata.st_size > MAX_JSON_BYTES:
             _fail(label, f"exceeds the {MAX_JSON_BYTES}-byte JSON bound")
         raw = path.read_bytes()
+        text = raw.decode("utf-8")
         value = json.loads(
-            raw,
+            text,
             object_pairs_hook=_pairs,
             parse_constant=_nonfinite,
         )
@@ -296,6 +301,24 @@ def _revision(value: Any, path: str) -> str:
     return revision
 
 
+def _image_id(value: Any, path: str) -> str:
+    image_id = _string(value, path)
+    if not image_id.startswith("sha256:"):
+        _fail(path, "must be sha256:<lowercase digest>")
+    _sha256(image_id.removeprefix("sha256:"), path)
+    return image_id
+
+
+def _source_date_epoch(value: Any, path: str) -> int:
+    if (
+        not isinstance(value, int)
+        or isinstance(value, bool)
+        or not 0 <= value <= 0xFFFFFFFF
+    ):
+        _fail(path, "must fit an unsigned 32-bit timestamp")
+    return value
+
+
 def _finite_number(value: Any, path: str, *, minimum: float | None = None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         _fail(path, "must be a finite number")
@@ -303,17 +326,6 @@ def _finite_number(value: Any, path: str, *, minimum: float | None = None) -> fl
     if not math.isfinite(result) or (minimum is not None and result < minimum):
         _fail(path, "is outside the finite reviewed range")
     return result
-
-
-def _file_sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    try:
-        with path.open("rb") as handle:
-            while block := handle.read(1024 * 1024):
-                digest.update(block)
-    except OSError as error:
-        _fail(str(path), f"cannot hash artifact: {error}")
-    return digest.hexdigest()
 
 
 def _safe_tar_members(archive: tarfile.TarFile, path: str) -> list[tarfile.TarInfo]:
@@ -368,42 +380,92 @@ def _resolve_artifact(
     path: str,
     evidence_root: Path,
     seen_paths: set[str],
+    snapshot_context: _ArtifactSnapshotContext,
 ) -> tuple[Path, str, str]:
     artifact = _exact(value, {"path", "sha256"}, path)
     relative = _string(artifact["path"], f"{path}.path")
-    if "\\" in relative or "//" in relative:
+    if "\x00" in relative or "\\" in relative or "//" in relative:
         _fail(f"{path}.path", "must use a normalized POSIX relative path")
     pure = PurePosixPath(relative)
-    if pure.is_absolute() or any(part in {"", ".", ".."} for part in pure.parts):
-        _fail(f"{path}.path", "path traversal and absolute paths are forbidden")
     normalized = pure.as_posix()
+    if (
+        not pure.parts
+        or relative != normalized
+        or pure.is_absolute()
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        _fail(f"{path}.path", "path traversal and absolute paths are forbidden")
     if normalized in seen_paths:
         _fail(f"{path}.path", "artifact path is duplicated")
     seen_paths.add(normalized)
     candidate = evidence_root.joinpath(*pure.parts)
-    current = evidence_root
-    for part in pure.parts:
-        current = current / part
-        try:
-            if stat.S_ISLNK(current.lstat().st_mode):
-                _fail(f"{path}.path", "symlink path components are forbidden")
-        except OSError as error:
-            _fail(f"{path}.path", f"cannot inspect artifact path component: {error}")
-    try:
-        metadata = candidate.lstat()
-    except OSError as error:
-        _fail(f"{path}.path", f"cannot inspect artifact: {error}")
-    if not stat.S_ISREG(metadata.st_mode):
-        _fail(f"{path}.path", "artifact must be a regular file, not a link or device")
-    try:
-        candidate.resolve(strict=True).relative_to(evidence_root)
-    except (OSError, ValueError):
-        _fail(f"{path}.path", "artifact resolves outside the evidence root")
     declared = _sha256(artifact["sha256"], f"{path}.sha256")
-    actual = _file_sha256(candidate)
+    directory_fd = snapshot_context.evidence_root_fd
+    file_fd = -1
+    try:
+        directory_flags = (
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+        )
+        for part in pure.parts[:-1]:
+            next_fd = os.open(
+                part,
+                directory_flags,
+                dir_fd=directory_fd,
+            )
+            if directory_fd != snapshot_context.evidence_root_fd:
+                os.close(directory_fd)
+            directory_fd = next_fd
+        file_fd = os.open(
+            pure.parts[-1],
+            os.O_RDONLY
+            | os.O_CLOEXEC
+            | os.O_NOFOLLOW
+            | os.O_NONBLOCK,
+            dir_fd=directory_fd,
+        )
+        before = os.fstat(file_fd)
+        if not stat.S_ISREG(before.st_mode):
+            _fail(
+                f"{path}.path",
+                "artifact must be a regular file, not a link or device",
+            )
+        snapshot = (
+            snapshot_context.directory / f"{len(seen_paths):03d}-{pure.name}"
+        )
+        digest = hashlib.sha256()
+        with os.fdopen(os.dup(file_fd), "rb") as source, snapshot.open("xb") as output:
+            while block := source.read(1024 * 1024):
+                digest.update(block)
+                output.write(block)
+        after = os.fstat(file_fd)
+        stable_fields = (
+            "st_dev",
+            "st_ino",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+        )
+        if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+            _fail(f"{path}.path", "artifact changed while it was snapshotted")
+        snapshot.chmod(stat.S_IMODE(before.st_mode) & 0o777)
+        actual = digest.hexdigest()
+    except CandidateError:
+        raise
+    except (OSError, ValueError) as error:
+        if candidate.is_symlink():
+            _fail(f"{path}.path", "symlink path components are forbidden")
+        _fail(f"{path}.path", f"cannot open and snapshot artifact: {error}")
+    finally:
+        if file_fd >= 0:
+            os.close(file_fd)
+        if (
+            directory_fd >= 0
+            and directory_fd != snapshot_context.evidence_root_fd
+        ):
+            os.close(directory_fd)
     if actual != declared:
         _fail(f"{path}.sha256", f"artifact digest mismatch: {actual}")
-    return candidate, declared, normalized
+    return snapshot, declared, normalized
 
 
 def _all_checks_pass(checks: Any, path: str) -> None:
@@ -484,6 +546,7 @@ def _validate_python_free_e2e_replay(
     native_correctness: dict[str, Any],
     native_correctness_sha256: str,
     optimization_correctness: dict[str, Any],
+    correctness_golden_sha256: str,
 ) -> dict[str, Any]:
     try:
         archive = python_free_e2e.load_raw_evidence_archive(raw_evidence_path)
@@ -498,6 +561,7 @@ def _validate_python_free_e2e_replay(
         image_id=f"sha256:{image_sha256}",
         correctness_report=native_correctness,
         correctness_report_sha256=native_correctness_sha256,
+        correctness_golden_sha256=correctness_golden_sha256,
     )
     if diagnostic is not None or replayed.get("status") != "passed":
         _fail("python_free_e2e.raw_evidence", diagnostic or "raw replay failed")
@@ -516,6 +580,10 @@ def _validate_python_free_e2e_replay(
         "model_revision": (
             raw_model.get("model_revision"),
             optimizer_model.get("revision"),
+        ),
+        "model_tree_sha256": (
+            raw_model.get("model_tree_sha256"),
+            optimizer_model.get("manifest_sha256"),
         ),
         "weights_sha256": (
             raw_model.get("weights_sha256"),
@@ -679,37 +747,6 @@ def _optimization_test(
     return _sha256(row["log_sha256"], f"{path}.log_sha256")
 
 
-def _optimization_log_hashes(path: Path) -> dict[str, str]:
-    try:
-        with tarfile.open(path, "r:*") as archive:
-            members = _safe_tar_members(archive, "optimization_correctness.raw_evidence")
-            files = [member for member in members if member.isreg()]
-            by_basename: dict[str, tarfile.TarInfo] = {}
-            for member in files:
-                basename = PurePosixPath(member.name).name
-                if basename in by_basename:
-                    _fail(
-                        "optimization_correctness.raw_evidence",
-                        f"duplicate log basename: {basename}",
-                    )
-                by_basename[basename] = member
-            expected_files = set(OPTIMIZATION_LOGS.values())
-            if set(by_basename) != expected_files:
-                _fail(
-                    "optimization_correctness.raw_evidence",
-                    f"exact log inventory mismatch: {sorted(by_basename)}",
-                )
-            result: dict[str, str] = {}
-            for test_id, filename in OPTIMIZATION_LOGS.items():
-                source = archive.extractfile(by_basename[filename])
-                if source is None:
-                    _fail("optimization_correctness.raw_evidence", f"cannot read {filename}")
-                result[test_id] = hashlib.sha256(source.read()).hexdigest()
-            return result
-    except (OSError, tarfile.TarError) as error:
-        _fail("optimization_correctness.raw_evidence", f"cannot read log archive: {error}")
-
-
 def _performance_raw_payloads(path: Path) -> list[tuple[str, bytes]]:
     evidence_path = "performance.raw_evidence"
     try:
@@ -767,7 +804,6 @@ def _validate_optimization_correctness(
     *,
     revision: str,
     archive_sha256: str,
-    raw_evidence_path: Path,
 ) -> str:
     row = _exact(
         report,
@@ -863,7 +899,7 @@ def _validate_optimization_correctness(
         by_id[test_id] = test
     if set(by_id) != set(OPTIMIZATION_LOGS):
         _fail(f"{path}.tests", f"test id set mismatch: {sorted(by_id)}")
-    declared = {
+    _ = {
         "cuda-compile-only": _optimization_test(
             by_id["cuda-compile-only"], f"{path}.tests.cuda-compile-only",
             "cuda-compile-only", {},
@@ -905,9 +941,6 @@ def _validate_optimization_correctness(
             },
         ),
     }
-    actual = _optimization_log_hashes(raw_evidence_path)
-    if declared != actual:
-        _fail(f"{path}.tests", "declared log hashes do not match exact raw log inventory")
     return profile_image_sha256
 
 
@@ -922,6 +955,7 @@ def _validate_performance(
     optimization_sha256: str,
     optimization_gate_id: str,
     optimization_profile_image_sha256: str,
+    profile_binary_sha256: str,
     raw_evidence_path: Path,
 ) -> None:
     row = _exact(
@@ -970,12 +1004,16 @@ def _validate_performance(
         "correctness_report_sha256": optimization_sha256,
         "correctness_gate_id": optimization_gate_id,
         "profile_image_sha256": optimization_profile_image_sha256,
+        "profile_binary_sha256": profile_binary_sha256,
         "semantic_class": "E0",
     }
     for key, value in expected.items():
         if binding.get(key) != value:
             _fail(f"{path}.candidate.source.{key}", "candidate binding mismatch")
-    _sha256(binding["profile_binary_sha256"], f"{path}.candidate.source.profile_binary_sha256")
+    _sha256(
+        binding["profile_binary_sha256"],
+        f"{path}.candidate.source.profile_binary_sha256",
+    )
 
     baseline = _reviewed_performance_baseline()
     declared_baseline = _exact(
@@ -1274,6 +1312,131 @@ def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> N
         _fail("manifest.release.binary", "standalone binary differs from bundle binary")
 
 
+def _validate_reproducibility_replay(
+    replay: dict[str, Any],
+    *,
+    revision: str,
+    archive_sha256: str,
+    source_date_epoch: int,
+    build_image_id: str,
+    evidence_a_sha256: str,
+    evidence_b_sha256: str,
+    binary_sha256: str,
+    profile_binary_sha256: str,
+    bundle_sha256: str,
+    native_manifest_sha256: str,
+) -> str:
+    row = _exact(
+        replay,
+        {
+            "schema_version",
+            "gate_id",
+            "status",
+            "source",
+            "build",
+            "evidence",
+            "artifacts",
+            "comparisons",
+        },
+        "reproducible_build.replay",
+    )
+    if (
+        row["schema_version"] != reproducible_build_evidence.SCHEMA_VERSION
+        or row["gate_id"] != reproducible_build_evidence.GATE_ID
+        or row["status"] != "passed"
+    ):
+        _fail("reproducible_build.replay", "schema/gate/status mismatch")
+    if _exact(
+        row["source"],
+        {"revision", "archive_sha256", "source_date_epoch"},
+        "reproducible_build.replay.source",
+    ) != {
+        "revision": revision,
+        "archive_sha256": archive_sha256,
+        "source_date_epoch": source_date_epoch,
+    }:
+        _fail("reproducible_build.replay.source", "trusted source binding mismatch")
+    build = _exact(
+        row["build"],
+        {
+            "image_id",
+            "image_inspect_sha256",
+            "platform",
+            "network",
+            "cargo_command",
+            "profile_cargo_command",
+            "rust_toolchain",
+            "cuda_toolkit",
+            "nvcc_version",
+            "cuda_architectures",
+            "independent_clean_containers",
+        },
+        "reproducible_build.replay.build",
+    )
+    if (
+        build["image_id"] != build_image_id
+        or build["platform"] != reproducible_build_evidence.PLATFORM
+        or build["network"] != "none"
+        or build["independent_clean_containers"] != 2
+    ):
+        _fail("reproducible_build.replay.build", "reviewed build binding mismatch")
+    _sha256(
+        build["image_inspect_sha256"],
+        "reproducible_build.replay.build.image_inspect_sha256",
+    )
+    evidence = _exact(
+        row["evidence"],
+        {
+            "a_sha256",
+            "b_sha256",
+            "a_container_id",
+            "b_container_id",
+            "a_workspace_volume",
+            "b_workspace_volume",
+            "a_workspace_source",
+            "b_workspace_source",
+            "a_started_at",
+            "a_finished_at",
+            "b_started_at",
+            "b_finished_at",
+        },
+        "reproducible_build.replay.evidence",
+    )
+    if evidence["a_sha256"] != evidence_a_sha256 or evidence["b_sha256"] != evidence_b_sha256:
+        _fail("reproducible_build.replay.evidence", "A/B artifact digest mismatch")
+    artifacts = _exact(
+        row["artifacts"],
+        {
+            "binary_sha256",
+            "profile_binary_sha256",
+            "bundle_sha256",
+            "native_manifest_sha256",
+        },
+        "reproducible_build.replay.artifacts",
+    )
+    if artifacts != {
+        "binary_sha256": binary_sha256,
+        "profile_binary_sha256": profile_binary_sha256,
+        "bundle_sha256": bundle_sha256,
+        "native_manifest_sha256": native_manifest_sha256,
+    }:
+        _fail("reproducible_build.replay.artifacts", "final artifact binding mismatch")
+    comparisons = _exact(
+        row["comparisons"],
+        {
+            "binary_a_b_final_byte_exact",
+            "profile_binary_a_b_final_byte_exact",
+            "bundle_a_b_final_byte_exact",
+            "native_manifest_a_b_final_byte_exact",
+            "source_archive_a_b_final_byte_exact",
+        },
+        "reproducible_build.replay.comparisons",
+    )
+    if not all(value is True for value in comparisons.values()):
+        _fail("reproducible_build.replay.comparisons", "all byte comparisons must pass")
+    return hashlib.sha256(canonical_json_bytes(row)).hexdigest()
+
+
 def _empty_report() -> dict[str, Any]:
     return {
         "schema_version": REPORT_VERSION,
@@ -1287,14 +1450,71 @@ def _empty_report() -> dict[str, Any]:
     }
 
 
-def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
+def evaluate(
+    manifest_path: Path,
+    evidence_root: Path,
+    *,
+    expected_revision: str,
+    expected_source_archive_sha256: str,
+    expected_release_image_id: str,
+    expected_build_image_id: str,
+    expected_correctness_golden_sha256: str,
+) -> dict[str, Any]:
     """Validate a final tag candidate without executing the release or CUDA."""
 
     report = _empty_report()
+    snapshot_temporary: tempfile.TemporaryDirectory[str] | None = None
+    evidence_root_fd = -1
     try:
+        trusted_revision = _revision(expected_revision, "--expected-revision")
+        trusted_archive_sha256 = _sha256(
+            expected_source_archive_sha256,
+            "--expected-source-archive-sha256",
+        )
+        trusted_release_image_id = _image_id(
+            expected_release_image_id,
+            "--expected-release-image-id",
+        )
+        trusted_build_image_id = _image_id(
+            expected_build_image_id,
+            "--expected-build-image-id",
+        )
+        trusted_correctness_golden_sha256 = _sha256(
+            expected_correctness_golden_sha256,
+            "--expected-correctness-golden-sha256",
+        )
         evidence_root = evidence_root.resolve(strict=True)
-        if not evidence_root.is_dir():
+        if not all(
+            hasattr(os, flag)
+            for flag in (
+                "O_CLOEXEC",
+                "O_DIRECTORY",
+                "O_NOFOLLOW",
+                "O_NONBLOCK",
+            )
+        ) or os.open not in getattr(os, "supports_dir_fd", set()):
+            _fail("--evidence-root", "platform lacks required no-follow open flags")
+        root_before = evidence_root.lstat()
+        if not stat.S_ISDIR(root_before.st_mode):
             _fail("--evidence-root", "must be a directory")
+        evidence_root_fd = os.open(
+            evidence_root,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        root_after = os.fstat(evidence_root_fd)
+        if (
+            not stat.S_ISDIR(root_after.st_mode)
+            or root_before.st_dev != root_after.st_dev
+            or root_before.st_ino != root_after.st_ino
+        ):
+            _fail("--evidence-root", "directory changed while it was opened")
+        snapshot_temporary = tempfile.TemporaryDirectory(
+            prefix="rustinfer-candidate-snapshot-"
+        )
+        snapshot_root = _ArtifactSnapshotContext(
+            directory=Path(snapshot_temporary.name),
+            evidence_root_fd=evidence_root_fd,
+        )
         manifest, manifest_raw = _load_json(manifest_path, "manifest")
         row = _exact(
             manifest,
@@ -1306,31 +1526,59 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
         candidate_id = _string(row["candidate_id"], "manifest.candidate_id", ID_RE)
         source_row = _exact(row["source"], {"git_revision", "git_dirty", "archive"}, "manifest.source")
         revision = _revision(source_row["git_revision"], "manifest.source.git_revision")
+        if revision != trusted_revision:
+            _fail(
+                "manifest.source.git_revision",
+                "differs from the trusted expected revision",
+            )
         if source_row["git_dirty"] is not False:
             _fail("manifest.source.git_dirty", "release source must be clean")
         release_row = _exact(row["release"], {"binary", "bundle", "image_digest"}, "manifest.release")
-        image_digest = _string(release_row["image_digest"], "manifest.release.image_digest")
-        if not image_digest.startswith("sha256:"):
-            _fail("manifest.release.image_digest", "must be sha256:<lowercase digest>")
-        image_sha256 = _sha256(image_digest.removeprefix("sha256:"), "manifest.release.image_digest")
+        image_digest = _image_id(
+            release_row["image_digest"], "manifest.release.image_digest"
+        )
+        if image_digest != trusted_release_image_id:
+            _fail(
+                "manifest.release.image_digest",
+                "differs from the trusted expected release image ID",
+            )
+        image_sha256 = image_digest.removeprefix("sha256:")
         evidence_row = _exact(
             row["evidence"],
             {
                 "python_free_e2e", "cuda_fault", "native_correctness",
                 "optimization_correctness", "performance", "reliability_soak",
+                "reproducible_build",
             },
             "manifest.evidence",
         )
         seen_paths: set[str] = set()
         archive_path, archive_sha256, _ = _resolve_artifact(
-            source_row["archive"], "manifest.source.archive", evidence_root, seen_paths
+            source_row["archive"],
+            "manifest.source.archive",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
         )
+        if archive_sha256 != trusted_archive_sha256:
+            _fail(
+                "manifest.source.archive.sha256",
+                "differs from the trusted expected source archive SHA-256",
+            )
         _verify_source_archive(archive_path, revision)
         binary_path, binary_sha256, _ = _resolve_artifact(
-            release_row["binary"], "manifest.release.binary", evidence_root, seen_paths
+            release_row["binary"],
+            "manifest.release.binary",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
         )
         bundle_path, bundle_sha256, _ = _resolve_artifact(
-            release_row["bundle"], "manifest.release.bundle", evidence_root, seen_paths
+            release_row["bundle"],
+            "manifest.release.bundle",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
         )
         if not os.access(binary_path, os.X_OK):
             _fail("manifest.release.binary", "must be executable")
@@ -1345,17 +1593,92 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
         loaded: dict[str, tuple[dict[str, Any], str]] = {}
         raw_hashes: dict[str, str] = {}
         raw_paths: dict[str, Path] = {}
+
+        reproducible = _exact(
+            evidence_row["reproducible_build"],
+            {
+                "build_image_id",
+                "source_date_epoch",
+                "build_a",
+                "build_b",
+                "native_manifest",
+            },
+            "manifest.evidence.reproducible_build",
+        )
+        reproducible_build_image_id = _image_id(
+            reproducible["build_image_id"],
+            "manifest.evidence.reproducible_build.build_image_id",
+        )
+        if reproducible_build_image_id != trusted_build_image_id:
+            _fail(
+                "manifest.evidence.reproducible_build.build_image_id",
+                "differs from the trusted expected build image ID",
+            )
+        source_date_epoch = _source_date_epoch(
+            reproducible["source_date_epoch"],
+            "manifest.evidence.reproducible_build.source_date_epoch",
+        )
+        reproducible_a_path, reproducible_a_sha, _ = _resolve_artifact(
+            reproducible["build_a"],
+            "manifest.evidence.reproducible_build.build_a",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
+        )
+        reproducible_b_path, reproducible_b_sha, _ = _resolve_artifact(
+            reproducible["build_b"],
+            "manifest.evidence.reproducible_build.build_b",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
+        )
+        native_manifest_path, native_manifest_sha, _ = _resolve_artifact(
+            reproducible["native_manifest"],
+            "manifest.evidence.reproducible_build.native_manifest",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
+        )
+        raw_hashes["reproducible_build_a"] = reproducible_a_sha
+        raw_hashes["reproducible_build_b"] = reproducible_b_sha
+        raw_hashes["reproducible_build_native_manifest"] = native_manifest_sha
+
         for gate_name in ("python_free_e2e",):
-            gate = _exact(evidence_row[gate_name], {"report", "raw_evidence"}, f"manifest.evidence.{gate_name}")
+            gate = _exact(
+                evidence_row[gate_name],
+                {"report", "raw_evidence", "correctness_golden"},
+                f"manifest.evidence.{gate_name}",
+            )
             report_path, report_sha, _ = _resolve_artifact(
-                gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
+                gate["report"],
+                f"manifest.evidence.{gate_name}.report",
+                evidence_root,
+                seen_paths,
+                snapshot_root,
             )
             raw_path, raw_sha, _ = _resolve_artifact(
-                gate["raw_evidence"], f"manifest.evidence.{gate_name}.raw_evidence", evidence_root, seen_paths
+                gate["raw_evidence"],
+                f"manifest.evidence.{gate_name}.raw_evidence",
+                evidence_root,
+                seen_paths,
+                snapshot_root,
             )
+            correctness_golden_path, correctness_golden_sha, _ = _resolve_artifact(
+                gate["correctness_golden"],
+                f"manifest.evidence.{gate_name}.correctness_golden",
+                evidence_root,
+                seen_paths,
+                snapshot_root,
+            )
+            if correctness_golden_sha != trusted_correctness_golden_sha256:
+                _fail(
+                    f"manifest.evidence.{gate_name}.correctness_golden.sha256",
+                    "differs from the trusted expected correctness golden SHA-256",
+                )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
             raw_hashes[gate_name] = raw_sha
+            raw_hashes[f"{gate_name}_correctness_golden"] = correctness_golden_sha
             raw_paths[gate_name] = raw_path
 
         cuda_gate = _exact(
@@ -1363,30 +1686,28 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             {"build_image_id", "report", "raw_evidence"},
             "manifest.evidence.cuda_fault",
         )
-        cuda_build_image_id = _string(
+        cuda_build_image_id = _image_id(
             cuda_gate["build_image_id"],
             "manifest.evidence.cuda_fault.build_image_id",
         )
-        if not cuda_build_image_id.startswith("sha256:"):
+        if cuda_build_image_id != trusted_build_image_id:
             _fail(
                 "manifest.evidence.cuda_fault.build_image_id",
-                "must be sha256:<lowercase digest>",
+                "differs from the trusted expected build image ID",
             )
-        _sha256(
-            cuda_build_image_id.removeprefix("sha256:"),
-            "manifest.evidence.cuda_fault.build_image_id",
-        )
         cuda_report_path, cuda_report_sha, _ = _resolve_artifact(
             cuda_gate["report"],
             "manifest.evidence.cuda_fault.report",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         cuda_raw_path, cuda_raw_sha, _ = _resolve_artifact(
             cuda_gate["raw_evidence"],
             "manifest.evidence.cuda_fault.raw_evidence",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         cuda_report, _ = _load_json(cuda_report_path, "cuda_fault report")
         loaded["cuda_fault"] = (cuda_report, cuda_report_sha)
@@ -1403,12 +1724,14 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             "manifest.evidence.performance.report",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         performance_raw_path, performance_raw_sha, _ = _resolve_artifact(
             performance["raw_evidence"],
             "manifest.evidence.performance.raw_evidence",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         performance_report, _ = _load_json(
             performance_report_path, "performance report"
@@ -1424,13 +1747,18 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
                 f"manifest.evidence.{gate_name}",
             )
             report_path, report_sha, _ = _resolve_artifact(
-                gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
+                gate["report"],
+                f"manifest.evidence.{gate_name}.report",
+                evidence_root,
+                seen_paths,
+                snapshot_root,
             )
             raw_path, raw_sha, _ = _resolve_artifact(
                 gate["raw_evidence"],
                 f"manifest.evidence.{gate_name}.raw_evidence",
                 evidence_root,
                 seen_paths,
+                snapshot_root,
             )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
@@ -1447,18 +1775,21 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             "manifest.evidence.native_correctness.report",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         native_raw_path, native_raw_sha, _ = _resolve_artifact(
             native["raw_replay"],
             "manifest.evidence.native_correctness.raw_replay",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         native_executable_path, native_executable_sha, _ = _resolve_artifact(
             native["candidate_executable"],
             "manifest.evidence.native_correctness.candidate_executable",
             evidence_root,
             seen_paths,
+            snapshot_root,
         )
         if not os.access(native_executable_path, os.X_OK):
             _fail(
@@ -1477,17 +1808,30 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
 
         optimization = _exact(
             evidence_row["optimization_correctness"],
-            {"report", "raw_evidence"},
+            {"build_image_id", "report", "raw_evidence"},
             "manifest.evidence.optimization_correctness",
         )
+        optimization_build_image_id = _image_id(
+            optimization["build_image_id"],
+            "manifest.evidence.optimization_correctness.build_image_id",
+        )
+        if optimization_build_image_id != trusted_build_image_id:
+            _fail(
+                "manifest.evidence.optimization_correctness.build_image_id",
+                "differs from the trusted expected build image ID",
+            )
         optimization_report_path, optimization_report_sha, _ = _resolve_artifact(
             optimization["report"], "manifest.evidence.optimization_correctness.report",
-            evidence_root, seen_paths,
+            evidence_root,
+            seen_paths,
+            snapshot_root,
         )
         optimization_raw_path, optimization_raw_sha, _ = _resolve_artifact(
             optimization["raw_evidence"],
             "manifest.evidence.optimization_correctness.raw_evidence",
-            evidence_root, seen_paths,
+            evidence_root,
+            seen_paths,
+            snapshot_root,
         )
         optimization_report, _ = _load_json(
             optimization_report_path, "optimization_correctness report"
@@ -1496,6 +1840,39 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             optimization_report, optimization_report_sha
         )
         raw_hashes["optimization_correctness"] = optimization_raw_sha
+        raw_paths["optimization_correctness"] = optimization_raw_path
+
+        try:
+            reproducibility_replay = (
+                reproducible_build_evidence.check_reproducible_build(
+                    evidence_a=reproducible_a_path,
+                    evidence_b=reproducible_b_path,
+                    source_archive=archive_path,
+                    expected_source_archive_sha256=trusted_archive_sha256,
+                    source_revision=trusted_revision,
+                    source_date_epoch=source_date_epoch,
+                    build_image_id=trusted_build_image_id,
+                    final_binary=binary_path,
+                    final_profile_binary=native_executable_path,
+                    final_bundle=bundle_path,
+                    final_native_manifest=native_manifest_path,
+                )
+            )
+        except (ReleaseContractError, OSError) as error:
+            _fail("reproducible_build", str(error))
+        reproducibility_report_sha256 = _validate_reproducibility_replay(
+            reproducibility_replay,
+            revision=revision,
+            archive_sha256=archive_sha256,
+            source_date_epoch=source_date_epoch,
+            build_image_id=trusted_build_image_id,
+            evidence_a_sha256=reproducible_a_sha,
+            evidence_b_sha256=reproducible_b_sha,
+            binary_sha256=binary_sha256,
+            profile_binary_sha256=native_executable_sha,
+            bundle_sha256=bundle_sha256,
+            native_manifest_sha256=native_manifest_sha,
+        )
 
         _validate_attestation(
             loaded["python_free_e2e"][0], "python_free_e2e",
@@ -1553,8 +1930,38 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             "optimization_correctness",
             revision=revision,
             archive_sha256=archive_sha256,
-            raw_evidence_path=optimization_raw_path,
         )
+        if optimization_profile_image_sha256 != trusted_build_image_id.removeprefix(
+            "sha256:"
+        ):
+            _fail(
+                "optimization_correctness.build.container_image_sha256",
+                "differs from the trusted expected build image ID",
+            )
+        try:
+            optimization_replay = optimization_evidence.replay_raw_evidence(
+                raw_paths["optimization_correctness"],
+                report=optimization_report_path,
+                source_revision=revision,
+                source_archive_sha256=archive_sha256,
+                build_image_id=trusted_build_image_id,
+                profile_binary=native_executable_path,
+            )
+        except (optimization_evidence.OptimizationEvidenceError, OSError) as error:
+            _fail("optimization_correctness.raw_evidence", str(error))
+        expected_optimization_replay = {
+            "report": loaded["optimization_correctness"][0],
+            "report_sha256": optimization_report_sha,
+            "raw_evidence_sha256": optimization_raw_sha,
+            "profile_binary_sha256": native_executable_sha,
+            "build_image_sha256": trusted_build_image_id.removeprefix("sha256:"),
+        }
+        for field, expected in expected_optimization_replay.items():
+            if optimization_replay.get(field) != expected:
+                _fail(
+                    f"optimization_correctness.raw_evidence.{field}",
+                    "does not match the final candidate binding",
+                )
         python_free_model = _validate_python_free_e2e_replay(
             loaded["python_free_e2e"][0],
             raw_paths["python_free_e2e"],
@@ -1566,6 +1973,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             native_correctness=loaded["native_correctness_report"][0],
             native_correctness_sha256=native_correctness_sha256,
             optimization_correctness=loaded["optimization_correctness"][0],
+            correctness_golden_sha256=trusted_correctness_golden_sha256,
         )
         _validate_performance(
             loaded["performance"][0], "performance", revision=revision,
@@ -1574,6 +1982,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             optimization_sha256=optimization_report_sha,
             optimization_gate_id=OPTIMIZATION_GATE,
             optimization_profile_image_sha256=optimization_profile_image_sha256,
+            profile_binary_sha256=native_executable_sha,
             raw_evidence_path=raw_paths["performance"],
         )
         _validate_soak(
@@ -1597,20 +2006,29 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
                     "release_binary_sha256": binary_sha256,
                     "release_bundle_sha256": bundle_sha256,
                     "release_image_sha256": image_sha256,
+                    "build_image_id": trusted_build_image_id,
+                    "profile_binary_sha256": native_executable_sha,
+                    "reproducibility_report_sha256": reproducibility_report_sha256,
+                    "correctness_golden_sha256": trusted_correctness_golden_sha256,
                     "evidence_sha256": dict(sorted(evidence_hashes.items())),
                 },
                 "checks": [
                     {"name": name, "passed": True}
                     for name in (
-                        "release_bundle", "python_free_e2e", "cuda_fault",
+                        "release_bundle", "reproducible_build", "python_free_e2e", "cuda_fault",
                         "native_correctness", "optimization_correctness",
                         "performance", "reliability_soak", "cross_bindings",
                     )
                 ],
             }
         )
-    except (CandidateError, OSError) as error:
+    except (OSError, ValueError) as error:
         report["errors"] = [str(error)]
+    finally:
+        if evidence_root_fd >= 0:
+            os.close(evidence_root_fd)
+        if snapshot_temporary is not None:
+            snapshot_temporary.cleanup()
     return report
 
 
@@ -1618,13 +2036,28 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--evidence-root", required=True, type=Path)
+    parser.add_argument("--expected-revision", required=True)
+    parser.add_argument("--expected-source-archive-sha256", required=True)
+    parser.add_argument("--expected-release-image-id", required=True)
+    parser.add_argument("--expected-build-image-id", required=True)
+    parser.add_argument("--expected-correctness-golden-sha256", required=True)
     parser.add_argument("--report", type=Path, help="create without overwriting")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    report = evaluate(args.manifest, args.evidence_root)
+    report = evaluate(
+        args.manifest,
+        args.evidence_root,
+        expected_revision=args.expected_revision,
+        expected_source_archive_sha256=args.expected_source_archive_sha256,
+        expected_release_image_id=args.expected_release_image_id,
+        expected_build_image_id=args.expected_build_image_id,
+        expected_correctness_golden_sha256=(
+            args.expected_correctness_golden_sha256
+        ),
+    )
     encoded = json.dumps(report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     if args.report is not None:
         try:

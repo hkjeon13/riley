@@ -475,6 +475,67 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
                 self.assertEqual(report["status"], "error")
                 self.assertIn(expected, diagnostic.lower())
 
+    def test_readiness_requires_json_booleans_not_equal_integers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = E2EFixture(Path(directory))
+            payloads = read_raw_tar(fixture.raw_archive)
+            raw = json.loads(payloads["raw-evidence.json"])
+            raw["observations"]["readyz"]["ready"] = 1
+            raw["observations"]["readyz"]["accepting"] = 1
+            payloads["raw-evidence.json"] = json_bytes(raw)
+            payloads["http-readyz.raw"] = http_json(
+                {"ready": 1, "accepting": 1}
+            )
+            refresh_checksums(payloads)
+            write_raw_tar(fixture.raw_archive, payloads)
+            report, diagnostic = fixture.replay(
+                checker.load_raw_evidence_archive(fixture.raw_archive)
+            )
+            self.assertEqual(report["status"], "error")
+            self.assertIn("boolean", diagnostic)
+
+    def test_request_numbers_cannot_be_replaced_by_json_booleans(self) -> None:
+        for mutation in ("greedy", "sampling", "cancellation"):
+            with self.subTest(mutation), tempfile.TemporaryDirectory() as directory:
+                fixture = E2EFixture(Path(directory))
+                payloads = read_raw_tar(fixture.raw_archive)
+                if mutation == "greedy":
+                    for name in ("request-greedy.json", "request-greedy-stream.json"):
+                        request = json.loads(payloads[name])
+                        request["temperature"] = False
+                        request["top_p"] = True
+                        payloads[name] = compact_json(request)
+                elif mutation == "sampling":
+                    request = json.loads(payloads["request-sampling.json"])
+                    request["temperature"] = False
+                    request["top_p"] = True
+                    payloads["request-sampling.json"] = compact_json(request)
+                else:
+                    _, _, body = payloads["cancellation-request.raw"].partition(
+                        b"\r\n\r\n"
+                    )
+                    request = json.loads(body)
+                    request["temperature"] = False
+                    request["top_p"] = True
+                    body = json.dumps(
+                        request, sort_keys=True, separators=(",", ":")
+                    ).encode("utf-8")
+                    payloads["cancellation-request.raw"] = (
+                        b"POST /v1/completions HTTP/1.1\r\n"
+                        b"Host: localhost\r\n"
+                        b"Content-Type: application/json\r\n"
+                        + f"Content-Length: {len(body)}\r\n".encode("ascii")
+                        + b"Connection: close\r\n\r\n"
+                        + body
+                    )
+                refresh_checksums(payloads)
+                write_raw_tar(fixture.raw_archive, payloads)
+                report, diagnostic = fixture.replay(
+                    checker.load_raw_evidence_archive(fixture.raw_archive)
+                )
+                self.assertEqual(report["status"], "error")
+                self.assertIn("number", diagnostic)
+
     def test_reviewed_golden_prevents_transcript_self_authorization(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = E2EFixture(Path(directory))
@@ -526,6 +587,19 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
                 write_raw_tar(fixture.raw_archive, payloads, link_name=link)
                 with self.assertRaises(checker.EvidenceError):
                     checker.load_raw_evidence_archive(fixture.raw_archive)
+
+    def test_archived_json_must_be_utf8_not_utf16(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = E2EFixture(Path(directory))
+            payloads = read_raw_tar(fixture.raw_archive)
+            raw = json.loads(payloads["raw-evidence.json"])
+            payloads["raw-evidence.json"] = json.dumps(
+                raw, sort_keys=True
+            ).encode("utf-16")
+            refresh_checksums(payloads)
+            write_raw_tar(fixture.raw_archive, payloads)
+            with self.assertRaisesRegex(checker.EvidenceError, "strict UTF-8"):
+                checker.load_raw_evidence_archive(fixture.raw_archive)
 
     def test_replay_requires_independently_reviewed_golden_digest(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

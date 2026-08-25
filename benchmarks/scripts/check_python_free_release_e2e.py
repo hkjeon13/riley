@@ -145,7 +145,8 @@ def _parse_json_value(raw: bytes, label: str) -> Any:
     if len(raw) > MAX_JSON_BYTES:
         _fail(label, f"exceeds {MAX_JSON_BYTES} bytes")
     try:
-        return json.loads(raw, object_pairs_hook=_pairs, parse_constant=_nonfinite)
+        text = raw.decode("utf-8")
+        return json.loads(text, object_pairs_hook=_pairs, parse_constant=_nonfinite)
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         _fail(label, f"cannot read strict UTF-8 JSON: {error}")
 
@@ -205,6 +206,12 @@ def _number(value: Any, path: str, *, positive: bool = False) -> float:
     if not math.isfinite(result) or result < 0 or (positive and result <= 0):
         _fail(path, "must be finite and positive" if positive else "must be finite and nonnegative")
     return result
+
+
+def _boolean(value: Any, path: str) -> bool:
+    if not isinstance(value, bool):
+        _fail(path, "must be a boolean")
+    return value
 
 
 def _file_sha256(path: Path, label: str) -> str:
@@ -642,7 +649,11 @@ def _validate_raw(document: Mapping[str, Any]) -> dict[str, Any]:
 
     observations = _closed(row["observations"], {"readyz", "models", "greedy", "sampling", "cancellation", "shutdown", "python_free"}, "raw.observations")
     ready = _closed(observations["readyz"], {"http_status", "ready", "accepting"}, "raw.observations.readyz")
-    ready_result = {"http_status": _integer(ready["http_status"], "readyz.http_status"), "ready": ready["ready"], "accepting": ready["accepting"]}
+    ready_result = {
+        "http_status": _integer(ready["http_status"], "readyz.http_status"),
+        "ready": _boolean(ready["ready"], "readyz.ready"),
+        "accepting": _boolean(ready["accepting"], "readyz.accepting"),
+    }
     if ready_result != {"http_status": 200, "ready": True, "accepting": True}:
         _fail("raw.observations.readyz", "must record accepting HTTP 200 readiness")
     models = _closed(observations["models"], {"http_status", "model_ids"}, "raw.observations.models")
@@ -690,7 +701,10 @@ def _validate_raw(document: Mapping[str, Any]) -> dict[str, Any]:
 
     cancellation = _closed(observations["cancellation"], {"disconnect_probe_sent", "cancellations_before", "cancellations_after", "disconnects_before", "disconnects_after", "active_requests_after", "waiting_requests_after"}, "raw.observations.cancellation")
     cancellation_result = {
-        "disconnect_probe_sent": cancellation["disconnect_probe_sent"],
+        "disconnect_probe_sent": _boolean(
+            cancellation["disconnect_probe_sent"],
+            "cancellation.disconnect_probe_sent",
+        ),
         "cancellations_before": _integer(cancellation["cancellations_before"], "cancellation.cancellations_before"),
         "cancellations_after": _integer(cancellation["cancellations_after"], "cancellation.cancellations_after"),
         "disconnects_before": _integer(cancellation["disconnects_before"], "cancellation.disconnects_before"),
@@ -859,6 +873,24 @@ def _request_json(payloads: Mapping[str, bytes], name: str, keys: set[str]) -> d
     return dict(_closed(_parse_json_bytes(payloads[name], name), keys, name))
 
 
+def _validated_completion_request(
+    document: Mapping[str, Any], label: str, *, with_seed: bool
+) -> dict[str, Any]:
+    result = {
+        "model": _string(document["model"], f"{label}.model", MODEL_ID_RE),
+        "prompt": _string(document["prompt"], f"{label}.prompt"),
+        "max_tokens": _integer(document["max_tokens"], f"{label}.max_tokens", 1),
+        "temperature": _number(document["temperature"], f"{label}.temperature"),
+        "top_p": _number(document["top_p"], f"{label}.top_p", positive=True),
+        "stream": _boolean(document["stream"], f"{label}.stream"),
+    }
+    if result["top_p"] > 1:
+        _fail(f"{label}.top_p", "must be no larger than 1")
+    if with_seed:
+        result["seed"] = _integer(document["seed"], f"{label}.seed")
+    return result
+
+
 def _http_request(raw: bytes, label: str) -> tuple[str, str, dict[str, str], bytes]:
     head, separator, body = raw.partition(b"\r\n\r\n")
     if not separator:
@@ -946,7 +978,12 @@ def _container_snapshot(raw: bytes, label: str, *, container_id: str, image_id: 
     pid = state.get("Pid")
     if running:
         _integer(pid, f"{label}.State.Pid", 1)
-    elif pid != 0 or state.get("ExitCode") != 0 or state.get("OOMKilled") is not False or state.get("Error") not in {"", None}:
+    elif (
+        _integer(pid, f"{label}.State.Pid") != 0
+        or _integer(state.get("ExitCode"), f"{label}.State.ExitCode") != 0
+        or state.get("OOMKilled") is not False
+        or state.get("Error") not in {"", None}
+    ):
         _fail(label, "post-SIGTERM container must be stopped cleanly with exit zero")
     return row
 
@@ -1030,10 +1067,22 @@ def _replay_runtime(payloads: Mapping[str, bytes], validated: Mapping[str, Any],
     if observations["python_free"]["processes"] != snapshots[("first", "runtime_processes")]["rows"]:
         _fail("raw.observations.python_free.processes", "differs from process-first-runtime.txt")
 
-    greedy_request = _request_json(payloads, "request-greedy.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"})
-    greedy_stream_request = _request_json(payloads, "request-greedy-stream.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"})
-    sampling_request = _request_json(payloads, "request-sampling.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "seed", "stream"})
-    expected_greedy_request = {"model": golden["model_id"], "prompt": golden["prompt"], "max_tokens": golden["max_tokens"], "temperature": 0, "top_p": 1, "stream": False}
+    greedy_request = _validated_completion_request(
+        _request_json(payloads, "request-greedy.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"}),
+        "request-greedy.json",
+        with_seed=False,
+    )
+    greedy_stream_request = _validated_completion_request(
+        _request_json(payloads, "request-greedy-stream.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"}),
+        "request-greedy-stream.json",
+        with_seed=False,
+    )
+    sampling_request = _validated_completion_request(
+        _request_json(payloads, "request-sampling.json", {"model", "prompt", "max_tokens", "temperature", "top_p", "seed", "stream"}),
+        "request-sampling.json",
+        with_seed=True,
+    )
+    expected_greedy_request = {"model": golden["model_id"], "prompt": golden["prompt"], "max_tokens": golden["max_tokens"], "temperature": 0.0, "top_p": 1.0, "stream": False}
     if greedy_request != expected_greedy_request or greedy_stream_request != {**expected_greedy_request, "stream": True}:
         _fail("request-greedy.json", "greedy request bytes differ from the reviewed golden probe")
     expected_sampling_request = {"model": golden["model_id"], "prompt": golden["prompt"], "max_tokens": 16, "temperature": 0.8, "top_p": 0.95, "seed": 424242, "stream": False}
@@ -1041,7 +1090,13 @@ def _replay_runtime(payloads: Mapping[str, bytes], validated: Mapping[str, Any],
         _fail("request-sampling.json", "fixed-seed sampling request bytes differ from the reviewed probe")
 
     ready_status, ready = _http_json(payloads["http-readyz.raw"], "http-readyz.raw")
-    derived_ready = {"http_status": ready_status, "ready": ready.get("ready"), "accepting": ready.get("accepting")}
+    derived_ready = {
+        "http_status": ready_status,
+        "ready": _boolean(ready.get("ready"), "http-readyz.raw.ready"),
+        "accepting": _boolean(
+            ready.get("accepting"), "http-readyz.raw.accepting"
+        ),
+    }
     if derived_ready != observations["readyz"]:
         _fail("raw.observations.readyz", "differs from http-readyz.raw")
     models_status, models = _http_json(payloads["http-models.raw"], "http-models.raw")
@@ -1086,8 +1141,12 @@ def _replay_runtime(payloads: Mapping[str, bytes], validated: Mapping[str, Any],
     method, target, headers, cancel_body = _http_request(payloads["cancellation-request.raw"], "cancellation-request.raw")
     if method != "POST" or target != "/v1/completions" or headers.get("content-type") != "application/json":
         _fail("cancellation-request.raw", "must preserve a JSON completion POST")
-    cancel = _closed(_parse_json_bytes(cancel_body, "cancellation request body"), {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"}, "cancellation request body")
-    if cancel["model"] != golden["model_id"] or cancel["prompt"] != golden["prompt"] or cancel["temperature"] != 0 or cancel["top_p"] != 1 or cancel["stream"] is not True or _integer(cancel["max_tokens"], "cancellation max_tokens", 32) > 1024:
+    cancel = _validated_completion_request(
+        _closed(_parse_json_bytes(cancel_body, "cancellation request body"), {"model", "prompt", "max_tokens", "temperature", "top_p", "stream"}, "cancellation request body"),
+        "cancellation request body",
+        with_seed=False,
+    )
+    if cancel["model"] != golden["model_id"] or cancel["prompt"] != golden["prompt"] or cancel["temperature"] != 0.0 or cancel["top_p"] != 1.0 or cancel["stream"] is not True or cancel["max_tokens"] < 32 or cancel["max_tokens"] > 1024:
         _fail("cancellation-request.raw", "does not match the bounded disconnect probe")
     if payloads["cancellation-response-prefix.raw"] != b"HTTP/1.1 200":
         _fail("cancellation-response-prefix.raw", "does not prove an admitted HTTP 200 stream before disconnect")

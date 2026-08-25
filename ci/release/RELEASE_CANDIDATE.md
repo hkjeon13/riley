@@ -5,20 +5,30 @@ a release tag. It does not build an image, start the server, load a model, use
 CUDA, create a tag, or push anything. It consumes immutable artifacts produced
 by the earlier gates and emits a single source-bound decision.
 
-Run it from any Python 3.11+ host after copying the complete evidence set into
-one read-only directory:
+Run it from a Python 3.11+ POSIX/Linux host with no-follow `openat` support
+after copying the complete evidence set into one read-only directory:
 
 ```sh
 python3 ci/release/check_release_candidate.py \
   --manifest /evidence/release-candidate.json \
   --evidence-root /evidence \
+  --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
+  --expected-source-archive-sha256 LOWERCASE_SHA256 \
+  --expected-release-image-id sha256:LOWERCASE_SHA256 \
+  --expected-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-correctness-golden-sha256 LOWERCASE_SHA256 \
   --report /evidence/release-candidate-report.json
 ```
 
+The five `--expected-*` values are trusted promotion inputs. Obtain them from
+the reviewed commit decision, canonical archive publication, immutable OCI
+image inspection, and the separately reviewed correctness golden; never
+populate them by copying values out of the candidate manifest being checked.
+
 The report path is create-only. Only `status=passed` and `passed=true` exits
 zero. A passed report binds the SHA-256 of the exact input manifest, source
-archive, release binary, release bundle, six gate decisions, six raw/replay
-archives, and the immutable release image digest.
+archive, release binary, release bundle, seven gate decisions, all raw/replay
+artifacts, and the immutable release/build image IDs.
 
 ## Closed candidate manifest
 
@@ -46,7 +56,8 @@ shape is:
   "evidence": {
     "python_free_e2e": {
       "report": {"path": "python-free-report.json", "sha256": "LOWERCASE_SHA256"},
-      "raw_evidence": {"path": "python-free-evidence.tar", "sha256": "LOWERCASE_SHA256"}
+      "raw_evidence": {"path": "python-free-evidence.tar", "sha256": "LOWERCASE_SHA256"},
+      "correctness_golden": {"path": "correctness-golden.json", "sha256": "LOWERCASE_SHA256"}
     },
     "cuda_fault": {
       "build_image_id": "sha256:LOWERCASE_SHA256",
@@ -58,7 +69,15 @@ shape is:
       "raw_replay": {"path": "native-correctness-replay.tar", "sha256": "LOWERCASE_SHA256"},
       "candidate_executable": {"path": "rustinfer-native", "sha256": "LOWERCASE_SHA256"}
     },
+    "reproducible_build": {
+      "build_image_id": "sha256:LOWERCASE_SHA256",
+      "source_date_epoch": 1700000000,
+      "build_a": {"path": "reproducible-build-a.tar", "sha256": "LOWERCASE_SHA256"},
+      "build_b": {"path": "reproducible-build-b.tar", "sha256": "LOWERCASE_SHA256"},
+      "native_manifest": {"path": "native-dependencies.txt", "sha256": "LOWERCASE_SHA256"}
+    },
     "optimization_correctness": {
+      "build_image_id": "sha256:LOWERCASE_SHA256",
       "report": {"path": "optimization-correctness-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_evidence": {"path": "optimization-correctness-evidence.tar", "sha256": "LOWERCASE_SHA256"}
     },
@@ -78,6 +97,11 @@ The uppercase values above document positions only; they are deliberately not
 accepted as evidence. All-zero digests/revisions and common placeholder text
 are rejected.
 
+Every artifact is opened with no-follow semantics, hashed from that open file
+descriptor, and copied into a private snapshot. All parsers consume the
+snapshot, so replacing or editing a path after its digest check cannot alter
+the bytes seen by a later gate.
+
 The source archive must be the exact output of `git archive --format=tar` for
 the clean revision named by `git_revision`. Besides hashing the bytes, the
 checker opens the tar safely and requires the pax global `comment` and every
@@ -88,6 +112,15 @@ source revision must match and its embedded `bin/rustinfer` must be
 byte-identical to the separately supplied executable. The image is identified
 only by an immutable `sha256:` image ID, which every runtime report must repeat
 exactly.
+
+The reproducibility entry is replayed before GPU evidence is accepted. Build A
+and B must be independent clean, networkless containers using the externally
+trusted immutable build image. Their production binary, `rustinfer-profile`,
+bundle, native dependency manifest, and source archive must be byte-identical
+to one another and to the selected final artifacts. The
+`native_correctness.candidate_executable` is the selected
+`rustinfer-profile`; there is no second profile artifact that can be
+substituted later.
 
 ## Raw-replayed gate attestations
 
@@ -141,14 +174,20 @@ The CUDA attestation uses `gate=cuda-fault-injection` and requires:
 
 An attestation is an index into the preserved raw evidence, not a replacement
 for it. Its `raw_evidence_sha256` must equal the separately hashed artifact in
-the candidate manifest. For Python-free E2E, the tar excludes the attestation
-to avoid a circular hash and contains exactly `raw-evidence.json`, the reviewed
-golden, canonical model checksum manifest, two shutdown-metrics documents, and
-an internal `SHA256SUMS`. The final candidate opens that tar, validates its
-closed inventory and canonical metadata, replays all runtime observations,
-recomputes model/tokenizer/shutdown bindings, and requires the replayed
-attestation object to equal the submitted object exactly. It also cross-binds
-the native five-file tokenizer aggregate and optimizer `tokenizer.json` hash.
+the candidate manifest. For Python-free E2E, the canonical USTAR excludes the
+attestation to avoid a circular hash and preserves the reviewed golden, every
+model file, canonical model checksum manifest, extracted image ELF and native
+dependency observations, immutable OCI inspect output, both containers'
+pre/runtime/post state and process observations, exact request bytes, raw
+JSON/SSE/cancellation responses, shutdown metrics, `raw-evidence.json`, and an
+internal `SHA256SUMS`. The final candidate opens that tar, validates its closed
+inventory and canonical metadata, replays HTTP/SSE/cancellation semantics and
+container lifecycle transitions, validates the extracted executable ELF,
+recomputes the full model tree/tokenizer/shutdown bindings, and requires the
+replayed attestation object to equal the submitted object exactly. The golden
+artifact SHA must also equal the fifth external promotion input. Model ID,
+revision, canonical full-tree manifest, weights, and `tokenizer.json` are
+cross-bound to optimizer evidence.
 For CUDA fault injection, `build_image_id` names the immutable CUDA toolchain
 image used by the raw runner. The final candidate opens the canonical closed
 tar, rechecks its internal `SHA256SUMS`, exact two-test/four-subprocess marker
@@ -176,11 +215,19 @@ The two correctness roles must never be collapsed into one hash:
   same source/archive, pinned SmolLM2 BF16 artifacts, network-none locked/offline
   CUDA sm89 build, and exact `per-operation` versus `iteration-batch` flags with
   `residual_rmsnorm=separate`. Its exact five-test inventory and every expected
-  zero-mismatch/allocation result are checked. The raw evidence tar must contain
-  exactly these regular log files, whose bytes must match the report hashes:
-  `cuda-compile-only.log`, `workspace-all-features-all-targets.log`,
-  `command-batch-lifecycle-gpu.log`, `command-batch-primitives-gpu.log`, and
-  `iteration-command-batch-model-parity-gpu.log`.
+  zero-mismatch/CUDA-live-allocation result are checked. Its canonical USTAR
+  contains the submitted report, ordered v2 execution receipt, three executable
+  Linux x86-64 Rust test ELFs, five execution logs, three Cargo JSON build logs,
+  and internal `SHA256SUMS`. The receipt records the three locked/offline
+  `--no-run` builds separately from direct execution of the copied
+  `/evidence/*-gpu-test` ELFs. Replay verifies nonzero ELF entry points and
+  executable `PT_LOAD` segments, unique fresh Cargo compiler-artifact
+  provenance, original/copied subject equality, exact eight-command
+  environment/exit contracts, source/build/model bindings, semantic log
+  records, report bytes, and every subject/log digest. The immutable build
+  image must equal the reproducibility and CUDA evidence image, while the
+  replayed profile binary must be the same bytes selected by reproducibility
+  and native correctness.
 
 Create that bundle only after both source revisions and all raw calibration
 artifacts are available:
@@ -203,8 +250,9 @@ The remaining cross-bindings are:
   have the exact four reviewed passing checks, select semantic class E0, bind the exact source
   archive/release binary/runtime image, and bind the exact optimizer
   equivalence report bytes and gate ID. Its profile image must equal the
-  optimizer report's build image. It must not bind the native 31-case report
-  in that field. Its raw evidence tar must contain only
+  optimizer/reproducibility build image, and its profile executable SHA must
+  equal the reproducible/native/optimizer profile artifact. It must not bind
+  the native 31-case report in the optimizer-report field. Its raw evidence tar must contain only
   `candidate-1.json` through `candidate-5.json`; the final gate revalidates the
   closed native profile schema and all source/model/environment/workload/raw
   hashes, then recomputes the R7 metrics, baseline ratios, and thresholds;
@@ -235,6 +283,10 @@ explicit owner action outside this tool.
 
 ```sh
 python3 -m unittest ci/release/test_release_candidate.py -v
+python3 -m unittest ci/release/test_optimization_evidence.py \
+  ci/release/test_write_optimization_execution_evidence.py -v
+python3 -m unittest \
+  benchmarks.scripts.tests.test_check_python_free_release_e2e -v
 python3 -m unittest benchmarks.scripts.tests.test_check_reliability_soak -v
 python3 -m unittest discover -s ci/release -p 'test_*.py' -v
 python3 -m py_compile ci/release/check_release_candidate.py \
