@@ -69,9 +69,9 @@ sys.modules[_RELIABILITY_SOAK_SPEC.name] = reliability_soak
 _RELIABILITY_SOAK_SPEC.loader.exec_module(reliability_soak)
 
 
-MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v1"
+MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v2"
 ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
-REPORT_VERSION = "rustinfer.release-candidate-report.v1"
+REPORT_VERSION = "rustinfer.release-candidate-report.v2"
 PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
 SOAK_VERSION = "rustinfer.reliability-soak-report.v1"
 CORRECTNESS_VERSION = "1.0.0"
@@ -1457,7 +1457,9 @@ def evaluate(
     expected_revision: str,
     expected_source_archive_sha256: str,
     expected_release_image_id: str,
-    expected_build_image_id: str,
+    expected_reproducible_build_image_id: str,
+    expected_cuda_build_image_id: str,
+    expected_optimization_build_image_id: str,
     expected_correctness_golden_sha256: str,
 ) -> dict[str, Any]:
     """Validate a final tag candidate without executing the release or CUDA."""
@@ -1475,9 +1477,17 @@ def evaluate(
             expected_release_image_id,
             "--expected-release-image-id",
         )
-        trusted_build_image_id = _image_id(
-            expected_build_image_id,
-            "--expected-build-image-id",
+        trusted_reproducible_build_image_id = _image_id(
+            expected_reproducible_build_image_id,
+            "--expected-reproducible-build-image-id",
+        )
+        trusted_cuda_build_image_id = _image_id(
+            expected_cuda_build_image_id,
+            "--expected-cuda-build-image-id",
+        )
+        trusted_optimization_build_image_id = _image_id(
+            expected_optimization_build_image_id,
+            "--expected-optimization-build-image-id",
         )
         trusted_correctness_golden_sha256 = _sha256(
             expected_correctness_golden_sha256,
@@ -1601,6 +1611,7 @@ def evaluate(
                 "source_date_epoch",
                 "build_a",
                 "build_b",
+                "profile_binary",
                 "native_manifest",
             },
             "manifest.evidence.reproducible_build",
@@ -1609,10 +1620,10 @@ def evaluate(
             reproducible["build_image_id"],
             "manifest.evidence.reproducible_build.build_image_id",
         )
-        if reproducible_build_image_id != trusted_build_image_id:
+        if reproducible_build_image_id != trusted_reproducible_build_image_id:
             _fail(
                 "manifest.evidence.reproducible_build.build_image_id",
-                "differs from the trusted expected build image ID",
+                "differs from the trusted expected reproducible-build image ID",
             )
         source_date_epoch = _source_date_epoch(
             reproducible["source_date_epoch"],
@@ -1632,6 +1643,18 @@ def evaluate(
             seen_paths,
             snapshot_root,
         )
+        profile_binary_path, profile_binary_sha, _ = _resolve_artifact(
+            reproducible["profile_binary"],
+            "manifest.evidence.reproducible_build.profile_binary",
+            evidence_root,
+            seen_paths,
+            snapshot_root,
+        )
+        if not os.access(profile_binary_path, os.X_OK):
+            _fail(
+                "manifest.evidence.reproducible_build.profile_binary",
+                "must be executable",
+            )
         native_manifest_path, native_manifest_sha, _ = _resolve_artifact(
             reproducible["native_manifest"],
             "manifest.evidence.reproducible_build.native_manifest",
@@ -1690,10 +1713,10 @@ def evaluate(
             cuda_gate["build_image_id"],
             "manifest.evidence.cuda_fault.build_image_id",
         )
-        if cuda_build_image_id != trusted_build_image_id:
+        if cuda_build_image_id != trusted_cuda_build_image_id:
             _fail(
                 "manifest.evidence.cuda_fault.build_image_id",
-                "differs from the trusted expected build image ID",
+                "differs from the trusted expected CUDA-build image ID",
             )
         cuda_report_path, cuda_report_sha, _ = _resolve_artifact(
             cuda_gate["report"],
@@ -1815,10 +1838,10 @@ def evaluate(
             optimization["build_image_id"],
             "manifest.evidence.optimization_correctness.build_image_id",
         )
-        if optimization_build_image_id != trusted_build_image_id:
+        if optimization_build_image_id != trusted_optimization_build_image_id:
             _fail(
                 "manifest.evidence.optimization_correctness.build_image_id",
-                "differs from the trusted expected build image ID",
+                "differs from the trusted expected optimization-build image ID",
             )
         optimization_report_path, optimization_report_sha, _ = _resolve_artifact(
             optimization["report"], "manifest.evidence.optimization_correctness.report",
@@ -1851,9 +1874,9 @@ def evaluate(
                     expected_source_archive_sha256=trusted_archive_sha256,
                     source_revision=trusted_revision,
                     source_date_epoch=source_date_epoch,
-                    build_image_id=trusted_build_image_id,
+                    build_image_id=trusted_reproducible_build_image_id,
                     final_binary=binary_path,
-                    final_profile_binary=native_executable_path,
+                    final_profile_binary=profile_binary_path,
                     final_bundle=bundle_path,
                     final_native_manifest=native_manifest_path,
                 )
@@ -1865,11 +1888,11 @@ def evaluate(
             revision=revision,
             archive_sha256=archive_sha256,
             source_date_epoch=source_date_epoch,
-            build_image_id=trusted_build_image_id,
+            build_image_id=trusted_reproducible_build_image_id,
             evidence_a_sha256=reproducible_a_sha,
             evidence_b_sha256=reproducible_b_sha,
             binary_sha256=binary_sha256,
-            profile_binary_sha256=native_executable_sha,
+            profile_binary_sha256=profile_binary_sha,
             bundle_sha256=bundle_sha256,
             native_manifest_sha256=native_manifest_sha,
         )
@@ -1931,12 +1954,12 @@ def evaluate(
             revision=revision,
             archive_sha256=archive_sha256,
         )
-        if optimization_profile_image_sha256 != trusted_build_image_id.removeprefix(
-            "sha256:"
+        if optimization_profile_image_sha256 != (
+            trusted_optimization_build_image_id.removeprefix("sha256:")
         ):
             _fail(
                 "optimization_correctness.build.container_image_sha256",
-                "differs from the trusted expected build image ID",
+                "differs from the trusted expected optimization-build image ID",
             )
         try:
             optimization_replay = optimization_evidence.replay_raw_evidence(
@@ -1944,8 +1967,8 @@ def evaluate(
                 report=optimization_report_path,
                 source_revision=revision,
                 source_archive_sha256=archive_sha256,
-                build_image_id=trusted_build_image_id,
-                profile_binary=native_executable_path,
+                build_image_id=trusted_optimization_build_image_id,
+                profile_binary=profile_binary_path,
             )
         except (optimization_evidence.OptimizationEvidenceError, OSError) as error:
             _fail("optimization_correctness.raw_evidence", str(error))
@@ -1953,8 +1976,10 @@ def evaluate(
             "report": loaded["optimization_correctness"][0],
             "report_sha256": optimization_report_sha,
             "raw_evidence_sha256": optimization_raw_sha,
-            "profile_binary_sha256": native_executable_sha,
-            "build_image_sha256": trusted_build_image_id.removeprefix("sha256:"),
+            "profile_binary_sha256": profile_binary_sha,
+            "build_image_sha256": (
+                trusted_optimization_build_image_id.removeprefix("sha256:")
+            ),
         }
         for field, expected in expected_optimization_replay.items():
             if optimization_replay.get(field) != expected:
@@ -1982,7 +2007,7 @@ def evaluate(
             optimization_sha256=optimization_report_sha,
             optimization_gate_id=OPTIMIZATION_GATE,
             optimization_profile_image_sha256=optimization_profile_image_sha256,
-            profile_binary_sha256=native_executable_sha,
+            profile_binary_sha256=profile_binary_sha,
             raw_evidence_path=raw_paths["performance"],
         )
         _validate_soak(
@@ -2006,8 +2031,15 @@ def evaluate(
                     "release_binary_sha256": binary_sha256,
                     "release_bundle_sha256": bundle_sha256,
                     "release_image_sha256": image_sha256,
-                    "build_image_id": trusted_build_image_id,
-                    "profile_binary_sha256": native_executable_sha,
+                    "build_image_ids": {
+                        "reproducible_build": trusted_reproducible_build_image_id,
+                        "cuda_fault": trusted_cuda_build_image_id,
+                        "optimization_correctness": (
+                            trusted_optimization_build_image_id
+                        ),
+                    },
+                    "native_correctness_executable_sha256": native_executable_sha,
+                    "profile_binary_sha256": profile_binary_sha,
                     "reproducibility_report_sha256": reproducibility_report_sha256,
                     "correctness_golden_sha256": trusted_correctness_golden_sha256,
                     "evidence_sha256": dict(sorted(evidence_hashes.items())),
@@ -2039,7 +2071,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--expected-revision", required=True)
     parser.add_argument("--expected-source-archive-sha256", required=True)
     parser.add_argument("--expected-release-image-id", required=True)
-    parser.add_argument("--expected-build-image-id", required=True)
+    parser.add_argument("--expected-reproducible-build-image-id", required=True)
+    parser.add_argument("--expected-cuda-build-image-id", required=True)
+    parser.add_argument("--expected-optimization-build-image-id", required=True)
     parser.add_argument("--expected-correctness-golden-sha256", required=True)
     parser.add_argument("--report", type=Path, help="create without overwriting")
     return parser
@@ -2053,7 +2087,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         expected_revision=args.expected_revision,
         expected_source_archive_sha256=args.expected_source_archive_sha256,
         expected_release_image_id=args.expected_release_image_id,
-        expected_build_image_id=args.expected_build_image_id,
+        expected_reproducible_build_image_id=(
+            args.expected_reproducible_build_image_id
+        ),
+        expected_cuda_build_image_id=args.expected_cuda_build_image_id,
+        expected_optimization_build_image_id=(
+            args.expected_optimization_build_image_id
+        ),
         expected_correctness_golden_sha256=(
             args.expected_correctness_golden_sha256
         ),

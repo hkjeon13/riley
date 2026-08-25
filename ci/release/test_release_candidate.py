@@ -28,6 +28,7 @@ from check_release_candidate import (  # noqa: E402
     MANIFEST_VERSION,
     OPTIMIZATION_LOGS,
     PYTHON_FREE_CHECKS,
+    REPORT_VERSION,
     SOAK_COMMON_SCENARIO_CHECKS,
     SOAK_CONTRACT_ID,
     SOAK_GLOBAL_CHECKS,
@@ -118,6 +119,7 @@ class CandidateFixture:
             "native_executable": root / "rustinfer-native",
             "repro_build_a": root / "reproducible-build-a.tar",
             "repro_build_b": root / "reproducible-build-b.tar",
+            "profile_binary": root / "rustinfer-profile",
             "native_manifest": root / "native-dependencies.txt",
             "optimization_correctness": root / "optimization-correctness-report.json",
             "optimization_raw": root / "optimization-correctness-evidence.tar",
@@ -134,6 +136,10 @@ class CandidateFixture:
         shutil.copyfile(_NATIVE_TEMPLATE.raw, self.paths["native_replay"])
         shutil.copyfile(_NATIVE_TEMPLATE.executable, self.paths["native_executable"])
         self.paths["native_executable"].chmod(0o755)
+        self.paths["profile_binary"].write_bytes(
+            fixture_elf() + b"rustinfer-profile\0"
+        )
+        self.paths["profile_binary"].chmod(0o755)
         self.paths["binary"].write_bytes(fixture_elf())
         self.paths["binary"].chmod(0o755)
         build_bundle(
@@ -156,6 +162,12 @@ class CandidateFixture:
         self.paths["repro_build_b"].write_bytes(b"reproducible build B fixture\n")
         self.image_sha = digest(b"release image")
         self.cuda_build_image_id = CUDA_BUILD_IMAGE_ID
+        self.reproducible_build_image_id = "sha256:" + digest(
+            b"reproducible build image"
+        )
+        self.optimization_build_image_id = "sha256:" + digest(
+            b"optimization build image"
+        )
         cuda_template_root = root / "cuda-evidence-template"
         cuda_template_root.mkdir()
         cuda_template = CudaEvidenceFixture(cuda_template_root)
@@ -216,7 +228,7 @@ class CandidateFixture:
             "a": digest(self.paths["repro_build_a"].read_bytes()),
             "b": digest(self.paths["repro_build_b"].read_bytes()),
             "binary": digest(self.paths["binary"].read_bytes()),
-            "profile_binary": digest(self.paths["native_executable"].read_bytes()),
+            "profile_binary": digest(self.paths["profile_binary"].read_bytes()),
             "bundle": digest(self.paths["bundle"].read_bytes()),
             "native_manifest": digest(self.paths["native_manifest"].read_bytes()),
         }
@@ -322,8 +334,10 @@ class CandidateFixture:
         raw_root = self.root / "performance-runs"
         raw_root.mkdir()
         fixture = profile_fixture_module.ProfilePairFixture(raw_root)
-        profile_binary_sha = digest(self.paths["native_executable"].read_bytes())
-        profile_image_sha = self.cuda_build_image_id.removeprefix("sha256:")
+        profile_binary_sha = digest(self.paths["profile_binary"].read_bytes())
+        profile_image_sha = self.optimization_build_image_id.removeprefix(
+            "sha256:"
+        )
         for run_index, run in enumerate(fixture.candidate):
             run["source"] = {
                 "git_commit": self.revision,
@@ -519,8 +533,8 @@ class CandidateFixture:
                 "archive_sha256": self._binding()["source_archive_sha256"],
             },
             "build": {
-                "container_image_sha256": self.cuda_build_image_id.removeprefix(
-                    "sha256:"
+                "container_image_sha256": (
+                    self.optimization_build_image_id.removeprefix("sha256:")
                 ),
                 "network": "none",
                 "cargo_locked": True,
@@ -710,14 +724,15 @@ class CandidateFixture:
                     "candidate_executable": artifact("native_executable"),
                 },
                 "reproducible_build": {
-                    "build_image_id": self.cuda_build_image_id,
+                    "build_image_id": self.reproducible_build_image_id,
                     "source_date_epoch": EPOCH,
                     "build_a": artifact("repro_build_a"),
                     "build_b": artifact("repro_build_b"),
+                    "profile_binary": artifact("profile_binary"),
                     "native_manifest": artifact("native_manifest"),
                 },
                 "optimization_correctness": {
-                    "build_image_id": self.cuda_build_image_id,
+                    "build_image_id": self.optimization_build_image_id,
                     "report": artifact("optimization_correctness"),
                     "raw_evidence": artifact("optimization_raw"),
                 },
@@ -750,7 +765,7 @@ class CandidateFixture:
                 "source_date_epoch": EPOCH,
             },
             "build": {
-                "image_id": self.cuda_build_image_id,
+                "image_id": self.reproducible_build_image_id,
                 "image_inspect_sha256": digest(b"builder image inspect"),
                 "platform": reproducible_build_evidence.PLATFORM,
                 "network": "none",
@@ -803,7 +818,9 @@ class CandidateFixture:
             "profile_binary_sha256": self.trusted_reproducible_hashes[
                 "profile_binary"
             ],
-            "build_image_sha256": self.cuda_build_image_id.removeprefix("sha256:"),
+            "build_image_sha256": self.optimization_build_image_id.removeprefix(
+                "sha256:"
+            ),
             "log_sha256": {},
             "test_binary_sha256": {},
         }
@@ -826,7 +843,13 @@ class CandidateFixture:
             "expected_revision": self.revision,
             "expected_source_archive_sha256": self.trusted_source_sha256,
             "expected_release_image_id": f"sha256:{self.image_sha}",
-            "expected_build_image_id": self.cuda_build_image_id,
+            "expected_reproducible_build_image_id": (
+                self.reproducible_build_image_id
+            ),
+            "expected_cuda_build_image_id": self.cuda_build_image_id,
+            "expected_optimization_build_image_id": (
+                self.optimization_build_image_id
+            ),
             "expected_correctness_golden_sha256": (
                 self.correctness_golden_sha256
             ),
@@ -859,6 +882,69 @@ class CandidateFixture:
                 )
             return copy.deepcopy(self.trusted_python_report), None
 
+        def replay_reproducible_build(**arguments: object) -> dict[str, object]:
+            expected_scalars = {
+                "expected_source_archive_sha256": self.trusted_source_sha256,
+                "source_revision": self.revision,
+                "source_date_epoch": EPOCH,
+                "build_image_id": self.reproducible_build_image_id,
+            }
+            for field, expected in expected_scalars.items():
+                if arguments.get(field) != expected:
+                    raise AssertionError(
+                        f"reproducibility replay {field} differs: "
+                        f"{arguments.get(field)!r}"
+                    )
+            expected_artifacts = {
+                "evidence_a": self.paths["repro_build_a"],
+                "evidence_b": self.paths["repro_build_b"],
+                "source_archive": self.paths["source"],
+                "final_binary": self.paths["binary"],
+                "final_profile_binary": self.paths["profile_binary"],
+                "final_bundle": self.paths["bundle"],
+                "final_native_manifest": self.paths["native_manifest"],
+            }
+            for field, expected_path in expected_artifacts.items():
+                actual_path = arguments.get(field)
+                if not isinstance(actual_path, Path):
+                    raise AssertionError(
+                        f"reproducibility replay {field} is not a Path"
+                    )
+                if digest(actual_path.read_bytes()) != digest(expected_path.read_bytes()):
+                    raise AssertionError(
+                        f"reproducibility replay {field} has the wrong bytes"
+                    )
+            return reproducibility_replay
+
+        def replay_optimization(
+            raw_evidence: object, **arguments: object
+        ) -> dict[str, object]:
+            if not isinstance(raw_evidence, Path) or digest(
+                raw_evidence.read_bytes()
+            ) != digest(self.paths["optimization_raw"].read_bytes()):
+                raise AssertionError("optimizer replay received the wrong raw evidence")
+            expected_scalars = {
+                "source_revision": self.revision,
+                "source_archive_sha256": self.trusted_source_sha256,
+                "build_image_id": self.optimization_build_image_id,
+            }
+            for field, expected in expected_scalars.items():
+                if arguments.get(field) != expected:
+                    raise AssertionError(
+                        f"optimizer replay {field} differs: {arguments.get(field)!r}"
+                    )
+            expected_artifacts = {
+                "report": self.paths["optimization_correctness"],
+                "profile_binary": self.paths["profile_binary"],
+            }
+            for field, expected_path in expected_artifacts.items():
+                actual_path = arguments.get(field)
+                if not isinstance(actual_path, Path):
+                    raise AssertionError(f"optimizer replay {field} is not a Path")
+                if digest(actual_path.read_bytes()) != digest(expected_path.read_bytes()):
+                    raise AssertionError(f"optimizer replay {field} has the wrong bytes")
+            return optimization_replay
+
         with mock.patch.object(
             reliability_soak,
             "replay_raw_evidence_archive",
@@ -866,11 +952,11 @@ class CandidateFixture:
         ), mock.patch.object(
             reproducible_build_evidence,
             "check_reproducible_build",
-            return_value=reproducibility_replay,
+            side_effect=replay_reproducible_build,
         ), mock.patch.object(
             optimization_evidence,
             "replay_raw_evidence",
-            return_value=optimization_replay,
+            side_effect=replay_optimization,
         ), mock.patch.object(
             python_free_e2e,
             "load_raw_evidence_archive",
@@ -892,10 +978,43 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def test_complete_source_bound_candidate_passes(self) -> None:
+        self.assertNotEqual(
+            digest(self.fixture.paths["native_executable"].read_bytes()),
+            digest(self.fixture.paths["profile_binary"].read_bytes()),
+        )
+        self.assertEqual(
+            len(
+                {
+                    self.fixture.reproducible_build_image_id,
+                    self.fixture.cuda_build_image_id,
+                    self.fixture.optimization_build_image_id,
+                }
+            ),
+            3,
+        )
         report = self.fixture.evaluate()
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
+        self.assertEqual(report["schema_version"], REPORT_VERSION)
         self.assertEqual(report["bindings"]["git_revision"], self.fixture.revision)
+        self.assertEqual(
+            report["bindings"]["build_image_ids"],
+            {
+                "reproducible_build": self.fixture.reproducible_build_image_id,
+                "cuda_fault": self.fixture.cuda_build_image_id,
+                "optimization_correctness": (
+                    self.fixture.optimization_build_image_id
+                ),
+            },
+        )
+        self.assertEqual(
+            report["bindings"]["native_correctness_executable_sha256"],
+            digest(self.fixture.paths["native_executable"].read_bytes()),
+        )
+        self.assertEqual(
+            report["bindings"]["profile_binary_sha256"],
+            digest(self.fixture.paths["profile_binary"].read_bytes()),
+        )
         self.assertEqual(
             set(report["bindings"]["evidence_sha256"]),
             {
@@ -917,6 +1036,28 @@ class ReleaseCandidateTests(unittest.TestCase):
                 "reproducible_build_native_manifest_raw",
             },
         )
+
+    def test_cli_exposes_only_role_specific_build_image_anchors(self) -> None:
+        destinations = {
+            action.dest for action in release_candidate_module._parser()._actions
+        }
+        self.assertNotIn("expected_build_image_id", destinations)
+        self.assertTrue(
+            {
+                "expected_reproducible_build_image_id",
+                "expected_cuda_build_image_id",
+                "expected_optimization_build_image_id",
+            }.issubset(destinations)
+        )
+
+    def test_legacy_manifest_v1_is_rejected(self) -> None:
+        self.fixture.manifest["schema_version"] = (
+            "rustinfer.release-candidate-manifest.v1"
+        )
+        self.fixture.write_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn(MANIFEST_VERSION, report["errors"][0])
 
     def test_python_free_v2_archive_replays_through_candidate_boundary(self) -> None:
         root = self.fixture.root / "candidate-e2e-integration"
@@ -996,7 +1137,9 @@ class ReleaseCandidateTests(unittest.TestCase):
             "expected_revision": "f" * 40,
             "expected_source_archive_sha256": "e" * 64,
             "expected_release_image_id": "sha256:" + "d" * 64,
-            "expected_build_image_id": "sha256:" + "c" * 64,
+            "expected_reproducible_build_image_id": "sha256:" + "c" * 64,
+            "expected_cuda_build_image_id": "sha256:" + "b" * 64,
+            "expected_optimization_build_image_id": "sha256:" + "a" * 64,
             "expected_correctness_golden_sha256": "b" * 64,
         }
         for field, value in cases.items():
@@ -1005,14 +1148,14 @@ class ReleaseCandidateTests(unittest.TestCase):
                 self.assertFalse(report["passed"])
                 self.assertIn("trusted expected", report["errors"][0])
 
-    def test_optimizer_profile_binary_must_match_native_and_reproducible(self) -> None:
+    def test_optimizer_profile_binary_must_match_reproducible_profile(self) -> None:
         replay = self.fixture.optimization_replay()
         replay["profile_binary_sha256"] = digest(b"substituted profile")
         report = self.fixture.evaluate(optimization_replay=replay)
         self.assertFalse(report["passed"])
         self.assertIn("profile_binary_sha256", report["errors"][0])
 
-    def test_reproducibility_profile_binary_must_match_native(self) -> None:
+    def test_reproducibility_profile_binary_must_match_selected_profile(self) -> None:
         replay = self.fixture.reproducibility_replay()
         replay["artifacts"]["profile_binary_sha256"] = digest(  # type: ignore[index]
             b"substituted profile"
@@ -1021,7 +1164,17 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertIn("final artifact binding mismatch", report["errors"][0])
 
-    def test_performance_profile_binary_must_match_native(self) -> None:
+    def test_native_calibration_executable_cannot_replace_profile_binary(self) -> None:
+        self.fixture.paths["profile_binary"].write_bytes(
+            self.fixture.paths["native_executable"].read_bytes()
+        )
+        self.fixture.paths["profile_binary"].chmod(0o755)
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("final artifact binding mismatch", report["errors"][0])
+
+    def test_performance_profile_binary_must_match_selected_profile(self) -> None:
         self.fixture.documents["performance"]["candidate"]["source"][
             "profile_binary_sha256"
         ] = digest(b"substituted profile")
@@ -1251,7 +1404,29 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.fixture.write_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("trusted expected build image ID", report["errors"][0])
+        self.assertIn("trusted expected CUDA-build image ID", report["errors"][0])
+
+    def test_reproducible_build_image_has_its_own_external_anchor(self) -> None:
+        self.fixture.manifest["evidence"]["reproducible_build"][
+            "build_image_id"
+        ] = "sha256:" + "f" * 64
+        self.fixture.write_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn(
+            "trusted expected reproducible-build image ID", report["errors"][0]
+        )
+
+    def test_optimization_build_image_has_its_own_external_anchor(self) -> None:
+        self.fixture.manifest["evidence"]["optimization_correctness"][
+            "build_image_id"
+        ] = "sha256:" + "f" * 64
+        self.fixture.write_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn(
+            "trusted expected optimization-build image ID", report["errors"][0]
+        )
 
     def test_python_free_attestation_must_equal_raw_replay(self) -> None:
         self.fixture.documents["python_report"]["checks"].reverse()

@@ -15,25 +15,32 @@ python3 ci/release/check_release_candidate.py \
   --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
   --expected-source-archive-sha256 LOWERCASE_SHA256 \
   --expected-release-image-id sha256:LOWERCASE_SHA256 \
-  --expected-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-reproducible-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-cuda-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-optimization-build-image-id sha256:LOWERCASE_SHA256 \
   --expected-correctness-golden-sha256 LOWERCASE_SHA256 \
   --report /evidence/release-candidate-report.json
 ```
 
-The five `--expected-*` values are trusted promotion inputs. Obtain them from
+The seven `--expected-*` values are trusted promotion inputs. Obtain them from
 the reviewed commit decision, canonical archive publication, immutable OCI
-image inspection, and the separately reviewed correctness golden; never
-populate them by copying values out of the candidate manifest being checked.
+image inspections for each distinct role, and the separately reviewed
+correctness golden; never populate them by copying values out of the candidate
+manifest being checked. The reproducibility image may contain the release
+packaging Python tool, while the CUDA-fault and optimizer images are
+Python-free; their IDs are deliberately independent external anchors.
 
 The report path is create-only. Only `status=passed` and `passed=true` exits
-zero. A passed report binds the SHA-256 of the exact input manifest, source
-archive, release binary, release bundle, seven gate decisions, all raw/replay
-artifacts, and the immutable release/build image IDs.
+zero. The report schema is `rustinfer.release-candidate-report.v2`. A passed
+report binds the SHA-256 of the exact input manifest, source archive, release
+binary, release bundle, separate native-calibration and profile executables,
+seven gate decisions, all raw/replay artifacts, and the immutable release plus
+role-specific build image IDs.
 
 ## Closed candidate manifest
 
 The manifest schema version is
-`rustinfer.release-candidate-manifest.v1`. Every `path` is a normalized POSIX
+`rustinfer.release-candidate-manifest.v2`. Every `path` is a normalized POSIX
 path relative to `--evidence-root`; absolute paths, `..`, links, devices,
 duplicate paths, and paths resolving outside that root are rejected. Every
 file descriptor is exactly `{"path": ..., "sha256": ...}`. The complete
@@ -41,7 +48,7 @@ shape is:
 
 ```json
 {
-  "schema_version": "rustinfer.release-candidate-manifest.v1",
+  "schema_version": "rustinfer.release-candidate-manifest.v2",
   "candidate_id": "rustinfer-X.Y.Z-rcN",
   "source": {
     "git_revision": "FULL_LOWERCASE_40_CHARACTER_COMMIT",
@@ -74,6 +81,7 @@ shape is:
       "source_date_epoch": 1700000000,
       "build_a": {"path": "reproducible-build-a.tar", "sha256": "LOWERCASE_SHA256"},
       "build_b": {"path": "reproducible-build-b.tar", "sha256": "LOWERCASE_SHA256"},
+      "profile_binary": {"path": "rustinfer-profile", "sha256": "LOWERCASE_SHA256"},
       "native_manifest": {"path": "native-dependencies.txt", "sha256": "LOWERCASE_SHA256"}
     },
     "optimization_correctness": {
@@ -109,18 +117,25 @@ member's inherited comment to equal that revision. A tar containing the right
 files but lacking the Git commit marker is not evidence. The deterministic
 release bundle is then passed through `verify_release_bundle.py`; its embedded
 source revision must match and its embedded `bin/rustinfer` must be
-byte-identical to the separately supplied executable. The image is identified
-only by an immutable `sha256:` image ID, which every runtime report must repeat
-exactly.
+byte-identical to the separately supplied executable. Each image is identified
+only by an immutable `sha256:` image ID. Runtime reports repeat the release
+image exactly; build evidence repeats the external anchor for its own
+reproducibility, CUDA-fault, or optimizer role.
 
 The reproducibility entry is replayed before GPU evidence is accepted. Build A
 and B must be independent clean, networkless containers using the externally
 trusted immutable build image. Their production binary, `rustinfer-profile`,
 bundle, native dependency manifest, and source archive must be byte-identical
-to one another and to the selected final artifacts. The
-`native_correctness.candidate_executable` is the selected
-`rustinfer-profile`; there is no second profile artifact that can be
-substituted later.
+to one another and to the selected final artifacts. The selected profile is
+the separate `reproducible_build.profile_binary` artifact. It must equal the
+profile executable replayed by optimizer and performance evidence.
+
+`native_correctness.candidate_executable` has a different role: it is the
+source-bound `rustinfer-native calibrate` development executable embedded in
+the native correctness raw evidence. It must equal that raw executable, but it
+must not be substituted for `rustinfer-profile` or shipped as the production
+server. Source/archive and report hashes cross-bind the calibration result to
+the release without pretending the two executables have identical bytes.
 
 ## Raw-replayed gate attestations
 
@@ -185,7 +200,7 @@ inventory and canonical metadata, replays HTTP/SSE/cancellation semantics and
 container lifecycle transitions, validates the extracted executable ELF,
 recomputes the full model tree/tokenizer/shutdown bindings, and requires the
 replayed attestation object to equal the submitted object exactly. The golden
-artifact SHA must also equal the fifth external promotion input. Model ID,
+artifact SHA must also equal the seventh external promotion input. Model ID,
 revision, canonical full-tree manifest, weights, and `tokenizer.json` are
 cross-bound to optimizer evidence.
 For CUDA fault injection, `build_image_id` names the immutable CUDA toolchain
@@ -224,10 +239,11 @@ The two correctness roles must never be collapsed into one hash:
   executable `PT_LOAD` segments, unique fresh Cargo compiler-artifact
   provenance, original/copied subject equality, exact eight-command
   environment/exit contracts, source/build/model bindings, semantic log
-  records, report bytes, and every subject/log digest. The immutable build
-  image must equal the reproducibility and CUDA evidence image, while the
-  replayed profile binary must be the same bytes selected by reproducibility
-  and native correctness.
+  records, report bytes, and every subject/log digest. Its immutable optimizer
+  image ID is independently trusted and need not equal the reproducibility or
+  CUDA-fault image ID. The replayed profile binary must be the same bytes
+  selected by reproducibility and performance evidence; native correctness
+  retains its separate calibration executable.
 
 Create that bundle only after both source revisions and all raw calibration
 artifacts are available:
@@ -250,8 +266,8 @@ The remaining cross-bindings are:
   have the exact four reviewed passing checks, select semantic class E0, bind the exact source
   archive/release binary/runtime image, and bind the exact optimizer
   equivalence report bytes and gate ID. Its profile image must equal the
-  optimizer/reproducibility build image, and its profile executable SHA must
-  equal the reproducible/native/optimizer profile artifact. It must not bind
+  optimizer build image, and its profile executable SHA must equal the
+  reproducible/optimizer profile artifact. It must not bind
   the native 31-case report in the optimizer-report field. Its raw evidence tar must contain only
   `candidate-1.json` through `candidate-5.json`; the final gate revalidates the
   closed native profile schema and all source/model/environment/workload/raw
