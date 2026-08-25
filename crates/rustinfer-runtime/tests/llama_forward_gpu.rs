@@ -328,6 +328,7 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
         u32::try_from(LlamaTracePoint::ALL.len()).expect("trace point count fits u32")
     );
     assert_eq!(golden.len(), LlamaTracePoint::ALL.len());
+    let mut first_numeric_divergence = None;
     for (index, point) in LlamaTracePoint::ALL.into_iter().enumerate() {
         let actual = trace
             .tensor(point)
@@ -348,13 +349,12 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
                 metrics.max_abs,
                 metrics.mean_abs
             );
-            assert!(
-                metrics.cosine >= tolerance.cosine_min
-                    && metrics.max_abs <= tolerance.max_abs_max
-                    && metrics.mean_abs <= tolerance.mean_abs_max,
-                "first divergent PR07 checkpoint {}: metrics={metrics:?}, tolerance={tolerance:?}",
-                point.name()
-            );
+            let passes = metrics.cosine >= tolerance.cosine_min
+                && metrics.max_abs <= tolerance.max_abs_max
+                && metrics.mean_abs <= tolerance.mean_abs_max;
+            if !passes && first_numeric_divergence.is_none() {
+                first_numeric_divergence = Some((point, metrics, tolerance));
+            }
         } else {
             assert_eq!(actual, expected, "{} must be byte-exact", point.name());
         }
@@ -372,6 +372,12 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
         expected_top.into_iter().collect::<BTreeSet<_>>(),
         "golden top-10 token set"
     );
+    if let Some((point, metrics, tolerance)) = first_numeric_divergence {
+        panic!(
+            "first divergent PR07 checkpoint {}: metrics={metrics:?}, tolerance={tolerance:?}",
+            point.name()
+        );
+    }
 }
 
 fn assert_report_matches_context(
