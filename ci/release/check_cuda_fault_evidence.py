@@ -363,9 +363,13 @@ def _read_evidence_directory(root: Path) -> tuple[dict[str, bytes], dict[str, st
         _fail("--evidence-dir", "must be a real directory, not a link")
 
     environment_path = root / "environment.txt"
-    environment_bytes = _regular_file(
+    environment_path = _regular_file(
         environment_path, "environment.txt", MAX_EVIDENCE_FILE_BYTES
-    ).read_bytes()
+    )
+    try:
+        environment_bytes = environment_path.read_bytes()
+    except OSError as error:
+        _fail("environment.txt", f"cannot read evidence: {error}")
     environment = _parse_environment(environment_bytes)
     expected = set(BASE_EVIDENCE_FILES)
     if environment["compute_sanitizer"] == "1":
@@ -627,6 +631,17 @@ def produce(
 
     if raw_evidence.resolve(strict=False) == report.resolve(strict=False):
         _fail("outputs", "--raw-evidence and --report must be different paths")
+    try:
+        evidence_root = evidence_dir.resolve(strict=True)
+        output_paths = {
+            "--raw-evidence": raw_evidence.resolve(strict=False),
+            "--report": report.resolve(strict=False),
+        }
+    except (OSError, RuntimeError) as error:
+        _fail("outputs", f"cannot resolve evidence/output paths: {error}")
+    for label, output in output_paths.items():
+        if output.is_relative_to(evidence_root):
+            _fail(label, "must be outside --evidence-dir")
     _new_output_path(raw_evidence, "--raw-evidence")
     _new_output_path(report, "--report")
     files, source = validate(

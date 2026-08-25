@@ -386,6 +386,20 @@ class CudaFaultEvidenceTests(unittest.TestCase):
             )
         self.assertFalse(raw.exists())
 
+    def test_outputs_inside_raw_evidence_directory_are_rejected(self) -> None:
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "outside --evidence-dir"):
+            produce(
+                self.fixture.evidence,
+                source_revision=REVISION,
+                source_archive=self.fixture.source_archive,
+                build_image_id=BUILD_IMAGE_ID,
+                release_binary=self.fixture.release_binary,
+                release_bundle=self.fixture.release_bundle,
+                release_image_id=RELEASE_IMAGE_ID,
+                raw_evidence=self.fixture.evidence / "recursive-raw.tar",
+                report=self.fixture.root / "report.json",
+            )
+
 
 class CudaFaultRunnerStaticTests(unittest.TestCase):
     def test_python_free_runner_emits_the_checker_inventory(self) -> None:
