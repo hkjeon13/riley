@@ -51,6 +51,7 @@ enum ChainEvidence {
     Quiet,
 }
 
+#[derive(Clone, Copy, Debug)]
 struct CachedChainOptions<'a> {
     decode_calls: usize,
     reference_decode: bool,
@@ -1309,11 +1310,10 @@ fn pinned_smollm2_paged_pool_oom_is_pre_mutation_and_recoverable() -> TestResult
     decode.close()?;
     assert!(context.allocation_stats()?.is_zero());
     println!(
-        "pr10-llama-paged-oom schema_version=1 physical_blocks=1 logical_before={} \
+        "pr10-llama-paged-oom schema_version=1 physical_blocks=1 logical_before={logical_before} \
 requested_blocks=1 free_blocks=0 error_pre_model_mutation=true table_stable=true \
 logits_stable=true pool_accounting_stable=true cuda_allocation_stable=true \
 owner_not_poisoned=true reset_replay_byte_exact=true status=passed",
-        logical_before,
     );
     stream.close()?;
     close_context(context)
