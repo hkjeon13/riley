@@ -184,8 +184,9 @@ fn completion_restore_ambiguous() -> Result<(), Box<dyn Error>> {
 #[ignore = "remote GPU"]
 fn memory_fault_cases_are_subprocess_isolated() -> Result<(), Box<dyn Error>> {
     let executable = std::env::current_exe()?;
+    let parent_pid = std::process::id();
     for case in CASES {
-        let status = Command::new(&executable)
+        let mut child = Command::new(&executable)
             .args([
                 "--ignored",
                 "--exact",
@@ -193,7 +194,16 @@ fn memory_fault_cases_are_subprocess_isolated() -> Result<(), Box<dyn Error>> {
                 "--nocapture",
             ])
             .env(CHILD_ENV, case)
-            .status()?;
+            .spawn()?;
+        let child_pid = child.id();
+        println!(
+            "rustinfer-cuda-memory-fault-case case={case} event=spawn parent_pid={parent_pid} child_pid={child_pid}"
+        );
+        let status = child.wait()?;
+        println!(
+            "rustinfer-cuda-memory-fault-case case={case} event=joined parent_pid={parent_pid} child_pid={child_pid} exit_code={}",
+            status.code().unwrap_or(-1)
+        );
         assert!(status.success(), "fault subprocess failed: {case}");
     }
     Ok(())
@@ -202,12 +212,18 @@ fn memory_fault_cases_are_subprocess_isolated() -> Result<(), Box<dyn Error>> {
 #[test]
 #[ignore = "remote GPU"]
 fn memory_fault_subprocess() -> Result<(), Box<dyn Error>> {
-    match std::env::var(CHILD_ENV).as_deref() {
-        Ok("create-rollback-ambiguous") => create_rollback_ambiguous(),
-        Ok("explicit-close-ambiguous") => explicit_close_ambiguous(),
-        Ok("deferred-submission-error") => deferred_submission_error(),
-        Ok("completion-restore-ambiguous") => completion_restore_ambiguous(),
-        Ok(case) => panic!("unknown memory fault child case: {case}"),
-        Err(_) => Ok(()),
+    let case = std::env::var(CHILD_ENV)?;
+    let child_pid = std::process::id();
+    println!("rustinfer-cuda-memory-fault-case case={case} event=start child_pid={child_pid}");
+    let result = match case.as_str() {
+        "create-rollback-ambiguous" => create_rollback_ambiguous(),
+        "explicit-close-ambiguous" => explicit_close_ambiguous(),
+        "deferred-submission-error" => deferred_submission_error(),
+        "completion-restore-ambiguous" => completion_restore_ambiguous(),
+        _ => panic!("unknown memory fault child case: {case}"),
+    };
+    if result.is_ok() {
+        println!("rustinfer-cuda-memory-fault-case case={case} event=passed child_pid={child_pid}");
     }
+    result
 }

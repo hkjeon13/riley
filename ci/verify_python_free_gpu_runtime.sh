@@ -81,6 +81,7 @@ memory_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-list.txt"
 memory_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-tests.log"
 memory_fault_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
 memory_fault_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-tests.log"
+memory_fault_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-binary.sha256"
 checksum_file="$RUSTINFER_GPU_EVIDENCE_DIR/SHA256SUMS"
 sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
 memory_sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
@@ -92,6 +93,10 @@ memory_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-readelf.txt"
 memory_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-nm.txt"
 test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
 memory_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
+release_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-binary.sha256"
+release_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-ldd.txt"
+release_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-readelf.txt"
+release_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-nm.txt"
 driver_libraries_log="$RUSTINFER_GPU_EVIDENCE_DIR/cuda-driver-libraries.txt"
 
 for output in \
@@ -104,6 +109,7 @@ for output in \
     "$memory_test_log" \
     "$memory_fault_test_list_log" \
     "$memory_fault_test_log" \
+    "$memory_fault_test_binary_checksum_log" \
     "$ldd_log" \
     "$readelf_log" \
     "$nm_log" \
@@ -112,6 +118,10 @@ for output in \
     "$memory_nm_log" \
     "$test_binary_checksum_log" \
     "$memory_test_binary_checksum_log" \
+    "$release_binary_checksum_log" \
+    "$release_ldd_log" \
+    "$release_readelf_log" \
+    "$release_nm_log" \
     "$driver_libraries_log" \
     "$sanitizer_log" \
     "$memory_sanitizer_log" \
@@ -287,10 +297,25 @@ if [ "$memory_binary_count" -ne 1 ]; then
     exit 1
 fi
 
+memory_fault_test_binary=
+memory_fault_binary_count=0
+for candidate in target/debug/deps/memory_fault_injection_gpu-*; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+        memory_fault_test_binary=$candidate
+        memory_fault_binary_count=$((memory_fault_binary_count + 1))
+    fi
+done
+if [ "$memory_fault_binary_count" -ne 1 ]; then
+    echo "expected one memory_fault_injection_gpu test executable, found $memory_fault_binary_count" >&2
+    exit 1
+fi
+
 sha256sum "$test_binary" >"$test_binary_checksum_log"
 sha256sum "$memory_test_binary" >"$memory_test_binary_checksum_log"
+sha256sum "$memory_fault_test_binary" >"$memory_fault_test_binary_checksum_log"
 cat "$test_binary_checksum_log"
 cat "$memory_test_binary_checksum_log"
+cat "$memory_fault_test_binary_checksum_log"
 
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
@@ -353,6 +378,78 @@ then
 fi
 cat "$memory_fault_test_log"
 grep -Eq 'test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out;' "$memory_fault_test_log"
+
+for fault_case in \
+    create-rollback-ambiguous \
+    explicit-close-ambiguous \
+    deferred-submission-error \
+    completion-restore-ambiguous
+do
+    spawn_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=spawn parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    start_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=start child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    passed_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=passed child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    joined_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=joined parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]* exit_code=0" "$memory_fault_test_log" || true)
+    if [ "$spawn_marker_count" -ne 1 ] \
+        || [ "$start_marker_count" -ne 1 ] \
+        || [ "$passed_marker_count" -ne 1 ] \
+        || [ "$joined_marker_count" -ne 1 ]
+    then
+        echo "fault case did not emit one complete subprocess marker sequence: $fault_case" >&2
+        exit 1
+    fi
+done
+
+fault_summary_count=$(grep -Ec 'test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out;' "$memory_fault_test_log" || true)
+if [ "$fault_summary_count" -ne 5 ]; then
+    echo "expected four child and one parent fault-test success summaries, found $fault_summary_count" >&2
+    exit 1
+fi
+
+release_binary=target/release/rustinfer
+test -f "$release_binary"
+test -x "$release_binary"
+sha256sum "$release_binary" >"$release_binary_checksum_log"
+{
+    printf 'artifact=%s\n' "$release_binary"
+    ldd "$release_binary"
+} >"$release_ldd_log"
+{
+    printf 'artifact=%s\n' "$release_binary"
+    readelf -d "$release_binary"
+} >"$release_readelf_log"
+{
+    printf 'artifact=%s\n' "$release_binary"
+    nm -a --defined-only "$release_binary"
+} >"$release_nm_log"
+cat "$release_binary_checksum_log"
+cat "$release_ldd_log"
+cat "$release_readelf_log"
+cat "$release_nm_log"
+
+if grep -Eq '=>[[:space:]]+not found' "$release_ldd_log"; then
+    echo "production release binary has an unresolved dynamic dependency" >&2
+    exit 1
+fi
+grep -Eq 'libcudart\.so' "$release_ldd_log"
+grep -Eq 'libcuda\.so\.1' "$release_ldd_log"
+grep -Eq 'NEEDED.*libcudart\.so' "$release_readelf_log"
+grep -Eq 'NEEDED.*libcuda\.so\.1' "$release_readelf_log"
+if grep -Eq '(RPATH|RUNPATH)' "$release_readelf_log"; then
+    echo "production release binary embeds an unreviewed runtime search path" >&2
+    exit 1
+fi
+if grep -aFq 'rustinfer_cuda_test_memory_fault_' "$release_binary" \
+    || grep -Fq 'rustinfer_cuda_test_memory_fault_' "$release_nm_log"
+then
+    echo "production release binary unexpectedly contains CUDA test fault injection" >&2
+    exit 1
+fi
+if grep -Eiq 'libpython|pytorch|torch|transformers|triton' \
+    "$release_ldd_log" "$release_readelf_log"
+then
+    echo "production release binary contains a forbidden runtime dependency" >&2
+    exit 1
+fi
 
 ldd "$test_binary" >"$ldd_log"
 cat "$ldd_log"
@@ -470,10 +567,15 @@ memory-test-list.txt
 memory-tests.log
 memory-fault-test-list.txt
 memory-fault-tests.log
+memory-fault-test-binary.sha256
 memory-ldd.txt
 memory-readelf.txt
 memory-nm.txt
 memory-test-binary.sha256
+release-binary.sha256
+release-ldd.txt
+release-readelf.txt
+release-nm.txt
 cuda-driver-libraries.txt'
     if [ "$sanitizer_enabled" -eq 1 ]; then
         evidence_files="$evidence_files
@@ -482,7 +584,7 @@ compute-sanitizer-memory-memcheck.log"
     fi
     # File names are fixed above and intentionally contain no whitespace.
     # shellcheck disable=SC2086
-    sha256sum $evidence_files >SHA256SUMS
+    sha256sum $evidence_files | LC_ALL=C sort -k2 >SHA256SUMS
 )
 cat "$checksum_file"
 
