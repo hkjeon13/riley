@@ -261,6 +261,11 @@ pub struct LlamaKvCacheLayout {
 
 impl LlamaKvCacheLayout {
     /// Computes `[layer, kv_head, max_sequence, head_dimension]` BF16 strides.
+    ///
+    /// # Errors
+    ///
+    /// Returns when a dimension is zero, cannot be represented by the native
+    /// fixed-width contract, or makes byte-stride arithmetic overflow.
     pub fn checked(
         layer_count: usize,
         key_value_head_count: usize,
@@ -696,6 +701,12 @@ impl PreparedLlamaDecode {
     /// The prompt length remains fixed because PR08 prefill GEMMs and attention
     /// are prepared for one exact `S`. Reset permits another prompt with that
     /// same length while reusing every allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns for invalid prompt/capacity bounds, unsupported model geometry,
+    /// allocation or upload failure, CUDA-plan selection failure, or checked
+    /// byte-arithmetic overflow.
     #[allow(clippy::too_many_lines, clippy::cast_precision_loss)]
     pub fn prepare(
         model: &LoadedModel,
@@ -880,6 +891,11 @@ impl PreparedLlamaDecode {
     }
 
     /// Uploads and executes the owner's exact fixed-length prompt into cache.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the owner is poisoned or not empty, the prompt length is
+    /// different from the prepared length, or upload/native execution fails.
     pub fn prefill(&mut self, prompt: &[u32], stream: &mut CudaStream) -> LlamaDecodeResult<()> {
         if self.is_poisoned() {
             return Err(LlamaDecodeError::Poisoned);
@@ -900,6 +916,10 @@ impl PreparedLlamaDecode {
     /// Stale cache and partial-state bytes are never visible because the next
     /// prefill overwrites every published prompt position and decode attention
     /// reads only the committed logical length.
+    ///
+    /// # Errors
+    ///
+    /// Returns if native execution previously poisoned the owner.
     pub fn reset(&mut self) -> LlamaDecodeResult<()> {
         if self.is_poisoned() {
             return Err(LlamaDecodeError::Poisoned);
@@ -918,6 +938,11 @@ impl PreparedLlamaDecode {
     /// Capacity, phase, and vocabulary validation complete before the first
     /// device mutation. The logical length commits only after every layer and
     /// the final LM head succeed.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a poisoned or unprefilled owner, exhausted fixed capacity,
+    /// an out-of-range token ID, or any upload/native execution failure.
     pub fn decode(&mut self, token_id: u32, stream: &mut CudaStream) -> LlamaDecodeResult<()> {
         if self.is_poisoned() {
             return Err(LlamaDecodeError::Poisoned);
@@ -1488,6 +1513,12 @@ impl PreparedLlamaDecode {
     ///
     /// Prefill dispatches to its last sequence row; one-token decode writes and
     /// downloads row zero of the reused logits allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the owner is poisoned, no successful output is published,
+    /// the destination length differs from one vocabulary row, or the CUDA
+    /// download fails.
     pub fn download_last_logits(
         &mut self,
         destination: &mut [u8],
@@ -1531,6 +1562,11 @@ impl PreparedLlamaDecode {
     ///
     /// Every close is attempted after the first failure. This is the normal
     /// error-observing path; field `Drop` remains a best-effort fallback.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first decode-local or embedded-forward cleanup failure after
+    /// attempting to close every owned resource.
     #[allow(clippy::too_many_lines)]
     pub fn close(self) -> LlamaDecodeResult<()> {
         let Self {
