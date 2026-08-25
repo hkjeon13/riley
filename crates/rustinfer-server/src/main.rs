@@ -1,25 +1,571 @@
 use std::env;
+use std::ffi::{OsStr, OsString};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
+const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
+
+const USAGE: &str = "\
+usage:
+  rustinfer --version
+  rustinfer serve --model PATH [options]
+
+serve options:
+  --model-id ID                  public model ID (default: checkpoint source model)
+  --bind ADDRESS                 listener address (default: 127.0.0.1:8080)
+  --device ORDINAL               CUDA device ordinal (default: 0)
+  --max-active-sequences N       active scheduler capacity (default: 8)
+  --max-waiting-requests N       waiting scheduler capacity (default: 64)
+  --max-sequence-tokens N        context bound (default: checkpoint maximum)
+  --max-output-tokens N          API output bound (default: min(1024, context-1))
+  --batch-token-budget N         tokens per CUDA iteration (default: 512)
+  --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
+  --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
+  --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+  --shutdown-on-stdin            gracefully stop after one input line or EOF
+";
+
+#[derive(Debug, Eq, PartialEq)]
+enum CliCommand {
+    Help,
+    Version,
+    Serve(ServeOptions),
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct ServeOptions {
+    model_path: PathBuf,
+    model_id: Option<String>,
+    bind_address: String,
+    device_ordinal: u32,
+    max_active_sequences: usize,
+    max_waiting_requests: usize,
+    max_sequence_tokens: Option<usize>,
+    max_output_tokens: Option<usize>,
+    batch_token_budget: usize,
+    prefill_chunk_tokens: usize,
+    physical_kv_blocks: Option<usize>,
+    max_weight_bytes: u64,
+    shutdown_on_stdin: bool,
+}
+
 fn main() -> ExitCode {
-    let mut arguments = env::args_os();
-    let _program = arguments.next();
-    match (arguments.next(), arguments.next()) {
-        (Some(flag), None) if flag == "--version" || flag == "-V" => {
-            match rustinfer_server::version_line() {
-                Ok(version) => {
-                    println!("{version}");
-                    ExitCode::SUCCESS
-                }
-                Err(error) => {
-                    eprintln!("rustinfer: {error}");
-                    ExitCode::FAILURE
-                }
-            }
+    match parse_arguments(env::args_os().skip(1)) {
+        Ok(CliCommand::Help) => {
+            print!("{USAGE}");
+            ExitCode::SUCCESS
         }
-        _ => {
-            eprintln!("usage: rustinfer --version");
+        Ok(CliCommand::Version) => print_version(),
+        Ok(CliCommand::Serve(options)) => match run_serve(options) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("rustinfer: {error}");
+                ExitCode::FAILURE
+            }
+        },
+        Err(error) => {
+            eprintln!("rustinfer: {error}\n\n{USAGE}");
             ExitCode::from(2)
         }
+    }
+}
+
+fn print_version() -> ExitCode {
+    match rustinfer_server::version_line() {
+        Ok(version) => {
+            println!("{version}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("rustinfer: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliCommand, String> {
+    let mut arguments = arguments.into_iter();
+    let Some(command) = arguments.next() else {
+        return Err("a command is required".to_owned());
+    };
+    if command == "--help" || command == "-h" {
+        ensure_finished(&mut arguments)?;
+        return Ok(CliCommand::Help);
+    }
+    if command == "--version" || command == "-V" {
+        ensure_finished(&mut arguments)?;
+        return Ok(CliCommand::Version);
+    }
+    if command != "serve" {
+        return Err(format!("unknown command {}", display_argument(&command)));
+    }
+
+    let mut model_path = None;
+    let mut model_id = None;
+    let mut bind_address = None;
+    let mut device_ordinal = None;
+    let mut max_active_sequences = None;
+    let mut max_waiting_requests = None;
+    let mut max_sequence_tokens = None;
+    let mut max_output_tokens = None;
+    let mut batch_token_budget = None;
+    let mut prefill_chunk_tokens = None;
+    let mut physical_kv_blocks = None;
+    let mut max_weight_bytes = None;
+    let mut shutdown_on_stdin = false;
+
+    while let Some(flag) = arguments.next() {
+        let Some(flag_text) = flag.to_str() else {
+            return Err("serve option names must be UTF-8".to_owned());
+        };
+        match flag_text {
+            "--help" | "-h" => {
+                ensure_finished(&mut arguments)?;
+                return Ok(CliCommand::Help);
+            }
+            "--model" => set_once(
+                &mut model_path,
+                PathBuf::from(next_value(&mut arguments, "--model")?),
+                "--model",
+            )?,
+            "--model-id" => set_once(
+                &mut model_id,
+                parse_utf8(next_value(&mut arguments, "--model-id")?, "--model-id")?,
+                "--model-id",
+            )?,
+            "--bind" => set_once(
+                &mut bind_address,
+                parse_utf8(next_value(&mut arguments, "--bind")?, "--bind")?,
+                "--bind",
+            )?,
+            "--device" => set_once(
+                &mut device_ordinal,
+                parse_number(next_value(&mut arguments, "--device")?, "--device")?,
+                "--device",
+            )?,
+            "--max-active-sequences" => set_once(
+                &mut max_active_sequences,
+                parse_number(
+                    next_value(&mut arguments, "--max-active-sequences")?,
+                    "--max-active-sequences",
+                )?,
+                "--max-active-sequences",
+            )?,
+            "--max-waiting-requests" => set_once(
+                &mut max_waiting_requests,
+                parse_number(
+                    next_value(&mut arguments, "--max-waiting-requests")?,
+                    "--max-waiting-requests",
+                )?,
+                "--max-waiting-requests",
+            )?,
+            "--max-sequence-tokens" => set_once(
+                &mut max_sequence_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--max-sequence-tokens")?,
+                    "--max-sequence-tokens",
+                )?,
+                "--max-sequence-tokens",
+            )?,
+            "--max-output-tokens" => set_once(
+                &mut max_output_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--max-output-tokens")?,
+                    "--max-output-tokens",
+                )?,
+                "--max-output-tokens",
+            )?,
+            "--batch-token-budget" => set_once(
+                &mut batch_token_budget,
+                parse_number(
+                    next_value(&mut arguments, "--batch-token-budget")?,
+                    "--batch-token-budget",
+                )?,
+                "--batch-token-budget",
+            )?,
+            "--prefill-chunk-tokens" => set_once(
+                &mut prefill_chunk_tokens,
+                parse_number(
+                    next_value(&mut arguments, "--prefill-chunk-tokens")?,
+                    "--prefill-chunk-tokens",
+                )?,
+                "--prefill-chunk-tokens",
+            )?,
+            "--kv-blocks" => set_once(
+                &mut physical_kv_blocks,
+                parse_number(next_value(&mut arguments, "--kv-blocks")?, "--kv-blocks")?,
+                "--kv-blocks",
+            )?,
+            "--max-weight-bytes" => set_once(
+                &mut max_weight_bytes,
+                parse_number(
+                    next_value(&mut arguments, "--max-weight-bytes")?,
+                    "--max-weight-bytes",
+                )?,
+                "--max-weight-bytes",
+            )?,
+            "--shutdown-on-stdin" => {
+                if shutdown_on_stdin {
+                    return Err("--shutdown-on-stdin may occur only once".to_owned());
+                }
+                shutdown_on_stdin = true;
+            }
+            _ => return Err(format!("unknown serve option {flag_text}")),
+        }
+    }
+
+    Ok(CliCommand::Serve(ServeOptions {
+        model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
+        model_id,
+        bind_address: bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned()),
+        device_ordinal: device_ordinal.unwrap_or(0),
+        max_active_sequences: max_active_sequences.unwrap_or(8),
+        max_waiting_requests: max_waiting_requests.unwrap_or(64),
+        max_sequence_tokens,
+        max_output_tokens,
+        batch_token_budget: batch_token_budget.unwrap_or(512),
+        prefill_chunk_tokens: prefill_chunk_tokens.unwrap_or(512),
+        physical_kv_blocks,
+        max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
+        shutdown_on_stdin,
+    }))
+}
+
+fn ensure_finished(arguments: &mut impl Iterator<Item = OsString>) -> Result<(), String> {
+    match arguments.next() {
+        None => Ok(()),
+        Some(extra) => Err(format!("unexpected argument {}", display_argument(&extra))),
+    }
+}
+
+fn next_value(
+    arguments: &mut impl Iterator<Item = OsString>,
+    option: &str,
+) -> Result<OsString, String> {
+    arguments
+        .next()
+        .ok_or_else(|| format!("{option} requires a value"))
+}
+
+fn parse_utf8(value: OsString, option: &str) -> Result<String, String> {
+    value
+        .into_string()
+        .map_err(|_| format!("{option} requires a UTF-8 value"))
+}
+
+fn parse_number<T>(value: OsString, option: &str) -> Result<T, String>
+where
+    T: std::str::FromStr,
+{
+    let value = parse_utf8(value, option)?;
+    value
+        .parse::<T>()
+        .map_err(|_| format!("{option} requires a non-negative decimal integer"))
+}
+
+fn set_once<T>(slot: &mut Option<T>, value: T, option: &str) -> Result<(), String> {
+    if slot.replace(value).is_some() {
+        Err(format!("{option} may occur only once"))
+    } else {
+        Ok(())
+    }
+}
+
+fn display_argument(argument: &OsStr) -> String {
+    argument.to_string_lossy().into_owned()
+}
+
+#[cfg(not(feature = "cuda"))]
+fn run_serve(options: ServeOptions) -> Result<(), String> {
+    let _ = (
+        options.model_path,
+        options.model_id,
+        options.bind_address,
+        options.device_ordinal,
+        options.max_active_sequences,
+        options.max_waiting_requests,
+        options.max_sequence_tokens,
+        options.max_output_tokens,
+        options.batch_token_budget,
+        options.prefill_chunk_tokens,
+        options.physical_kv_blocks,
+        options.max_weight_bytes,
+        options.shutdown_on_stdin,
+    );
+    Err("serve requires a build with --features server,cuda".to_owned())
+}
+
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_lines)]
+fn run_serve(options: ServeOptions) -> Result<(), String> {
+    use std::io;
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+    use rustinfer_model::{LoadLimits, LoadedModel};
+    use rustinfer_runtime::llama::{
+        LlamaBatchMetadataConfig, PreparedLlamaBatchExecutorConfig, PreparedLlamaForwardConfig,
+    };
+    use rustinfer_runtime::paged_kv::KV_BLOCK_SIZE;
+    use rustinfer_scheduler::{OverloadPolicy, SchedulerConfig};
+    use rustinfer_server::domain::{ModelMetadata, RequestLimits};
+    use rustinfer_server::engine::{
+        CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
+    };
+    use rustinfer_server::service::{CompletionBackend, ServerConfig, start_server};
+
+    validate_positive("--max-active-sequences", options.max_active_sequences)?;
+    validate_positive("--max-waiting-requests", options.max_waiting_requests)?;
+    validate_positive("--batch-token-budget", options.batch_token_budget)?;
+    validate_positive("--prefill-chunk-tokens", options.prefill_chunk_tokens)?;
+    if options.prefill_chunk_tokens > options.batch_token_budget {
+        return Err("--prefill-chunk-tokens must not exceed --batch-token-budget".to_owned());
+    }
+    if options.batch_token_budget < options.max_active_sequences {
+        return Err(
+            "--batch-token-budget must permit at least one token per active sequence".to_owned(),
+        );
+    }
+    if options.max_weight_bytes == 0 {
+        return Err("--max-weight-bytes must be greater than zero".to_owned());
+    }
+
+    let bind_address = options
+        .bind_address
+        .parse::<SocketAddr>()
+        .map_err(|_| "--bind must be an IP socket address such as 127.0.0.1:8080".to_owned())?;
+    let load_limits = LoadLimits::default()
+        .with_weight_byte_limits(options.max_weight_bytes, options.max_weight_bytes)
+        .map_err(|error| format!("invalid model load limit: {error}"))?;
+    let model = LoadedModel::load(&options.model_path, load_limits)
+        .map_err(|error| format!("model load failed: {error}"))?;
+    let model_context = model.spec().max_sequence_length();
+    let max_sequence_tokens = options.max_sequence_tokens.unwrap_or(model_context);
+    if max_sequence_tokens < 2 || max_sequence_tokens > model_context {
+        return Err(format!(
+            "--max-sequence-tokens must be between 2 and the model bound {model_context}"
+        ));
+    }
+    let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
+    let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
+    if max_output_tokens == 0 || max_output_tokens >= max_sequence_tokens {
+        return Err("--max-output-tokens must be positive and smaller than the context".to_owned());
+    }
+
+    let blocks_per_sequence = max_sequence_tokens.div_ceil(KV_BLOCK_SIZE);
+    let full_active_promise = options
+        .max_active_sequences
+        .checked_mul(blocks_per_sequence)
+        .ok_or_else(|| "KV block promise overflowed".to_owned())?;
+    let physical_kv_blocks = options.physical_kv_blocks.unwrap_or(full_active_promise);
+    validate_positive("--kv-blocks", physical_kv_blocks)?;
+    let maximum_live_requests = options
+        .max_active_sequences
+        .checked_add(options.max_waiting_requests)
+        .ok_or_else(|| "request capacity overflowed".to_owned())?;
+    let maximum_waiting_prompt_tokens = options
+        .max_waiting_requests
+        .checked_mul(max_sequence_tokens)
+        .ok_or_else(|| "waiting prompt-token capacity overflowed".to_owned())?;
+
+    let scheduler = SchedulerConfig {
+        max_waiting_requests: options.max_waiting_requests,
+        max_waiting_prompt_tokens: maximum_waiting_prompt_tokens,
+        max_active_sequences: options.max_active_sequences,
+        max_sequence_tokens,
+        iteration_token_budget: options.batch_token_budget,
+        max_prefill_chunk_tokens: options.prefill_chunk_tokens,
+        aging_threshold_ns: 100_000_000,
+        overload_policy: OverloadPolicy::Wait,
+        admission_timeout_ns: Some(30_000_000_000),
+        max_promised_kv_blocks: physical_kv_blocks,
+        metrics_window_samples: 1_024,
+    };
+    let batch_metadata = LlamaBatchMetadataConfig::new(
+        options.max_active_sequences,
+        options.batch_token_budget,
+        physical_kv_blocks,
+        options.max_active_sequences,
+        physical_kv_blocks,
+    )
+    .map_err(|error| format!("invalid batch configuration: {error}"))?;
+    let executor = PreparedLlamaBatchExecutorConfig::new(
+        batch_metadata,
+        PreparedLlamaForwardConfig::default(),
+    );
+    let model_id = options
+        .model_id
+        .unwrap_or_else(|| model.provenance().source_model().to_owned());
+    let created_unix_seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let metadata = ModelMetadata {
+        model_id,
+        created_unix_seconds,
+        owned_by: "rustinfer".to_owned(),
+        context_window_tokens: max_sequence_tokens,
+        max_output_tokens,
+    };
+    let resources = CudaEngineResources::prepare(
+        metadata,
+        model,
+        CudaBackendConfig {
+            device_ordinal: options.device_ordinal,
+            scheduler,
+            executor,
+        },
+    )
+    .map_err(|error| format!("CUDA backend preparation failed: {error}"))?;
+    let engine = Arc::new(
+        InferenceEngine::start_cuda(
+            resources,
+            EngineConfig {
+                command_queue_capacity: options.max_waiting_requests,
+                event_channel_capacity: 32,
+                max_inflight_requests: maximum_live_requests,
+                admission_timeout: Duration::from_secs(30),
+                idle_poll_interval: Duration::from_millis(1),
+            },
+        )
+        .map_err(|error| format!("inference engine startup failed: {error}"))?,
+    );
+
+    let mut request_limits = RequestLimits::default();
+    request_limits.max_output_tokens = max_output_tokens;
+    let server_config = ServerConfig {
+        bind_address,
+        request_limits,
+        ..ServerConfig::default()
+    };
+    let backend: Arc<dyn CompletionBackend> = engine;
+    let server = start_server(server_config, backend)
+        .map_err(|error| format!("HTTP server startup failed: {error}"))?;
+    println!(
+        "rustinfer listening on http://{} (graceful_stdin_shutdown={})",
+        server.local_address(),
+        options.shutdown_on_stdin
+    );
+
+    if !options.shutdown_on_stdin {
+        loop {
+            std::thread::park();
+        }
+    }
+    let mut line = String::new();
+    io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| format!("shutdown input failed: {error}"))?;
+    server
+        .shutdown()
+        .map_err(|error| format!("graceful shutdown failed: {error}"))
+}
+
+#[cfg(feature = "cuda")]
+fn validate_positive(option: &str, value: usize) -> Result<(), String> {
+    if value == 0 {
+        Err(format!("{option} must be greater than zero"))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsString;
+    use std::path::PathBuf;
+
+    use super::{CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ServeOptions, parse_arguments};
+
+    fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
+        values.iter().map(OsString::from)
+    }
+
+    #[test]
+    fn version_and_help_are_exact_commands() {
+        assert_eq!(
+            parse_arguments(args(&["--version"])),
+            Ok(CliCommand::Version)
+        );
+        assert_eq!(parse_arguments(args(&["-h"])), Ok(CliCommand::Help));
+        assert!(parse_arguments(args(&["--version", "extra"])).is_err());
+        assert!(parse_arguments(args(&[])).is_err());
+    }
+
+    #[test]
+    fn serve_defaults_are_bounded_and_model_is_required() {
+        assert_eq!(
+            parse_arguments(args(&["serve", "--model", "/models/fixture"])),
+            Ok(CliCommand::Serve(ServeOptions {
+                model_path: PathBuf::from("/models/fixture"),
+                model_id: None,
+                bind_address: "127.0.0.1:8080".to_owned(),
+                device_ordinal: 0,
+                max_active_sequences: 8,
+                max_waiting_requests: 64,
+                max_sequence_tokens: None,
+                max_output_tokens: None,
+                batch_token_budget: 512,
+                prefill_chunk_tokens: 512,
+                physical_kv_blocks: None,
+                max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                shutdown_on_stdin: false,
+            }))
+        );
+        assert!(parse_arguments(args(&["serve"])).is_err());
+    }
+
+    #[test]
+    fn serve_explicit_options_and_duplicate_rejection_are_deterministic() {
+        let parsed = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/m",
+            "--model-id",
+            "fixture",
+            "--bind",
+            "0.0.0.0:9000",
+            "--device",
+            "2",
+            "--max-active-sequences",
+            "4",
+            "--max-waiting-requests",
+            "9",
+            "--max-sequence-tokens",
+            "2048",
+            "--max-output-tokens",
+            "128",
+            "--batch-token-budget",
+            "64",
+            "--prefill-chunk-tokens",
+            "32",
+            "--kv-blocks",
+            "512",
+            "--max-weight-bytes",
+            "4096",
+            "--shutdown-on-stdin",
+        ]));
+        assert_eq!(
+            parsed,
+            Ok(CliCommand::Serve(ServeOptions {
+                model_path: PathBuf::from("/m"),
+                model_id: Some("fixture".to_owned()),
+                bind_address: "0.0.0.0:9000".to_owned(),
+                device_ordinal: 2,
+                max_active_sequences: 4,
+                max_waiting_requests: 9,
+                max_sequence_tokens: Some(2048),
+                max_output_tokens: Some(128),
+                batch_token_budget: 64,
+                prefill_chunk_tokens: 32,
+                physical_kv_blocks: Some(512),
+                max_weight_bytes: 4096,
+                shutdown_on_stdin: true,
+            }))
+        );
+        assert!(parse_arguments(args(&["serve", "--model", "/a", "--model", "/b"])).is_err());
+        assert!(parse_arguments(args(&["serve", "--model", "/a", "--bogus"])).is_err());
     }
 }
