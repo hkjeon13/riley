@@ -961,8 +961,13 @@ fn pinned_smollm2_online_prefill_matches_reference_without_score_storage() -> Te
     let optimized_greedy = top_k(&optimized_last_logits, 1)[0];
     let optimized_top_ten = top_k(&optimized_last_logits, 10);
     let golden_top_ten = top_k(golden_last_logits, 10);
+    let optimized_top_ten_csv = optimized_top_ten
+        .iter()
+        .map(usize::to_string)
+        .collect::<Vec<_>>()
+        .join(",");
     eprintln!(
-        "pr08-online-semantic optimized_top1={optimized_greedy} top10={optimized_top_ten:?} row0_byte_exact=true"
+        "pr08-online-semantic schema_version=1 optimized_top1={optimized_greedy} top10={optimized_top_ten_csv} row0_byte_exact=true"
     );
     assert_eq!(optimized_greedy, reference_greedy);
     assert_eq!(optimized_greedy, top_k(golden_last_logits, 1)[0]);
@@ -997,22 +1002,24 @@ fn pinned_smollm2_online_prefill_matches_reference_without_score_storage() -> Te
     );
 
     let stable_allocations = context.allocation_stats()?;
-    for _ in 0..100 {
+    let mut repeated_logits = vec![0_u8; logits_bytes];
+    for iteration in 0..100 {
         optimized.execute(&mut stream)?;
+        optimized.download_logits(&mut repeated_logits, &mut stream)?;
+        assert_eq!(
+            repeated_logits,
+            optimized_prefix_source,
+            "online hot execution {} must remain byte-deterministic",
+            iteration + 1
+        );
     }
     assert_eq!(
         context.allocation_stats()?,
         stable_allocations,
         "100 online hot executions must not allocate score or workspace buffers"
     );
-    let mut repeated_logits = vec![0_u8; logits_bytes];
-    optimized.download_logits(&mut repeated_logits, &mut stream)?;
-    assert_eq!(
-        repeated_logits, optimized_prefix_source,
-        "100 online hot executions must remain byte-deterministic"
-    );
     eprintln!(
-        "pr08-online-determinism executions=100 logits_sha256={} byte_exact=true",
+        "pr08-online-determinism schema_version=1 executions=100 logits_sha256={} byte_exact=true",
         sha256_hex(&repeated_logits)
     );
 
