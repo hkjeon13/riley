@@ -481,11 +481,11 @@ logits_download_bytes={} owner_reused_by_prompt_shape=true status=passed",
 
     assert_eq!(executed_cases, EXPECTED_GOLDEN_CASES);
     println!(
-        "pr11-generation-golden-summary schema_version=1 cases={} prompt_shapes={} \
+        "pr11-generation-golden-summary schema_version=1 cases={executed_cases} \
+prompt_shapes={prompt_shape_count} \
 cache_modes=on,off greedy_exact=true rng_draws=0 n_tokens_requires_n_minus_1_decode=true \
-per_token_cpu_gpu_timing=true full_bf16_logits_d2h_bytes_per_token={} kv_pool_reset=true \
-cuda_allocation_zero_after_close=true status=passed",
-        executed_cases, prompt_shape_count, logits_row_bytes,
+per_token_cpu_gpu_timing=true full_bf16_logits_d2h_bytes_per_token={logits_row_bytes} \
+kv_pool_reset=true cuda_allocation_zero_after_close=true status=passed",
     );
     stream.close()?;
     close_context(context)
