@@ -98,6 +98,7 @@ typedef int32_t RustInferCudaDType;
 #define RUSTINFER_CUDA_DTYPE_BF16 ((RustInferCudaDType)2)
 #define RUSTINFER_CUDA_DTYPE_U32 ((RustInferCudaDType)3)
 #define RUSTINFER_CUDA_DTYPE_U8 ((RustInferCudaDType)4)
+#define RUSTINFER_CUDA_DTYPE_U16 ((RustInferCudaDType)5)
 
 // A borrowed, typed subspan of an opaque device allocation. byte_len is the
 // caller-declared accessible capacity from byte_offset, not the allocation's
@@ -416,6 +417,95 @@ typedef struct RustInferCudaDecodePartialStateReduceParams {
   uint32_t reserved1;
   uint64_t reserved[4];
 } RustInferCudaDecodePartialStateReduceParams;
+
+#define RUSTINFER_CUDA_PAGED_KV_BLOCK_TABLE_VERSION 1u
+#define RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE 16u
+#define RUSTINFER_CUDA_PAGED_KV_METADATA_NONE 0u
+
+// Exact paged-cache address-translation descriptor. block_ids is U32
+// [block_count] in logical-block order; entries name physical blocks in
+// [0, physical_block_count). valid_tokens is U16 [block_count]. Every block
+// except the last contains 16 valid tokens and the last contains
+// ((logical_token_count - 1) % 16) + 1. The safe Rust boundary validates the
+// mirrored host arrays (including distinct/in-range physical IDs) before this
+// device descriptor is submitted. metadata_kind/version must both be zero in
+// v1: the exact path has no optional sidecar dependency, while the reserved
+// tail leaves an additive extension point.
+typedef struct RustInferCudaPagedKvBlockTableV1 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RustInferCudaBufferSpan block_ids;
+  RustInferCudaBufferSpan valid_tokens;
+  uint64_t logical_token_count;
+  uint64_t block_count;
+  uint64_t physical_block_count;
+  uint32_t block_size;
+  uint32_t metadata_kind;
+  uint32_t metadata_version;
+  uint32_t reserved0;
+  uint64_t reserved[3];
+} RustInferCudaPagedKvBlockTableV1;
+
+// Bit-preserving scatter from dense BF16 [T,KVH,D] sources into separate BF16
+// pools [physical_block_count,KVH,16,D]. destination_token_start is logical;
+// the table performs address translation and may contain shuffled physical
+// block IDs. The table describes the post-write logical length.
+typedef struct RustInferCudaPagedKvCacheWriteParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan key_source;
+  RustInferCudaBufferSpan value_source;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaPagedKvBlockTableV1 block_table;
+  uint64_t source_token_count;
+  uint64_t destination_token_start;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[4];
+} RustInferCudaPagedKvCacheWriteParams;
+
+// Four-stage staged-BF16 correctness reference over paged BF16 pools. Scores
+// are materialized as BF16 [QH,logical_token_count]. Only logical table order
+// affects attention order; physical block numbering is opaque.
+typedef struct RustInferCudaPagedDecodeAttentionReferenceParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaBufferSpan score_workspace;
+  RustInferCudaBufferSpan output;
+  RustInferCudaPagedKvBlockTableV1 block_table;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  float scale;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaPagedDecodeAttentionReferenceParams;
+
+// Exact D64 paged online producer. One packed F32 DecodePartialState is
+// produced for each logical 16-token block, then the unchanged PR 09 reducer
+// merges block slots in logical order and normalizes once. Capacity is the
+// preallocated number of logical block slots.
+typedef struct RustInferCudaPagedDecodeAttentionParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaBufferSpan partial_states;
+  RustInferCudaBufferSpan output;
+  RustInferCudaPagedKvBlockTableV1 block_table;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t partial_state_capacity;
+  float scale;
+  uint32_t reduction_order;
+  uint64_t reserved[4];
+} RustInferCudaPagedDecodeAttentionParams;
 
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
@@ -764,6 +854,18 @@ RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_decode_partial_state_reduce_execute(
     const RustInferCudaDecodePartialStateReduceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_paged_kv_cache_write_execute(
+    const RustInferCudaPagedKvCacheWriteParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_paged_decode_attention_reference_execute(
+    const RustInferCudaPagedDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
+    const RustInferCudaPagedDecodeAttentionParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

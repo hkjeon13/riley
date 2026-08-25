@@ -26,7 +26,10 @@ pub use decode::{
     DecodeAttentionRequest, DecodeAttentionSelectionReason, DecodeAttentionSelectionTrace,
     DecodePartialReductionOrder, DecodePartialState, DecodePartialStateError,
     DecodePartialStateLayout, DecodePartialStateReduceParams, KvCacheAppendParams,
-    PreparedDecodeAttention, decode_partial_states_reduce, kv_cache_append,
+    PAGED_KV_BLOCK_SIZE, PAGED_KV_BLOCK_TABLE_VERSION, PagedDecodeAttentionParams,
+    PagedDecodeAttentionRequest, PagedKvBlockTableHostV1, PagedKvBlockTableV1,
+    PagedKvCacheAppendParams, PreparedDecodeAttention, PreparedPagedDecodeAttention,
+    decode_partial_states_reduce, kv_cache_append, paged_kv_cache_append,
 };
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};

@@ -27,6 +27,8 @@ pub enum CudaDType {
     BF16,
     /// Unsigned 32-bit integer, used for token ids.
     U32,
+    /// Unsigned 16-bit integer, used for paged-cache valid-token counts.
+    U16,
     /// Unsigned byte, used for opaque primitive scratch records.
     U8,
 }
@@ -37,7 +39,7 @@ impl CudaDType {
     pub const fn size_bytes(self) -> u64 {
         match self {
             Self::F32 | Self::U32 => 4,
-            Self::BF16 => 2,
+            Self::BF16 | Self::U16 => 2,
             Self::U8 => 1,
         }
     }
@@ -49,6 +51,7 @@ impl CudaDType {
             Self::F32 => "f32",
             Self::BF16 => "bf16",
             Self::U32 => "u32",
+            Self::U16 => "u16",
             Self::U8 => "u8",
         }
     }
@@ -63,6 +66,7 @@ impl CudaDType {
             Self::F32 => ffi::DTYPE_F32,
             Self::BF16 => ffi::DTYPE_BF16,
             Self::U32 => ffi::DTYPE_U32,
+            Self::U16 => ffi::DTYPE_U16,
             Self::U8 => ffi::DTYPE_U8,
         }
     }
@@ -1016,6 +1020,7 @@ mod tests {
         assert_eq!(CudaDType::F32.size_bytes(), 4);
         assert_eq!(CudaDType::BF16.size_bytes(), 2);
         assert_eq!(CudaDType::U32.size_bytes(), 4);
+        assert_eq!(CudaDType::U16.size_bytes(), 2);
         assert_eq!(CudaDType::U8.size_bytes(), 1);
     }
 

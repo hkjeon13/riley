@@ -22,6 +22,10 @@ const MAXIMUM_GRID_X: u64 = i32::MAX as u64;
 const MAXIMUM_GRID_Y: u64 = 65_535;
 const REFERENCE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.materialized-gqa-decode.bf16";
 const ONLINE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64";
+const PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.paged-materialized-gqa-decode.bf16.block16";
+const PAGED_ONLINE_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
 const IMPLEMENTATION_VERSION: &str = "1";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
@@ -31,6 +35,12 @@ const NATIVE_DEPENDENCY: &str = concat!(
 
 /// Version of the packed decode-partial-state storage contract.
 pub const DECODE_PARTIAL_STATE_VERSION: u32 = 1;
+/// Version of the exact paged KV block-table contract.
+pub const PAGED_KV_BLOCK_TABLE_VERSION: u32 = 1;
+/// Fixed number of logical tokens in every PR 10 physical KV block.
+pub const PAGED_KV_BLOCK_SIZE: u64 = 16;
+#[cfg(feature = "cuda")]
+const PAGED_KV_BLOCK_SIZE_ABI: u32 = 16;
 
 /// One cache write from dense token-major projections into head-major storage.
 #[derive(Debug)]
@@ -158,6 +168,311 @@ pub fn kv_cache_append(
             params.source_token_count,
             params.destination_token_start,
             params.maximum_token_count,
+            params.key_value_head_count,
+            params.head_size,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Allocation-free host mirror of one exact paged block table.
+///
+/// Physical IDs are stored in logical-block order and may be arbitrarily
+/// shuffled. The constructor rejects duplicate or out-of-pool IDs and pins the
+/// valid-token count of every logical block.
+#[derive(Clone, Copy, Debug)]
+pub struct PagedKvBlockTableHostV1<'a> {
+    format_version: u32,
+    block_ids: &'a [u32],
+    valid_tokens: &'a [u16],
+    logical_token_count: u64,
+    physical_block_count: u64,
+    block_count: u64,
+}
+
+impl<'a> PagedKvBlockTableHostV1<'a> {
+    /// Creates a version-1 host table.
+    ///
+    /// # Errors
+    ///
+    /// Returns before CUDA execution for malformed lengths, invalid valid-token
+    /// counts, duplicate/stale physical IDs, or arithmetic overflow.
+    pub fn new(
+        block_ids: &'a [u32],
+        valid_tokens: &'a [u16],
+        logical_token_count: u64,
+        physical_block_count: u64,
+    ) -> CudaResult<Self> {
+        Self::from_versioned_parts(
+            PAGED_KV_BLOCK_TABLE_VERSION,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+        )
+    }
+
+    /// Decodes an explicitly versioned table, rejecting unknown versions.
+    ///
+    /// # Errors
+    ///
+    /// Returns for an unsupported version or any invalid v1 field.
+    pub fn from_versioned_parts(
+        format_version: u32,
+        block_ids: &'a [u32],
+        valid_tokens: &'a [u16],
+        logical_token_count: u64,
+        physical_block_count: u64,
+    ) -> CudaResult<Self> {
+        validate_paged_block_table_host(
+            format_version,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+        )?;
+        let block_count = u64::try_from(block_ids.len()).map_err(|_| {
+            CudaError::out_of_range(
+                "PagedKvBlockTableHostV1::from_versioned_parts",
+                "host block-id length does not fit u64",
+            )
+        })?;
+        Ok(Self {
+            format_version,
+            block_ids,
+            valid_tokens,
+            logical_token_count,
+            physical_block_count,
+            block_count,
+        })
+    }
+
+    #[must_use]
+    pub const fn format_version(self) -> u32 {
+        self.format_version
+    }
+
+    #[must_use]
+    pub const fn block_ids(self) -> &'a [u32] {
+        self.block_ids
+    }
+
+    #[must_use]
+    pub const fn valid_tokens(self) -> &'a [u16] {
+        self.valid_tokens
+    }
+
+    #[must_use]
+    pub const fn logical_token_count(self) -> u64 {
+        self.logical_token_count
+    }
+
+    #[must_use]
+    pub const fn physical_block_count(self) -> u64 {
+        self.physical_block_count
+    }
+
+    #[must_use]
+    pub const fn block_count(self) -> u64 {
+        self.block_count
+    }
+}
+
+/// Paired host mirror and device arrays for [`PagedKvBlockTableHostV1`].
+#[derive(Debug)]
+pub struct PagedKvBlockTableV1<'a> {
+    host: PagedKvBlockTableHostV1<'a>,
+    device_block_ids: CudaBufferSpan<'a>,
+    device_valid_tokens: CudaBufferSpan<'a>,
+}
+
+impl<'a> PagedKvBlockTableV1<'a> {
+    /// Binds validated host metadata to pre-uploaded U32/U16 device arrays.
+    ///
+    /// The caller owns synchronization of the mirrored contents. This method
+    /// validates dtype and capacity; execution additionally validates CUDA
+    /// context ownership and idle state.
+    ///
+    /// # Errors
+    ///
+    /// Returns for an incompatible dtype or undersized device span.
+    pub fn new(
+        host: PagedKvBlockTableHostV1<'a>,
+        device_block_ids: CudaBufferSpan<'a>,
+        device_valid_tokens: CudaBufferSpan<'a>,
+    ) -> CudaResult<Self> {
+        const OPERATION: &str = "PagedKvBlockTableV1::new";
+        require_dtype(
+            OPERATION,
+            "device_block_ids",
+            device_block_ids.dtype(),
+            CudaDType::U32,
+        )?;
+        require_dtype(
+            OPERATION,
+            "device_valid_tokens",
+            device_valid_tokens.dtype(),
+            CudaDType::U16,
+        )?;
+        require_capacity(
+            OPERATION,
+            "device_block_ids",
+            device_block_ids.byte_len(),
+            checked_bytes(
+                OPERATION,
+                &[host.block_count(), CudaDType::U32.size_bytes()],
+            )?,
+        )?;
+        require_capacity(
+            OPERATION,
+            "device_valid_tokens",
+            device_valid_tokens.byte_len(),
+            checked_bytes(
+                OPERATION,
+                &[host.block_count(), CudaDType::U16.size_bytes()],
+            )?,
+        )?;
+        Ok(Self {
+            host,
+            device_block_ids,
+            device_valid_tokens,
+        })
+    }
+
+    #[must_use]
+    pub const fn host(&self) -> PagedKvBlockTableHostV1<'a> {
+        self.host
+    }
+
+    #[must_use]
+    pub const fn device_block_ids(&self) -> CudaBufferSpan<'a> {
+        self.device_block_ids
+    }
+
+    #[must_use]
+    pub const fn device_valid_tokens(&self) -> CudaBufferSpan<'a> {
+        self.device_valid_tokens
+    }
+}
+
+/// One dense-to-paged BF16 K/V scatter.
+#[derive(Debug)]
+pub struct PagedKvCacheAppendParams<'a> {
+    /// BF16 `[T,KVH,D]` keys after `RoPE`.
+    pub key_source: CudaBufferSpan<'a>,
+    /// BF16 `[T,KVH,D]` values.
+    pub value_source: CudaBufferSpan<'a>,
+    /// BF16 `[physical_block,KVH,16,D]` key pool.
+    pub key_pool: CudaBufferSpanMut<'a>,
+    /// BF16 `[physical_block,KVH,16,D]` value pool.
+    pub value_pool: CudaBufferSpanMut<'a>,
+    /// Post-write logical address translation.
+    pub block_table: PagedKvBlockTableV1<'a>,
+    /// Number of dense source tokens.
+    pub source_token_count: u64,
+    /// First logical destination token.
+    pub destination_token_start: u64,
+    /// Number of K/V heads.
+    pub key_value_head_count: u64,
+    /// Elements per head.
+    pub head_size: u64,
+}
+
+/// Scatters paired K/V rows into a fixed-block paged cache.
+///
+/// Validation completes before either pool is modified. Logical commit remains
+/// the caller's responsibility after all layer writes succeed.
+///
+/// # Errors
+///
+/// Returns for invalid table metadata, range, dtype, capacity, ownership,
+/// overlap, launch, or synchronization failure.
+pub fn paged_kv_cache_append(
+    params: &mut PagedKvCacheAppendParams<'_>,
+    stream: &mut CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "paged_kv_cache_append";
+    require_nonzero(OPERATION, "source_token_count", params.source_token_count)?;
+    require_nonzero(
+        OPERATION,
+        "key_value_head_count",
+        params.key_value_head_count,
+    )?;
+    require_nonzero(OPERATION, "head_size", params.head_size)?;
+    let host = params.block_table.host();
+    if params.destination_token_start > host.logical_token_count()
+        || params.source_token_count > host.logical_token_count() - params.destination_token_start
+    {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            "paged cache destination range exceeds logical_token_count",
+        ));
+    }
+    for (name, dtype) in [
+        ("key_source", params.key_source.dtype()),
+        ("value_source", params.value_source.dtype()),
+        ("key_pool", params.key_pool.dtype()),
+        ("value_pool", params.value_pool.dtype()),
+    ] {
+        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+    }
+    let source_bytes = checked_bytes(
+        OPERATION,
+        &[
+            params.source_token_count,
+            params.key_value_head_count,
+            params.head_size,
+            BF16_BYTES,
+        ],
+    )?;
+    let pool_bytes = paged_pool_bytes(
+        OPERATION,
+        host.physical_block_count(),
+        params.key_value_head_count,
+        params.head_size,
+    )?;
+    for (name, actual, required) in [
+        ("key_source", params.key_source.byte_len(), source_bytes),
+        ("value_source", params.value_source.byte_len(), source_bytes),
+        ("key_pool", params.key_pool.byte_len(), pool_bytes),
+        ("value_pool", params.value_pool.byte_len(), pool_bytes),
+    ] {
+        require_capacity(OPERATION, name, actual, required)?;
+    }
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.key_source.buffer(),
+            params.value_source.buffer(),
+            params.key_pool.buffer(),
+            params.value_pool.buffer(),
+            params.block_table.device_block_ids.buffer(),
+            params.block_table.device_valid_tokens.buffer(),
+        ],
+    )?;
+
+    #[cfg(feature = "cuda")]
+    {
+        ffi::paged_kv_cache_write_execute(
+            params.key_source.raw(),
+            params.value_source.raw(),
+            params.key_pool.raw(),
+            params.value_pool.raw(),
+            params.block_table.device_block_ids.raw(),
+            params.block_table.device_valid_tokens.raw(),
+            host.format_version(),
+            host.logical_token_count(),
+            host.block_count(),
+            host.physical_block_count(),
+            PAGED_KV_BLOCK_SIZE_ABI,
+            params.source_token_count,
+            params.destination_token_start,
             params.key_value_head_count,
             params.head_size,
             &mut stream.native,
@@ -332,6 +647,68 @@ impl DecodeAttentionRequest {
     }
 }
 
+/// Fixed dimensions for one query-length-one decode over a paged KV pool.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PagedDecodeAttentionRequest {
+    maximum_sequence_length: u64,
+    physical_block_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+}
+
+impl PagedDecodeAttentionRequest {
+    #[must_use]
+    pub const fn new(
+        maximum_sequence_length: u64,
+        physical_block_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        head_size: u64,
+        scale: f32,
+    ) -> Self {
+        Self {
+            maximum_sequence_length,
+            physical_block_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            scale,
+        }
+    }
+
+    #[must_use]
+    pub const fn maximum_sequence_length(self) -> u64 {
+        self.maximum_sequence_length
+    }
+
+    #[must_use]
+    pub const fn physical_block_count(self) -> u64 {
+        self.physical_block_count
+    }
+
+    #[must_use]
+    pub const fn query_head_count(self) -> u64 {
+        self.query_head_count
+    }
+
+    #[must_use]
+    pub const fn key_value_head_count(self) -> u64 {
+        self.key_value_head_count
+    }
+
+    #[must_use]
+    pub const fn head_size(self) -> u64 {
+        self.head_size
+    }
+
+    #[must_use]
+    pub const fn scale(self) -> f32 {
+        self.scale
+    }
+}
+
 /// Static contract declared by a decode backend.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DecodeAttentionCapability {
@@ -384,6 +761,22 @@ const REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabilit
 
 const ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     implementation_id: ONLINE_IMPLEMENTATION_ID,
+    head_size: Some(ONLINE_HEAD_SIZE),
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: false,
+    partial_state_merge: true,
+};
+
+const PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: PAGED_REFERENCE_IMPLEMENTATION_ID,
+    head_size: None,
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: true,
+    partial_state_merge: false,
+};
+
+const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: PAGED_ONLINE_IMPLEMENTATION_ID,
     head_size: Some(ONLINE_HEAD_SIZE),
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
@@ -764,6 +1157,249 @@ impl PreparedDecodeAttention {
                 self.request.key_value_head_count,
                 self.request.head_size,
                 self.request.tokens_per_partition,
+                self.trace.partial_state_capacity,
+                self.request.scale,
+                reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
+                &mut stream.native,
+            ),
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = params;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+}
+
+/// Device views used by one paged decode execution.
+#[derive(Debug)]
+pub struct PagedDecodeAttentionParams<'a> {
+    /// BF16 query `[QH,D]`.
+    pub query: CudaBufferSpan<'a>,
+    /// BF16 key pool `[physical_block,KVH,16,D]`.
+    pub key_pool: CudaBufferSpan<'a>,
+    /// BF16 value pool `[physical_block,KVH,16,D]`.
+    pub value_pool: CudaBufferSpan<'a>,
+    /// BF16 reference scores or F32 packed states, selected during prepare.
+    pub workspace: CudaBufferSpanMut<'a>,
+    /// BF16 output `[QH,D]`.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Exact logical-to-physical address translation.
+    pub block_table: PagedKvBlockTableV1<'a>,
+}
+
+/// Immutable paged decode selection bound to one CUDA context owner.
+#[derive(Clone)]
+pub struct PreparedPagedDecodeAttention {
+    context: Arc<ContextInner>,
+    request: PagedDecodeAttentionRequest,
+    backend: DecodeAttentionBackend,
+    capability: DecodeAttentionCapability,
+    trace: DecodeAttentionSelectionTrace,
+}
+
+impl fmt::Debug for PreparedPagedDecodeAttention {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("PreparedPagedDecodeAttention")
+            .field("device_ordinal", &self.context.ordinal)
+            .field("request", &self.request)
+            .field("backend", &self.backend)
+            .field("capability", &self.capability)
+            .field("trace", &self.trace)
+            .finish()
+    }
+}
+
+impl PreparedPagedDecodeAttention {
+    /// Cold-selects the materialized or exact D64 online paged backend.
+    ///
+    /// # Errors
+    ///
+    /// Returns for invalid dimensions, arithmetic overflow, architecture
+    /// incompatibility, or unavailable required backends.
+    pub fn select(
+        context: &CudaContext,
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        Self::select_for_compute_capability(
+            context,
+            context.compute_capability(),
+            request,
+            preference,
+            availability,
+        )
+    }
+
+    fn select_for_compute_capability(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        validate_paged_request(request)?;
+        require_architecture_support(compute_capability)?;
+        match preference {
+            DecodeAttentionPreference::Reference => {
+                if !availability.reference {
+                    return Err(not_supported(
+                        "select_paged_decode_attention",
+                        "the explicitly requested paged reference is unavailable",
+                    ));
+                }
+                prepare_paged_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::MaterializedReference,
+                    DecodeAttentionSelectionReason::ExplicitReference,
+                )
+            }
+            DecodeAttentionPreference::Optimized => {
+                let fallback_reason = if !availability.chunked_online {
+                    DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+                } else if request.head_size != ONLINE_HEAD_SIZE {
+                    DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
+                } else if !paged_optimized_geometry_supported(request)? {
+                    DecodeAttentionSelectionReason::UnsupportedLaunchGeometryFallback
+                } else {
+                    return prepare_paged_selection(
+                        context,
+                        compute_capability,
+                        request,
+                        DecodeAttentionBackend::ChunkedOnline,
+                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch,
+                    );
+                };
+                if !availability.reference {
+                    return Err(not_supported(
+                        "select_paged_decode_attention",
+                        format!(
+                            "optimized paged decode was rejected ({fallback_reason:?}) and the reference is unavailable"
+                        ),
+                    ));
+                }
+                prepare_paged_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::MaterializedReference,
+                    fallback_reason,
+                )
+            }
+        }
+    }
+
+    #[must_use]
+    pub const fn request(&self) -> PagedDecodeAttentionRequest {
+        self.request
+    }
+
+    #[must_use]
+    pub const fn backend(&self) -> DecodeAttentionBackend {
+        self.backend
+    }
+
+    #[must_use]
+    pub const fn capability(&self) -> DecodeAttentionCapability {
+        self.capability
+    }
+
+    #[must_use]
+    pub const fn selection_trace(&self) -> DecodeAttentionSelectionTrace {
+        self.trace
+    }
+
+    #[must_use]
+    pub const fn workspace_bytes(&self) -> u64 {
+        self.trace.workspace_bytes
+    }
+
+    #[must_use]
+    pub const fn workspace_dtype(&self) -> CudaDType {
+        self.trace.workspace_dtype
+    }
+
+    #[must_use]
+    pub const fn partial_state_capacity(&self) -> u64 {
+        self.trace.partial_state_capacity
+    }
+
+    #[must_use]
+    pub const fn tokens_per_partition(&self) -> u64 {
+        PAGED_KV_BLOCK_SIZE
+    }
+
+    /// Executes the cold-selected exact backend without allocating.
+    ///
+    /// # Errors
+    ///
+    /// Returns before launch for stale/malformed table metadata, incompatible
+    /// pool geometry, dtype/capacity/context violations, or native failure.
+    pub fn execute(
+        &self,
+        params: &mut PagedDecodeAttentionParams<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "paged_decode_attention";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        let host = params.block_table.host();
+        if host.logical_token_count() > self.request.maximum_sequence_length {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                "block table logical length exceeds the prepared sequence capacity",
+            ));
+        }
+        if host.physical_block_count() != self.request.physical_block_count {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "block table physical pool size differs from the prepared request",
+            ));
+        }
+        validate_paged_execute_params(self, params, stream)?;
+
+        #[cfg(feature = "cuda")]
+        match self.backend {
+            DecodeAttentionBackend::MaterializedReference => {
+                ffi::paged_decode_attention_reference_execute(
+                    params.query.raw(),
+                    params.key_pool.raw(),
+                    params.value_pool.raw(),
+                    params.workspace.raw(),
+                    params.output.raw(),
+                    params.block_table.device_block_ids.raw(),
+                    params.block_table.device_valid_tokens.raw(),
+                    host.format_version(),
+                    host.logical_token_count(),
+                    host.block_count(),
+                    host.physical_block_count(),
+                    PAGED_KV_BLOCK_SIZE_ABI,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.request.scale,
+                    &mut stream.native,
+                )
+            }
+            DecodeAttentionBackend::ChunkedOnline => ffi::paged_decode_attention_execute(
+                params.query.raw(),
+                params.key_pool.raw(),
+                params.value_pool.raw(),
+                params.workspace.raw(),
+                params.output.raw(),
+                params.block_table.device_block_ids.raw(),
+                params.block_table.device_valid_tokens.raw(),
+                host.format_version(),
+                host.logical_token_count(),
+                host.block_count(),
+                host.physical_block_count(),
+                PAGED_KV_BLOCK_SIZE_ABI,
+                self.request.query_head_count,
+                self.request.key_value_head_count,
+                self.request.head_size,
                 self.trace.partial_state_capacity,
                 self.request.scale,
                 reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
@@ -1159,6 +1795,277 @@ impl fmt::Display for DecodePartialStateError {
 }
 
 impl error::Error for DecodePartialStateError {}
+
+fn prepare_paged_selection(
+    context: &CudaContext,
+    compute_capability: (u32, u32),
+    request: PagedDecodeAttentionRequest,
+    backend: DecodeAttentionBackend,
+    reason: DecodeAttentionSelectionReason,
+) -> CudaResult<PreparedPagedDecodeAttention> {
+    let (
+        capability,
+        workspace_dtype,
+        workspace_bytes,
+        materialized_score_bytes,
+        partial_state_bytes,
+        partial_state_capacity,
+    ) = match backend {
+        DecodeAttentionBackend::MaterializedReference => {
+            let bytes = checked_bytes(
+                "select_paged_decode_attention",
+                &[
+                    request.query_head_count,
+                    request.maximum_sequence_length,
+                    BF16_BYTES,
+                ],
+            )?;
+            (
+                PAGED_REFERENCE_CAPABILITY,
+                CudaDType::BF16,
+                bytes,
+                bytes,
+                0,
+                0,
+            )
+        }
+        DecodeAttentionBackend::ChunkedOnline => {
+            let capacity = paged_block_count(request.maximum_sequence_length)?;
+            let layout = DecodePartialStateLayout::new(
+                capacity,
+                request.query_head_count,
+                request.head_size,
+            )?;
+            (
+                PAGED_ONLINE_CAPABILITY,
+                CudaDType::F32,
+                layout.byte_len(),
+                0,
+                layout.byte_len(),
+                capacity,
+            )
+        }
+    };
+    Ok(PreparedPagedDecodeAttention {
+        context: Arc::clone(&context.inner),
+        request,
+        backend,
+        capability,
+        trace: DecodeAttentionSelectionTrace {
+            reason,
+            implementation_id: capability.implementation_id,
+            implementation_version: IMPLEMENTATION_VERSION,
+            native_dependency: NATIVE_DEPENDENCY,
+            compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
+            device_ordinal: context.device_ordinal(),
+            compute_capability,
+            workspace_dtype,
+            workspace_bytes,
+            materialized_score_bytes,
+            partial_state_bytes,
+            partial_state_capacity,
+            tokens_per_partition: PAGED_KV_BLOCK_SIZE,
+        },
+    })
+}
+
+fn validate_paged_request(request: PagedDecodeAttentionRequest) -> CudaResult<()> {
+    const OPERATION: &str = "select_paged_decode_attention";
+    for (name, value) in [
+        ("maximum_sequence_length", request.maximum_sequence_length),
+        ("physical_block_count", request.physical_block_count),
+        ("query_head_count", request.query_head_count),
+        ("key_value_head_count", request.key_value_head_count),
+        ("head_size", request.head_size),
+    ] {
+        require_nonzero(OPERATION, name, value)?;
+    }
+    if request.query_head_count % request.key_value_head_count != 0 {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "key_value_head_count must divide query_head_count",
+        ));
+    }
+    if !request.scale.is_finite() || request.scale <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "scale must be finite and greater than zero",
+        ));
+    }
+    checked_bytes(
+        OPERATION,
+        &[request.query_head_count, request.head_size, BF16_BYTES],
+    )?;
+    paged_pool_bytes(
+        OPERATION,
+        request.physical_block_count,
+        request.key_value_head_count,
+        request.head_size,
+    )?;
+    paged_block_count(request.maximum_sequence_length)?;
+    Ok(())
+}
+
+fn paged_optimized_geometry_supported(request: PagedDecodeAttentionRequest) -> CudaResult<bool> {
+    Ok(
+        paged_block_count(request.maximum_sequence_length)? <= MAXIMUM_GRID_X
+            && request.query_head_count <= MAXIMUM_GRID_Y,
+    )
+}
+
+fn validate_paged_execute_params(
+    prepared: &PreparedPagedDecodeAttention,
+    params: &PagedDecodeAttentionParams<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "paged_decode_attention";
+    for (name, dtype) in [
+        ("query", params.query.dtype()),
+        ("key_pool", params.key_pool.dtype()),
+        ("value_pool", params.value_pool.dtype()),
+        ("output", params.output.dtype()),
+    ] {
+        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+    }
+    require_dtype(
+        OPERATION,
+        "workspace",
+        params.workspace.dtype(),
+        prepared.workspace_dtype(),
+    )?;
+    let query_bytes = checked_bytes(
+        OPERATION,
+        &[
+            prepared.request.query_head_count,
+            prepared.request.head_size,
+            BF16_BYTES,
+        ],
+    )?;
+    let pool_bytes = paged_pool_bytes(
+        OPERATION,
+        prepared.request.physical_block_count,
+        prepared.request.key_value_head_count,
+        prepared.request.head_size,
+    )?;
+    for (name, actual, required) in [
+        ("query", params.query.byte_len(), query_bytes),
+        ("key_pool", params.key_pool.byte_len(), pool_bytes),
+        ("value_pool", params.value_pool.byte_len(), pool_bytes),
+        ("output", params.output.byte_len(), query_bytes),
+        (
+            "workspace",
+            params.workspace.byte_len(),
+            prepared.workspace_bytes(),
+        ),
+    ] {
+        require_capacity(OPERATION, name, actual, required)?;
+    }
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.query.buffer(),
+            params.key_pool.buffer(),
+            params.value_pool.buffer(),
+            params.workspace.buffer(),
+            params.output.buffer(),
+            params.block_table.device_block_ids.buffer(),
+            params.block_table.device_valid_tokens.buffer(),
+        ],
+    )
+}
+
+fn validate_paged_block_table_host(
+    format_version: u32,
+    block_ids: &[u32],
+    valid_tokens: &[u16],
+    logical_token_count: u64,
+    physical_block_count: u64,
+) -> CudaResult<()> {
+    const OPERATION: &str = "validate_paged_block_table";
+    if format_version != PAGED_KV_BLOCK_TABLE_VERSION {
+        return Err(not_supported(
+            OPERATION,
+            format!("unsupported paged block-table version {format_version}"),
+        ));
+    }
+    require_nonzero(OPERATION, "logical_token_count", logical_token_count)?;
+    require_nonzero(OPERATION, "physical_block_count", physical_block_count)?;
+    let expected_blocks = paged_block_count(logical_token_count)?;
+    let actual_blocks = u64::try_from(block_ids.len())
+        .map_err(|_| CudaError::out_of_range(OPERATION, "host block-id length does not fit u64"))?;
+    let actual_valid = u64::try_from(valid_tokens.len()).map_err(|_| {
+        CudaError::out_of_range(OPERATION, "host valid-token length does not fit u64")
+    })?;
+    if actual_blocks != expected_blocks || actual_valid != expected_blocks {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "host block_ids/valid_tokens lengths do not match logical_token_count",
+        ));
+    }
+    if expected_blocks > physical_block_count {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            "logical block count exceeds physical_block_count",
+        ));
+    }
+    for (logical_index, (&physical_id, &valid)) in block_ids.iter().zip(valid_tokens).enumerate() {
+        if u64::from(physical_id) >= physical_block_count {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                format!("physical block id {physical_id} is outside the pool"),
+            ));
+        }
+        if block_ids[..logical_index].contains(&physical_id) {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!("physical block id {physical_id} appears more than once"),
+            ));
+        }
+        let expected_valid = if logical_index + 1 == block_ids.len() {
+            u16::try_from(((logical_token_count - 1) % PAGED_KV_BLOCK_SIZE) + 1)
+                .expect("fixed block size fits u16")
+        } else {
+            u16::try_from(PAGED_KV_BLOCK_SIZE).expect("fixed block size fits u16")
+        };
+        if valid != expected_valid {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!(
+                    "logical block {logical_index} has {valid} valid tokens; expected {expected_valid}"
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn paged_block_count(logical_token_count: u64) -> CudaResult<u64> {
+    require_nonzero(
+        "paged_block_count",
+        "logical_token_count",
+        logical_token_count,
+    )?;
+    Ok(((logical_token_count - 1) / PAGED_KV_BLOCK_SIZE) + 1)
+}
+
+fn paged_pool_bytes(
+    operation: &'static str,
+    physical_block_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+) -> CudaResult<u64> {
+    checked_bytes(
+        operation,
+        &[
+            physical_block_count,
+            key_value_head_count,
+            PAGED_KV_BLOCK_SIZE,
+            head_size,
+            BF16_BYTES,
+        ],
+    )
+}
 
 fn prepare_selection(
     context: &CudaContext,
@@ -1686,5 +2593,132 @@ mod tests {
         );
         assert_eq!(prepared.workspace_bytes(), 8 * 8 * 2);
         assert_eq!(prepared.tokens_per_partition(), 0);
+    }
+
+    #[test]
+    fn paged_host_table_accepts_boundaries_and_shuffled_physical_ids() {
+        for logical_length in [1_u64, 15, 16, 17, 31, 32, 33, 128, 129] {
+            let count = usize::try_from(paged_block_count(logical_length).unwrap()).unwrap();
+            let ids: Vec<u32> = (0..count)
+                .rev()
+                .map(|id| u32::try_from(id + 3).unwrap())
+                .collect();
+            let mut valid = vec![u16::try_from(PAGED_KV_BLOCK_SIZE).unwrap(); count];
+            *valid.last_mut().unwrap() =
+                u16::try_from(((logical_length - 1) % PAGED_KV_BLOCK_SIZE) + 1).unwrap();
+            let table = PagedKvBlockTableHostV1::new(
+                &ids,
+                &valid,
+                logical_length,
+                u64::try_from(count + 3).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(table.block_count(), u64::try_from(count).unwrap());
+            assert_eq!(table.logical_token_count(), logical_length);
+
+            let physical_count = count + 3;
+            let mut pool = vec![u64::MAX; physical_count * 16];
+            for logical in 0..usize::try_from(logical_length).unwrap() {
+                let block = logical / 16;
+                let offset = logical % 16;
+                pool[usize::try_from(ids[block]).unwrap() * 16 + offset] =
+                    u64::try_from(logical).unwrap();
+            }
+            let gathered: Vec<u64> = (0..usize::try_from(logical_length).unwrap())
+                .map(|logical| {
+                    let block = logical / 16;
+                    pool[usize::try_from(ids[block]).unwrap() * 16 + logical % 16]
+                })
+                .collect();
+            assert_eq!(
+                gathered,
+                (0..logical_length).collect::<Vec<_>>(),
+                "logical order must not depend on physical allocation order"
+            );
+        }
+    }
+
+    #[test]
+    fn paged_host_table_rejects_version_shape_validity_and_stale_ids() {
+        assert_eq!(
+            PagedKvBlockTableHostV1::from_versioned_parts(2, &[0], &[1], 1, 1)
+                .unwrap_err()
+                .kind(),
+            CudaErrorKind::NotSupported
+        );
+        for (ids, valid, logical, physical, expected) in [
+            (
+                &[][..],
+                &[][..],
+                1_u64,
+                1_u64,
+                CudaErrorKind::InvalidArgument,
+            ),
+            (&[0][..], &[16][..], 1, 1, CudaErrorKind::InvalidArgument),
+            (
+                &[0, 1][..],
+                &[16, 2][..],
+                17,
+                2,
+                CudaErrorKind::InvalidArgument,
+            ),
+            (&[0, 2][..], &[16, 1][..], 17, 2, CudaErrorKind::OutOfRange),
+            (
+                &[0, 0][..],
+                &[16, 1][..],
+                17,
+                2,
+                CudaErrorKind::InvalidArgument,
+            ),
+        ] {
+            assert_eq!(
+                PagedKvBlockTableHostV1::new(ids, valid, logical, physical)
+                    .unwrap_err()
+                    .kind(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn paged_selection_uses_one_partial_state_per_block_and_facade_types() {
+        let context = test_context();
+        let request = PagedDecodeAttentionRequest::new(129, 32, 9, 3, 64, 0.125);
+        let online = PreparedPagedDecodeAttention::select_for_compute_capability(
+            &context,
+            context.compute_capability(),
+            request,
+            DecodeAttentionPreference::Optimized,
+            DecodeAttentionBackendAvailability::new(true, true),
+        )
+        .unwrap();
+        assert_eq!(online.backend(), DecodeAttentionBackend::ChunkedOnline);
+        assert_eq!(online.partial_state_capacity(), 9);
+        assert_eq!(online.workspace_bytes(), 9 * 9 * 66 * 4);
+        assert_eq!(online.workspace_dtype(), CudaDType::F32);
+        assert_eq!(online.tokens_per_partition(), 16);
+        assert_eq!(
+            online.capability().implementation_id(),
+            PAGED_ONLINE_IMPLEMENTATION_ID
+        );
+
+        let fallback = PreparedPagedDecodeAttention::select_for_compute_capability(
+            &context,
+            context.compute_capability(),
+            PagedDecodeAttentionRequest::new(129, 32, 9, 3, 32, 0.125),
+            DecodeAttentionPreference::Optimized,
+            DecodeAttentionBackendAvailability::new(true, true),
+        )
+        .unwrap();
+        assert_eq!(
+            fallback.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(fallback.workspace_bytes(), 129 * 9 * 2);
+        assert_eq!(
+            fallback.selection_trace().reason(),
+            DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
+        );
     }
 }

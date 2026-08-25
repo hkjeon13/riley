@@ -286,6 +286,72 @@ buffer를 exclusive-use로 잡는다. Writable span은 다른 touched span과 �
 guard를 해제한다. 완료를 확정하지 못하면 기존 copy-token 규칙처럼 UAF 대신
 fail-closed busy/accounting leak을 선택한다.
 
+## PR 10 exact paged KV ABI
+
+PR 10은 기존 ABI version과 PR 09 struct를 바꾸지 않고 `U16` dtype discriminant
+`5`와 다음 세 symbol을 additive하게 추가한다.
+
+- `rustinfer_cuda_paged_kv_cache_write_execute`
+- `rustinfer_cuda_paged_decode_attention_reference_execute`
+- `rustinfer_cuda_paged_decode_attention_execute`
+
+`RustInferCudaPagedKvBlockTableV1`, `RustInferCudaPagedKvCacheWriteParams`,
+`RustInferCudaPagedDecodeAttentionReferenceParams`,
+`RustInferCudaPagedDecodeAttentionParams`의 전체 크기는 64-bit ABI에서 각각
+168, 432, 480, 488 bytes다. C11, CUDA C++와 Rust assertion이 크기와 핵심
+offset을 함께 고정한다.
+
+### Block table version 1
+
+`RUSTINFER_CUDA_PAGED_KV_BLOCK_TABLE_VERSION == 1`이고 block size는 고정 16이다.
+K와 V는 별도 BF16 pool이며 한 layer view의 layout은 다음과 같다.
+
+```text
+[physical_block_count, key_value_head_count, 16, head_size]
+```
+
+table의 U32 `block_ids[block_count]`는 logical block 순서로 physical block을
+지정한다. 따라서 값은 연속일 필요가 없고 allocation/free 결과에 따라 섞여도 된다.
+U16 `valid_tokens[block_count]`는 마지막 block만 1..16일 수 있으며 그 앞 block은
+항상 16이다. `block_count == ceil(logical_token_count / 16)`이고 각 ID는
+`physical_block_count`보다 작아야 한다.
+
+safe Rust wrapper는 device array와 함께 immutable host mirror를 요구한다.
+`PagedKvBlockTableHostV1` 생성 때 version, 두 배열 길이, valid-token 값,
+out-of-pool ID, duplicate/stale ID를 allocation 없이 한 번 검사한다. 이후 layer별
+append/decode hot path는 이 validated type invariant를 신뢰해 O(block_count²)
+검사를 반복하지 않는다. host/device mirror의 upload 완료와 generation lifetime은
+상위 runtime이 소유한다. Raw C caller가 잘못된 device content를 전달해도 kernel은
+pool 밖을 역참조하지 않지만, 성공적인 의미 결과를 얻으려면 같은 table invariant를
+외부에서 지켜야 한다.
+
+`metadata_kind == RUSTINFER_CUDA_PAGED_KV_METADATA_NONE`이고
+`metadata_version == 0`만 v1 exact path에서 허용한다. 즉 sidecar가 없는 경로가
+기본이며 주소 변환 외 metadata branch가 없다. 알 수 없는 kind/version은 launch 전
+`NOT_SUPPORTED/VALIDATION`으로 거부한다. 이후 page 통계나 offload metadata는 이
+주소 table layout을 바꾸지 않는 별도 versioned capability로 추가한다.
+
+### Scatter와 exact attention
+
+Paged cache write는 RoPE 이후 token-major BF16 `[T,KVH,D]` K/V를 logical
+destination interval에 bit-preserving scatter한다. table은 write 완료 뒤 publish할
+logical length를 기술하며, 모든 layer가 성공하기 전 SequenceState의 committed
+length를 갱신하지 않는다.
+
+Paged materialized reference는 PR 09와 같은 QK, scale, stable softmax, AV 네
+stage와 BF16 staging 지점을 유지하되 모든 K/V access를 block table로 변환한다.
+따라서 동일 logical K/V와 query에 대해 contiguous reference와 BF16 bit parity가
+correctness oracle이다.
+
+D64 optimized producer는 logical block 하나마다 packed F32
+`DecodePartialState(m,l,n[D])` 하나를 쓴다. State slot은 physical ID가 아니라
+logical block ordinal이다. 그 뒤 PR 09 standalone reducer를 그대로 사용해 logical
+순서로 merge하고 마지막 한 번만 normalize한다. 모든 page를 읽으므로 exact이며
+page selection/pruning은 하지 않는다. Materialized reference와 FP32 online recurrence
+사이에는 기존 허용 오차가 적용되고 bit-exact를 주장하지 않는다. Reference와 online
+호출은 각각 kernel 4개와 2개이며 device/host heap allocation 없이 caller가 미리 잡은
+workspace를 사용한다.
+
 context 생성은 target device의 CUDA **primary context에 대한 공유 lease**를
 `cuDevicePrimaryCtxRetain`으로 얻는다. 프로세스에 독점 context를 만들거나
 primary context를 reset하지 않는다. close는 해당 lease의 release를 정확히 한

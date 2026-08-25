@@ -157,7 +157,8 @@ static_assert(sizeof(RustInferCudaDType) == 4,
 static_assert(RUSTINFER_CUDA_DTYPE_F32 == 1 &&
                   RUSTINFER_CUDA_DTYPE_BF16 == 2 &&
                   RUSTINFER_CUDA_DTYPE_U32 == 3 &&
-                  RUSTINFER_CUDA_DTYPE_U8 == 4,
+                  RUSTINFER_CUDA_DTYPE_U8 == 4 &&
+                  RUSTINFER_CUDA_DTYPE_U16 == 5,
               "RustInferCudaDType ABI discriminants changed");
 static_assert(sizeof(RustInferCudaBufferSpan) == 48,
               "RustInferCudaBufferSpan ABI size changed");

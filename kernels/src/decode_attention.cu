@@ -21,7 +21,7 @@ using rustinfer_cuda_internal::validation_error;
 
 constexpr uint32_t kThreads = 256;
 constexpr uint32_t kMaximumBlocks = 65535;
-constexpr size_t kMaximumDecodeBuffers = 5;
+constexpr size_t kMaximumDecodeBuffers = 7;
 constexpr uint32_t kWarpSize = 32;
 constexpr uint32_t kFullWarpMask = 0xffffffffU;
 constexpr uint64_t kOptimizedHeadSize = 64;
@@ -37,6 +37,14 @@ static_assert(sizeof(RustInferCudaDecodeAttentionParams) == 344,
               "decode attention ABI size changed");
 static_assert(sizeof(RustInferCudaDecodePartialStateReduceParams) == 176,
               "decode reducer ABI size changed");
+static_assert(sizeof(RustInferCudaPagedKvBlockTableV1) == 168,
+              "paged block-table ABI size changed");
+static_assert(sizeof(RustInferCudaPagedKvCacheWriteParams) == 432,
+              "paged KV write ABI size changed");
+static_assert(sizeof(RustInferCudaPagedDecodeAttentionReferenceParams) == 480,
+              "paged reference decode ABI size changed");
+static_assert(sizeof(RustInferCudaPagedDecodeAttentionParams) == 488,
+              "paged online decode ABI size changed");
 static_assert(kOptimizedHeadSize == 2 * kWarpSize,
               "optimized decode lane ownership changed");
 
@@ -56,6 +64,14 @@ struct DecodeByteCounts {
   uint64_t query_output;
   uint64_t cache;
   uint64_t scores;
+};
+
+struct PagedByteCounts {
+  uint64_t query_output;
+  uint64_t pool;
+  uint64_t scores;
+  uint64_t block_ids;
+  uint64_t valid_tokens;
 };
 
 bool checked_add(uint64_t left, uint64_t right, uint64_t* output) noexcept {
@@ -180,6 +196,50 @@ RustInferCudaStatus partial_state_bytes(
                             "decode partial-state shape overflows uint64_t");
   }
   return typed_bytes(elements, 4, output, error, operation);
+}
+
+RustInferCudaStatus paged_byte_counts(
+    const RustInferCudaPagedKvBlockTableV1& table,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t head_size, PagedByteCounts* output,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  if (output == nullptr) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          operation, "internal paged byte counts are null");
+  }
+  uint64_t query_elements = 0;
+  uint64_t block_elements = 0;
+  uint64_t pool_elements = 0;
+  uint64_t score_elements = 0;
+  if (!checked_multiply(query_head_count, head_size, &query_elements) ||
+      !checked_product3(key_value_head_count,
+                        RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE, head_size,
+                        &block_elements) ||
+      !checked_multiply(table.physical_block_count, block_elements,
+                        &pool_elements) ||
+      !checked_multiply(query_head_count, table.logical_token_count,
+                        &score_elements)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged decode tensor shape overflows uint64_t");
+  }
+  RustInferCudaStatus status = typed_bytes(
+      query_elements, 2, &output->query_output, error, operation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(pool_elements, 2, &output->pool, error, operation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(score_elements, 2, &output->scores, error, operation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(table.block_count, 4, &output->block_ids, error,
+                         operation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(table.block_count, 2, &output->valid_tokens, error,
+                         operation);
+  }
+  return status;
 }
 
 RustInferCudaStatus resolve_span(const RustInferCudaBufferSpan& span,
@@ -475,6 +535,69 @@ RustInferCudaStatus validate_reduction_order(
   return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
+RustInferCudaStatus validate_paged_block_table(
+    const RustInferCudaPagedKvBlockTableV1& table,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  if (table.struct_size < sizeof(table)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block table has an incompatible struct_size");
+  }
+  if (table.format_version != RUSTINFER_CUDA_PAGED_KV_BLOCK_TABLE_VERSION ||
+      table.block_size != RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block table version or block size is unsupported");
+  }
+  if (table.metadata_kind != RUSTINFER_CUDA_PAGED_KV_METADATA_NONE ||
+      table.metadata_version != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged v1 exact execution does not accept a metadata sidecar");
+  }
+  if (table.reserved0 != 0 || !reserved_is_zero(table.reserved, 3)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block table reserved fields must be zero");
+  }
+  if (table.logical_token_count == 0 || table.block_count == 0 ||
+      table.physical_block_count == 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block-table dimensions must be greater than zero");
+  }
+  const uint64_t expected_blocks =
+      ((table.logical_token_count - 1) /
+       RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE) +
+      1;
+  if (table.block_count != expected_blocks) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block_count does not match logical_token_count");
+  }
+  if (table.block_count > table.physical_block_count) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "paged block table exceeds the physical pool");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
+RustInferCudaStatus resolve_paged_block_table(
+    const RustInferCudaPagedKvBlockTableV1& table,
+    const PagedByteCounts& bytes, ResolvedSpan* block_ids,
+    ResolvedSpan* valid_tokens, RustInferCudaErrorInfo* error,
+    const char* operation) noexcept {
+  RustInferCudaStatus status =
+      resolve_span(table.block_ids, RUSTINFER_CUDA_DTYPE_U32, 4,
+                   bytes.block_ids, block_ids, error, operation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(table.valid_tokens, RUSTINFER_CUDA_DTYPE_U16, 2,
+                          bytes.valid_tokens, valid_tokens, error, operation);
+  }
+  return status;
+}
+
 __global__ void kv_cache_write_kernel(
     const __nv_bfloat16* key_source, const __nv_bfloat16* value_source,
     __nv_bfloat16* key_cache, __nv_bfloat16* value_cache,
@@ -497,6 +620,123 @@ __global__ void kv_cache_write_kernel(
         depth;
     key_cache[cache_index] = key_source[index];
     value_cache[cache_index] = value_source[index];
+  }
+}
+
+__device__ __forceinline__ bool paged_cache_base(
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    uint64_t logical_token, uint64_t physical_block_count,
+    uint64_t key_value_head, uint64_t key_value_head_count,
+    uint64_t head_size, uint64_t* output) {
+  const uint64_t logical_block =
+      logical_token / RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE;
+  const uint64_t token_in_block =
+      logical_token % RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE;
+  const uint64_t physical_block = block_ids[logical_block];
+  const uint64_t valid = valid_tokens[logical_block];
+  if (output == nullptr || physical_block >= physical_block_count ||
+      valid == 0 || valid > RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE ||
+      token_in_block >= valid) {
+    return false;
+  }
+  *output =
+      ((physical_block * key_value_head_count + key_value_head) *
+           RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE +
+       token_in_block) *
+      head_size;
+  return true;
+}
+
+__global__ void paged_kv_cache_write_kernel(
+    const __nv_bfloat16* key_source, const __nv_bfloat16* value_source,
+    __nv_bfloat16* key_pool, __nv_bfloat16* value_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    uint64_t destination_token_start, uint64_t physical_block_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const uint64_t depth = index % head_size;
+    const uint64_t row = index / head_size;
+    const uint64_t key_value_head = row % key_value_head_count;
+    const uint64_t logical_token =
+        destination_token_start + row / key_value_head_count;
+    uint64_t cache_base = 0;
+    if (paged_cache_base(block_ids, valid_tokens, logical_token,
+                         physical_block_count, key_value_head,
+                         key_value_head_count, head_size, &cache_base)) {
+      key_pool[cache_base + depth] = key_source[index];
+      value_pool[cache_base + depth] = value_source[index];
+    }
+  }
+}
+
+__global__ void paged_decode_qk_reference_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    __nv_bfloat16* scores, uint64_t physical_block_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t score_element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = first; index < score_element_count; index += stride) {
+    const uint64_t logical_token = index % logical_token_count;
+    const uint64_t query_head = index / logical_token_count;
+    const uint64_t key_value_head = query_head / group_size;
+    uint64_t key_base = 0;
+    if (!paged_cache_base(block_ids, valid_tokens, logical_token,
+                          physical_block_count, key_value_head,
+                          key_value_head_count, head_size, &key_base)) {
+      scores[index] = __float2bfloat16_rn(CUDART_NAN_F);
+      continue;
+    }
+    const uint64_t query_base = query_head * head_size;
+    float accumulator = 0.0F;
+    for (uint64_t depth = 0; depth < head_size; ++depth) {
+      accumulator = fmaf(__bfloat162float(query[query_base + depth]),
+                         __bfloat162float(key_pool[key_base + depth]),
+                         accumulator);
+    }
+    scores[index] = __float2bfloat16_rn(accumulator);
+  }
+}
+
+__global__ void paged_decode_av_reference_kernel(
+    const __nv_bfloat16* probabilities, const __nv_bfloat16* value_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    __nv_bfloat16* output, uint64_t physical_block_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t output_element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = first; index < output_element_count; index += stride) {
+    const uint64_t depth = index % head_size;
+    const uint64_t query_head = index / head_size;
+    const uint64_t key_value_head = query_head / group_size;
+    const uint64_t probability_base = query_head * logical_token_count;
+    float accumulator = 0.0F;
+    for (uint64_t logical_token = 0; logical_token < logical_token_count;
+         ++logical_token) {
+      uint64_t value_base = 0;
+      if (!paged_cache_base(block_ids, valid_tokens, logical_token,
+                            physical_block_count, key_value_head,
+                            key_value_head_count, head_size, &value_base)) {
+        accumulator = CUDART_NAN_F;
+        break;
+      }
+      accumulator = fmaf(
+          __bfloat162float(probabilities[probability_base + logical_token]),
+          __bfloat162float(value_pool[value_base + depth]), accumulator);
+    }
+    output[index] = __float2bfloat16_rn(accumulator);
   }
 }
 
@@ -748,6 +988,77 @@ __global__ __launch_bounds__(kWarpSize) void decode_partial_state_kernel(
 
   const uint64_t state_base =
       (partition * query_head_count + query_head) *
+      kOptimizedStateStride;
+  if (lane == 0) {
+    partial_states[state_base] = maximum;
+    partial_states[state_base + 1] = denominator;
+  }
+  partial_states[state_base + 2 + lane] = numerator_low;
+  partial_states[state_base + 2 + lane + kWarpSize] = numerator_high;
+}
+
+__global__ __launch_bounds__(kWarpSize) void
+paged_decode_partial_state_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, const uint32_t* block_ids,
+    const uint16_t* valid_tokens, float* partial_states,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  const uint32_t lane = threadIdx.x;
+  const uint64_t logical_block = blockIdx.x;
+  const uint64_t query_head = blockIdx.y;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t query_base = query_head * kOptimizedHeadSize;
+  const uint64_t physical_block = block_ids[logical_block];
+  const uint64_t token_count = valid_tokens[logical_block];
+  const bool valid_block =
+      physical_block < physical_block_count && token_count != 0 &&
+      token_count <= RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE;
+  const uint64_t block_head_base =
+      (physical_block * key_value_head_count + key_value_head) *
+      RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE * kOptimizedHeadSize;
+
+  const float query_low = __bfloat162float(query[query_base + lane]);
+  const float query_high =
+      __bfloat162float(query[query_base + lane + kWarpSize]);
+  float maximum = valid_block ? -CUDART_INF_F : CUDART_NAN_F;
+  float denominator = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator_low = valid_block ? 0.0F : CUDART_NAN_F;
+  float numerator_high = valid_block ? 0.0F : CUDART_NAN_F;
+  if (valid_block) {
+    for (uint64_t token_in_block = 0; token_in_block < token_count;
+         ++token_in_block) {
+      const uint64_t cache_base =
+          block_head_base + token_in_block * kOptimizedHeadSize;
+      const float key_low =
+          __bfloat162float(key_pool[cache_base + lane]);
+      const float key_high = __bfloat162float(
+          key_pool[cache_base + lane + kWarpSize]);
+      float score = fmaf(query_low, key_low, query_high * key_high);
+      score = warp_sum(score);
+      score = staged_decode_score(
+          __shfl_sync(kFullWarpMask, score, 0), scale);
+
+      float alpha = 0.0F;
+      float beta = 0.0F;
+      if (lane == 0) {
+        update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      }
+      alpha = __shfl_sync(kFullWarpMask, alpha, 0);
+      beta = __shfl_sync(kFullWarpMask, beta, 0);
+      numerator_low = update_numerator(
+          numerator_low, __bfloat162float(value_pool[cache_base + lane]),
+          alpha, beta);
+      numerator_high = update_numerator(
+          numerator_high,
+          __bfloat162float(value_pool[cache_base + lane + kWarpSize]), alpha,
+          beta);
+    }
+  }
+
+  const uint64_t state_base =
+      (logical_block * query_head_count + query_head) *
       kOptimizedStateStride;
   if (lane == 0) {
     partial_states[state_base] = maximum;
@@ -1392,6 +1703,494 @@ rustinfer_cuda_decode_partial_state_reduce_execute(
         reinterpret_cast<const float*>(partial_states.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),
         params->partial_state_count, params->query_head_count,
+        params->head_size, params->reduction_order, stream->stream);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_paged_kv_cache_write_execute(
+    const RustInferCudaPagedKvCacheWriteParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "write paged KV cache";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaPagedKvCacheWriteParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RustInferCudaStatus status =
+      validate_paged_block_table(params->block_table, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      (params->source_token_count == 0 ||
+       params->key_value_head_count == 0 || params->head_size == 0)) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "paged KV write dimensions must be greater than zero");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      (params->destination_token_start >
+           params->block_table.logical_token_count ||
+       params->source_token_count >
+           params->block_table.logical_token_count -
+               params->destination_token_start)) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "paged KV write exceeds the table logical length");
+  }
+
+  uint64_t source_elements = 0;
+  uint64_t source_bytes = 0;
+  PagedByteCounts bytes{};
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      !checked_product3(params->source_token_count,
+                        params->key_value_head_count, params->head_size,
+                        &source_elements)) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "paged KV source shape overflows uint64_t");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(source_elements, 2, &source_bytes, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = paged_byte_counts(
+        params->block_table, params->key_value_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan key_source{};
+  ResolvedSpan value_source{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan block_ids{};
+  ResolvedSpan valid_tokens{};
+  status = resolve_span(params->key_source, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                        source_bytes, &key_source, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_source, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          source_bytes, &value_source, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &key_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &value_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_paged_block_table(params->block_table, bytes, &block_ids,
+                                       &valid_tokens, error, kOperation);
+  }
+  const ResolvedSpan* const read_spans[] = {
+      &key_source, &value_source, &block_ids, &valid_tokens};
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 4; ++index) {
+    status = reject_overlap(key_pool, *read_spans[index], error, kOperation);
+  }
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 4; ++index) {
+    status = reject_overlap(value_pool, *read_spans[index], error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(key_pool, value_pool, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {key_source, value_source, key_pool,
+                                value_pool, block_ids, valid_tokens};
+  status = validate_contexts(stream, spans, 6, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(key_source.buffer) || !uses.add(value_source.buffer) ||
+      !uses.add(key_pool.buffer) || !uses.add(value_pool.buffer) ||
+      !uses.add(block_ids.buffer) || !uses.add(valid_tokens.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    paged_kv_cache_write_kernel
+        <<<block_count(source_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(key_source.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_source.data),
+            reinterpret_cast<__nv_bfloat16*>(key_pool.data),
+            reinterpret_cast<__nv_bfloat16*>(value_pool.data),
+            reinterpret_cast<const uint32_t*>(block_ids.data),
+            reinterpret_cast<const uint16_t*>(valid_tokens.data),
+            params->destination_token_start,
+            params->block_table.physical_block_count,
+            params->key_value_head_count, params->head_size,
+            source_elements);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus
+rustinfer_cuda_paged_decode_attention_reference_execute(
+    const RustInferCudaPagedDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute reference paged decode attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaPagedDecodeAttentionReferenceParams stable_params =
+      *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RustInferCudaStatus status =
+      validate_paged_block_table(params->block_table, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_decode_dimensions(
+        params->block_table.logical_token_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, params->scale, error,
+        kOperation);
+  }
+  PagedByteCounts bytes{};
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = paged_byte_counts(
+        params->block_table, params->query_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan scores{};
+  ResolvedSpan output{};
+  ResolvedSpan block_ids{};
+  ResolvedSpan valid_tokens{};
+  status = resolve_span(params->query, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                        bytes.query_output, &query, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &key_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &value_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->score_workspace,
+                          RUSTINFER_CUDA_DTYPE_BF16, 2, bytes.scores,
+                          &scores, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->output, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.query_output, &output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_paged_block_table(params->block_table, bytes, &block_ids,
+                                       &valid_tokens, error, kOperation);
+  }
+  const ResolvedSpan* const inputs[] = {
+      &query, &key_pool, &value_pool, &block_ids, &valid_tokens};
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(scores, *inputs[index], error, kOperation);
+  }
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(output, *inputs[index], error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, scores, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query,  key_pool,  value_pool, scores,
+                                output, block_ids, valid_tokens};
+  status = validate_contexts(stream, spans, 7, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_pool.buffer) ||
+      !uses.add(value_pool.buffer) || !uses.add(scores.buffer) ||
+      !uses.add(output.buffer) || !uses.add(block_ids.buffer) ||
+      !uses.add(valid_tokens.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  const uint64_t score_elements = bytes.scores / 2;
+  const uint64_t output_elements = bytes.query_output / 2;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    paged_decode_qk_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(query.data),
+            reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+            reinterpret_cast<const uint32_t*>(block_ids.data),
+            reinterpret_cast<const uint16_t*>(valid_tokens.data),
+            reinterpret_cast<__nv_bfloat16*>(scores.data),
+            params->block_table.physical_block_count,
+            params->block_table.logical_token_count,
+            params->query_head_count, params->key_value_head_count,
+            params->head_size, score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(scores.data), params->scale,
+            score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    decode_softmax_reference_kernel
+        <<<block_count(params->query_head_count), kThreads, 0,
+           stream->stream>>>(reinterpret_cast<__nv_bfloat16*>(scores.data),
+                            params->block_table.logical_token_count,
+                            params->query_head_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    paged_decode_av_reference_kernel
+        <<<block_count(output_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(scores.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+            reinterpret_cast<const uint32_t*>(block_ids.data),
+            reinterpret_cast<const uint16_t*>(valid_tokens.data),
+            reinterpret_cast<__nv_bfloat16*>(output.data),
+            params->block_table.physical_block_count,
+            params->block_table.logical_token_count,
+            params->query_head_count, params->key_value_head_count,
+            params->head_size, output_elements);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
+    const RustInferCudaPagedDecodeAttentionParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute partitioned paged decode attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaPagedDecodeAttentionParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RustInferCudaStatus status =
+      validate_paged_block_table(params->block_table, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_decode_dimensions(
+        params->block_table.logical_token_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, params->scale, error,
+        kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      params->head_size != kOptimizedHeadSize) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "paged online decode supports head_size=64 only");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      params->partial_state_capacity == 0) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "partial_state_capacity must be greater than zero");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      params->block_table.block_count > params->partial_state_capacity) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "partial-state capacity is smaller than block_count");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      (params->block_table.block_count > kMaximumGridX ||
+       params->query_head_count > kMaximumGridYOrZ)) {
+    status = validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                              kOperation,
+                              "paged online launch dimensions exceed the CUDA grid contract");
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_reduction_order(params->reduction_order, error,
+                                      kOperation);
+  }
+
+  PagedByteCounts bytes{};
+  uint64_t states_bytes = 0;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = paged_byte_counts(
+        params->block_table, params->query_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = partial_state_bytes(
+        params->partial_state_capacity, params->query_head_count,
+        params->head_size, &states_bytes, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan partial_states{};
+  ResolvedSpan output{};
+  ResolvedSpan block_ids{};
+  ResolvedSpan valid_tokens{};
+  status = resolve_span(params->query, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                        bytes.query_output, &query, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &key_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &value_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->partial_states,
+                          RUSTINFER_CUDA_DTYPE_F32, 4, states_bytes,
+                          &partial_states, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->output, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.query_output, &output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_paged_block_table(params->block_table, bytes, &block_ids,
+                                       &valid_tokens, error, kOperation);
+  }
+  const ResolvedSpan* const inputs[] = {
+      &query, &key_pool, &value_pool, &block_ids, &valid_tokens};
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(partial_states, *inputs[index], error,
+                            kOperation);
+  }
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(output, *inputs[index], error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, partial_states, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query,          key_pool,  value_pool,
+                                partial_states, output,    block_ids,
+                                valid_tokens};
+  status = validate_contexts(stream, spans, 7, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_pool.buffer) ||
+      !uses.add(value_pool.buffer) || !uses.add(partial_states.buffer) ||
+      !uses.add(output.buffer) || !uses.add(block_ids.buffer) ||
+      !uses.add(valid_tokens.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    const dim3 grid(static_cast<uint32_t>(params->block_table.block_count),
+                    static_cast<uint32_t>(params->query_head_count));
+    paged_decode_partial_state_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(query.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+        reinterpret_cast<const uint32_t*>(block_ids.data),
+        reinterpret_cast<const uint16_t*>(valid_tokens.data),
+        reinterpret_cast<float*>(partial_states.data),
+        params->block_table.physical_block_count, params->query_head_count,
+        params->key_value_head_count, params->scale);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_partial_state_reducer(
+        reinterpret_cast<const float*>(partial_states.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        params->block_table.block_count, params->query_head_count,
         params->head_size, params->reduction_order, stream->stream);
     status = launch_status(error, kOperation);
   }

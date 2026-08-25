@@ -98,6 +98,33 @@ cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
   --test decode_attention_gpu -- --ignored --test-threads=1 --nocapture
 ```
 
+## Exact paged KV decode
+
+`PagedKvBlockTableHostV1` validates the version-1 logical table once, including
+fixed 16-token block validity, unique in-range physical IDs, and the final
+partial block. `PagedKvBlockTableV1` binds that immutable mirror to U32 block-ID
+and U16 valid-token device arrays. K/V pools use separate BF16
+`[physical_block,KVH,16,D]` layouts; shuffled physical IDs do not change logical
+attention order.
+
+`paged_kv_cache_append` performs a bit-preserving logical-to-physical scatter.
+`PreparedPagedDecodeAttention` exposes the same backend/capability/selection
+trace facade as contiguous decode. Its materialized reference uses four staged
+BF16 kernels, while the D64 online path produces one PR 09 F32 partial state per
+logical block and reuses the existing reducer. Both paths scan every valid
+logical token, require no optional metadata sidecar, and allocate nothing in
+`execute`.
+
+The remote-only paged target covers lengths around every block boundary,
+shuffled physical IDs, sentinel preservation, exact paged-versus-contiguous
+reference output, reference-versus-online tolerance, workspace capacity tails,
+and allocation stability:
+
+```text
+cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+  --test paged_decode_attention_gpu -- --ignored --test-threads=1 --nocapture
+```
+
 The additive PR 04 memory boundary has a separate five-test remote target. All
 five tests are ignored by default and cover logical zero-byte handles,
 allocation accounting returning to zero, pinned-host/device round trips,

@@ -24,7 +24,7 @@ add_library(rustinfer_cuda_native STATIC
     src/version.cu
 )
 
-# This target compiles the installed header as C11 and pins every public PR 09
+# This target compiles the installed header as C11 and pins every public PR 10
 # struct layout independently of the CUDA implementation's C++ assertions.
 add_library(rustinfer_cuda_abi_checks OBJECT
     tests/abi_layout.c

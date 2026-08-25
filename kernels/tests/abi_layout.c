@@ -11,7 +11,8 @@ _Static_assert(sizeof(RustInferCudaDType) == 4,
 _Static_assert(RUSTINFER_CUDA_DTYPE_F32 == 1 &&
                    RUSTINFER_CUDA_DTYPE_BF16 == 2 &&
                    RUSTINFER_CUDA_DTYPE_U32 == 3 &&
-                   RUSTINFER_CUDA_DTYPE_U8 == 4,
+                   RUSTINFER_CUDA_DTYPE_U8 == 4 &&
+                   RUSTINFER_CUDA_DTYPE_U16 == 5,
                "dtype discriminants changed");
 _Static_assert(sizeof(RustInferCudaErrorInfo) == 272,
                "error-info ABI size changed");
@@ -161,6 +162,53 @@ _Static_assert(offsetof(RustInferCudaDecodePartialStateReduceParams,
 _Static_assert(
     offsetof(RustInferCudaDecodePartialStateReduceParams, reserved) == 144,
     "decode reducer reserved tail changed");
+_Static_assert(RUSTINFER_CUDA_PAGED_KV_BLOCK_TABLE_VERSION == 1 &&
+                   RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE == 16 &&
+                   RUSTINFER_CUDA_PAGED_KV_METADATA_NONE == 0,
+               "paged KV constants changed");
+_Static_assert(sizeof(RustInferCudaPagedKvBlockTableV1) == 168,
+               "paged block-table ABI size changed");
+_Static_assert(offsetof(RustInferCudaPagedKvBlockTableV1, block_ids) == 8,
+               "paged block-table ids offset changed");
+_Static_assert(
+    offsetof(RustInferCudaPagedKvBlockTableV1, logical_token_count) == 104,
+    "paged block-table logical length offset changed");
+_Static_assert(offsetof(RustInferCudaPagedKvBlockTableV1, block_size) == 128,
+               "paged block-table block-size offset changed");
+_Static_assert(offsetof(RustInferCudaPagedKvBlockTableV1, reserved) == 144,
+               "paged block-table reserved tail changed");
+_Static_assert(sizeof(RustInferCudaPagedKvCacheWriteParams) == 432,
+               "paged KV write ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaPagedKvCacheWriteParams, block_table) == 200,
+    "paged KV write table offset changed");
+_Static_assert(
+    offsetof(RustInferCudaPagedKvCacheWriteParams, source_token_count) == 368,
+    "paged KV write dimension offset changed");
+_Static_assert(offsetof(RustInferCudaPagedKvCacheWriteParams, reserved) == 400,
+               "paged KV write reserved tail changed");
+_Static_assert(sizeof(RustInferCudaPagedDecodeAttentionReferenceParams) == 480,
+               "paged reference decode ABI size changed");
+_Static_assert(offsetof(RustInferCudaPagedDecodeAttentionReferenceParams,
+                        block_table) == 248,
+               "paged reference table offset changed");
+_Static_assert(offsetof(RustInferCudaPagedDecodeAttentionReferenceParams,
+                        query_head_count) == 416,
+               "paged reference dimension offset changed");
+_Static_assert(offsetof(RustInferCudaPagedDecodeAttentionReferenceParams,
+                        reserved) == 448,
+               "paged reference reserved tail changed");
+_Static_assert(sizeof(RustInferCudaPagedDecodeAttentionParams) == 488,
+               "paged online decode ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaPagedDecodeAttentionParams, block_table) == 248,
+    "paged online table offset changed");
+_Static_assert(
+    offsetof(RustInferCudaPagedDecodeAttentionParams, query_head_count) == 416,
+    "paged online dimension offset changed");
+_Static_assert(offsetof(RustInferCudaPagedDecodeAttentionParams, reserved) ==
+                   456,
+               "paged online reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -250,6 +298,16 @@ static RustInferCudaStatus (*const decode_partial_state_reduce_symbol)(
     const RustInferCudaDecodePartialStateReduceParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) =
     rustinfer_cuda_decode_partial_state_reduce_execute;
+static RustInferCudaStatus (*const paged_kv_cache_write_symbol)(
+    const RustInferCudaPagedKvCacheWriteParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_paged_kv_cache_write_execute;
+static RustInferCudaStatus (*const paged_decode_attention_reference_symbol)(
+    const RustInferCudaPagedDecodeAttentionReferenceParams*,
+    RustInferCudaStream*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_paged_decode_attention_reference_execute;
+static RustInferCudaStatus (*const paged_decode_attention_symbol)(
+    const RustInferCudaPagedDecodeAttentionParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_paged_decode_attention_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -280,6 +338,9 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&decode_attention_reference_symbol,
     (const void*)&decode_attention_symbol,
     (const void*)&decode_partial_state_reduce_symbol,
+    (const void*)&paged_kv_cache_write_symbol,
+    (const void*)&paged_decode_attention_reference_symbol,
+    (const void*)&paged_decode_attention_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,

@@ -55,6 +55,10 @@ const KV_CACHE_WRITE_PARAMS_SIZE: u32 = 272;
 const DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 328;
 const DECODE_ATTENTION_PARAMS_SIZE: u32 = 344;
 const DECODE_PARTIAL_STATE_REDUCE_PARAMS_SIZE: u32 = 176;
+const PAGED_KV_BLOCK_TABLE_V1_SIZE: u32 = 168;
+const PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 432;
+const PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 480;
+const PAGED_DECODE_ATTENTION_PARAMS_SIZE: u32 = 488;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 
@@ -62,6 +66,7 @@ pub(super) const DTYPE_F32: i32 = 1;
 pub(super) const DTYPE_BF16: i32 = 2;
 pub(super) const DTYPE_U32: i32 = 3;
 pub(super) const DTYPE_U8: i32 = 4;
+pub(super) const DTYPE_U16: i32 = 5;
 
 pub(super) const PREFILL_MASK_CAUSAL: u32 = 1;
 pub(super) const PREFILL_MASK_CAUSAL_LOCAL: u32 = 2;
@@ -483,6 +488,76 @@ struct RawDecodePartialStateReduceParams {
     reserved: [u64; 4],
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct RawPagedKvBlockTableV1 {
+    struct_size: u32,
+    format_version: u32,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    metadata_kind: u32,
+    metadata_version: u32,
+    reserved0: u32,
+    reserved: [u64; 3],
+}
+
+#[repr(C)]
+struct RawPagedKvCacheWriteParams {
+    struct_size: u32,
+    reserved0: u32,
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    block_table: RawPagedKvBlockTableV1,
+    source_token_count: u64,
+    destination_token_start: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawPagedDecodeAttentionReferenceParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    block_table: RawPagedKvBlockTableV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawPagedDecodeAttentionParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    block_table: RawPagedKvBlockTableV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    reserved: [u64; 4],
+}
+
 #[repr(C)]
 struct RawGemmConfig {
     struct_size: u32,
@@ -826,6 +901,21 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_decode_partial_state_reduce_execute(
         params: *const RawDecodePartialStateReduceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_paged_kv_cache_write_execute(
+        params: *const RawPagedKvCacheWriteParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_paged_decode_attention_reference_execute(
+        params: *const RawPagedDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_paged_decode_attention_execute(
+        params: *const RawPagedDecodeAttentionParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -2023,6 +2113,195 @@ pub(super) fn decode_partial_state_reduce_execute(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+fn raw_paged_block_table_v1(
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+) -> RawPagedKvBlockTableV1 {
+    RawPagedKvBlockTableV1 {
+        struct_size: PAGED_KV_BLOCK_TABLE_V1_SIZE,
+        format_version,
+        block_ids,
+        valid_tokens,
+        logical_token_count,
+        block_count,
+        physical_block_count,
+        block_size,
+        metadata_kind: 0,
+        metadata_version: 0,
+        reserved0: 0,
+        reserved: [0; 3],
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn paged_kv_cache_write_execute(
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    source_token_count: u64,
+    destination_token_start: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPagedKvCacheWriteParams {
+        struct_size: PAGED_KV_CACHE_WRITE_PARAMS_SIZE,
+        reserved0: 0,
+        key_source,
+        value_source,
+        key_pool,
+        value_pool,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        source_token_count,
+        destination_token_start,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("write CUDA paged KV cache", stream, |stream, error| {
+        // SAFETY: the descriptor and all borrowed resources remain live for
+        // the synchronously completing native operation.
+        unsafe { rustinfer_cuda_paged_kv_cache_write_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn paged_decode_attention_reference_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPagedDecodeAttentionReferenceParams {
+        struct_size: PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        score_workspace,
+        output,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA materialized paged decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and borrowed resources live
+            // through synchronous completion.
+            unsafe {
+                rustinfer_cuda_paged_decode_attention_reference_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn paged_decode_attention_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    partial_states: RawBufferSpan,
+    output: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    partial_state_capacity: u64,
+    scale: f32,
+    reduction_order: u32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPagedDecodeAttentionParams {
+        struct_size: PAGED_DECODE_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        partial_states,
+        output,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        partial_state_capacity,
+        scale,
+        reduction_order,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA paged online decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and borrowed resources live
+            // through synchronous completion.
+            unsafe { rustinfer_cuda_paged_decode_attention_execute(&params, stream, error) }
+        },
+    )
+}
+
 /// Runs the existing staged-BF16 primitives for every dense batch while
 /// reusing one `[QH,S,S]` score/probability workspace.
 #[allow(clippy::too_many_arguments)]
@@ -2509,6 +2788,25 @@ const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, partial_stat
 const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, partial_state_count) == 104);
 const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, reduction_order) == 136);
 const _: () = assert!(offset_of!(RawDecodePartialStateReduceParams, reserved) == 144);
+const _: () = assert!(size_of::<RawPagedKvBlockTableV1>() == 168);
+const _: () = assert!(offset_of!(RawPagedKvBlockTableV1, block_ids) == 8);
+const _: () = assert!(offset_of!(RawPagedKvBlockTableV1, logical_token_count) == 104);
+const _: () = assert!(offset_of!(RawPagedKvBlockTableV1, block_size) == 128);
+const _: () = assert!(offset_of!(RawPagedKvBlockTableV1, reserved) == 144);
+const _: () = assert!(size_of::<RawPagedKvCacheWriteParams>() == 432);
+const _: () = assert!(offset_of!(RawPagedKvCacheWriteParams, block_table) == 200);
+const _: () = assert!(offset_of!(RawPagedKvCacheWriteParams, source_token_count) == 368);
+const _: () = assert!(offset_of!(RawPagedKvCacheWriteParams, reserved) == 400);
+const _: () = assert!(size_of::<RawPagedDecodeAttentionReferenceParams>() == 480);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionReferenceParams, block_table) == 248);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionReferenceParams, query_head_count) == 416);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionReferenceParams, scale) == 440);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionReferenceParams, reserved) == 448);
+const _: () = assert!(size_of::<RawPagedDecodeAttentionParams>() == 488);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, block_table) == 248);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, query_head_count) == 416);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, scale) == 448);
+const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, reserved) == 456);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);

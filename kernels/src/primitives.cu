@@ -69,6 +69,7 @@ uint64_t dtype_size(RustInferCudaDType dtype) noexcept {
     case RUSTINFER_CUDA_DTYPE_U32:
       return 4;
     case RUSTINFER_CUDA_DTYPE_BF16:
+    case RUSTINFER_CUDA_DTYPE_U16:
       return 2;
     case RUSTINFER_CUDA_DTYPE_U8:
       return 1;
