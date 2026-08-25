@@ -84,6 +84,16 @@ __device__ __forceinline__ float update_numerator(float numerator,
   return fmaf(beta, value, alpha * numerator);
 }
 
+__device__ __forceinline__ float stage_bf16_scaled_score(float dot_product,
+                                                          float scale) {
+  // Preserve the established BF16 attention-score contract while keeping the
+  // score matrix virtual: the materialized backend rounds once after QK and
+  // once after scaling. No staged value is written to global memory here.
+  const __nv_bfloat16 staged_dot = __float2bfloat16_rn(dot_product);
+  return __bfloat162float(
+      __float2bfloat16_rn(__bfloat162float(staged_dot) * scale));
+}
+
 __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
     const __nv_bfloat16* query, const __nv_bfloat16* key,
     const __nv_bfloat16* value, __nv_bfloat16* output,
@@ -170,7 +180,8 @@ __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
             __bfloat162float(key_tile[tile_base + lane + kWarpSize]);
         float score = fmaf(query_low, key_low, query_high * key_high);
         score = warp_sum(score);
-        score = __shfl_sync(kFullWarpMask, score, 0) * scale;
+        score = stage_bf16_scaled_score(
+            __shfl_sync(kFullWarpMask, score, 0), scale);
 
         float alpha = 0.0F;
         float beta = 0.0F;
