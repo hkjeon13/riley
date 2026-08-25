@@ -7,12 +7,13 @@ use std::fmt;
 use std::mem;
 
 use rustinfer_cuda::{
-    AvGqaParams, CausalSoftmaxInPlaceParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaError, CudaErrorStage, CudaGemmConfig, CudaPinnedHostBuffer,
+    AttentionBackend, AttentionBackendAvailability, AttentionMask, AttentionPreference,
+    AttentionSelectionTrace, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
+    CudaDeviceBuffer, CudaError, CudaErrorStage, CudaGemmConfig, CudaPinnedHostBuffer,
     CudaPreparedGemm, CudaStream, EmbeddingError, EmbeddingParams, GatedMultiplyParams, GemmParams,
-    QkGqaParams, ResidualAddParams, RmsNormParams, RopeParams, ScaleCausalMaskInPlaceParams,
-    SiluParams, av_gqa, causal_softmax_in_place, embedding, gated_multiply, qk_gqa, residual_add,
-    rms_norm, rope, scale_causal_mask_in_place, silu,
+    PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams,
+    RmsNormParams, RopeParams, SiluParams, embedding, gated_multiply, residual_add, rms_norm, rope,
+    silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -26,6 +27,9 @@ const DEFAULT_IO_STAGING_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_GEMM_WORKSPACE_CAP_BYTES: u64 = 16 * 1024 * 1024;
 const DEFAULT_ATTENTION_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
 const BF16_BYTES: u64 = 2;
+// Token IDs + 5 hidden + 3 key/value + 4 intermediate + 2 RoPE tables +
+// logits + embedding-error scratch. Attention and GEMM workspaces are optional.
+const NON_ATTENTION_GRAPH_ALLOCATION_COUNT: u64 = 17;
 const TRACE_POINT_COUNT: usize = 18;
 
 /// Result type for preparing, executing, downloading, and closing PR07 forward state.
@@ -269,6 +273,7 @@ impl PreparedLlamaForward {
             plan: _,
             weights,
             gemms,
+            attention: _,
             buffers,
             io_staging,
             token_bytes: _,
@@ -298,7 +303,7 @@ impl PreparedLlamaForward {
             up_raw,
             gate_activated,
             gated_product,
-            attention,
+            attention_workspace,
             rope_cos,
             rope_sin,
             logits,
@@ -340,7 +345,6 @@ impl PreparedLlamaForward {
             (LlamaForwardResource::UpRaw, up_raw.close()),
             (LlamaForwardResource::GateActivated, gate_activated.close()),
             (LlamaForwardResource::GatedProduct, gated_product.close()),
-            (LlamaForwardResource::Attention, attention.close()),
             (LlamaForwardResource::RopeCos, rope_cos.close()),
             (LlamaForwardResource::RopeSin, rope_sin.close()),
             (LlamaForwardResource::Logits, logits.close()),
@@ -350,6 +354,13 @@ impl PreparedLlamaForward {
             ),
         ] {
             record_close(&mut first, resource, result);
+        }
+        if let Some(workspace) = attention_workspace {
+            record_close(
+                &mut first,
+                LlamaForwardResource::Attention,
+                workspace.close(),
+            );
         }
         if let Some(workspace) = gemm_workspace {
             record_close(
@@ -632,6 +643,7 @@ pub enum LlamaForwardError {
         actual_bytes: usize,
     },
     TracePlanMismatch,
+    TraceRequiresReferenceAttention,
     TraceLayerUnavailable {
         required_layers: usize,
         actual_layers: usize,
@@ -720,6 +732,9 @@ impl fmt::Display for LlamaForwardError {
             ),
             Self::TracePlanMismatch => formatter
                 .write_str("prepared trace dimensions do not match this Llama execution plan"),
+            Self::TraceRequiresReferenceAttention => formatter.write_str(
+                "the PR07 probability trace requires the materialized reference attention backend",
+            ),
             Self::TraceLayerUnavailable {
                 required_layers,
                 actual_layers,
@@ -763,6 +778,7 @@ pub struct PreparedLlamaForwardConfig {
     io_staging_bytes: u64,
     gemm_workspace_cap_bytes: u64,
     attention_budget_bytes: u64,
+    attention_preference: AttentionPreference,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -778,7 +794,24 @@ impl PreparedLlamaForwardConfig {
             io_staging_bytes,
             gemm_workspace_cap_bytes,
             attention_budget_bytes,
+            attention_preference: AttentionPreference::Optimized,
         }
+    }
+
+    /// Selects the allocation-free online prefill backend when supported,
+    /// falling back to the native materialized reference during preparation.
+    #[must_use]
+    pub const fn with_optimized_attention(mut self) -> Self {
+        self.attention_preference = AttentionPreference::Optimized;
+        self
+    }
+
+    /// Requires the native materialized reference backend. This mode is used
+    /// by the pinned PR07 probability trace and its exact staged-BF16 golden.
+    #[must_use]
+    pub const fn with_reference_attention(mut self) -> Self {
+        self.attention_preference = AttentionPreference::Reference;
+        self
     }
 
     #[must_use]
@@ -799,6 +832,11 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn attention_budget_bytes(self) -> u64 {
         self.attention_budget_bytes
+    }
+
+    #[must_use]
+    pub const fn attention_preference(self) -> AttentionPreference {
+        self.attention_preference
     }
 
     fn validate(self) -> LlamaForwardResult<()> {
@@ -904,7 +942,7 @@ struct ForwardBuffers {
     up_raw: CudaDeviceBuffer,
     gate_activated: CudaDeviceBuffer,
     gated_product: CudaDeviceBuffer,
-    attention: CudaDeviceBuffer,
+    attention_workspace: Option<CudaDeviceBuffer>,
     rope_cos: CudaDeviceBuffer,
     rope_sin: CudaDeviceBuffer,
     logits: CudaDeviceBuffer,
@@ -917,6 +955,7 @@ pub struct PreparedLlamaForward {
     plan: LlamaExecutionPlan,
     weights: CudaUploadedWeights,
     gemms: GemmPlans,
+    attention: PreparedPrefillAttention,
     buffers: ForwardBuffers,
     io_staging: CudaPinnedHostBuffer,
     token_bytes: Box<[u8]>,
@@ -931,6 +970,7 @@ impl fmt::Debug for PreparedLlamaForward {
         formatter
             .debug_struct("PreparedLlamaForward")
             .field("plan", &self.plan)
+            .field("attention_selection", &self.attention.selection_trace())
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
             .field("output_ready", &self.output_ready)
@@ -977,9 +1017,11 @@ impl PreparedLlamaForward {
         .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
         let plan = LlamaExecutionPlan::prepare(model.spec(), &weights, sequence_length)?;
         let workspace = plan.workspace_spec();
-        if workspace.attention_buffer_bytes() > config.attention_budget_bytes {
+        let attention = prepare_attention(context, &plan, config.attention_preference)?;
+        let attention_workspace_bytes = attention.workspace_bytes();
+        if attention_workspace_bytes > config.attention_budget_bytes {
             return Err(LlamaForwardError::AttentionBudgetExceeded {
-                required_bytes: workspace.attention_buffer_bytes(),
+                required_bytes: attention_workspace_bytes,
                 maximum_bytes: config.attention_budget_bytes,
             });
         }
@@ -995,7 +1037,12 @@ impl PreparedLlamaForward {
         .into_iter()
         .max()
         .unwrap_or(0);
-        let mut buffers = allocate_buffers(context, &plan, gemm_workspace_bytes)?;
+        let mut buffers = allocate_buffers(
+            context,
+            &plan,
+            attention_workspace_bytes,
+            gemm_workspace_bytes,
+        )?;
         let mut io_staging = context
             .allocate_pinned_host_buffer(config.io_staging_bytes)
             .map_err(|source| {
@@ -1018,38 +1065,19 @@ impl PreparedLlamaForward {
 
         let token_bytes =
             allocate_host_bytes(workspace.token_ids_bytes(), LlamaForwardResource::TokenIds)?;
-        let total_device_bytes = weights
-            .total_physical_bytes()
-            .checked_add(workspace.total_planned_bytes())
-            .and_then(|bytes| bytes.checked_add(gemm_workspace_bytes))
-            .ok_or(LlamaForwardError::ArithmeticOverflow {
-                resource: LlamaForwardResource::GemmWorkspace,
-            })?;
-        let graph_allocations = 18_u64 + u64::from(gemm_workspace_bytes != 0);
-        let physical_allocations =
-            u64::try_from(weights.physical_tensor_count()).map_err(|_| {
-                LlamaForwardError::ArithmeticOverflow {
-                    resource: LlamaForwardResource::UploadedWeights,
-                }
-            })?;
-        let allocation_report = PreparedLlamaAllocationReport {
-            weight_bytes: weights.total_physical_bytes(),
-            graph_bytes: workspace.total_planned_bytes(),
+        let allocation_report = build_allocation_report(
+            &weights,
+            &plan,
+            attention_workspace_bytes,
             gemm_workspace_bytes,
-            total_device_bytes,
-            device_allocation_count: physical_allocations.checked_add(graph_allocations).ok_or(
-                LlamaForwardError::ArithmeticOverflow {
-                    resource: LlamaForwardResource::UploadedWeights,
-                },
-            )?,
-            pinned_host_bytes: config.io_staging_bytes,
-            pinned_host_allocation_count: 1,
-        };
+            config.io_staging_bytes,
+        )?;
 
         Ok(Self {
             plan,
             weights,
             gemms,
+            attention,
             buffers,
             io_staging,
             token_bytes,
@@ -1072,14 +1100,24 @@ impl PreparedLlamaForward {
         self.allocation_report
     }
 
+    /// Cold-path attention selection and its allocation/materialization facts.
+    #[must_use]
+    pub fn attention_selection(&self) -> AttentionSelectionTrace {
+        self.attention.selection_trace()
+    }
+
     /// Allocates reusable caller-owned host storage for the canonical PR07
     /// diagnostic checkpoints without executing CUDA work.
     ///
     /// # Errors
     ///
     /// Returns if the plan has fewer than the layer-14 checkpoint or host byte
-    /// arithmetic/reservation fails.
+    /// arithmetic/reservation fails. Online attention has no probability
+    /// matrix to capture, so callers must prepare a reference-attention owner.
     pub fn prepare_trace(&self) -> LlamaForwardResult<PreparedLlamaTrace> {
+        if self.attention.backend() != AttentionBackend::MaterializedReference {
+            return Err(LlamaForwardError::TraceRequiresReferenceAttention);
+        }
         PreparedLlamaTrace::prepare(&self.plan)
     }
 
@@ -1216,6 +1254,9 @@ impl PreparedLlamaForward {
         }
         if !self.tokens_ready {
             return Err(LlamaForwardError::TokensNotUploaded);
+        }
+        if self.attention.backend() != AttentionBackend::MaterializedReference {
+            return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
         trace.validate(&self.plan)?;
         trace.reset();
@@ -1365,6 +1406,7 @@ impl PreparedLlamaForward {
         let plan = &self.plan;
         let weights = &self.weights;
         let gemms = &mut self.gemms;
+        let attention = &self.attention;
         let buffers = &mut self.buffers;
         let io_staging = &mut self.io_staging;
         let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
@@ -1608,105 +1650,72 @@ impl PreparedLlamaForward {
                     .map_err(|source| LlamaForwardError::cuda(key_rope_site, source))?;
             }
 
-            let scores_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionScores);
+            let prefill_site = ExecutionSite::layer(layer_index, LlamaOp::PrefillAttention);
             {
-                let mut params = QkGqaParams {
+                let ForwardBuffers {
+                    hidden_rotary,
+                    hidden_context,
+                    value_raw,
+                    key_rotary,
+                    attention_workspace,
+                    ..
+                } = buffers;
+                let workspace = attention_workspace
+                    .as_mut()
+                    .map(|buffer| {
+                        span_mut(
+                            buffer,
+                            CudaDType::BF16,
+                            attention.workspace_bytes(),
+                            prefill_site,
+                        )
+                    })
+                    .transpose()?;
+                let mut params = PrefillAttentionParams {
                     query: span(
-                        &buffers.hidden_rotary,
+                        hidden_rotary,
                         CudaDType::BF16,
                         plan.workspace_spec().hidden_buffer_bytes(),
-                        scores_site,
+                        prefill_site,
                     )?,
                     key: span(
-                        &buffers.key_rotary,
+                        key_rotary,
                         CudaDType::BF16,
                         plan.workspace_spec().key_value_buffer_bytes(),
-                        scores_site,
+                        prefill_site,
+                    )?,
+                    value: span(
+                        value_raw,
+                        CudaDType::BF16,
+                        plan.workspace_spec().key_value_buffer_bytes(),
+                        prefill_site,
                     )?,
                     output: span_mut(
-                        &mut buffers.attention,
+                        hidden_context,
                         CudaDType::BF16,
-                        plan.workspace_spec().attention_buffer_bytes(),
-                        scores_site,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        prefill_site,
                     )?,
-                    token_count: sequence,
-                    query_head_count: query_heads,
-                    key_value_head_count: key_value_heads,
-                    head_size,
+                    workspace,
                 };
-                qk_gqa(&mut params, stream)
-                    .map_err(|source| LlamaForwardError::cuda(scores_site, source))?;
+                attention
+                    .execute(&mut params, stream)
+                    .map_err(|source| LlamaForwardError::cuda(prefill_site, source))?;
             }
-            let scale_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionScaleMask);
-            {
-                let mut params = ScaleCausalMaskInPlaceParams {
-                    scores: span_mut(
-                        &mut buffers.attention,
-                        CudaDType::BF16,
-                        plan.workspace_spec().attention_buffer_bytes(),
-                        scale_site,
-                    )?,
-                    token_count: sequence,
-                    query_head_count: query_heads,
-                    scale: 1.0 / (head_size as f32).sqrt(),
-                };
-                scale_causal_mask_in_place(&mut params, stream)
-                    .map_err(|source| LlamaForwardError::cuda(scale_site, source))?;
-            }
-            let softmax_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionSoftmax);
-            {
-                let mut params = CausalSoftmaxInPlaceParams {
-                    scores: span_mut(
-                        &mut buffers.attention,
-                        CudaDType::BF16,
-                        plan.workspace_spec().attention_buffer_bytes(),
-                        softmax_site,
-                    )?,
-                    token_count: sequence,
-                    query_head_count: query_heads,
-                };
-                causal_softmax_in_place(&mut params, stream)
-                    .map_err(|source| LlamaForwardError::cuda(softmax_site, source))?;
-            }
-            if layer_index == 0 {
+            if layer_index == 0 && trace.is_some() {
+                let workspace = buffers
+                    .attention_workspace
+                    .as_mut()
+                    .ok_or(LlamaForwardError::TraceRequiresReferenceAttention)?;
                 capture_trace(
                     &mut trace,
                     LlamaTracePoint::Layer0AttentionProbabilities,
-                    &mut buffers.attention,
+                    workspace,
                     0,
                     io_staging,
                     stream,
-                    softmax_site,
+                    prefill_site,
                 )?;
-            }
-            let value_product_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionValue);
-            {
-                let mut params = AvGqaParams {
-                    probabilities: span(
-                        &buffers.attention,
-                        CudaDType::BF16,
-                        plan.workspace_spec().attention_buffer_bytes(),
-                        value_product_site,
-                    )?,
-                    value: span(
-                        &buffers.value_raw,
-                        CudaDType::BF16,
-                        plan.workspace_spec().key_value_buffer_bytes(),
-                        value_product_site,
-                    )?,
-                    output: span_mut(
-                        &mut buffers.hidden_context,
-                        CudaDType::BF16,
-                        plan.workspace_spec().hidden_buffer_bytes(),
-                        value_product_site,
-                    )?,
-                    token_count: sequence,
-                    query_head_count: query_heads,
-                    key_value_head_count: key_value_heads,
-                    head_size,
-                };
-                av_gqa(&mut params, stream)
-                    .map_err(|source| LlamaForwardError::cuda(value_product_site, source))?;
             }
             if layer_index == 0 {
                 capture_trace(
@@ -1716,7 +1725,7 @@ impl PreparedLlamaForward {
                     0,
                     io_staging,
                     stream,
-                    value_product_site,
+                    prefill_site,
                 )?;
             }
 
@@ -2055,6 +2064,83 @@ impl PreparedLlamaForward {
     // HOT_EXECUTE_END
 }
 
+#[allow(clippy::cast_precision_loss)]
+fn prepare_attention(
+    context: &CudaContext,
+    plan: &LlamaExecutionPlan,
+    preference: AttentionPreference,
+) -> LlamaForwardResult<PreparedPrefillAttention> {
+    let site = ExecutionSite::layer(0, LlamaOp::PrefillAttention);
+    let dimensions = plan.dimensions();
+    let head_size = to_u64(
+        dimensions.head_dimension(),
+        LlamaForwardResource::HiddenRotary,
+    )?;
+    let request = PrefillAttentionRequest::new(
+        1,
+        to_u64(plan.sequence_length(), LlamaForwardResource::Attention)?,
+        to_u64(dimensions.query_heads(), LlamaForwardResource::Attention)?,
+        to_u64(dimensions.key_value_heads(), LlamaForwardResource::KeyRaw)?,
+        head_size,
+        1.0 / (head_size as f32).sqrt(),
+        AttentionMask::Causal,
+    );
+    PreparedPrefillAttention::select(
+        context,
+        request,
+        preference,
+        AttentionBackendAvailability::linked(),
+    )
+    .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
+fn build_allocation_report(
+    weights: &CudaUploadedWeights,
+    plan: &LlamaExecutionPlan,
+    attention_workspace_bytes: u64,
+    gemm_workspace_bytes: u64,
+    pinned_host_bytes: u64,
+) -> LlamaForwardResult<PreparedLlamaAllocationReport> {
+    let graph_bytes = plan
+        .workspace_spec()
+        .non_attention_planned_bytes()
+        .checked_add(attention_workspace_bytes)
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::Attention,
+        })?;
+    let total_device_bytes = weights
+        .total_physical_bytes()
+        .checked_add(graph_bytes)
+        .and_then(|bytes| bytes.checked_add(gemm_workspace_bytes))
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::GemmWorkspace,
+        })?;
+    let graph_allocations = NON_ATTENTION_GRAPH_ALLOCATION_COUNT
+        .checked_add(u64::from(attention_workspace_bytes != 0))
+        .and_then(|count| count.checked_add(u64::from(gemm_workspace_bytes != 0)))
+        .ok_or(LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::Attention,
+        })?;
+    let physical_allocations = u64::try_from(weights.physical_tensor_count()).map_err(|_| {
+        LlamaForwardError::ArithmeticOverflow {
+            resource: LlamaForwardResource::UploadedWeights,
+        }
+    })?;
+    Ok(PreparedLlamaAllocationReport {
+        weight_bytes: weights.total_physical_bytes(),
+        graph_bytes,
+        gemm_workspace_bytes,
+        total_device_bytes,
+        device_allocation_count: physical_allocations.checked_add(graph_allocations).ok_or(
+            LlamaForwardError::ArithmeticOverflow {
+                resource: LlamaForwardResource::UploadedWeights,
+            },
+        )?,
+        pinned_host_bytes,
+        pinned_host_allocation_count: 1,
+    })
+}
+
 fn prepare_gemms(
     context: &CudaContext,
     plan: &LlamaExecutionPlan,
@@ -2117,6 +2203,7 @@ fn prepare_gemms(
 fn allocate_buffers(
     context: &CudaContext,
     plan: &LlamaExecutionPlan,
+    attention_workspace_bytes: u64,
     gemm_workspace_bytes: u64,
 ) -> LlamaForwardResult<ForwardBuffers> {
     let spec = plan.workspace_spec();
@@ -2145,10 +2232,14 @@ fn allocate_buffers(
         up_raw: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
         gate_activated: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
         gated_product: allocate(spec.intermediate_buffer_bytes(), intermediate_site)?,
-        attention: allocate(
-            spec.attention_buffer_bytes(),
-            ExecutionSite::layer(0, LlamaOp::AttentionScores),
-        )?,
+        attention_workspace: if attention_workspace_bytes == 0 {
+            None
+        } else {
+            Some(allocate(
+                attention_workspace_bytes,
+                ExecutionSite::layer(0, LlamaOp::PrefillAttention),
+            )?)
+        },
         rope_cos: allocate(
             spec.rope_cos_bytes(),
             ExecutionSite::layer(0, LlamaOp::QueryRope),

@@ -18,6 +18,9 @@ pub use kernel::{
     KernelRegistry, KernelRegistryError, OpId,
 };
 
+#[cfg(feature = "cuda")]
+pub use rustinfer_cuda::{AttentionBackend, AttentionPreference, AttentionSelectionTrace};
+
 /// Static build information that does not initialize a CUDA device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BuildInfo {

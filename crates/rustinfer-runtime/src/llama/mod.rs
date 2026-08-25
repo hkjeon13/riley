@@ -22,12 +22,33 @@ pub use forward::{
     PreparedLlamaTrace,
 };
 
+#[cfg(feature = "cuda")]
+pub use rustinfer_cuda::{AttentionBackend, AttentionPreference, AttentionSelectionTrace};
+
 #[cfg(any(feature = "cuda", test))]
 pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
 
 #[cfg(test)]
 mod source_contract_tests {
-    use super::forward::LlamaTracePoint;
+    use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
+    use rustinfer_cuda::AttentionPreference;
+
+    #[test]
+    fn optimized_attention_is_default_and_reference_is_explicit() {
+        let defaults = PreparedLlamaForwardConfig::default();
+        assert_eq!(
+            defaults.attention_preference(),
+            AttentionPreference::Optimized
+        );
+        assert_eq!(
+            defaults.with_reference_attention().attention_preference(),
+            AttentionPreference::Reference
+        );
+        assert_eq!(
+            defaults.with_optimized_attention().attention_preference(),
+            AttentionPreference::Optimized
+        );
+    }
 
     #[test]
     fn hot_execute_source_uses_only_prebound_direct_index_state() {
@@ -52,12 +73,22 @@ mod source_contract_tests {
             "format!",
             "allocate_device_buffer",
             "allocate_pinned_host_buffer",
+            "PreparedPrefillAttention::select",
+            "AttentionBackend::",
+            "qk_gqa(",
+            "scale_causal_mask_in_place(",
+            "causal_softmax_in_place(",
+            "av_gqa(",
         ] {
             assert!(
                 !hot.contains(forbidden),
                 "hot execute source contains forbidden cold-path token {forbidden:?}"
             );
         }
+        assert!(
+            hot.contains("let attention = &self.attention;"),
+            "hot execute must use the backend fixed during cold preparation"
+        );
     }
 
     #[test]

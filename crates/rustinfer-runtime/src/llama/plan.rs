@@ -137,6 +137,7 @@ pub struct LlamaWorkspaceSpec {
     rope_sin_bytes: u64,
     logits_bytes: u64,
     embedding_error_scratch_bytes: u64,
+    non_attention_planned_bytes: u64,
     total_planned_bytes: u64,
 }
 
@@ -192,6 +193,13 @@ impl LlamaWorkspaceSpec {
     #[must_use]
     pub const fn embedding_error_scratch_bytes(self) -> u64 {
         self.embedding_error_scratch_bytes
+    }
+
+    /// Sum of every fixed graph allocation except the optional materialized
+    /// attention workspace. Online prefill backends use this exact base.
+    #[must_use]
+    pub const fn non_attention_planned_bytes(self) -> u64 {
+        self.non_attention_planned_bytes
     }
 
     /// Sum of all graph, table, input, and output buffers described above.
@@ -865,7 +873,7 @@ fn build_workspace_spec(
     )?;
     let logits_bytes = checked_bytes(LlamaBufferRole::Logits, &[sequence, vocabulary], BF16_BYTES)?;
 
-    let counted = [
+    let non_attention_counted = [
         (token_ids_bytes, 1),
         (hidden_buffer_bytes, HIDDEN_WORKSPACE_BUFFER_COUNT),
         (key_value_buffer_bytes, KEY_VALUE_WORKSPACE_BUFFER_COUNT),
@@ -873,20 +881,27 @@ fn build_workspace_spec(
             intermediate_buffer_bytes,
             INTERMEDIATE_WORKSPACE_BUFFER_COUNT,
         ),
-        (attention_buffer_bytes, 1),
         (rope_cos_bytes, 1),
         (rope_sin_bytes, 1),
         (logits_bytes, 1),
         (EMBEDDING_ERROR_SCRATCH_BYTES, 1),
     ];
-    let total_planned_bytes = counted.iter().try_fold(0_u64, |total, &(bytes, count)| {
-        bytes
-            .checked_mul(count)
-            .and_then(|counted_bytes| total.checked_add(counted_bytes))
-            .ok_or(LlamaPlanError::WorkspaceOverflow {
-                role: LlamaBufferRole::Total,
-            })
-    })?;
+    let non_attention_planned_bytes =
+        non_attention_counted
+            .iter()
+            .try_fold(0_u64, |total, &(bytes, count)| {
+                bytes
+                    .checked_mul(count)
+                    .and_then(|counted_bytes| total.checked_add(counted_bytes))
+                    .ok_or(LlamaPlanError::WorkspaceOverflow {
+                        role: LlamaBufferRole::Total,
+                    })
+            })?;
+    let total_planned_bytes = non_attention_planned_bytes
+        .checked_add(attention_buffer_bytes)
+        .ok_or(LlamaPlanError::WorkspaceOverflow {
+            role: LlamaBufferRole::Total,
+        })?;
 
     Ok(LlamaWorkspaceSpec {
         token_ids_bytes,
@@ -898,6 +913,7 @@ fn build_workspace_spec(
         rope_sin_bytes,
         logits_bytes,
         embedding_error_scratch_bytes: EMBEDDING_ERROR_SCRATCH_BYTES,
+        non_attention_planned_bytes,
         total_planned_bytes,
     })
 }
@@ -1140,6 +1156,7 @@ mod tests {
         assert_eq!(workspace.rope_sin_bytes(), 16_384);
         assert_eq!(workspace.logits_bytes(), 12_582_912);
         assert_eq!(workspace.embedding_error_scratch_bytes(), 32);
+        assert_eq!(workspace.non_attention_planned_bytes(), 15_073_824);
         assert_eq!(workspace.total_planned_bytes(), 15_368_736);
     }
 

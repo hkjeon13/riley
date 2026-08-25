@@ -30,6 +30,8 @@ pub enum LlamaOp {
     AttentionSoftmax,
     /// Attention probability/value product.
     AttentionValue,
+    /// Cold-selected full-sequence prefill attention backend.
+    PrefillAttention,
     /// Attention output projection.
     OutputProjection,
     /// Post-attention residual addition.
@@ -70,6 +72,7 @@ impl LlamaOp {
             Self::AttentionScaleMask => "attention_scale_mask",
             Self::AttentionSoftmax => "attention_softmax",
             Self::AttentionValue => "attention_value",
+            Self::PrefillAttention => "prefill_attention",
             Self::OutputProjection => "output_projection",
             Self::AttentionResidual => "attention_residual",
             Self::PostAttentionNorm => "post_attention_norm",

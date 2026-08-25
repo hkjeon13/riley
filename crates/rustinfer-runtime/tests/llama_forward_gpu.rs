@@ -10,8 +10,12 @@ use std::collections::BTreeSet;
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
-use rustinfer_cuda::{CudaAllocationStats, CudaErrorStage, CudaRuntime};
+use rustinfer_cuda::{
+    AttentionSelectionTrace, CudaAllocationStats, CudaContext, CudaErrorStage, CudaRuntime,
+    CudaStream,
+};
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
     LlamaForwardError, LlamaPlanError, LlamaTracePoint, PreparedLlamaAllocationReport,
@@ -33,6 +37,9 @@ const HEAD_SIZE: u64 = 64;
 const VOCABULARY_SIZE: usize = 49_152;
 const PINNED_TOKENS_A: [u32; SEQUENCE_LENGTH] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 const PINNED_TOKENS_B: [u32; SEQUENCE_LENGTH] = [504, 2_365, 6_354, 16_438, 42, 43, 44];
+const MODEL_BENCHMARK_SEQUENCE_LENGTH: usize = 128;
+const MODEL_BENCHMARK_WARMUP_ITERATIONS: usize = 3;
+const MODEL_BENCHMARK_MEASURED_ITERATIONS: usize = 10;
 
 #[derive(Clone, Copy, Debug)]
 struct NumericTolerance {
@@ -46,6 +53,21 @@ struct NumericMetrics {
     cosine: f64,
     max_abs: f64,
     mean_abs: f64,
+}
+
+struct LlamaPrefillBenchmarkOutcome {
+    selection: AttentionSelectionTrace,
+    report: PreparedLlamaAllocationReport,
+    last_logits: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct LlamaPrefillBenchmarkSpec<'a> {
+    backend_label: &'static str,
+    expected_implementation_id: &'static str,
+    sequence_length: usize,
+    token_ids: &'a [u32],
+    config: PreparedLlamaForwardConfig,
 }
 
 fn expected_shape(point: LlamaTracePoint) -> &'static [u64] {
@@ -419,6 +441,128 @@ fn assert_bf16_logits_are_finite(bytes: &[u8]) {
     }
 }
 
+fn benchmark_tokens(sequence_length: usize) -> Vec<u32> {
+    (0..sequence_length)
+        .map(|position| PINNED_TOKENS_A[position % PINNED_TOKENS_A.len()])
+        .collect()
+}
+
+fn percentile_nearest_rank(sorted: &[u64], percentile: usize) -> u64 {
+    assert!(!sorted.is_empty());
+    assert!((1..=100).contains(&percentile));
+    let rank = percentile
+        .checked_mul(sorted.len())
+        .expect("benchmark percentile rank fits usize")
+        .div_ceil(100);
+    sorted[rank - 1]
+}
+
+fn run_llama_prefill_benchmark(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    spec: LlamaPrefillBenchmarkSpec<'_>,
+) -> TestResult<LlamaPrefillBenchmarkOutcome> {
+    let LlamaPrefillBenchmarkSpec {
+        backend_label,
+        expected_implementation_id,
+        sequence_length,
+        token_ids,
+        config,
+    } = spec;
+    let mut forward =
+        PreparedLlamaForward::prepare(model, context, stream, sequence_length, config)?;
+    let selection = forward.attention_selection();
+    let report = forward.allocation_report();
+    assert_eq!(selection.implementation_id(), expected_implementation_id);
+    assert_report_matches_context(report, context.allocation_stats()?);
+    assert_eq!(token_ids.len(), sequence_length);
+
+    println!(
+        "pr08-llama-prefill-benchmark-metadata schema_version=1 \
+metric=prefill_execute_proxy_ttft backend={backend_label} sequence_length={sequence_length} \
+token_pattern=repeat_pr07_pinned_tokens_a implementation_id={} implementation_version={} \
+native_dependency={} selection_reason={:?} score_materialization={:?} \
+materialized_score_bytes={} attention_workspace_bytes={} layout_copy_bytes={} graph_bytes={} \
+gemm_workspace_bytes={} total_device_bytes={} device_allocation_count={} warmup_iterations={} \
+measured_iterations={} timing_boundary=execute_plus_stream_synchronize \
+decode_sampling=incomplete_excluded",
+        selection.implementation_id(),
+        selection.implementation_version(),
+        selection.native_dependency(),
+        selection.reason(),
+        selection.score_materialization(),
+        selection.materialized_score_bytes(),
+        selection.workspace_bytes(),
+        selection.layout_copy_bytes(),
+        report.graph_bytes(),
+        report.gemm_workspace_bytes(),
+        report.total_device_bytes(),
+        report.device_allocation_count(),
+        MODEL_BENCHMARK_WARMUP_ITERATIONS,
+        MODEL_BENCHMARK_MEASURED_ITERATIONS,
+    );
+
+    forward.upload_tokens(token_ids, stream)?;
+    for _ in 0..MODEL_BENCHMARK_WARMUP_ITERATIONS {
+        forward.execute(stream)?;
+        stream.synchronize()?;
+    }
+
+    let stable_allocations = context.allocation_stats()?;
+    let mut latencies_ns = Vec::with_capacity(MODEL_BENCHMARK_MEASURED_ITERATIONS);
+    for iteration in 0..MODEL_BENCHMARK_MEASURED_ITERATIONS {
+        let started = Instant::now();
+        forward.execute(stream)?;
+        stream.synchronize()?;
+        let latency_ns = u64::try_from(started.elapsed().as_nanos())?;
+        latencies_ns.push(latency_ns);
+        println!(
+            "pr08-llama-prefill-benchmark-raw schema_version=1 \
+metric=prefill_execute_proxy_ttft backend={backend_label} sequence_length={sequence_length} \
+iteration={iteration} latency_ns={latency_ns} timing_boundary=execute_plus_stream_synchronize \
+decode_sampling=incomplete_excluded"
+        );
+    }
+    assert_eq!(
+        context.allocation_stats()?,
+        stable_allocations,
+        "hot benchmark iterations must not change CUDA allocation accounting"
+    );
+
+    let mut sorted_latencies_ns = latencies_ns;
+    sorted_latencies_ns.sort_unstable();
+    let median_ns = percentile_nearest_rank(&sorted_latencies_ns, 50);
+    let p95_ns = percentile_nearest_rank(&sorted_latencies_ns, 95);
+    println!(
+        "pr08-llama-prefill-benchmark-summary schema_version=1 \
+metric=prefill_execute_proxy_ttft backend={backend_label} sequence_length={sequence_length} \
+samples={} median_ns={median_ns} p95_ns={p95_ns} \
+timing_boundary=execute_plus_stream_synchronize decode_sampling=incomplete_excluded",
+        sorted_latencies_ns.len(),
+    );
+
+    let row_bytes = forward
+        .plan()
+        .dimensions()
+        .vocabulary_size()
+        .checked_mul(2)
+        .ok_or("last-logit byte length overflow")?;
+    let mut last_logits = vec![0_u8; row_bytes];
+    forward.download_last_logits(&mut last_logits, stream)?;
+    assert_bf16_logits_are_finite(&last_logits);
+    forward.close()?;
+    assert!(
+        context.allocation_stats()?.is_zero(),
+        "sequential benchmark owners must release all CUDA allocations"
+    );
+    Ok(LlamaPrefillBenchmarkOutcome {
+        selection,
+        report,
+        last_logits,
+    })
+}
+
 #[test]
 #[ignore = "requires the pinned checkpoint/golden and a CUDA GPU on server-4096"]
 fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestResult {
@@ -479,7 +623,8 @@ fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestR
         defaults.io_staging_bytes(),
         defaults.gemm_workspace_cap_bytes(),
         0,
-    );
+    )
+    .with_reference_attention();
     let error = PreparedLlamaForward::prepare(
         &model,
         &context,
@@ -505,7 +650,7 @@ fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestR
         &context,
         &mut stream,
         SEQUENCE_LENGTH,
-        PreparedLlamaForwardConfig::default(),
+        PreparedLlamaForwardConfig::default().with_reference_attention(),
     )?;
     assert_report_matches_context(forward.allocation_report(), context.allocation_stats()?);
     assert_eq!(forward.plan().layers().len(), 30);
@@ -659,6 +804,275 @@ fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestR
         context.allocation_stats()?.is_zero(),
         "explicit forward close must release weights, graph buffers, and pinned staging"
     );
+    stream.close()?;
+    context.close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned checkpoint and a CUDA GPU on server-4096"]
+fn pinned_smollm2_online_prefill_matches_reference_without_score_storage() -> TestResult {
+    let checkpoint = std::env::var_os("RUSTINFER_REAL_CHECKPOINT")
+        .map(PathBuf::from)
+        .expect("RUSTINFER_REAL_CHECKPOINT must name the remote checkpoint directory");
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+
+    let runtime = CudaRuntime::initialize()?;
+    assert!(
+        runtime.device_count() > 0,
+        "remote runner has no CUDA device"
+    );
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let mut reference = PreparedLlamaForward::prepare(
+        &model,
+        &context,
+        &mut stream,
+        SEQUENCE_LENGTH,
+        PreparedLlamaForwardConfig::default().with_reference_attention(),
+    )?;
+    let reference_selection = reference.attention_selection();
+    let reference_report = reference.allocation_report();
+    assert_eq!(
+        reference_selection.implementation_id(),
+        "rustinfer.cuda.materialized-gqa-prefill.bf16"
+    );
+    assert_eq!(
+        reference_selection.workspace_bytes(),
+        reference.plan().workspace_spec().attention_buffer_bytes()
+    );
+    assert_eq!(
+        reference_selection.materialized_score_bytes(),
+        reference.plan().workspace_spec().attention_buffer_bytes()
+    );
+    assert_report_matches_context(reference_report, context.allocation_stats()?);
+
+    reference.forward(&PINNED_TOKENS_A, &mut stream)?;
+    let row_bytes = VOCABULARY_SIZE
+        .checked_mul(2)
+        .ok_or("last-logit byte length overflow")?;
+    let mut reference_last_logits = vec![0_u8; row_bytes];
+    reference.download_last_logits(&mut reference_last_logits, &mut stream)?;
+    let reference_greedy = top_k(&reference_last_logits, 1)[0];
+    reference.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let defaults = PreparedLlamaForwardConfig::default();
+    let zero_workspace_optimized = PreparedLlamaForwardConfig::new(
+        defaults.upload_staging_bytes(),
+        defaults.io_staging_bytes(),
+        defaults.gemm_workspace_cap_bytes(),
+        0,
+    )
+    .with_optimized_attention();
+    let mut optimized = PreparedLlamaForward::prepare(
+        &model,
+        &context,
+        &mut stream,
+        SEQUENCE_LENGTH,
+        zero_workspace_optimized,
+    )?;
+    let optimized_selection = optimized.attention_selection();
+    let optimized_report = optimized.allocation_report();
+    assert_eq!(
+        optimized_selection.implementation_id(),
+        "rustinfer.cuda.online-gqa-prefill.bf16.d64"
+    );
+    assert_eq!(optimized_selection.workspace_bytes(), 0);
+    assert_eq!(optimized_selection.materialized_score_bytes(), 0);
+    assert_ne!(
+        optimized_selection.implementation_id(),
+        reference_selection.implementation_id()
+    );
+    assert_eq!(
+        optimized_report.graph_bytes(),
+        optimized
+            .plan()
+            .workspace_spec()
+            .non_attention_planned_bytes()
+    );
+    assert_eq!(
+        optimized_report.graph_bytes() + reference_selection.workspace_bytes(),
+        reference_report.graph_bytes()
+    );
+    assert_eq!(
+        optimized_report.gemm_workspace_bytes(),
+        reference_report.gemm_workspace_bytes()
+    );
+    assert_eq!(
+        optimized_report.total_device_bytes() + reference_selection.workspace_bytes(),
+        reference_report.total_device_bytes()
+    );
+    assert_eq!(
+        optimized_report.device_allocation_count() + 1,
+        reference_report.device_allocation_count()
+    );
+    assert!(matches!(
+        optimized.prepare_trace(),
+        Err(LlamaForwardError::TraceRequiresReferenceAttention)
+    ));
+    assert_report_matches_context(optimized_report, context.allocation_stats()?);
+
+    optimized.forward(&PINNED_TOKENS_A, &mut stream)?;
+    let mut optimized_last_logits = vec![0_u8; row_bytes];
+    optimized.download_last_logits(&mut optimized_last_logits, &mut stream)?;
+    assert_bf16_logits_are_finite(&optimized_last_logits);
+    let metrics = numeric_metrics(&optimized_last_logits, &reference_last_logits);
+    eprintln!(
+        "pr08-online-vs-reference cosine={:.12} max_abs={:.9} mean_abs={:.9}",
+        metrics.cosine, metrics.max_abs, metrics.mean_abs
+    );
+    assert!(
+        metrics.cosine >= 0.999,
+        "online/reference cosine {metrics:?}"
+    );
+    assert!(
+        metrics.max_abs <= 4.0,
+        "online/reference max abs {metrics:?}"
+    );
+    assert!(
+        metrics.mean_abs <= 0.25,
+        "online/reference mean abs {metrics:?}"
+    );
+    assert_eq!(top_k(&optimized_last_logits, 1)[0], reference_greedy);
+
+    let logits_bytes = usize::try_from(optimized.plan().workspace_spec().logits_bytes())?;
+    let mut optimized_prefix_source = vec![0_u8; logits_bytes];
+    optimized.download_logits(&mut optimized_prefix_source, &mut stream)?;
+
+    let stable_allocations = context.allocation_stats()?;
+    for _ in 0..100 {
+        optimized.execute(&mut stream)?;
+    }
+    assert_eq!(
+        context.allocation_stats()?,
+        stable_allocations,
+        "100 online hot executions must not allocate score or workspace buffers"
+    );
+
+    optimized.forward(&PINNED_TOKENS_B, &mut stream)?;
+    let mut optimized_divergent_suffix = vec![0_u8; logits_bytes];
+    optimized.download_logits(&mut optimized_divergent_suffix, &mut stream)?;
+    let prefix_bytes = COMMON_PREFIX_LENGTH
+        .checked_mul(row_bytes)
+        .ok_or("common-prefix byte length overflow")?;
+    assert_eq!(
+        &optimized_divergent_suffix[..prefix_bytes],
+        &optimized_prefix_source[..prefix_bytes],
+        "online attention must not let a future suffix change prefix logits"
+    );
+    assert_ne!(
+        &optimized_divergent_suffix[prefix_bytes..],
+        &optimized_prefix_source[prefix_bytes..],
+        "the optimized causal regression inputs must have distinct suffix logits"
+    );
+    assert_eq!(context.allocation_stats()?, stable_allocations);
+
+    optimized.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    stream.close()?;
+    context.close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote-only pinned SmolLM2 reference-vs-online prefill benchmark on server-4096"]
+fn benchmark_pinned_smollm2_reference_vs_online_prefill_execute_proxy_ttft() -> TestResult {
+    let checkpoint = std::env::var_os("RUSTINFER_REAL_CHECKPOINT")
+        .map(PathBuf::from)
+        .expect("RUSTINFER_REAL_CHECKPOINT must name the remote checkpoint directory");
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    let token_ids = benchmark_tokens(MODEL_BENCHMARK_SEQUENCE_LENGTH);
+
+    let runtime = CudaRuntime::initialize()?;
+    assert!(
+        runtime.device_count() > 0,
+        "remote benchmark runner has no CUDA device"
+    );
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let reference = run_llama_prefill_benchmark(
+        &model,
+        &context,
+        &mut stream,
+        LlamaPrefillBenchmarkSpec {
+            backend_label: "reference",
+            expected_implementation_id: "rustinfer.cuda.materialized-gqa-prefill.bf16",
+            sequence_length: MODEL_BENCHMARK_SEQUENCE_LENGTH,
+            token_ids: &token_ids,
+            config: PreparedLlamaForwardConfig::default().with_reference_attention(),
+        },
+    )?;
+    assert!(reference.selection.workspace_bytes() > 0);
+    assert_eq!(
+        reference.selection.workspace_bytes(),
+        reference.selection.materialized_score_bytes()
+    );
+
+    let defaults = PreparedLlamaForwardConfig::default();
+    let optimized_config = PreparedLlamaForwardConfig::new(
+        defaults.upload_staging_bytes(),
+        defaults.io_staging_bytes(),
+        defaults.gemm_workspace_cap_bytes(),
+        0,
+    )
+    .with_optimized_attention();
+    let optimized = run_llama_prefill_benchmark(
+        &model,
+        &context,
+        &mut stream,
+        LlamaPrefillBenchmarkSpec {
+            backend_label: "optimized",
+            expected_implementation_id: "rustinfer.cuda.online-gqa-prefill.bf16.d64",
+            sequence_length: MODEL_BENCHMARK_SEQUENCE_LENGTH,
+            token_ids: &token_ids,
+            config: optimized_config,
+        },
+    )?;
+    assert_eq!(optimized.selection.workspace_bytes(), 0);
+    assert_eq!(optimized.selection.materialized_score_bytes(), 0);
+    assert_eq!(optimized.selection.layout_copy_bytes(), 0);
+    assert_eq!(
+        optimized.report.graph_bytes() + reference.selection.workspace_bytes(),
+        reference.report.graph_bytes()
+    );
+
+    let metrics = numeric_metrics(&optimized.last_logits, &reference.last_logits);
+    let reference_top1 = top_k(&reference.last_logits, 1)[0];
+    let optimized_top1 = top_k(&optimized.last_logits, 1)[0];
+    println!(
+        "pr08-llama-prefill-benchmark-parity schema_version=1 sequence_length={} \
+reference_top1={reference_top1} optimized_top1={optimized_top1} cosine={:.12} \
+max_abs={:.9} mean_abs={:.9}",
+        MODEL_BENCHMARK_SEQUENCE_LENGTH, metrics.cosine, metrics.max_abs, metrics.mean_abs,
+    );
+    assert!(
+        metrics.cosine.is_finite() && metrics.max_abs.is_finite() && metrics.mean_abs.is_finite(),
+        "S=128 online/reference parity metrics must be finite: {metrics:?}"
+    );
+    assert!(
+        metrics.cosine >= 0.999,
+        "S=128 online/reference cosine failed the E0 gate: {metrics:?}"
+    );
+    assert!(
+        metrics.max_abs <= 4.0,
+        "S=128 online/reference max error failed the E0 gate: {metrics:?}"
+    );
+    assert!(
+        metrics.mean_abs <= 0.25,
+        "S=128 online/reference mean error failed the E0 gate: {metrics:?}"
+    );
+    assert_eq!(
+        optimized_top1, reference_top1,
+        "S=128 reference and online prefill must preserve the greedy next token"
+    );
+
     stream.close()?;
     context.close()?;
     Ok(())
