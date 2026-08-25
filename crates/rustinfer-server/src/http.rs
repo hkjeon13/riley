@@ -310,6 +310,7 @@ pub fn read_request(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 fn parse_head(
     head: &[u8],
     limits: HttpLimits,
@@ -608,7 +609,7 @@ mod tests {
         };
         assert!(matches!(
             read_request(&mut Cursor::new(post(body)), limits),
-            Err(HttpReadError::BodyTooLarge { .. }) | Err(HttpReadError::HeaderTooLarge { .. })
+            Err(HttpReadError::BodyTooLarge { .. } | HttpReadError::HeaderTooLarge { .. })
         ));
 
         let target = b"GET /target-too-long HTTP/1.1\r\nHost: x\r\n\r\n";

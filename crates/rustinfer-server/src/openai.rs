@@ -1000,8 +1000,11 @@ mod tests {
         assert_eq!(normalized.model_id, "fixture-model");
         assert_eq!(normalized.prompt, "hello");
         assert_eq!(normalized.max_new_tokens, 7);
-        assert_eq!(normalized.sampling.temperature, 0.25);
-        assert_eq!(normalized.sampling.top_p, 0.75);
+        assert_eq!(
+            normalized.sampling.temperature.to_bits(),
+            0.25_f32.to_bits()
+        );
+        assert_eq!(normalized.sampling.top_p.to_bits(), 0.75_f32.to_bits());
         assert_eq!(normalized.sampling.seed, Some(42));
         assert_eq!(normalized.stop_sequences, ["END", "STOP"]);
         assert!(normalized.stream);
@@ -1009,8 +1012,8 @@ mod tests {
         let defaults = normalize_completion_request(minimal_request(), RequestLimits::default())
             .expect("defaults must normalize");
         assert_eq!(defaults.max_new_tokens, 16);
-        assert_eq!(defaults.sampling.temperature, 1.0);
-        assert_eq!(defaults.sampling.top_p, 1.0);
+        assert_eq!(defaults.sampling.temperature.to_bits(), 1.0_f32.to_bits());
+        assert_eq!(defaults.sampling.top_p.to_bits(), 1.0_f32.to_bits());
         assert!(!defaults.stream);
     }
 
@@ -1032,7 +1035,8 @@ mod tests {
 
     #[test]
     fn non_neutral_and_unsupported_options_fail_explicitly() {
-        let cases: [(&str, fn(&mut CompletionRequest)); 7] = [
+        type UnsupportedCase = (&'static str, fn(&mut CompletionRequest));
+        let cases: [UnsupportedCase; 7] = [
             ("n", |request| request.n = Some(2)),
             ("best_of", |request| request.best_of = Some(2)),
             ("echo", |request| request.echo = Some(true)),
