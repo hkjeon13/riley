@@ -25,11 +25,16 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const TOKENS_A: [u32; 7] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 const TOKENS_B: [u32; 4] = [504, 2_365, 42, 43];
 const BF16_BYTES: usize = 2;
+const ONE_GIB: u64 = 1 << 30;
 
 fn checkpoint_path() -> PathBuf {
     std::env::var_os("RUSTINFER_REAL_CHECKPOINT")
         .map(PathBuf::from)
         .expect("RUSTINFER_REAL_CHECKPOINT must name the remote checkpoint directory")
+}
+
+fn checkpoint_load_limits() -> TestResult<LoadLimits> {
+    Ok(LoadLimits::default().with_weight_byte_limits(ONE_GIB, ONE_GIB)?)
 }
 
 fn env_enabled(name: &str) -> bool {
@@ -201,7 +206,7 @@ fn assert_report_matches_context(
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
 fn concurrency_one_matches_the_single_request_forward() -> TestResult {
-    let model = LoadedModel::load(&checkpoint_path(), LoadLimits::default())?;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let (context, mut stream) = first_context()?;
     let expected = independent_last_logits(&model, &context, &mut stream, &TOKENS_A)?;
     let mut batch = PreparedLlamaBatchExecutor::prepare(
@@ -234,7 +239,7 @@ fn concurrency_one_matches_the_single_request_forward() -> TestResult {
 #[ignore = "requires the pinned checkpoint and CUDA GPU on server-4096"]
 fn concurrency_one_matches_prepared_decode_for_thirty_two_steps() -> TestResult {
     const DECODE_STEPS: usize = 32;
-    let model = LoadedModel::load(&checkpoint_path(), LoadLimits::default())?;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let maximum_length = TOKENS_A.len() + DECODE_STEPS;
     let physical_blocks = maximum_length.div_ceil(KV_BLOCK_SIZE);
     let (context, mut stream) = first_context()?;
@@ -308,7 +313,7 @@ fn concurrency_one_matches_prepared_decode_for_thirty_two_steps() -> TestResult 
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
 fn multiple_independent_requests_and_permuted_output_slots_match() -> TestResult {
-    let model = LoadedModel::load(&checkpoint_path(), LoadLimits::default())?;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let (context, mut stream) = first_context()?;
     let expected_a = independent_last_logits(&model, &context, &mut stream, &TOKENS_A[..3])?;
     let expected_b = independent_last_logits(&model, &context, &mut stream, &TOKENS_B)?;
@@ -354,7 +359,7 @@ fn multiple_independent_requests_and_permuted_output_slots_match() -> TestResult
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
 fn mixed_prefill_chunk_and_decode_match_independent_full_sequences() -> TestResult {
-    let model = LoadedModel::load(&checkpoint_path(), LoadLimits::default())?;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let (context, mut stream) = first_context()?;
     let mut batch = PreparedLlamaBatchExecutor::prepare(
         &model,
@@ -433,7 +438,7 @@ fn one_thousand_iterations_do_not_allocate_or_leak() -> TestResult {
         eprintln!("pr13-long-gate-skipped env=RUSTINFER_PR13_LONG_STEPS expected=true");
         return Ok(());
     }
-    let model = LoadedModel::load(&checkpoint_path(), LoadLimits::default())?;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     assert!(model.spec().max_sequence_length() >= 1_001);
     let (context, mut stream) = first_context()?;
     let physical_blocks = 1_001_usize.div_ceil(KV_BLOCK_SIZE);
