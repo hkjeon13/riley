@@ -26,6 +26,16 @@ const TOKENS_A: [u32; 7] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 const TOKENS_B: [u32; 4] = [504, 2_365, 42, 43];
 const BF16_BYTES: usize = 2;
 const ONE_GIB: u64 = 1 << 30;
+// Carried forward unchanged from the initial PR13 gate into the cross-model
+// remote run. This guards exact top-1 and must not be relaxed from observations.
+const BATCH_LOGIT_COSINE_MIN: f64 = 0.997;
+
+#[derive(Clone, Copy, Debug)]
+struct LogitMetrics {
+    cosine: f64,
+    max_abs: f64,
+    mean_abs: f64,
+}
 
 fn checkpoint_path() -> PathBuf {
     std::env::var_os("RUSTINFER_REAL_CHECKPOINT")
@@ -167,24 +177,62 @@ fn top1(logits: &[u8]) -> usize {
         .map_or(0, |(token, _)| token)
 }
 
-fn assert_semantic_parity(label: &str, actual: &[u8], expected: &[u8]) {
+fn assert_semantic_parity(label: &str, actual: &[u8], expected: &[u8]) -> LogitMetrics {
     assert_eq!(actual.len(), expected.len());
-    assert_eq!(top1(actual), top1(expected), "{label} top-1 differs");
+    assert!(!actual.is_empty());
+    assert_eq!(actual.len() % BF16_BYTES, 0);
+    let actual_top1 = top1(actual);
+    let expected_top1 = top1(expected);
+    assert_eq!(actual_top1, expected_top1, "{label} top-1 differs");
     let mut dot = 0.0_f64;
     let mut actual_norm = 0.0_f64;
     let mut expected_norm = 0.0_f64;
+    let mut max_abs = 0.0_f64;
+    let mut sum_abs = 0.0_f64;
     for (actual, expected) in actual
         .chunks_exact(BF16_BYTES)
         .zip(expected.chunks_exact(BF16_BYTES))
     {
         let actual = bf16(actual);
         let expected = bf16(expected);
+        assert!(actual.is_finite(), "{label} actual logit is not finite");
+        assert!(expected.is_finite(), "{label} expected logit is not finite");
         dot += actual * expected;
         actual_norm += actual * actual;
         expected_norm += expected * expected;
+        let absolute = (actual - expected).abs();
+        max_abs = max_abs.max(absolute);
+        sum_abs += absolute;
     }
+    assert!(actual_norm > 0.0, "{label} actual logits have zero norm");
+    assert!(
+        expected_norm > 0.0,
+        "{label} expected logits have zero norm"
+    );
     let cosine = dot / (actual_norm.sqrt() * expected_norm.sqrt());
-    assert!(cosine >= 0.997, "{label} cosine={cosine}");
+    let mean_abs = sum_abs / ((actual.len() / BF16_BYTES) as f64);
+    let actual_top1_value = bf16(&actual[actual_top1 * BF16_BYTES..][..BF16_BYTES]);
+    let expected_top1_value = bf16(&expected[expected_top1 * BF16_BYTES..][..BF16_BYTES]);
+    let metrics = LogitMetrics {
+        cosine,
+        max_abs,
+        mean_abs,
+    };
+    assert!(
+        cosine.is_finite() && max_abs.is_finite() && mean_abs.is_finite(),
+        "{label} metrics are not finite: {metrics:?}"
+    );
+    println!(
+        "pr13-batch-parity schema_version=1 label={label} cosine={cosine:.12} \
+max_abs={max_abs:.9} mean_abs={mean_abs:.9} actual_top1={actual_top1} \
+expected_top1={expected_top1} actual_top1_value={actual_top1_value:.6} \
+expected_top1_value={expected_top1_value:.6} top1_exact=true cosine_min={BATCH_LOGIT_COSINE_MIN}"
+    );
+    assert!(
+        cosine >= BATCH_LOGIT_COSINE_MIN,
+        "{label} failed the predeclared batch cosine gate: {metrics:?}"
+    );
+    metrics
 }
 
 fn assert_report_matches_context(
@@ -275,7 +323,11 @@ fn concurrency_one_matches_prepared_decode_for_thirty_two_steps() -> TestResult 
     let mut batch_logits = vec![0_u8; row_bytes];
     reference.download_last_logits(&mut reference_logits, &mut stream)?;
     batch.download_logits(&mut batch_logits, &mut stream)?;
-    assert_semantic_parity("decode-step-prefill", &batch_logits, &reference_logits);
+    let prefill_metrics =
+        assert_semantic_parity("decode-step-prefill", &batch_logits, &reference_logits);
+    let mut worst_cosine = prefill_metrics.cosine;
+    let mut worst_max_abs = prefill_metrics.max_abs;
+    let mut worst_mean_abs = prefill_metrics.mean_abs;
     let stable = context.allocation_stats()?;
 
     for step in 0..DECODE_STEPS {
@@ -296,13 +348,22 @@ fn concurrency_one_matches_prepared_decode_for_thirty_two_steps() -> TestResult 
         batch.execute(&rows, &mut stream)?;
         reference.download_last_logits(&mut reference_logits, &mut stream)?;
         batch.download_logits(&mut batch_logits, &mut stream)?;
-        assert_semantic_parity(
+        let metrics = assert_semantic_parity(
             &format!("decode-step-{}", step + 1),
             &batch_logits,
             &reference_logits,
         );
+        worst_cosine = worst_cosine.min(metrics.cosine);
+        worst_max_abs = worst_max_abs.max(metrics.max_abs);
+        worst_mean_abs = worst_mean_abs.max(metrics.mean_abs);
         assert_eq!(context.allocation_stats()?, stable, "decode step {step}");
     }
+    println!(
+        "pr13-batch-parity-summary schema_version=1 fixed_m=8 parity_rows={} \
+top1_mismatches=0 worst_cosine={worst_cosine:.12} worst_max_abs={worst_max_abs:.9} \
+worst_mean_abs={worst_mean_abs:.9} status=passed",
+        DECODE_STEPS + 1,
+    );
 
     batch.close()?;
     reference.close()?;
@@ -450,8 +511,15 @@ fn one_thousand_iterations_do_not_allocate_or_leak() -> TestResult {
     )?;
     let stable = context.allocation_stats()?;
     let mut token = TOKENS_A[0];
+    let maximum_blocks = 1_001_usize.div_ceil(KV_BLOCK_SIZE);
+    let ids: Vec<u32> = (0..maximum_blocks)
+        .map(u32::try_from)
+        .collect::<Result<_, _>>()?;
+    let mut valid = vec![u16::try_from(KV_BLOCK_SIZE)?; maximum_blocks];
+    let mut logits = vec![0_u8; batch.output_byte_len()?];
     for target_length in 1..=1_001 {
-        let (ids, valid) = block_table(target_length, 0)?;
+        let block_count = target_length.div_ceil(KV_BLOCK_SIZE);
+        valid[block_count - 1] = u16::try_from(target_length - (block_count - 1) * KV_BLOCK_SIZE)?;
         let kind = if target_length == 1 {
             LlamaBatchRowKind::Prefill
         } else {
@@ -463,12 +531,11 @@ fn one_thousand_iterations_do_not_allocate_or_leak() -> TestResult {
             kind,
             &tokens,
             target_length,
-            &ids,
-            &valid,
+            &ids[..block_count],
+            &valid[..block_count],
             Some(0),
         )?];
         batch.execute(&rows, &mut stream)?;
-        let mut logits = vec![0_u8; batch.output_byte_len()?];
         batch.download_logits(&mut logits, &mut stream)?;
         token = u32::try_from(top1(&logits))?;
         assert_eq!(
