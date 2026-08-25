@@ -106,3 +106,19 @@ restart with both conservative flags:
 For release rollback, restart the preceding checksummed bundle with the same
 model/configuration, verify `/v1/models`, then restore traffic. Rollback never
 reuses an unverified executable or edits a published bundle in place.
+
+## Graceful shutdown and final metrics
+
+The production CLI blocks `SIGINT` and `SIGTERM` before starting backend or
+HTTP threads and consumes either signal synchronously. A received signal stops
+admission, interrupts incomplete HTTP framing, drains bounded active work,
+closes scheduler/CUDA resources, and exits with status zero only when the
+global shutdown deadline and native close contract succeed.
+
+Release/soak automation may set `RUSTINFER_SHUTDOWN_METRICS_PATH` to a new
+absolute path. After successful native close, the CLI atomically requests a
+backend-captured allocation snapshot and creates that file with the same
+fixed, prompt-free JSON shape as `GET /metrics`. Existing paths are never
+replaced. Missing post-close evidence, a non-absolute path, serialization or
+sync failure, a shutdown deadline, or a CUDA/context close failure makes the
+process exit unsuccessfully instead of emitting synthetic zero gauges.

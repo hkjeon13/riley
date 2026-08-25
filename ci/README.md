@@ -34,8 +34,10 @@ and it is not part of a production artifact. The checker fails closed unless:
   native evidence producer requires exactly the non-default `bench,cuda` features;
 - every crate inherits `publish = false`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
-  `serde_json`, and `sha2` requirements owned by `rustinfer-model`, plus the
-  same reviewed `sha2` package used directly by `rustinfer-runtime`;
+  `serde_json`, and `sha2` requirements owned by `rustinfer-model`, the same
+  reviewed `sha2` package used directly by `rustinfer-runtime`, and optional
+  `libc` owned by `rustinfer-server` solely for synchronous POSIX shutdown
+  signal handling;
 - development-only dependency declarations match their own exact allowlist and
   do not count as production edges, while their resolved registry packages
   remain inside the exact lockfile closure below;

@@ -138,6 +138,7 @@ dependencies = [
 name = "rustinfer-server"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rustinfer-core",
  "rustinfer-model",
  "rustinfer-runtime",

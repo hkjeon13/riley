@@ -46,6 +46,13 @@ features = []
 
 [[direct_dependencies]]
 owner = "rustinfer-server"
+name = "libc"
+version = "0.2.189"
+default_features = true
+features = []
+
+[[direct_dependencies]]
+owner = "rustinfer-server"
 name = "serde"
 version = "1.0.228"
 default_features = true

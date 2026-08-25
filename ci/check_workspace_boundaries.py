@@ -51,7 +51,11 @@ EXPECTED_INTERNAL_DEPENDENCIES = {
 
 EXPECTED_FEATURES = {
     "rustinfer-core": {"default": []},
-    "rustinfer-cuda": {"cuda": [], "default": []},
+    "rustinfer-cuda": {
+        "cuda": [],
+        "cuda-test-fault-injection": ["cuda"],
+        "default": [],
+    },
     "rustinfer-tensor": {
         "cuda": ["dep:rustinfer-cuda", "rustinfer-cuda/cuda"],
         "default": [],
@@ -74,7 +78,7 @@ EXPECTED_FEATURES = {
         "cuda": ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"],
         "default": [],
         "experimental": [],
-        "server": ["dep:serde", "dep:serde_json"],
+        "server": ["dep:libc", "dep:serde", "dep:serde_json"],
     },
 }
 
@@ -85,7 +89,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "rustinfer-model": set(),
     "rustinfer-runtime": {"rustinfer-cuda"},
     "rustinfer-scheduler": set(),
-    "rustinfer-server": {"serde", "serde_json"},
+    "rustinfer-server": {"libc", "serde", "serde_json"},
 }
 
 EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
@@ -118,6 +122,11 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
         "version": "1.0.228",
         "default_features": True,
         "features": ["derive"],
+    },
+    ("rustinfer-server", "libc"): {
+        "version": "0.2.189",
+        "default_features": True,
+        "features": [],
     },
     ("rustinfer-server", "serde_json"): {
         "version": "1.0.145",

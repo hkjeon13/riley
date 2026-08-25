@@ -45,8 +45,9 @@ feature는 server가 소유하고 아래 crate로 명시적으로 전달한다.
 cargo build --locked --release --features cuda,server
 ```
 
-- `server`: `rustinfer` binary와 정확히 고정된 optional `serde`/`serde_json` HTTP
-  직렬화 경계를 활성화한다.
+- `server`: `rustinfer` binary, 정확히 고정된 optional `serde`/`serde_json` HTTP
+  직렬화 경계와 POSIX 종료 신호를 동기적으로 처리하는 optional `libc` 경계를
+  활성화한다.
 - `cuda`: composition root가 scheduler와 runtime 양쪽에 명시적으로 전달하고,
   runtime/tensor → cuda로 이어진다.
 - `bench`: non-default native profile evidence producer와 그 고정 JSON

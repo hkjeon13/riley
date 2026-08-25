@@ -3,7 +3,13 @@ use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+#[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
+#[allow(unsafe_code)]
+mod signal;
+
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
+#[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
+const SHUTDOWN_METRICS_ENV: &str = "RUSTINFER_SHUTDOWN_METRICS_PATH";
 
 const USAGE: &str = "\
 usage:
@@ -358,7 +364,6 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
 #[cfg(feature = "cuda")]
 #[allow(clippy::too_many_lines)]
 fn run_serve(options: ServeOptions) -> Result<(), String> {
-    use std::io;
     use std::net::SocketAddr;
     use std::sync::Arc;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -374,6 +379,15 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
     };
     use rustinfer_server::service::{CompletionBackend, ServerConfig, start_server};
+
+    #[cfg(not(unix))]
+    return Err("serve currently requires POSIX SIGINT/SIGTERM support".to_owned());
+    #[cfg(unix)]
+    let shutdown_signals = Arc::new(
+        signal::ShutdownSignals::block()
+            .map_err(|error| format!("could not block shutdown signals: {error}"))?,
+    );
+    let shutdown_metrics_path = shutdown_metrics_path_from_env()?;
 
     validate_positive("--max-active-sequences", options.max_active_sequences)?;
     validate_positive("--max-waiting-requests", options.max_waiting_requests)?;
@@ -513,23 +527,135 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
     let server = start_server(server_config, backend)
         .map_err(|error| format!("HTTP server startup failed: {error}"))?;
     println!(
-        "rustinfer listening on http://{} (graceful_stdin_shutdown={})",
+        "rustinfer listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
         server.local_address(),
         options.shutdown_on_stdin
     );
 
-    if !options.shutdown_on_stdin {
-        loop {
-            std::thread::park();
+    let trigger = wait_for_shutdown(Arc::clone(&shutdown_signals), options.shutdown_on_stdin)?;
+    println!("rustinfer graceful shutdown requested by {trigger}");
+    match shutdown_metrics_path {
+        Some(path) => {
+            let snapshot = server
+                .shutdown_with_metrics()
+                .map_err(|error| format!("graceful shutdown failed: {error}"))?;
+            write_shutdown_metrics(&path, snapshot)?;
+            println!(
+                "rustinfer wrote verified shutdown metrics to {}",
+                path.display()
+            );
+            Ok(())
+        }
+        None => server
+            .shutdown()
+            .map_err(|error| format!("graceful shutdown failed: {error}")),
+    }
+}
+
+#[cfg(all(feature = "server", feature = "cuda", unix))]
+fn shutdown_metrics_path_from_env() -> Result<Option<PathBuf>, String> {
+    validate_shutdown_metrics_path(env::var_os(SHUTDOWN_METRICS_ENV))
+}
+
+#[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
+fn validate_shutdown_metrics_path(value: Option<OsString>) -> Result<Option<PathBuf>, String> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let path = PathBuf::from(value);
+    if path.as_os_str().is_empty() {
+        return Err(format!("{SHUTDOWN_METRICS_ENV} must not be empty"));
+    }
+    if !path.is_absolute() {
+        return Err(format!("{SHUTDOWN_METRICS_ENV} must be an absolute path"));
+    }
+    Ok(Some(path))
+}
+
+#[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
+fn write_shutdown_metrics(
+    path: &std::path::Path,
+    snapshot: rustinfer_server::service::OperationalMetricsSnapshot,
+) -> Result<(), String> {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let mut document = serde_json::to_vec(&snapshot)
+        .map_err(|error| format!("could not serialize shutdown metrics: {error}"))?;
+    document.push(b'\n');
+    let mut file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            format!(
+                "could not create shutdown metrics {} without replacement: {error}",
+                path.display()
+            )
+        })?;
+    file.write_all(&document).map_err(|error| {
+        format!(
+            "could not write shutdown metrics {}: {error}",
+            path.display()
+        )
+    })?;
+    file.sync_all().map_err(|error| {
+        format!(
+            "could not sync shutdown metrics {}: {error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(all(feature = "cuda", unix))]
+fn wait_for_shutdown(
+    signals: std::sync::Arc<signal::ShutdownSignals>,
+    include_stdin: bool,
+) -> Result<&'static str, String> {
+    use std::io;
+    use std::sync::mpsc;
+    use std::thread;
+
+    fn signal_name(signal: signal::ShutdownSignal) -> &'static str {
+        match signal {
+            signal::ShutdownSignal::Interrupt => "SIGINT",
+            signal::ShutdownSignal::Terminate => "SIGTERM",
         }
     }
-    let mut line = String::new();
-    io::stdin()
-        .read_line(&mut line)
-        .map_err(|error| format!("shutdown input failed: {error}"))?;
-    server
-        .shutdown()
-        .map_err(|error| format!("graceful shutdown failed: {error}"))
+
+    if !include_stdin {
+        return signals
+            .wait()
+            .map(signal_name)
+            .map_err(|error| format!("shutdown signal wait failed: {error}"));
+    }
+
+    let (sender, receiver) = mpsc::sync_channel(2);
+    let signal_sender = sender.clone();
+    thread::Builder::new()
+        .name("rustinfer-signal-wait".to_owned())
+        .spawn(move || {
+            let result = signals
+                .wait()
+                .map(signal_name)
+                .map_err(|error| format!("shutdown signal wait failed: {error}"));
+            let _ = signal_sender.send(result);
+        })
+        .map_err(|error| format!("could not start shutdown signal waiter: {error}"))?;
+    thread::Builder::new()
+        .name("rustinfer-stdin-wait".to_owned())
+        .spawn(move || {
+            let mut line = String::new();
+            let result = io::stdin()
+                .read_line(&mut line)
+                .map(|_| "stdin")
+                .map_err(|error| format!("shutdown input failed: {error}"));
+            let _ = sender.send(result);
+        })
+        .map_err(|error| format!("could not start shutdown stdin waiter: {error}"))?;
+    receiver
+        .recv()
+        .map_err(|_| "all shutdown waiters exited without a trigger".to_owned())?
 }
 
 #[cfg(feature = "cuda")]
@@ -548,7 +674,8 @@ mod tests {
 
     use super::{
         CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, ResidualRmsNormMode,
-        ServeOptions, USAGE, parse_arguments,
+        ServeOptions, USAGE, parse_arguments, validate_shutdown_metrics_path,
+        write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -723,5 +850,34 @@ mod tests {
                 shutdown_on_stdin: false,
             }))
         );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shutdown_metrics_path_is_absolute_and_create_only() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_PATH: AtomicU64 = AtomicU64::new(0);
+        assert_eq!(validate_shutdown_metrics_path(None), Ok(None));
+        assert!(validate_shutdown_metrics_path(Some(OsString::new())).is_err());
+        assert!(validate_shutdown_metrics_path(Some(OsString::from("relative.json"))).is_err());
+
+        let path = std::env::temp_dir().join(format!(
+            "rustinfer-shutdown-metrics-{}-{}",
+            std::process::id(),
+            NEXT_PATH.fetch_add(1, Ordering::AcqRel)
+        ));
+        assert_eq!(
+            validate_shutdown_metrics_path(Some(path.clone().into_os_string())),
+            Ok(Some(path.clone()))
+        );
+        let snapshot = rustinfer_server::service::OperationalMetricsSnapshot::default();
+        write_shutdown_metrics(&path, snapshot).expect("create shutdown metrics");
+        assert!(write_shutdown_metrics(&path, snapshot).is_err());
+        let encoded = std::fs::read(&path).expect("read shutdown metrics");
+        let decoded: serde_json::Value =
+            serde_json::from_slice(&encoded).expect("decode shutdown metrics");
+        assert_eq!(decoded["active_requests"], 0);
+        std::fs::remove_file(&path).expect("remove exact test artifact");
     }
 }

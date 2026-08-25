@@ -304,6 +304,12 @@ pub trait EngineBackend: Send + 'static {
         Ok(EngineMetricsSnapshot::default())
     }
 
+    /// Returns metrics captured only after a successful explicit shutdown.
+    #[must_use]
+    fn final_metrics_snapshot(&self) -> EngineMetricsSnapshot {
+        EngineMetricsSnapshot::default()
+    }
+
     /// Cancels remaining work and explicitly closes owned resources.
     ///
     /// # Errors
@@ -403,10 +409,36 @@ struct EngineInner {
     worker: Mutex<Option<JoinHandle<()>>>,
 }
 
-#[derive(Default)]
 struct EngineStats {
     active_requests: AtomicUsize,
     waiting_requests: AtomicUsize,
+    final_metrics: Mutex<Option<EngineMetricsSnapshot>>,
+}
+
+impl Default for EngineStats {
+    fn default() -> Self {
+        Self {
+            active_requests: AtomicUsize::new(0),
+            waiting_requests: AtomicUsize::new(0),
+            final_metrics: Mutex::new(None),
+        }
+    }
+}
+
+impl EngineStats {
+    fn store_final_metrics(&self, metrics: &EngineMetricsSnapshot) {
+        *self
+            .final_metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(*metrics);
+    }
+
+    fn final_metrics(&self) -> Option<EngineMetricsSnapshot> {
+        *self
+            .final_metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
 }
 
 /// Cloneable handle to the single inference worker.
@@ -582,6 +614,12 @@ impl InferenceEngine {
                 RecvTimeoutError::Timeout => EngineError::Timeout,
                 RecvTimeoutError::Disconnected => EngineError::WorkerUnavailable,
             })?
+    }
+
+    /// Returns the backend snapshot captured after successful explicit close.
+    #[must_use]
+    pub fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
+        self.inner.stats.final_metrics()
     }
 
     /// Submits one request without blocking on generation.
@@ -918,7 +956,10 @@ fn worker_main<B: EngineBackend>(
         if lifecycle.load() == LIFECYCLE_DRAINING {
             reject_pending_commands(commands, stats);
             match backend.shutdown() {
-                Ok(events) => publish_events(&mut backend, &mut requests, events),
+                Ok(events) => {
+                    publish_events(&mut backend, &mut requests, events);
+                    stats.store_final_metrics(&backend.final_metrics_snapshot());
+                }
                 Err(error) => {
                     eprintln!("rustinfer engine shutdown failure: {}", error.detail());
                     failed = true;
@@ -1234,6 +1275,10 @@ impl crate::service::CompletionBackend for InferenceEngine {
         InferenceEngine::metrics_snapshot(self).map_err(|error| error.service_class())
     }
 
+    fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
+        InferenceEngine::final_metrics_snapshot(self)
+    }
+
     fn submit(
         &self,
         request: GenerationRequest,
@@ -1440,6 +1485,7 @@ mod cuda_backend {
         samples: Vec<SampledIterationToken>,
         pending_tokens: Vec<PendingToken>,
         pending_events: VecDeque<BackendEvent>,
+        final_metrics: EngineMetricsSnapshot,
         clock: Instant,
     }
 
@@ -1497,6 +1543,7 @@ mod cuda_backend {
                 samples,
                 pending_tokens,
                 pending_events,
+                final_metrics: EngineMetricsSnapshot::default(),
                 clock: Instant::now(),
             })
         }
@@ -1803,6 +1850,32 @@ mod cuda_backend {
                     first_error.get_or_insert_with(|| format!("stream close failed: {source}"));
                 }
             }
+            if first_error.is_none() {
+                match self.context.as_ref() {
+                    Some(context) => match context.allocation_stats() {
+                        Ok(allocation) => {
+                            self.final_metrics = EngineMetricsSnapshot {
+                                scheduler: None,
+                                allocation: Some(EngineAllocationMetrics {
+                                    device_live_bytes: allocation.device_live_bytes(),
+                                    device_live_allocations: allocation.device_live_allocations(),
+                                    pinned_host_live_bytes: allocation.pinned_host_live_bytes(),
+                                    pinned_host_live_allocations: allocation
+                                        .pinned_host_live_allocations(),
+                                }),
+                            };
+                        }
+                        Err(source) => {
+                            first_error = Some(format!(
+                                "final allocation metrics failed before context close: {source}"
+                            ));
+                        }
+                    },
+                    None => {
+                        first_error = Some("CUDA context is already closed".to_owned());
+                    }
+                }
+            }
             if let Some(context) = self.context.take() {
                 if let Err(source) = context.close() {
                     first_error.get_or_insert_with(|| format!("context close failed: {source}"));
@@ -2077,6 +2150,10 @@ mod cuda_backend {
             })
         }
 
+        fn final_metrics_snapshot(&self) -> EngineMetricsSnapshot {
+            self.final_metrics
+        }
+
         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
             if self.scheduler.is_none()
                 && self.executor.is_none()
@@ -2324,11 +2401,16 @@ mod tests {
     fn metrics_snapshot_is_serialized_through_the_worker() {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(counters, 2, 2, Duration::ZERO);
+        assert_eq!(engine.final_metrics_snapshot(), None);
         assert_eq!(
             engine.metrics_snapshot().expect("metrics snapshot"),
             super::EngineMetricsSnapshot::default()
         );
         engine.shutdown(Duration::from_secs(1)).expect("shutdown");
+        assert_eq!(
+            engine.final_metrics_snapshot(),
+            Some(super::EngineMetricsSnapshot::default())
+        );
     }
 
     #[test]

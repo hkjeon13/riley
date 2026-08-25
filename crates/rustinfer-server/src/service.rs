@@ -231,6 +231,13 @@ pub trait CompletionBackend: Send + Sync {
         Ok(EngineMetricsSnapshot::default())
     }
 
+    /// Returns the snapshot captured only after successful explicit backend
+    /// close. `None` means the backend cannot prove that close completed.
+    #[must_use]
+    fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
+        None
+    }
+
     /// Admits a normalized request and returns its bounded event stream.
     ///
     /// # Errors
@@ -481,6 +488,8 @@ pub enum ServerShutdownError {
     DeadlineExceeded { stage: &'static str },
     /// The bounded backend-shutdown coordinator thread could not be started.
     CoordinatorUnavailable,
+    /// The backend closed but did not publish a verified final snapshot.
+    FinalMetricsUnavailable,
 }
 
 impl fmt::Display for ServerShutdownError {
@@ -496,6 +505,9 @@ impl fmt::Display for ServerShutdownError {
             }
             Self::CoordinatorUnavailable => {
                 formatter.write_str("could not start the backend shutdown coordinator")
+            }
+            Self::FinalMetricsUnavailable => {
+                formatter.write_str("backend did not publish verified final metrics")
             }
         }
     }
@@ -648,6 +660,29 @@ impl ServerHandle {
     /// Returns a stable backend shutdown class or reports a service panic.
     pub fn shutdown(mut self) -> Result<(), ServerShutdownError> {
         self.shutdown_inner()
+    }
+
+    /// Gracefully shuts down and returns the fixed-shape snapshot captured
+    /// only after the backend has explicitly closed all native resources.
+    ///
+    /// # Errors
+    ///
+    /// Returns a shutdown error or fails closed when the backend cannot prove
+    /// that a final snapshot was captured after close.
+    pub fn shutdown_with_metrics(
+        mut self,
+    ) -> Result<OperationalMetricsSnapshot, ServerShutdownError> {
+        self.shutdown_inner()?;
+        let backend_metrics = self
+            .backend
+            .final_metrics_snapshot()
+            .ok_or(ServerShutdownError::FinalMetricsUnavailable)?;
+        Ok(operational_metrics_from_snapshot(
+            self.backend.status(),
+            &backend_metrics,
+            &self.metrics,
+            &self.observations,
+        ))
     }
 
     fn shutdown_inner(&mut self) -> Result<(), ServerShutdownError> {
@@ -1135,6 +1170,20 @@ fn operational_metrics(
 ) -> Result<OperationalMetricsSnapshot, ServiceErrorClass> {
     let status = backend.status();
     let backend_metrics = backend.metrics_snapshot()?;
+    Ok(operational_metrics_from_snapshot(
+        status,
+        &backend_metrics,
+        metrics,
+        observations,
+    ))
+}
+
+fn operational_metrics_from_snapshot(
+    status: BackendStatus,
+    backend_metrics: &EngineMetricsSnapshot,
+    metrics: &ServiceMetrics,
+    observations: &ObservationBuffer,
+) -> OperationalMetricsSnapshot {
     let scheduler_cancellations = backend_metrics
         .scheduler
         .map_or(0, |snapshot| snapshot.requests_cancelled);
@@ -1142,7 +1191,7 @@ fn operational_metrics(
         u64::try_from(snapshot.gauges.allocated_kv_blocks).unwrap_or(u64::MAX)
     });
     let allocation = backend_metrics.allocation.unwrap_or_default();
-    Ok(OperationalMetricsSnapshot {
+    OperationalMetricsSnapshot {
         active_requests: u64::try_from(status.active_requests).unwrap_or(u64::MAX),
         waiting_requests: u64::try_from(status.waiting_requests).unwrap_or(u64::MAX),
         kv_allocated_blocks,
@@ -1159,7 +1208,7 @@ fn operational_metrics(
             overloads: metrics.overloads.load(Ordering::Acquire),
             dropped_samples: observations.dropped(),
         },
-    })
+    }
 }
 
 fn write_operational_metrics(
@@ -1909,9 +1958,10 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        BackendStatus, CompletionBackend, ObservationBuffer, OperationalMetricsSnapshot,
-        RequestCancellation, RequestObservation, RequestObservationStatus, ServerConfig,
-        ServerShutdownError, SubmittedRequest, start_server,
+        BackendStatus, CompletionBackend, EngineMetricsSnapshot, ObservationBuffer,
+        OperationalMetricsSnapshot, RequestCancellation, RequestObservation,
+        RequestObservationStatus, ServerConfig, ServerShutdownError, SubmittedRequest,
+        start_server,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
@@ -1965,6 +2015,7 @@ mod tests {
         cancellation_count: Arc<AtomicUsize>,
         shutdown_signal: Arc<AtomicBool>,
         shutdown_called: AtomicBool,
+        final_metrics_available: AtomicBool,
         shutdown_delay: Mutex<Option<Duration>>,
     }
 
@@ -1987,6 +2038,7 @@ mod tests {
                 cancellation_count: Arc::new(AtomicUsize::new(0)),
                 shutdown_signal: Arc::new(AtomicBool::new(false)),
                 shutdown_called: AtomicBool::new(false),
+                final_metrics_available: AtomicBool::new(true),
                 shutdown_delay: Mutex::new(None),
             })
         }
@@ -2015,6 +2067,12 @@ mod tests {
                 active_requests: self.active.load(Ordering::Acquire),
                 waiting_requests: self.waiting.load(Ordering::Acquire),
             }
+        }
+
+        fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
+            self.final_metrics_available
+                .load(Ordering::Acquire)
+                .then_some(EngineMetricsSnapshot::default())
         }
 
         fn submit(
@@ -2267,7 +2325,12 @@ mod tests {
             assert_eq!(observation.status, RequestObservationStatus::Completed);
             assert_eq!(observation.error_class, None);
         }
-        server.shutdown().expect("graceful shutdown");
+        assert_eq!(
+            server
+                .shutdown_with_metrics()
+                .expect("graceful shutdown with final metrics"),
+            OperationalMetricsSnapshot::default()
+        );
     }
 
     #[test]
@@ -2551,6 +2614,22 @@ mod tests {
             started.elapsed() < Duration::from_millis(500),
             "shutdown exceeded its bounded grace: {:?}",
             started.elapsed()
+        );
+        assert!(backend.shutdown_called.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn shutdown_metrics_fail_closed_without_post_close_backend_evidence() {
+        let backend = TestBackend::new([]);
+        backend
+            .final_metrics_available
+            .store(false, Ordering::Release);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("start server");
+
+        assert_eq!(
+            server.shutdown_with_metrics(),
+            Err(ServerShutdownError::FinalMetricsUnavailable)
         );
         assert!(backend.shutdown_called.load(Ordering::Acquire));
     }

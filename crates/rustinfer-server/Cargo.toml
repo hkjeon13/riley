@@ -9,7 +9,7 @@ description = "Binary and server feature owner for rustinfer"
 [features]
 default = []
 cuda = ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"]
-server = ["dep:serde", "dep:serde_json"]
+server = ["dep:libc", "dep:serde", "dep:serde_json"]
 bench = ["dep:serde", "dep:serde_json"]
 experimental = []
 
@@ -18,6 +18,7 @@ rustinfer-core = { path = "../rustinfer-core" }
 rustinfer-model = { path = "../rustinfer-model" }
 rustinfer-runtime = { path = "../rustinfer-runtime" }
 rustinfer-scheduler = { path = "../rustinfer-scheduler" }
+libc = { version = "=0.2.189", optional = true }
 serde = { version = "=1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.145", optional = true }
 
