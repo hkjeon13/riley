@@ -194,7 +194,9 @@ subprocesses for create rollback ambiguity, explicit close ambiguity, deferred
 copy errors after confirmed completion, and unconfirmed completion/context
 restoration. The intentional fail-closed leak cases are not run under the
 ordinary leak sanitizer. Production binaries are checked for absence of the
-test-only native symbol prefix.
+test-only native symbol prefix. Each child now records its case and PID at
+start and pass, while the parent records the matching spawn and zero-exit join;
+the four child PIDs must be distinct.
 
 Its stable accounting marker must report all four values as zero:
 
@@ -205,13 +207,21 @@ rustinfer-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 p
 Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
 `nvidia-smi-device-metadata.csv`, the existing `host-runtime-*` test/list/link
 logs, additive `memory-*` test/list/link logs, SHA-256 records for both exact
-test executables, the injected CUDA driver/runtime library inventory, and the
-top-level `SHA256SUMS` manifest. Both binaries receive independent
+test executables plus the fault harness, the injected CUDA driver/runtime
+library inventory, production release binary hash/ELF/`nm` evidence, and the
+top-level `SHA256SUMS` manifest. The ordinary GPU binaries receive independent
 `ldd`/`readelf`/`nm` inspection, including resolved `libcuda.so.1` and
 `libcudart.so` checks, no driver-stub RPATH/RUNPATH, and no Python, PyTorch,
 Transformers, or Triton dependency. Existing evidence is never overwritten.
 The workflow also binds this output to the checked-out revision, the SHA-256
 of `git archive --format=tar HEAD`, and the locally built GPU image ID.
+
+The GPU container does not self-attest these results. The CPU-only
+`ci/release/check_cuda_fault_evidence.py` checker verifies the closed raw
+inventory, source archive PAX revision, immutable build image, exact two-test
+inventory, all four PID-isolated child results, parent result, and the exact
+production binary before producing the deterministic raw tar and final
+release-gate attestation. See `ci/release/CUDA_FAULT_EVIDENCE.md`.
 
 Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat both ignored targets serially
 under `compute-sanitizer --tool memcheck --leak-check full`. The PR 03 output
@@ -260,6 +270,23 @@ Release packaging currently has one deliberate fail-closed blocker: the
 repository has no owner-selected root `LICENSE`. Do not invent one in CI.
 Ordinary build/test lanes remain unaffected, while release preflight cannot
 pass until the owner adds an approved license and aligns Cargo metadata.
+
+### Independent release build reproducibility
+
+`ci/run_release_reproducibility.sh` is the remote-only PR 16 A/B build driver.
+It resolves one content-addressed Linux/amd64 builder image, creates two
+separate `runc` containers with independent anonymous workspaces, disables the
+network, mounts the canonical Git source archive read-only, and runs the exact
+locked/offline CUDA release build in each. No GPU/device passthrough is used.
+
+`check_reproducible_build.py` consumes the two closed raw evidence tars and the
+selected final artifacts. It validates the embedded Git revision and
+`SOURCE_DATE_EPOCH`, daemon-produced Docker inspect receipts, toolchain and
+command logs, closed checksums, ELF-derived dependencies, and each deterministic
+release bundle. It then requires the binary, bundle, and native dependency
+manifest to be byte-identical across A, B, and final. See
+`ci/release/REPRODUCIBLE_BUILD.md` for the remote procedure and exact evidence
+inventory.
 
 ## Optional Python reference gate
 
