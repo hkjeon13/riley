@@ -22,7 +22,7 @@ serve options:
   --prefill-chunk-tokens N       prompt tokens per request/iteration (default: 512)
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
-  --execution-completion MODE    per-operation or iteration-batch (default: per-operation)
+  --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
@@ -245,7 +245,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
 
     let residual_rmsnorm = residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate);
     let execution_completion =
-        execution_completion.unwrap_or(ExecutionCompletionMode::PerOperation);
+        execution_completion.unwrap_or(ExecutionCompletionMode::IterationBatch);
     if residual_rmsnorm == ResidualRmsNormMode::Fused
         && execution_completion == ExecutionCompletionMode::IterationBatch
     {
@@ -548,7 +548,7 @@ mod tests {
 
     use super::{
         CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, ResidualRmsNormMode,
-        ServeOptions, parse_arguments,
+        ServeOptions, USAGE, parse_arguments,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -562,6 +562,8 @@ mod tests {
             Ok(CliCommand::Version)
         );
         assert_eq!(parse_arguments(args(&["-h"])), Ok(CliCommand::Help));
+        assert!(USAGE.contains("--execution-completion MODE"));
+        assert!(USAGE.contains("(default: iteration-batch)"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -583,7 +585,7 @@ mod tests {
                 prefill_chunk_tokens: 512,
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
-                execution_completion: ExecutionCompletionMode::PerOperation,
+                execution_completion: ExecutionCompletionMode::IterationBatch,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
@@ -656,6 +658,44 @@ mod tests {
                 "unknown",
             ]))
             .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--residual-rmsnorm",
+                "fused",
+            ]))
+            .is_err()
+        );
+        assert_eq!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--residual-rmsnorm",
+                "fused",
+                "--execution-completion",
+                "per-operation",
+            ])),
+            Ok(CliCommand::Serve(ServeOptions {
+                model_path: PathBuf::from("/a"),
+                model_id: None,
+                bind_address: "127.0.0.1:8080".to_owned(),
+                device_ordinal: 0,
+                max_active_sequences: 8,
+                max_waiting_requests: 64,
+                max_sequence_tokens: None,
+                max_output_tokens: None,
+                batch_token_budget: 512,
+                prefill_chunk_tokens: 512,
+                physical_kv_blocks: None,
+                residual_rmsnorm: ResidualRmsNormMode::Fused,
+                execution_completion: ExecutionCompletionMode::PerOperation,
+                max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                shutdown_on_stdin: false,
+            }))
         );
         assert!(
             parse_arguments(args(&[
