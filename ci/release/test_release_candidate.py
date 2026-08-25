@@ -31,9 +31,14 @@ from check_release_candidate import (  # noqa: E402
     SOAK_GOLDEN_SCENARIOS,
     SOAK_SCENARIOS,
     SOAK_TEMPLATE_CANONICAL_SHA256,
+    cuda_fault_evidence,
     evaluate,
     reliability_soak,
     release_performance,
+)
+from test_cuda_fault_evidence import (  # noqa: E402
+    BUILD_IMAGE_ID as CUDA_BUILD_IMAGE_ID,
+    Fixture as CudaEvidenceFixture,
 )
 from test_release import EPOCH, fixture_elf  # noqa: E402
 
@@ -118,7 +123,34 @@ class CandidateFixture:
             source_revision=REVISION,
             source_date_epoch=EPOCH,
         )
-        self.paths["cuda_raw"].write_bytes(b"cuda fault raw evidence")
+        self.image_sha = digest(b"release image")
+        self.cuda_build_image_id = CUDA_BUILD_IMAGE_ID
+        cuda_template_root = root / "cuda-evidence-template"
+        cuda_template_root.mkdir()
+        cuda_template = CudaEvidenceFixture(cuda_template_root)
+        environment_path = cuda_template.evidence / "environment.txt"
+        environment = environment_path.read_text(encoding="utf-8")
+        environment = environment.replace(
+            f"source_archive_sha256={digest(cuda_template.source_archive.read_bytes())}",
+            f"source_archive_sha256={digest(self.paths['source'].read_bytes())}",
+        )
+        environment_path.write_text(environment, encoding="utf-8")
+        (cuda_template.evidence / "release-binary.sha256").write_text(
+            f"{digest(self.paths['binary'].read_bytes())}  target/release/rustinfer\n",
+            encoding="ascii",
+        )
+        cuda_template.refresh_checksums()
+        self.cuda_attestation = cuda_fault_evidence.produce(
+            cuda_template.evidence,
+            source_revision=REVISION,
+            source_archive=self.paths["source"],
+            build_image_id=self.cuda_build_image_id,
+            release_binary=self.paths["binary"],
+            release_bundle=self.paths["bundle"],
+            release_image_id=f"sha256:{self.image_sha}",
+            raw_evidence=self.paths["cuda_raw"],
+            report=self.paths["cuda_report"],
+        )
         self.paths["soak_raw"].write_bytes(b"soak raw evidence fixture")
         self._write_tar(
             self.paths["native_replay"],
@@ -135,7 +167,6 @@ class CandidateFixture:
                 for test_id, contents in self.optimization_logs.items()
             },
         )
-        self.image_sha = digest(b"release image")
         self.documents: dict[str, dict[str, object]] = {}
         self._build_documents()
         self.write_reports()
@@ -454,9 +485,7 @@ class CandidateFixture:
         }
 
     def _build_documents(self) -> None:
-        self.documents["cuda_report"] = self._attestation(
-            "cuda-fault-injection", "cuda_raw", CUDA_FAULT_CHECKS
-        )
+        self.documents["cuda_report"] = copy.deepcopy(self.cuda_attestation)
         summary_variant = {
             "case_count": 31,
             "failure_count": 0,
@@ -736,7 +765,11 @@ class CandidateFixture:
             },
             "evidence": {
                 "python_free_e2e": {"report": artifact("python_report"), "raw_evidence": artifact("python_raw")},
-                "cuda_fault": {"report": artifact("cuda_report"), "raw_evidence": artifact("cuda_raw")},
+                "cuda_fault": {
+                    "build_image_id": self.cuda_build_image_id,
+                    "report": artifact("cuda_report"),
+                    "raw_evidence": artifact("cuda_raw"),
+                },
                 "native_correctness": {
                     "report": artifact("native_correctness"),
                     "raw_replay": artifact("native_replay"),
@@ -934,6 +967,37 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("required check set mismatch", report["errors"][0])
+
+    def test_cuda_attestation_must_equal_raw_replay(self) -> None:
+        self.fixture.documents["cuda_report"]["checks"].reverse()
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("submitted attestation differs from raw replay", report["errors"][0])
+
+    def test_cuda_raw_payload_cannot_be_self_attested_after_tampering(self) -> None:
+        raw_path = self.fixture.paths["cuda_raw"]
+        contents = raw_path.read_bytes()
+        self.assertIn(b"fixture evidence\n", contents)
+        raw_path.write_bytes(
+            contents.replace(b"fixture evidence\n", b"fixture evidencf\n", 1)
+        )
+        self.fixture.documents["cuda_report"]["raw_evidence_sha256"] = digest(
+            raw_path.read_bytes()
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("digest mismatch", report["errors"][0])
+
+    def test_cuda_build_image_is_rebound_from_raw_environment(self) -> None:
+        self.fixture.manifest["evidence"]["cuda_fault"]["build_image_id"] = (
+            "sha256:" + "f" * 64
+        )
+        self.fixture.write_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("gpu_image_id", report["errors"][0])
 
     def test_python_free_attestation_must_equal_raw_replay(self) -> None:
         self.fixture.documents["python_report"]["checks"].reverse()

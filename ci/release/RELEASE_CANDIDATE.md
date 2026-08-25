@@ -49,6 +49,7 @@ shape is:
       "raw_evidence": {"path": "python-free-evidence.tar", "sha256": "LOWERCASE_SHA256"}
     },
     "cuda_fault": {
+      "build_image_id": "sha256:LOWERCASE_SHA256",
       "report": {"path": "cuda-fault-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_evidence": {"path": "cuda-fault-evidence.tar", "sha256": "LOWERCASE_SHA256"}
     },
@@ -148,6 +149,12 @@ closed inventory and canonical metadata, replays all runtime observations,
 recomputes model/tokenizer/shutdown bindings, and requires the replayed
 attestation object to equal the submitted object exactly. It also cross-binds
 the native five-file tokenizer aggregate and optimizer `tokenizer.json` hash.
+For CUDA fault injection, `build_image_id` names the immutable CUDA toolchain
+image used by the raw runner. The final candidate opens the canonical closed
+tar, rechecks its internal `SHA256SUMS`, exact two-test/four-subprocess marker
+inventory, sanitizer result when enabled, production ELF logs, source archive,
+standalone binary, release bundle, build image, and release image. It then
+requires the recomputed attestation to equal the submitted object exactly.
 
 ## Native and optimization correctness are separate gates
 

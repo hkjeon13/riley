@@ -16,6 +16,7 @@ import tarfile
 from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn, Sequence
 
+import check_cuda_fault_evidence as cuda_fault_evidence
 from release_common import ReleaseContractError
 from verify_release_bundle import verify_bundle
 
@@ -531,6 +532,33 @@ def _validate_python_free_e2e_replay(
                 f"python_free_e2e.raw.model.{field}",
                 "does not match optimizer/model provenance",
             )
+
+
+def _validate_cuda_fault_replay(
+    report: dict[str, Any],
+    raw_evidence_path: Path,
+    *,
+    revision: str,
+    source_archive: Path,
+    build_image_id: str,
+    release_binary: Path,
+    release_bundle: Path,
+    release_image_id: str,
+) -> None:
+    try:
+        replayed = cuda_fault_evidence.replay_raw_evidence(
+            raw_evidence_path,
+            source_revision=revision,
+            source_archive=source_archive,
+            build_image_id=build_image_id,
+            release_binary=release_binary,
+            release_bundle=release_bundle,
+            release_image_id=release_image_id,
+        )
+    except (cuda_fault_evidence.CudaFaultEvidenceError, OSError) as error:
+        _fail("cuda_fault.raw_evidence", str(error))
+    if replayed != report:
+        _fail("cuda_fault", "submitted attestation differs from raw replay")
 
 
 def _validate_correctness(
@@ -1370,7 +1398,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
         loaded: dict[str, tuple[dict[str, Any], str]] = {}
         raw_hashes: dict[str, str] = {}
         raw_paths: dict[str, Path] = {}
-        for gate_name in ("python_free_e2e", "cuda_fault"):
+        for gate_name in ("python_free_e2e",):
             gate = _exact(evidence_row[gate_name], {"report", "raw_evidence"}, f"manifest.evidence.{gate_name}")
             report_path, report_sha, _ = _resolve_artifact(
                 gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
@@ -1382,6 +1410,41 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             loaded[gate_name] = (gate_report, report_sha)
             raw_hashes[gate_name] = raw_sha
             raw_paths[gate_name] = raw_path
+
+        cuda_gate = _exact(
+            evidence_row["cuda_fault"],
+            {"build_image_id", "report", "raw_evidence"},
+            "manifest.evidence.cuda_fault",
+        )
+        cuda_build_image_id = _string(
+            cuda_gate["build_image_id"],
+            "manifest.evidence.cuda_fault.build_image_id",
+        )
+        if not cuda_build_image_id.startswith("sha256:"):
+            _fail(
+                "manifest.evidence.cuda_fault.build_image_id",
+                "must be sha256:<lowercase digest>",
+            )
+        _sha256(
+            cuda_build_image_id.removeprefix("sha256:"),
+            "manifest.evidence.cuda_fault.build_image_id",
+        )
+        cuda_report_path, cuda_report_sha, _ = _resolve_artifact(
+            cuda_gate["report"],
+            "manifest.evidence.cuda_fault.report",
+            evidence_root,
+            seen_paths,
+        )
+        cuda_raw_path, cuda_raw_sha, _ = _resolve_artifact(
+            cuda_gate["raw_evidence"],
+            "manifest.evidence.cuda_fault.raw_evidence",
+            evidence_root,
+            seen_paths,
+        )
+        cuda_report, _ = _load_json(cuda_report_path, "cuda_fault report")
+        loaded["cuda_fault"] = (cuda_report, cuda_report_sha)
+        raw_hashes["cuda_fault"] = cuda_raw_sha
+        raw_paths["cuda_fault"] = cuda_raw_path
 
         performance = _exact(
             evidence_row["performance"],
@@ -1475,6 +1538,16 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             loaded["cuda_fault"][0], "cuda_fault",
             gate="cuda-fault-injection", required_checks=CUDA_FAULT_CHECKS,
             source=source, release=release, raw_sha256=raw_hashes["cuda_fault"],
+        )
+        _validate_cuda_fault_replay(
+            loaded["cuda_fault"][0],
+            raw_paths["cuda_fault"],
+            revision=revision,
+            source_archive=archive_path,
+            build_image_id=cuda_build_image_id,
+            release_binary=binary_path,
+            release_bundle=bundle_path,
+            release_image_id=image_digest,
         )
         native_correctness_sha256 = loaded["native_correctness_report"][1]
         _validate_correctness(
