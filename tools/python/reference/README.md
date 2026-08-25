@@ -185,6 +185,46 @@ raw-sidecar replay rules, and GPU commands are documented in
 [`CALIBRATION.md`](CALIBRATION.md). Calibration outputs are staged outside the
 checkout and are separate from the golden fixture and performance results.
 
+## PR 07 fixed forward trace
+
+`pr07-trace-produce` is a separate, BF16-only bring-up artifact. It does not
+change or relax any `calibrate-*` contract. The command always uses token IDs
+`[504, 2365, 6354, 16438, 11139, 253, 1890]`, eager attention, explicit
+position IDs `0..6`, `use_cache=False`, and `logits_to_keep=1`. Explicit hooks
+are bound to the pinned Transformers 5.15.1 Llama implementation; its
+`modeling_llama.py` SHA-256 must be
+`13e65b752a9c9d8a5c22b83df73009a8940c0eefdc58c101df3eb910e3efc2f9`.
+
+This producer loads the model and CUDA and therefore must run only on the
+canonical `server-4096` GPU host, from a clean committed checkout. For the
+currently pinned remote Python environment, run:
+
+```sh
+ssh server-4096
+cd /absolute/path/to/clean/rustinfer-checkout
+PYTHON=/tmp/rustinfer-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-55a397313acd/bin/python
+REVISION=$(git rev-parse HEAD)
+OUTPUT=/home/psyche/rustinfer-artifacts/pr07/$REVISION/golden
+test ! -e "$OUTPUT/hf-bf16-s7-manifest.json"
+test ! -e "$OUTPUT/hf-bf16-s7.safetensors"
+mkdir -p "$OUTPUT"
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=tools/python/reference \
+  "$PYTHON" -m rustinfer_reference pr07-trace-produce \
+  --repo-root . \
+  --manifest "$OUTPUT/hf-bf16-s7-manifest.json" \
+  --sidecar "$OUTPUT/hf-bf16-s7.safetensors" \
+  --device cuda:0
+sha256sum "$OUTPUT/hf-bf16-s7-manifest.json" \
+  "$OUTPUT/hf-bf16-s7.safetensors"
+```
+
+The two outputs must be siblings and outside the repository. Neither is ever
+overwritten. A failed sidecar or manifest publication removes temporary and
+newly-created partial output. The manifest binds all tensor keys, shapes and
+dtypes; token/model/config/weight hashes; Python and library versions; the GPU
+environment; repository source hashes; and the pinned Transformers Llama
+source hash.
+
 ## Offline tests
 
 The default suite uses a fake backend and never imports or downloads PyTorch,

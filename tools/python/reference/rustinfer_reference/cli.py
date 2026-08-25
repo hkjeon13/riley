@@ -37,6 +37,7 @@ from .environment import (
 
 BackendFactory = Callable[..., Any]
 ProvenanceFactory = Callable[..., dict[str, object]]
+Pr07TraceProducer = Callable[..., dict[str, object]]
 
 
 def _uint64(value: str) -> int:
@@ -158,6 +159,16 @@ def _build_parser() -> argparse.ArgumentParser:
     calibration_produce.add_argument("--repo-root", type=Path, required=True)
     calibration_produce.add_argument("--device", default="cuda:0")
     calibration_produce.add_argument("--allow-download", action="store_true")
+
+    pr07_trace = subparsers.add_parser(
+        "pr07-trace-produce",
+        help="produce the fixed remote-only BF16 Llama forward trace",
+    )
+    pr07_trace.add_argument("--manifest", type=Path, required=True)
+    pr07_trace.add_argument("--sidecar", type=Path, required=True)
+    pr07_trace.add_argument("--repo-root", type=Path, required=True)
+    pr07_trace.add_argument("--device", default="cuda:0")
+    pr07_trace.add_argument("--allow-download", action="store_true")
 
     calibration_manifest = subparsers.add_parser(
         "calibrate-validate-manifest",
@@ -379,6 +390,29 @@ def _run_calibration_produce(
     return 0
 
 
+def _run_pr07_trace_produce(
+    args: argparse.Namespace,
+    *,
+    producer: Pr07TraceProducer,
+    environment_probe: EnvironmentProbe,
+    now: Callable[[], datetime],
+) -> int:
+    manifest = producer(
+        manifest_path=args.manifest,
+        sidecar_path=args.sidecar,
+        repo_root=args.repo_root,
+        device=args.device,
+        local_files_only=not args.allow_download,
+        created_at=now(),
+        environment_probe=environment_probe,
+    )
+    print(
+        f"wrote {manifest['artifact_kind']} "
+        f"({manifest['sidecar']['tensor_count']} tensors) to {args.manifest}"
+    )
+    return 0
+
+
 def _run_calibration_validate_manifest(args: argparse.Namespace) -> int:
     from .calibration import load_calibration_manifest, verify_calibration_artifact
 
@@ -515,6 +549,7 @@ def main(
     ] = validate_fixture_against_repository,
     environment_probe: EnvironmentProbe = probe_primary_environment,
     now: Callable[[], datetime] = utc_now,
+    pr07_trace_producer: Pr07TraceProducer | None = None,
 ) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
@@ -535,6 +570,17 @@ def main(
         if args.command == "calibrate-produce":
             return _run_calibration_produce(
                 args, environment_probe=environment_probe, now=now
+            )
+        if args.command == "pr07-trace-produce":
+            if pr07_trace_producer is None:
+                from .pr07_trace import produce_pr07_trace
+
+                pr07_trace_producer = produce_pr07_trace
+            return _run_pr07_trace_produce(
+                args,
+                producer=pr07_trace_producer,
+                environment_probe=environment_probe,
+                now=now,
             )
         if args.command == "calibrate-validate-manifest":
             return _run_calibration_validate_manifest(args)
