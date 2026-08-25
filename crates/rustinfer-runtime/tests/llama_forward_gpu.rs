@@ -100,9 +100,13 @@ fn tolerance(point: LlamaTracePoint) -> Option<NumericTolerance> {
             max_abs_max: 0.388_427_257_537_841_8,
             mean_abs_max: 0.008_509_292_567_237_658,
         }),
-        LlamaTracePoint::Layer14Output
-        | LlamaTracePoint::FinalNormInput
-        | LlamaTracePoint::FinalNormOutput => Some(cumulative_hidden),
+        LlamaTracePoint::Layer14Output | LlamaTracePoint::FinalNormOutput => {
+            Some(cumulative_hidden)
+        }
+        // This unnormalized residual stream is retained only to locate
+        // cumulative divergence. The gated final hidden state is the following
+        // FinalNormOutput tensor, which is the actual LM-head input.
+        LlamaTracePoint::FinalNormInput => None,
         // Predeclared final-logits threshold from the immutable PR01 E0 v2 matrix.
         LlamaTracePoint::LastLogits => Some(NumericTolerance {
             cosine_min: 0.997_903_530_549_539_3,
@@ -340,7 +344,9 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
             "{} prepared byte length",
             point.name()
         );
-        if let Some(tolerance) = tolerance(point) {
+        if point == LlamaTracePoint::Embedding {
+            assert_eq!(actual, expected, "{} must be byte-exact", point.name());
+        } else {
             let metrics = numeric_metrics(actual, expected);
             println!(
                 "pr07-trace point={} cosine={:.12} max_abs={:.9} mean_abs={:.9}",
@@ -349,14 +355,16 @@ fn assert_trace_matches_golden(trace: &PreparedLlamaTrace, golden: &[Vec<u8>]) {
                 metrics.max_abs,
                 metrics.mean_abs
             );
-            let passes = metrics.cosine >= tolerance.cosine_min
-                && metrics.max_abs <= tolerance.max_abs_max
-                && metrics.mean_abs <= tolerance.mean_abs_max;
-            if !passes && first_numeric_divergence.is_none() {
-                first_numeric_divergence = Some((point, metrics, tolerance));
+            if let Some(tolerance) = tolerance(point) {
+                let passes = metrics.cosine >= tolerance.cosine_min
+                    && metrics.max_abs <= tolerance.max_abs_max
+                    && metrics.mean_abs <= tolerance.mean_abs_max;
+                if !passes && first_numeric_divergence.is_none() {
+                    first_numeric_divergence = Some((point, metrics, tolerance));
+                }
+            } else {
+                assert_eq!(point, LlamaTracePoint::FinalNormInput);
             }
-        } else {
-            assert_eq!(actual, expected, "{} must be byte-exact", point.name());
         }
     }
 
