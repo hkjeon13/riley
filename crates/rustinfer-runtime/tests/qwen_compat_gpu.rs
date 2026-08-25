@@ -15,9 +15,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use rustinfer_cuda::{CudaContext, CudaRuntime, CudaStream};
-use rustinfer_model::{
-    EncodeOptions, LoadLimits, LoadedModel, ModelArchitecture, ModelFamily, Tokenizer,
-};
+use rustinfer_model::{EncodeOptions, LoadLimits, LoadedModel, ModelArchitecture, ModelFamily};
 use rustinfer_runtime::generation::{FinishReason, GenerationRequest, GenerationState};
 use rustinfer_runtime::llama::{
     LlamaDecodePhase, LlamaGenerationEvent, PreparedLlamaDecode, PreparedLlamaDecodeConfig,

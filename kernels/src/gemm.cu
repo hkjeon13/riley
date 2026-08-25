@@ -299,6 +299,59 @@ bool algorithm_has_supported_alignment(
          is_satisfied(alignment_c) && is_satisfied(alignment_d);
 }
 
+bool deterministic_candidate(
+    RustInferCudaGemmPlan* plan,
+    const cublasLtMatmulHeuristicResult_t& candidate,
+    cublasLtMatmulAlgo_t* algorithm, size_t* workspace_bytes) noexcept {
+  if (plan == nullptr || algorithm == nullptr || workspace_bytes == nullptr ||
+      candidate.state != CUBLAS_STATUS_SUCCESS) {
+    return false;
+  }
+
+  *algorithm = candidate.algo;
+  *workspace_bytes = candidate.workspaceSize;
+
+  uint32_t split_k = 0;
+  uint32_t reduction_scheme = 0;
+  if (!algorithm_config_value(algorithm, CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
+                              &split_k) ||
+      !algorithm_config_value(algorithm,
+                              CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+                              &reduction_scheme)) {
+    return false;
+  }
+  if (split_k <= 1 &&
+      reduction_scheme ==
+          static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE)) {
+    return true;
+  }
+
+  const uint32_t deterministic_split_k = 1;
+  const uint32_t deterministic_reduction_scheme =
+      static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE);
+  if (cublasLtMatmulAlgoConfigSetAttribute(
+          algorithm, CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
+          &deterministic_split_k, sizeof(deterministic_split_k)) !=
+          CUBLAS_STATUS_SUCCESS ||
+      cublasLtMatmulAlgoConfigSetAttribute(
+          algorithm, CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+          &deterministic_reduction_scheme,
+          sizeof(deterministic_reduction_scheme)) != CUBLAS_STATUS_SUCCESS) {
+    return false;
+  }
+
+  cublasLtMatmulHeuristicResult_t checked{};
+  if (cublasLtMatmulAlgoCheck(
+          plan->handle, plan->operation, plan->weight_layout,
+          plan->input_layout, plan->output_layout, plan->output_layout,
+          algorithm, &checked) != CUBLAS_STATUS_SUCCESS ||
+      checked.state != CUBLAS_STATUS_SUCCESS) {
+    return false;
+  }
+  *workspace_bytes = checked.workspaceSize;
+  return true;
+}
+
 RustInferCudaStatus query_plan_environment(
     RustInferCudaGemmPlan* plan, RustInferCudaErrorInfo* error) noexcept {
   int capability_major = 0;
@@ -381,9 +434,12 @@ RustInferCudaStatus select_deterministic_algorithm(
 
   for (int index = 0; index < returned_results; ++index) {
     const cublasLtMatmulHeuristicResult_t& candidate = candidates[index];
-    if (candidate.state != CUBLAS_STATUS_SUCCESS ||
-        candidate.workspaceSize > plan->config.max_workspace_bytes ||
-        !algorithm_has_supported_alignment(&candidate.algo)) {
+    cublasLtMatmulAlgo_t algorithm{};
+    size_t workspace_bytes = 0;
+    if (!deterministic_candidate(plan, candidate, &algorithm,
+                                 &workspace_bytes) ||
+        workspace_bytes > plan->config.max_workspace_bytes ||
+        !algorithm_has_supported_alignment(&algorithm)) {
       continue;
     }
 
@@ -395,28 +451,27 @@ RustInferCudaStatus select_deterministic_algorithm(
     uint32_t cta_swizzling = 0;
     uint32_t custom_option = 0;
     uint64_t numerical_flags = 0;
-    if (!algorithm_config_value(&candidate.algo,
-                                CUBLASLT_ALGO_CONFIG_ID,
+    if (!algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_ID,
                                 &algorithm_id) ||
-        !algorithm_config_value(&candidate.algo,
-                                CUBLASLT_ALGO_CONFIG_TILE_ID, &tile_id) ||
-        !algorithm_config_value(&candidate.algo,
+        !algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_TILE_ID,
+                                &tile_id) ||
+        !algorithm_config_value(&algorithm,
                                 CUBLASLT_ALGO_CONFIG_STAGES_ID,
                                 &stages_id) ||
-        !algorithm_config_value(&candidate.algo,
+        !algorithm_config_value(&algorithm,
                                 CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
                                 &split_k) ||
-        !algorithm_config_value(&candidate.algo,
+        !algorithm_config_value(&algorithm,
                                 CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
                                 &reduction_scheme) ||
-        !algorithm_config_value(&candidate.algo,
+        !algorithm_config_value(&algorithm,
                                 CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,
                                 &cta_swizzling) ||
-        !algorithm_config_value(&candidate.algo,
+        !algorithm_config_value(&algorithm,
                                 CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION,
                                 &custom_option) ||
         !algorithm_capability_value(
-            &candidate.algo, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS,
+            &algorithm, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS,
             &numerical_flags)) {
       continue;
     }
@@ -426,7 +481,7 @@ RustInferCudaStatus select_deterministic_algorithm(
       continue;
     }
 
-    plan->algorithm = candidate.algo;
+    plan->algorithm = algorithm;
     plan->algorithm_info.algorithm_id = algorithm_id;
     plan->algorithm_info.tile_id = tile_id;
     plan->algorithm_info.stages_id = stages_id;
@@ -435,7 +490,7 @@ RustInferCudaStatus select_deterministic_algorithm(
     plan->algorithm_info.cta_swizzling = cta_swizzling;
     plan->algorithm_info.custom_option = custom_option;
     plan->algorithm_info.workspace_bytes =
-        static_cast<uint64_t>(candidate.workspaceSize);
+        static_cast<uint64_t>(workspace_bytes);
     plan->algorithm_info.numerical_implementation_flags = numerical_flags;
     plan->algorithm_ready = true;
     return RUSTINFER_CUDA_STATUS_SUCCESS;

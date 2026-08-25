@@ -12,7 +12,8 @@ use rustinfer_cuda::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-const MAX_WORKSPACE_BYTES: u64 = 64 * 1024 * 1024;
+const STANDARD_MAX_WORKSPACE_BYTES: u64 = 64 * 1024 * 1024;
+const QWEN_MAX_WORKSPACE_BYTES: u64 = 16 * 1024 * 1024;
 const UPLOAD_STAGING_BYTES: u64 = 1024 * 1024;
 const WARMUP_ITERATIONS: usize = 2;
 const MEASURED_ITERATIONS: usize = 11;
@@ -122,6 +123,33 @@ const CASES: &[GemmCase] = &[
         m: 7,
         n: 49_152,
         k: 576,
+    },
+];
+
+const QWEN_CASES: &[GemmCase] = &[
+    GemmCase {
+        label: "qwen-down-decode-m1",
+        m: 1,
+        n: 896,
+        k: 4_864,
+    },
+    GemmCase {
+        label: "qwen-down-prefill-m30",
+        m: 30,
+        n: 896,
+        k: 4_864,
+    },
+    GemmCase {
+        label: "qwen-down-prefill-m40",
+        m: 40,
+        n: 896,
+        k: 4_864,
+    },
+    GemmCase {
+        label: "qwen-down-prefill-m46",
+        m: 46,
+        n: 896,
+        k: 4_864,
     },
 ];
 
@@ -297,8 +325,9 @@ fn run_case(
     expected_compute_capability: (u32, u32),
     case: GemmCase,
     case_index: u64,
+    max_workspace_bytes: u64,
 ) -> TestResult {
-    let config = CudaGemmConfig::new(case.m, case.n, case.k, MAX_WORKSPACE_BYTES)?;
+    let config = CudaGemmConfig::new(case.m, case.n, case.k, max_workspace_bytes)?;
     assert_eq!(config.input_dtype(), CudaDType::BF16);
     assert_eq!(config.weight_dtype(), CudaDType::BF16);
     assert_eq!(config.accumulator_dtype(), CudaDType::F32);
@@ -427,7 +456,7 @@ fn run_case(
 
 #[test]
 #[ignore = "remote GPU"]
-fn deterministic_bf16_gemm_matches_f32_reference_for_odd_and_smollm2_shapes() -> TestResult {
+fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes() -> TestResult {
     let (_runtime, device) = first_device()?;
     let expected_compute_capability = device.properties().compute_capability();
     let context = device.create_context()?;
@@ -442,6 +471,23 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_and_smollm2_shapes() ->
             expected_compute_capability,
             case,
             u64::try_from(case_index)?,
+            STANDARD_MAX_WORKSPACE_BYTES,
+        )?;
+    }
+    for (case_index, &case) in QWEN_CASES.iter().enumerate() {
+        run_case(
+            &context,
+            &mut stream,
+            &mut upload_staging,
+            expected_compute_capability,
+            case,
+            u64::try_from(
+                CASES
+                    .len()
+                    .checked_add(case_index)
+                    .ok_or("case index overflow")?,
+            )?,
+            QWEN_MAX_WORKSPACE_BYTES,
         )?;
     }
 
