@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/reliability-soak-manifest-v1.schema.json",
+  "title": "rustinfer reliability soak manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_id", "target", "thresholds", "requests", "golden", "scenarios"],
+  "properties": {
+    "schema_version": {"const": "rustinfer.reliability-soak-manifest.v1"},
+    "contract_id": {"$ref": "#/$defs/id"},
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["kind", "binary", "model_path", "bind", "completion_path", "health_path", "metrics_path", "shutdown_signal", "launch_arguments"],
+      "properties": {
+        "kind": {"enum": ["process", "container"]},
+        "binary": {"type": "string", "minLength": 1},
+        "model_path": {"type": "string", "minLength": 1},
+        "bind": {"type": "string", "pattern": "^[^:]+:[0-9]+$"},
+        "completion_path": {"type": "string", "pattern": "^/"},
+        "health_path": {"type": "string", "pattern": "^/"},
+        "metrics_path": {"type": "string", "pattern": "^/"},
+        "shutdown_signal": {"const": "TERM"},
+        "launch_arguments": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["sample_interval_ms", "maximum_sample_gap_ms", "minimum_samples_per_scenario", "plateau_tail_fraction", "maximum_rss_plateau_growth_bytes", "maximum_rss_slope_bytes_per_hour", "maximum_vram_plateau_growth_bytes", "maximum_vram_slope_bytes_per_hour", "minimum_cancellations", "minimum_disconnects", "minimum_overloads", "graceful_shutdown_deadline_ms"],
+      "properties": {
+        "sample_interval_ms": {"type": "integer", "minimum": 100},
+        "maximum_sample_gap_ms": {"type": "integer", "minimum": 100},
+        "minimum_samples_per_scenario": {"type": "integer", "minimum": 2},
+        "plateau_tail_fraction": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "maximum_rss_plateau_growth_bytes": {"type": "integer", "minimum": 0},
+        "maximum_rss_slope_bytes_per_hour": {"type": "number", "minimum": 0},
+        "maximum_vram_plateau_growth_bytes": {"type": "integer", "minimum": 0},
+        "maximum_vram_slope_bytes_per_hour": {"type": "number", "minimum": 0},
+        "minimum_cancellations": {"type": "integer", "minimum": 1},
+        "minimum_disconnects": {"type": "integer", "minimum": 1},
+        "minimum_overloads": {"type": "integer", "minimum": 1},
+        "graceful_shutdown_deadline_ms": {"type": "integer", "minimum": 1}
+      }
+    },
+    "requests": {"type": "object", "minProperties": 4, "additionalProperties": {"type": "object"}},
+    "golden": {
+      "type": "object", "additionalProperties": false,
+      "required": ["request_profile", "digest_domain", "generated_sha256", "provenance_sha256"],
+      "properties": {
+        "request_profile": {"$ref": "#/$defs/id"},
+        "digest_domain": {"const": "completion-text-utf8"},
+        "generated_sha256": {"$ref": "#/$defs/sha256"},
+        "provenance_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "scenarios": {"type": "array", "minItems": 10, "items": {"$ref": "#/$defs/scenario"}}
+  },
+  "$defs": {
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "scenario": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "kind", "required", "duration_seconds", "concurrency", "request_profile", "execution_completion"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "kind": {"enum": ["steady", "burst-idle", "mixed", "invalid", "overload", "cancellation-disconnect", "near-kv", "graceful-restart", "rollback"]},
+        "required": {"type": "boolean"},
+        "duration_seconds": {"type": "integer", "minimum": 1},
+        "concurrency": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "request_profile": {"$ref": "#/$defs/id"},
+        "secondary_request_profile": {"$ref": "#/$defs/id"},
+        "execution_completion": {"enum": ["iteration-batch", "per-operation"]}
+      }
+    }
+  }
+}

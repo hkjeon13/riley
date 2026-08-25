@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/reliability-soak-report-v1.schema.json",
+  "title": "rustinfer reliability soak checker report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"],
+  "properties": {
+    "schema_version": {"const": "rustinfer.reliability-soak-report.v1"},
+    "status": {"enum": ["passed", "failed", "error"]},
+    "passed": {"type": "boolean"},
+    "bindings": {"type": ["object", "null"]},
+    "scenario_summaries": {"type": "array"},
+    "observations": {"type": "object"},
+    "checks": {"type": "array"},
+    "errors": {"type": "array", "items": {"type": "string"}}
+  }
+}

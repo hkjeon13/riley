@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/reliability-soak-event-v1.schema.json",
+  "title": "rustinfer append-only reliability soak event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256"],
+  "properties": {
+    "schema_version": {"const": "rustinfer.reliability-soak-event.v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "monotonic_ns": {"type": "integer", "minimum": 0},
+    "kind": {"enum": ["run_start", "scenario_start", "sample", "request", "restart", "scenario_end", "failure", "run_end"]},
+    "scenario_id": {"type": ["string", "null"]},
+    "binding_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+    ,"execution_completion": {"enum": ["iteration-batch", "per-operation"]}
+    ,"process": {"$ref": "#/$defs/process"}
+    ,"gpu": {"$ref": "#/$defs/gpu"}
+    ,"metrics": {"$ref": "#/$defs/metrics"}
+    ,"sample_dropped": {"type": "boolean"}
+    ,"request_id": {"type": "string", "minLength": 1}
+    ,"outcome": {"enum": ["success", "invalid", "overload", "cancelled", "disconnected", "timeout", "failure"]}
+    ,"http_status": {"type": "integer", "minimum": 0, "maximum": 599}
+    ,"latency_ms": {"type": "number", "minimum": 0}
+    ,"generated_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+    ,"graceful": {"type": "boolean"}
+    ,"exit_code": {"type": "integer", "minimum": 0}
+    ,"elapsed_ms": {"type": "number", "minimum": 0}
+    ,"before_generated_sha256": {"$ref": "#/$defs/sha256"}
+    ,"after_generated_sha256": {"$ref": "#/$defs/sha256"}
+    ,"status": {"enum": ["success", "failure"]}
+    ,"stage": {"type": "string", "minLength": 1}
+    ,"message": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "sample"}}}, "then": {"required": ["process", "gpu", "metrics", "sample_dropped"]}},
+    {"if": {"properties": {"kind": {"const": "request"}}}, "then": {"required": ["request_id", "outcome", "http_status", "latency_ms", "generated_sha256"]}},
+    {"if": {"properties": {"kind": {"const": "scenario_end"}}}, "then": {"required": ["status"]}},
+    {"if": {"properties": {"kind": {"const": "restart"}}}, "then": {"required": ["graceful", "exit_code", "elapsed_ms", "before_generated_sha256", "after_generated_sha256"]}}
+  ],
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "process": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pid", "rss_bytes", "hwm_bytes", "fd_count", "thread_count", "children"],
+      "properties": {
+        "pid": {"type": "integer", "minimum": 0},
+        "rss_bytes": {"type": "integer", "minimum": 0},
+        "hwm_bytes": {"type": "integer", "minimum": 0},
+        "fd_count": {"type": "integer", "minimum": 0},
+        "thread_count": {"type": "integer", "minimum": 0},
+        "children": {"type": "array", "items": {"$ref": "#/$defs/child"}}
+      }
+    },
+    "child": {
+      "type": "object", "additionalProperties": false,
+      "required": ["pid", "comm", "executable"],
+      "properties": {"pid": {"type": "integer", "minimum": 1}, "comm": {"type": "string", "minLength": 1}, "executable": {"type": "string", "minLength": 1}}
+    },
+    "gpu": {"type": "object", "additionalProperties": false, "required": ["vram_bytes"], "properties": {"vram_bytes": {"type": "integer", "minimum": 0}}},
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "counters"],
+      "properties": {
+        "active_requests": {"type": "integer", "minimum": 0},
+        "waiting_requests": {"type": "integer", "minimum": 0},
+        "kv_allocated_blocks": {"type": "integer", "minimum": 0},
+        "allocation": {"$ref": "#/$defs/allocation"},
+        "counters": {"$ref": "#/$defs/counters"}
+      }
+    },
+    "allocation": {
+      "type": "object", "additionalProperties": false,
+      "required": ["device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"],
+      "properties": {
+        "device_live_count": {"type": "integer", "minimum": 0},
+        "device_live_bytes": {"type": "integer", "minimum": 0},
+        "pinned_live_count": {"type": "integer", "minimum": 0},
+        "pinned_live_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "counters": {
+      "type": "object", "additionalProperties": false,
+      "required": ["cancellations", "disconnects", "overloads", "dropped_samples"],
+      "properties": {
+        "cancellations": {"type": "integer", "minimum": 0},
+        "disconnects": {"type": "integer", "minimum": 0},
+        "overloads": {"type": "integer", "minimum": 0},
+        "dropped_samples": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

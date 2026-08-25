@@ -1,0 +1,61 @@
+{
+  "schema_version": "rustinfer.reliability-soak-manifest.v1",
+  "contract_id": "pr16-release-soak-v1",
+  "target": {
+    "kind": "process",
+    "binary": "/opt/rustinfer/bin/rustinfer",
+    "model_path": "/models/SmolLM2-135M-Instruct",
+    "bind": "127.0.0.1:18080",
+    "completion_path": "/v1/completions",
+    "health_path": "/readyz",
+    "metrics_path": "/metrics",
+    "shutdown_signal": "TERM",
+    "launch_arguments": [
+      "serve",
+      "--model",
+      "{model_path}",
+      "--bind",
+      "{bind}",
+      "--execution-completion",
+      "{execution_completion}"
+    ]
+  },
+  "thresholds": {
+    "sample_interval_ms": 1000,
+    "maximum_sample_gap_ms": 2500,
+    "minimum_samples_per_scenario": 30,
+    "plateau_tail_fraction": 0.5,
+    "maximum_rss_plateau_growth_bytes": 67108864,
+    "maximum_rss_slope_bytes_per_hour": 33554432,
+    "maximum_vram_plateau_growth_bytes": 67108864,
+    "maximum_vram_slope_bytes_per_hour": 33554432,
+    "minimum_cancellations": 100,
+    "minimum_disconnects": 100,
+    "minimum_overloads": 20,
+    "graceful_shutdown_deadline_ms": 30000
+  },
+  "requests": {
+    "short": {"model": "HuggingFaceTB/SmolLM2-135M", "prompt": "Explain why deterministic benchmarks need immutable inputs.", "max_tokens": 8, "temperature": 0.0},
+    "long": {"model": "HuggingFaceTB/SmolLM2-135M", "prompt": "Write a deterministic numbered list of facts about inference serving.", "max_tokens": 256, "temperature": 0.0},
+    "near_kv": {"model": "HuggingFaceTB/SmolLM2-135M", "prompt": "context ", "prompt_repeat": 7600, "max_tokens": 256, "temperature": 0.0},
+    "invalid": {"model": "HuggingFaceTB/SmolLM2-135M", "prompt": 17, "max_tokens": -1}
+  },
+  "golden": {
+    "request_profile": "short",
+    "digest_domain": "completion-text-utf8",
+    "generated_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "provenance_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "scenarios": [
+    {"id": "steady", "kind": "steady", "required": true, "duration_seconds": 14400, "concurrency": 4, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "burst-idle", "kind": "burst-idle", "required": true, "duration_seconds": 3600, "concurrency": 16, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "mixed-short-long", "kind": "mixed", "required": true, "duration_seconds": 3600, "concurrency": 8, "request_profile": "short", "secondary_request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "invalid", "kind": "invalid", "required": true, "duration_seconds": 300, "concurrency": 4, "request_profile": "invalid", "execution_completion": "iteration-batch"},
+    {"id": "overload", "kind": "overload", "required": true, "duration_seconds": 600, "concurrency": 64, "request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "cancellation-disconnect", "kind": "cancellation-disconnect", "required": true, "duration_seconds": 900, "concurrency": 16, "request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "near-kv", "kind": "near-kv", "required": true, "duration_seconds": 1800, "concurrency": 1, "request_profile": "near_kv", "execution_completion": "iteration-batch"},
+    {"id": "graceful-restart", "kind": "graceful-restart", "required": true, "duration_seconds": 300, "concurrency": 4, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "rollback-iteration-batch", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "rollback-per-operation", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "request_profile": "short", "execution_completion": "per-operation"}
+  ]
+}
