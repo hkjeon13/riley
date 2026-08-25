@@ -282,9 +282,15 @@ locked/offline CUDA release build in each. No GPU/device passthrough is used.
 `check_reproducible_build.py` consumes the two closed raw evidence tars and the
 selected final artifacts. It validates the embedded Git revision and
 `SOURCE_DATE_EPOCH`, daemon-produced Docker inspect receipts, toolchain and
-command logs, closed checksums, ELF-derived dependencies, and each deterministic
-release bundle. It then requires the binary, bundle, and native dependency
-manifest to be byte-identical across A, B, and final. See
+command logs, a trusted external source-archive digest, closed checksums,
+ELF-derived dependencies, and each deterministic release bundle. Builder-image
+environment and command arguments are closed, proxy variables are empty, and
+the pre-start receipts must prove distinct anonymous `NoCopy` workspaces. A
+matching post-run daemon receipt must prove each same container exited once
+with status zero, while the last in-container completion receipt binds that
+container and source to the hashes of every artifact and build log. It then
+requires the server binary, `rustinfer-profile` binary, bundle, and native
+dependency manifest to be byte-identical across A, B, and final. See
 `ci/release/REPRODUCIBLE_BUILD.md` for the remote procedure and exact evidence
 inventory.
 

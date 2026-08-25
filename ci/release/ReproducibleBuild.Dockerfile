@@ -14,6 +14,7 @@ RUN apt-get update \
         cmake \
         pkg-config \
         python3 \
+        python3-tomli \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
@@ -36,6 +37,7 @@ RUN --mount=type=bind,source=.,target=/seed,readonly \
 RUN rustc --version \
     && cargo --version \
     && nvcc --version \
+    && python3 -c 'import tomli; assert tomli.loads("value = 1")["value"] == 1' \
     && test "$(rustc --version | cut -d ' ' -f 2)" = 1.85.0 \
     && test "$(cargo --version | cut -d ' ' -f 2)" = 1.85.0 \
     && nvcc --version | grep -F 'Cuda compilation tools, release 12.8, V12.8.93'

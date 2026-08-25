@@ -25,6 +25,7 @@ test -f Cargo.lock
 test -f ci/release/Dockerfile
 test -f /input/source.tar
 test -s /input/container-inspect.json
+test -s /input/builder-image-inspect.json
 test -d /evidence
 test -z "$(find /evidence -mindepth 1 -print -quit)"
 
@@ -51,7 +52,7 @@ export TMPDIR=/workspace/tmp
     nvcc --version | sed -n '/Cuda compilation tools/p'
 } > /workspace/logs/toolchain.txt
 
-python3 ci/release/check_release_preflight.py \
+python3 ci/release/run_release_python.py ci/release/check_release_preflight.py \
     --source-revision "${RUSTINFER_SOURCE_REVISION}" \
     --source-date-epoch "${SOURCE_DATE_EPOCH}" \
     > /workspace/logs/preflight.log 2>&1
@@ -59,39 +60,55 @@ python3 ci/release/check_release_preflight.py \
 cargo build --locked --offline --release --features cuda,server \
     > /workspace/logs/cargo-build.log 2>&1
 
-python3 ci/release/build_release_bundle.py \
+cargo build --locked --offline --release --features bench,cuda \
+    --bin rustinfer-profile \
+    > /workspace/logs/profile-build.log 2>&1
+
+python3 ci/release/run_release_python.py ci/release/build_release_bundle.py \
     --binary target/release/rustinfer \
     --output /workspace/release/rustinfer.tar.gz \
     --source-revision "${RUSTINFER_SOURCE_REVISION}" \
     --source-date-epoch "${SOURCE_DATE_EPOCH}" \
     > /workspace/logs/bundle-build.log 2>&1
 
-python3 ci/release/verify_release_bundle.py /workspace/release/rustinfer.tar.gz \
+python3 ci/release/run_release_python.py ci/release/verify_release_bundle.py \
+    /workspace/release/rustinfer.tar.gz \
     > /workspace/logs/bundle-verify.log 2>&1
 
 tar --extract --gzip --file /workspace/release/rustinfer.tar.gz \
     --strip-components=1 --directory /workspace/release-root
 
-mkdir /evidence/artifacts
+mkdir /evidence/artifacts /evidence/logs
 install -m 0755 target/release/rustinfer /evidence/artifacts/rustinfer
+install -m 0755 target/release/rustinfer-profile /evidence/artifacts/rustinfer-profile
 install -m 0644 /workspace/release/rustinfer.tar.gz /evidence/artifacts/rustinfer.tar.gz
 install -m 0644 /workspace/release-root/manifest/native-dependencies.txt \
     /evidence/artifacts/native-dependencies.txt
+install -m 0644 /workspace/logs/toolchain.txt /evidence/logs/toolchain.txt
+install -m 0644 /workspace/logs/preflight.log /evidence/logs/preflight.log
+install -m 0644 /workspace/logs/cargo-build.log /evidence/logs/cargo-build.log
+install -m 0644 /workspace/logs/profile-build.log /evidence/logs/profile-build.log
+install -m 0644 /workspace/logs/bundle-build.log /evidence/logs/bundle-build.log
+install -m 0644 /workspace/logs/bundle-verify.log /evidence/logs/bundle-verify.log
 
-output_name="repro-build-${RUSTINFER_REPRO_BUILD_ID,,}.tar"
-python3 ci/release/package_reproducible_build_evidence.py \
+# This is deliberately the last in-container action. The host captures the
+# exited/zero-status Docker receipt before packaging these raw bytes.
+python3 ci/release/run_release_python.py \
+    ci/release/write_reproducible_build_completion.py \
     --build-id "${RUSTINFER_REPRO_BUILD_ID}" \
-    --source-archive /input/source.tar \
     --source-revision "${RUSTINFER_SOURCE_REVISION}" \
+    --source-archive-sha256 "${RUSTINFER_SOURCE_ARCHIVE_SHA256}" \
     --source-date-epoch "${SOURCE_DATE_EPOCH}" \
     --build-image-id "${RUSTINFER_BUILD_IMAGE_ID}" \
-    --binary target/release/rustinfer \
-    --bundle /workspace/release/rustinfer.tar.gz \
-    --native-manifest /workspace/release-root/manifest/native-dependencies.txt \
-    --toolchain-log /workspace/logs/toolchain.txt \
     --container-inspect /input/container-inspect.json \
-    --preflight-log /workspace/logs/preflight.log \
-    --cargo-build-log /workspace/logs/cargo-build.log \
-    --bundle-build-log /workspace/logs/bundle-build.log \
-    --bundle-verify-log /workspace/logs/bundle-verify.log \
-    --output "/evidence/${output_name}"
+    --binary /evidence/artifacts/rustinfer \
+    --profile-binary /evidence/artifacts/rustinfer-profile \
+    --bundle /evidence/artifacts/rustinfer.tar.gz \
+    --native-manifest /evidence/artifacts/native-dependencies.txt \
+    --toolchain-log /evidence/logs/toolchain.txt \
+    --preflight-log /evidence/logs/preflight.log \
+    --cargo-build-log /evidence/logs/cargo-build.log \
+    --profile-build-log /evidence/logs/profile-build.log \
+    --bundle-build-log /evidence/logs/bundle-build.log \
+    --bundle-verify-log /evidence/logs/bundle-verify.log \
+    --output /evidence/logs/build-completion.json
