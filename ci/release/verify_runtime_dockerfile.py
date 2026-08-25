@@ -14,6 +14,7 @@ PINNED_RUNTIME = (
     "nvidia/cuda:12.8.1-runtime-ubuntu22.04@"
     "sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd"
 )
+PINNED_RUSTUP_TOOLCHAIN = "1.85.0-x86_64-unknown-linux-gnu"
 
 
 def _instructions(contents: str) -> list[str]:
@@ -43,7 +44,17 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
     if not re.fullmatch(rf"FROM {re.escape(PINNED_RUNTIME)} AS runtime", from_instructions[-1]):
         raise ReleaseContractError("final CUDA runtime image must use the reviewed immutable digest")
     runtime_index = instructions.index(from_instructions[-1])
+    builder = instructions[:runtime_index]
     runtime = instructions[runtime_index + 1 :]
+    toolchain_environment = f"ENV RUSTUP_TOOLCHAIN={PINNED_RUSTUP_TOOLCHAIN}"
+    if builder.count(toolchain_environment) != 1:
+        raise ReleaseContractError(
+            "release builder must select the reviewed exact rustup toolchain"
+        )
+    if any("RUSTUP_TOOLCHAIN" in line for line in runtime):
+        raise ReleaseContractError(
+            "final runtime must not inherit the builder rustup toolchain environment"
+        )
     if any(line.upper().startswith(("FROM ", "ADD ")) for line in runtime):
         raise ReleaseContractError("runtime stage contains an unexpected stage or ADD instruction")
     copy_lines = [line for line in runtime if line.upper().startswith("COPY ")]

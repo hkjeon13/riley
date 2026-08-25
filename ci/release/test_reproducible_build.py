@@ -22,6 +22,7 @@ from check_reproducible_build import (  # noqa: E402
     CONTAINER_COMMAND,
     GATE_ID,
     PROXY_ENVIRONMENT,
+    RUSTUP_TOOLCHAIN,
     _validate_source_archive,
     check_reproducible_build,
 )
@@ -68,6 +69,7 @@ def builder_image_inspect() -> list[dict[str, object]]:
                     "DEBIAN_FRONTEND=noninteractive",
                     "CARGO_HOME=/usr/local/cargo",
                     "RUSTUP_HOME=/usr/local/rustup",
+                    f"RUSTUP_TOOLCHAIN={RUSTUP_TOOLCHAIN}",
                     "CUDA_HOME=/usr/local/cuda",
                     "CUDAToolkit_ROOT=/usr/local/cuda",
                     "RUSTINFER_CUDA_ARCHITECTURES=89",
@@ -727,6 +729,37 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ReleaseContractError, "differs for PATH"):
             self.check(changed, self.package("B"))
 
+    def test_consistent_but_wrong_rustup_toolchain_is_rejected(self) -> None:
+        evidence_a = self.package("A")
+        changed = self.root / "wrong-rustup-toolchain.tar"
+
+        def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
+            root = "rustinfer-repro-build-a"
+            for relative in (
+                "logs/builder-image-inspect.json",
+                "logs/container-inspect.json",
+            ):
+                name = f"{root}/{relative}"
+                member, contents = entries[name]
+                assert contents is not None
+                document = json.loads(contents)
+                environment = document[0]["Config"]["Env"]
+                pinned = f"RUSTUP_TOOLCHAIN={RUSTUP_TOOLCHAIN}"
+                environment[environment.index(pinned)] = (
+                    "RUSTUP_TOOLCHAIN=stable-x86_64-unknown-linux-gnu"
+                )
+                replacement = canonical_json_bytes(document)
+                member.size = len(replacement)
+                entries[name] = (member, replacement)
+                update_checksum(entries, root, relative, replacement)
+
+        rewrite_evidence(evidence_a, changed, mutate)
+        with self.assertRaisesRegex(
+            ReleaseContractError,
+            "differs for RUSTUP_TOOLCHAIN",
+        ):
+            self.check(changed, self.package("B"))
+
     def test_container_rejects_host_pid_namespace(self) -> None:
         evidence_a = self.package("A")
         changed = self.root / "host-pid-namespace-inspect.tar"
@@ -1082,6 +1115,10 @@ class ReproducibilityRunnerStaticTests(unittest.TestCase):
         )
         self.assertIn("cargo fetch --locked", contents)
         self.assertIn("python3-tomli", contents)
+        self.assertIn(
+            f"ENV RUSTUP_TOOLCHAIN={RUSTUP_TOOLCHAIN}",
+            contents,
+        )
         self.assertNotIn("cargo build", contents)
         self.assertNotIn("COPY .", contents)
 

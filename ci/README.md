@@ -74,6 +74,12 @@ immutable manifest digest:
 - Docker Official Image `rust:1.85.0-bookworm`;
 - NVIDIA `cuda:12.8.1-devel-ubuntu22.04`.
 
+The builder selects the installed
+`1.85.0-x86_64-unknown-linux-gnu` toolchain explicitly, so the repository
+directory override cannot trigger a rustup channel sync during an offline or
+read-only run. The networked image-preparation phase installs and version-checks
+the matching Clippy component before the Python-free CUDA gate executes.
+
 Compile for the RTX 4090's compute capability 8.9 without granting the
 container GPU access:
 
@@ -262,7 +268,9 @@ as dependencies. The workspace boundary checker separately rejects external
 process launching from production crate sources.
 
 `ci/release/Dockerfile` separates the CUDA builder from a digest-pinned CUDA
-runtime stage and copies only the verified bundle payload. The final stage
+runtime stage and copies only the verified bundle payload. Its builder also
+selects the already-installed exact Rust toolchain instead of allowing a
+source-directory rustup sync. The final stage
 asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
 absent. See `docs/release/README.md` for the file layout and runtime contract.
 

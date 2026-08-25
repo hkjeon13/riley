@@ -8,9 +8,11 @@ running the CPU-only writer tests.
 
 ## Prepare the dependency image on server-4096
 
-The dependency fetch is the only networked phase.  `--no-cache` is required
-because the BuildKit seed is a read-only bind mount.  No candidate source is
-baked into the resulting image.
+Image preparation is the only networked phase: it installs the Clippy
+component for the exact `1.85.0-x86_64-unknown-linux-gnu` toolchain and fetches
+the locked Cargo dependencies.  `--no-cache` is required because the BuildKit
+seed is a read-only bind mount.  No candidate source is baked into the
+resulting image.
 
 ```sh
 docker build \
@@ -26,7 +28,9 @@ BUILDER_IMAGE_ID=$(docker image inspect \
 The actual evidence container resolves that immutable image ID, uses
 `--network none`, mounts the canonical source archive and pinned model
 read-only, grants only the designated GPU, and builds in a fresh anonymous
-workspace volume.
+workspace volume.  The immutable image pins
+`RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu`, so a checkout-local rustup
+directory override cannot select or download another toolchain.
 
 ## Run
 
@@ -67,6 +71,11 @@ commands in order:
 7. locked/offline Cargo `--no-run` for `llama_batch_gpu`.
 8. direct execution of copied `/evidence/llama-batch-gpu-test` with the pinned
    checkpoint mounted at `/model`.
+
+Every recorded command carries the exact
+`RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu` environment entry.  Both the
+writer and the independent replay checker reject a missing, substituted, or
+additional command environment entry.
 
 Each compile command uses its own empty absolute target directory and emits
 Cargo JSON.  The runner accepts exactly one fresh `compiler-artifact` test ELF,

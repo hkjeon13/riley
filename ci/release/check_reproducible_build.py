@@ -35,6 +35,7 @@ from verify_release_bundle import verify_bundle
 SCHEMA_VERSION = 1
 GATE_ID = "pr16-release-build-reproducibility-v1"
 RUST_TOOLCHAIN = "1.85.0"
+RUSTUP_TOOLCHAIN = "1.85.0-x86_64-unknown-linux-gnu"
 NVCC_VERSION = "12.8.93"
 PLATFORM = "linux/amd64"
 BUILDER_PATH = (
@@ -576,6 +577,7 @@ def _validate_builder_image_inspect(contents: bytes, build_image_id: str) -> dic
         "DEBIAN_FRONTEND": "noninteractive",
         "CARGO_HOME": "/usr/local/cargo",
         "RUSTUP_HOME": "/usr/local/rustup",
+        "RUSTUP_TOOLCHAIN": RUSTUP_TOOLCHAIN,
         "CUDA_HOME": "/usr/local/cuda",
         "CUDAToolkit_ROOT": "/usr/local/cuda",
         "RUSTINFER_CUDA_ARCHITECTURES": "89",

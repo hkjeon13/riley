@@ -72,6 +72,7 @@ BASE_ENVIRONMENT = {
     "CUDA_HOME": "/usr/local/cuda",
     "CUDAToolkit_ROOT": "/usr/local/cuda",
     "RUSTINFER_CUDA_ARCHITECTURES": "89",
+    "RUSTUP_TOOLCHAIN": "1.85.0-x86_64-unknown-linux-gnu",
 }
 
 

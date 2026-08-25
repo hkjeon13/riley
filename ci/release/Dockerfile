@@ -23,6 +23,7 @@ COPY --from=rust-toolchain /usr/local/rustup /usr/local/rustup
 
 ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
+ENV RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
 ENV PATH=/usr/local/cargo/bin:/usr/local/cuda/bin:${PATH}
 ENV CUDA_HOME=/usr/local/cuda
 ENV CUDAToolkit_ROOT=/usr/local/cuda

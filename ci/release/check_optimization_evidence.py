@@ -216,6 +216,14 @@ COMMAND_TEST_BINARIES = {
     "compile-smollm2-multi-step-greedy-exact": "llama-batch-gpu-test",
     "smollm2-multi-step-greedy-exact": "llama-batch-gpu-test",
 }
+BASE_ENVIRONMENT = {
+    "CARGO_NET_OFFLINE": "true",
+    "CARGO_TERM_COLOR": "never",
+    "CUDA_HOME": "/usr/local/cuda",
+    "CUDAToolkit_ROOT": "/usr/local/cuda",
+    "RUSTINFER_CUDA_ARCHITECTURES": "89",
+    "RUSTUP_TOOLCHAIN": "1.85.0-x86_64-unknown-linux-gnu",
+}
 
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -781,13 +789,7 @@ def _validate_receipt(
         _fail(RECEIPT_FILE, "commands are not in the reviewed execution order")
     for command_id, argv in EXPECTED_COMMANDS.items():
         command = observed[command_id]
-        expected_environment = {
-            "CARGO_NET_OFFLINE": "true",
-            "CARGO_TERM_COLOR": "never",
-            "CUDA_HOME": "/usr/local/cuda",
-            "CUDAToolkit_ROOT": "/usr/local/cuda",
-            "RUSTINFER_CUDA_ARCHITECTURES": "89",
-        }
+        expected_environment = dict(BASE_ENVIRONMENT)
         if command_id == "smollm2-multi-step-greedy-exact":
             expected_environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
         expected_binary = COMMAND_TEST_BINARIES[command_id]

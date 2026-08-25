@@ -122,13 +122,18 @@ class Fixture:
             "6 filtered out; finished in 0.01s\n"
         )
 
-    def _write_commands(self, argv_override: dict[str, list[str]] | None = None) -> None:
+    def _write_commands(
+        self,
+        argv_override: dict[str, list[str]] | None = None,
+        environment_override: dict[str, dict[str, str]] | None = None,
+    ) -> None:
         rows = [writer.COMMAND_RECORD_VERSION]
         for command_id in writer.COMMAND_ORDER:
             expected = writer.EXPECTED_COMMANDS[command_id]
             environment = dict(writer.BASE_ENVIRONMENT)
             if command_id == "smollm2-multi-step-greedy-exact":
                 environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
+            environment.update((environment_override or {}).get(command_id, {}))
             rows.extend(
                 [
                     f"BEGIN {encoded(command_id)}",
@@ -194,6 +199,17 @@ class EvidenceWriterTests(unittest.TestCase):
 
     def test_direct_execution_argv_cannot_be_replaced_by_cargo(self) -> None:
         self.fixture._write_commands({"command-batch-lifecycle": ["cargo", "test"]})
+        with self.assertRaisesRegex(writer.EvidenceWriterError, "reviewed invocation"):
+            self.fixture.write()
+
+    def test_toolchain_environment_cannot_follow_directory_override(self) -> None:
+        self.fixture._write_commands(
+            environment_override={
+                "workspace-all-features-all-targets": {
+                    "RUSTUP_TOOLCHAIN": "stable-x86_64-unknown-linux-gnu"
+                }
+            }
+        )
         with self.assertRaisesRegex(writer.EvidenceWriterError, "reviewed invocation"):
             self.fixture.write()
 

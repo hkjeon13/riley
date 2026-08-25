@@ -17,6 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from check_optimization_evidence import (  # noqa: E402
+    BASE_ENVIRONMENT,
     CHECKSUM_FILE,
     COMMAND_LOG_FILES,
     COMMAND_TEST_BINARIES,
@@ -311,13 +312,7 @@ class Fixture:
     def _receipt(self) -> dict[str, object]:
         commands = []
         for command_id, argv in EXPECTED_COMMANDS.items():
-            environment = {
-                "CARGO_NET_OFFLINE": "true",
-                "CARGO_TERM_COLOR": "never",
-                "CUDA_HOME": "/usr/local/cuda",
-                "CUDAToolkit_ROOT": "/usr/local/cuda",
-                "RUSTINFER_CUDA_ARCHITECTURES": "89",
-            }
+            environment = dict(BASE_ENVIRONMENT)
             if command_id == "smollm2-multi-step-greedy-exact":
                 environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
             commands.append(
@@ -428,6 +423,7 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.assertEqual(RECEIPT_VERSION, writer_contract.RECEIPT_VERSION)
         self.assertEqual(COMPILE_LOG_FILES, writer_contract.COMPILE_LOG_FILES)
         self.assertEqual(TEST_SUBJECTS, writer_contract.TEST_SUBJECTS)
+        self.assertEqual(BASE_ENVIRONMENT, writer_contract.BASE_ENVIRONMENT)
         observed = {
             command_id: {
                 "argv": argv,
@@ -549,6 +545,15 @@ class OptimizationEvidenceTests(unittest.TestCase):
 
     def test_command_argv_receipt_is_closed(self) -> None:
         self.fixture.receipt["commands"][0]["argv"] = ["true"]  # type: ignore[index]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_command_toolchain_environment_is_exact(self) -> None:
+        commands = self.fixture.receipt["commands"]  # type: ignore[assignment]
+        commands[1]["environment"]["RUSTUP_TOOLCHAIN"] = (
+            "stable-x86_64-unknown-linux-gnu"
+        )
         self.fixture._write_receipt()
         with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
             self.fixture.produce()

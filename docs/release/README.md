@@ -78,12 +78,15 @@ docker build \
   .
 ```
 
-The final stage is a digest-pinned NVIDIA CUDA 12.8.1 runtime image. It copies
-only the already verified bundle payload to `/opt/rustinfer`, runs as numeric
-user `65532:65532`, and contains no repository source, Rust/CUDA compiler,
-build system, Python/Pip executable, or Python-family package artifact. Model,
-tokenizer, and configuration files remain operator-mounted inputs; they are
-not embedded into the image.
+The builder selects the already installed exact
+`1.85.0-x86_64-unknown-linux-gnu` Rust toolchain, preventing checkout-local
+rustup reconciliation or downloads. The final stage is a digest-pinned NVIDIA
+CUDA 12.8.1 runtime image. It copies only the already verified bundle payload
+to `/opt/rustinfer`, does not inherit the rustup environment or toolchain, runs
+as numeric user `65532:65532`, and contains no repository source, Rust/CUDA
+compiler, build system, Python/Pip executable, or Python-family package
+artifact. Model, tokenizer, and configuration files remain operator-mounted
+inputs; they are not embedded into the image.
 
 `python3 ci/release/verify_runtime_dockerfile.py` is a CPU-only static guard
 for that stage boundary. A GPU release lane must additionally start the final

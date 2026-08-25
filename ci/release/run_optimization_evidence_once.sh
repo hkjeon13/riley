@@ -29,6 +29,7 @@ export CARGO_TERM_COLOR=never
 export CUDA_HOME=/usr/local/cuda
 export CUDAToolkit_ROOT=/usr/local/cuda
 export RUSTINFER_CUDA_ARCHITECTURES=89
+export RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
 
 command_records=/runner-output/commands.v2
 subject_records=/runner-output/subjects.v2
@@ -47,7 +48,8 @@ record_environment() {
         CARGO_TERM_COLOR \
         CUDA_HOME \
         CUDAToolkit_ROOT \
-        RUSTINFER_CUDA_ARCHITECTURES
+        RUSTINFER_CUDA_ARCHITECTURES \
+        RUSTUP_TOOLCHAIN
     do
         value=${!key}
         printf 'ENV %s %s\n' "$(encode_record "${key}")" "$(encode_record "${value}")" \

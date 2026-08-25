@@ -21,7 +21,9 @@ The gate fixes all of the following before build A starts:
   timestamp;
 - one Linux/amd64 OCI builder image addressed by its resolved `sha256:` image
   ID;
-- Rust 1.85.0, CUDA toolkit 12.8.1, nvcc 12.8.93, and CUDA architecture 89;
+- Rust 1.85.0 selected by the exact rustup toolchain override
+  `1.85.0-x86_64-unknown-linux-gnu`, CUDA toolkit 12.8.1, nvcc 12.8.93,
+  and CUDA architecture 89;
 - `cargo build --locked --offline --release --features cuda,server` for the
   production server, followed by `cargo build --locked --offline --release
   --features bench,cuda --bin rustinfer-profile` for the profiling subject; and
