@@ -195,6 +195,7 @@ class Fixture:
             "drop_restores_stream=true status=passed\n"
             "ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=7)
+            + "\n"
         ).encode()
         ledger = (
             "Running tests/primitives_gpu.rs (target/debug/deps/primitives_gpu-fixture)\n"
@@ -206,6 +207,7 @@ class Fixture:
             "owner_close_live_allocation_count=0 status=passed\n"
             "ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=5)
+            + "\n"
         ).encode()
         token_text = ", ".join(str(value) for value in EXPECTED_TOKENS)
         parity = (
@@ -218,6 +220,7 @@ class Fixture:
             f"generated_token_ids=[{token_text}] status=passed\n"
             "ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=6)
+            + "\n"
         ).encode()
         return {
             "cuda-compile-only": compile_log,
@@ -492,6 +495,12 @@ class OptimizationEvidenceTests(unittest.TestCase):
         contents = self.fixture.logs["command-batch-lifecycle"] + b"error: test failed\n"
         self.fixture.refresh_log("command-batch-lifecycle", contents)
         with self.assertRaisesRegex(OptimizationEvidenceError, "failing test-run marker"):
+            self.fixture.produce()
+
+    def test_exact_gpu_log_requires_libtest_terminal_blank_line(self) -> None:
+        contents = self.fixture.logs["command-batch-lifecycle"].removesuffix(b"\n")
+        self.fixture.refresh_log("command-batch-lifecycle", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "does not end"):
             self.fixture.produce()
 
     def test_compile_log_allows_only_the_one_expected_negative_process(self) -> None:

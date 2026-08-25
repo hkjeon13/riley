@@ -242,7 +242,8 @@ WORKSPACE_HEADING_RE = re.compile(
 )
 EXACT_SUMMARY_END_RE = re.compile(
     r"test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; "
-    r"(?P<filtered>[0-9]+) filtered out; finished in [0-9]+(?:\.[0-9]+)?s\r?\n\Z"
+    r"(?P<filtered>[0-9]+) filtered out; finished in [0-9]+(?:\.[0-9]+)?s"
+    r"\r?\n\r?\n\Z"
 )
 PARITY_RE = re.compile(
     r"pr15-execution-completion-parity schema_version=1 decode_steps=(?P<steps>[0-9]+) "
