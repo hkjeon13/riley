@@ -40,6 +40,7 @@ pub const PAGED_KV_BLOCK_TABLE_VERSION: u32 = 1;
 /// Fixed number of logical tokens in every PR 10 physical KV block.
 pub const PAGED_KV_BLOCK_SIZE: u64 = 16;
 #[cfg(feature = "cuda")]
+#[allow(clippy::cast_possible_truncation)] // Guarded by the adjacent const assertion.
 const PAGED_KV_BLOCK_SIZE_ABI: u32 = PAGED_KV_BLOCK_SIZE as u32;
 #[cfg(feature = "cuda")]
 const _: () = assert!(PAGED_KV_BLOCK_SIZE <= u32::MAX as u64);
