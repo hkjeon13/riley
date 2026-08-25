@@ -313,6 +313,74 @@ impl CudaDeviceBuffer {
         Ok(())
     }
 
+    /// Downloads device bytes into ordinary host storage through a reusable
+    /// caller-owned pinned staging buffer.
+    ///
+    /// The full source range, context ownership, and staging capacity are
+    /// validated before the first partial copy. Each chunk is synchronized
+    /// before the pinned bytes are read or reused. The successful path performs
+    /// no host or device allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a range, context, staging-capacity, copy, synchronization, or
+    /// pinned-host read error. A failed completion retains the existing
+    /// fail-closed copy guards.
+    pub fn download_to_slice(
+        &mut self,
+        source_offset: u64,
+        destination: &mut [u8],
+        staging: &mut CudaPinnedHostBuffer,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaDeviceBuffer::download_to_slice";
+        let destination_len = u64::try_from(destination.len()).map_err(|_| {
+            CudaError::out_of_range(OPERATION, "destination length does not fit the CUDA ABI")
+        })?;
+        ensure_same_context(&self.context, &staging.context, OPERATION)?;
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_range(self.byte_len, source_offset, destination_len, OPERATION)?;
+        self.use_state.ensure_idle(OPERATION, "device buffer")?;
+        staging
+            .use_state
+            .ensure_idle(OPERATION, "pinned host buffer")?;
+
+        if destination.is_empty() {
+            return self
+                .copy_to_pinned_async(source_offset, staging, 0, 0, stream)?
+                .synchronize();
+        }
+        if staging.byte_len == 0 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "a non-empty download requires a non-empty pinned staging buffer",
+            ));
+        }
+
+        let staging_capacity = usize::try_from(staging.byte_len).unwrap_or(usize::MAX);
+        let mut downloaded = 0_usize;
+        while downloaded < destination.len() {
+            let chunk_len = staging_capacity.min(destination.len() - downloaded);
+            let downloaded_u64 = u64::try_from(downloaded).map_err(|_| {
+                CudaError::out_of_range(
+                    OPERATION,
+                    "downloaded byte count does not fit the CUDA ABI",
+                )
+            })?;
+            let chunk_len_u64 = u64::try_from(chunk_len).map_err(|_| {
+                CudaError::out_of_range(OPERATION, "chunk length does not fit the CUDA ABI")
+            })?;
+            let chunk_source = source_offset
+                .checked_add(downloaded_u64)
+                .ok_or_else(|| CudaError::out_of_range(OPERATION, "source offset overflow"))?;
+            self.copy_to_pinned_async(chunk_source, staging, 0, chunk_len_u64, stream)?
+                .synchronize()?;
+            staging.read(0, &mut destination[downloaded..downloaded + chunk_len])?;
+            downloaded += chunk_len;
+        }
+        Ok(())
+    }
+
     /// Enqueues an asynchronous pinned-host-to-device copy.
     ///
     /// The returned pending token exclusively borrows the originating stream
