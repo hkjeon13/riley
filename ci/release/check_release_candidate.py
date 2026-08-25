@@ -34,6 +34,20 @@ release_performance = importlib.util.module_from_spec(_PERFORMANCE_SPEC)
 sys.modules[_PERFORMANCE_SPEC.name] = release_performance
 _PERFORMANCE_SPEC.loader.exec_module(release_performance)
 
+_PYTHON_FREE_E2E_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "benchmarks/scripts/check_python_free_release_e2e.py"
+)
+_PYTHON_FREE_E2E_SPEC = importlib.util.spec_from_file_location(
+    "rustinfer_final_candidate_python_free_e2e_contract",
+    _PYTHON_FREE_E2E_PATH,
+)
+if _PYTHON_FREE_E2E_SPEC is None or _PYTHON_FREE_E2E_SPEC.loader is None:  # pragma: no cover
+    raise RuntimeError(f"cannot load Python-free E2E contract: {_PYTHON_FREE_E2E_PATH}")
+python_free_e2e = importlib.util.module_from_spec(_PYTHON_FREE_E2E_SPEC)
+sys.modules[_PYTHON_FREE_E2E_SPEC.name] = python_free_e2e
+_PYTHON_FREE_E2E_SPEC.loader.exec_module(python_free_e2e)
+
 
 MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v1"
 ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
@@ -433,6 +447,68 @@ def _validate_attestation(
         _fail(f"{path}.checks", f"required check set mismatch: {sorted(observed)}")
 
 
+def _validate_python_free_e2e_replay(
+    report: dict[str, Any],
+    raw_evidence_path: Path,
+    *,
+    revision: str,
+    archive_sha256: str,
+    binary_sha256: str,
+    bundle_sha256: str,
+    image_sha256: str,
+    native_correctness: dict[str, Any],
+    native_correctness_sha256: str,
+    optimization_correctness: dict[str, Any],
+) -> None:
+    try:
+        archive = python_free_e2e.load_raw_evidence_archive(raw_evidence_path)
+    except (python_free_e2e.EvidenceError, OSError) as error:
+        _fail("python_free_e2e.raw_evidence", str(error))
+    replayed, diagnostic = python_free_e2e.validate_bound_raw_archive(
+        archive,
+        source_revision=revision,
+        source_archive_sha256=archive_sha256,
+        release_binary_sha256=binary_sha256,
+        release_bundle_sha256=bundle_sha256,
+        image_id=f"sha256:{image_sha256}",
+        correctness_report=native_correctness,
+        correctness_report_sha256=native_correctness_sha256,
+    )
+    if diagnostic is not None or replayed.get("status") != "passed":
+        _fail("python_free_e2e.raw_evidence", diagnostic or "raw replay failed")
+    if replayed != report:
+        _fail("python_free_e2e", "submitted attestation differs from raw replay")
+
+    raw_model = _object(
+        _object(archive["raw"], "python_free_e2e.raw").get("model"),
+        "python_free_e2e.raw.model",
+    )
+    optimizer_model = _object(
+        optimization_correctness.get("model"), "optimization_correctness.model"
+    )
+    cross_bindings = {
+        "model_id": (raw_model.get("model_id"), optimizer_model.get("model_id")),
+        "model_revision": (
+            raw_model.get("model_revision"),
+            optimizer_model.get("revision"),
+        ),
+        "weights_sha256": (
+            raw_model.get("weights_sha256"),
+            optimizer_model.get("weights_sha256"),
+        ),
+        "tokenizer_json_sha256": (
+            raw_model.get("tokenizer_json_sha256"),
+            optimizer_model.get("tokenizer_sha256"),
+        ),
+    }
+    for field, (e2e_value, optimizer_value) in cross_bindings.items():
+        if e2e_value != optimizer_value:
+            _fail(
+                f"python_free_e2e.raw.model.{field}",
+                "does not match optimizer/model provenance",
+            )
+
+
 def _validate_correctness(
     report: dict[str, Any], path: str, revision: str
 ) -> None:
@@ -454,6 +530,16 @@ def _validate_correctness(
     if bindings.get("candidate_git_status_sha256") != hashlib.sha256(b"").hexdigest():
         _fail(f"{path}.bindings.candidate_git_status_sha256", "source tree was not clean")
     _sha256(bindings.get("candidate_executable_sha256"), f"{path}.bindings.candidate_executable_sha256")
+    expected_model_bindings = {
+        "model_id": python_free_e2e.MODEL_ID,
+        "model_revision": python_free_e2e.MODEL_REVISION,
+        "config_sha256": python_free_e2e.MODEL_CONFIG_SHA256,
+        "weights_sha256": python_free_e2e.MODEL_WEIGHTS_SHA256,
+        "tokenizer_sha256": python_free_e2e.TOKENIZER_AGGREGATE_SHA256,
+    }
+    for field, expected in expected_model_bindings.items():
+        if bindings.get(field) != expected:
+            _fail(f"{path}.bindings.{field}", "reviewed model binding mismatch")
     summary = _object(row["summary"], f"{path}.summary")
     expected_summary = {
         "case_count": 31,
@@ -1364,6 +1450,18 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             revision=revision,
             archive_sha256=archive_sha256,
             raw_evidence_path=optimization_raw_path,
+        )
+        _validate_python_free_e2e_replay(
+            loaded["python_free_e2e"][0],
+            raw_paths["python_free_e2e"],
+            revision=revision,
+            archive_sha256=archive_sha256,
+            binary_sha256=binary_sha256,
+            bundle_sha256=bundle_sha256,
+            image_sha256=image_sha256,
+            native_correctness=loaded["native_correctness_report"][0],
+            native_correctness_sha256=native_correctness_sha256,
+            optimization_correctness=loaded["optimization_correctness"][0],
         )
         _validate_performance(
             loaded["performance"][0], "performance", revision=revision,

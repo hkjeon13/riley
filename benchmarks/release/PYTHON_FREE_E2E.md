@@ -18,6 +18,7 @@ file with this closed schema:
   "source_revision": "clean-40-character-candidate-revision",
   "model_id": "HuggingFaceTB/SmolLM2-135M",
   "model_revision": "immutable-model-revision",
+  "config_sha256": "reviewed-lowercase-sha256",
   "weights_sha256": "reviewed-lowercase-sha256",
   "tokenizer_aggregate_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
   "tokenizer_json_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
@@ -49,6 +50,7 @@ export RUSTINFER_E2E_RELEASE_BUNDLE_SHA256=<reviewed-digest>
 export RUSTINFER_E2E_MODEL_DIR=/models/reviewed-checkpoint
 export RUSTINFER_E2E_MODEL_TREE_SHA256=<reviewed-digest>
 export RUSTINFER_E2E_MODEL_REVISION=<immutable-model-revision>
+export RUSTINFER_E2E_CONFIG_SHA256=1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843
 export RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH=model.safetensors
 export RUSTINFER_E2E_WEIGHTS_SHA256=<reviewed-digest>
 export RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH=tokenizer.json
@@ -64,6 +66,12 @@ ci/run_python_free_release_e2e.sh
 The output directory must not exist. The driver verifies all inputs before
 starting CUDA, refuses mutable image references, and creates raw evidence,
 the release-gate attestation, post-SIGTERM shutdown metrics, and SHA256SUMS.
+Before attestation, it creates an uncompressed deterministic
+`python-free-evidence.tar` with exactly six flat regular files:
+`raw-evidence.json`, `correctness-golden.json`, `model-SHA256SUMS`, both
+shutdown metrics files, and an internal checksum manifest over those five
+payloads. The attestation is deliberately outside that tar and binds the tar
+SHA-256, avoiding a circular self-hash.
 The container itself proves real checkpoint load through `/readyz` and
 `/v1/models`; greedy prefill/decode and non-stream/SSE parity against the
 approved golden; fixed-seed sampling repeatability across two clean starts
@@ -83,8 +91,10 @@ final release-candidate gate.
 The golden cannot self-authorize a new output: it must bind the exact passing
 `smollm2-fp32-bf16-native-e0-v2` report, clean candidate revision, immutable
 model revision, weights, the native five-file tokenizer aggregate, and the
-exact runtime `tokenizer.json`. The closed raw evidence repeats those
-bindings and is itself SHA-bound by the attestation. The attestation root stays
+exact runtime `tokenizer.json`. The closed raw archive repeats those bindings;
+the checker enforces its exact inventory and metadata, validates its internal
+checksums, recomputes the five-file tokenizer aggregate from the preserved
+model manifest, and is itself SHA-bound by the attestation. The attestation root stays
 compatible with the final candidate's closed schema; the transitive provenance
 is therefore exposed through `raw_evidence_sha256`, not an unreviewed root
 extension.

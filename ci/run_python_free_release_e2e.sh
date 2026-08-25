@@ -7,6 +7,7 @@ set -euo pipefail
 export LC_ALL=C
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 checker="$repo_root/benchmarks/scripts/check_python_free_release_e2e.py"
+packager="$repo_root/ci/release/package_python_free_e2e_evidence.py"
 
 : "${RUSTINFER_E2E_OUTPUT:?set a new absolute evidence directory}"
 : "${RUSTINFER_E2E_IMAGE_ID:?set the immutable sha256: release image ID}"
@@ -20,6 +21,7 @@ checker="$repo_root/benchmarks/scripts/check_python_free_release_e2e.py"
 : "${RUSTINFER_E2E_MODEL_DIR:?set the real checkpoint directory}"
 : "${RUSTINFER_E2E_MODEL_TREE_SHA256:?set its reviewed canonical tree SHA-256}"
 : "${RUSTINFER_E2E_MODEL_REVISION:?set the immutable model revision}"
+: "${RUSTINFER_E2E_CONFIG_SHA256:?set the reviewed config.json SHA-256}"
 : "${RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH:?set the primary weights path below the model directory}"
 : "${RUSTINFER_E2E_WEIGHTS_SHA256:?set its reviewed SHA-256}"
 : "${RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH:?set the tokenizer path below the model directory}"
@@ -49,6 +51,7 @@ for digest in \
     "$RUSTINFER_E2E_RELEASE_BINARY_SHA256" \
     "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256" \
     "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
+    "$RUSTINFER_E2E_CONFIG_SHA256" \
     "$RUSTINFER_E2E_WEIGHTS_SHA256" \
     "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
     "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
@@ -76,6 +79,7 @@ for path in "$RUSTINFER_E2E_OUTPUT" "$RUSTINFER_E2E_MODEL_DIR"; do
 done
 test ! -e "$RUSTINFER_E2E_OUTPUT"
 test -d "$RUSTINFER_E2E_MODEL_DIR"
+test -f "$RUSTINFER_E2E_MODEL_DIR/config.json" && test ! -L "$RUSTINFER_E2E_MODEL_DIR/config.json"
 test -f "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH"
 test ! -L "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH"
 test -f "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH"
@@ -94,6 +98,7 @@ sha_file() { sha256sum "$1" | awk '{print $1}'; }
 test "$(sha_file "$RUSTINFER_E2E_SOURCE_ARCHIVE")" = "$RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_RELEASE_BINARY")" = "$RUSTINFER_E2E_RELEASE_BINARY_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_RELEASE_BUNDLE")" = "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256"
+test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/config.json")" = "$RUSTINFER_E2E_CONFIG_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256"
@@ -133,12 +138,13 @@ test "$(sha_file "$model_manifest")" = "$RUSTINFER_E2E_MODEL_TREE_SHA256"
 
 golden_schema=$(jq -er '.schema_version' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
 test "$golden_schema" = rustinfer.python-free-release-e2e-golden.v1
-jq -e 'keys == ["correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_aggregate_sha256","tokenizer_json_sha256","weights_sha256"]' \
+jq -e 'keys == ["config_sha256","correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_aggregate_sha256","tokenizer_json_sha256","weights_sha256"]' \
     "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" >/dev/null
 test "$(jq -er '.correctness_gate_id' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v2
 test "$(jq -er '.correctness_report_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
 test "$(jq -er '.source_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.model_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_MODEL_REVISION"
+test "$(jq -er '.config_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CONFIG_SHA256"
 test "$(jq -er '.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
 test "$(jq -er '.tokenizer_json_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
 test "$(jq -er '.tokenizer_aggregate_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
@@ -147,6 +153,7 @@ test "$(jq -er '.status' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = pass
 test "$(jq -er '.bindings.candidate_git_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.bindings.candidate_git_status_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$(printf '' | sha256sum | awk '{print $1}')"
 test "$(jq -er '.bindings.model_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_MODEL_REVISION"
+test "$(jq -er '.bindings.config_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_CONFIG_SHA256"
 test "$(jq -er '.bindings.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
 test "$(jq -er '.bindings.tokenizer_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
 model_id=$(jq -er '.model_id | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"))' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
@@ -426,6 +433,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     --arg model_id "$model_id" \
     --arg model_revision "$RUSTINFER_E2E_MODEL_REVISION" \
     --arg model_tree_sha256 "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
+    --arg config_sha256 "$RUSTINFER_E2E_CONFIG_SHA256" \
     --arg weights_sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
     --arg tokenizer_aggregate_sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
     --arg tokenizer_json_sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
@@ -466,7 +474,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
       recorded_at_utc:$recorded_at_utc,status:"success",
       source:{git_revision:$git_revision,git_dirty:false,source_archive_sha256:$source_archive_sha256},
       release:{binary_sha256:$binary_sha256,bundle_sha256:$bundle_sha256,image_sha256:$image_sha256},
-      model:{model_id:$model_id,model_revision:$model_revision,model_tree_sha256:$model_tree_sha256,weights_sha256:$weights_sha256,tokenizer_aggregate_sha256:$tokenizer_aggregate_sha256,tokenizer_json_sha256:$tokenizer_json_sha256,correctness_gate_id:$correctness_gate_id,correctness_report_sha256:$correctness_report_sha256,correctness_golden_sha256:$correctness_golden_sha256},
+      model:{model_id:$model_id,model_revision:$model_revision,model_tree_sha256:$model_tree_sha256,config_sha256:$config_sha256,weights_sha256:$weights_sha256,tokenizer_aggregate_sha256:$tokenizer_aggregate_sha256,tokenizer_json_sha256:$tokenizer_json_sha256,correctness_gate_id:$correctness_gate_id,correctness_report_sha256:$correctness_report_sha256,correctness_golden_sha256:$correctness_golden_sha256},
       runtime:{container_ids:[$first_container_id,$second_container_id],network_mode:"none",image_id:$image_id,image_binary_sha256:$image_binary_sha256},
       observations:{
         readyz:{http_status:200,ready:true,accepting:true},models:{http_status:200,model_ids:($model_ids|fromjson)},
@@ -479,8 +487,18 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     }' >"$raw_evidence"
 )
 
+raw_archive="$RUSTINFER_E2E_OUTPUT/python-free-evidence.tar"
+python3 "$packager" \
+    --output "$raw_archive" \
+    --raw-evidence "$raw_evidence" \
+    --correctness-golden "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
+    --model-manifest "$model_manifest" \
+    --shutdown-metrics "$shutdown_metrics" \
+    --repeat-shutdown-metrics "$repeat_shutdown_metrics"
+
 python3 "$checker" \
     --evidence "$raw_evidence" \
+    --raw-archive "$raw_archive" \
     --source-revision "$RUSTINFER_E2E_SOURCE_REVISION" \
     --source-archive "$RUSTINFER_E2E_SOURCE_ARCHIVE" \
     --release-binary "$RUSTINFER_E2E_RELEASE_BINARY" \
@@ -503,7 +521,6 @@ python3 "$checker" \
 
 ( set -o noclobber
   cd "$RUSTINFER_E2E_OUTPUT"
-  sha256sum raw-evidence.json attestation.json container-evidence/shutdown-metrics.json \
-      container-evidence/repeat-shutdown-metrics.json >SHA256SUMS
+  sha256sum attestation.json python-free-evidence.tar >SHA256SUMS
 )
 echo "Python-free real-model release E2E gate passed: $RUSTINFER_E2E_OUTPUT"

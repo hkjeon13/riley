@@ -52,6 +52,17 @@ assert PROFILE_FIXTURE_SPEC is not None and PROFILE_FIXTURE_SPEC.loader is not N
 profile_fixture_module = importlib.util.module_from_spec(PROFILE_FIXTURE_SPEC)
 sys.modules[PROFILE_FIXTURE_SPEC.name] = profile_fixture_module
 PROFILE_FIXTURE_SPEC.loader.exec_module(profile_fixture_module)
+E2E_FIXTURE_SCRIPT = (
+    REPOSITORY_ROOT
+    / "benchmarks/scripts/tests/test_check_python_free_release_e2e.py"
+)
+E2E_FIXTURE_SPEC = importlib.util.spec_from_file_location(
+    "release_candidate_python_free_e2e_fixture", E2E_FIXTURE_SCRIPT
+)
+assert E2E_FIXTURE_SPEC is not None and E2E_FIXTURE_SPEC.loader is not None
+e2e_fixture_module = importlib.util.module_from_spec(E2E_FIXTURE_SPEC)
+sys.modules[E2E_FIXTURE_SPEC.name] = e2e_fixture_module
+E2E_FIXTURE_SPEC.loader.exec_module(e2e_fixture_module)
 
 
 def digest(contents: bytes) -> str:
@@ -104,7 +115,6 @@ class CandidateFixture:
             source_revision=REVISION,
             source_date_epoch=EPOCH,
         )
-        self.paths["python_raw"].write_bytes(b"python-free raw evidence")
         self.paths["cuda_raw"].write_bytes(b"cuda fault raw evidence")
         self._write_tar(
             self.paths["native_replay"],
@@ -170,6 +180,99 @@ class CandidateFixture:
             "raw_evidence_sha256": digest(self.paths[raw].read_bytes()),
             "checks": [{"id": check, "passed": True} for check in sorted(checks)],
         }
+
+    def _build_python_e2e_document(
+        self, native_correctness_sha256: str
+    ) -> dict[str, object]:
+        template_root = self.root / "python-e2e-template"
+        template_root.mkdir()
+        template = e2e_fixture_module.E2EFixture(template_root)
+        raw = copy.deepcopy(template.raw)
+        binding = self._binding()
+        raw["source"] = {
+            "git_revision": REVISION,
+            "git_dirty": False,
+            "source_archive_sha256": binding["source_archive_sha256"],
+        }
+        raw["release"] = {
+            "binary_sha256": binding["release_binary_sha256"],
+            "bundle_sha256": binding["release_bundle_sha256"],
+            "image_sha256": self.image_sha,
+        }
+        raw["runtime"]["image_id"] = f"sha256:{self.image_sha}"
+        raw["runtime"]["image_binary_sha256"] = binding[
+            "release_binary_sha256"
+        ]
+
+        model_files = {
+            "config.json": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+            "model.safetensors": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+            **e2e_fixture_module.checker.TOKENIZER_FILES_SHA256,
+        }
+        model_manifest = b"".join(
+            f"{sha256}  {name}\n".encode("ascii")
+            for name, sha256 in sorted(model_files.items())
+        )
+        golden = {
+            "schema_version": e2e_fixture_module.checker.GOLDEN_SCHEMA,
+            "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "correctness_report_sha256": native_correctness_sha256,
+            "source_revision": REVISION,
+            "model_id": "HuggingFaceTB/SmolLM2-135M",
+            "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+            "config_sha256": model_files["config.json"],
+            "weights_sha256": model_files["model.safetensors"],
+            "tokenizer_aggregate_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
+            "tokenizer_json_sha256": model_files["tokenizer.json"],
+            "prompt": "A bounded release probe",
+            "max_tokens": 8,
+            "expected_greedy_text_sha256": template.expected_text_sha256,
+        }
+        golden_bytes = (
+            json.dumps(golden, sort_keys=True, indent=2) + "\n"
+        ).encode()
+        raw["model"] = {
+            "model_id": golden["model_id"],
+            "model_revision": golden["model_revision"],
+            "model_tree_sha256": digest(model_manifest),
+            "config_sha256": golden["config_sha256"],
+            "weights_sha256": golden["weights_sha256"],
+            "tokenizer_aggregate_sha256": golden["tokenizer_aggregate_sha256"],
+            "tokenizer_json_sha256": golden["tokenizer_json_sha256"],
+            "correctness_gate_id": golden["correctness_gate_id"],
+            "correctness_report_sha256": native_correctness_sha256,
+            "correctness_golden_sha256": digest(golden_bytes),
+        }
+        raw["observations"]["models"]["model_ids"] = [golden["model_id"]]
+        raw_bytes = (json.dumps(raw, sort_keys=True, indent=2) + "\n").encode()
+        payloads = {
+            "correctness-golden.json": golden_bytes,
+            "model-SHA256SUMS": model_manifest,
+            "raw-evidence.json": raw_bytes,
+            "repeat-shutdown-metrics.json": template.repeat_shutdown_metrics.read_bytes(),
+            "shutdown-metrics.json": template.shutdown_metrics.read_bytes(),
+        }
+        payloads["SHA256SUMS"] = b"".join(
+            f"{digest(payloads[name])}  {name}\n".encode("ascii")
+            for name in e2e_fixture_module.checker.RAW_ARCHIVE_PAYLOADS
+        )
+        e2e_fixture_module.write_raw_tar(self.paths["python_raw"], payloads)
+        archive = e2e_fixture_module.checker.load_raw_evidence_archive(
+            self.paths["python_raw"]
+        )
+        report, diagnostic = e2e_fixture_module.checker.validate_bound_raw_archive(
+            archive,
+            source_revision=REVISION,
+            source_archive_sha256=binding["source_archive_sha256"],
+            release_binary_sha256=binding["release_binary_sha256"],
+            release_bundle_sha256=binding["release_bundle_sha256"],
+            image_id=f"sha256:{self.image_sha}",
+            correctness_report=self.documents["native_correctness"],
+            correctness_report_sha256=native_correctness_sha256,
+        )
+        if diagnostic is not None:
+            raise AssertionError(diagnostic)
+        return report
 
     def _build_performance_document(self, optimization_sha: str) -> dict[str, object]:
         baseline = json.loads(PERFORMANCE_BASELINE.read_text(encoding="utf-8"))
@@ -347,9 +450,6 @@ class CandidateFixture:
         }
 
     def _build_documents(self) -> None:
-        self.documents["python_report"] = self._attestation(
-            "python-free-clean-runtime-e2e", "python_raw", PYTHON_FREE_CHECKS
-        )
         self.documents["cuda_report"] = self._attestation(
             "cuda-fault-injection", "cuda_raw", CUDA_FAULT_CHECKS
         )
@@ -383,6 +483,11 @@ class CandidateFixture:
                 "candidate_git_revision": REVISION,
                 "candidate_git_status_sha256": hashlib.sha256(b"").hexdigest(),
                 "candidate_executable_sha256": digest(b"correctness executable"),
+                "model_id": "HuggingFaceTB/SmolLM2-135M",
+                "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+                "config_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+                "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+                "tokenizer_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
             },
             "summary": {
                 "case_count": 31,
@@ -409,6 +514,9 @@ class CandidateFixture:
         }
         native_correctness_sha = digest(
             (json.dumps(self.documents["native_correctness"], sort_keys=True, indent=2) + "\n").encode()
+        )
+        self.documents["python_report"] = self._build_python_e2e_document(
+            native_correctness_sha
         )
         self.documents["native_replay_validation"] = {
             "schema_version": NATIVE_REPLAY_VERSION,
@@ -813,6 +921,37 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("required check set mismatch", report["errors"][0])
+
+    def test_python_free_attestation_must_equal_raw_replay(self) -> None:
+        self.fixture.documents["python_report"]["checks"].reverse()
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("differs from raw replay", report["errors"][0])
+
+    def test_python_free_raw_source_cannot_be_self_rebound(self) -> None:
+        payloads = e2e_fixture_module.read_raw_tar(
+            self.fixture.paths["python_raw"]
+        )
+        raw = json.loads(payloads["raw-evidence.json"])
+        raw["source"]["source_archive_sha256"] = digest(b"other source")
+        payloads["raw-evidence.json"] = (
+            json.dumps(raw, sort_keys=True, indent=2) + "\n"
+        ).encode()
+        payloads["SHA256SUMS"] = b"".join(
+            f"{digest(payloads[name])}  {name}\n".encode("ascii")
+            for name in e2e_fixture_module.checker.RAW_ARCHIVE_PAYLOADS
+        )
+        e2e_fixture_module.write_raw_tar(
+            self.fixture.paths["python_raw"], payloads
+        )
+        self.fixture.documents["python_report"]["raw_evidence_sha256"] = digest(
+            self.fixture.paths["python_raw"].read_bytes()
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("raw.source", report["errors"][0])
 
     def test_soak_contract_and_duration_checks_cannot_be_self_asserted(self) -> None:
         self.fixture.documents["soak"]["bindings"][

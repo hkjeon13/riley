@@ -85,12 +85,11 @@ byte-identical to the separately supplied executable. The image is identified
 only by an immutable `sha256:` image ID, which every runtime report must repeat
 exactly.
 
-## Log-backed gate attestation
+## Raw-replayed gate attestations
 
-The Python-free clean-runtime and CUDA fault runners currently produce logs
-and `SHA256SUMS`, not a common JSON result. Preserve each output directory as a
-deterministic tar file (do not discard its internal checksum manifest), hash
-that tar, and create this closed standard-library-readable attestation:
+The Python-free clean-runtime and CUDA fault runners preserve deterministic
+raw evidence tar files and create this closed standard-library-readable
+attestation:
 
 ```json
 {
@@ -138,7 +137,14 @@ The CUDA attestation uses `gate=cuda-fault-injection` and requires:
 
 An attestation is an index into the preserved raw evidence, not a replacement
 for it. Its `raw_evidence_sha256` must equal the separately hashed artifact in
-the candidate manifest.
+the candidate manifest. For Python-free E2E, the tar excludes the attestation
+to avoid a circular hash and contains exactly `raw-evidence.json`, the reviewed
+golden, canonical model checksum manifest, two shutdown-metrics documents, and
+an internal `SHA256SUMS`. The final candidate opens that tar, validates its
+closed inventory and canonical metadata, replays all runtime observations,
+recomputes model/tokenizer/shutdown bindings, and requires the replayed
+attestation object to equal the submitted object exactly. It also cross-binds
+the native five-file tokenizer aggregate and optimizer `tokenizer.json` hash.
 
 ## Native and optimization correctness are separate gates
 

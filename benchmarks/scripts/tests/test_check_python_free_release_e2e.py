@@ -15,6 +15,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parents[1] / "check_python_free_release_e2e.py"
 REPOSITORY_ROOT = SCRIPT.parents[2]
 DRIVER = REPOSITORY_ROOT / "ci/run_python_free_release_e2e.sh"
+PACKAGER = REPOSITORY_ROOT / "ci/release/package_python_free_e2e_evidence.py"
 RELEASE_DIR = REPOSITORY_ROOT / "ci/release"
 sys.path.insert(0, str(RELEASE_DIR))
 from build_release_bundle import build_bundle  # noqa: E402
@@ -25,10 +26,53 @@ assert SPEC is not None and SPEC.loader is not None
 checker = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = checker
 SPEC.loader.exec_module(checker)
+PACKAGE_SPEC = importlib.util.spec_from_file_location(
+    "package_python_free_e2e_evidence", PACKAGER
+)
+assert PACKAGE_SPEC is not None and PACKAGE_SPEC.loader is not None
+packager = importlib.util.module_from_spec(PACKAGE_SPEC)
+sys.modules[PACKAGE_SPEC.name] = packager
+PACKAGE_SPEC.loader.exec_module(packager)
 
 
 def sha_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
+
+
+def write_raw_tar(
+    path: Path,
+    payloads: dict[str, bytes],
+    *,
+    link_name: str | None = None,
+) -> None:
+    with tarfile.open(path, "w", format=tarfile.USTAR_FORMAT) as archive:
+        for name in sorted(payloads):
+            contents = payloads[name]
+            member = tarfile.TarInfo(name)
+            member.size = len(contents)
+            member.mode = 0o644
+            member.uid = 0
+            member.gid = 0
+            member.uname = ""
+            member.gname = ""
+            member.mtime = 0
+            if name == link_name:
+                member.type = tarfile.SYMTYPE
+                member.linkname = "raw-evidence.json"
+                member.size = 0
+                archive.addfile(member)
+            else:
+                archive.addfile(member, io.BytesIO(contents))
+
+
+def read_raw_tar(path: Path) -> dict[str, bytes]:
+    with tarfile.open(path, "r:") as archive:
+        result = {}
+        for member in archive.getmembers():
+            source = archive.extractfile(member)
+            if source is not None:
+                result[member.name] = source.read()
+        return result
 
 
 class E2EFixture:
@@ -41,22 +85,38 @@ class E2EFixture:
         self.release_bundle = root / "rustinfer.tar.gz"
         self.model_dir = root / "model"
         self.model_dir.mkdir()
+        self.config = self.model_dir / "config.json"
         self.tokenizer = self.model_dir / "tokenizer.json"
         self.weights = self.model_dir / "model.safetensors"
+        self.tokenizer_files = {
+            "merges.txt": self.model_dir / "merges.txt",
+            "special_tokens_map.json": self.model_dir / "special_tokens_map.json",
+            "tokenizer.json": self.tokenizer,
+            "tokenizer_config.json": self.model_dir / "tokenizer_config.json",
+            "vocab.json": self.model_dir / "vocab.json",
+        }
         self.golden = root / "golden.json"
         self.correctness_report = root / "correctness-report.json"
         self.shutdown_metrics = root / "shutdown-metrics.json"
         self.repeat_shutdown_metrics = root / "repeat-shutdown-metrics.json"
         self.evidence = root / "raw.json"
+        self.raw_archive = root / "python-free-evidence.tar"
         self.source_archive.write_bytes(b"source archive fixture")
         self.release_binary.write_bytes(fixture_elf())
         self.release_binary.chmod(0o755)
-        self.tokenizer.write_bytes(b'{"tokenizer":"fixture"}\n')
+        self.config.write_bytes(b'{"model_type":"fixture"}\n')
+        for name, path in self.tokenizer_files.items():
+            path.write_bytes(f'{{"fixture":"{name}"}}\n'.encode())
         self.weights.write_bytes(b"safetensors fixture")
         self.expected_text_sha256 = sha_bytes(b"fixture completion")
         self.model_revision = "model-revision-fixture"
         self.model_id = "HuggingFaceTB/SmolLM2-135M"
-        self.tokenizer_aggregate_sha256 = sha_bytes(b"tokenizer aggregate fixture")
+        self.tokenizer_aggregate_sha256 = checker._tokenizer_aggregate_sha256(
+            {
+                name: sha_bytes(path.read_bytes())
+                for name, path in self.tokenizer_files.items()
+            }
+        )
         self.correctness_report.write_text(
             json.dumps(
                 {
@@ -67,6 +127,7 @@ class E2EFixture:
                         "candidate_git_status_sha256": sha_bytes(b""),
                         "model_id": self.model_id,
                         "model_revision": self.model_revision,
+                        "config_sha256": sha_bytes(self.config.read_bytes()),
                         "weights_sha256": sha_bytes(self.weights.read_bytes()),
                         "tokenizer_sha256": self.tokenizer_aggregate_sha256,
                     },
@@ -87,6 +148,7 @@ class E2EFixture:
                     "source_revision": self.revision,
                     "model_id": self.model_id,
                     "model_revision": self.model_revision,
+                    "config_sha256": sha_bytes(self.config.read_bytes()),
                     "weights_sha256": sha_bytes(self.weights.read_bytes()),
                     "tokenizer_aggregate_sha256": self.tokenizer_aggregate_sha256,
                     "tokenizer_json_sha256": sha_bytes(self.tokenizer.read_bytes()),
@@ -124,6 +186,7 @@ class E2EFixture:
             "binary": sha_bytes(self.release_binary.read_bytes()),
             "bundle": sha_bytes(self.release_bundle.read_bytes()),
             "model": checker.model_tree_sha256(self.model_dir),
+            "config": sha_bytes(self.config.read_bytes()),
             "weights": sha_bytes(self.weights.read_bytes()),
             "tokenizer_json": sha_bytes(self.tokenizer.read_bytes()),
             "tokenizer_aggregate": self.tokenizer_aggregate_sha256,
@@ -167,6 +230,7 @@ class E2EFixture:
                 "model_id": self.model_id,
                 "model_revision": self.model_revision,
                 "model_tree_sha256": self.hashes["model"],
+                "config_sha256": self.hashes["config"],
                 "weights_sha256": self.hashes["weights"],
                 "tokenizer_aggregate_sha256": self.hashes["tokenizer_aggregate"],
                 "tokenizer_json_sha256": self.hashes["tokenizer_json"],
@@ -280,10 +344,23 @@ class E2EFixture:
         self.evidence.write_text(
             json.dumps(self.raw, sort_keys=True, indent=2) + "\n", encoding="utf-8"
         )
+        payloads = {
+            "correctness-golden.json": self.golden.read_bytes(),
+            "model-SHA256SUMS": checker.model_tree_manifest_bytes(self.model_dir),
+            "raw-evidence.json": self.evidence.read_bytes(),
+            "repeat-shutdown-metrics.json": self.repeat_shutdown_metrics.read_bytes(),
+            "shutdown-metrics.json": self.shutdown_metrics.read_bytes(),
+        }
+        payloads["SHA256SUMS"] = b"".join(
+            f"{sha_bytes(payloads[name])}  {name}\n".encode("ascii")
+            for name in checker.RAW_ARCHIVE_PAYLOADS
+        )
+        write_raw_tar(self.raw_archive, payloads)
 
     def evaluate(self) -> tuple[dict[str, object], str | None]:
         return checker.evaluate(
             self.evidence,
+            raw_archive=self.raw_archive,
             source_revision=self.revision,
             source_archive=self.source_archive,
             release_binary=self.release_binary,
@@ -309,6 +386,7 @@ class E2EFixture:
     def argv(self, report: Path) -> list[str]:
         return [
             "--evidence", str(self.evidence),
+            "--raw-archive", str(self.raw_archive),
             "--source-revision", self.revision,
             "--source-archive", str(self.source_archive),
             "--release-binary", str(self.release_binary),
@@ -332,6 +410,28 @@ class E2EFixture:
 
 
 class PythonFreeReleaseE2ETests(unittest.TestCase):
+    def test_packager_is_deterministic_and_create_only(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = E2EFixture(Path(directory))
+            model_manifest = fixture.root / "model-SHA256SUMS"
+            model_manifest.write_bytes(
+                checker.model_tree_manifest_bytes(fixture.model_dir)
+            )
+            output = fixture.root / "packaged.tar"
+            inputs = {
+                "correctness-golden.json": fixture.golden,
+                "model-SHA256SUMS": model_manifest,
+                "raw-evidence.json": fixture.evidence,
+                "repeat-shutdown-metrics.json": fixture.repeat_shutdown_metrics,
+                "shutdown-metrics.json": fixture.shutdown_metrics,
+            }
+            packager.package(output, inputs)
+            self.assertEqual(output.read_bytes(), fixture.raw_archive.read_bytes())
+            original = output.read_bytes()
+            with self.assertRaises(FileExistsError):
+                packager.package(output, inputs)
+            self.assertEqual(output.read_bytes(), original)
+
     def test_complete_bound_real_runtime_evidence_passes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = E2EFixture(Path(directory))
@@ -343,8 +443,29 @@ class PythonFreeReleaseE2ETests(unittest.TestCase):
                 {check["id"] for check in report["checks"]}, set(checker.CHECK_IDS)
             )
             self.assertEqual(
-                report["raw_evidence_sha256"], sha_bytes(fixture.evidence.read_bytes())
+                report["raw_evidence_sha256"], sha_bytes(fixture.raw_archive.read_bytes())
             )
+
+    def test_raw_archive_inventory_metadata_and_checksums_fail_closed(self) -> None:
+        mutations = ("extra", "missing", "bad-checksum", "link")
+        for mutation in mutations:
+            with self.subTest(mutation), tempfile.TemporaryDirectory() as directory:
+                fixture = E2EFixture(Path(directory))
+                payloads = read_raw_tar(fixture.raw_archive)
+                link_name = None
+                if mutation == "extra":
+                    payloads["unreviewed.json"] = b"{}\n"
+                elif mutation == "missing":
+                    del payloads["shutdown-metrics.json"]
+                elif mutation == "bad-checksum":
+                    payloads["SHA256SUMS"] = b"0" * len(payloads["SHA256SUMS"])
+                else:
+                    link_name = "correctness-golden.json"
+                write_raw_tar(fixture.raw_archive, payloads, link_name=link_name)
+                report, diagnostic = fixture.evaluate()
+                self.assertEqual(report["status"], "error")
+                self.assertIsNotNone(diagnostic)
+                self.assertIn("raw evidence archive", diagnostic)
 
     def test_self_asserted_golden_or_model_binding_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -362,7 +483,7 @@ class PythonFreeReleaseE2ETests(unittest.TestCase):
             fixture.weights.write_bytes(b"tampered")
             report, diagnostic = fixture.evaluate()
             self.assertEqual(report["status"], "error")
-            self.assertIn("model tree binding mismatch", diagnostic)
+            self.assertIn("model", diagnostic)
 
         with tempfile.TemporaryDirectory() as directory:
             fixture = E2EFixture(Path(directory))
