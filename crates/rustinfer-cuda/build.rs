@@ -78,16 +78,7 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         .arg(format!("-DCMAKE_CUDA_ARCHITECTURES={architectures}"))
         .arg(format!("-DCUDAToolkit_ROOT={}", toolkit.root.display()))
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
-    let fault_injection = if env::var_os("CARGO_FEATURE_CUDA_TEST_FAULT_INJECTION").is_some() {
-        "ON"
-    } else {
-        "OFF"
-    };
-    // Always overwrite a possibly reused CMake cache: a prior test-only build
-    // must never leave destructive hooks enabled for a production feature set.
-    configure.arg(format!(
-        "-DRUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION={fault_injection}"
-    ));
+    configure_fault_injection(&mut configure);
     run(&mut configure, "configure the native CUDA library")?;
 
     let cublaslt_link_dir = discover_dynamic_cublaslt(&build_dir, profile, &toolkit)?;
@@ -150,6 +141,19 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=cuda");
     Ok(())
+}
+
+fn configure_fault_injection(configure: &mut Command) {
+    let enabled = if env::var_os("CARGO_FEATURE_CUDA_TEST_FAULT_INJECTION").is_some() {
+        "ON"
+    } else {
+        "OFF"
+    };
+    // Always overwrite a possibly reused CMake cache: a prior test-only build
+    // must never leave destructive hooks enabled for a production feature set.
+    configure.arg(format!(
+        "-DRUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION={enabled}"
+    ));
 }
 
 fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
