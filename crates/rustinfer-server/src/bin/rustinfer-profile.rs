@@ -294,15 +294,15 @@ impl Options {
             ));
         }
         match (self.role, runtime_selection) {
-            (Role::Baseline, RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate))
-            | (Role::Candidate, RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused))
-            | (
+            (
                 Role::Baseline,
-                RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation),
+                RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate)
+                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation),
             )
             | (
                 Role::Candidate,
-                RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
+                RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused)
+                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
             ) => {}
             _ => {
                 return Err(
@@ -920,14 +920,12 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
         PreparedLlamaForwardConfig::default(),
     );
     let executor = match options.runtime_selection()? {
-        RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate) => executor
+        RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate)
+        | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation) => executor
             .with_separate_residual_norm()
             .with_per_operation_completion(),
         RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused) => executor
             .with_fused_residual_norm()
-            .with_per_operation_completion(),
-        RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation) => executor
-            .with_separate_residual_norm()
             .with_per_operation_completion(),
         RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch) => executor
             .with_separate_residual_norm()
