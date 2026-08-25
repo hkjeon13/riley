@@ -169,6 +169,27 @@ typedef struct RustInferCudaResidualAddParams {
   uint64_t reserved[5];
 } RustInferCudaResidualAddParams;
 
+// Fuses the exact BF16/F32 residual storage boundary with the immediately
+// following RMSNorm. residual_output stores round(left + right) exactly as the
+// standalone residual primitive would. RMSNorm reduces those stored values in
+// FP32 and preserves its existing normalized-to-storage boundary before the
+// learned weight multiply. The two outputs and weight must not overlap; exact
+// residual-output alias with either residual input remains supported.
+typedef struct RustInferCudaResidualRmsNormParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan left;
+  RustInferCudaBufferSpan right;
+  RustInferCudaBufferSpan weight;
+  RustInferCudaBufferSpan residual_output;
+  RustInferCudaBufferSpan normalized_output;
+  uint64_t row_count;
+  uint64_t hidden_size;
+  float epsilon;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaResidualRmsNormParams;
+
 // Adds one BF16 [column_count] bias vector to every row of a contiguous BF16
 // [row_count, column_count] matrix in place. Each pair is expanded to F32,
 // added once, then rounded to BF16 with round-to-nearest-even. column_count
@@ -906,6 +927,13 @@ RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
 // Exact output alias with either input is supported. Partial overlap is not.
 RustInferCudaStatus rustinfer_cuda_residual_add_execute(
     const RustInferCudaResidualAddParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Exact fused equivalent of residual_add followed by RMSNorm. This is an
+// additive ABI-v1 entry point; the standalone functions remain the fallback.
+RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

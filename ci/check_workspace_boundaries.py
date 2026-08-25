@@ -70,7 +70,7 @@ EXPECTED_FEATURES = {
         "default": [],
     },
     "rustinfer-server": {
-        "bench": [],
+        "bench": ["dep:serde", "dep:serde_json"],
         "cuda": ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"],
         "default": [],
         "experimental": [],
@@ -775,13 +775,24 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
             raise BoundaryError(f"{name}: default features must remain empty")
 
     server_targets = packages["rustinfer-server"].get("targets", [])
-    server_bins = [target for target in server_targets if "bin" in target.get("kind", [])]
-    if len(server_bins) != 1:
-        raise BoundaryError("rustinfer-server must own exactly one production binary")
-    binary = server_bins[0]
-    if binary.get("name") != "rustinfer" or binary.get("required-features") != ["server"]:
+    server_bins = {
+        target.get("name"): target
+        for target in server_targets
+        if "bin" in target.get("kind", [])
+    }
+    if set(server_bins) != {"rustinfer", "rustinfer-profile"}:
+        raise BoundaryError(
+            "rustinfer-server must own exactly the production and native-profile binaries"
+        )
+    production_binary = server_bins["rustinfer"]
+    if production_binary.get("required-features") != ["server"]:
         raise BoundaryError(
             "the rustinfer binary must be owned by rustinfer-server and require only `server`"
+        )
+    profile_binary = server_bins["rustinfer-profile"]
+    if profile_binary.get("required-features") != ["bench", "cuda"]:
+        raise BoundaryError(
+            "the rustinfer-profile binary must require exactly `bench` and `cuda`"
         )
     for name, package in packages.items():
         if name == "rustinfer-server":

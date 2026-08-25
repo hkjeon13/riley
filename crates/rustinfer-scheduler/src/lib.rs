@@ -71,7 +71,10 @@ pub use execution::{
     IterationCommitFailure, IterationTiming, PreparedLlamaIteration, SampledIterationToken,
 };
 #[cfg(feature = "cuda")]
-pub use execution::{IterationExecutionFailure, execute_llama_iteration};
+pub use execution::{
+    IterationExecutionFailure, LlamaIterationCudaTimer, execute_llama_iteration,
+    execute_llama_iteration_timed,
+};
 pub use metrics::{
     IterationMetricSample, MetricWindowSnapshot, SchedulerGauges, SchedulerMetricsSnapshot,
 };

@@ -5,8 +5,9 @@ use std::error::Error;
 use rustinfer_cuda::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
     CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream, EmbeddingError,
-    EmbeddingParams, GatedMultiplyParams, ResidualAddParams, RmsNormParams, RopeParams, SiluParams,
-    cast, embedding, gated_multiply, residual_add, rms_norm, rope, silu,
+    EmbeddingParams, GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams,
+    RopeParams, SiluParams, cast, embedding, gated_multiply, residual_add, residual_rms_norm,
+    rms_norm, rope, silu,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -112,6 +113,176 @@ fn assert_close(actual: &[f32], expected: &[f32], tolerance: f32) {
             "value {index}: expected {expected}, got {actual}, tolerance {tolerance}"
         );
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ExactFloat {
+    F32,
+    Bf16,
+}
+
+impl ExactFloat {
+    const fn dtype(self) -> CudaDType {
+        match self {
+            Self::F32 => CudaDType::F32,
+            Self::Bf16 => CudaDType::BF16,
+        }
+    }
+
+    fn bytes(self, values: &[f32]) -> Vec<u8> {
+        match self {
+            Self::F32 => f32_bytes(values),
+            Self::Bf16 => bf16_bytes(values),
+        }
+    }
+}
+
+fn assert_error_kind(error: &rustinfer_cuda::CudaError, expected: CudaErrorKind, label: &str) {
+    assert_eq!(error.kind(), expected, "{label}: {error}");
+}
+
+#[derive(Clone, Copy)]
+struct Bf16FusedDescriptor {
+    matrix_span_bytes: u64,
+    right_dtype: CudaDType,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_bf16_fused_descriptor(
+    left: &CudaDeviceBuffer,
+    right: &CudaDeviceBuffer,
+    weight: &CudaDeviceBuffer,
+    residual_output: &mut CudaDeviceBuffer,
+    normalized_output: &mut CudaDeviceBuffer,
+    stream: &mut CudaStream,
+    descriptor: Bf16FusedDescriptor,
+) -> rustinfer_cuda::CudaResult<()> {
+    let mut params = ResidualRmsNormParams {
+        left: CudaBufferSpan::new(left, CudaDType::BF16, 0, descriptor.matrix_span_bytes)?,
+        right: CudaBufferSpan::new(
+            right,
+            descriptor.right_dtype,
+            0,
+            descriptor.matrix_span_bytes,
+        )?,
+        weight: CudaBufferSpan::new(weight, CudaDType::BF16, 0, 6)?,
+        residual_output: CudaBufferSpanMut::new(
+            residual_output,
+            CudaDType::BF16,
+            0,
+            descriptor.matrix_span_bytes,
+        )?,
+        normalized_output: CudaBufferSpanMut::new(
+            normalized_output,
+            CudaDType::BF16,
+            0,
+            descriptor.matrix_span_bytes,
+        )?,
+        row_count: descriptor.row_count,
+        hidden_size: descriptor.hidden_size,
+        epsilon: descriptor.epsilon,
+    };
+    residual_rms_norm(&mut params, stream)
+}
+
+fn residual_rms_norm_exact_case(
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    staging: &mut CudaPinnedHostBuffer,
+    storage: ExactFloat,
+    row_count: u64,
+    hidden_size: u64,
+) -> TestResult {
+    let element_count =
+        usize::try_from(row_count.checked_mul(hidden_size).ok_or("shape overflow")?)?;
+    let hidden_size_usize = usize::try_from(hidden_size)?;
+    let left_host: Vec<_> = (0..element_count)
+        .map(|index| {
+            let centered = i32::try_from(index.wrapping_mul(17) % 37).unwrap_or(0) - 18;
+            centered as f32 / 9.0
+        })
+        .collect();
+    let right_host: Vec<_> = (0..element_count)
+        .map(|index| {
+            let centered = i32::try_from(index.wrapping_mul(11) % 29).unwrap_or(0) - 14;
+            centered as f32 / 13.0
+        })
+        .collect();
+    let weight_host: Vec<_> = (0..hidden_size_usize)
+        .map(|index| 0.625 + (index.wrapping_mul(7) % 19) as f32 / 16.0)
+        .collect();
+    let left_bytes = storage.bytes(&left_host);
+    let right_bytes = storage.bytes(&right_host);
+    let weight_bytes = storage.bytes(&weight_host);
+    let matrix_bytes = u64::try_from(left_bytes.len())?;
+    let weight_byte_len = u64::try_from(weight_bytes.len())?;
+    let dtype = storage.dtype();
+
+    let left = upload(context, stream, staging, &left_bytes)?;
+    let right = upload(context, stream, staging, &right_bytes)?;
+    let weight = upload(context, stream, staging, &weight_bytes)?;
+    let mut standalone_residual = context.allocate_device_buffer(matrix_bytes)?;
+    let mut standalone_norm = context.allocate_device_buffer(matrix_bytes)?;
+    let mut fused_residual = context.allocate_device_buffer(matrix_bytes)?;
+    let mut fused_norm = context.allocate_device_buffer(matrix_bytes)?;
+
+    let mut residual = ResidualAddParams {
+        left: CudaBufferSpan::new(&left, dtype, 0, matrix_bytes)?,
+        right: CudaBufferSpan::new(&right, dtype, 0, matrix_bytes)?,
+        output: CudaBufferSpanMut::new(&mut standalone_residual, dtype, 0, matrix_bytes)?,
+        element_count: u64::try_from(element_count)?,
+    };
+    residual_add(&mut residual, stream)?;
+    let expected_residual = download(context, stream, &mut standalone_residual)?;
+
+    let mut norm = RmsNormParams {
+        input: CudaBufferSpan::new(&standalone_residual, dtype, 0, matrix_bytes)?,
+        weight: CudaBufferSpan::new(&weight, dtype, 0, weight_byte_len)?,
+        output: CudaBufferSpanMut::new(&mut standalone_norm, dtype, 0, matrix_bytes)?,
+        row_count,
+        hidden_size,
+        epsilon: 1.0e-5,
+    };
+    rms_norm(&mut norm, stream)?;
+    let expected_norm = download(context, stream, &mut standalone_norm)?;
+
+    let allocation_stats = context.allocation_stats()?;
+    let mut fused = ResidualRmsNormParams {
+        left: CudaBufferSpan::new(&left, dtype, 0, matrix_bytes)?,
+        right: CudaBufferSpan::new(&right, dtype, 0, matrix_bytes)?,
+        weight: CudaBufferSpan::new(&weight, dtype, 0, weight_byte_len)?,
+        residual_output: CudaBufferSpanMut::new(&mut fused_residual, dtype, 0, matrix_bytes)?,
+        normalized_output: CudaBufferSpanMut::new(&mut fused_norm, dtype, 0, matrix_bytes)?,
+        row_count,
+        hidden_size,
+        epsilon: 1.0e-5,
+    };
+    for _ in 0..4 {
+        residual_rms_norm(&mut fused, stream)?;
+    }
+    assert_eq!(allocation_stats, context.allocation_stats()?);
+    assert_eq!(
+        download(context, stream, &mut fused_residual)?,
+        expected_residual,
+        "{storage:?} fused residual differs at rows={row_count}, hidden={hidden_size}"
+    );
+    assert_eq!(
+        download(context, stream, &mut fused_norm)?,
+        expected_norm,
+        "{storage:?} fused norm differs at rows={row_count}, hidden={hidden_size}"
+    );
+
+    left.close()?;
+    right.close()?;
+    weight.close()?;
+    standalone_residual.close()?;
+    standalone_norm.close()?;
+    fused_residual.close()?;
+    fused_norm.close()?;
+    Ok(())
 }
 
 #[test]
@@ -310,6 +481,241 @@ fn norm_and_elementwise_bf16_match_f32_reference() -> TestResult {
     weight.close()?;
     output.close()?;
     product.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn residual_rms_norm_matches_standalone_raw_bytes_at_reduction_edges() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(8_192)?;
+
+    for storage in [ExactFloat::F32, ExactFloat::Bf16] {
+        for (row_count, hidden_size) in [(5, 1), (4, 3), (2, 255), (2, 256), (2, 257)] {
+            residual_rms_norm_exact_case(
+                &context,
+                &mut stream,
+                &mut staging,
+                storage,
+                row_count,
+                hidden_size,
+            )?;
+        }
+    }
+
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn residual_rms_norm_validation_is_fail_closed_and_zero_rows_are_a_noop() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(4_096)?;
+
+    let left = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &bf16_bytes(&[-2.0, -1.0, 0.0, 1.0, 2.0, 3.0]),
+    )?;
+    let right = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &bf16_bytes(&[0.5, 2.0, -4.0, 1.5, -0.25, 0.75]),
+    )?;
+    let weight = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &bf16_bytes(&[1.0, 0.5, 2.0]),
+    )?;
+    let mut residual_output = context.allocate_device_buffer(12)?;
+    let mut normalized_output = context.allocate_device_buffer(12)?;
+    let mut standalone_residual = context.allocate_device_buffer(12)?;
+    let mut standalone_norm = context.allocate_device_buffer(12)?;
+    let sentinel = [0x5a_u8; 12];
+    residual_output.upload_from_slice(0, &sentinel, &mut staging, &mut stream)?;
+    normalized_output.upload_from_slice(0, &sentinel, &mut staging, &mut stream)?;
+    let allocation_stats = context.allocation_stats()?;
+    let valid_descriptor = Bf16FusedDescriptor {
+        matrix_span_bytes: 12,
+        right_dtype: CudaDType::BF16,
+        row_count: 2,
+        hidden_size: 3,
+        epsilon: 1.0e-5,
+    };
+
+    for (epsilon, label) in [
+        (0.0, "zero epsilon"),
+        (-1.0e-5, "negative epsilon"),
+        (f32::NAN, "NaN epsilon"),
+        (f32::INFINITY, "infinite epsilon"),
+    ] {
+        let error = run_bf16_fused_descriptor(
+            &left,
+            &right,
+            &weight,
+            &mut residual_output,
+            &mut normalized_output,
+            &mut stream,
+            Bf16FusedDescriptor {
+                epsilon,
+                ..valid_descriptor
+            },
+        )
+        .expect_err(label);
+        assert_error_kind(&error, CudaErrorKind::InvalidArgument, label);
+    }
+
+    let zero_hidden_error = run_bf16_fused_descriptor(
+        &left,
+        &right,
+        &weight,
+        &mut residual_output,
+        &mut normalized_output,
+        &mut stream,
+        Bf16FusedDescriptor {
+            hidden_size: 0,
+            ..valid_descriptor
+        },
+    )
+    .expect_err("zero hidden size must fail");
+    assert_error_kind(
+        &zero_hidden_error,
+        CudaErrorKind::InvalidArgument,
+        "zero hidden size",
+    );
+
+    let dtype_error = run_bf16_fused_descriptor(
+        &left,
+        &right,
+        &weight,
+        &mut residual_output,
+        &mut normalized_output,
+        &mut stream,
+        Bf16FusedDescriptor {
+            right_dtype: CudaDType::F32,
+            ..valid_descriptor
+        },
+    )
+    .expect_err("mixed dtypes must fail");
+    assert_error_kind(&dtype_error, CudaErrorKind::InvalidArgument, "mixed dtypes");
+
+    let capacity_error = run_bf16_fused_descriptor(
+        &left,
+        &right,
+        &weight,
+        &mut residual_output,
+        &mut normalized_output,
+        &mut stream,
+        Bf16FusedDescriptor {
+            matrix_span_bytes: 10,
+            ..valid_descriptor
+        },
+    )
+    .expect_err("short matrix span must fail");
+    assert_error_kind(
+        &capacity_error,
+        CudaErrorKind::OutOfRange,
+        "short matrix span",
+    );
+
+    assert_eq!(
+        download(&context, &mut stream, &mut residual_output)?,
+        sentinel,
+        "validation errors must not write the residual output"
+    );
+    assert_eq!(
+        download(&context, &mut stream, &mut normalized_output)?,
+        sentinel,
+        "validation errors must not write the normalized output"
+    );
+
+    run_bf16_fused_descriptor(
+        &left,
+        &right,
+        &weight,
+        &mut residual_output,
+        &mut normalized_output,
+        &mut stream,
+        Bf16FusedDescriptor {
+            matrix_span_bytes: 0,
+            row_count: 0,
+            ..valid_descriptor
+        },
+    )?;
+    assert_eq!(
+        download(&context, &mut stream, &mut residual_output)?,
+        sentinel,
+        "zero rows must be a no-op"
+    );
+    assert_eq!(
+        download(&context, &mut stream, &mut normalized_output)?,
+        sentinel,
+        "zero rows must be a no-op"
+    );
+
+    run_bf16_fused_descriptor(
+        &left,
+        &right,
+        &weight,
+        &mut residual_output,
+        &mut normalized_output,
+        &mut stream,
+        valid_descriptor,
+    )?;
+    {
+        let mut residual = ResidualAddParams {
+            left: CudaBufferSpan::new(&left, CudaDType::BF16, 0, 12)?,
+            right: CudaBufferSpan::new(&right, CudaDType::BF16, 0, 12)?,
+            output: CudaBufferSpanMut::new(&mut standalone_residual, CudaDType::BF16, 0, 12)?,
+            element_count: 6,
+        };
+        residual_add(&mut residual, &mut stream)?;
+    }
+    {
+        let mut norm = RmsNormParams {
+            input: CudaBufferSpan::new(&standalone_residual, CudaDType::BF16, 0, 12)?,
+            weight: CudaBufferSpan::new(&weight, CudaDType::BF16, 0, 6)?,
+            output: CudaBufferSpanMut::new(&mut standalone_norm, CudaDType::BF16, 0, 12)?,
+            row_count: 2,
+            hidden_size: 3,
+            epsilon: 1.0e-5,
+        };
+        rms_norm(&mut norm, &mut stream)?;
+    }
+    assert_eq!(
+        download(&context, &mut stream, &mut residual_output)?,
+        download(&context, &mut stream, &mut standalone_residual)?,
+        "resources must remain usable after rejected calls"
+    );
+    assert_eq!(
+        download(&context, &mut stream, &mut normalized_output)?,
+        download(&context, &mut stream, &mut standalone_norm)?,
+        "resources must remain usable after rejected calls"
+    );
+    assert_eq!(allocation_stats, context.allocation_stats()?);
+
+    // Exact in-place and overlapping descriptors cannot be expressed through
+    // the public safe wrapper: immutable inputs and mutable outputs borrow the
+    // owning allocation incompatibly. Native ABI overlap checks therefore
+    // require a private-FFI test or a future explicit safe in-place entry point.
+    left.close()?;
+    right.close()?;
+    weight.close()?;
+    residual_output.close()?;
+    normalized_output.close()?;
+    standalone_residual.close()?;
+    standalone_norm.close()?;
     staging.close()?;
     stream.close()?;
     close_context(context)

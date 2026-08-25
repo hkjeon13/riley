@@ -1,5 +1,7 @@
 //! Binary-facing build information and the bounded PR 14 serving surface.
 
+#[cfg(feature = "bench")]
+pub mod benchmark;
 #[cfg(feature = "server")]
 pub mod domain;
 #[cfg(feature = "server")]

@@ -17,6 +17,7 @@ use rustinfer_runtime::llama::{
     LlamaBatchBlockTable, LlamaBatchMetadataConfig, LlamaBatchRow, LlamaBatchRowKind,
     PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig, PreparedLlamaDecode,
     PreparedLlamaDecodeConfig, PreparedLlamaForward, PreparedLlamaForwardConfig,
+    ResidualNormImplementation,
 };
 use rustinfer_runtime::paged_kv::{BLOCK_TABLE_V1_VERSION, KV_BLOCK_SIZE};
 
@@ -38,6 +39,12 @@ struct LogitMetrics {
     cosine: f64,
     max_abs: f64,
     mean_abs: f64,
+}
+
+#[derive(Debug)]
+struct GreedyExecutionTrace {
+    generated_token_ids: Vec<u32>,
+    logits_by_iteration: Vec<Vec<u8>>,
 }
 
 fn checkpoint_path() -> PathBuf {
@@ -264,6 +271,101 @@ fn assert_report_matches_context(
     );
 }
 
+fn assert_exact_bytes(label: &str, actual: &[u8], expected: &[u8]) {
+    assert_eq!(actual.len(), expected.len(), "{label} byte length differs");
+    let mismatch = actual
+        .iter()
+        .zip(expected)
+        .enumerate()
+        .find(|(_, (actual, expected))| actual != expected);
+    assert!(
+        mismatch.is_none(),
+        "{label} differs at byte {}: fused={} separate={}",
+        mismatch.map_or(0, |(index, _)| index),
+        mismatch.map_or(0, |(_, (actual, _))| *actual),
+        mismatch.map_or(0, |(_, (_, expected))| *expected),
+    );
+}
+
+fn greedy_residual_norm_trace(
+    model: &LoadedModel,
+    implementation: ResidualNormImplementation,
+    decode_steps: usize,
+) -> TestResult<GreedyExecutionTrace> {
+    let maximum_length = TOKENS_A
+        .len()
+        .checked_add(decode_steps)
+        .ok_or("maximum sequence length overflow")?;
+    let physical_blocks = maximum_length.div_ceil(KV_BLOCK_SIZE);
+    let (context, mut stream) = first_context()?;
+    let config = match implementation {
+        ResidualNormImplementation::Separate => {
+            batch_config(1, TOKENS_A.len(), physical_blocks, 1, physical_blocks)?
+                .with_separate_residual_norm()
+        }
+        ResidualNormImplementation::Fused => {
+            batch_config(1, TOKENS_A.len(), physical_blocks, 1, physical_blocks)?
+                .with_fused_residual_norm()
+        }
+    };
+    let mut batch = PreparedLlamaBatchExecutor::prepare(model, &context, &mut stream, config)?;
+    let (prompt_ids, prompt_valid) = block_table(TOKENS_A.len(), 0)?;
+    let prompt_rows = [row(
+        15,
+        LlamaBatchRowKind::Prefill,
+        &TOKENS_A,
+        TOKENS_A.len(),
+        &prompt_ids,
+        &prompt_valid,
+        Some(0),
+    )?];
+    batch.execute(&prompt_rows, &mut stream)?;
+
+    let mut logits = vec![0_u8; vocabulary_row_bytes(model)?];
+    batch.download_logits(&mut logits, &mut stream)?;
+    let stable = context.allocation_stats()?;
+    let mut trace = GreedyExecutionTrace {
+        generated_token_ids: Vec::with_capacity(decode_steps),
+        logits_by_iteration: Vec::with_capacity(decode_steps + 1),
+    };
+    trace.logits_by_iteration.push(logits.clone());
+
+    for step in 0..decode_steps {
+        let token = u32::try_from(top1(&logits))?;
+        trace.generated_token_ids.push(token);
+        let target_length = TOKENS_A.len() + step + 1;
+        let (ids, valid) = block_table(target_length, 0)?;
+        let tokens = [token];
+        let rows = [row(
+            15,
+            LlamaBatchRowKind::Decode,
+            &tokens,
+            target_length,
+            &ids,
+            &valid,
+            Some(0),
+        )?];
+        batch.execute(&rows, &mut stream)?;
+        batch.download_logits(&mut logits, &mut stream)?;
+        trace.logits_by_iteration.push(logits.clone());
+        assert_eq!(
+            context.allocation_stats()?,
+            stable,
+            "{implementation:?} allocation changed after committed decode step {}",
+            step + 1,
+        );
+    }
+
+    batch.close()?;
+    assert!(
+        context.allocation_stats()?.is_zero(),
+        "{implementation:?} executor close leaked CUDA allocations"
+    );
+    stream.close()?;
+    close_context(context)?;
+    Ok(trace)
+}
+
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
 fn concurrency_one_matches_the_single_request_forward() -> TestResult {
@@ -294,6 +396,50 @@ fn concurrency_one_matches_the_single_request_forward() -> TestResult {
     batch.close()?;
     stream.close()?;
     close_context(context)
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResult {
+    const DECODE_STEPS: usize = 16;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
+    let separate =
+        greedy_residual_norm_trace(&model, ResidualNormImplementation::Separate, DECODE_STEPS)?;
+    let fused =
+        greedy_residual_norm_trace(&model, ResidualNormImplementation::Fused, DECODE_STEPS)?;
+
+    assert_eq!(
+        &fused.generated_token_ids, &separate.generated_token_ids,
+        "fused and separate greedy token IDs differ"
+    );
+    assert_eq!(
+        fused.logits_by_iteration.len(),
+        separate.logits_by_iteration.len()
+    );
+    for (iteration, (fused_logits, separate_logits)) in fused
+        .logits_by_iteration
+        .iter()
+        .zip(&separate.logits_by_iteration)
+        .enumerate()
+    {
+        assert_exact_bytes(
+            &format!("residual-norm iteration {iteration}"),
+            fused_logits,
+            separate_logits,
+        );
+        assert_eq!(
+            top1(fused_logits),
+            top1(separate_logits),
+            "iteration {iteration} top-1 differs"
+        );
+    }
+    println!(
+        "pr15-residual-rmsnorm-parity schema_version=1 decode_steps={DECODE_STEPS} \
+committed_iterations={} raw_logit_mismatches=0 generated_token_ids={:?} status=passed",
+        fused.logits_by_iteration.len() - 1,
+        fused.generated_token_ids,
+    );
+    Ok(())
 }
 
 #[test]

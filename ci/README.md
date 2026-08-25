@@ -30,6 +30,8 @@ and it is not part of a production artifact. The checker fails closed unless:
 - the workspace contains exactly the seven production crates;
 - `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
 - crate edges and feature ownership match `crates/README.md`;
+- `rustinfer` remains the sole `server` production binary, while the separate
+  native evidence producer requires exactly the non-default `bench,cuda` features;
 - every crate inherits `publish = false`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
   `serde_json`, and `sha2` requirements owned by `rustinfer-model`, plus the
@@ -86,11 +88,12 @@ not runtime device behavior. The container gate records or checks:
 1. exact Rust, Cargo, nvcc, toolkit root, and AOT architecture information;
 2. locked release build plus the plan's exact root command
    `cargo build --release --features cuda,server`;
-3. the host-only C ABI link test and ABI version 1;
+3. the bench/CUDA-only native profile producer plus the host-only C ABI link
+   test and ABI version 1;
 4. compile-only `host_runtime_gpu` and `memory_gpu` test binaries plus the
    CUDA-backed `rustinfer-tensor` surface, without device access;
-5. CUDA feature-on `rustinfer-cuda` and `rustinfer-tensor` Clippy across all
-   targets with warnings denied;
+5. CUDA feature-on `rustinfer-cuda`, `rustinfer-tensor`, and
+   `rustinfer-server` Clippy across all targets with warnings denied;
 6. `rustinfer --version` reporting the linked CUDA ABI;
 7. a clear failure for an explicit nonexistent CUDA toolkit root; and
 8. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,

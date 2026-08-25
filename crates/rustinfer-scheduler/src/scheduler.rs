@@ -276,6 +276,7 @@ pub struct IterationUpdates {
     token_events: Vec<TokenEvent>,
     completions: Vec<RequestCompletion>,
     settlement_failures: Vec<RequestSettlementFailure>,
+    iteration_metric: Option<IterationMetricSample>,
 }
 
 impl IterationUpdates {
@@ -284,6 +285,7 @@ impl IterationUpdates {
             token_events: Vec::new(),
             completions: Vec::new(),
             settlement_failures: Vec::new(),
+            iteration_metric: None,
         }
     }
 
@@ -303,6 +305,15 @@ impl IterationUpdates {
     #[must_use]
     pub fn settlement_failures(&self) -> &[RequestSettlementFailure] {
         &self.settlement_failures
+    }
+
+    /// Exact metric sample for the successfully committed iteration.
+    ///
+    /// Aborts and contained commit failures return no sample. This is the raw
+    /// per-iteration counterpart to the scheduler's bounded rolling snapshot.
+    #[must_use]
+    pub const fn iteration_metric(&self) -> Option<IterationMetricSample> {
+        self.iteration_metric
     }
 
     #[must_use]
@@ -989,18 +1000,29 @@ impl Scheduler {
             }
         }
         self.drain_completion_outbox_into(&mut updates.completions);
+        if !updates.settlement_failures.is_empty() {
+            observe_metric(
+                &mut self.metrics_degraded,
+                self.metrics.record_aborted_iteration(),
+                "contained iteration publication failure",
+            );
+            self.refresh_metric_gauges();
+            return Ok(updates);
+        }
+        let iteration_metric = IterationMetricSample {
+            batch_size,
+            prefill_tokens,
+            decode_tokens,
+            scheduler_cpu_ns: scheduler_cpu_ns.saturating_add(elapsed_ns(cpu_started)),
+            gpu_execution_ns: result.gpu_execution_ns(),
+            gpu_idle_gap_ns: result.gpu_idle_gap_ns(),
+        };
         observe_metric(
             &mut self.metrics_degraded,
-            self.metrics.record_iteration(IterationMetricSample {
-                batch_size,
-                prefill_tokens,
-                decode_tokens,
-                scheduler_cpu_ns: scheduler_cpu_ns.saturating_add(elapsed_ns(cpu_started)),
-                gpu_execution_ns: result.gpu_execution_ns(),
-                gpu_idle_gap_ns: result.gpu_idle_gap_ns(),
-            }),
+            self.metrics.record_iteration(iteration_metric),
             "completed iteration",
         );
+        updates.iteration_metric = Some(iteration_metric);
         self.refresh_metric_gauges();
         Ok(updates)
     }
@@ -2595,7 +2617,10 @@ mod tests {
     use rustinfer_runtime::paged_kv::KvLayout;
 
     use super::{ExecutionAbort, RequestDescriptor, RequestFinishReason, RequestId, Scheduler};
-    use crate::{OverloadPolicy, SchedulerConfig, SchedulerError};
+    use crate::{
+        IterationOutput, IterationResult, OutputSlot, OverloadPolicy, SchedulerConfig,
+        SchedulerError,
+    };
 
     fn test_scheduler() -> Scheduler {
         let config = SchedulerConfig {
@@ -2659,5 +2684,75 @@ mod tests {
             .abort_iteration(plan.iteration_id(), ExecutionAbort::NotDispatched, 5)
             .expect("rollback active plan");
         scheduler.shutdown(5).expect("clean shutdown");
+    }
+
+    #[test]
+    fn successful_commit_returns_its_exact_raw_metric_sample() {
+        let mut scheduler = test_scheduler();
+        scheduler
+            .submit(RequestDescriptor::new(vec![1], 1), 0)
+            .expect("active request");
+        let plan = scheduler
+            .plan_iteration(1)
+            .expect("iteration plan")
+            .into_parts()
+            .0
+            .expect("planned work");
+        let result = IterationResult::new(
+            plan.iteration_id(),
+            vec![IterationOutput::new(OutputSlot::new(0), 2, false)],
+            23,
+            29,
+        )
+        .expect("valid result");
+        let updates = scheduler
+            .complete_iteration(&result, 2)
+            .expect("successful commit");
+        let metric = updates
+            .iteration_metric()
+            .expect("commit publishes its raw metric");
+        assert_eq!(metric.batch_size, 1);
+        assert_eq!(metric.prefill_tokens, 1);
+        assert_eq!(metric.decode_tokens, 0);
+        assert_eq!(metric.gpu_execution_ns, 23);
+        assert_eq!(metric.gpu_idle_gap_ns, 29);
+
+        scheduler.close(3, None).expect("exact scheduler cleanup");
+    }
+
+    #[test]
+    fn contained_publication_failure_is_not_a_completed_metric_sample() {
+        let mut scheduler = test_scheduler();
+        scheduler
+            .submit(RequestDescriptor::new(vec![1], 1), 0)
+            .expect("active request");
+        let plan = scheduler
+            .plan_iteration(1)
+            .expect("iteration plan")
+            .into_parts()
+            .0
+            .expect("planned work");
+        let result = IterationResult::new(
+            plan.iteration_id(),
+            vec![IterationOutput::new(OutputSlot::new(0), 2, false)],
+            23,
+            29,
+        )
+        .expect("valid result");
+
+        // Corrupt only the private ownership counter after planning so the KV
+        // reservation commits but terminal publication is contained.
+        scheduler.active_sequences = 0;
+        let updates = scheduler
+            .complete_iteration(&result, 2)
+            .expect("publication failure is request-scoped and contained");
+        assert_eq!(updates.settlement_failures().len(), 1);
+        assert!(updates.iteration_metric().is_none());
+        let metrics = scheduler.metrics_snapshot().expect("metrics snapshot");
+        assert_eq!(metrics.iterations_completed, 0);
+        assert_eq!(metrics.iterations_aborted, 1);
+
+        scheduler.active_sequences = 1;
+        scheduler.close(3, None).expect("exact scheduler cleanup");
     }
 }

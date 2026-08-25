@@ -1190,9 +1190,9 @@ mod cuda_backend {
     use rustinfer_runtime::sampling::{SamplingParams, SamplingWorkspace, TokenConstraints};
     use rustinfer_runtime::{CudaContext, CudaRuntime, CudaStream};
     use rustinfer_scheduler::{
-        ExecutionAbort, IterationTiming, RequestCompletion, RequestDescriptor, RequestFinishReason,
-        RequestId as SchedulerRequestId, SampledIterationToken, Scheduler, SchedulerConfig,
-        SchedulerError, execute_llama_iteration,
+        ExecutionAbort, LlamaIterationCudaTimer, RequestCompletion, RequestDescriptor,
+        RequestFinishReason, RequestId as SchedulerRequestId, SampledIterationToken, Scheduler,
+        SchedulerConfig, SchedulerError, execute_llama_iteration_timed,
     };
 
     use crate::domain::{
@@ -1224,6 +1224,7 @@ mod cuda_backend {
         context: CudaContext,
         stream: CudaStream,
         executor: PreparedLlamaBatchExecutor,
+        timer: LlamaIterationCudaTimer,
     }
 
     impl std::fmt::Debug for CudaEngineResources {
@@ -1280,6 +1281,8 @@ mod cuda_backend {
                     })?;
             let scheduler = Scheduler::new(config.scheduler, executor.kv_layout())
                 .map_err(|source| internal(format!("scheduler preparation failed: {source}")))?;
+            let timer = LlamaIterationCudaTimer::prepare(&context)
+                .map_err(|source| internal(format!("CUDA timing preparation failed: {source}")))?;
             Ok(Self {
                 metadata,
                 model,
@@ -1287,6 +1290,7 @@ mod cuda_backend {
                 context,
                 stream,
                 executor,
+                timer,
             })
         }
 
@@ -1341,6 +1345,7 @@ mod cuda_backend {
         context: Option<CudaContext>,
         stream: Option<CudaStream>,
         executor: Option<PreparedLlamaBatchExecutor>,
+        timer: Option<LlamaIterationCudaTimer>,
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
         addressable_tokens: usize,
@@ -1397,6 +1402,7 @@ mod cuda_backend {
                 context: Some(resources.context),
                 stream: Some(resources.stream),
                 executor: Some(resources.executor),
+                timer: Some(resources.timer),
                 sampling,
                 allowed_tokens,
                 addressable_tokens,
@@ -1696,6 +1702,11 @@ mod cuda_backend {
                     first_error.get_or_insert_with(|| format!("executor close failed: {source}"));
                 }
             }
+            if let Some(timer) = self.timer.take() {
+                if let Err(source) = timer.close() {
+                    first_error.get_or_insert_with(|| format!("CUDA timer close failed: {source}"));
+                }
+            }
             if let Some(mut stream) = self.stream.take() {
                 if let Err(source) = stream.synchronize() {
                     first_error
@@ -1846,7 +1857,7 @@ mod cuda_backend {
                 return Ok(events);
             };
             self.snapshot_cancel_deltas(&plan)?;
-            let downloaded = {
+            let (downloaded, timing) = {
                 let executor = self
                     .executor
                     .as_mut()
@@ -1855,8 +1866,12 @@ mod cuda_backend {
                     .stream
                     .as_mut()
                     .ok_or_else(|| internal("CUDA stream is already closed"))?;
-                match execute_llama_iteration(&plan, executor, stream) {
-                    Ok(downloaded) => downloaded,
+                let timer = self
+                    .timer
+                    .as_mut()
+                    .ok_or_else(|| internal("CUDA timer is already closed"))?;
+                match execute_llama_iteration_timed(&plan, executor, stream, timer) {
+                    Ok(measured) => measured,
                     Err(failure) => {
                         events.extend(self.settle_execution_failure(&failure)?);
                         return Ok(events);
@@ -1872,7 +1887,7 @@ mod cuda_backend {
                     .map_err(|source| internal(format!("sampling abort failed: {source}")))?;
                 return Err(error);
             }
-            let result = match downloaded.into_result(&self.samples, IterationTiming::default()) {
+            let result = match downloaded.into_result(&self.samples, timing) {
                 Ok(result) => result,
                 Err(failure) => {
                     let (iteration, abort) = failure.abort_data();
@@ -1954,6 +1969,7 @@ mod cuda_backend {
         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
             if self.scheduler.is_none()
                 && self.executor.is_none()
+                && self.timer.is_none()
                 && self.stream.is_none()
                 && self.context.is_none()
             {

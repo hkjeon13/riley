@@ -50,9 +50,9 @@ pub use prefill::{
 };
 pub use primitives::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
-    GatedMultiplyParams, ResidualAddParams, RmsNormParams, RopeParams, RowBiasAddInPlaceParams,
-    SiluParams, cast, embedding, gated_multiply, residual_add, rms_norm, rope,
-    row_bias_add_in_place, silu,
+    GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams,
+    RowBiasAddInPlaceParams, SiluParams, cast, embedding, gated_multiply, residual_add,
+    residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
 };
 pub use runtime::{
     CudaContext, CudaDevice, CudaEvent, CudaKernel, CudaPendingFill, CudaRuntime, CudaStream,

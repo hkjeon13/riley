@@ -49,7 +49,10 @@ cargo build --locked --release --features cuda,server
   직렬화 경계를 활성화한다.
 - `cuda`: composition root가 scheduler와 runtime 양쪽에 명시적으로 전달하고,
   runtime/tensor → cuda로 이어진다.
-- `bench`, `experimental`: 아직 구현을 활성화하지 않는 예약 opt-in 경계다.
+- `bench`: non-default native profile evidence producer와 그 고정 JSON
+  직렬화 경계를 활성화한다. 실행 binary는 추가로 `cuda`를 요구하며 production
+  `rustinfer` artifact에는 포함되지 않는다.
+- `experimental`: 아직 구현을 활성화하지 않는 예약 opt-in 경계다.
 
 ## Panic과 error 원칙
 

@@ -42,6 +42,7 @@ const EMBEDDING_ERROR_REPORT_SIZE: u32 = 32;
 const EMBEDDING_PARAMS_SIZE: u32 = 256;
 const RMS_NORM_PARAMS_SIZE: u32 = 208;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
+const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
@@ -305,6 +306,22 @@ struct RawResidualAddParams {
     output: RawBufferSpan,
     element_count: u64,
     reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawResidualRmsNormParams {
+    struct_size: u32,
+    reserved0: u32,
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    weight: RawBufferSpan,
+    residual_output: RawBufferSpan,
+    normalized_output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
 }
 
 #[repr(C)]
@@ -935,6 +952,11 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_residual_add_execute(
         params: *const RawResidualAddParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_residual_rms_norm_execute(
+        params: *const RawResidualRmsNormParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1821,6 +1843,43 @@ pub(super) fn residual_add_execute(
         // synchronously completing native operation.
         unsafe { rustinfer_cuda_residual_add_execute(&params, stream, error) }
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn residual_rms_norm_execute(
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    weight: RawBufferSpan,
+    residual_output: RawBufferSpan,
+    normalized_output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawResidualRmsNormParams {
+        struct_size: RESIDUAL_RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        left,
+        right,
+        weight,
+        residual_output,
+        normalized_output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA fused residual RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and all exclusively borrowed opaque
+            // resources outlive this synchronously completing native call.
+            unsafe { rustinfer_cuda_residual_rms_norm_execute(&params, stream, error) }
+        },
+    )
 }
 
 pub(super) fn row_bias_add_in_place_execute(
@@ -3070,6 +3129,10 @@ const _: () = assert!(offset_of!(RawEmbeddingParams, out_report) == 200);
 const _: () = assert!(size_of::<RawRmsNormParams>() == 208);
 const _: () = assert!(offset_of!(RawRmsNormParams, epsilon) == 168);
 const _: () = assert!(size_of::<RawResidualAddParams>() == 200);
+const _: () = assert!(size_of::<RawResidualRmsNormParams>() == 304);
+const _: () = assert!(offset_of!(RawResidualRmsNormParams, residual_output) == 152);
+const _: () = assert!(offset_of!(RawResidualRmsNormParams, row_count) == 248);
+const _: () = assert!(offset_of!(RawResidualRmsNormParams, epsilon) == 264);
 const _: () = assert!(size_of::<RawRowBiasAddInPlaceParams>() == 152);
 const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, matrix) == 8);
 const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, row_count) == 104);

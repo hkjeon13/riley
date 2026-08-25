@@ -40,6 +40,15 @@ _Static_assert(offsetof(RustInferCudaRmsNormParams, epsilon) == 168,
                "RMSNorm epsilon offset changed");
 _Static_assert(sizeof(RustInferCudaResidualAddParams) == 200,
                "residual-add params ABI size changed");
+_Static_assert(sizeof(RustInferCudaResidualRmsNormParams) == 304,
+               "residual-RMSNorm params ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaResidualRmsNormParams, residual_output) == 152,
+    "residual-RMSNorm residual output offset changed");
+_Static_assert(offsetof(RustInferCudaResidualRmsNormParams, row_count) == 248,
+               "residual-RMSNorm dimension offset changed");
+_Static_assert(offsetof(RustInferCudaResidualRmsNormParams, epsilon) == 264,
+               "residual-RMSNorm epsilon offset changed");
 _Static_assert(sizeof(RustInferCudaRowBiasAddInPlaceParams) == 152,
                "row-bias params ABI size changed");
 _Static_assert(offsetof(RustInferCudaRowBiasAddInPlaceParams, matrix) == 8,
@@ -326,6 +335,9 @@ static RustInferCudaStatus (*const rms_norm_symbol)(
 static RustInferCudaStatus (*const residual_add_symbol)(
     const RustInferCudaResidualAddParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_residual_add_execute;
+static RustInferCudaStatus (*const residual_rms_norm_symbol)(
+    const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_residual_rms_norm_execute;
 static RustInferCudaStatus (*const row_bias_add_symbol)(
     const RustInferCudaRowBiasAddInPlaceParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_row_bias_add_in_place_execute;
@@ -416,7 +428,9 @@ static RustInferCudaStatus (*const gemm_plan_close_symbol)(
 // warning configurations.
 const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
-    (const void*)&residual_add_symbol,   (const void*)&silu_symbol,
+    (const void*)&residual_add_symbol,
+    (const void*)&residual_rms_norm_symbol,
+    (const void*)&silu_symbol,
     (const void*)&row_bias_add_symbol,   (const void*)&gated_multiply_symbol,
     (const void*)&rope_symbol,           (const void*)&indexed_rope_symbol,
     (const void*)&cast_symbol,           (const void*)&row_gather_symbol,

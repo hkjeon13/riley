@@ -498,6 +498,47 @@ __global__ void residual_add_kernel(const T* left, const T* right, T* output,
   }
 }
 
+template <typename T>
+__global__ void residual_rms_norm_kernel(
+    const T* left, const T* right, const T* weight, T* residual_output,
+    T* normalized_output, uint64_t row_count, uint64_t hidden_size,
+    float epsilon) {
+  extern __shared__ float partial_sums[];
+  for (uint64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+    const uint64_t base = row * hidden_size;
+    float sum = 0.0F;
+    for (uint64_t column = threadIdx.x; column < hidden_size;
+         column += blockDim.x) {
+      const uint64_t index = base + column;
+      // Match the standalone residual store before RMSNorm observes the
+      // activation. BF16 therefore rounds once at the exact same boundary.
+      const float residual =
+          round_to_storage<T>(load_f32(left, index) + load_f32(right, index));
+      store_f32(residual_output, index, residual);
+      sum += residual * residual;
+    }
+    partial_sums[threadIdx.x] = sum;
+    __syncthreads();
+    for (uint32_t offset = blockDim.x / 2; offset != 0; offset /= 2) {
+      if (threadIdx.x < offset) {
+        partial_sums[threadIdx.x] += partial_sums[threadIdx.x + offset];
+      }
+      __syncthreads();
+    }
+    const float inverse_rms =
+        rsqrtf(partial_sums[0] / static_cast<float>(hidden_size) + epsilon);
+    for (uint64_t column = threadIdx.x; column < hidden_size;
+         column += blockDim.x) {
+      const uint64_t index = base + column;
+      const float normalized = load_f32(residual_output, index) * inverse_rms;
+      const float normalized_for_weight = round_to_storage<T>(normalized);
+      store_f32(normalized_output, index,
+                normalized_for_weight * load_f32(weight, column));
+    }
+    __syncthreads();
+  }
+}
+
 __global__ void row_bias_add_in_place_kernel(__nv_bfloat16* matrix,
                                              const __nv_bfloat16* bias,
                                              uint64_t column_count,
@@ -651,6 +692,24 @@ void launch_residual_add(const ResolvedSpan& left, const ResolvedSpan& right,
       reinterpret_cast<const T*>(left.data),
       reinterpret_cast<const T*>(right.data),
       reinterpret_cast<T*>(output.data), element_count);
+}
+
+template <typename T>
+void launch_residual_rms_norm(
+    const ResolvedSpan& left, const ResolvedSpan& right,
+    const ResolvedSpan& weight, const ResolvedSpan& residual_output,
+    const ResolvedSpan& normalized_output, uint64_t row_count,
+    uint64_t hidden_size, float epsilon, cudaStream_t stream) {
+  const uint32_t blocks = static_cast<uint32_t>(
+      row_count < kMaximumBlocks ? row_count : kMaximumBlocks);
+  residual_rms_norm_kernel<T>
+      <<<blocks, kThreads, kThreads * sizeof(float), stream>>>(
+          reinterpret_cast<const T*>(left.data),
+          reinterpret_cast<const T*>(right.data),
+          reinterpret_cast<const T*>(weight.data),
+          reinterpret_cast<T*>(residual_output.data),
+          reinterpret_cast<T*>(normalized_output.data), row_count, hidden_size,
+          epsilon);
 }
 
 void launch_row_bias_add_in_place(const ResolvedSpan& matrix,
@@ -1143,6 +1202,155 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_add_execute(
     } else {
       launch_residual_add<__nv_bfloat16>(
           left, right, output, params->element_count, stream->stream);
+    }
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute fused residual RMSNorm";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (!arithmetic_dtype(params->left.dtype) ||
+      params->right.dtype != params->left.dtype ||
+      params->weight.dtype != params->left.dtype ||
+      params->residual_output.dtype != params->left.dtype ||
+      params->normalized_output.dtype != params->left.dtype) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "all residual RMSNorm spans must share F32 or BF16 dtype");
+  }
+  if (params->hidden_size == 0 || !std::isfinite(params->epsilon) ||
+      params->epsilon <= 0.0F) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "hidden_size and finite positive epsilon are required");
+  }
+  uint64_t element_count = 0;
+  if (!checked_multiply(params->row_count, params->hidden_size,
+                        &element_count)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "residual RMSNorm shape product overflows uint64_t");
+  }
+  uint64_t tensor_bytes = 0;
+  uint64_t weight_bytes = 0;
+  RustInferCudaStatus status =
+      element_bytes(element_count, params->left.dtype, &tensor_bytes, error,
+                    kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = element_bytes(params->hidden_size, params->weight.dtype,
+                           &weight_bytes, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ResolvedSpan left{};
+  ResolvedSpan right{};
+  ResolvedSpan weight{};
+  ResolvedSpan residual_output{};
+  ResolvedSpan normalized_output{};
+  status = resolve_span(params->left, tensor_bytes, &left, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status =
+        resolve_span(params->right, tensor_bytes, &right, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status =
+        resolve_span(params->weight, weight_bytes, &weight, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->residual_output, tensor_bytes,
+                          &residual_output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->normalized_output, tensor_bytes,
+                          &normalized_output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(residual_output, left, true, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(residual_output, right, true, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(residual_output, weight, false, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(normalized_output, left, false, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(normalized_output, right, false, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status =
+        reject_overlap(normalized_output, weight, false, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(normalized_output, residual_output, false, error,
+                            kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {left, right, weight, residual_output,
+                                normalized_output};
+  status = validate_contexts(stream, spans, 5, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  if (!uses.add(left.buffer) || !uses.add(right.buffer) ||
+      !uses.add(weight.buffer) || !uses.add(residual_output.buffer) ||
+      !uses.add(normalized_output.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "primitive buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (params->row_count == 0) {
+    return uses.release_completed()
+               ? RUSTINFER_CUDA_STATUS_SUCCESS
+               : internal_error(error,
+                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation,
+                                "exclusive-use accounting was corrupted");
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    if (params->left.dtype == RUSTINFER_CUDA_DTYPE_F32) {
+      launch_residual_rms_norm<float>(
+          left, right, weight, residual_output, normalized_output,
+          params->row_count, params->hidden_size, params->epsilon,
+          stream->stream);
+    } else {
+      launch_residual_rms_norm<__nv_bfloat16>(
+          left, right, weight, residual_output, normalized_output,
+          params->row_count, params->hidden_size, params->epsilon,
+          stream->stream);
     }
     status = launch_status(error, kOperation);
   }

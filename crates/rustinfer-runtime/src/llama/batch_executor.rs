@@ -16,8 +16,9 @@ use rustinfer_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
     CudaStream, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    RmsNormParams, RowGatherParams, SiluParams, embedding, gated_multiply, indexed_rope,
-    ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, rms_norm, row_gather, silu,
+    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, embedding, gated_multiply,
+    indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write, residual_add,
+    residual_rms_norm, rms_norm, row_gather, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -238,11 +239,22 @@ impl From<PagedKvError> for LlamaBatchExecutorError {
     }
 }
 
+/// Exact implementation selected for the attention residual/post-norm pair.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ResidualNormImplementation {
+    /// Standalone residual add followed by standalone `RMSNorm`.
+    #[default]
+    Separate,
+    /// One exact fused residual-add plus `RMSNorm` primitive.
+    Fused,
+}
+
 /// Cold bounds for one reusable fixed-M continuous-batch owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PreparedLlamaBatchExecutorConfig {
     metadata: LlamaBatchMetadataConfig,
     forward: PreparedLlamaForwardConfig,
+    residual_norm: ResidualNormImplementation,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -251,7 +263,11 @@ impl PreparedLlamaBatchExecutorConfig {
         metadata: LlamaBatchMetadataConfig,
         forward: PreparedLlamaForwardConfig,
     ) -> Self {
-        Self { metadata, forward }
+        Self {
+            metadata,
+            forward,
+            residual_norm: ResidualNormImplementation::Separate,
+        }
     }
 
     #[must_use]
@@ -262,6 +278,25 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
+    }
+
+    /// Selects the exact fused attention residual/post-norm implementation.
+    #[must_use]
+    pub const fn with_fused_residual_norm(mut self) -> Self {
+        self.residual_norm = ResidualNormImplementation::Fused;
+        self
+    }
+
+    /// Selects the exact standalone rollback implementation.
+    #[must_use]
+    pub const fn with_separate_residual_norm(mut self) -> Self {
+        self.residual_norm = ResidualNormImplementation::Separate;
+        self
+    }
+
+    #[must_use]
+    pub const fn residual_norm_implementation(self) -> ResidualNormImplementation {
+        self.residual_norm
     }
 }
 
@@ -422,10 +457,7 @@ impl PreparedLlamaBatchExecutor {
         stream: &mut CudaStream,
         config: PreparedLlamaBatchExecutorConfig,
     ) -> LlamaBatchExecutorResult<Self> {
-        let config = PreparedLlamaBatchExecutorConfig::new(
-            config.metadata,
-            config.forward.with_optimized_attention(),
-        );
+        let config = normalize_prepared_config(config);
         let spec = model.spec();
         let attention = spec
             .blocks()
@@ -883,6 +915,16 @@ impl PreparedLlamaBatchExecutor {
     }
 }
 
+pub(super) const fn normalize_prepared_config(
+    config: PreparedLlamaBatchExecutorConfig,
+) -> PreparedLlamaBatchExecutorConfig {
+    PreparedLlamaBatchExecutorConfig {
+        metadata: config.metadata,
+        forward: config.forward.with_optimized_attention(),
+        residual_norm: config.residual_norm,
+    }
+}
+
 // HOT_BATCH_EXECUTE_BEGIN
 #[allow(
     clippy::too_many_arguments,
@@ -1026,6 +1068,7 @@ fn execute_packed(
 
     execute_fixed_graph(
         forward,
+        config.residual_norm,
         layout,
         key_cache,
         value_cache,
@@ -1098,6 +1141,7 @@ fn execute_packed(
 )]
 fn execute_fixed_graph(
     forward: &mut PreparedLlamaForward,
+    residual_norm_implementation: ResidualNormImplementation,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
     value_cache: &mut CudaDeviceBuffer,
@@ -1424,53 +1468,94 @@ fn execute_fixed_graph(
             output_site,
         )?;
         let attention_residual_site = ExecutionSite::layer(layer_index, LlamaOp::AttentionResidual);
-        {
-            let mut params = ResidualAddParams {
-                left: span(
-                    &buffers.hidden_current,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    attention_residual_site,
-                )?,
-                right: span(
-                    &buffers.hidden_projection,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    attention_residual_site,
-                )?,
-                output: span_mut(
-                    &mut buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    attention_residual_site,
-                )?,
-                element_count: hidden_elements,
-            };
-            residual_add(&mut params, stream)
-                .map_err(|source| batch_cuda(attention_residual_site, source))?;
-        }
-
         let post_norm_site = ExecutionSite::layer(layer_index, LlamaOp::PostAttentionNorm);
-        {
-            let mut params = RmsNormParams {
-                input: span(
-                    &buffers.hidden_rotary,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    post_norm_site,
-                )?,
-                weight: weight_span(weights, layer.post_attention_norm_weight(), post_norm_site)?,
-                output: span_mut(
-                    &mut buffers.hidden_norm,
-                    CudaDType::BF16,
-                    plan.workspace_spec().hidden_buffer_bytes(),
-                    post_norm_site,
-                )?,
-                row_count: dense_rows,
-                hidden_size: hidden,
-                epsilon: layer.post_attention_norm_epsilon(),
-            };
-            rms_norm(&mut params, stream).map_err(|source| batch_cuda(post_norm_site, source))?;
+        match residual_norm_implementation {
+            ResidualNormImplementation::Separate => {
+                let mut residual = ResidualAddParams {
+                    left: span(
+                        &buffers.hidden_current,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        attention_residual_site,
+                    )?,
+                    right: span(
+                        &buffers.hidden_projection,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        attention_residual_site,
+                    )?,
+                    output: span_mut(
+                        &mut buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        attention_residual_site,
+                    )?,
+                    element_count: hidden_elements,
+                };
+                residual_add(&mut residual, stream)
+                    .map_err(|source| batch_cuda(attention_residual_site, source))?;
+                let mut norm = RmsNormParams {
+                    input: span(
+                        &buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    weight: weight_span(
+                        weights,
+                        layer.post_attention_norm_weight(),
+                        post_norm_site,
+                    )?,
+                    output: span_mut(
+                        &mut buffers.hidden_norm,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    row_count: dense_rows,
+                    hidden_size: hidden,
+                    epsilon: layer.post_attention_norm_epsilon(),
+                };
+                rms_norm(&mut norm, stream).map_err(|source| batch_cuda(post_norm_site, source))?;
+            }
+            ResidualNormImplementation::Fused => {
+                let mut fused = ResidualRmsNormParams {
+                    left: span(
+                        &buffers.hidden_current,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    right: span(
+                        &buffers.hidden_projection,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    weight: weight_span(
+                        weights,
+                        layer.post_attention_norm_weight(),
+                        post_norm_site,
+                    )?,
+                    residual_output: span_mut(
+                        &mut buffers.hidden_rotary,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    normalized_output: span_mut(
+                        &mut buffers.hidden_norm,
+                        CudaDType::BF16,
+                        plan.workspace_spec().hidden_buffer_bytes(),
+                        post_norm_site,
+                    )?,
+                    row_count: dense_rows,
+                    hidden_size: hidden,
+                    epsilon: layer.post_attention_norm_epsilon(),
+                };
+                residual_rms_norm(&mut fused, stream)
+                    .map_err(|source| batch_cuda(post_norm_site, source))?;
+            }
         }
         let gate_site = ExecutionSite::layer(layer_index, LlamaOp::GateProjection);
         execute_gemm(

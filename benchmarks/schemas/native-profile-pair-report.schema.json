@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/native-profile-pair-report-v1.schema.json",
+  "title": "rustinfer native paired-profile checker report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "passed",
+    "primary_metric",
+    "run_counts",
+    "thresholds",
+    "bindings",
+    "metrics",
+    "run_pairs",
+    "checks",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": { "const": "rustinfer.native-profile-pair-report.v1" },
+    "status": { "enum": ["passed", "failed", "incomparable", "error"] },
+    "passed": { "type": "boolean" },
+    "primary_metric": {
+      "oneOf": [
+        { "$ref": "#/$defs/primaryMetric" },
+        { "type": "null" }
+      ]
+    },
+    "run_counts": { "$ref": "#/$defs/runCounts" },
+    "thresholds": {
+      "const": {
+        "required_independent_runs": 5,
+        "ttft_p95_candidate_to_baseline_max": 1.05,
+        "tpot_p95_candidate_to_baseline_max": 1.05,
+        "throughput_candidate_to_baseline_min": 0.95,
+        "primary_improvement_fraction_min": 0.05
+      }
+    },
+    "bindings": {
+      "oneOf": [
+        { "$ref": "#/$defs/bindings" },
+        { "type": "null" }
+      ]
+    },
+    "metrics": {
+      "oneOf": [
+        { "$ref": "#/$defs/metrics" },
+        { "type": "null" }
+      ]
+    },
+    "run_pairs": {
+      "type": "array",
+      "maxItems": 5,
+      "items": { "$ref": "#/$defs/runPair" }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "errors": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "gitCommit": { "type": "string", "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$" },
+    "primaryMetric": { "const": "aggregate.host.execute_ns" },
+    "runtimeFlag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "value"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "value": { "type": "string", "minLength": 1 }
+      }
+    },
+    "runtimeBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_id", "runtime_flag"],
+      "properties": {
+        "implementation_id": { "type": "string", "minLength": 1 },
+        "runtime_flag": { "$ref": "#/$defs/runtimeFlag" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "executable_sha256",
+        "semantic_class",
+        "correctness_gate_id",
+        "correctness_report_sha256",
+        "environment_sha256",
+        "workload_sha256",
+        "request_identity_sha256",
+        "baseline_runtime",
+        "candidate_runtime"
+      ],
+      "properties": {
+        "git_commit": { "$ref": "#/$defs/gitCommit" },
+        "executable_sha256": { "$ref": "#/$defs/sha256" },
+        "semantic_class": { "const": "E0" },
+        "correctness_gate_id": { "type": "string", "minLength": 1 },
+        "correctness_report_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "workload_sha256": { "$ref": "#/$defs/sha256" },
+        "request_identity_sha256": { "$ref": "#/$defs/sha256" },
+        "baseline_runtime": { "$ref": "#/$defs/runtimeBinding" },
+        "candidate_runtime": { "$ref": "#/$defs/runtimeBinding" }
+      }
+    },
+    "runCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "baseline", "candidate"],
+      "properties": {
+        "required": { "const": 5 },
+        "baseline": { "type": "integer", "minimum": 0 },
+        "candidate": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metricComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_median",
+        "candidate_median",
+        "baseline_p95",
+        "candidate_p95",
+        "median_ratio",
+        "p95_ratio",
+        "paired_median_change_fraction",
+        "paired_p95_change_fraction"
+      ],
+      "properties": {
+        "baseline_median": { "type": "number", "minimum": 0 },
+        "candidate_median": { "type": "number", "minimum": 0 },
+        "baseline_p95": { "type": "number", "minimum": 0 },
+        "candidate_p95": { "type": "number", "minimum": 0 },
+        "median_ratio": { "type": "number", "minimum": 0 },
+        "p95_ratio": { "type": "number", "minimum": 0 },
+        "paired_median_change_fraction": { "type": "number" },
+        "paired_p95_change_fraction": { "type": "number" }
+      }
+    },
+    "primaryComparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "direction",
+        "baseline_median",
+        "candidate_median",
+        "improvement_fraction",
+        "paired_improvement_fraction_median"
+      ],
+      "properties": {
+        "name": { "$ref": "#/$defs/primaryMetric" },
+        "direction": { "enum": ["lower", "higher"] },
+        "baseline_median": { "type": "number", "minimum": 0 },
+        "candidate_median": { "type": "number", "minimum": 0 },
+        "improvement_fraction": { "type": "number" },
+        "paired_improvement_fraction_median": { "type": "number" }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ttft_ms",
+        "tpot_ms",
+        "e2e_ms",
+        "throughput_output_tokens_per_second",
+        "primary"
+      ],
+      "properties": {
+        "ttft_ms": { "$ref": "#/$defs/metricComparison" },
+        "tpot_ms": { "$ref": "#/$defs/metricComparison" },
+        "e2e_ms": { "$ref": "#/$defs/metricComparison" },
+        "throughput_output_tokens_per_second": { "$ref": "#/$defs/metricComparison" },
+        "primary": { "$ref": "#/$defs/primaryComparison" }
+      }
+    },
+    "runMetricPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_median",
+        "candidate_median",
+        "baseline_p95",
+        "candidate_p95",
+        "median_ratio",
+        "p95_ratio"
+      ],
+      "properties": {
+        "baseline_median": { "type": "number", "minimum": 0 },
+        "candidate_median": { "type": "number", "minimum": 0 },
+        "baseline_p95": { "type": "number", "minimum": 0 },
+        "candidate_p95": { "type": "number", "minimum": 0 },
+        "median_ratio": { "type": "number", "minimum": 0 },
+        "p95_ratio": { "type": "number", "minimum": 0 }
+      }
+    },
+    "numericPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "candidate", "ratio"],
+      "properties": {
+        "baseline": { "type": "number", "minimum": 0 },
+        "candidate": { "type": "number", "minimum": 0 },
+        "ratio": { "type": "number", "minimum": 0 }
+      }
+    },
+    "primaryPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "candidate", "improvement_fraction"],
+      "properties": {
+        "baseline": { "type": "number", "minimum": 0 },
+        "candidate": { "type": "number", "minimum": 0 },
+        "improvement_fraction": { "type": "number" }
+      }
+    },
+    "runPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pair_index",
+        "baseline_run_id",
+        "candidate_run_id",
+        "ttft_ms",
+        "tpot_ms",
+        "e2e_ms",
+        "throughput_output_tokens_per_second",
+        "primary"
+      ],
+      "properties": {
+        "pair_index": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "baseline_run_id": { "type": "string", "minLength": 1 },
+        "candidate_run_id": { "type": "string", "minLength": 1 },
+        "ttft_ms": { "$ref": "#/$defs/runMetricPair" },
+        "tpot_ms": { "$ref": "#/$defs/runMetricPair" },
+        "e2e_ms": { "$ref": "#/$defs/runMetricPair" },
+        "throughput_output_tokens_per_second": { "$ref": "#/$defs/numericPair" },
+        "primary": { "$ref": "#/$defs/primaryPair" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed", "observed", "operator", "limit"],
+      "properties": {
+        "name": {
+          "enum": [
+            "zero_failures",
+            "zero_dropped_trace_records",
+            "ttft_p95_regression",
+            "tpot_p95_regression",
+            "throughput_regression",
+            "primary_effective_improvement"
+          ]
+        },
+        "passed": { "type": "boolean" },
+        "observed": { "type": "number" },
+        "operator": { "enum": ["<=", ">="] },
+        "limit": { "type": "number" }
+      }
+    }
+  }
+}

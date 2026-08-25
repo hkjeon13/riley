@@ -139,11 +139,14 @@ PR 02에서는 아직 추론을 하지 않지만 build와 빈 native link가 Pyt
 
 ```text
 default = []
-cuda = []
-server = []
-bench = []
+cuda = [runtime/scheduler CUDA propagation]
+server = [serde, serde_json]
+bench = [serde, serde_json]
 experimental = []
 ```
+
+PR 15부터 `bench`는 `cuda`와 함께 non-default `rustinfer-profile` evidence
+producer를 compile한다. Production `rustinfer` binary는 계속 `server`만 요구한다.
 
 `python` 또는 `triton`을 production Cargo feature로 추가하지 않는다. Python/Triton 도구는 독립 환경과 manifest를 사용한다.
 

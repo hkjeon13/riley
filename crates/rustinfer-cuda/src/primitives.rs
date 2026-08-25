@@ -511,6 +511,117 @@ pub fn residual_add(params: &mut ResidualAddParams<'_>, stream: &mut CudaStream)
     }
 }
 
+/// Inputs and outputs for the exact residual-add plus `RMSNorm` fusion.
+#[derive(Debug)]
+pub struct ResidualRmsNormParams<'a> {
+    /// Left residual input, F32 or BF16.
+    pub left: CudaBufferSpan<'a>,
+    /// Right residual input matching `left`.
+    pub right: CudaBufferSpan<'a>,
+    /// Learned norm weight `[hidden_size]` matching `left`.
+    pub weight: CudaBufferSpan<'a>,
+    /// Stored residual `[row_count, hidden_size]` matching standalone add.
+    pub residual_output: CudaBufferSpanMut<'a>,
+    /// Normalized output `[row_count, hidden_size]`.
+    pub normalized_output: CudaBufferSpanMut<'a>,
+    /// Number of independent rows.
+    pub row_count: u64,
+    /// Elements reduced per row.
+    pub hidden_size: u64,
+    /// Positive finite epsilon added before reciprocal square root.
+    pub epsilon: f32,
+}
+
+/// Executes an `E0` fused residual add and `RMSNorm`.
+///
+/// The residual is rounded to the storage dtype before the norm reduction,
+/// preserving the standalone primitive boundary. The native call launches one
+/// kernel and synchronizes once; [`residual_add`] plus [`rms_norm`] remain the
+/// exact fallback.
+///
+/// # Errors
+///
+/// Returns a descriptor, dtype, shape, overlap, launch, or synchronization
+/// error.
+pub fn residual_rms_norm(
+    params: &mut ResidualRmsNormParams<'_>,
+    stream: &mut CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "residual_rms_norm";
+    require_nonzero(OPERATION, "hidden_size", params.hidden_size)?;
+    if !params.epsilon.is_finite() || params.epsilon <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "epsilon must be finite and greater than zero",
+        ));
+    }
+    require_float(OPERATION, "left", params.left.dtype)?;
+    for (field, dtype) in [
+        ("right", params.right.dtype),
+        ("weight", params.weight.dtype),
+        ("residual_output", params.residual_output.dtype),
+        ("normalized_output", params.normalized_output.dtype),
+    ] {
+        require_dtype(OPERATION, field, dtype, params.left.dtype)?;
+    }
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.left.dtype,
+    )?;
+    require_capacity(OPERATION, "left", params.left.byte_len, matrix_bytes)?;
+    require_capacity(OPERATION, "right", params.right.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(
+        OPERATION,
+        "residual_output",
+        params.residual_output.byte_len,
+        matrix_bytes,
+    )?;
+    require_capacity(
+        OPERATION,
+        "normalized_output",
+        params.normalized_output.byte_len,
+        matrix_bytes,
+    )?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.left.buffer,
+            params.right.buffer,
+            params.weight.buffer,
+            params.residual_output.buffer,
+            params.normalized_output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::residual_rms_norm_execute(
+            params.left.raw(),
+            params.right.raw(),
+            params.weight.raw(),
+            params.residual_output.raw(),
+            params.normalized_output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// A contiguous BF16 matrix and per-column BF16 bias for exact in-place add.
 #[derive(Debug)]
 pub struct RowBiasAddInPlaceParams<'a> {

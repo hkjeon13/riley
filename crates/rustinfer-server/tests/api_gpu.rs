@@ -105,7 +105,8 @@ fn cuda_config() -> TestResult<CudaBackendConfig> {
             PHYSICAL_BLOCKS,
         )?,
         PreparedLlamaForwardConfig::default(),
-    );
+    )
+    .with_fused_residual_norm();
     Ok(CudaBackendConfig {
         device_ordinal: 0,
         scheduler,

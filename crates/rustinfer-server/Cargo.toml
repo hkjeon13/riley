@@ -10,7 +10,7 @@ description = "Binary and server feature owner for rustinfer"
 default = []
 cuda = ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"]
 server = ["dep:serde", "dep:serde_json"]
-bench = []
+bench = ["dep:serde", "dep:serde_json"]
 experimental = []
 
 [dependencies]
@@ -28,6 +28,11 @@ workspace = true
 name = "rustinfer"
 path = "src/main.rs"
 required-features = ["server"]
+
+[[bin]]
+name = "rustinfer-profile"
+path = "src/bin/rustinfer-profile.rs"
+required-features = ["bench", "cuda"]
 
 [[test]]
 name = "api_gpu"

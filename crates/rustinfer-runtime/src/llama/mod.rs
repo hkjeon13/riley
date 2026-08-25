@@ -22,7 +22,7 @@ pub use batch::{
 pub use batch_executor::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
     PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
-    PreparedLlamaBatchExecutorConfig,
+    PreparedLlamaBatchExecutorConfig, ResidualNormImplementation,
 };
 
 pub use error::{
@@ -64,6 +64,10 @@ pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
 
 #[cfg(test)]
 mod source_contract_tests {
+    use super::batch::LlamaBatchMetadataConfig;
+    use super::batch_executor::{
+        PreparedLlamaBatchExecutorConfig, ResidualNormImplementation, normalize_prepared_config,
+    };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
     use rustinfer_cuda::AttentionPreference;
@@ -81,6 +85,26 @@ mod source_contract_tests {
         );
         assert_eq!(
             defaults.with_optimized_attention().attention_preference(),
+            AttentionPreference::Optimized
+        );
+    }
+
+    #[test]
+    fn batch_prepare_normalization_preserves_fused_residual_norm_selection() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid bounds");
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            metadata,
+            PreparedLlamaForwardConfig::default().with_reference_attention(),
+        )
+        .with_fused_residual_norm();
+
+        let normalized = normalize_prepared_config(config);
+        assert_eq!(
+            normalized.residual_norm_implementation(),
+            ResidualNormImplementation::Fused
+        );
+        assert_eq!(
+            normalized.forward().attention_preference(),
             AttentionPreference::Optimized
         );
     }

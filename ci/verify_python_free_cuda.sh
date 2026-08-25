@@ -60,6 +60,25 @@ cat "$build_log"
 # The first command proves that its dependency resolution is lockfile-closed.
 cargo build --release --features cuda,server
 
+# Compile and link the native benchmark evidence producer without executing a
+# model or initializing a device. Its bench+CUDA-only surface belongs to the
+# same Python-free, lockfile-closed AOT lane as the production binary.
+cargo build \
+    --locked \
+    --release \
+    --package rustinfer-server \
+    --no-default-features \
+    --features bench,cuda \
+    --bin rustinfer-profile
+
+cargo test \
+    --locked \
+    --package rustinfer-server \
+    --no-default-features \
+    --features bench,cuda \
+    --bin rustinfer-profile \
+    --no-run
+
 grep -Eiq \
     "CUDA.*architectures[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}|CUDA arch[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}" \
     "$build_log"
@@ -131,6 +150,14 @@ cargo clippy \
     --features cuda \
     -- -D warnings
 
+cargo clippy \
+    --locked \
+    --package rustinfer-server \
+    --all-targets \
+    --no-default-features \
+    --features server,bench,cuda \
+    -- -D warnings
+
 version_output=$(run_host_metadata target/release/rustinfer --version)
 printf '%s\n' "$version_output"
 printf '%s\n' "$version_output" | grep -Eiq 'rustinfer.*0\.1\.0'
@@ -156,6 +183,8 @@ grep -Eiq \
 {
     printf 'artifact=%s\n' target/release/rustinfer
     run_host_metadata ldd target/release/rustinfer
+    printf 'artifact=%s\n' target/release/rustinfer-profile
+    run_host_metadata ldd target/release/rustinfer-profile
     printf 'artifact=%s\n' "$abi_link_binary"
     run_host_metadata ldd "$abi_link_binary"
 } >"$ldd_log"
@@ -163,6 +192,8 @@ cat "$ldd_log"
 {
     printf 'artifact=%s\n' target/release/rustinfer
     readelf -d target/release/rustinfer
+    printf 'artifact=%s\n' target/release/rustinfer-profile
+    readelf -d target/release/rustinfer-profile
     printf 'artifact=%s\n' "$abi_link_binary"
     readelf -d "$abi_link_binary"
 } >"$readelf_log"
@@ -170,6 +201,8 @@ cat "$readelf_log"
 {
     printf 'artifact=%s\n' target/release/rustinfer
     nm -D --undefined-only target/release/rustinfer
+    printf 'artifact=%s\n' target/release/rustinfer-profile
+    nm -D --undefined-only target/release/rustinfer-profile
     printf 'artifact=%s\n' "$abi_link_binary"
     nm -D --undefined-only "$abi_link_binary"
 } >"$nm_log"
@@ -194,4 +227,4 @@ then
     exit 1
 fi
 
-echo "Python-free CUDA compile, C ABI link, tensor memory, version, and dependency smoke passed"
+echo "Python-free CUDA production/profile compile, C ABI link, tensor memory, version, and dependency smoke passed"

@@ -17,7 +17,7 @@ use rustinfer_runtime::llama::{LlamaBatchBlockTable, LlamaBatchRow, LlamaBatchRo
 #[cfg(feature = "cuda")]
 use rustinfer_runtime::llama::{LlamaBatchExecutorError, PreparedLlamaBatchExecutor};
 #[cfg(feature = "cuda")]
-use rustinfer_runtime::{CudaError, CudaStream};
+use rustinfer_runtime::{CudaContext, CudaError, CudaEvent, CudaStream};
 
 use crate::plan::{
     ITERATION_SCHEMA_VERSION, IterationId, IterationOutput, IterationPlan, IterationResult,
@@ -106,6 +106,14 @@ pub enum IterationAdapterError {
     /// The fixed-M Llama executor rejected or failed the iteration.
     #[cfg(feature = "cuda")]
     Runtime(Box<LlamaBatchExecutorError>),
+    /// A dispatch-boundary CUDA event operation failed.
+    #[cfg(feature = "cuda")]
+    CudaTiming {
+        /// Stable event operation name.
+        operation: &'static str,
+        /// Native CUDA event failure.
+        source: CudaError,
+    },
     /// Stream quiescence could not be established after a dispatch attempt.
     #[cfg(feature = "cuda")]
     Synchronization {
@@ -184,6 +192,13 @@ impl fmt::Display for IterationAdapterError {
             #[cfg(feature = "cuda")]
             Self::Runtime(source) => write!(formatter, "Llama batch execution failed: {source}"),
             #[cfg(feature = "cuda")]
+            Self::CudaTiming { operation, source } => {
+                write!(
+                    formatter,
+                    "CUDA iteration timing {operation} failed: {source}"
+                )
+            }
+            #[cfg(feature = "cuda")]
             Self::Synchronization { preceding, source } => {
                 if let Some(preceding) = preceding {
                     write!(
@@ -203,6 +218,8 @@ impl error::Error for IterationAdapterError {
         match self {
             #[cfg(feature = "cuda")]
             Self::Runtime(source) => Some(source.as_ref()),
+            #[cfg(feature = "cuda")]
+            Self::CudaTiming { source, .. } => Some(source),
             #[cfg(feature = "cuda")]
             Self::Synchronization { source, .. } => Some(source),
             _ => None,
@@ -432,6 +449,155 @@ impl SampledIterationToken {
 pub struct IterationTiming {
     gpu_execution_ns: u64,
     gpu_idle_gap_ns: u64,
+}
+
+/// Reusable CUDA-event owner for exact iteration execution and idle timings.
+///
+/// The measured execution interval begins after plan adaptation, executor-bound
+/// validation, and host output allocation. It ends after the logits D2H copy is
+/// enqueued. The end event is synchronized before durations are published, and
+/// the next iteration's idle gap is the same-stream interval from that end
+/// event to the next dispatch start event.
+#[cfg(feature = "cuda")]
+pub struct LlamaIterationCudaTimer {
+    start: CudaEvent,
+    end: CudaEvent,
+    previous_end: CudaEvent,
+    has_previous_end: bool,
+}
+
+#[cfg(feature = "cuda")]
+impl LlamaIterationCudaTimer {
+    /// Creates the three timing-enabled events reused by one execution lane.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first event-creation failure after explicitly attempting to
+    /// close every event already created by this constructor.
+    pub fn prepare(context: &CudaContext) -> Result<Self, CudaError> {
+        let start = context.create_event()?;
+        let end = match context.create_event() {
+            Ok(event) => event,
+            Err(error) => {
+                let _ = start.close();
+                return Err(error);
+            }
+        };
+        let previous_end = match context.create_event() {
+            Ok(event) => event,
+            Err(error) => {
+                let _ = end.close();
+                let _ = start.close();
+                return Err(error);
+            }
+        };
+        Ok(Self {
+            start,
+            end,
+            previous_end,
+            has_previous_end: false,
+        })
+    }
+
+    fn record_start(&mut self, stream: &mut CudaStream) -> IterationAdapterResult<()> {
+        self.start
+            .record(stream)
+            .map_err(|source| IterationAdapterError::CudaTiming {
+                operation: "start record",
+                source,
+            })
+    }
+
+    fn record_end_and_measure(
+        &mut self,
+        stream: &mut CudaStream,
+    ) -> IterationAdapterResult<IterationTiming> {
+        self.end
+            .record(stream)
+            .map_err(|source| IterationAdapterError::CudaTiming {
+                operation: "end record",
+                source,
+            })?;
+        self.end
+            .synchronize()
+            .map_err(|source| IterationAdapterError::CudaTiming {
+                operation: "end synchronize",
+                source,
+            })?;
+        let gpu_execution_ns = elapsed_event_ns(&self.start, &self.end, "execution elapsed")?;
+        let gpu_idle_gap_ns = if self.has_previous_end {
+            elapsed_event_ns(&self.previous_end, &self.start, "idle elapsed")?
+        } else {
+            0
+        };
+        std::mem::swap(&mut self.end, &mut self.previous_end);
+        self.has_previous_end = true;
+        Ok(IterationTiming::new(gpu_execution_ns, gpu_idle_gap_ns))
+    }
+
+    fn invalidate_previous_end(&mut self) {
+        self.has_previous_end = false;
+    }
+
+    /// Starts a new observation window whose first iteration has no idle gap.
+    ///
+    /// This does not record or destroy an event. It only prevents time outside
+    /// the caller's next measured window from being attributed to that window.
+    pub fn reset_window(&mut self) {
+        self.invalidate_previous_end();
+    }
+
+    /// Explicitly destroys every owned CUDA event.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first close error after attempting all three closes.
+    pub fn close(self) -> Result<(), CudaError> {
+        let Self {
+            start,
+            end,
+            previous_end,
+            has_previous_end: _,
+        } = self;
+        let mut first_error = None;
+        for event in [start, end, previous_end] {
+            if let Err(error) = event.close() {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+        match first_error {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn elapsed_event_ns(
+    start: &CudaEvent,
+    end: &CudaEvent,
+    operation: &'static str,
+) -> IterationAdapterResult<u64> {
+    let elapsed_ms = start
+        .elapsed_ms(end)
+        .map_err(|source| IterationAdapterError::CudaTiming { operation, source })?;
+    if !elapsed_ms.is_finite() || elapsed_ms.is_sign_negative() {
+        return Err(IterationAdapterError::InvalidRuntimeOutput {
+            field: "CUDA event elapsed milliseconds",
+            reason: "timing result must be finite and non-negative",
+        });
+    }
+    let elapsed_ns = f64::from(elapsed_ms) * 1_000_000.0;
+    if elapsed_ns >= 18_446_744_073_709_551_616.0 {
+        return Err(IterationAdapterError::ArithmeticOverflow {
+            field: "CUDA event elapsed nanoseconds",
+        });
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let rounded_ns = elapsed_ns.round() as u64;
+    Ok(rounded_ns)
 }
 
 impl IterationTiming {
@@ -762,6 +928,38 @@ pub fn execute_llama_iteration(
     executor: &mut PreparedLlamaBatchExecutor,
     stream: &mut CudaStream,
 ) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+    execute_llama_iteration_inner(plan, executor, stream, None).map(|(downloaded, _)| downloaded)
+}
+
+/// Executes one scheduler plan with exact same-stream CUDA event timings.
+///
+/// The returned timing covers dispatch through the logits D2H copy. Its idle
+/// field is zero for the timer's first successful iteration and otherwise
+/// measures from the preceding successful iteration's end event to this
+/// iteration's dispatch start event.
+///
+/// # Errors
+///
+/// Uses the same settlement contract as [`execute_llama_iteration`]. A timing
+/// event failure before dispatch is `NotDispatched`; a post-dispatch event
+/// failure is classified only after stream quiescence is attempted.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_timed(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+    timer: &mut LlamaIterationCudaTimer,
+) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
+    execute_llama_iteration_inner(plan, executor, stream, Some(timer))
+}
+
+#[cfg(feature = "cuda")]
+fn execute_llama_iteration_inner(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+    mut timer: Option<&mut LlamaIterationCudaTimer>,
+) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
     let iteration_id = plan.iteration_id();
     let prepared = PreparedLlamaIteration::prepare(plan).map_err(|error| {
         IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
@@ -798,7 +996,13 @@ pub fn execute_llama_iteration(
             IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
         })?;
 
+    if let Some(timer) = timer.as_deref_mut() {
+        timer.record_start(stream).map_err(|error| {
+            IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
+        })?;
+    }
     if let Err(source) = executor.execute(prepared.rows(), stream) {
+        invalidate_timer(&mut timer);
         return Err(classify_runtime_failure(
             iteration_id,
             IterationAdapterError::Runtime(Box::new(source)),
@@ -806,6 +1010,7 @@ pub fn execute_llama_iteration(
         ));
     }
     if executor.output_count() != prepared.output_count {
+        invalidate_timer(&mut timer);
         return Err(classify_runtime_failure(
             iteration_id,
             IterationAdapterError::InvalidRuntimeOutput {
@@ -816,13 +1021,25 @@ pub fn execute_llama_iteration(
         ));
     }
     if let Err(source) = executor.download_logits(&mut logits_bf16_native, stream) {
+        invalidate_timer(&mut timer);
         return Err(classify_runtime_failure(
             iteration_id,
             IterationAdapterError::Runtime(Box::new(source)),
             stream,
         ));
     }
+    let timing = match timer.as_deref_mut() {
+        Some(timer) => match timer.record_end_and_measure(stream) {
+            Ok(timing) => timing,
+            Err(error) => {
+                timer.invalidate_previous_end();
+                return Err(classify_runtime_failure(iteration_id, error, stream));
+            }
+        },
+        None => IterationTiming::default(),
+    };
     if let Err(source) = stream.synchronize() {
+        invalidate_timer(&mut timer);
         return Err(IterationExecutionFailure::new(
             iteration_id,
             None,
@@ -833,13 +1050,23 @@ pub fn execute_llama_iteration(
         ));
     }
 
-    Ok(DownloadedLlamaIteration {
-        iteration_id,
-        vocabulary_size,
-        output_count: prepared.output_count,
-        logits_bf16_native,
-        commit_outputs: prepared.commit_outputs,
-    })
+    Ok((
+        DownloadedLlamaIteration {
+            iteration_id,
+            vocabulary_size,
+            output_count: prepared.output_count,
+            logits_bf16_native,
+            commit_outputs: prepared.commit_outputs,
+        },
+        timing,
+    ))
+}
+
+#[cfg(feature = "cuda")]
+fn invalidate_timer(timer: &mut Option<&mut LlamaIterationCudaTimer>) {
+    if let Some(timer) = timer.as_deref_mut() {
+        timer.invalidate_previous_end();
+    }
 }
 
 #[cfg(feature = "cuda")]
