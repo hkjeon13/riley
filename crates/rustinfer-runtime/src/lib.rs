@@ -1,6 +1,7 @@
 //! Model, tensor, and backend orchestration boundary.
 
 mod kernel;
+pub mod llama;
 pub mod reference;
 
 #[cfg(feature = "cuda")]

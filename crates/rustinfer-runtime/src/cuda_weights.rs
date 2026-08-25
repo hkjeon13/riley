@@ -2,12 +2,17 @@ use std::collections::BTreeMap;
 use std::error;
 use std::fmt;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rustinfer_cuda::{
     CudaBufferSpan, CudaContext, CudaDType, CudaDeviceBuffer, CudaError, CudaResult, CudaStream,
 };
 use rustinfer_model::{LoadedWeights, ModelError, TensorSource, WeightSlot};
 use rustinfer_tensor::DType;
+
+use crate::llama::{PhysicalWeightId, PhysicalWeightMetadata};
+
+static NEXT_WEIGHT_OWNER_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Result type for canonical checkpoint upload to one CUDA context.
 pub type CudaWeightUploadResult<T> = Result<T, CudaWeightUploadError>;
@@ -41,6 +46,12 @@ pub enum CudaWeightUploadError {
         /// Missing canonical slot.
         slot: WeightSlot,
     },
+    /// The process exhausted non-zero uploaded-weight owner identities.
+    WeightOwnerIdentityExhausted,
+    /// A physical ID was created by a different uploaded-weight owner.
+    ForeignPhysicalWeightId,
+    /// A physical ID index was absent from its uploaded-weight owner.
+    MissingPhysicalWeight { index: usize },
 }
 
 impl fmt::Display for CudaWeightUploadError {
@@ -65,6 +76,18 @@ impl fmt::Display for CudaWeightUploadError {
             }
             Self::MissingSlot { slot } => {
                 write!(formatter, "uploaded CUDA weights omit {}", slot.name())
+            }
+            Self::WeightOwnerIdentityExhausted => {
+                formatter.write_str("uploaded CUDA weight owner identities are exhausted")
+            }
+            Self::ForeignPhysicalWeightId => {
+                formatter.write_str("physical CUDA weight ID belongs to a different uploaded model")
+            }
+            Self::MissingPhysicalWeight { index } => {
+                write!(
+                    formatter,
+                    "uploaded CUDA weights omit physical index {index}"
+                )
             }
         }
     }
@@ -147,6 +170,24 @@ pub struct CudaUploadedWeight<'a> {
     span: CudaBufferSpan<'a>,
 }
 
+/// Direct-indexed physical weight view used only by the owning forward path.
+#[allow(dead_code)]
+pub(crate) struct CudaPhysicalWeight<'a> {
+    tensor: &'a CudaUploadedTensor,
+    span: CudaBufferSpan<'a>,
+}
+
+#[allow(dead_code)]
+impl<'a> CudaPhysicalWeight<'a> {
+    pub(crate) const fn tensor(&self) -> &'a CudaUploadedTensor {
+        self.tensor
+    }
+
+    pub(crate) const fn span(&self) -> CudaBufferSpan<'a> {
+        self.span
+    }
+}
+
 impl<'a> CudaUploadedWeight<'a> {
     /// Originally requested canonical slot.
     #[must_use]
@@ -169,6 +210,7 @@ impl<'a> CudaUploadedWeight<'a> {
 
 /// Canonical slot mapping over deduplicated physical device allocations.
 pub struct CudaUploadedWeights {
+    owner_id: u64,
     physical: Vec<CudaUploadedTensor>,
     slots: BTreeMap<WeightSlot, usize>,
     total_physical_bytes: u64,
@@ -196,6 +238,7 @@ impl CudaUploadedWeights {
         if staging_capacity_bytes == 0 {
             return Err(CudaWeightUploadError::EmptyStagingCapacity);
         }
+        let owner_id = next_weight_owner_id()?;
         let mut staging = context.allocate_pinned_host_buffer(staging_capacity_bytes)?;
         let mut physical = Vec::new();
         let mut physical_indices: BTreeMap<(PathBuf, String), usize> = BTreeMap::new();
@@ -237,6 +280,7 @@ impl CudaUploadedWeights {
 
         staging.close()?;
         Ok(Self {
+            owner_id,
             physical,
             slots,
             total_physical_bytes,
@@ -267,21 +311,71 @@ impl CudaUploadedWeights {
         &self.physical
     }
 
+    /// Resolves a canonical slot once during cold plan construction.
+    pub(crate) fn resolve_slot(&self, slot: WeightSlot) -> Option<PhysicalWeightId> {
+        self.slots
+            .get(&slot)
+            .copied()
+            .map(|index| PhysicalWeightId::new(self.owner_id, index))
+    }
+
+    /// Returns cold shape/dtype/byte metadata for an owner-bound physical ID.
+    pub(crate) fn physical_metadata(
+        &self,
+        id: PhysicalWeightId,
+    ) -> Option<PhysicalWeightMetadata<'_>> {
+        if id.owner() != self.owner_id {
+            return None;
+        }
+        let tensor = self.physical.get(id.index())?;
+        let dtype = match tensor.dtype {
+            CudaDType::BF16 => DType::BF16,
+            CudaDType::F32 => DType::F32,
+            CudaDType::U8 | CudaDType::U32 => return None,
+            _ => return None,
+        };
+        Some(PhysicalWeightMetadata {
+            dtype,
+            shape: &tensor.shape,
+            byte_len: tensor.byte_len(),
+        })
+    }
+
+    /// Directly indexes an already-bound physical tensor without a map lookup.
+    ///
+    /// The owner cookie rejects IDs from another uploaded model. The final
+    /// forward owner must keep this collection and its plan together.
+    #[allow(dead_code)]
+    pub(crate) fn view_physical(
+        &self,
+        id: PhysicalWeightId,
+    ) -> CudaWeightUploadResult<CudaPhysicalWeight<'_>> {
+        if id.owner() != self.owner_id {
+            return Err(CudaWeightUploadError::ForeignPhysicalWeightId);
+        }
+        let tensor = self
+            .physical
+            .get(id.index())
+            .ok_or(CudaWeightUploadError::MissingPhysicalWeight { index: id.index() })?;
+        let span = CudaBufferSpan::new(&tensor.buffer, tensor.dtype, 0, tensor.buffer.byte_len())?;
+        Ok(CudaPhysicalWeight { tensor, span })
+    }
+
     /// Resolves a canonical slot into its immutable whole-allocation span.
     ///
     /// # Errors
     ///
     /// Returns an internal mapping or CUDA span-contract error.
     pub fn view(&self, slot: WeightSlot) -> CudaWeightUploadResult<CudaUploadedWeight<'_>> {
-        let physical_index = self
-            .physical_index(slot)
+        let id = self
+            .resolve_slot(slot)
             .ok_or(CudaWeightUploadError::MissingSlot { slot })?;
-        let tensor = self
-            .physical
-            .get(physical_index)
-            .ok_or(CudaWeightUploadError::MissingSlot { slot })?;
-        let span = CudaBufferSpan::new(&tensor.buffer, tensor.dtype, 0, tensor.buffer.byte_len())?;
-        Ok(CudaUploadedWeight { slot, tensor, span })
+        let physical = self.view_physical(id)?;
+        Ok(CudaUploadedWeight {
+            slot,
+            tensor: physical.tensor,
+            span: physical.span,
+        })
     }
 
     /// Explicitly closes every physical allocation, attempting all closes even
@@ -307,11 +401,20 @@ impl fmt::Debug for CudaUploadedWeights {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("CudaUploadedWeights")
+            .field("owner_id", &self.owner_id)
             .field("physical", &self.physical)
             .field("slots", &self.slots)
             .field("total_physical_bytes", &self.total_physical_bytes)
             .finish()
     }
+}
+
+fn next_weight_owner_id() -> CudaWeightUploadResult<u64> {
+    NEXT_WEIGHT_OWNER_ID
+        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+            current.checked_add(1)
+        })
+        .map_err(|_| CudaWeightUploadError::WeightOwnerIdentityExhausted)
 }
 
 fn cuda_dtype(slot: WeightSlot, dtype: DType) -> CudaWeightUploadResult<CudaDType> {
