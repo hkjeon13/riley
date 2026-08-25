@@ -1247,7 +1247,10 @@ def validate_reference_fixture(
                 "bound source is missing or escapes the repository",
             )
         digest = source["sha256"]
-        _expect(_sha256(resolved), digest, f"{fixture_path}.provenance.sources.{name}")
+        # A checked-in golden remains bound to the producer at its recorded
+        # immutable revision. Later additive producer changes must not require
+        # rewriting historical provenance or pretending that they generated
+        # the old fixture; replay the exact Git object below instead.
         committed = _fixture_git(root, ["show", f"{revision}:{relative}"])
         _expect(
             hashlib.sha256(committed).hexdigest(),

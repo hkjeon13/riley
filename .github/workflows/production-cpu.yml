@@ -34,6 +34,14 @@ jobs:
       - name: Dependency, license, feature, and workspace boundary policy
         run: python3 ci/check_workspace_boundaries.py --locked
 
+      - name: Release, performance, and reliability contract tests
+        run: |
+          python3 -m unittest discover -s ci/release -p 'test_*.py' -v
+          python3 -m unittest discover -s benchmarks/scripts/tests -p 'test_*.py' -v
+          python3 ci/release/verify_runtime_dockerfile.py
+          bash -n ci/run_release_soak.sh
+          python3 benchmarks/scripts/validate_contract.py
+
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
 
