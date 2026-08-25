@@ -224,6 +224,29 @@ typedef struct RustInferCudaRopeParams {
   uint64_t reserved[5];
 } RustInferCudaRopeParams;
 
+// Row-indexed non-interleaved Llama RoPE. positions is U32 [active_row_count]
+// and selects an independent cos/sin table row for every dense input row.
+// input/output are [active_row_count,head_count,head_size]. The safe Rust
+// boundary validates its mirrored host positions before submission; the
+// native kernel also bounds-checks every device position and writes a NaN
+// rotary row instead of reading outside the tables when raw C metadata is
+// malformed. The non-rotary tail remains a bit-preserving copy.
+typedef struct RustInferCudaIndexedRopeParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan cos;
+  RustInferCudaBufferSpan sin;
+  RustInferCudaBufferSpan positions;
+  RustInferCudaBufferSpan output;
+  uint64_t active_row_count;
+  uint64_t head_count;
+  uint64_t head_size;
+  uint64_t rotary_dimension;
+  uint64_t table_position_count;
+  uint64_t reserved[4];
+} RustInferCudaIndexedRopeParams;
+
 // Only BF16<->F32 conversions are accepted by this operation.
 typedef struct RustInferCudaCastParams {
   uint32_t struct_size;
@@ -233,6 +256,24 @@ typedef struct RustInferCudaCastParams {
   uint64_t element_count;
   uint64_t reserved[5];
 } RustInferCudaCastParams;
+
+// Allocation-free gather from a contiguous row-major input matrix. row_indices
+// is U32 [output_row_count], input is [input_row_count,column_count], and
+// output is [output_row_count,column_count]. Input/output must have one
+// matching F32 or BF16 dtype and may not overlap. The safe Rust boundary
+// validates mirrored indices; malformed raw C device indices produce a NaN
+// output row without reading beyond input.
+typedef struct RustInferCudaRowGatherParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan row_indices;
+  RustInferCudaBufferSpan output;
+  uint64_t input_row_count;
+  uint64_t output_row_count;
+  uint64_t column_count;
+  uint64_t reserved[4];
+} RustInferCudaRowGatherParams;
 
 // Correctness-first materialized GQA attention. Query is BF16
 // [token_count, query_head_count, head_size], key is BF16
@@ -520,6 +561,83 @@ typedef struct RustInferCudaPagedDecodeAttentionParams {
   uint32_t reduction_order;
   uint64_t reserved[4];
 } RustInferCudaPagedDecodeAttentionParams;
+
+#define RUSTINFER_CUDA_PACKED_BATCH_VERSION 1u
+
+// Packed multi-sequence address-translation descriptor. The device arrays are
+// CSR sequence_block_offsets U32 [sequence_count+1], block_ids U32
+// [block_count], valid_tokens U16 [block_count], row_sequence_slots U32
+// [active_row_count], and row_positions U32 [active_row_count]. Offsets index
+// block_ids/valid_tokens, whose entries remain in logical-block order per
+// sequence. block_ids name blocks in [0,physical_block_count), block_size is
+// exactly 16, and each row position is the logical token written/queried by
+// that active row. Every non-last block of a sequence has 16 valid tokens;
+// its last block has [1,16], thereby defining the sequence's post-write
+// logical length, which must include every row position assigned to it. The
+// safe Rust boundary validates mirrored arrays including CSR monotonicity,
+// non-empty sequence ranges, physical-ID uniqueness/range, canonical
+// valid-token counts, row slots, row positions, and uniqueness of each
+// (sequence,row-position) pair. Native kernels independently bounds-guard all
+// device-derived indices so malformed raw C metadata cannot access outside a
+// declared span or pool.
+typedef struct RustInferCudaPackedBatchV1 {
+  uint32_t struct_size;
+  uint32_t format_version;
+  RustInferCudaBufferSpan sequence_block_offsets;
+  RustInferCudaBufferSpan block_ids;
+  RustInferCudaBufferSpan valid_tokens;
+  RustInferCudaBufferSpan row_sequence_slots;
+  RustInferCudaBufferSpan row_positions;
+  uint64_t sequence_count;
+  uint64_t block_count;
+  uint64_t active_row_count;
+  uint64_t physical_block_count;
+  uint32_t block_size;
+  uint32_t reserved0;
+  uint64_t reserved[4];
+} RustInferCudaPackedBatchV1;
+
+// Bit-preserving BF16 scatter from dense active rows [T,KVH,D] into shared
+// pools [physical_block_count,KVH,16,D]. Each row uses its packed sequence slot
+// and logical position. Invalid raw C metadata makes only that row a no-op.
+typedef struct RustInferCudaRaggedPagedKvCacheWriteParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan key_source;
+  RustInferCudaBufferSpan value_source;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaPackedBatchV1 batch;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[4];
+} RustInferCudaRaggedPagedKvCacheWriteParams;
+
+// Allocation-free ragged causal paged attention. Query is BF16 [T,QH,64],
+// output is BF16 [output_row_count,QH,64], pools are BF16
+// [physical_block_count,KVH,16,64], and each active row attends logical tokens
+// [0,row_positions[row]] in its own CSR sequence. output_row_count must be at
+// least T; every padding row [T,output_row_count) is overwritten with zero so
+// a prepared fixed-M projection never observes uninitialized bytes. QH must be
+// divisible by KVH. Dot products, online softmax state, and value accumulation
+// are F32; the final output rounds once to BF16. Invalid raw C metadata produces
+// a NaN output row rather than an out-of-bounds access.
+typedef struct RustInferCudaRaggedPagedAttentionParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaBufferSpan output;
+  RustInferCudaPackedBatchV1 batch;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t output_row_count;
+  float scale;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaRaggedPagedAttentionParams;
 
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
@@ -820,11 +938,23 @@ RustInferCudaStatus rustinfer_cuda_rope_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
+// Indexed RoPE has the same dtype, aliasing, synchronous-stream, and
+// allocation-free guarantees as rustinfer_cuda_rope_execute.
+RustInferCudaStatus rustinfer_cuda_indexed_rope_execute(
+    const RustInferCudaIndexedRopeParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
 // BF16<->F32 only. F32 NaNs narrow to CUDA's canonical BF16 NaN 0x7fff;
 // BF16-to-F32 expansion preserves the source BF16 bits. Any input/output
 // overlap is rejected.
 RustInferCudaStatus rustinfer_cuda_cast_execute(
     const RustInferCudaCastParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+RustInferCudaStatus rustinfer_cuda_row_gather_execute(
+    const RustInferCudaRowGatherParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
@@ -887,6 +1017,18 @@ RustInferCudaStatus rustinfer_cuda_paged_decode_attention_reference_execute(
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
     const RustInferCudaPagedDecodeAttentionParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Packed-batch calls are allocation-free, exclusively borrow every distinct
+// opaque buffer and the explicit stream, and synchronize that stream before
+// returning. Writable spans may not overlap any other touched span.
+RustInferCudaStatus rustinfer_cuda_ragged_paged_kv_cache_write_execute(
+    const RustInferCudaRaggedPagedKvCacheWriteParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_ragged_paged_attention_execute(
+    const RustInferCudaRaggedPagedAttentionParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

@@ -3,7 +3,7 @@
 #include <stddef.h>
 
 _Static_assert(RUSTINFER_CUDA_ABI_VERSION == 1,
-               "PR 09 additions must preserve ABI v1");
+               "additive CUDA entry points must preserve ABI v1");
 _Static_assert(sizeof(void*) * 8 == RUSTINFER_CUDA_ABI_POINTER_WIDTH,
                "rustinfer CUDA ABI requires 64-bit pointers");
 _Static_assert(sizeof(RustInferCudaDType) == 4,
@@ -58,8 +58,29 @@ _Static_assert(offsetof(RustInferCudaRopeParams, token_count) == 200,
                "RoPE dimension offset changed");
 _Static_assert(offsetof(RustInferCudaRopeParams, reserved) == 248,
                "RoPE reserved tail changed");
+_Static_assert(sizeof(RustInferCudaIndexedRopeParams) == 320,
+               "indexed RoPE params ABI size changed");
+_Static_assert(offsetof(RustInferCudaIndexedRopeParams, input) == 8,
+               "indexed RoPE input offset changed");
+_Static_assert(offsetof(RustInferCudaIndexedRopeParams, positions) == 152,
+               "indexed RoPE positions offset changed");
+_Static_assert(
+    offsetof(RustInferCudaIndexedRopeParams, active_row_count) == 248,
+    "indexed RoPE dimension offset changed");
+_Static_assert(offsetof(RustInferCudaIndexedRopeParams, reserved) == 288,
+               "indexed RoPE reserved tail changed");
 _Static_assert(sizeof(RustInferCudaCastParams) == 152,
                "cast params ABI size changed");
+_Static_assert(sizeof(RustInferCudaRowGatherParams) == 208,
+               "row gather params ABI size changed");
+_Static_assert(offsetof(RustInferCudaRowGatherParams, input) == 8,
+               "row gather input offset changed");
+_Static_assert(offsetof(RustInferCudaRowGatherParams, row_indices) == 56,
+               "row gather indices offset changed");
+_Static_assert(offsetof(RustInferCudaRowGatherParams, input_row_count) == 152,
+               "row gather dimension offset changed");
+_Static_assert(offsetof(RustInferCudaRowGatherParams, reserved) == 176,
+               "row gather reserved tail changed");
 _Static_assert(sizeof(RustInferCudaQkGqaParams) == 216,
                "QK GQA params ABI size changed");
 _Static_assert(offsetof(RustInferCudaQkGqaParams, query) == 8,
@@ -217,6 +238,48 @@ _Static_assert(
 _Static_assert(offsetof(RustInferCudaPagedDecodeAttentionParams, reserved) ==
                    456,
                "paged online reserved tail changed");
+_Static_assert(RUSTINFER_CUDA_PACKED_BATCH_VERSION == 1,
+               "packed batch ABI version changed");
+_Static_assert(sizeof(RustInferCudaPackedBatchV1) == 320,
+               "packed batch ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaPackedBatchV1, sequence_block_offsets) == 8,
+    "packed batch CSR offsets span changed");
+_Static_assert(offsetof(RustInferCudaPackedBatchV1, row_positions) == 200,
+               "packed batch row positions span changed");
+_Static_assert(offsetof(RustInferCudaPackedBatchV1, sequence_count) == 248,
+               "packed batch dimension offset changed");
+_Static_assert(offsetof(RustInferCudaPackedBatchV1, block_size) == 280,
+               "packed batch block-size offset changed");
+_Static_assert(offsetof(RustInferCudaPackedBatchV1, reserved) == 288,
+               "packed batch reserved tail changed");
+_Static_assert(sizeof(RustInferCudaRaggedPagedKvCacheWriteParams) == 568,
+               "ragged paged KV write ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaRaggedPagedKvCacheWriteParams, batch) == 200,
+    "ragged paged KV write batch offset changed");
+_Static_assert(offsetof(RustInferCudaRaggedPagedKvCacheWriteParams,
+                        key_value_head_count) == 520,
+               "ragged paged KV write dimension offset changed");
+_Static_assert(
+    offsetof(RustInferCudaRaggedPagedKvCacheWriteParams, reserved) == 536,
+    "ragged paged KV write reserved tail changed");
+_Static_assert(sizeof(RustInferCudaRaggedPagedAttentionParams) == 592,
+               "ragged paged attention ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaRaggedPagedAttentionParams, batch) == 200,
+    "ragged paged attention batch offset changed");
+_Static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams,
+                        query_head_count) == 520,
+               "ragged paged attention dimension offset changed");
+_Static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams,
+                        output_row_count) == 544,
+               "ragged paged attention output-row offset changed");
+_Static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams, scale) == 552,
+               "ragged paged attention scale offset changed");
+_Static_assert(
+    offsetof(RustInferCudaRaggedPagedAttentionParams, reserved) == 560,
+    "ragged paged attention reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -275,9 +338,15 @@ static RustInferCudaStatus (*const gated_multiply_symbol)(
 static RustInferCudaStatus (*const rope_symbol)(
     const RustInferCudaRopeParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_rope_execute;
+static RustInferCudaStatus (*const indexed_rope_symbol)(
+    const RustInferCudaIndexedRopeParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_indexed_rope_execute;
 static RustInferCudaStatus (*const cast_symbol)(
     const RustInferCudaCastParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_cast_execute;
+static RustInferCudaStatus (*const row_gather_symbol)(
+    const RustInferCudaRowGatherParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_row_gather_execute;
 static RustInferCudaStatus (*const qk_gqa_symbol)(
     const RustInferCudaQkGqaParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_qk_gqa_execute;
@@ -319,6 +388,14 @@ static RustInferCudaStatus (*const paged_decode_attention_reference_symbol)(
 static RustInferCudaStatus (*const paged_decode_attention_symbol)(
     const RustInferCudaPagedDecodeAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_paged_decode_attention_execute;
+static RustInferCudaStatus (*const ragged_paged_kv_cache_write_symbol)(
+    const RustInferCudaRaggedPagedKvCacheWriteParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_ragged_paged_kv_cache_write_execute;
+static RustInferCudaStatus (*const ragged_paged_attention_symbol)(
+    const RustInferCudaRaggedPagedAttentionParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_ragged_paged_attention_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -341,8 +418,9 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&residual_add_symbol,   (const void*)&silu_symbol,
     (const void*)&row_bias_add_symbol,   (const void*)&gated_multiply_symbol,
-    (const void*)&rope_symbol,
-    (const void*)&cast_symbol,           (const void*)&qk_gqa_symbol,
+    (const void*)&rope_symbol,           (const void*)&indexed_rope_symbol,
+    (const void*)&cast_symbol,           (const void*)&row_gather_symbol,
+    (const void*)&qk_gqa_symbol,
     (const void*)&scale_causal_mask_symbol,
     (const void*)&causal_softmax_symbol, (const void*)&av_gqa_symbol,
     (const void*)&prefill_attention_symbol,
@@ -353,6 +431,8 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&paged_kv_cache_write_symbol,
     (const void*)&paged_decode_attention_reference_symbol,
     (const void*)&paged_decode_attention_symbol,
+    (const void*)&ragged_paged_kv_cache_write_symbol,
+    (const void*)&ragged_paged_attention_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
