@@ -543,6 +543,8 @@ fn materialized_and_chunked_decode_agree_on_infinite_score_rules() -> TestResult
         query.close()?;
     }
 
+    drop(online);
+    drop(reference);
     staging.close()?;
     stream.close()?;
     close_context(context)
