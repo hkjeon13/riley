@@ -163,10 +163,11 @@ executes each ignored target separately with
 `#[ignore = "remote GPU"]`, so an ordinary Cargo test command cannot
 accidentally execute device work.
 
-The PR 03 `host_runtime_gpu` target remains exactly seven tests covering:
+The cumulative `host_runtime_gpu` target contains exactly eight tests covering:
 
 - device identity, compute capability, total memory, multiprocessor count,
   driver version, and runtime version;
+- command-batch one-shot finish/drop lifecycle and subsequent stream reuse;
 - an invalid device ordinal;
 - explicit event ordering across two non-default streams;
 - async fill correctness after synchronization;
@@ -182,6 +183,14 @@ The additive PR 04 `memory_gpu` target is exactly five tests:
 - `pinned_host_device_round_trip_is_exact`;
 - `two_stream_copy_handoff_prevents_early_reuse`; and
 - `copy_ranges_and_context_ownership_are_validated`.
+
+The PR 16 memory fault gate is compiled only with the explicit
+`cuda-test-fault-injection` feature. Its parent harness launches four fresh
+subprocesses for create rollback ambiguity, explicit close ambiguity, deferred
+copy errors after confirmed completion, and unconfirmed completion/context
+restoration. The intentional fail-closed leak cases are not run under the
+ordinary leak sanitizer. Production binaries are checked for absence of the
+test-only native symbol prefix.
 
 Its stable accounting marker must report all four values as zero:
 
@@ -215,6 +224,34 @@ The GitHub GPU job is disabled unless a manual dispatch explicitly selects
 `run_gpu_tests`. It targets only `[self-hosted, linux, x64, rustinfer-gpu]`, so
 standard hosted runners never receive or wait on a GPU job. Scheduled runs
 continue to perform compile/link and feature-on compile validation only.
+
+## Release bundle and minimal runtime image
+
+The PR 16 release packaging contract lives under `ci/release`. Its CPU-only
+unit and static checks do not compile or initialize CUDA:
+
+```sh
+python3 -m unittest discover -s ci/release -p 'test_*.py' -v
+python3 ci/release/verify_runtime_dockerfile.py
+```
+
+`build_release_bundle.py` accepts an already-built Linux x86_64 CUDA release
+binary plus a full source revision and `SOURCE_DATE_EPOCH`. It emits a
+deterministic archive with a reviewed release/configuration/rollback manifest,
+an ELF-derived native dependency manifest, and closed `SHA256SUMS` coverage.
+`verify_release_bundle.py` treats the archive as hostile and rejects traversal,
+links, extra files, forbidden Python artifacts, unreviewed or mismatched ELF
+dependencies, non-canonical metadata, and checksum errors.
+
+`ci/release/Dockerfile` separates the CUDA builder from a digest-pinned CUDA
+runtime stage and copies only the verified bundle payload. The final stage
+asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
+absent. See `docs/release/README.md` for the file layout and runtime contract.
+
+Release packaging currently has one deliberate fail-closed blocker: the
+repository has no owner-selected root `LICENSE`. Do not invent one in CI.
+Ordinary build/test lanes remain unaffected, while release preflight cannot
+pass until the owner adds an approved license and aligns Cargo metadata.
 
 ## Optional Python reference gate
 
