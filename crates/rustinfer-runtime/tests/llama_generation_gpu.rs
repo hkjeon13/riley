@@ -382,6 +382,8 @@ fn pinned_smollm2_all_greedy_sequences_match_cache_on_and_cache_off_golden() -> 
         .ok_or("logits row byte count overflow")?;
     let prompt_shape_count = fixture.cases_by_prompt_length.len();
     let mut executed_cases = 0_usize;
+    let mut terminal_incomplete_utf8_cases = 0_usize;
+    let mut terminal_incomplete_utf8_bytes = 0_usize;
 
     for (prompt_length, cases) in fixture.cases_by_prompt_length {
         let mut owner = PreparedLlamaGeneration::prepare(
@@ -449,6 +451,17 @@ fn pinned_smollm2_all_greedy_sequences_match_cache_on_and_cache_off_golden() -> 
             assert_eq!(state.rng_draws(), 0);
             assert_eq!(state.rng_algorithm_id(), PHILOX4X32_10_ALGORITHM_ID);
             assert_eq!(trace.text, state.text());
+            let pending_utf8_bytes = state.stop_state().pending_bytes();
+            if !pending_utf8_bytes.is_empty() {
+                let source = std::str::from_utf8(pending_utf8_bytes)
+                    .expect_err("terminal pending bytes must be one incomplete UTF-8 scalar");
+                assert_eq!(source.valid_up_to(), 0);
+                assert_eq!(source.error_len(), None);
+                terminal_incomplete_utf8_cases += 1;
+                terminal_incomplete_utf8_bytes = terminal_incomplete_utf8_bytes
+                    .checked_add(pending_utf8_bytes.len())
+                    .ok_or("terminal incomplete UTF-8 byte count overflow")?;
+            }
             assert_token_trace(
                 &trace,
                 &case.cache_on_token_ids,
@@ -464,7 +477,8 @@ fn pinned_smollm2_all_greedy_sequences_match_cache_on_and_cache_off_golden() -> 
                 "pr11-generation-golden schema_version=1 case={} prompt_length={} \
 sampled_tokens={} prefill_calls={} decode_calls={} rng_draws=0 finish_reason={} \
 cache_on_off_fixture_exact=true adapter_cache_on_exact=true adapter_cache_off_exact=true \
-logits_download_bytes={} owner_reused_by_prompt_shape=true status=passed",
+logits_download_bytes={} terminal_incomplete_utf8_bytes={} \
+owner_reused_by_prompt_shape=true status=passed",
                 case.index,
                 prompt_length,
                 case.cache_on_token_ids.len(),
@@ -472,6 +486,7 @@ logits_download_bytes={} owner_reused_by_prompt_shape=true status=passed",
                 summary.decode_tokens(),
                 case.finish.runtime(),
                 summary.logits_download_bytes(),
+                pending_utf8_bytes.len(),
             );
         }
 
@@ -485,7 +500,9 @@ logits_download_bytes={} owner_reused_by_prompt_shape=true status=passed",
 prompt_shapes={prompt_shape_count} \
 cache_modes=on,off greedy_exact=true rng_draws=0 n_tokens_requires_n_minus_1_decode=true \
 per_token_cpu_gpu_timing=true full_bf16_logits_d2h_bytes_per_token={logits_row_bytes} \
-kv_pool_reset=true cuda_allocation_zero_after_close=true status=passed",
+terminal_incomplete_utf8_cases={terminal_incomplete_utf8_cases} \
+terminal_incomplete_utf8_bytes={terminal_incomplete_utf8_bytes} kv_pool_reset=true \
+cuda_allocation_zero_after_close=true status=passed",
     );
     stream.close()?;
     close_context(context)

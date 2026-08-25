@@ -310,6 +310,9 @@ impl StopState {
     }
 
     /// Bytes withheld for UTF-8 completion or stop-prefix disambiguation.
+    ///
+    /// A terminal state can retain an incomplete UTF-8 scalar here. The raw
+    /// bytes remain lossless while [`Self::text`] stays strict UTF-8.
     #[must_use]
     pub fn pending_bytes(&self) -> &[u8] {
         &self.pending
@@ -403,7 +406,7 @@ impl StopState {
         }
 
         if flush_at_end {
-            self.flush_pending()?;
+            self.finish_pending()?;
             return Ok(false);
         }
 
@@ -418,9 +421,13 @@ impl StopState {
         Ok(false)
     }
 
-    fn flush_pending(&mut self) -> GenerationResult<()> {
-        let pending_len = self.pending.len();
-        self.emit_prefix(pending_len)
+    fn finish_pending(&mut self) -> GenerationResult<()> {
+        let emit_end = match str::from_utf8(&self.pending) {
+            Ok(_) => self.pending.len(),
+            Err(source) if source.error_len().is_none() => source.valid_up_to(),
+            Err(source) => return Err(invalid_utf8(source)),
+        };
+        self.emit_prefix(emit_end)
     }
 
     fn emit_prefix(&mut self, byte_len: usize) -> GenerationResult<()> {
@@ -779,7 +786,7 @@ impl GenerationState {
 
         if is_eos || is_stop_token {
             self.stop_state.clear_delta();
-            if let Err(error) = self.stop_state.flush_pending() {
+            if let Err(error) = self.stop_state.finish_pending() {
                 return self.fail(error);
             }
             self.finish_reason = Some(if is_eos {
@@ -821,17 +828,18 @@ impl GenerationState {
     /// Cancels between model steps without drawing another RNG word.
     ///
     /// Any valid text retained solely as a possible stop prefix is flushed and
-    /// returned as the final delta. An incomplete UTF-8 scalar becomes a
-    /// structured error because no future token can complete it.
+    /// returned as the final delta. An incomplete trailing UTF-8 scalar stays
+    /// losslessly available through [`StopState::pending_bytes`] and is not
+    /// replaced in the strict UTF-8 text view.
     ///
     /// # Errors
     ///
     /// Returns after an existing terminal transition or when withheld bytes
-    /// do not form complete UTF-8 at cancellation.
+    /// contain a definitively invalid UTF-8 sequence.
     pub fn cancel(&mut self) -> GenerationResult<&str> {
         self.pre_step()?;
         self.stop_state.clear_delta();
-        if let Err(error) = self.stop_state.flush_pending() {
+        if let Err(error) = self.stop_state.finish_pending() {
             return self.fail(error);
         }
         self.finish_reason = Some(FinishReason::Cancelled);
@@ -1265,19 +1273,39 @@ mod tests {
     }
 
     #[test]
-    fn incomplete_utf8_at_length_is_a_structured_error() {
+    fn terminal_incomplete_utf8_is_retained_without_lossy_replacement() {
         let mut request = request(b"utf8-length");
         request.max_new_tokens = 1;
-        let mut state =
+        let mut length_state =
             GenerationState::new(request, VOCABULARY_SIZE, MAXIMUM_TOKEN_BYTES).unwrap();
+        let token = length_state
+            .accept_token(10, None, Some(b"visible\xe2\x82"))
+            .unwrap();
+        assert_eq!(token.text_delta(), "visible");
+        assert_eq!(token.finish_reason(), Some(FinishReason::Length));
+        assert_eq!(length_state.generated_token_ids(), &[10]);
+        assert_eq!(length_state.text(), "visible");
+        assert_eq!(length_state.stop_state().pending_bytes(), b"\xe2\x82");
+
+        let mut eos = state(b"utf8-eos");
         assert_eq!(
-            state.accept_token(10, None, Some(b"\xe2\x82")).unwrap_err(),
-            GenerationError::InvalidUtf8 {
-                valid_up_to: 0,
-                error_len: None,
-            }
+            eos.accept_token(10, None, Some(b"prefix\xe2"))
+                .unwrap()
+                .text_delta(),
+            "prefix"
         );
-        assert_eq!(state.finish_reason(), Some(FinishReason::Error));
+        let token = eos.accept_token(3, None, None).unwrap();
+        assert_eq!(token.text_delta(), "");
+        assert_eq!(token.finish_reason(), Some(FinishReason::Eos));
+        assert_eq!(eos.stop_state().pending_bytes(), b"\xe2");
+
+        let mut cancelled = state(b"utf8-cancel");
+        cancelled
+            .accept_token(10, None, Some(b"prefix\xe2"))
+            .unwrap();
+        assert_eq!(cancelled.cancel().unwrap(), "");
+        assert_eq!(cancelled.finish_reason(), Some(FinishReason::Cancelled));
+        assert_eq!(cancelled.stop_state().pending_bytes(), b"\xe2");
     }
 
     #[test]
