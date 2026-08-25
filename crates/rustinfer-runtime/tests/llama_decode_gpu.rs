@@ -738,10 +738,9 @@ fn pinned_smollm2_capacity_reset_and_prompt_reuse_have_no_contamination() -> Tes
     );
 
     println!(
-        "pr09-llama-lifecycle schema_version=1 capacity={} capacity_error_pre_mutation=true \
+        "pr09-llama-lifecycle schema_version=1 capacity={maximum_length} capacity_error_pre_mutation=true \
 reset_allocation_stable=true same_prompt_replay_byte_exact=true different_prompt_fresh_byte_exact=true \
-implicit_drop_accounting_zero=true",
-        maximum_length,
+implicit_drop_accounting_zero=true"
     );
     stream.close()?;
     close_context(context)
@@ -811,9 +810,9 @@ logical_after={} token_id={} latency_ns={} timing_boundary=decode_plus_stream_sy
     decode.close()?;
     assert!(context.allocation_stats()?.is_zero());
     println!(
-        "pr09-llama-near-limit-summary schema_version=1 prompt_length={} decode_calls={} \
-final_logical_length={} capacity_error_pre_mutation=true allocation_stable=true",
-        prompt_length, LONG_PARITY_DECODE_CALLS, maximum_length,
+        "pr09-llama-near-limit-summary schema_version=1 prompt_length={prompt_length} \
+decode_calls={LONG_PARITY_DECODE_CALLS} final_logical_length={maximum_length} \
+capacity_error_pre_mutation=true allocation_stable=true"
     );
     stream.close()?;
     close_context(context)
