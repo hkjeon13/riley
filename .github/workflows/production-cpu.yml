@@ -1,0 +1,55 @@
+name: Production CPU
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.85.0
+
+jobs:
+  quality:
+    name: Format, lint, test, docs, and boundaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install exact Rust toolchain
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal --component clippy,rustfmt
+          rustc --version | grep -E '^rustc 1\.85\.0 '
+          cargo --version | grep -E '^cargo 1\.85\.0 '
+
+      - name: Format
+        run: cargo fmt --all -- --check
+
+      - name: Dependency, license, feature, and workspace boundary policy
+        run: python3 ci/check_workspace_boundaries.py --locked
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+
+      - name: Unit tests
+        run: cargo test --locked --workspace --no-default-features
+
+      - name: Python-free synthetic model loading
+        run: ci/verify_python_free_model_loading.sh
+
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --workspace --no-deps --no-default-features
+
+      - name: CPU feature matrix
+        run: ci/check_feature_matrix.sh
+
+      - name: Build without excluded tool and research directories
+        run: ci/check_workspace_without_research_tools.sh

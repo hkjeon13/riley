@@ -1,0 +1,825 @@
+{
+  "cells": [
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.028357076304637914
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.028012483931611893
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.037965786652735575
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 380.5293120094575,
+            "r7_p95": 411.88813075132197
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 11.789003503508866,
+            "r7_p95": 15.50704890905763
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.912175032193772,
+            "r7_p95": 12.939529943574714
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 84.0934606512561
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 393.0469179977081,
+            "r7_p95": 434.10128864998114
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 12.303179493756033,
+            "r7_p95": 16.100708404701432
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 12.293744032156669,
+            "r7_p95": 13.61585022724842
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 81.41528424011574
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 392.56663800915703,
+            "r7_p95": 420.7400019564375
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 12.148554502346087,
+            "r7_p95": 15.776866494707061
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 12.269532709568363,
+            "r7_p95": 13.186578565810416
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 81.51499645370257
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 366.9721295009367,
+            "r7_p95": 394.04870640137227
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 11.479410495667253,
+            "r7_p95": 14.793005299725337
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.489481161275293,
+            "r7_p95": 12.352107363145596
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 87.2020136669294
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 380.8355815053801,
+            "r7_p95": 429.39213704667054
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 930,
+            "r7_p50": 11.926034501811955,
+            "r7_p95": 15.765963989542795
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.915511612906196,
+            "r7_p95": 13.462246271134767
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 84.02602169662168
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.028357076304637914,
+        "warm_end_to_end_r7_p50_sample_cv": 0.028012483931611893,
+        "warm_end_to_end_r7_p95_sample_cv": 0.037965786652735575,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.026836399390010465,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.03156980360184945,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.02742669257044269,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.03793018790351967
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.026667999961592567
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.027015908189455925
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.06798589215511058
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 1788.5778245035908,
+            "r7_p95": 2048.2075941479707
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 3488677888.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 12.137593002989888,
+            "r7_p95": 17.99785095281547
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 12.419219480382415,
+            "r7_p95": 14.457986345303823
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 71.56527891094572
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 1747.1407570046722,
+            "r7_p95": 1815.0010487464897
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 3488677888.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 11.982310003077146,
+            "r7_p95": 15.051055699586865
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 12.0938963740427,
+            "r7_p95": 12.627139729538182
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 73.26266326711391
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 1687.9865755036008,
+            "r7_p95": 1738.1990270449023
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 3488677888.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 11.493311503727455,
+            "r7_p95": 14.411827448930124
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.627707389773668,
+            "r7_p95": 12.022312088553495
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 75.83002274555938
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 1676.021221501287,
+            "r7_p95": 1756.7904705509136
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 3488677888.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 11.500511005579028,
+            "r7_p95": 14.43605709791881
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.533100003977928,
+            "r7_p95": 12.169597543708202
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 76.37140174384658
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 30,
+            "r7_p50": 1704.2095684955711,
+            "r7_p95": 1806.8171257989889
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 3488677888.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 3810,
+            "r7_p50": 11.679539005854167,
+            "r7_p95": 15.0097194549744
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 30,
+            "r7_p50": 11.756737606268096,
+            "r7_p95": 12.56151157325889
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 75.10813437166877
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.026667999961592567,
+        "warm_end_to_end_r7_p50_sample_cv": 0.027015908189455925,
+        "warm_end_to_end_r7_p95_sample_cv": 0.06798589215511058,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.02468175799557748,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.09712378919148693,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.030783050181047704,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.07666685359458736
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 128,
+        "prompt_tokens": 4096,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "throughput_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.024024211901044423
+        },
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "warm_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.05,
+          "value": 0.024328988742864134
+        },
+        {
+          "name": "warm_p95_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.04580353628011142
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 30,
+      "run_summaries": [
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 409.28522100148257,
+            "r7_p95": 460.4263799992623
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1641086976.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 12.452185503207147,
+            "r7_p95": 17.496104002930224
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 12.81196243554962,
+            "r7_p95": 14.478048483837366
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-01",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 625.4806843274334
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 383.91832950583193,
+            "r7_p95": 412.4900470051216
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1641086976.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 11.948428495088592,
+            "r7_p95": 15.379725009552203
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 12.024458032336101,
+            "r7_p95": 12.970071515977203
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-02",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 666.8090236423068
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 397.4310885023442,
+            "r7_p95": 438.2740129949525
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1641086976.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 12.225225000292994,
+            "r7_p95": 16.73673899495043
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 12.464489516259487,
+            "r7_p95": 13.795807612628016
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-03",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 644.1371869505365
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 389.54002450191183,
+            "r7_p95": 428.1515490001766
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1641086976.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 12.222095996548887,
+            "r7_p95": 15.978907991666347
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 12.15502282256268,
+            "r7_p95": 13.435475613204613
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-04",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 657.187605965267
+          },
+          "trial_count": 30
+        },
+        {
+          "end_to_end_ms": {
+            "observation_count": 240,
+            "r7_p50": 392.3309145029634,
+            "r7_p95": 414.0438489994267
+          },
+          "failure_count": 0,
+          "peak_vram_bytes": {
+            "maximum": 1641086976.0,
+            "observation_count": 30
+          },
+          "pooled_itl_ms": {
+            "observation_count": 7440,
+            "r7_p50": 12.225964506797027,
+            "r7_p95": 15.568692004308105
+          },
+          "request_mean_tpot_ms": {
+            "observation_count": 240,
+            "r7_p50": 12.305092370943091,
+            "r7_p95": 12.979512580768056
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-05",
+          "successful_trial_count": 30,
+          "throughput_tokens_per_second": {
+            "observation_count": 30,
+            "r7_p50": 652.5116086959987
+          },
+          "trial_count": 30
+        }
+      ],
+      "statistics": {
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.024024211901044423,
+        "warm_end_to_end_r7_p50_sample_cv": 0.024328988742864134,
+        "warm_end_to_end_r7_p95_sample_cv": 0.04580353628011142,
+        "warm_pooled_itl_r7_p50_sample_cv": 0.014621651959345795,
+        "warm_pooled_itl_r7_p95_sample_cv": 0.05408697778865871,
+        "warm_request_mean_tpot_r7_p50_sample_cv": 0.024705321795466393,
+        "warm_request_mean_tpot_r7_p95_sample_cv": 0.046664336071435275
+      },
+      "workload": {
+        "concurrency": 8,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "warm"
+      }
+    },
+    {
+      "checks": [
+        {
+          "name": "peak_vram_relative_range_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.01,
+          "value": 0.0
+        },
+        {
+          "name": "cold_model_load_p50_cv_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.1,
+          "value": 0.009848457471420314
+        },
+        {
+          "name": "failure_count_max",
+          "operator": "<=",
+          "passed": true,
+          "threshold": 0.0,
+          "value": 0.0
+        }
+      ],
+      "errors": [],
+      "independent_run_count": 5,
+      "passed": true,
+      "required_independent_runs": 5,
+      "required_trials_per_run": 1,
+      "run_summaries": [
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 4810.870804998558
+          },
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 1
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-01",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 34.5434217083804
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 4766.030860002502
+          },
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 1
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-02",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 36.37516295007009
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 4715.654721992905
+          },
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 1
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-03",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 34.36176898049622
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 4767.365439009154
+          },
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 1
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-04",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 36.81793258296836
+          },
+          "trial_count": 1
+        },
+        {
+          "failure_count": 0,
+          "model_load_ms": {
+            "observation_count": 1,
+            "r7_p50": 4692.441357008647
+          },
+          "peak_vram_bytes": {
+            "maximum": 1609629696.0,
+            "observation_count": 1
+          },
+          "run_id": "hf-transformers-20260824T185646.150Z-55a397313acd-run-05",
+          "successful_trial_count": 1,
+          "throughput_tokens_per_second": {
+            "observation_count": 1,
+            "r7_p50": 37.61945136884255
+          },
+          "trial_count": 1
+        }
+      ],
+      "statistics": {
+        "cold_model_load_r7_p50_sample_cv": 0.009848457471420314,
+        "failure_count": 0,
+        "peak_vram_max_relative_range": 0.0,
+        "throughput_p50_sample_cv": 0.039887276250608644
+      },
+      "workload": {
+        "concurrency": 1,
+        "output_tokens": 32,
+        "prompt_tokens": 128,
+        "warm_state": "cold"
+      }
+    }
+  ],
+  "comparability": {
+    "engine_revision": "transformers-5.15.1+torch-2.13.0",
+    "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    "git_dirty": false,
+    "git_revision": "09911ba2630845e9d4094b7c33c3ff65931a919c",
+    "lane_manifest_sha256": "e84ddc2ee30d5734b7490b36d95350b4c51379a57580d9665987ffa7fdabe645",
+    "matrix_id": "smollm2-135m-rtx4090-bf16-v1",
+    "matrix_sha256": "a979659ef9d7b3c5a7a85e423347eb6f06ccbd3ae5a370056bd056d3137c7e87",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "prompts_sha256": "709612e45d735888b240951d51b979b7ded1e87ef6cae9296f0b1250647255d2",
+    "scope": "end-to-end"
+  },
+  "contract_version": "rustinfer.repeatability.v2",
+  "definitions": {
+    "cold_model_load": "within each run and cold cell, compute R7 p50 of successful-trial metrics.model_load_ms",
+    "coverage": "every configured exact cell must contain the same run_ids; each run must contain trial_index 1..measurement.<warm_state>.measured_iterations_per_run",
+    "failures": "sum root failure_count across all trials in a cell",
+    "peak_vram_relative_range": "take each run's maximum successful-trial metrics.peak_vram_bytes, then (max-min)/R7 median across runs",
+    "pooled_itl": "within each run and warm cell, pool every actual per-token value from successful requests[].itl_ms arrays and compute R7 p50/p95",
+    "r7": "sort x; h=(n-1)*p; linearly interpolate x[floor(h)] and x[ceil(h)]",
+    "request_mean_tpot": "within each run and warm cell, flatten successful request-level requests[].mean_tpot_ms observations and compute R7 p50/p95",
+    "sample_cv": "across independent runs, sample standard deviation / abs(mean)",
+    "throughput": "within each run and cell, compute R7 p50 of successful-trial metrics.output_tokens_per_second; report its sample CV for every cell, but apply throughput_cv_max only to warm cells because a cold run has one diagnostic first-request observation",
+    "token_identity": "for each cell, trial_index, and request position, require identical prompt_token_ids_sha256 and generated_token_ids_sha256 across runs",
+    "warm_latency": "within each run and warm cell, flatten successful requests[].end_to_end_ms across trials and compute R7 p50/p95"
+  },
+  "errors": [],
+  "ignored_trial_count": 0,
+  "matrix": "/tmp/rustinfer-pr01-09911ba-hf-20260825/benchmarks/matrix.yaml",
+  "matrix_contract_validation": "passed",
+  "matrix_sha256": "a979659ef9d7b3c5a7a85e423347eb6f06ccbd3ae5a370056bd056d3137c7e87",
+  "passed": true,
+  "status": "passed",
+  "thresholds": {
+    "cold_model_load_p50_cv_max": 0.1,
+    "failure_count_max": 0.0,
+    "peak_vram_relative_range_max": 0.01,
+    "throughput_cv_max": 0.05,
+    "warm_p50_cv_max": 0.05,
+    "warm_p95_cv_max": 0.1
+  },
+  "trial_files": [
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-01/cell-01-warm-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-01/cell-02-warm-c1-p4096-o128/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-01/cell-03-warm-c8-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-01/cell-04-cold-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-02/cell-01-warm-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-02/cell-02-warm-c1-p4096-o128/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-02/cell-03-warm-c8-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-02/cell-04-cold-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-03/cell-01-warm-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-03/cell-02-warm-c1-p4096-o128/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-03/cell-03-warm-c8-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-03/cell-04-cold-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-04/cell-01-warm-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-04/cell-02-warm-c1-p4096-o128/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-04/cell-03-warm-c8-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-04/cell-04-cold-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-05/cell-01-warm-c1-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-05/cell-02-warm-c1-p4096-o128/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-05/cell-03-warm-c8-p128-o32/result/raw.jsonl",
+    "/home/psyche/rustinfer-artifacts/pr01/09911ba2630845e9d4094b7c33c3ff65931a919c/repeatability-hf-run003-staging/runs/run-05/cell-04-cold-c1-p128-o32/result/raw.jsonl"
+  ]
+}

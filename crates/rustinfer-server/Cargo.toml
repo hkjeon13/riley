@@ -1,0 +1,26 @@
+[package]
+name = "rustinfer-server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Binary and server feature owner for rustinfer"
+
+[features]
+default = []
+cuda = ["rustinfer-scheduler/cuda"]
+server = []
+bench = []
+experimental = []
+
+[dependencies]
+rustinfer-core = { path = "../rustinfer-core" }
+rustinfer-scheduler = { path = "../rustinfer-scheduler" }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "rustinfer"
+path = "src/main.rs"
+required-features = ["server"]

@@ -1,0 +1,220 @@
+{
+  "contract_version": "1.0.0",
+  "matrix_id": "smollm2-135m-rtx4090-bf16-v1",
+  "benchmark_scope": "end-to-end",
+  "tokenization": {
+    "input": "pretokenized",
+    "latency_included": false,
+    "add_special_tokens": true
+  },
+  "primary_hardware": {
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "compute_capability": "8.9",
+    "dtype": "bf16"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "weights_file": "model.safetensors",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "max_context_tokens": 8192
+  },
+  "correctness_gate": {
+    "gate_id": "smollm2-fp32-bf16-native-e0-v2",
+    "path": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+  },
+  "lane_manifests": [
+    "benchmarks/lanes/hf-transformers.json",
+    "benchmarks/lanes/vllm.json",
+    "benchmarks/lanes/rustinfer-native.json"
+  ],
+  "allowed_semantic_classes": [
+    "reference",
+    "E0"
+  ],
+  "axes": {
+    "concurrency": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "prompt_tokens": [
+      128,
+      1024,
+      4096
+    ],
+    "output_tokens": [
+      32,
+      128
+    ],
+    "sampling": [
+      {
+        "id": "greedy",
+        "strategy": "greedy",
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "seed": null,
+        "ignore_eos": true,
+        "fixed_output_length": true
+      }
+    ],
+    "warm_state": [
+      "cold",
+      "warm"
+    ],
+    "approximation_enabled": [
+      false
+    ]
+  },
+  "measurement": {
+    "independent_runs": 5,
+    "run_index_origin": 1,
+    "thermal_stabilization": {
+      "temperature_limit_c": 50,
+      "retry_interval_seconds": 30,
+      "maximum_wait_seconds": 1200,
+      "retry_only_on_temperature_limit": true,
+      "final_full_preflight_required": true
+    },
+    "cold": {
+      "warmup_iterations": 0,
+      "measured_iterations_per_run": 1,
+      "fresh_process_per_independent_run": true,
+      "reset_model_state_per_independent_run": true,
+      "reuse_model_within_run": false
+    },
+    "warm": {
+      "warmup_iterations": 5,
+      "measured_iterations_per_run": 30,
+      "fresh_process_per_independent_run": true,
+      "reset_model_state_per_independent_run": true,
+      "reuse_model_within_run": true
+    },
+    "reported_percentiles": [
+      50,
+      95
+    ]
+  },
+  "cache_policy": {
+    "cold_scope": "process-and-model-state-only",
+    "dependency_preparation": "uv-sync-frozen-offline",
+    "uv_version": "uv 0.12.5 (x86_64-unknown-linux-gnu)",
+    "uv_linux_x86_64_sha256": "b65f23a420c4acc96427efb30e5ed9bc0f7e25d2d712000f6ede77c1a0de5f46",
+    "uv_python": "3.13.15",
+    "uv_python_downloads": "never",
+    "python_linux_x86_64_sha256": "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866",
+    "python_dont_write_bytecode": "1",
+    "cuda_cache_maxsize": "4294967296",
+    "python_hash_seed": "0",
+    "tokenizers_parallelism": "false",
+    "cublas_workspace_config": ":4096:8",
+    "omp_num_threads": "1",
+    "mkl_num_threads": "1",
+    "telemetry_environment": {
+      "DO_NOT_TRACK": "1",
+      "HF_HUB_DISABLE_TELEMETRY": "1",
+      "VLLM_DO_NOT_TRACK": "1",
+      "VLLM_NO_USAGE_STATS": "1"
+    },
+    "reuse_external_disk_caches_across_independent_runs": true,
+    "external_cache_environment": [
+      "UV_CACHE_DIR",
+      "UV_PYTHON_INSTALL_DIR",
+      "HF_HOME",
+      "VLLM_CACHE_ROOT",
+      "TORCHINDUCTOR_CACHE_DIR",
+      "TRITON_CACHE_DIR",
+      "CUDA_CACHE_PATH"
+    ],
+    "offline_environment": {
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1"
+    },
+    "lane_prime_cells": {
+      "hf-transformers": [
+        {
+          "concurrency": 1,
+          "prompt_tokens": 128,
+          "output_tokens": 32,
+          "warm_state": "warm"
+        },
+        {
+          "concurrency": 1,
+          "prompt_tokens": 4096,
+          "output_tokens": 128,
+          "warm_state": "warm"
+        },
+        {
+          "concurrency": 8,
+          "prompt_tokens": 128,
+          "output_tokens": 32,
+          "warm_state": "warm"
+        }
+      ],
+      "vllm": [
+        {
+          "concurrency": 1,
+          "prompt_tokens": 128,
+          "output_tokens": 32,
+          "warm_state": "warm"
+        },
+        {
+          "concurrency": 1,
+          "prompt_tokens": 4096,
+          "output_tokens": 128,
+          "warm_state": "warm"
+        },
+        {
+          "concurrency": 8,
+          "prompt_tokens": 128,
+          "output_tokens": 32,
+          "warm_state": "warm"
+        }
+      ]
+    },
+    "reject_measured_cache_mutation": true
+  },
+  "repeatability_gate": {
+    "cells": [
+      {
+        "concurrency": 1,
+        "prompt_tokens": 128,
+        "output_tokens": 32,
+        "warm_state": "warm"
+      },
+      {
+        "concurrency": 1,
+        "prompt_tokens": 4096,
+        "output_tokens": 128,
+        "warm_state": "warm"
+      },
+      {
+        "concurrency": 8,
+        "prompt_tokens": 128,
+        "output_tokens": 32,
+        "warm_state": "warm"
+      },
+      {
+        "concurrency": 1,
+        "prompt_tokens": 128,
+        "output_tokens": 32,
+        "warm_state": "cold"
+      }
+    ],
+    "thresholds": {
+      "warm_p50_cv_max": 0.05,
+      "warm_p95_cv_max": 0.10,
+      "throughput_cv_max": 0.05,
+      "cold_model_load_p50_cv_max": 0.10,
+      "peak_vram_relative_range_max": 0.01,
+      "failure_count_max": 0
+    }
+  },
+  "expected_counts": {
+    "cells_per_lane": 48,
+    "independent_runs_per_cell": 5,
+    "raw_trials_per_lane": 3720
+  }
+}

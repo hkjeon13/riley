@@ -1,0 +1,45 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/rustinfer-core",
+    "crates/rustinfer-cuda",
+    "crates/rustinfer-tensor",
+    "crates/rustinfer-model",
+    "crates/rustinfer-runtime",
+    "crates/rustinfer-scheduler",
+    "crates/rustinfer-server",
+]
+default-members = ["crates/rustinfer-server"]
+exclude = ["tools/python", "tools/native", "experiments/triton"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+
+[profile.dev]
+debug = 2
+overflow-checks = true
+panic = "unwind"
+
+[profile.test]
+debug = 2
+overflow-checks = true
+
+[profile.release]
+opt-level = 3
+debug = "line-tables-only"
+lto = "thin"
+codegen-units = 1
+overflow-checks = false
+panic = "abort"
+strip = "none"

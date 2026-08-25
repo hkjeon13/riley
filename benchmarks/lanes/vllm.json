@@ -1,0 +1,116 @@
+{
+  "contract_version": "1.0.0",
+  "lane_id": "vllm",
+  "implementation_id": "vllm",
+  "reference_implementation": "hf-transformers-eager",
+  "runtime_dependency_class": "python-reference",
+  "semantic_class": "reference",
+  "availability": "available",
+  "dependency_manifest": "benchmarks/lanes/vllm/pyproject.toml",
+  "engine": {
+    "name": "vllm",
+    "version": "0.27.1",
+    "revision": "vllm-0.27.1",
+    "backend": "native",
+    "dependencies": {
+      "nvidia-ml-py": "13.610.43",
+      "psutil": "7.2.2",
+      "vllm": "0.27.1"
+    }
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "max_context_tokens": 8192
+  },
+  "dtype": "bf16",
+  "sampling_id": "greedy",
+  "commands": {
+    "golden_fixture": {
+      "status": "not-required",
+      "argv": null
+    },
+    "serve": {
+      "status": "available",
+      "environment": {
+        "DO_NOT_TRACK": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "VLLM_DO_NOT_TRACK": "1",
+        "VLLM_NO_USAGE_STATS": "1",
+        "VLLM_USE_FLASHINFER_SAMPLER": "0"
+      },
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "--no-sync",
+        "--project",
+        "benchmarks/lanes/vllm",
+        "vllm",
+        "serve",
+        "HuggingFaceTB/SmolLM2-135M",
+        "--revision",
+        "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        "8192"
+      ]
+    },
+    "benchmark": {
+      "status": "available",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "--no-sync",
+        "--project",
+        "benchmarks/lanes/vllm",
+        "rustinfer-vllm-benchmark",
+        "--matrix",
+        "benchmarks/matrix.yaml",
+        "--prompts",
+        "benchmarks/prompts.jsonl",
+        "--result-dir",
+        "{result_dir}",
+        "--run-index",
+        "{independent_run_index}",
+        "--run-id",
+        "{run_id}",
+        "--warm-state",
+        "{warm_state}",
+        "--concurrency",
+        "{concurrency}",
+        "--prompt-tokens",
+        "{prompt_tokens}",
+        "--output-tokens",
+        "{output_tokens}"
+      ],
+      "environment": {
+        "DO_NOT_TRACK": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1",
+        "VLLM_DO_NOT_TRACK": "1",
+        "VLLM_NO_USAGE_STATS": "1",
+        "VLLM_USE_FLASHINFER_SAMPLER": "0"
+      },
+      "output_contract": "benchmarks/schemas/result.schema.json"
+    }
+  },
+  "dependency_policy": {
+    "allowed": [
+      "uv",
+      "python",
+      "nvidia-ml-py",
+      "psutil",
+      "vllm",
+      "torch",
+      "cuda-driver",
+      "cuda-runtime",
+      "nvidia-libraries"
+    ],
+    "forbidden": []
+  }
+}

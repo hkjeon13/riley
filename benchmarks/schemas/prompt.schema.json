@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/benchmark-prompt-v1.schema.json",
+  "title": "rustinfer golden corpus prompt",
+  "description": "One source prompt. benchmarks/prompts.jsonl contains one object conforming to this schema per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "prompt_id",
+    "category",
+    "language",
+    "text",
+    "target_prompt_tokens",
+    "boundary_kind",
+    "expected_behavior",
+    "contains_sensitive_data"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "prompt_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._-]*$"
+    },
+    "category": {
+      "enum": [
+        "short",
+        "multilingual",
+        "symbols-code",
+        "long-repetition",
+        "context-boundary",
+        "minimal",
+        "early-eos"
+      ]
+    },
+    "language": {
+      "enum": [
+        "ko",
+        "en",
+        "mixed",
+        "code",
+        "none"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "target_prompt_tokens": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1,
+      "maximum": 8192
+    },
+    "boundary_kind": {
+      "enum": [
+        "none",
+        "near-max-context"
+      ]
+    },
+    "expected_behavior": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contains_sensitive_data": {
+      "const": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "context-boundary"
+          }
+        },
+        "required": [
+          "category"
+        ]
+      },
+      "then": {
+        "properties": {
+          "target_prompt_tokens": {
+            "type": "integer",
+            "minimum": 7168,
+            "maximum": 8192
+          },
+          "boundary_kind": {
+            "const": "near-max-context"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "boundary_kind": {
+            "const": "none"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "category": {
+            "const": "early-eos"
+          }
+        },
+        "required": [
+          "category"
+        ]
+      },
+      "then": {
+        "properties": {
+          "language": {
+            "const": "en"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "target_prompt_tokens": {
+            "type": "null"
+          },
+          "expected_behavior": {
+            "const": "greedy-eos-at-first-output-token"
+          }
+        }
+      }
+    }
+  ]
+}

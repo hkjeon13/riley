@@ -1,0 +1,928 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.dev/schemas/benchmark-result-v1.schema.json",
+  "title": "rustinfer benchmark trial",
+  "description": "One independent benchmark trial. Raw result files contain one object conforming to this schema per JSONL line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "trial_id",
+    "run_id",
+    "trial_index",
+    "recorded_at_utc",
+    "scope",
+    "matrix_id",
+    "matrix_sha256",
+    "prompts_sha256",
+    "lane_manifest_sha256",
+    "environment_id",
+    "semantic_class",
+    "correctness_gate_id",
+    "correctness_report_sha256",
+    "implementation_id",
+    "reference_implementation",
+    "runtime_dependency_class",
+    "approximation_enabled",
+    "error_budget",
+    "seed",
+    "warm_state",
+    "model_id",
+    "model_revision",
+    "engine_revision",
+    "dtype",
+    "environment",
+    "provenance",
+    "status",
+    "failure_reason",
+    "failure_count",
+    "workload",
+    "microbenchmark",
+    "metrics",
+    "requests",
+    "speculative",
+    "sparse_attention",
+    "quantization"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "1.0.0"
+    },
+    "trial_id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "run_id": {
+      "description": "Identifier for one of the five independent process runs of a matrix cell.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "trial_index": {
+      "description": "One-based measured iteration within run_id for this workload cell and warm state.",
+      "type": "integer",
+      "minimum": 1
+    },
+    "recorded_at_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "enum": [
+        "end-to-end",
+        "microbenchmark"
+      ]
+    },
+    "matrix_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "matrix_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "prompts_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "lane_manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "environment_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "semantic_class": {
+      "enum": [
+        "reference",
+        "E0",
+        "E1",
+        "A1",
+        "M1"
+      ]
+    },
+    "correctness_gate_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1
+    },
+    "correctness_report_sha256": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/sha256"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "implementation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reference_implementation": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime_dependency_class": {
+      "enum": [
+        "python-reference",
+        "native-production"
+      ]
+    },
+    "approximation_enabled": {
+      "type": "boolean"
+    },
+    "error_budget": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "seed": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 18446744073709551615
+    },
+    "warm_state": {
+      "enum": [
+        "cold",
+        "warm"
+      ]
+    },
+    "model_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "model_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "engine_revision": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dtype": {
+      "type": "string",
+      "minLength": 1
+    },
+    "environment": {
+      "$ref": "#/$defs/environment"
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "failure"
+      ]
+    },
+    "failure_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "failure_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "workload": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/endToEndWorkload"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "microbenchmark": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/microbenchmark"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "metrics": {
+      "$ref": "#/$defs/trialMetrics"
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/requestObservation"
+      }
+    },
+    "speculative": {
+      "$ref": "#/$defs/speculative"
+    },
+    "sparse_attention": {
+      "$ref": "#/$defs/sparseAttention"
+    },
+    "quantization": {
+      "$ref": "#/$defs/quantization"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "semantic_class": {
+            "const": "E0"
+          },
+          "status": {
+            "const": "success"
+          }
+        },
+        "required": [
+          "semantic_class",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "correctness_gate_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "correctness_report_sha256": {
+            "$ref": "#/$defs/sha256"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "success"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failure_reason": {
+            "type": "null"
+          },
+          "failure_count": {
+            "const": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "failure_reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "failure_count": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "end-to-end"
+          }
+        },
+        "required": [
+          "scope"
+        ]
+      },
+      "then": {
+        "properties": {
+          "workload": {
+            "$ref": "#/$defs/endToEndWorkload"
+          },
+          "microbenchmark": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "workload": {
+            "type": "null"
+          },
+          "microbenchmark": {
+            "$ref": "#/$defs/microbenchmark"
+          },
+          "requests": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scope": {
+            "const": "end-to-end"
+          },
+          "status": {
+            "const": "success"
+          }
+        },
+        "required": [
+          "scope",
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "metrics": {
+            "properties": {
+              "model_load_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "batch_wall_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "output_tokens_per_second": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          },
+          "requests": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "approximation_enabled": {
+            "const": false
+          }
+        },
+        "required": [
+          "approximation_enabled"
+        ]
+      },
+      "then": {
+        "properties": {
+          "error_budget": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "error_budget": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "semantic_class": {
+            "const": "A1"
+          }
+        },
+        "required": [
+          "semantic_class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "approximation_enabled": {
+            "const": true
+          },
+          "error_budget": {
+            "type": "number",
+            "minimum": 0
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableNonNegativeNumber": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "nullableNonNegativeInteger": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "nullableFraction": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1
+    },
+    "nullableString": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gpu_model",
+        "compute_capability",
+        "gpu_count",
+        "cpu_model",
+        "ram_bytes",
+        "os",
+        "nvidia_driver_version",
+        "cuda_toolkit_version",
+        "cuda_runtime_version"
+      ],
+      "properties": {
+        "gpu_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compute_capability": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+$"
+        },
+        "gpu_count": {
+          "const": 1
+        },
+        "cpu_model": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ram_bytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "nvidia_driver_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cuda_toolkit_version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cuda_runtime_version": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_revision",
+        "git_dirty"
+      ],
+      "properties": {
+        "git_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "git_dirty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "endToEndWorkload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "concurrency",
+        "prompt_tokens",
+        "output_tokens",
+        "sampling_id",
+        "warm_state"
+      ],
+      "properties": {
+        "concurrency": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sampling_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "warm_state": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        }
+      }
+    },
+    "microbenchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation",
+        "shape",
+        "strides",
+        "layout",
+        "backend",
+        "latency_ms",
+        "throughput_units_per_second",
+        "allocation_bytes"
+      ],
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "shape": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "strides": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "layout": {
+          "type": "string",
+          "minLength": 1
+        },
+        "backend": {
+          "type": "string",
+          "minLength": 1
+        },
+        "latency_ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "throughput_units_per_second": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "allocation_bytes": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        }
+      }
+    },
+    "trialMetrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_load_ms",
+        "batch_wall_ms",
+        "output_tokens_per_second",
+        "cpu_utilization_percent",
+        "gpu_utilization_percent",
+        "peak_vram_bytes"
+      ],
+      "properties": {
+        "model_load_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "batch_wall_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "output_tokens_per_second": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "cpu_utilization_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "gpu_utilization_percent": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "peak_vram_bytes": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        }
+      }
+    },
+    "requestObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_id",
+        "prompt_id",
+        "prompt_token_ids_sha256",
+        "generated_token_ids_sha256",
+        "status",
+        "failure_reason",
+        "prompt_tokens",
+        "requested_output_tokens",
+        "generated_tokens",
+        "ttft_ms",
+        "end_to_end_ms",
+        "mean_tpot_ms",
+        "itl_ms"
+      ],
+      "properties": {
+        "request_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "prompt_token_ids_sha256": {
+          "description": "SHA-256 of the exact input token IDs encoded consecutively as unsigned 32-bit little-endian integers.",
+          "$ref": "#/$defs/sha256"
+        },
+        "generated_token_ids_sha256": {
+          "description": "SHA-256 of the exact generated token IDs encoded consecutively as unsigned 32-bit little-endian integers; failures hash the empty sequence.",
+          "$ref": "#/$defs/sha256"
+        },
+        "status": {
+          "enum": [
+            "success",
+            "failure"
+          ]
+        },
+        "failure_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "requested_output_tokens": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "generated_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "ttft_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "end_to_end_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "mean_tpot_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "itl_ms": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number",
+                "minimum": 0
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Actual per-token inter-token latency observations in generation order; exactly generated_tokens - 1 entries for successful requests."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "success"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "failure_reason": {
+                "type": "null"
+              },
+              "ttft_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "end_to_end_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "mean_tpot_ms": {
+                "type": "number",
+                "minimum": 0
+              },
+              "itl_ms": {
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "failure_reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "generated_tokens": {
+                "const": 0
+              },
+              "generated_token_ids_sha256": {
+                "const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+              },
+              "ttft_ms": {
+                "type": "null"
+              },
+              "end_to_end_ms": {
+                "type": "null"
+              },
+              "mean_tpot_ms": {
+                "type": "null"
+              },
+              "itl_ms": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "speculative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "draft_model",
+        "lookahead",
+        "acceptance_rate",
+        "accepted_tokens_per_verify",
+        "target_calls_per_output_token",
+        "draft_latency_ms",
+        "verification_latency_ms",
+        "rejected_suffix_tokens",
+        "rollback_count"
+      ],
+      "properties": {
+        "draft_model": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "lookahead": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "acceptance_rate": {
+          "$ref": "#/$defs/nullableFraction"
+        },
+        "accepted_tokens_per_verify": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "target_calls_per_output_token": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "draft_latency_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "verification_latency_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "rejected_suffix_tokens": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "rollback_count": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        }
+      }
+    },
+    "sparseAttention": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selected_pages",
+        "total_pages",
+        "page_metadata_bytes",
+        "page_bound_time_ms",
+        "omitted_mass_bound",
+        "exact_fallback_rate"
+      ],
+      "properties": {
+        "selected_pages": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "total_pages": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "page_metadata_bytes": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "page_bound_time_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "omitted_mass_bound": {
+          "$ref": "#/$defs/nullableFraction"
+        },
+        "exact_fallback_rate": {
+          "$ref": "#/$defs/nullableFraction"
+        }
+      }
+    },
+    "quantization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "weight_format",
+        "activation_format",
+        "kv_format",
+        "calibration_revision",
+        "transform_runtime_ms",
+        "weight_bytes",
+        "kv_bytes",
+        "gemm_throughput_tflops"
+      ],
+      "properties": {
+        "weight_format": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "activation_format": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "kv_format": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "calibration_revision": {
+          "$ref": "#/$defs/nullableString"
+        },
+        "transform_runtime_ms": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        },
+        "weight_bytes": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "kv_bytes": {
+          "$ref": "#/$defs/nullableNonNegativeInteger"
+        },
+        "gemm_throughput_tflops": {
+          "$ref": "#/$defs/nullableNonNegativeNumber"
+        }
+      }
+    }
+  }
+}

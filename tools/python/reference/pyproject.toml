@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rustinfer-reference"
+version = "0.1.0"
+description = "Pinned external Python reference lane for rustinfer"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "nvidia-ml-py==13.610.43",
+  "psutil==7.2.2",
+  "safetensors==0.8.0",
+  "torch==2.13.0",
+  "transformers==5.15.1",
+]
+
+[project.scripts]
+rustinfer-reference = "rustinfer_reference.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["rustinfer_reference"]

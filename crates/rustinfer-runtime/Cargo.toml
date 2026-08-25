@@ -1,0 +1,20 @@
+[package]
+name = "rustinfer-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Model and backend orchestration boundary for rustinfer"
+
+[features]
+default = []
+cuda = ["dep:rustinfer-cuda", "rustinfer-cuda/cuda", "rustinfer-tensor/cuda"]
+
+[dependencies]
+rustinfer-core = { path = "../rustinfer-core" }
+rustinfer-cuda = { path = "../rustinfer-cuda", optional = true }
+rustinfer-model = { path = "../rustinfer-model" }
+rustinfer-tensor = { path = "../rustinfer-tensor" }
+
+[lints]
+workspace = true

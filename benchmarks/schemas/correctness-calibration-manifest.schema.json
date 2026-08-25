@@ -1,0 +1,506 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/correctness-calibration-manifest.schema.json",
+  "title": "rustinfer numeric/semantic calibration sidecar manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_kind", "created_at", "producer", "candidate_execution", "contract", "provenance", "corpus", "sidecar", "cases"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "artifact_kind": { "enum": ["fp32-numeric-oracle", "bf16-semantic-oracle", "candidate"] },
+    "created_at": { "type": "string", "format": "date-time" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_id", "engine_revision", "runtime_dependency_class", "python_version", "python_executable_sha256", "python_platform_system", "python_platform_machine", "torch_version", "transformers_version", "safetensors_version"],
+      "properties": {
+        "implementation_id": { "type": "string", "minLength": 1 },
+        "engine_revision": { "type": "string", "minLength": 1 },
+        "runtime_dependency_class": { "enum": ["python-reference", "native-production"] },
+        "python_version": { "type": ["string", "null"] },
+        "python_executable_sha256": { "type": ["string", "null"] },
+        "python_platform_system": { "type": ["string", "null"] },
+        "python_platform_machine": { "type": ["string", "null"] },
+        "torch_version": { "type": ["string", "null"] },
+        "transformers_version": { "type": ["string", "null"] },
+        "safetensors_version": { "type": ["string", "null"] }
+      }
+    },
+    "candidate_execution": {
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/candidateExecution" }
+      ]
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gate_id", "model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_sha256", "tokenizer_files_sha256", "dtype", "attention_backend", "tensor_capture_cache_path", "log_prob_pipeline", "trust_remote_code", "max_context_tokens", "eos_token_ids", "semantic_generation_steps", "cross_cache_exact_window", "top_k", "oracle_reduction_variant", "required_candidate_reduction_variants"],
+      "properties": {
+        "gate_id": { "const": "smollm2-fp32-bf16-native-e0-v2" },
+        "model_id": { "const": "HuggingFaceTB/SmolLM2-135M" },
+        "model_revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
+        "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },
+        "weights_sha256": { "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1" },
+        "tokenizer_sha256": { "const": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db" },
+        "tokenizer_files_sha256": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["merges.txt", "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "vocab.json"],
+          "properties": {
+            "merges.txt": { "const": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510" },
+            "special_tokens_map.json": { "const": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3" },
+            "tokenizer.json": { "const": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c" },
+            "tokenizer_config.json": { "const": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424" },
+            "vocab.json": { "const": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79" }
+          }
+        },
+        "dtype": { "enum": ["float32", "bfloat16"] },
+        "attention_backend": { "const": "eager" },
+        "tensor_capture_cache_path": { "const": "off" },
+        "log_prob_pipeline": { "const": "log-softmax-fp32-v1" },
+        "trust_remote_code": { "const": false },
+        "max_context_tokens": { "const": 8192 },
+        "eos_token_ids": { "const": [0] },
+        "semantic_generation_steps": { "const": 32 },
+        "cross_cache_exact_window": { "const": 16 },
+        "top_k": { "const": 10 },
+        "oracle_reduction_variant": { "$ref": "#/$defs/oracleVariant" },
+        "required_candidate_reduction_variants": {
+          "type": "array",
+          "prefixItems": [
+            { "$ref": "#/$defs/canonicalVariant" },
+            { "$ref": "#/$defs/alternateVariant" }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sources", "git_revision", "git_dirty", "git_status_sha256", "environment_id", "observed_environment"],
+      "properties": {
+        "sources": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["matrix", "prompts", "gate_manifest", "dependency_lock", "python_version_file", "lane_manifest", "environment", "environment_probe"],
+          "properties": {
+            "matrix": { "$ref": "#/$defs/source" },
+            "prompts": { "$ref": "#/$defs/source" },
+            "gate_manifest": { "$ref": "#/$defs/source" },
+            "dependency_lock": { "$ref": "#/$defs/source" },
+            "python_version_file": { "$ref": "#/$defs/pythonVersionSource" },
+            "lane_manifest": { "$ref": "#/$defs/source" },
+            "environment": { "$ref": "#/$defs/source" },
+            "environment_probe": { "$ref": "#/$defs/source" }
+          }
+        },
+        "git_revision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "git_dirty": { "const": false },
+        "git_status_sha256": { "const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "observed_environment": { "$ref": "#/$defs/environmentSnapshot" }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_count"],
+      "properties": { "prompt_count": { "const": 31 } }
+    },
+    "sidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "format", "tensor_count"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^[^/\\\\]+\\.safetensors$" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "format": { "const": "safetensors" },
+        "tensor_count": { "type": "integer", "minimum": 93 }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 31,
+      "maxItems": 31,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["artifact_kind"],
+        "properties": { "artifact_kind": { "enum": ["fp32-numeric-oracle", "bf16-semantic-oracle"] } }
+      },
+      "then": { "properties": { "producer": { "$ref": "#/$defs/hfProducer" }, "candidate_execution": { "type": "null" } } }
+    },
+    {
+      "if": {
+        "required": ["artifact_kind"],
+        "properties": { "artifact_kind": { "const": "candidate" } }
+      },
+      "then": { "properties": { "producer": { "$ref": "#/$defs/nativeProducer" }, "candidate_execution": { "$ref": "#/$defs/candidateExecution" } } }
+    },
+    {
+      "if": {
+        "required": ["artifact_kind"],
+        "properties": { "artifact_kind": { "const": "fp32-numeric-oracle" } }
+      },
+      "then": {
+        "properties": {
+          "contract": { "properties": { "dtype": { "const": "float32" } } },
+          "sidecar": { "properties": { "tensor_count": { "const": 93 } } },
+          "cases": { "items": { "$ref": "#/$defs/fp32CaseRole" } }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["artifact_kind"],
+        "properties": { "artifact_kind": { "const": "bf16-semantic-oracle" } }
+      },
+      "then": {
+        "properties": {
+          "contract": { "properties": { "dtype": { "const": "bfloat16" } } },
+          "sidecar": { "properties": { "tensor_count": { "const": 93 } } },
+          "cases": { "items": { "$ref": "#/$defs/bf16CaseRole" } }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["artifact_kind"],
+        "properties": { "artifact_kind": { "const": "candidate" } }
+      },
+      "then": {
+        "properties": {
+          "contract": { "properties": { "dtype": { "const": "bfloat16" } } },
+          "sidecar": { "properties": { "tensor_count": { "const": 186 } } },
+          "cases": { "items": { "$ref": "#/$defs/candidateCaseRole" } }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "hfProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_id", "engine_revision", "runtime_dependency_class", "python_version", "python_executable_sha256", "python_platform_system", "python_platform_machine", "torch_version", "transformers_version", "safetensors_version"],
+      "properties": {
+        "implementation_id": { "const": "hf-transformers-eager" },
+        "engine_revision": { "const": "transformers-5.15.1+torch-2.13.0" },
+        "runtime_dependency_class": { "const": "python-reference" },
+        "python_version": { "const": "3.13.15" },
+        "python_executable_sha256": { "const": "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866" },
+        "python_platform_system": { "const": "linux" },
+        "python_platform_machine": { "const": "x86_64" },
+        "torch_version": { "const": "2.13.0" },
+        "transformers_version": { "const": "5.15.1" },
+        "safetensors_version": { "const": "0.8.0" }
+      }
+    },
+    "nativeProducer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["implementation_id", "engine_revision", "runtime_dependency_class", "python_version", "python_executable_sha256", "python_platform_system", "python_platform_machine", "torch_version", "transformers_version", "safetensors_version"],
+      "properties": {
+        "implementation_id": { "const": "rustinfer-native" },
+        "engine_revision": { "type": "string", "minLength": 1 },
+        "runtime_dependency_class": { "const": "native-production" },
+        "python_version": { "type": "null" },
+        "python_executable_sha256": { "type": "null" },
+        "python_platform_system": { "type": "null" },
+        "python_platform_machine": { "type": "null" },
+        "torch_version": { "type": "null" },
+        "transformers_version": { "type": "null" },
+        "safetensors_version": { "type": "null" }
+      }
+    },
+    "candidateExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["executable", "build_argv", "capture_argv"],
+      "properties": {
+        "executable": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "sha256"],
+          "properties": {
+            "path": { "const": "rustinfer-native" },
+            "sha256": { "$ref": "#/$defs/sha256" }
+          }
+        },
+        "build_argv": { "const": ["cargo", "build", "--locked", "--release", "--bin", "rustinfer-native"] },
+        "capture_argv": { "type": "array", "minItems": 14, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "u32": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "pythonVersionSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "tools/python/reference/.python-version" },
+        "sha256": { "const": "861b3dd8083d28f336ef70f6755bc399538ddad627b1d095820ca34cb953cf14" }
+      }
+    },
+    "environmentSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "environment_id", "host", "accelerator"],
+      "properties": {
+        "schema_version": { "const": "1.0.0" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["os_id", "os_version_id", "kernel_release", "machine", "cpu_model", "physical_cpu_cores", "logical_cpu_threads", "ram_bytes", "cpu_governor", "cpu_governor_policy_count", "clock_synchronized"],
+          "properties": {
+            "os_id": { "const": "ubuntu" },
+            "os_version_id": { "const": "22.04" },
+            "kernel_release": { "const": "6.8.0-138-generic" },
+            "machine": { "const": "x86_64" },
+            "cpu_model": { "const": "Intel Core i7-13700K" },
+            "physical_cpu_cores": { "const": 16 },
+            "logical_cpu_threads": { "const": 24 },
+            "ram_bytes": { "const": 67185598464 },
+            "cpu_governor": { "const": "powersave" },
+            "cpu_governor_policy_count": { "const": 24 },
+            "clock_synchronized": { "const": true }
+          }
+        },
+        "accelerator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["gpu_count", "gpus", "nvidia_driver_version", "driver_cuda_api_version", "cuda_driver_available", "host_cuda_toolkit_present", "primary_compute_dtype", "persistence_mode", "compute_process_count", "memory_used_mib", "temperature_c", "power_limit_w", "application_graphics_clock_mhz", "application_memory_clock_mhz"],
+          "properties": {
+            "gpu_count": { "const": 1 },
+            "gpus": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/primaryGpuSnapshot" },
+              "minItems": 1,
+              "maxItems": 1
+            },
+            "nvidia_driver_version": { "const": "580.173.02" },
+            "driver_cuda_api_version": { "const": "13.0" },
+            "cuda_driver_available": { "const": true },
+            "host_cuda_toolkit_present": { "const": false },
+            "primary_compute_dtype": { "const": "bf16" },
+            "persistence_mode": { "const": "Disabled" },
+            "compute_process_count": { "const": 0 },
+            "memory_used_mib": { "type": "integer", "minimum": 0, "maximum": 256 },
+            "temperature_c": { "type": "integer", "minimum": 0, "maximum": 50 },
+            "power_limit_w": { "type": "number", "minimum": 0.000001 },
+            "application_graphics_clock_mhz": { "const": "[N/A]" },
+            "application_memory_clock_mhz": { "const": "[N/A]" }
+          }
+        }
+      }
+    },
+    "primaryGpuSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "name", "compute_capability", "memory_total_mib", "bf16_compute_supported"],
+      "properties": {
+        "index": { "const": 0 },
+        "name": { "const": "NVIDIA GeForce RTX 4090" },
+        "compute_capability": { "const": "8.9" },
+        "memory_total_mib": { "const": 24564 },
+        "bf16_compute_supported": { "const": true }
+      }
+    },
+    "oracleVariant": { "const": { "variant_id": "hf-eager-default-v1", "partition_kind": "hf-eager-runtime-default", "chunk_elements": null, "remainder_policy": "runtime-default", "merge_order": "runtime-default" } },
+    "canonicalVariant": { "const": { "variant_id": "canonical-v1", "partition_kind": "production-default", "chunk_elements": null, "remainder_policy": "implementation-default", "merge_order": "implementation-default" } },
+    "alternateVariant": { "const": { "variant_id": "fixed-contiguous-37-balanced-v1", "partition_kind": "fixed-contiguous", "chunk_elements": 37, "remainder_policy": "last-short-chunk", "merge_order": "deterministic-balanced-binary-tree-by-chunk-index" } },
+    "variantConfig": {
+      "oneOf": [
+        { "$ref": "#/$defs/oracleVariant" },
+        { "$ref": "#/$defs/canonicalVariant" },
+        { "$ref": "#/$defs/alternateVariant" }
+      ]
+    },
+    "tensorRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "shape", "dtype", "cache_path"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "shape": { "type": "array", "minItems": 1, "items": { "type": "integer", "minimum": 1 } },
+        "dtype": { "enum": ["float32", "bfloat16"] },
+        "cache_path": { "const": "off" }
+      }
+    },
+    "semanticPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generated_token_ids", "stop_reason"],
+      "properties": {
+        "generated_token_ids": { "type": "array", "minItems": 1, "maxItems": 32, "items": { "$ref": "#/$defs/u32" } },
+        "stop_reason": { "enum": ["eos", "max_new_tokens"] }
+      }
+    },
+    "semantic": {
+      "anyOf": [
+        { "$ref": "#/$defs/semanticObject" },
+        { "type": "null" }
+      ]
+    },
+    "semanticObject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top_1_token_id", "top_k_token_id_set", "cache_on", "cache_off", "cross_cache_first_divergence_step", "cross_cache_exact_window_match"],
+      "properties": {
+        "top_1_token_id": { "$ref": "#/$defs/u32" },
+        "top_k_token_id_set": { "type": "array", "minItems": 10, "maxItems": 10, "uniqueItems": true, "items": { "$ref": "#/$defs/u32" } },
+        "cache_on": { "$ref": "#/$defs/semanticPath" },
+        "cache_off": { "$ref": "#/$defs/semanticPath" },
+        "cross_cache_first_divergence_step": { "type": ["integer", "null"], "minimum": 0, "maximum": 31 },
+        "cross_cache_exact_window_match": { "type": "boolean" }
+      }
+    },
+    "variantEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config", "tensors", "semantic"],
+      "properties": {
+        "config": { "$ref": "#/$defs/variantConfig" },
+        "tensors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+          "properties": {
+            "first_layer_hidden": { "$ref": "#/$defs/tensorRef" },
+            "final_logits": { "$ref": "#/$defs/tensorRef" },
+            "final_log_probs": { "$ref": "#/$defs/tensorRef" }
+          }
+        },
+        "semantic": { "$ref": "#/$defs/semantic" }
+      }
+    },
+    "fp32Tensors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+      "properties": {
+        "first_layer_hidden": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "float32" } } }] },
+        "final_logits": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "float32" } } }] },
+        "final_log_probs": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "float32" } } }] }
+      }
+    },
+    "bf16Tensors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+      "properties": {
+        "first_layer_hidden": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "bfloat16" } } }] },
+        "final_logits": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "bfloat16" } } }] },
+        "final_log_probs": { "allOf": [{ "$ref": "#/$defs/tensorRef" }, { "properties": { "dtype": { "const": "float32" } } }] }
+      }
+    },
+    "fp32OracleEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/variantEvidence" },
+        { "properties": { "config": { "$ref": "#/$defs/oracleVariant" }, "tensors": { "$ref": "#/$defs/fp32Tensors" }, "semantic": { "type": "null" } } }
+      ]
+    },
+    "bf16OracleEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/variantEvidence" },
+        { "properties": { "config": { "$ref": "#/$defs/oracleVariant" }, "tensors": { "$ref": "#/$defs/bf16Tensors" }, "semantic": { "$ref": "#/$defs/semanticObject" } } }
+      ]
+    },
+    "canonicalCandidateEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/variantEvidence" },
+        { "properties": { "config": { "$ref": "#/$defs/canonicalVariant" }, "tensors": { "$ref": "#/$defs/bf16Tensors" }, "semantic": { "$ref": "#/$defs/semanticObject" } } }
+      ]
+    },
+    "alternateCandidateEvidence": {
+      "allOf": [
+        { "$ref": "#/$defs/variantEvidence" },
+        { "properties": { "config": { "$ref": "#/$defs/alternateVariant" }, "tensors": { "$ref": "#/$defs/bf16Tensors" }, "semantic": { "$ref": "#/$defs/semanticObject" } } }
+      ]
+    },
+    "fp32CaseRole": {
+      "properties": {
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hf-eager-default-v1"],
+          "properties": { "hf-eager-default-v1": { "$ref": "#/$defs/fp32OracleEvidence" } }
+        }
+      }
+    },
+    "bf16CaseRole": {
+      "properties": {
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hf-eager-default-v1"],
+          "properties": { "hf-eager-default-v1": { "$ref": "#/$defs/bf16OracleEvidence" } }
+        }
+      }
+    },
+    "candidateCaseRole": {
+      "properties": {
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonical-v1", "fixed-contiguous-37-balanced-v1"],
+          "properties": {
+            "canonical-v1": { "$ref": "#/$defs/canonicalCandidateEvidence" },
+            "fixed-contiguous-37-balanced-v1": { "$ref": "#/$defs/alternateCandidateEvidence" }
+          }
+        }
+      }
+    },
+    "promptMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["category", "language", "target_prompt_tokens", "boundary_kind", "expected_behavior"],
+      "properties": {
+        "category": { "enum": ["short", "multilingual", "symbols-code", "long-repetition", "context-boundary", "minimal", "early-eos"] },
+        "language": { "enum": ["ko", "en", "mixed", "code", "none"] },
+        "target_prompt_tokens": { "type": ["integer", "null"], "minimum": 1, "maximum": 8192 },
+        "boundary_kind": { "enum": ["none", "near-max-context"] },
+        "expected_behavior": { "type": "string", "minLength": 1 }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_id", "prompt_text_sha256", "prompt_metadata", "input_token_ids_sha256", "input_first_token_id", "input_token_count", "hidden_anchor_positions", "variants"],
+      "properties": {
+        "prompt_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "prompt_text_sha256": { "$ref": "#/$defs/sha256" },
+        "prompt_metadata": { "$ref": "#/$defs/promptMetadata" },
+        "input_token_ids_sha256": { "$ref": "#/$defs/sha256" },
+        "input_first_token_id": { "$ref": "#/$defs/u32" },
+        "input_token_count": { "type": "integer", "minimum": 1, "maximum": 8160 },
+        "hidden_anchor_positions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["first", "middle", "last"],
+          "properties": {
+            "first": { "const": 0 },
+            "middle": { "type": "integer", "minimum": 0 },
+            "last": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "variants": {}
+      }
+    }
+  }
+}

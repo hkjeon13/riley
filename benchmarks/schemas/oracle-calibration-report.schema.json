@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/oracle-calibration-report.schema.json",
+  "title": "HF FP32/BF16 oracle calibration report",
+  "description": "Threshold-activation and semantic-oracle self-check evidence; never native E0 candidate evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "report_kind", "gate_id", "created_at", "status", "e0_candidate_evidence", "roles", "thresholds", "inputs", "bindings", "summary", "cases"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "report_kind": { "const": "hf-oracle-calibration" },
+    "gate_id": { "const": "smollm2-hf-fp32-bf16-calibration-v2" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["pass", "fail"] },
+    "e0_candidate_evidence": { "const": false },
+    "roles": {
+      "const": {
+        "fp32": "numeric-reference",
+        "bf16": "numeric-calibration-and-semantic-oracle-self-check"
+      }
+    },
+    "thresholds": { "$ref": "#/$defs/thresholdSet" },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fp32_manifest_sha256", "bf16_manifest_sha256", "fp32_sidecar_sha256", "bf16_sidecar_sha256"],
+      "properties": {
+        "fp32_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "bf16_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "fp32_sidecar_sha256": { "$ref": "#/$defs/sha256" },
+        "bf16_sidecar_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_sha256", "matrix_sha256", "prompts_sha256", "gate_manifest_sha256", "dependency_lock_sha256", "lane_manifest_sha256", "environment_sha256", "environment_id", "git_revision", "git_status_sha256"],
+      "properties": {
+        "model_id": { "const": "HuggingFaceTB/SmolLM2-135M" },
+        "model_revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
+        "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },
+        "weights_sha256": { "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1" },
+        "tokenizer_sha256": { "const": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db" },
+        "matrix_sha256": { "$ref": "#/$defs/sha256" },
+        "prompts_sha256": { "$ref": "#/$defs/sha256" },
+        "gate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "dependency_lock_sha256": { "$ref": "#/$defs/sha256" },
+        "lane_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "git_revision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "git_status_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_count", "failure_count", "numeric_pass", "semantic_self_check_pass", "aggregate_numeric"],
+      "properties": {
+        "case_count": { "const": 31 },
+        "failure_count": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "numeric_pass": { "type": "boolean" },
+        "semantic_self_check_pass": { "type": "boolean" },
+        "aggregate_numeric": { "$ref": "#/$defs/numeric" }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 31,
+      "maxItems": 31,
+      "items": { "$ref": "#/$defs/case" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_abs", "mean_abs", "max_relative", "mean_relative", "cosine_similarity"],
+      "properties": {
+        "max_abs": { "type": "number", "minimum": 0 },
+        "mean_abs": { "type": "number", "minimum": 0 },
+        "max_relative": { "type": "number", "minimum": 0 },
+        "mean_relative": { "type": "number", "minimum": 0 },
+        "cosine_similarity": { "type": "number", "minimum": -1, "maximum": 1 }
+      }
+    },
+    "metricRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics", "pass"],
+      "properties": {
+        "metrics": { "$ref": "#/$defs/metrics" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "numeric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+      "properties": {
+        "first_layer_hidden": { "$ref": "#/$defs/metricRecord" },
+        "final_logits": { "$ref": "#/$defs/metricRecord" },
+        "final_log_probs": { "$ref": "#/$defs/metricRecord" }
+      }
+    },
+    "semanticSelf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["top_k_metadata_tensor_derived", "top_1_matches_cache_paths", "cross_cache_first_divergence_step", "cross_cache_exact_window", "cross_cache_exact_window_match", "divergence_metadata_recomputed", "pass"],
+      "properties": {
+        "top_k_metadata_tensor_derived": { "type": "boolean" },
+        "top_1_matches_cache_paths": { "type": "boolean" },
+        "cross_cache_first_divergence_step": { "type": ["integer", "null"], "minimum": 0, "maximum": 31 },
+        "cross_cache_exact_window": { "const": 16 },
+        "cross_cache_exact_window_match": { "type": "boolean" },
+        "divergence_metadata_recomputed": { "type": "boolean" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_id", "numeric", "semantic_self_check", "pass"],
+      "properties": {
+        "prompt_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "numeric": { "$ref": "#/$defs/numeric" },
+        "semantic_self_check": { "$ref": "#/$defs/semanticSelf" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "thresholdSet": {
+      "const": {
+        "first_layer_hidden": { "max_abs_max": 0.3884272575378418, "mean_abs_max": 0.008509292567237658, "max_relative_max": 0.13578447438776492, "mean_relative_max": 0.005414661057131772, "cosine_min": 0.999983706829855 },
+        "final_logits": { "max_abs_max": 5.852936458587647, "mean_abs_max": 1.151280319263363, "max_relative_max": 1.1707394897937775, "mean_relative_max": 0.13616598220459955, "cosine_min": 0.9979035305495393 },
+        "final_log_probs": { "max_abs_max": 4.998420619964599, "mean_abs_max": 0.6007178144163239, "max_relative_max": 0.5767027348279953, "mean_relative_max": 0.04668832837569344, "cosine_min": 0.9987779663298298 }
+      }
+    }
+  }
+}

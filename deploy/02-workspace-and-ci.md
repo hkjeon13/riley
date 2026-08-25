@@ -1,6 +1,6 @@
 # PR 02 — Rust Workspace와 CI 뼈대
 
-**상태:** Planned  
+**상태:** Active
 **선행 조건:** [PR 01](01-baseline-and-reproducibility.md)  
 **다음:** [PR 03 — CUDA Host Runtime](03-cuda-host-runtime.md)
 
@@ -109,18 +109,19 @@ GPU runner가 준비되기 전에는 로컬 명령과 nightly/manual workflow만
 
 - CUDA C++ compile smoke
 - C ABI link smoke
-- device test
-- kernel correctness
+- device test — PR 03으로 연기; PR 02의 device 호출 비범위와 일치
+- kernel correctness — PR 03 smoke kernel부터 시작; PR 02에서는 실행하지 않음
 - benchmark는 PR merge 필수가 아니라 결과 artifact로 보존
 
 ### Python reference 선택
 
 별도 optional job으로만 실행한다.
 
-- pinned Python environment
-- PyTorch/Transformers reference fixture 생성
-- artifact provenance 검사
-- 생성 artifact를 Rust가 Python 없이 읽는 integration test
+- pinned Python environment의 model-free fake-backend 검사
+- PyTorch/Transformers reference fixture 생성과 provenance 검사는 PR 01의 canonical
+  remote artifact를 사용하며 이 PR에서는 재실행하지 않음
+- 생성 artifact를 Rust가 Python 없이 읽는 integration test는 loader를 구현하는
+  PR 05로 연기
 
 ### Python-free release smoke
 
@@ -180,15 +181,68 @@ CPU-only 환경에서 `cargo test --workspace`가 동작해야 한다. CUDA가 �
 - CUTLASS operation 구현
 - NVRTC
 
+## 구현 및 검증 evidence — 2026-08-25
+
+검증된 source snapshot은 commit `4c017b6`이다. Production workspace는
+`Cargo.lock`을 포함한 일곱 crate로 고정되며 `tools/python`, `tools/native`,
+`experiments/triton`은 명시적으로 제외된다. 책임·feature·dependency·profile·panic
+및 error 정책은 [`crates/README.md`](../crates/README.md), 실행 계약은
+[`ci/README.md`](../ci/README.md)에 기록했다.
+
+로컬에서는 모델이나 CUDA를 실행하지 않고 다음 CPU/model-free gate를 통과했다.
+
+```text
+cargo fmt --all -- --check
+python3 ci/check_workspace_boundaries.py --locked
+cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
+cargo test --locked --workspace --no-default-features
+RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
+ci/check_feature_matrix.sh                         # CUDA 외 8개 조합
+ci/check_workspace_without_research_tools.sh       # 제외 디렉터리 없는 fresh copy
+PYTHONPATH=tools/python/reference python3 -m unittest discover \
+  -s tools/python/reference/tests -t . -v          # fake backend 57/57
+```
+
+Native gate는 `server-4096`에서만 실행했다. RTX 4090(compute capability 8.9),
+driver `580.173.02`, Linux `6.8.0-138-generic` 환경이며 Docker build에는 의도적으로
+`--gpus`를 전달하지 않았다. 따라서 이 단계는 device/context/kernel/model을 실행하지
+않고 AOT compile과 host-only link만 검증한다.
+
+```text
+source commit:       4c017b6
+archive command:     git archive --format=tar.gz --output=source.tar.gz 4c017b6
+source archive sha:  335c8e85f8e3be666843db8ed3c0fc0aaa8d3b2d1f58e54472de6e6c20997b07
+Rust image amd64:    rust:1.85.0-bookworm@sha256:16a7f242108de02f10fe4a392991679bafa7694e59f5b40a54d5af1be9b40d03
+CUDA image amd64:    nvidia/cuda:12.8.1-devel-ubuntu22.04@sha256:6617a625f4090c76c545a0e7d63f2e441718ef9af7f4efe7dd1242a29e289fd7
+rustc / cargo:       1.85.0 / 1.85.0
+nvcc:                12.8.93
+AOT architecture:    89
+native ABI test:     1 passed, 0 failed
+version:             rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)
+runtime dependency:  libcudart.so.12 resolved; no Python/PyTorch/Transformers/Triton
+invalid toolkit:     failed closed with `CUDAToolkit_ROOT=... is not a directory`
+image id:            sha256:695dc59e85c63a973106de67bdec8ee4ecc55bd87a7e970c3ad510f453e95477
+build log sha:       74205e2b931b9256e698e19ff2c8e155d9949b45fedff839a57fa5f5c35d0133
+external artifact:   server-4096:/home/psyche/rustinfer-artifacts/pr02/4c017b6/
+```
+
+첫 원격 snapshot `7fb2dc8`은 nvcc fatbinary 등록 심볼의 `cudart` link 누락을
+검출해 실패했다. 후속 수정은 CMake가 선택한 shared CUDA Runtime 경로가 동일
+toolkit 내부임을 검증해 Cargo에 전달하며, 최종 snapshot에서 동일 gate를 다시
+통과했다. 이는 runtime device capability 탐색과 compile target을 분리한다.
+
 ## 완료 기준
 
-- [ ] 새 clone에서 문서화된 명령으로 CPU CI 통과
-- [ ] CUDA가 있는 환경에서 빈 native CUDA library link 성공
-- [ ] Python 없는 환경에서 production build 성공
-- [ ] production Cargo dependency graph에 Python/PyTorch/Transformers/Triton runtime 없음
-- [ ] `tools/python`과 `experiments/triton`이 production workspace 경계 밖에 있음
-- [ ] crate 책임과 dependency가 README에 명시됨
-- [ ] release/debug profile 기본값 결정
-- [ ] panic 정책과 error type 기본 원칙 결정
+- [x] 새 clone에서 문서화된 명령으로 CPU CI 통과
+- [x] CUDA가 있는 환경에서 빈 native CUDA library link 성공
+- [x] Python 없는 환경에서 production build 성공
+- [x] production Cargo dependency graph에 Python/PyTorch/Transformers/Triton runtime 없음
+- [x] `tools/python`과 `experiments/triton`이 production workspace 경계 밖에 있음
+- [x] crate 책임과 dependency가 README에 명시됨
+- [x] release/debug profile 기본값 결정
+- [x] panic 정책과 error type 기본 원칙 결정
+
+구현 gate는 통과했다. 이 문서는 선행 PR과 함께 merge되기 전까지 `Active`, merge
+후 `Complete`로 전환한다.
 
 [← 이전](01-baseline-and-reproducibility.md) | [목차](README.md) | [다음 →](03-cuda-host-runtime.md)

@@ -1,0 +1,107 @@
+{
+  "contract_version": "1.0.0",
+  "lane_id": "hf-transformers",
+  "implementation_id": "hf-transformers-eager",
+  "reference_implementation": "hf-transformers-eager",
+  "runtime_dependency_class": "python-reference",
+  "semantic_class": "reference",
+  "availability": "available",
+  "dependency_manifest": "tools/python/reference/pyproject.toml",
+  "engine": {
+    "name": "transformers",
+    "version": "5.15.1",
+    "revision": "transformers-5.15.1+torch-2.13.0",
+    "backend": "eager",
+    "dependencies": {
+      "nvidia-ml-py": "13.610.43",
+      "psutil": "7.2.2",
+      "safetensors": "0.8.0",
+      "torch": "2.13.0",
+      "transformers": "5.15.1"
+    }
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "max_context_tokens": 8192
+  },
+  "dtype": "bf16",
+  "sampling_id": "greedy",
+  "commands": {
+    "golden_fixture": {
+      "status": "available",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "--no-sync",
+        "--project",
+        "tools/python/reference",
+        "rustinfer-reference",
+        "generate",
+        "--prompts",
+        "benchmarks/prompts.jsonl",
+        "--repo-root",
+        ".",
+        "--output",
+        "/var/tmp/rustinfer-reference/smollm2-135m-bf16.json"
+      ]
+    },
+    "serve": {
+      "status": "not-required",
+      "argv": null
+    },
+    "benchmark": {
+      "status": "available",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "--offline",
+        "--no-sync",
+        "--project",
+        "tools/python/reference",
+        "rustinfer-reference",
+        "benchmark",
+        "--matrix",
+        "benchmarks/matrix.yaml",
+        "--prompts",
+        "benchmarks/prompts.jsonl",
+        "--result-dir",
+        "{result_dir}",
+        "--run-index",
+        "{independent_run_index}",
+        "--run-id",
+        "{run_id}",
+        "--warm-state",
+        "{warm_state}",
+        "--concurrency",
+        "{concurrency}",
+        "--prompt-tokens",
+        "{prompt_tokens}",
+        "--output-tokens",
+        "{output_tokens}"
+      ],
+      "output_contract": "benchmarks/schemas/result.schema.json"
+    }
+  },
+  "dependency_policy": {
+    "allowed": [
+      "uv",
+      "python",
+      "nvidia-ml-py",
+      "psutil",
+      "safetensors",
+      "torch",
+      "transformers",
+      "numpy",
+      "scipy",
+      "cuda-driver",
+      "cuda-runtime",
+      "nvidia-libraries"
+    ],
+    "forbidden": []
+  }
+}

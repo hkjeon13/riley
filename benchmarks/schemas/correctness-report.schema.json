@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/correctness-report.schema.json",
+  "title": "rustinfer replay-verifiable native E0 correctness report",
+  "description": "The result row binds SHA-256 of the raw bytes of this file. This document has no self-hash.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "gate_id", "created_at", "status", "roles", "gate_contract", "inputs", "bindings", "summary", "cases"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "gate_id": { "const": "smollm2-fp32-bf16-native-e0-v2" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["pass", "fail"] },
+    "roles": {
+      "const": {
+        "fp32": "numeric-only",
+        "bf16": "semantic-only",
+        "candidate_numeric_reference": "fp32",
+        "candidate_semantic_reference": "hf-bf16-path-matched"
+      }
+    },
+    "gate_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thresholds", "oracle_reduction_variant", "required_candidate_reduction_variants", "cross_cache_exact_window", "top_k_comparison", "top_1_comparison", "threshold_activation_evidence"],
+      "properties": {
+        "thresholds": { "$ref": "#/$defs/thresholdSet" },
+        "oracle_reduction_variant": { "$ref": "#/$defs/oracleVariant" },
+        "required_candidate_reduction_variants": {
+          "type": "array",
+          "prefixItems": [
+            { "$ref": "#/$defs/canonicalVariant" },
+            { "$ref": "#/$defs/alternateVariant" }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "cross_cache_exact_window": { "const": 16 },
+        "top_k_comparison": { "const": "set-exact" },
+        "top_1_comparison": { "const": "ordered-exact" },
+        "threshold_activation_evidence": { "const": "replayed-passing-full-31-hf-oracle-calibration-report-v2" }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fp32_manifest_sha256", "bf16_manifest_sha256", "candidate_manifest_sha256", "oracle_calibration_report_sha256", "fp32_sidecar_sha256", "bf16_sidecar_sha256", "candidate_sidecar_sha256"],
+      "properties": {
+        "fp32_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "bf16_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "oracle_calibration_report_sha256": { "$ref": "#/$defs/sha256" },
+        "fp32_sidecar_sha256": { "$ref": "#/$defs/sha256" },
+        "bf16_sidecar_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_sidecar_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "model_revision", "config_sha256", "weights_sha256", "tokenizer_sha256", "matrix_sha256", "prompts_sha256", "gate_manifest_sha256", "environment_sha256", "environment_id", "oracle_git_revision", "oracle_git_status_sha256", "candidate_git_revision", "candidate_git_status_sha256", "candidate_executable_sha256", "candidate_build_argv_sha256", "candidate_capture_argv_sha256", "dependency_locks", "lane_manifests"],
+      "properties": {
+        "model_id": { "const": "HuggingFaceTB/SmolLM2-135M" },
+        "model_revision": { "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2" },
+        "config_sha256": { "const": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843" },
+        "weights_sha256": { "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1" },
+        "tokenizer_sha256": { "const": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db" },
+        "matrix_sha256": { "$ref": "#/$defs/sha256" },
+        "prompts_sha256": { "$ref": "#/$defs/sha256" },
+        "gate_manifest_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_id": { "const": "rtx4090-ubuntu22-driver580-v1" },
+        "oracle_git_revision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "oracle_git_status_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_git_revision": { "type": "string", "pattern": "^[0-9a-f]{40,64}$" },
+        "candidate_git_status_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_executable_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_build_argv_sha256": { "$ref": "#/$defs/sha256" },
+        "candidate_capture_argv_sha256": { "$ref": "#/$defs/sha256" },
+        "dependency_locks": { "$ref": "#/$defs/roleHashes" },
+        "lane_manifests": { "$ref": "#/$defs/roleHashes" }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_count", "candidate_variant_count", "failure_count", "numeric_pass", "semantic_pass", "variants"],
+      "properties": {
+        "case_count": { "const": 31 },
+        "candidate_variant_count": { "const": 2 },
+        "failure_count": { "type": "integer", "minimum": 0, "maximum": 62 },
+        "numeric_pass": { "type": "boolean" },
+        "semantic_pass": { "type": "boolean" },
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonical-v1", "fixed-contiguous-37-balanced-v1"],
+          "properties": {
+            "canonical-v1": { "$ref": "#/$defs/variantSummary" },
+            "fixed-contiguous-37-balanced-v1": { "$ref": "#/$defs/variantSummary" }
+          }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 31,
+      "maxItems": 31,
+      "items": { "$ref": "#/$defs/caseReport" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_abs", "mean_abs", "max_relative", "mean_relative", "cosine_similarity"],
+      "properties": {
+        "max_abs": { "type": "number", "minimum": 0 },
+        "mean_abs": { "type": "number", "minimum": 0 },
+        "max_relative": { "type": "number", "minimum": 0 },
+        "mean_relative": { "type": "number", "minimum": 0 },
+        "cosine_similarity": { "type": "number", "minimum": -1, "maximum": 1 }
+      }
+    },
+    "metricRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics", "pass"],
+      "properties": {
+        "metrics": { "$ref": "#/$defs/metrics" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "numeric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["first_layer_hidden", "final_logits", "final_log_probs"],
+      "properties": {
+        "first_layer_hidden": { "$ref": "#/$defs/metricRecord" },
+        "final_logits": { "$ref": "#/$defs/metricRecord" },
+        "final_log_probs": { "$ref": "#/$defs/metricRecord" }
+      }
+    },
+    "semantic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cache_on_exact", "cache_off_exact", "top_1_exact", "top_k_set_exact", "hf_cross_cache_first_divergence_step", "candidate_cross_cache_first_divergence_step", "cross_cache_exact_window", "cross_cache_exact_window_match", "pass"],
+      "properties": {
+        "cache_on_exact": { "type": "boolean" },
+        "cache_off_exact": { "type": "boolean" },
+        "top_1_exact": { "type": "boolean" },
+        "top_k_set_exact": { "type": "boolean" },
+        "hf_cross_cache_first_divergence_step": { "type": ["integer", "null"], "minimum": 0, "maximum": 31 },
+        "candidate_cross_cache_first_divergence_step": { "type": ["integer", "null"], "minimum": 0, "maximum": 31 },
+        "cross_cache_exact_window": { "const": 16 },
+        "cross_cache_exact_window_match": { "type": "boolean" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "variantReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["numeric", "semantic", "pass"],
+      "properties": {
+        "numeric": { "$ref": "#/$defs/numeric" },
+        "semantic": { "$ref": "#/$defs/semantic" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "caseReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_id", "variants", "pass"],
+      "properties": {
+        "prompt_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$" },
+        "variants": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["canonical-v1", "fixed-contiguous-37-balanced-v1"],
+          "properties": {
+            "canonical-v1": { "$ref": "#/$defs/variantReport" },
+            "fixed-contiguous-37-balanced-v1": { "$ref": "#/$defs/variantReport" }
+          }
+        },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "variantSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_count", "failure_count", "numeric_pass", "semantic_pass", "aggregate_numeric", "pass"],
+      "properties": {
+        "case_count": { "const": 31 },
+        "failure_count": { "type": "integer", "minimum": 0, "maximum": 31 },
+        "numeric_pass": { "type": "boolean" },
+        "semantic_pass": { "type": "boolean" },
+        "aggregate_numeric": { "$ref": "#/$defs/numeric" },
+        "pass": { "type": "boolean" }
+      }
+    },
+    "roleHashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fp32", "bf16", "candidate"],
+      "properties": {
+        "fp32": { "$ref": "#/$defs/sha256" },
+        "bf16": { "$ref": "#/$defs/sha256" },
+        "candidate": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "thresholdSet": {
+      "const": {
+        "first_layer_hidden": { "max_abs_max": 0.3884272575378418, "mean_abs_max": 0.008509292567237658, "max_relative_max": 0.13578447438776492, "mean_relative_max": 0.005414661057131772, "cosine_min": 0.999983706829855 },
+        "final_logits": { "max_abs_max": 5.852936458587647, "mean_abs_max": 1.151280319263363, "max_relative_max": 1.1707394897937775, "mean_relative_max": 0.13616598220459955, "cosine_min": 0.9979035305495393 },
+        "final_log_probs": { "max_abs_max": 4.998420619964599, "mean_abs_max": 0.6007178144163239, "max_relative_max": 0.5767027348279953, "mean_relative_max": 0.04668832837569344, "cosine_min": 0.9987779663298298 }
+      }
+    },
+    "oracleVariant": { "const": { "variant_id": "hf-eager-default-v1", "partition_kind": "hf-eager-runtime-default", "chunk_elements": null, "remainder_policy": "runtime-default", "merge_order": "runtime-default" } },
+    "canonicalVariant": { "const": { "variant_id": "canonical-v1", "partition_kind": "production-default", "chunk_elements": null, "remainder_policy": "implementation-default", "merge_order": "implementation-default" } },
+    "alternateVariant": { "const": { "variant_id": "fixed-contiguous-37-balanced-v1", "partition_kind": "fixed-contiguous", "chunk_elements": 37, "remainder_policy": "last-short-chunk", "merge_order": "deterministic-balanced-binary-tree-by-chunk-index" } }
+  }
+}

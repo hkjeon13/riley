@@ -1,0 +1,97 @@
+[
+  {
+    "slot": "token_embedding.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.embed_tokens.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.input_norm.scale",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.input_layernorm.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.attention.query.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.self_attn.q_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.attention.key.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.self_attn.k_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.attention.value.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.self_attn.v_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.attention.output.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.self_attn.o_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.post_attention_norm.scale",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.post_attention_layernorm.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.mlp.gate.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.mlp.gate_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.mlp.up.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.mlp.up_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "decoder.0.mlp.down.weight",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.layers.0.mlp.down_proj.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "final_norm.scale",
+    "binding": {
+      "kind": "tensor",
+      "tensor_name": "model.norm.weight",
+      "shard_path": "model.safetensors"
+    }
+  },
+  {
+    "slot": "lm_head.weight",
+    "binding": {
+      "kind": "alias",
+      "slot": "token_embedding.weight"
+    }
+  }
+]

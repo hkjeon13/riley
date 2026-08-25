@@ -1,6 +1,7 @@
 # PR 01 — 기준선과 재현성 계약
 
-**상태:** Planned  
+**상태:** Active
+
 **선행 조건:** [PR 00](00-pr-contract.md)  
 **다음:** [PR 02 — Workspace와 CI](02-workspace-and-ci.md)
 
@@ -107,6 +108,11 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - GPU utilization
 - peak VRAM
 - failure count
+
+반복성 Gate A에서 처리량 CV 5% 상한은 30회 measured trial의 run 내부 p50을
+계산하는 `warm` cell에만 적용한다. Warmup 없이 첫 request 한 번만 기록하는
+`cold` cell의 처리량 CV는 진단값으로 보존하고, cold pass/fail은 model load
+CV 10%, peak VRAM 상대 범위 1%, failure count 0과 token identity로 판정한다.
 
 ## 결과 schema의 공통 필드
 
@@ -252,7 +258,10 @@ benchmarks/
 ├── scripts/
 ├── schemas/
 │   └── result.schema.json
-└── results/.gitkeep
+└── results/
+    ├── PR01.md
+    ├── README.md
+    └── <canonical repeatability bundles>
 
 tools/python/reference/
 └── Python reference 생성 도구
@@ -271,15 +280,30 @@ tools/python/reference/
 
 ## 완료 기준
 
-- [ ] primary GPU, dtype, checkpoint 고정
-- [ ] Python reference lane의 dependency와 실행 명령 고정
-- [ ] Python-free rustinfer production lane의 dependency와 실행 명령 고정
-- [ ] baseline 실행 명령 재현 가능
-- [ ] benchmark matrix 파일화
-- [ ] golden corpus와 reference 생성 절차 문서화
-- [ ] 의미 보존 등급과 runtime dependency class를 포함한 raw result schema 정의
-- [ ] RNG 알고리즘과 seed 기록 방식 정의
-- [ ] 같은 환경에서 baseline 반복 실행 편차 확인
+- [x] primary GPU, dtype, checkpoint 고정
+- [x] Python reference lane의 dependency와 실행 명령 고정
+- [x] Python-free rustinfer production lane의 dependency와 실행 명령 고정
+- [x] baseline 실행 명령 재현 가능
+- [x] benchmark matrix 파일화
+- [x] golden corpus와 reference 생성 절차 문서화
+- [x] 의미 보존 등급과 runtime dependency class를 포함한 raw result schema 정의
+- [x] RNG 알고리즘과 seed 기록 방식 정의
+- [x] 같은 환경에서 baseline 반복 실행 편차 확인
+
+구현 gate는 통과했다. HF Transformers eager와 vLLM의 canonical v2 반복성
+bundle, 실패한 v1 calibration과 Git 크기 계약 때문에 제외한 run002의 근거는
+[`benchmarks/results/PR01.md`](../benchmarks/results/PR01.md)와 그 상세 증거에 기록했다. 채택한
+두 run003 bundle은 source commit
+`09911ba2630845e9d4094b7c33c3ff65931a919c`에서 원격 RTX 4090으로 실행됐고,
+각각 20개 measured raw와 455행을 포함한다. 두 lane 모두 failure 0건으로 v2
+threshold를 통과했으며 전체 contract validator는 2,000 file-row trials를 검증했다.
+
+이 PR의 의미 보존 분류는 baseline `reference`다. 최적화나 production inference
+구현을 추가하지 않으므로 Cargo, `unsafe`, CUDA FFI merge 항목은 `N/A`다.
+정확한 model runner argv는 각 bundle에, model-free 재검증 명령과 결과는 PR 01
+Gate A 인덱스의 상세 증거에 보존한다.
+
+이 단계는 merge 전까지 `Active`, merge 후 `Complete`로 전환한다.
 
 **중단 조건:** benchmark 결과가 반복 실행마다 크게 흔들리거나 두 lane의 model/dtype/sampling 조건이 다르면 다음 PR로 가지 않는다.
 

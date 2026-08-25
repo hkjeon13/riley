@@ -1,0 +1,412 @@
+#ifndef RUSTINFER_CUDA_FFI_INTERNAL_HPP_
+#define RUSTINFER_CUDA_FFI_INTERNAL_HPP_
+
+#include "rustinfer_cuda.h"
+
+#include <cuda.h>
+#include <cuda_runtime_api.h>
+
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <limits>
+#include <new>
+
+struct RustInferCudaContext {
+  RustInferCudaContext(CUdevice selected_device, CUcontext primary_context,
+                       int32_t device_ordinal) noexcept
+      : device(selected_device),
+        context(primary_context),
+        ordinal(device_ordinal),
+        live_children(0),
+        restoration_failed(false),
+        device_live_bytes(0),
+        device_live_allocations(0),
+        pinned_host_live_bytes(0),
+        pinned_host_live_allocations(0) {}
+
+  CUdevice device;
+  CUcontext context;
+  int32_t ordinal;
+  std::atomic<uint32_t> live_children;
+  std::atomic<bool> restoration_failed;
+  std::atomic_flag allocation_stats_lock = ATOMIC_FLAG_INIT;
+  std::atomic<uint64_t> device_live_bytes;
+  std::atomic<uint64_t> device_live_allocations;
+  std::atomic<uint64_t> pinned_host_live_bytes;
+  std::atomic<uint64_t> pinned_host_live_allocations;
+};
+
+struct RustInferCudaStream {
+  RustInferCudaStream(RustInferCudaContext* owning_context,
+                      cudaStream_t native_stream) noexcept
+      : owner(owning_context), stream(native_stream), active_copies(0) {}
+
+  RustInferCudaContext* owner;
+  cudaStream_t stream;
+  std::atomic<uint32_t> active_copies;
+};
+
+struct RustInferCudaEvent {
+  RustInferCudaContext* owner;
+  cudaEvent_t event;
+};
+
+struct RustInferCudaSmokeBuffer {
+  RustInferCudaContext* owner;
+  float* device_data;
+  uint64_t element_count;
+  bool in_flight;
+  cudaStream_t launch_stream;
+};
+
+struct RustInferCudaDeviceBuffer {
+  RustInferCudaDeviceBuffer(RustInferCudaContext* owning_context,
+                            void* allocation, uint64_t allocation_bytes) noexcept
+      : owner(owning_context),
+        device_data(allocation),
+        byte_len(allocation_bytes),
+        active_copies(0) {}
+
+  RustInferCudaContext* owner;
+  void* device_data;
+  uint64_t byte_len;
+  std::atomic<uint32_t> active_copies;
+};
+
+struct RustInferCudaPinnedHostBuffer {
+  RustInferCudaPinnedHostBuffer(RustInferCudaContext* owning_context,
+                                void* allocation,
+                                uint64_t allocation_bytes) noexcept
+      : owner(owning_context),
+        host_data(allocation),
+        byte_len(allocation_bytes),
+        active_copies(0) {}
+
+  RustInferCudaContext* owner;
+  void* host_data;
+  uint64_t byte_len;
+  std::atomic<uint32_t> active_copies;
+};
+
+struct RustInferCudaCopy {
+  RustInferCudaCopy(RustInferCudaContext* owning_context,
+                    RustInferCudaStream* copy_stream,
+                    RustInferCudaDeviceBuffer* device_buffer,
+                    RustInferCudaPinnedHostBuffer* host_buffer) noexcept
+      : owner(owning_context),
+        stream(copy_stream),
+        device(device_buffer),
+        host(host_buffer),
+        deferred_status(RUSTINFER_CUDA_STATUS_SUCCESS),
+        deferred_error{},
+        completed(false) {
+    deferred_error.struct_size = sizeof(deferred_error);
+  }
+
+  RustInferCudaContext* owner;
+  RustInferCudaStream* stream;
+  RustInferCudaDeviceBuffer* device;
+  RustInferCudaPinnedHostBuffer* host;
+  RustInferCudaStatus deferred_status;
+  RustInferCudaErrorInfo deferred_error;
+  bool completed;
+};
+
+namespace rustinfer_cuda_internal {
+
+class AllocationStatsGuard final {
+ public:
+  explicit AllocationStatsGuard(RustInferCudaContext* context) noexcept
+      : lock_(context->allocation_stats_lock) {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }
+  }
+  AllocationStatsGuard(const AllocationStatsGuard&) = delete;
+  AllocationStatsGuard& operator=(const AllocationStatsGuard&) = delete;
+  ~AllocationStatsGuard() noexcept { lock_.clear(std::memory_order_release); }
+
+ private:
+  std::atomic_flag& lock_;
+};
+
+static_assert(sizeof(RustInferCudaErrorInfo) == 272,
+              "RustInferCudaErrorInfo ABI size changed");
+static_assert(offsetof(RustInferCudaErrorInfo, message) == 16,
+              "RustInferCudaErrorInfo ABI layout changed");
+static_assert(sizeof(RustInferCudaDeviceProperties) == 320,
+              "RustInferCudaDeviceProperties ABI size changed");
+static_assert(offsetof(RustInferCudaDeviceProperties, name) == 64,
+              "RustInferCudaDeviceProperties ABI layout changed");
+static_assert(sizeof(RustInferCudaAllocationStats) == 40,
+              "RustInferCudaAllocationStats ABI size changed");
+static_assert(offsetof(RustInferCudaAllocationStats, device_live_bytes) == 8,
+              "RustInferCudaAllocationStats ABI layout changed");
+static_assert(
+    offsetof(RustInferCudaAllocationStats, pinned_host_live_allocations) == 32,
+    "RustInferCudaAllocationStats ABI tail layout changed");
+
+inline void clear_error(RustInferCudaErrorInfo* error) noexcept {
+  if (error == nullptr || error->struct_size < sizeof(*error)) {
+    return;
+  }
+  std::memset(error, 0, sizeof(*error));
+  error->struct_size = sizeof(*error);
+}
+
+inline RustInferCudaStatus set_error(RustInferCudaErrorInfo* error,
+                                     RustInferCudaStatus status,
+                                     int32_t native_code, uint32_t domain,
+                                     uint32_t stage, const char* operation,
+                                     const char* detail) noexcept {
+  if (error != nullptr && error->struct_size >= sizeof(*error)) {
+    const uint32_t struct_size = error->struct_size;
+    std::memset(error, 0, sizeof(*error));
+    error->struct_size = struct_size;
+    error->native_code = native_code;
+    error->domain = domain;
+    error->stage = stage;
+    std::snprintf(error->message, sizeof(error->message), "%s: %s", operation,
+                  detail == nullptr ? "unknown error" : detail);
+  }
+  return status;
+}
+
+inline RustInferCudaStatus validation_error(RustInferCudaErrorInfo* error,
+                                            RustInferCudaStatus status,
+                                            uint32_t stage,
+                                            const char* operation,
+                                            const char* detail) noexcept {
+  return set_error(error, status, 0, RUSTINFER_CUDA_ERROR_DOMAIN_VALIDATION,
+                   stage, operation, detail);
+}
+
+inline RustInferCudaStatus internal_error(RustInferCudaErrorInfo* error,
+                                          uint32_t stage,
+                                          const char* operation,
+                                          const char* detail) noexcept {
+  return set_error(error, RUSTINFER_CUDA_STATUS_INTERNAL_ERROR, 0,
+                   RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL, stage, operation,
+                   detail);
+}
+
+inline RustInferCudaStatus driver_error(CUresult result,
+                                        RustInferCudaErrorInfo* error,
+                                        uint32_t stage,
+                                        const char* operation) noexcept {
+  if (result == CUDA_SUCCESS) {
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+  const char* detail = nullptr;
+  (void)cuGetErrorString(result, &detail);
+  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_DRIVER_ERROR;
+  if (result == CUDA_ERROR_INVALID_DEVICE) {
+    status = RUSTINFER_CUDA_STATUS_INVALID_DEVICE;
+  } else if (result == CUDA_ERROR_INVALID_VALUE) {
+    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+  } else if (result == CUDA_ERROR_OUT_OF_MEMORY) {
+    status = RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY;
+  } else if (result == CUDA_ERROR_NOT_READY) {
+    status = RUSTINFER_CUDA_STATUS_NOT_READY;
+  }
+  return set_error(error, status, static_cast<int32_t>(result),
+                   RUSTINFER_CUDA_ERROR_DOMAIN_DRIVER, stage, operation,
+                   detail);
+}
+
+inline RustInferCudaStatus runtime_error(cudaError_t result,
+                                         RustInferCudaErrorInfo* error,
+                                         uint32_t stage,
+                                         const char* operation) noexcept {
+  if (result == cudaSuccess) {
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_RUNTIME_ERROR;
+  if (result == cudaErrorInvalidDevice) {
+    status = RUSTINFER_CUDA_STATUS_INVALID_DEVICE;
+  } else if (result == cudaErrorInvalidValue ||
+             result == cudaErrorInvalidConfiguration) {
+    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+  } else if (result == cudaErrorMemoryAllocation) {
+    status = RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY;
+  } else if (result == cudaErrorNotReady) {
+    status = RUSTINFER_CUDA_STATUS_NOT_READY;
+  }
+  return set_error(error, status, static_cast<int32_t>(result),
+                   RUSTINFER_CUDA_ERROR_DOMAIN_RUNTIME, stage, operation,
+                   cudaGetErrorString(result));
+}
+
+class CurrentContext final {
+ public:
+  explicit CurrentContext(RustInferCudaContext* context) noexcept
+      : context_(context), previous_(nullptr), active_(false) {}
+  CurrentContext(const CurrentContext&) = delete;
+  CurrentContext& operator=(const CurrentContext&) = delete;
+
+  ~CurrentContext() noexcept {
+    if (active_) {
+      CUcontext popped = nullptr;
+      if (cuCtxPopCurrent(&popped) == CUDA_SUCCESS &&
+          popped == context_->context) {
+        active_ = false;
+      } else {
+        poison_context();
+        reconcile_after_uncertain_pop();
+      }
+    }
+  }
+
+  bool active() const noexcept { return active_; }
+
+  RustInferCudaStatus enter(RustInferCudaErrorInfo* error, uint32_t stage,
+                            const char* operation) noexcept {
+    if (context_ == nullptr) {
+      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                              stage, operation, "context is null");
+    }
+    if (context_->restoration_failed.load(std::memory_order_acquire)) {
+      return validation_error(
+          error, RUSTINFER_CUDA_STATUS_INVALID_STATE, stage, operation,
+          "a prior CUDA context-stack restoration failed");
+    }
+
+    const CUresult snapshot_result = cuCtxGetCurrent(&previous_);
+    if (snapshot_result != CUDA_SUCCESS) {
+      poison_context();
+      return driver_error(snapshot_result, error, stage, operation);
+    }
+    if (previous_ == context_->context) {
+      // The caller already made this primary context current. Borrow it for
+      // this call and do not disturb the caller's stack on leave.
+      return RUSTINFER_CUDA_STATUS_SUCCESS;
+    }
+
+    const CUresult result = cuCtxPushCurrent(context_->context);
+    if (result != CUDA_SUCCESS) {
+      // Driver context APIs may surface a prior asynchronous error after doing
+      // their own side effect. Re-observe current state before deciding whether
+      // a pop is owed. If observation itself is ambiguous, poison the lease and
+      // leave it retained rather than pop or release uncertain ownership.
+      CUcontext observed = nullptr;
+      if (cuCtxGetCurrent(&observed) != CUDA_SUCCESS) {
+        poison_context();
+      } else if (observed == context_->context) {
+        active_ = true;
+      } else if (observed != previous_) {
+        poison_context();
+      }
+      return driver_error(result, error, stage, operation);
+    }
+    active_ = true;
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+
+  RustInferCudaStatus leave(RustInferCudaStatus operation_status,
+                            RustInferCudaErrorInfo* error, uint32_t stage,
+                            const char* operation) noexcept {
+    if (!active_) {
+      return operation_status;
+    }
+    CUcontext popped = nullptr;
+    const CUresult result = cuCtxPopCurrent(&popped);
+    if (result != CUDA_SUCCESS) {
+      poison_context();
+      reconcile_after_uncertain_pop();
+      // NOT_READY is a successful non-blocking observation at the safe Rust
+      // boundary, so a context-stack restoration failure must take precedence
+      // over it instead of being collapsed to Ok(false). Preserve only genuine
+      // operation failures that already carry the more relevant diagnostic.
+      if (operation_status != RUSTINFER_CUDA_STATUS_SUCCESS &&
+          operation_status != RUSTINFER_CUDA_STATUS_NOT_READY) {
+        return operation_status;
+      }
+      return driver_error(result, error, stage, operation);
+    }
+    if (popped != context_->context) {
+      poison_context();
+      reconcile_after_uncertain_pop();
+      if (operation_status != RUSTINFER_CUDA_STATUS_SUCCESS &&
+          operation_status != RUSTINFER_CUDA_STATUS_NOT_READY) {
+        return operation_status;
+      }
+      return internal_error(error, stage, operation,
+                            "CUDA context stack returned a different context");
+    }
+    active_ = false;
+    if (operation_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      return operation_status;
+    }
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+
+ private:
+  void poison_context() noexcept {
+    if (context_ != nullptr) {
+      context_->restoration_failed.store(true, std::memory_order_release);
+    }
+  }
+
+  void reconcile_after_uncertain_pop() noexcept {
+    CUcontext observed = nullptr;
+    if (cuCtxGetCurrent(&observed) != CUDA_SUCCESS) {
+      // State cannot be identified. Do not risk popping a caller-owned context;
+      // the poison bit prevents release of this primary-context lease.
+      active_ = false;
+    } else if (observed == previous_) {
+      // Pop had its side effect and only reported a deferred earlier error.
+      active_ = false;
+    } else if (observed == context_->context) {
+      // The target remains current, so an explicit caller-side retry is safe.
+      active_ = true;
+    } else {
+      active_ = false;
+    }
+  }
+
+  RustInferCudaContext* context_;
+  CUcontext previous_;
+  bool active_;
+};
+
+inline bool same_context(const RustInferCudaContext* left,
+                         const RustInferCudaContext* right) noexcept {
+  return left != nullptr && left == right;
+}
+
+inline bool retain_child(RustInferCudaContext* context) noexcept {
+  if (context == nullptr) {
+    return false;
+  }
+  uint32_t current = context->live_children.load(std::memory_order_relaxed);
+  while (current != std::numeric_limits<uint32_t>::max()) {
+    if (context->live_children.compare_exchange_weak(
+            current, current + 1, std::memory_order_relaxed,
+            std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+inline bool release_child(RustInferCudaContext* context) noexcept {
+  if (context == nullptr) {
+    return false;
+  }
+  uint32_t current = context->live_children.load(std::memory_order_relaxed);
+  while (current != 0) {
+    if (context->live_children.compare_exchange_weak(
+            current, current - 1, std::memory_order_release,
+            std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace rustinfer_cuda_internal
+
+#endif  // RUSTINFER_CUDA_FFI_INTERNAL_HPP_
