@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, NoReturn, Sequence
 
 import check_cuda_fault_evidence as cuda_fault_evidence
+import check_native_correctness_evidence as native_correctness_evidence
 from release_common import ReleaseContractError
 from verify_release_bundle import verify_bundle
 
@@ -71,7 +72,6 @@ PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
 SOAK_VERSION = "rustinfer.reliability-soak-report.v1"
 CORRECTNESS_VERSION = "1.0.0"
 CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
-NATIVE_REPLAY_VERSION = "rustinfer.native-correctness-replay-validation.v1"
 OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -563,7 +563,7 @@ def _validate_cuda_fault_replay(
 
 
 def _validate_correctness(
-    report: dict[str, Any], path: str, revision: str
+    report: dict[str, Any], path: str, revision: str, candidate_executable_sha256: str
 ) -> None:
     row = _exact(
         report,
@@ -582,7 +582,17 @@ def _validate_correctness(
         _fail(f"{path}.bindings.candidate_git_revision", "source revision mismatch")
     if bindings.get("candidate_git_status_sha256") != hashlib.sha256(b"").hexdigest():
         _fail(f"{path}.bindings.candidate_git_status_sha256", "source tree was not clean")
-    _sha256(bindings.get("candidate_executable_sha256"), f"{path}.bindings.candidate_executable_sha256")
+    if (
+        _sha256(
+            bindings.get("candidate_executable_sha256"),
+            f"{path}.bindings.candidate_executable_sha256",
+        )
+        != candidate_executable_sha256
+    ):
+        _fail(
+            f"{path}.bindings.candidate_executable_sha256",
+            "does not match the replayed native executable artifact",
+        )
     expected_model_bindings = {
         "model_id": python_free_e2e.MODEL_ID,
         "model_revision": python_free_e2e.MODEL_REVISION,
@@ -655,64 +665,6 @@ def _validate_correctness(
                         f"{case_path}.variants.{name}.numeric.{metric_name}.pass",
                         "must be true",
                     )
-
-
-def _validate_native_replay(
-    report: dict[str, Any],
-    path: str,
-    *,
-    revision: str,
-    archive_sha256: str,
-    correctness_sha256: str,
-    raw_replay_sha256: str,
-) -> None:
-    row = _exact(
-        report,
-        {
-            "schema_version", "status", "source", "correctness_report_sha256",
-            "raw_replay_sha256", "case_count", "failure_count", "checks",
-        },
-        path,
-    )
-    if row["schema_version"] != NATIVE_REPLAY_VERSION or row["status"] != "passed":
-        _fail(path, "native correctness replay validation did not pass")
-    source = _exact(
-        row["source"],
-        {"git_revision", "git_dirty", "source_archive_sha256"},
-        f"{path}.source",
-    )
-    if source != {
-        "git_revision": revision,
-        "git_dirty": False,
-        "source_archive_sha256": archive_sha256,
-    }:
-        _fail(f"{path}.source", "does not exactly match candidate source")
-    if row["correctness_report_sha256"] != correctness_sha256:
-        _fail(f"{path}.correctness_report_sha256", "native report digest mismatch")
-    if row["raw_replay_sha256"] != raw_replay_sha256:
-        _fail(f"{path}.raw_replay_sha256", "raw replay bundle digest mismatch")
-    if row["case_count"] != 31 or row["failure_count"] != 0:
-        _fail(path, "native replay must pass exactly 31 cases with zero failures")
-    checks = row["checks"]
-    if not isinstance(checks, list):
-        _fail(f"{path}.checks", "must be an array")
-    required = {
-        "schema-closed-validation",
-        "raw-input-hashes-replayed",
-        "all-cases-replayed",
-        "summary-recomputed",
-    }
-    observed: set[str] = set()
-    for index, raw in enumerate(checks):
-        check = _exact(raw, {"id", "passed"}, f"{path}.checks[{index}]")
-        check_id = _string(check["id"], f"{path}.checks[{index}].id", ID_RE)
-        if check_id in observed:
-            _fail(f"{path}.checks[{index}].id", "duplicate check id")
-        observed.add(check_id)
-        if check["passed"] is not True:
-            _fail(f"{path}.checks[{index}].passed", "must be true")
-    if observed != required:
-        _fail(f"{path}.checks", f"required replay check set mismatch: {sorted(observed)}")
 
 
 def _optimization_test(
@@ -807,16 +759,6 @@ def _reviewed_performance_baseline() -> dict[str, Any]:
         return release_performance._validate_baseline(document, raw)
     except (release_performance.InputError, OSError) as error:
         _fail("performance.baseline", str(error))
-
-
-def _verify_native_replay_archive(path: Path) -> None:
-    try:
-        with tarfile.open(path, "r:*") as archive:
-            members = _safe_tar_members(archive, "native_correctness.raw_replay")
-            if not any(member.isreg() for member in members):
-                _fail("native_correctness.raw_replay", "must contain replay evidence files")
-    except (OSError, tarfile.TarError) as error:
-        _fail("native_correctness.raw_replay", f"cannot read replay archive: {error}")
 
 
 def _validate_optimization_correctness(
@@ -1497,20 +1439,41 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
 
         native = _exact(
             evidence_row["native_correctness"],
-            {"report", "raw_replay", "replay_validation"},
+            {"report", "raw_replay", "candidate_executable"},
             "manifest.evidence.native_correctness",
         )
-        for field in ("report", "raw_replay", "replay_validation"):
-            native_path, native_sha, _ = _resolve_artifact(
-                native[field], f"manifest.evidence.native_correctness.{field}",
-                evidence_root, seen_paths,
+        native_report_path, native_report_sha, _ = _resolve_artifact(
+            native["report"],
+            "manifest.evidence.native_correctness.report",
+            evidence_root,
+            seen_paths,
+        )
+        native_raw_path, native_raw_sha, _ = _resolve_artifact(
+            native["raw_replay"],
+            "manifest.evidence.native_correctness.raw_replay",
+            evidence_root,
+            seen_paths,
+        )
+        native_executable_path, native_executable_sha, _ = _resolve_artifact(
+            native["candidate_executable"],
+            "manifest.evidence.native_correctness.candidate_executable",
+            evidence_root,
+            seen_paths,
+        )
+        if not os.access(native_executable_path, os.X_OK):
+            _fail(
+                "manifest.evidence.native_correctness.candidate_executable",
+                "must be executable",
             )
-            if field == "raw_replay":
-                raw_hashes["native_correctness"] = native_sha
-                _verify_native_replay_archive(native_path)
-            else:
-                native_document, _ = _load_json(native_path, f"native_correctness {field}")
-                loaded[f"native_correctness_{field}"] = (native_document, native_sha)
+        native_document, _ = _load_json(
+            native_report_path, "native_correctness report"
+        )
+        loaded["native_correctness_report"] = (
+            native_document,
+            native_report_sha,
+        )
+        raw_hashes["native_correctness"] = native_raw_sha
+        raw_paths["native_correctness"] = native_raw_path
 
         optimization = _exact(
             evidence_row["optimization_correctness"],
@@ -1555,16 +1518,35 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             release_image_id=image_digest,
         )
         native_correctness_sha256 = loaded["native_correctness_report"][1]
+        try:
+            native_replay = native_correctness_evidence.replay_raw_evidence(
+                raw_paths["native_correctness"],
+                source_revision=revision,
+                source_archive=archive_path,
+                correctness_report=native_report_path,
+                candidate_executable=native_executable_path,
+            )
+        except (
+            native_correctness_evidence.NativeCorrectnessEvidenceError,
+            OSError,
+        ) as error:
+            _fail("native_correctness.raw_replay", str(error))
+        if (
+            native_replay.source_archive_sha256 != archive_sha256
+            or native_replay.correctness_report_sha256 != native_correctness_sha256
+            or native_replay.candidate_executable_sha256 != native_executable_sha
+            or native_replay.case_count != 31
+            or native_replay.failure_count != 0
+        ):
+            _fail(
+                "native_correctness.raw_replay",
+                "replayed source/report/executable/count bindings differ",
+            )
         _validate_correctness(
-            loaded["native_correctness_report"][0], "native_correctness", revision
-        )
-        _validate_native_replay(
-            loaded["native_correctness_replay_validation"][0],
-            "native_correctness.replay_validation",
-            revision=revision,
-            archive_sha256=archive_sha256,
-            correctness_sha256=native_correctness_sha256,
-            raw_replay_sha256=raw_hashes["native_correctness"],
+            loaded["native_correctness_report"][0],
+            "native_correctness",
+            revision,
+            native_replay.candidate_executable_sha256,
         )
         optimization_profile_image_sha256 = _validate_optimization_correctness(
             loaded["optimization_correctness"][0],

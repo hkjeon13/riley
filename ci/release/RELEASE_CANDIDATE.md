@@ -56,7 +56,7 @@ shape is:
     "native_correctness": {
       "report": {"path": "native-correctness-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_replay": {"path": "native-correctness-replay.tar", "sha256": "LOWERCASE_SHA256"},
-      "replay_validation": {"path": "native-replay-validation.json", "sha256": "LOWERCASE_SHA256"}
+      "candidate_executable": {"path": "rustinfer-native", "sha256": "LOWERCASE_SHA256"}
     },
     "optimization_correctness": {
       "report": {"path": "optimization-correctness-report.json", "sha256": "LOWERCASE_SHA256"},
@@ -164,9 +164,13 @@ The two correctness roles must never be collapsed into one hash:
   `smollm2-fp32-bf16-native-e0-v2`: must pass all 31 cases and both E0
   variants from `benchmarks/schemas/correctness-report.schema.json`, bind the
   exact candidate revision, and record the clean-tree digest. Merely parsing
-  that report is not approval. `raw_replay` preserves the replay inputs/output,
-  and `replay_validation` must bind both exact byte hashes and attest that the
-  closed schema, raw hashes, all cases, and summary were independently replayed;
+  that report is not approval. `raw_replay` is deterministic closed USTAR with
+  both source revisions, FP32/BF16 manifests and sidecars, the replayed oracle
+  report, candidate manifest/sidecar/executable, submitted correctness report,
+  and internal checksums. The final gate reads F32/BF16 safetensors with its
+  standard-library reader, reruns `replay_validate_correctness_report`, and
+  requires the embedded source/report/executable bytes to equal the separately
+  supplied candidate artifacts exactly;
 - optimizer equivalence report schema `1`, gate
   `pr15-iteration-command-batch-exact-v1`: must be passed E0 evidence for the
   same source/archive, pinned SmolLM2 BF16 artifacts, network-none locked/offline
@@ -178,28 +182,19 @@ The two correctness roles must never be collapsed into one hash:
   `command-batch-lifecycle-gpu.log`, `command-batch-primitives-gpu.log`, and
   `iteration-command-batch-model-parity-gpu.log`.
 
-The closed native replay validation shape is:
+Create that bundle only after both source revisions and all raw calibration
+artifacts are available:
 
-```json
-{
-  "schema_version": "rustinfer.native-correctness-replay-validation.v1",
-  "status": "passed",
-  "source": {
-    "git_revision": "FULL_LOWERCASE_40_CHARACTER_COMMIT",
-    "git_dirty": false,
-    "source_archive_sha256": "LOWERCASE_SHA256"
-  },
-  "correctness_report_sha256": "LOWERCASE_SHA256",
-  "raw_replay_sha256": "LOWERCASE_SHA256",
-  "case_count": 31,
-  "failure_count": 0,
-  "checks": [
-    {"id": "schema-closed-validation", "passed": true},
-    {"id": "raw-input-hashes-replayed", "passed": true},
-    {"id": "all-cases-replayed", "passed": true},
-    {"id": "summary-recomputed", "passed": true}
-  ]
-}
+```sh
+python3 ci/release/check_native_correctness_evidence.py \
+  --candidate-source-archive source.tar \
+  --oracle-source-archive oracle-source.tar \
+  --fp32-manifest fp32-manifest.json \
+  --bf16-manifest bf16-manifest.json \
+  --oracle-report oracle-calibration-report.json \
+  --candidate-manifest candidate-manifest.json \
+  --correctness-report native-correctness-report.json \
+  --output native-correctness-replay.tar
 ```
 
 The remaining cross-bindings are:

@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -22,7 +23,6 @@ from check_release_candidate import (  # noqa: E402
     ATTESTATION_VERSION,
     CUDA_FAULT_CHECKS,
     MANIFEST_VERSION,
-    NATIVE_REPLAY_VERSION,
     OPTIMIZATION_LOGS,
     PYTHON_FREE_CHECKS,
     SOAK_COMMON_SCENARIO_CHECKS,
@@ -36,6 +36,7 @@ from check_release_candidate import (  # noqa: E402
     reliability_soak,
     release_performance,
 )
+from test_native_correctness_evidence import NativeFixture as NativeEvidenceFixture  # noqa: E402
 from test_cuda_fault_evidence import (  # noqa: E402
     BUILD_IMAGE_ID as CUDA_BUILD_IMAGE_ID,
     Fixture as CudaEvidenceFixture,
@@ -71,6 +72,10 @@ e2e_fixture_module = importlib.util.module_from_spec(E2E_FIXTURE_SPEC)
 sys.modules[E2E_FIXTURE_SPEC.name] = e2e_fixture_module
 E2E_FIXTURE_SPEC.loader.exec_module(e2e_fixture_module)
 
+_NATIVE_TEMPLATE_TEMP = tempfile.TemporaryDirectory()
+_NATIVE_TEMPLATE_ROOT = Path(_NATIVE_TEMPLATE_TEMP.name)
+_NATIVE_TEMPLATE = NativeEvidenceFixture(_NATIVE_TEMPLATE_ROOT)
+
 
 def digest(contents: bytes) -> str:
     return hashlib.sha256(contents).hexdigest()
@@ -79,6 +84,7 @@ def digest(contents: bytes) -> str:
 class CandidateFixture:
     def __init__(self, root: Path) -> None:
         self.root = root
+        self.revision = _NATIVE_TEMPLATE.result.source_revision
         repository = root / "repository"
         repository.mkdir()
         (repository / "Cargo.toml").write_text(
@@ -101,7 +107,7 @@ class CandidateFixture:
             "cuda_report": root / "cuda-fault-report.json",
             "native_correctness": root / "native-correctness-report.json",
             "native_replay": root / "native-correctness-replay.tar",
-            "native_replay_validation": root / "native-replay-validation.json",
+            "native_executable": root / "rustinfer-native",
             "optimization_correctness": root / "optimization-correctness-report.json",
             "optimization_raw": root / "optimization-correctness-evidence.tar",
             "performance": root / "performance-report.json",
@@ -109,18 +115,20 @@ class CandidateFixture:
             "soak": root / "soak-report.json",
             "soak_raw": root / "soak-evidence.tar",
         }
-        self._write_tar(
-            self.paths["source"],
-            {"README.md": b"exact source archive fixture"},
-            pax_headers={"comment": REVISION},
+        shutil.copyfile(_NATIVE_TEMPLATE.candidate_source, self.paths["source"])
+        shutil.copyfile(
+            _NATIVE_TEMPLATE.correctness_report, self.paths["native_correctness"]
         )
+        shutil.copyfile(_NATIVE_TEMPLATE.raw, self.paths["native_replay"])
+        shutil.copyfile(_NATIVE_TEMPLATE.executable, self.paths["native_executable"])
+        self.paths["native_executable"].chmod(0o755)
         self.paths["binary"].write_bytes(fixture_elf())
         self.paths["binary"].chmod(0o755)
         build_bundle(
             binary_path=self.paths["binary"],
             output=self.paths["bundle"],
             repository_root=repository,
-            source_revision=REVISION,
+            source_revision=self.revision,
             source_date_epoch=EPOCH,
         )
         self.image_sha = digest(b"release image")
@@ -130,6 +138,10 @@ class CandidateFixture:
         cuda_template = CudaEvidenceFixture(cuda_template_root)
         environment_path = cuda_template.evidence / "environment.txt"
         environment = environment_path.read_text(encoding="utf-8")
+        environment = environment.replace(
+            f"source_revision={REVISION}",
+            f"source_revision={self.revision}",
+        )
         environment = environment.replace(
             f"source_archive_sha256={digest(cuda_template.source_archive.read_bytes())}",
             f"source_archive_sha256={digest(self.paths['source'].read_bytes())}",
@@ -142,7 +154,7 @@ class CandidateFixture:
         cuda_template.refresh_checksums()
         self.cuda_attestation = cuda_fault_evidence.produce(
             cuda_template.evidence,
-            source_revision=REVISION,
+            source_revision=self.revision,
             source_archive=self.paths["source"],
             build_image_id=self.cuda_build_image_id,
             release_binary=self.paths["binary"],
@@ -152,10 +164,6 @@ class CandidateFixture:
             report=self.paths["cuda_report"],
         )
         self.paths["soak_raw"].write_bytes(b"soak raw evidence fixture")
-        self._write_tar(
-            self.paths["native_replay"],
-            {"replay-summary.json": b'{"status":"passed"}\n'},
-        )
         self.optimization_logs = {
             test_id: f"raw log for {test_id}\n".encode()
             for test_id in OPTIMIZATION_LOGS
@@ -198,7 +206,7 @@ class CandidateFixture:
 
     def _binding(self) -> dict[str, object]:
         return {
-            "git_revision": REVISION,
+            "git_revision": self.revision,
             "git_dirty": False,
             "source_archive_sha256": digest(self.paths["source"].read_bytes()),
             "release_binary_sha256": digest(self.paths["binary"].read_bytes()),
@@ -225,7 +233,7 @@ class CandidateFixture:
         raw = copy.deepcopy(template.raw)
         binding = self._binding()
         raw["source"] = {
-            "git_revision": REVISION,
+            "git_revision": self.revision,
             "git_dirty": False,
             "source_archive_sha256": binding["source_archive_sha256"],
         }
@@ -252,7 +260,7 @@ class CandidateFixture:
             "schema_version": e2e_fixture_module.checker.GOLDEN_SCHEMA,
             "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
             "correctness_report_sha256": native_correctness_sha256,
-            "source_revision": REVISION,
+            "source_revision": self.revision,
             "model_id": "HuggingFaceTB/SmolLM2-135M",
             "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
             "config_sha256": model_files["config.json"],
@@ -298,7 +306,7 @@ class CandidateFixture:
         )
         report, diagnostic = e2e_fixture_module.checker.validate_bound_raw_archive(
             archive,
-            source_revision=REVISION,
+            source_revision=self.revision,
             source_archive_sha256=binding["source_archive_sha256"],
             release_binary_sha256=binding["release_binary_sha256"],
             release_bundle_sha256=binding["release_bundle_sha256"],
@@ -319,7 +327,7 @@ class CandidateFixture:
         profile_image_sha = digest(b"profile image")
         for run_index, run in enumerate(fixture.candidate):
             run["source"] = {
-                "git_commit": REVISION,
+                "git_commit": self.revision,
                 "git_dirty": False,
                 "executable_sha256": profile_binary_sha,
                 "implementation_id": "native-iteration-command-batch",
@@ -383,7 +391,7 @@ class CandidateFixture:
             "candidate_id": "fixture",
             "recorded_at_utc": "2026-08-26T00:00:00Z",
             "source": {
-                "git_commit": REVISION,
+                "git_commit": self.revision,
                 "git_dirty": False,
                 "source_archive_sha256": self._binding()["source_archive_sha256"],
                 "profile_binary_sha256": profile_binary_sha,
@@ -487,95 +495,15 @@ class CandidateFixture:
 
     def _build_documents(self) -> None:
         self.documents["cuda_report"] = copy.deepcopy(self.cuda_attestation)
-        summary_variant = {
-            "case_count": 31,
-            "failure_count": 0,
-            "numeric_pass": True,
-            "semantic_pass": True,
-            "aggregate_numeric": {},
-            "pass": True,
-        }
-        metric = {"metrics": {}, "pass": True}
-        case_variant = {
-            "numeric": {
-                "first_layer_hidden": copy.deepcopy(metric),
-                "final_logits": copy.deepcopy(metric),
-                "final_log_probs": copy.deepcopy(metric),
-            },
-            "semantic": {"pass": True},
-            "pass": True,
-        }
-        self.documents["native_correctness"] = {
-            "schema_version": "1.0.0",
-            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
-            "created_at": "2026-08-26T00:00:00Z",
-            "status": "pass",
-            "roles": {},
-            "gate_contract": {},
-            "inputs": {},
-            "bindings": {
-                "candidate_git_revision": REVISION,
-                "candidate_git_status_sha256": hashlib.sha256(b"").hexdigest(),
-                "candidate_executable_sha256": digest(b"correctness executable"),
-                "model_id": "HuggingFaceTB/SmolLM2-135M",
-                "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
-                "config_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
-                "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
-                "tokenizer_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
-            },
-            "summary": {
-                "case_count": 31,
-                "candidate_variant_count": 2,
-                "failure_count": 0,
-                "numeric_pass": True,
-                "semantic_pass": True,
-                "variants": {
-                    "canonical-v1": copy.deepcopy(summary_variant),
-                    "fixed-contiguous-37-balanced-v1": copy.deepcopy(summary_variant),
-                },
-            },
-            "cases": [
-                {
-                    "prompt_id": f"prompt-{index:02d}",
-                    "variants": {
-                        "canonical-v1": copy.deepcopy(case_variant),
-                        "fixed-contiguous-37-balanced-v1": copy.deepcopy(case_variant),
-                    },
-                    "pass": True,
-                }
-                for index in range(31)
-            ],
-        }
+        self.documents["native_correctness"] = json.loads(
+            self.paths["native_correctness"].read_text(encoding="utf-8")
+        )
         native_correctness_sha = digest(
             (json.dumps(self.documents["native_correctness"], sort_keys=True, indent=2) + "\n").encode()
         )
         self.documents["python_report"] = self._build_python_e2e_document(
             native_correctness_sha
         )
-        self.documents["native_replay_validation"] = {
-            "schema_version": NATIVE_REPLAY_VERSION,
-            "status": "passed",
-            "source": {
-                "git_revision": REVISION,
-                "git_dirty": False,
-                "source_archive_sha256": self._binding()["source_archive_sha256"],
-            },
-            "correctness_report_sha256": native_correctness_sha,
-            "raw_replay_sha256": digest(self.paths["native_replay"].read_bytes()),
-            "case_count": 31,
-            "failure_count": 0,
-            "checks": [
-                {"id": check_id, "passed": True}
-                for check_id in sorted(
-                    {
-                        "schema-closed-validation",
-                        "raw-input-hashes-replayed",
-                        "all-cases-replayed",
-                        "summary-recomputed",
-                    }
-                )
-            ],
-        }
         log_hashes = {
             test_id: digest(contents)
             for test_id, contents in self.optimization_logs.items()
@@ -587,7 +515,7 @@ class CandidateFixture:
             "status": "passed",
             "semantic_class": "E0",
             "source": {
-                "git_commit": REVISION,
+                "git_commit": self.revision,
                 "git_dirty": False,
                 "archive_sha256": self._binding()["source_archive_sha256"],
             },
@@ -689,7 +617,7 @@ class CandidateFixture:
                 "manifest_sha256": digest(b"soak manifest"),
                 "binding_sha256": digest(b"soak binding"),
                 "source": {
-                    "git_commit": REVISION,
+                    "git_commit": self.revision,
                     "git_dirty": False,
                     "source_archive_sha256": self._binding()["source_archive_sha256"],
                     "binary_sha256": self._binding()["release_binary_sha256"],
@@ -737,7 +665,7 @@ class CandidateFixture:
     def write_reports(self) -> None:
         for name in (
             "python_report", "cuda_report", "native_correctness",
-            "native_replay_validation", "optimization_correctness", "performance", "soak",
+            "optimization_correctness", "performance", "soak",
         ):
             self.paths[name].write_text(
                 json.dumps(self.documents[name], sort_keys=True, indent=2) + "\n",
@@ -755,7 +683,7 @@ class CandidateFixture:
             "schema_version": MANIFEST_VERSION,
             "candidate_id": "rustinfer-0.1.0-rc1",
             "source": {
-                "git_revision": REVISION,
+                "git_revision": self.revision,
                 "git_dirty": False,
                 "archive": artifact("source"),
             },
@@ -774,7 +702,7 @@ class CandidateFixture:
                 "native_correctness": {
                     "report": artifact("native_correctness"),
                     "raw_replay": artifact("native_replay"),
-                    "replay_validation": artifact("native_replay_validation"),
+                    "candidate_executable": artifact("native_executable"),
                 },
                 "optimization_correctness": {
                     "report": artifact("optimization_correctness"),
@@ -819,8 +747,8 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
-        self.assertEqual(report["bindings"]["git_revision"], REVISION)
-        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 13)
+        self.assertEqual(report["bindings"]["git_revision"], self.fixture.revision)
+        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 12)
 
     def test_failed_or_missing_gate_fails_closed(self) -> None:
         del self.fixture.documents["performance"]["status"]
@@ -887,14 +815,14 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertIn("must contain only", report["errors"][0])
 
-    def test_native_replay_validation_binds_raw_bundle(self) -> None:
-        self.fixture.documents["native_replay_validation"]["raw_replay_sha256"] = digest(
-            b"unrelated replay"
-        )
+    def test_native_replay_rejects_self_declared_report_tamper(self) -> None:
+        self.fixture.documents["native_correctness"]["cases"][0]["variants"][
+            "canonical-v1"
+        ]["numeric"]["first_layer_hidden"]["metrics"]["max_abs"] = 0.0
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("raw replay bundle digest mismatch", report["errors"][0])
+        self.assertIn("bytes differ from raw replay bundle", report["errors"][0])
 
     def test_source_archive_requires_exact_git_pax_comment(self) -> None:
         self.fixture._write_tar(
@@ -979,9 +907,9 @@ class ReleaseCandidateTests(unittest.TestCase):
     def test_cuda_raw_payload_cannot_be_self_attested_after_tampering(self) -> None:
         raw_path = self.fixture.paths["cuda_raw"]
         contents = raw_path.read_bytes()
-        self.assertIn(b"fixture evidence\n", contents)
+        self.assertIn(b"Linux fixture 6.8.0", contents)
         raw_path.write_bytes(
-            contents.replace(b"fixture evidence\n", b"fixture evidencf\n", 1)
+            contents.replace(b"Linux fixture 6.8.0", b"Linux fixturf 6.8.0", 1)
         )
         self.fixture.documents["cuda_report"]["raw_evidence_sha256"] = digest(
             raw_path.read_bytes()
