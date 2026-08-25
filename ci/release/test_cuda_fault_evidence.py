@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import struct
 import sys
 import tempfile
 import tarfile
@@ -20,7 +21,11 @@ from check_cuda_fault_evidence import (  # noqa: E402
     BASE_EVIDENCE_FILES,
     CHECK_IDS,
     FAULT_CASES,
+    FAULT_PREFIX,
     GATE,
+    HOST_RUNTIME_TESTS,
+    MARKER_PREFIX,
+    MEMORY_TESTS,
     SANITIZER_FILES,
     SUMMARY,
     CudaFaultEvidenceError,
@@ -29,7 +34,7 @@ from check_cuda_fault_evidence import (  # noqa: E402
     replay_raw_evidence,
     validate,
 )
-from test_release import EPOCH, fixture_elf  # noqa: E402
+from test_release import DEPENDENCIES, EPOCH, fixture_elf  # noqa: E402
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
@@ -49,6 +54,11 @@ class Fixture:
         self.source_archive = root / "source.tar"
         self.release_binary = root / "rustinfer"
         self.release_bundle = root / "rustinfer.tar.gz"
+        self.host_path = "target/debug/deps/host_runtime_gpu-0123456789abcdef"
+        self.memory_path = "target/debug/deps/memory_gpu-1234567890abcdef"
+        self.fault_path = (
+            "target/debug/deps/memory_fault_injection_gpu-234567890abcdef1"
+        )
         self.counter = 0
 
         with tarfile.open(
@@ -86,8 +96,99 @@ class Fixture:
         )
         self._write_base_evidence()
 
+    def _test_elf(self, required_strings: set[str], *, fault: bool = False) -> bytes:
+        binary = bytearray(fixture_elf())
+        struct.pack_into("<Q", binary, 24, 0x400000)
+        binary.extend(b"\0")
+        for value in sorted(required_strings):
+            binary.extend(value.encode("ascii") + b"\0")
+        if fault:
+            binary.extend(FAULT_PREFIX.encode("ascii") + b"arm\0")
+        return bytes(binary)
+
+    def _test_list(self, source: str, artifact_path: str, tests: set[str]) -> bytes:
+        lines = [
+            "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s",
+            f"Running tests/{source}.rs ({artifact_path})",
+            *(f"{name}: test" for name in sorted(tests)),
+            "",
+        ]
+        return "\n".join(lines).encode()
+
+    def _host_log(self) -> bytes:
+        lines = [
+            "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s",
+            f"Running tests/host_runtime_gpu.rs ({self.host_path})",
+            "",
+            "running 8 tests",
+        ]
+        for name in sorted(HOST_RUNTIME_TESTS):
+            if name == "device_metadata_is_reported":
+                lines.extend(
+                    [
+                        f"test {name} ... rustinfer-cuda-device-metadata ordinal=0 "
+                        "name=NVIDIA GeForce RTX 4090 compute_capability=8.9 "
+                        "total_memory_bytes=25250627584 multiprocessor_count=128 "
+                        "driver_version=13000 runtime_version=12080",
+                        "ok",
+                    ]
+                )
+            elif name == "repeated_create_drop_has_no_resource_leak":
+                lines.extend(
+                    [
+                        f"test {name} ... rustinfer-cuda-leak-smoke iterations=128 "
+                        "before_free_bytes=24594284544 after_free_bytes=24594284544",
+                        "ok",
+                    ]
+                )
+            else:
+                lines.append(f"test {name} ... ok")
+        lines.extend(
+            [
+                "",
+                "test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; "
+                "0 filtered out; finished in 0.19s",
+                "",
+            ]
+        )
+        return "\n".join(lines).encode()
+
+    def _memory_log(self) -> bytes:
+        lines = [
+            "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s",
+            f"Running tests/memory_gpu.rs ({self.memory_path})",
+            "",
+            "running 5 tests",
+        ]
+        for name in sorted(MEMORY_TESTS):
+            if name == "allocation_accounting_returns_to_zero":
+                lines.extend(
+                    [
+                        f"test {name} ...",
+                        "rustinfer-cuda-memory-accounting device_live_bytes=0 "
+                        "device_live_allocations=0 pinned_host_live_bytes=0 "
+                        "pinned_host_live_allocations=0",
+                        "ok",
+                    ]
+                )
+            else:
+                lines.append(f"test {name} ... ok")
+        lines.extend(
+            [
+                "",
+                "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; "
+                "0 filtered out; finished in 0.08s",
+                "",
+            ]
+        )
+        return "\n".join(lines).encode()
+
     def _fault_log(self) -> bytes:
-        lines = ["running 1 test"]
+        lines = [
+            "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.01s",
+            f"Running tests/memory_fault_injection_gpu.rs ({self.fault_path})",
+            "running 1 test",
+        ]
         parent_pid = 4000
         for index, case in enumerate(FAULT_CASES):
             child_pid = 4100 + index
@@ -97,6 +198,7 @@ class Fixture:
                     f"parent_pid={parent_pid} child_pid={child_pid}",
                     f"rustinfer-cuda-memory-fault-case case={case} event=start "
                     f"child_pid={child_pid}",
+                    "running 1 test",
                     f"rustinfer-cuda-memory-fault-case case={case} event=passed "
                     f"child_pid={child_pid}",
                     "test memory_fault_subprocess ... ok",
@@ -114,6 +216,39 @@ class Fixture:
         )
         return "\n".join(lines).encode()
 
+    def _elf_evidence(
+        self,
+        prefix: str,
+        artifact_path: str,
+        binary_sha256: str,
+        *,
+        fault: bool = False,
+    ) -> None:
+        headers = f"artifact={artifact_path}\nsha256={binary_sha256}\n"
+        ldd = headers + "".join(
+            f"{dependency} => /usr/lib/x86_64-linux-gnu/{dependency}\n"
+            for dependency in DEPENDENCIES
+        )
+        readelf = headers + "".join(
+            "0x0000000000000001 (NEEDED) Shared library: "
+            f"[{dependency}]\n"
+            for dependency in DEPENDENCIES
+        )
+        nm_symbol = (
+            "0000000000002000 T rustinfer_cuda_test_memory_fault_arm\n"
+            if fault
+            else "                 U cudaGetDeviceCount\n"
+        )
+        (self.evidence / f"{prefix}-ldd.txt").write_text(ldd, encoding="utf-8")
+        (self.evidence / f"{prefix}-readelf.txt").write_text(
+            readelf,
+            encoding="utf-8",
+        )
+        (self.evidence / f"{prefix}-nm.txt").write_text(
+            headers + nm_symbol,
+            encoding="utf-8",
+        )
+
     def _environment(self, *, sanitizer: bool = False) -> bytes:
         return (
             f"source_revision={REVISION}\n"
@@ -124,9 +259,11 @@ class Fixture:
             "nvidia_visible_devices=all\n"
             "leak_iterations=128\n"
             f"compute_sanitizer={int(sanitizer)}\n"
-            "Linux fixture 6.8.0 x86_64\n"
-            "rustc 1.85.0\n"
-            "nvcc release 12.8\n"
+            "Linux fixture 6.8.0 x86_64 GNU/Linux\n"
+            "rustc 1.85.0 (4d91de4e4 2025-02-17)\n"
+            "cargo 1.85.0 (d73d2caf9 2024-12-31)\n"
+            "Cuda compilation tools, release 12.8, V12.8.93\n"
+            "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
         ).encode()
 
     def _write_base_evidence(self) -> None:
@@ -134,45 +271,80 @@ class Fixture:
         for name in sorted(BASE_EVIDENCE_FILES - {"SHA256SUMS"}):
             (self.evidence / name).write_bytes(placeholder)
         (self.evidence / "environment.txt").write_bytes(self._environment())
-        (self.evidence / "memory-fault-test-list.txt").write_text(
-            "memory_fault_cases_are_subprocess_isolated: test\n"
-            "memory_fault_subprocess: test\n",
+        (self.evidence / "nvidia-smi-list.txt").write_text(
+            "GPU 0: NVIDIA GeForce RTX 4090 "
+            "(UUID: GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0)\n",
+            encoding="ascii",
+        )
+        (self.evidence / "nvidia-smi-device-metadata.csv").write_text(
+            "0, GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0, "
+            "NVIDIA GeForce RTX 4090, 8.9, 24564, 580.173.02\n",
+            encoding="ascii",
+        )
+        (self.evidence / "cuda-driver-libraries.txt").write_text(
+            "libcuda.so.1 (libc6,x86-64) => /usr/lib/x86_64-linux-gnu/libcuda.so.1\n"
+            "libcudart.so.12 (libc6,x86-64) => /usr/local/cuda/lib64/libcudart.so.12\n",
             encoding="utf-8",
         )
+        (self.evidence / "host-runtime-test-list.txt").write_bytes(
+            self._test_list("host_runtime_gpu", self.host_path, HOST_RUNTIME_TESTS)
+        )
+        (self.evidence / "memory-test-list.txt").write_bytes(
+            self._test_list("memory_gpu", self.memory_path, MEMORY_TESTS)
+        )
+        (self.evidence / "memory-fault-test-list.txt").write_bytes(
+            self._test_list(
+                "memory_fault_injection_gpu",
+                self.fault_path,
+                {"memory_fault_cases_are_subprocess_isolated", "memory_fault_subprocess"},
+            )
+        )
+        (self.evidence / "host-runtime-tests.log").write_bytes(self._host_log())
+        (self.evidence / "memory-tests.log").write_bytes(self._memory_log())
         (self.evidence / "memory-fault-tests.log").write_bytes(self._fault_log())
+
+        host_binary = self._test_elf(
+            HOST_RUNTIME_TESTS
+            | {"rustinfer-cuda-device-metadata", "rustinfer-cuda-leak-smoke"}
+        )
+        memory_binary = self._test_elf(
+            MEMORY_TESTS | {"rustinfer-cuda-memory-accounting"}
+        )
+        fault_binary = self._test_elf(
+            {"memory_fault_cases_are_subprocess_isolated", "memory_fault_subprocess"}
+            | set(FAULT_CASES)
+            | {MARKER_PREFIX, "RUSTINFER_CUDA_MEMORY_FAULT_CHILD"},
+            fault=True,
+        )
+        (self.evidence / "host-runtime-test-binary").write_bytes(host_binary)
+        (self.evidence / "memory-test-binary").write_bytes(memory_binary)
+        (self.evidence / "memory-fault-test-binary").write_bytes(fault_binary)
         (self.evidence / "host-runtime-test-binary.sha256").write_text(
-            f"{digest(b'host test binary')}  target/debug/deps/host_runtime_gpu-0123456789abcdef\n",
+            f"{digest(host_binary)}  {self.host_path}\n",
             encoding="ascii",
         )
         (self.evidence / "memory-test-binary.sha256").write_text(
-            f"{digest(b'memory test binary')}  target/debug/deps/memory_gpu-1234567890abcdef\n",
+            f"{digest(memory_binary)}  {self.memory_path}\n",
             encoding="ascii",
         )
         (self.evidence / "memory-fault-test-binary.sha256").write_text(
-            f"{digest(b'fault test binary')}  target/debug/deps/memory_fault_injection_gpu-234567890abcdef1\n",
+            f"{digest(fault_binary)}  {self.fault_path}\n",
             encoding="ascii",
+        )
+        self._elf_evidence("host-runtime", self.host_path, digest(host_binary))
+        self._elf_evidence("memory", self.memory_path, digest(memory_binary))
+        self._elf_evidence(
+            "memory-fault",
+            self.fault_path,
+            digest(fault_binary),
+            fault=True,
         )
         binary_sha256 = digest(self.release_binary.read_bytes())
         (self.evidence / "release-binary.sha256").write_text(
             f"{binary_sha256}  target/release/rustinfer\n",
             encoding="ascii",
         )
-        (self.evidence / "release-ldd.txt").write_text(
-            "artifact=target/release/rustinfer\n"
-            "libcudart.so.12 => /usr/local/cuda/lib64/libcudart.so.12\n"
-            "libcuda.so.1 => /usr/lib/x86_64-linux-gnu/libcuda.so.1\n",
-            encoding="utf-8",
-        )
-        (self.evidence / "release-readelf.txt").write_text(
-            "artifact=target/release/rustinfer\n"
-            "0x0000000000000001 (NEEDED) Shared library: [libcudart.so.12]\n"
-            "0x0000000000000001 (NEEDED) Shared library: [libcuda.so.1]\n",
-            encoding="utf-8",
-        )
-        (self.evidence / "release-nm.txt").write_text(
-            "artifact=target/release/rustinfer\n0000000000001000 T main\n",
-            encoding="utf-8",
-        )
+        self._elf_evidence("release", "target/release/rustinfer", binary_sha256)
         self.refresh_checksums()
 
     def refresh_checksums(self) -> None:
@@ -182,13 +354,45 @@ class Fixture:
         )
         (self.evidence / "SHA256SUMS").write_text(contents, encoding="ascii")
 
-    def enable_sanitizer(self) -> None:
-        (self.evidence / "environment.txt").write_bytes(self._environment(sanitizer=True))
-        for name in SANITIZER_FILES:
-            (self.evidence / name).write_text(
-                "ERROR SUMMARY: 0 errors\nLEAK SUMMARY: 0 bytes leaked\n",
+    def replace_test_binary(
+        self,
+        evidence_name: str,
+        receipt_name: str,
+        log_prefix: str,
+        contents: bytes,
+    ) -> None:
+        receipt_path = self.evidence / receipt_name
+        old_digest, artifact_path = receipt_path.read_text(encoding="ascii").rstrip("\n").split(
+            "  ",
+            1,
+        )
+        new_digest = digest(contents)
+        (self.evidence / evidence_name).write_bytes(contents)
+        receipt_path.write_text(
+            f"{new_digest}  {artifact_path}\n",
+            encoding="ascii",
+        )
+        for suffix in ("ldd.txt", "readelf.txt", "nm.txt"):
+            path = self.evidence / f"{log_prefix}-{suffix}"
+            path.write_text(
+                path.read_text(encoding="utf-8").replace(
+                    f"sha256={old_digest}\n",
+                    f"sha256={new_digest}\n",
+                    1,
+                ),
                 encoding="utf-8",
             )
+        self.refresh_checksums()
+
+    def enable_sanitizer(self) -> None:
+        (self.evidence / "environment.txt").write_bytes(self._environment(sanitizer=True))
+        suffix = b"ERROR SUMMARY: 0 errors\nLEAK SUMMARY: 0 bytes leaked\n"
+        (self.evidence / "compute-sanitizer-memcheck.log").write_bytes(
+            self._host_log() + suffix
+        )
+        (self.evidence / "compute-sanitizer-memory-memcheck.log").write_bytes(
+            self._memory_log() + suffix
+        )
         self.refresh_checksums()
 
     def validate(self, **overrides: object) -> tuple[dict[str, bytes], dict[str, object]]:
@@ -272,8 +476,10 @@ class CudaFaultEvidenceTests(unittest.TestCase):
     def test_preserved_raw_archive_rejects_payload_tampering(self) -> None:
         _, raw, _ = self.fixture.produce()
         contents = raw.read_bytes()
-        self.assertIn(b"fixture evidence\n", contents)
-        raw.write_bytes(contents.replace(b"fixture evidence\n", b"fixture evidencf\n", 1))
+        self.assertIn(b"NVIDIA GeForce RTX 4090", contents)
+        raw.write_bytes(
+            contents.replace(b"NVIDIA GeForce RTX 4090", b"NVIDIB GeForce RTX 4090", 1)
+        )
         with self.assertRaisesRegex(CudaFaultEvidenceError, "digest mismatch"):
             replay_raw_evidence(
                 raw,
@@ -325,6 +531,89 @@ class CudaFaultEvidenceTests(unittest.TestCase):
     def test_checksum_tampering_is_rejected(self) -> None:
         (self.fixture.evidence / "memory-fault-tests.log").write_bytes(b"tampered\n")
         with self.assertRaisesRegex(CudaFaultEvidenceError, "digest mismatch"):
+            self.fixture.validate()
+
+    def test_forged_receipt_and_placeholder_runtime_logs_are_rejected(self) -> None:
+        (self.fixture.evidence / "host-runtime-test-binary.sha256").write_text(
+            f"{'f' * 64}  {self.fixture.host_path}\n",
+            encoding="ascii",
+        )
+        (self.fixture.evidence / "host-runtime-tests.log").write_text(
+            "all CUDA tests passed\n",
+            encoding="utf-8",
+        )
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "executed test inventory|running 8 tests"):
+            self.fixture.validate()
+
+    def test_preserved_test_binary_must_match_its_checksum_receipt(self) -> None:
+        path = self.fixture.evidence / "memory-test-binary"
+        path.write_bytes(path.read_bytes() + b"tampered-after-run\0")
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "checksum receipt"):
+            self.fixture.validate()
+
+    def test_preserved_test_binary_must_be_executable_linux_x86_64_elf(self) -> None:
+        self.fixture.replace_test_binary(
+            "host-runtime-test-binary",
+            "host-runtime-test-binary.sha256",
+            "host-runtime",
+            b"\x7fELFsynthetic-placeholder",
+        )
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "64-bit little-endian|ELF"):
+            self.fixture.validate()
+
+    def test_preserved_test_binary_must_contain_reviewed_marker_strings(self) -> None:
+        path = self.fixture.evidence / "host-runtime-test-binary"
+        contents = path.read_bytes().replace(
+            b"rustinfer-cuda-leak-smoke",
+            b"rustinfer-cuda-leak-smokf",
+            1,
+        )
+        self.fixture.replace_test_binary(
+            "host-runtime-test-binary",
+            "host-runtime-test-binary.sha256",
+            "host-runtime",
+            contents,
+        )
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "omits reviewed test/marker strings"):
+            self.fixture.validate()
+
+    def test_elf_inspection_header_must_bind_preserved_binary_digest(self) -> None:
+        path = self.fixture.evidence / "memory-fault-readelf.txt"
+        text = path.read_text(encoding="utf-8")
+        path.write_text(
+            text.replace(f"sha256={text.splitlines()[1].removeprefix('sha256=')}", f"sha256={'f' * 64}"),
+            encoding="utf-8",
+        )
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "exact inspected ELF path and SHA-256"):
+            self.fixture.validate()
+
+    def test_host_runtime_test_inventory_cannot_be_self_declared(self) -> None:
+        path = self.fixture.evidence / "host-runtime-test-list.txt"
+        path.write_text(
+            path.read_text().replace(
+                "command_batch_proxy_is_one_shot_and_drop_restores_stream_use: test\n",
+                "",
+            )
+        )
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "reviewed test inventory mismatch"):
+            self.fixture.validate()
+
+    def test_nvidia_inventory_must_be_the_reviewed_sm89_gpu(self) -> None:
+        path = self.fixture.evidence / "nvidia-smi-device-metadata.csv"
+        path.write_text(path.read_text().replace(", 8.9,", ", 9.0,"), encoding="ascii")
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "RTX 4090/sm89"):
+            self.fixture.validate()
+
+    def test_environment_must_prove_pinned_cuda_toolchain(self) -> None:
+        path = self.fixture.evidence / "environment.txt"
+        path.write_text(path.read_text().replace("release 12.8", "release 12.7"))
+        self.fixture.refresh_checksums()
+        with self.assertRaisesRegex(CudaFaultEvidenceError, "CUDA 12.8 compiler"):
             self.fixture.validate()
 
     def test_closed_inventory_rejects_extra_file(self) -> None:

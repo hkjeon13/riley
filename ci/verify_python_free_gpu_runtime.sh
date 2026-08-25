@@ -82,6 +82,9 @@ memory_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-tests.log"
 memory_fault_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
 memory_fault_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-tests.log"
 memory_fault_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-binary.sha256"
+test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary"
+memory_test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary"
+memory_fault_test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-binary"
 checksum_file="$RUSTINFER_GPU_EVIDENCE_DIR/SHA256SUMS"
 sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
 memory_sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
@@ -91,6 +94,9 @@ nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-nm.txt"
 memory_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-ldd.txt"
 memory_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-readelf.txt"
 memory_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-nm.txt"
+memory_fault_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-ldd.txt"
+memory_fault_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-readelf.txt"
+memory_fault_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-nm.txt"
 test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
 memory_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
 release_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-binary.sha256"
@@ -110,12 +116,18 @@ for output in \
     "$memory_fault_test_list_log" \
     "$memory_fault_test_log" \
     "$memory_fault_test_binary_checksum_log" \
+    "$test_binary_evidence" \
+    "$memory_test_binary_evidence" \
+    "$memory_fault_test_binary_evidence" \
     "$ldd_log" \
     "$readelf_log" \
     "$nm_log" \
     "$memory_ldd_log" \
     "$memory_readelf_log" \
     "$memory_nm_log" \
+    "$memory_fault_ldd_log" \
+    "$memory_fault_readelf_log" \
+    "$memory_fault_nm_log" \
     "$test_binary_checksum_log" \
     "$memory_test_binary_checksum_log" \
     "$release_binary_checksum_log" \
@@ -313,6 +325,13 @@ fi
 sha256sum "$test_binary" >"$test_binary_checksum_log"
 sha256sum "$memory_test_binary" >"$memory_test_binary_checksum_log"
 sha256sum "$memory_fault_test_binary" >"$memory_fault_test_binary_checksum_log"
+cp -- "$test_binary" "$test_binary_evidence"
+cp -- "$memory_test_binary" "$memory_test_binary_evidence"
+cp -- "$memory_fault_test_binary" "$memory_fault_test_binary_evidence"
+chmod 0644 \
+    "$test_binary_evidence" \
+    "$memory_test_binary_evidence" \
+    "$memory_fault_test_binary_evidence"
 cat "$test_binary_checksum_log"
 cat "$memory_test_binary_checksum_log"
 cat "$memory_fault_test_binary_checksum_log"
@@ -409,16 +428,20 @@ release_binary=target/release/rustinfer
 test -f "$release_binary"
 test -x "$release_binary"
 sha256sum "$release_binary" >"$release_binary_checksum_log"
+release_binary_sha256=$(cut -d ' ' -f 1 "$release_binary_checksum_log")
 {
     printf 'artifact=%s\n' "$release_binary"
+    printf 'sha256=%s\n' "$release_binary_sha256"
     ldd "$release_binary"
 } >"$release_ldd_log"
 {
     printf 'artifact=%s\n' "$release_binary"
+    printf 'sha256=%s\n' "$release_binary_sha256"
     readelf -d "$release_binary"
 } >"$release_readelf_log"
 {
     printf 'artifact=%s\n' "$release_binary"
+    printf 'sha256=%s\n' "$release_binary_sha256"
     nm -a --defined-only "$release_binary"
 } >"$release_nm_log"
 cat "$release_binary_checksum_log"
@@ -451,7 +474,12 @@ then
     exit 1
 fi
 
-ldd "$test_binary" >"$ldd_log"
+test_binary_sha256=$(cut -d ' ' -f 1 "$test_binary_checksum_log")
+{
+    printf 'artifact=%s\n' "$test_binary"
+    printf 'sha256=%s\n' "$test_binary_sha256"
+    ldd "$test_binary"
+} >"$ldd_log"
 cat "$ldd_log"
 if grep -Eq '=>[[:space:]]+not found' "$ldd_log"; then
     echo "host-runtime test has an unresolved dynamic dependency" >&2
@@ -460,7 +488,11 @@ fi
 grep -Eq 'libcudart\.so' "$ldd_log"
 grep -Eq 'libcuda\.so\.1' "$ldd_log"
 
-readelf -d "$test_binary" >"$readelf_log"
+{
+    printf 'artifact=%s\n' "$test_binary"
+    printf 'sha256=%s\n' "$test_binary_sha256"
+    readelf -d "$test_binary"
+} >"$readelf_log"
 cat "$readelf_log"
 grep -Eq 'NEEDED.*libcudart\.so' "$readelf_log"
 grep -Eq 'NEEDED.*libcuda\.so\.1' "$readelf_log"
@@ -469,10 +501,19 @@ if grep -Eq '(RPATH|RUNPATH).*stubs' "$readelf_log"; then
     exit 1
 fi
 
-nm -D --undefined-only "$test_binary" >"$nm_log"
+{
+    printf 'artifact=%s\n' "$test_binary"
+    printf 'sha256=%s\n' "$test_binary_sha256"
+    nm -D --undefined-only "$test_binary"
+} >"$nm_log"
 cat "$nm_log"
 
-ldd "$memory_test_binary" >"$memory_ldd_log"
+memory_test_binary_sha256=$(cut -d ' ' -f 1 "$memory_test_binary_checksum_log")
+{
+    printf 'artifact=%s\n' "$memory_test_binary"
+    printf 'sha256=%s\n' "$memory_test_binary_sha256"
+    ldd "$memory_test_binary"
+} >"$memory_ldd_log"
 cat "$memory_ldd_log"
 if grep -Eq '=>[[:space:]]+not found' "$memory_ldd_log"; then
     echo "memory GPU test has an unresolved dynamic dependency" >&2
@@ -481,7 +522,11 @@ fi
 grep -Eq 'libcudart\.so' "$memory_ldd_log"
 grep -Eq 'libcuda\.so\.1' "$memory_ldd_log"
 
-readelf -d "$memory_test_binary" >"$memory_readelf_log"
+{
+    printf 'artifact=%s\n' "$memory_test_binary"
+    printf 'sha256=%s\n' "$memory_test_binary_sha256"
+    readelf -d "$memory_test_binary"
+} >"$memory_readelf_log"
 cat "$memory_readelf_log"
 grep -Eq 'NEEDED.*libcudart\.so' "$memory_readelf_log"
 grep -Eq 'NEEDED.*libcuda\.so\.1' "$memory_readelf_log"
@@ -490,8 +535,47 @@ if grep -Eq '(RPATH|RUNPATH).*stubs' "$memory_readelf_log"; then
     exit 1
 fi
 
-nm -D --undefined-only "$memory_test_binary" >"$memory_nm_log"
+{
+    printf 'artifact=%s\n' "$memory_test_binary"
+    printf 'sha256=%s\n' "$memory_test_binary_sha256"
+    nm -D --undefined-only "$memory_test_binary"
+} >"$memory_nm_log"
 cat "$memory_nm_log"
+
+memory_fault_test_binary_sha256=$(cut -d ' ' -f 1 "$memory_fault_test_binary_checksum_log")
+{
+    printf 'artifact=%s\n' "$memory_fault_test_binary"
+    printf 'sha256=%s\n' "$memory_fault_test_binary_sha256"
+    ldd "$memory_fault_test_binary"
+} >"$memory_fault_ldd_log"
+cat "$memory_fault_ldd_log"
+if grep -Eq '=>[[:space:]]+not found' "$memory_fault_ldd_log"; then
+    echo "memory fault GPU test has an unresolved dynamic dependency" >&2
+    exit 1
+fi
+grep -Eq 'libcudart\.so' "$memory_fault_ldd_log"
+grep -Eq 'libcuda\.so\.1' "$memory_fault_ldd_log"
+
+{
+    printf 'artifact=%s\n' "$memory_fault_test_binary"
+    printf 'sha256=%s\n' "$memory_fault_test_binary_sha256"
+    readelf -d "$memory_fault_test_binary"
+} >"$memory_fault_readelf_log"
+cat "$memory_fault_readelf_log"
+grep -Eq 'NEEDED.*libcudart\.so' "$memory_fault_readelf_log"
+grep -Eq 'NEEDED.*libcuda\.so\.1' "$memory_fault_readelf_log"
+if grep -Eq '(RPATH|RUNPATH).*stubs' "$memory_fault_readelf_log"; then
+    echo "memory fault GPU test embeds a CUDA driver stubs runtime path" >&2
+    exit 1
+fi
+
+{
+    printf 'artifact=%s\n' "$memory_fault_test_binary"
+    printf 'sha256=%s\n' "$memory_fault_test_binary_sha256"
+    nm -a --defined-only "$memory_fault_test_binary"
+} >"$memory_fault_nm_log"
+cat "$memory_fault_nm_log"
+grep -Fq 'rustinfer_cuda_test_memory_fault_' "$memory_fault_nm_log"
 
 ldconfig -p >"$driver_libraries_log"
 cat "$driver_libraries_log"
@@ -500,7 +584,8 @@ grep -Eq 'libcudart\.so' "$driver_libraries_log"
 
 if grep -Eiq 'python|pytorch|torch|transformers|triton' \
     "$ldd_log" "$readelf_log" "$nm_log" \
-    "$memory_ldd_log" "$memory_readelf_log" "$memory_nm_log"
+    "$memory_ldd_log" "$memory_readelf_log" "$memory_nm_log" \
+    "$memory_fault_ldd_log" "$memory_fault_readelf_log" "$memory_fault_nm_log"
 then
     echo "GPU integration test contains a forbidden runtime dependency" >&2
     exit 1
@@ -563,15 +648,21 @@ host-runtime-ldd.txt
 host-runtime-readelf.txt
 host-runtime-nm.txt
 host-runtime-test-binary.sha256
+host-runtime-test-binary
 memory-test-list.txt
 memory-tests.log
 memory-fault-test-list.txt
 memory-fault-tests.log
 memory-fault-test-binary.sha256
+memory-fault-test-binary
+memory-fault-ldd.txt
+memory-fault-readelf.txt
+memory-fault-nm.txt
 memory-ldd.txt
 memory-readelf.txt
 memory-nm.txt
 memory-test-binary.sha256
+memory-test-binary
 release-binary.sha256
 release-ldd.txt
 release-readelf.txt

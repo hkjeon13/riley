@@ -15,6 +15,7 @@ import io
 import json
 import re
 import stat
+import struct
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
@@ -23,6 +24,7 @@ from typing import Any, NoReturn, Sequence
 from release_common import (
     ReleaseContractError,
     canonical_json_bytes,
+    inspect_elf_dynamic,
     validate_binary,
 )
 from verify_release_bundle import verify_bundle
@@ -43,6 +45,23 @@ FAULT_TESTS = {
     "memory_fault_cases_are_subprocess_isolated",
     "memory_fault_subprocess",
 }
+HOST_RUNTIME_TESTS = {
+    "async_fill_is_correct_after_sync",
+    "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
+    "device_metadata_is_reported",
+    "events_report_positive_elapsed_time",
+    "invalid_device_is_rejected",
+    "invalid_launch_reports_launch_stage",
+    "repeated_create_drop_has_no_resource_leak",
+    "two_stream_event_ordering_is_explicit",
+}
+MEMORY_TESTS = {
+    "allocation_accounting_returns_to_zero",
+    "copy_ranges_and_context_ownership_are_validated",
+    "pinned_host_device_round_trip_is_exact",
+    "two_stream_copy_handoff_prevents_early_reuse",
+    "zero_byte_allocations_and_copies_are_logical_noops",
+}
 FAULT_CASES = (
     "create-rollback-ambiguous",
     "explicit-close-ambiguous",
@@ -57,15 +76,21 @@ BASE_EVIDENCE_FILES = {
     "host-runtime-ldd.txt",
     "host-runtime-nm.txt",
     "host-runtime-readelf.txt",
+    "host-runtime-test-binary",
     "host-runtime-test-binary.sha256",
     "host-runtime-test-list.txt",
     "host-runtime-tests.log",
     "memory-fault-test-binary.sha256",
+    "memory-fault-test-binary",
+    "memory-fault-ldd.txt",
+    "memory-fault-nm.txt",
+    "memory-fault-readelf.txt",
     "memory-fault-test-list.txt",
     "memory-fault-tests.log",
     "memory-ldd.txt",
     "memory-nm.txt",
     "memory-readelf.txt",
+    "memory-test-binary",
     "memory-test-binary.sha256",
     "memory-test-list.txt",
     "memory-tests.log",
@@ -89,6 +114,19 @@ TEST_BINARY_RE = re.compile(
     r"^([0-9a-f]{64})  "
     r"(target/debug/deps/(?:host_runtime_gpu|memory_gpu|memory_fault_injection_gpu)-[0-9a-f]{16})$"
 )
+NVIDIA_LIST_RE = re.compile(
+    r"^GPU (?P<index>[0-9]+): (?P<name>[^\r\n]+) "
+    r"\(UUID: (?P<uuid>GPU-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})\)$"
+)
+NVIDIA_UUID_RE = re.compile(
+    r"^GPU-[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+    r"[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+)
+DRIVER_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
+COMPUTE_CAPABILITY_RE = re.compile(r"^[0-9]+\.[0-9]+$")
+EXPECTED_GPU_NAME = "NVIDIA GeForce RTX 4090"
+EXPECTED_COMPUTE_CAPABILITY = "8.9"
 FAULT_PREFIX = "rustinfer_cuda_test_memory_fault_"
 FORBIDDEN_DEPENDENCY_RE = re.compile(
     r"(?:libpython|pytorch|python|torch|transformers|triton|pickle)", re.IGNORECASE
@@ -106,8 +144,8 @@ MARKER_RE = re.compile(
     re.MULTILINE,
 )
 
-MAX_EVIDENCE_FILE_BYTES = 64 * 1024 * 1024
-MAX_EVIDENCE_TOTAL_BYTES = 256 * 1024 * 1024
+MAX_EVIDENCE_FILE_BYTES = 128 * 1024 * 1024
+MAX_EVIDENCE_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_RAW_EVIDENCE_ARCHIVE_BYTES = MAX_EVIDENCE_TOTAL_BYTES + 4 * 1024 * 1024
 MAX_SOURCE_ARCHIVE_BYTES = 8 * 1024 * 1024 * 1024
 MAX_RELEASE_BINARY_BYTES = 2 * 1024 * 1024 * 1024
@@ -154,6 +192,8 @@ def _text(contents: bytes, label: str, *, ascii_only: bool = False) -> str:
 
 def _parse_environment(contents: bytes) -> dict[str, str]:
     text = _text(contents, "environment.txt")
+    if "\0" in text or not text.endswith("\n"):
+        _fail("environment.txt", "must be newline-terminated UTF-8 text without NUL bytes")
     required = {
         "source_revision",
         "source_archive_command",
@@ -191,6 +231,40 @@ def _parse_environment(contents: bytes) -> dict[str, str]:
         _fail("environment.txt.compute_sanitizer", "must be 0 or 1")
     if not result["leak_iterations"].isdigit() or not 32 <= int(result["leak_iterations"]) <= 4096:
         _fail("environment.txt.leak_iterations", "must be an integer from 32 through 4096")
+    for key in ("cuda_visible_devices", "nvidia_visible_devices"):
+        value = result[key]
+        if (
+            not value
+            or value.casefold() in {"none", "void"}
+            or any(character.isspace() for character in value)
+            or "," in value
+        ):
+            _fail(f"environment.txt.{key}", "must select exactly one visible GPU or all")
+        if value != "all" and value != "0" and NVIDIA_UUID_RE.fullmatch(value) is None:
+            _fail(
+                f"environment.txt.{key}",
+                "must be all, device index 0, or a concrete NVIDIA GPU UUID",
+            )
+    required_runtime_patterns = {
+        "Linux x86_64 host": r"(?m)^.*Linux.*x86_64.*$",
+        "pinned Rust toolchain": r"(?m)^rustc 1\.85\.0(?: |$)",
+        "pinned Cargo toolchain": r"(?m)^cargo 1\.85\.0(?: |$)",
+        "CUDA 12.8 compiler": r"(?m)^Cuda compilation tools, release 12\.8, V12\.8\.[0-9]+$",
+        "release executable version": (
+            r"(?m)^rustinfer 0\.1\.0 "
+            r"\(server=true, cuda=true, cuda_abi=1\)$"
+        ),
+    }
+    missing_runtime = [
+        label for label, pattern in required_runtime_patterns.items()
+        if re.search(pattern, text) is None
+    ]
+    if missing_runtime:
+        _fail(
+            "environment.txt",
+            "does not prove the reviewed CUDA build/runtime environment: "
+            + ", ".join(missing_runtime),
+        )
     return result
 
 
@@ -235,22 +309,266 @@ def _single_test_binary_checksum(
     return digest, path
 
 
-def _validate_fault_inventory(contents: bytes) -> None:
-    text = _text(contents, "memory-fault-test-list.txt")
+def _validate_test_inventory(
+    contents: bytes,
+    label: str,
+    expected: set[str],
+) -> None:
+    text = _text(contents, label)
+    if not text.endswith("\n"):
+        _fail(label, "must be newline terminated")
     observed = [
         line.removesuffix(": test")
         for line in text.splitlines()
         if line.endswith(": test")
     ]
-    if len(observed) != 2 or set(observed) != FAULT_TESTS:
+    if len(observed) != len(set(observed)):
+        _fail(label, "contains a duplicate test entry")
+    if set(observed) != expected:
+        _fail(
+            label,
+            f"reviewed test inventory mismatch; expected={sorted(expected)}, "
+            f"observed={sorted(observed)}",
+        )
+
+
+def _validate_fault_inventory(contents: bytes) -> None:
+    try:
+        _validate_test_inventory(
+            contents,
+            "memory-fault-test-list.txt",
+            FAULT_TESTS,
+        )
+    except CudaFaultEvidenceError as error:
         _fail(
             "memory-fault-test-list.txt",
-            f"must list exactly the two reviewed tests; observed={sorted(observed)}",
+            f"must list exactly the two reviewed tests ({error})",
         )
+
+
+def _validate_test_execution_log(
+    contents: bytes,
+    label: str,
+    expected: set[str],
+) -> str:
+    text = _text(contents, label)
+    expected_count = len(expected)
+    if "\0" in text or not text.endswith("\n"):
+        _fail(label, "must be newline-terminated UTF-8 text without NUL bytes")
+    if "FAILED" in text or "test result: FAILED" in text:
+        _fail(label, "contains a failed test result")
+    if len(re.findall(rf"(?m)^running {expected_count} tests\r?$", text)) != 1:
+        _fail(label, f"must contain exactly one 'running {expected_count} tests' line")
+
+    headings = list(re.finditer(r"(?m)^test ([a-z0-9_]+) \.\.\.", text))
+    observed = [match.group(1) for match in headings]
+    if len(observed) != len(set(observed)) or set(observed) != expected:
+        _fail(
+            label,
+            f"executed test inventory mismatch; expected={sorted(expected)}, "
+            f"observed={sorted(observed)}",
+        )
+    summary_re = re.compile(
+        rf"(?m)^test result: ok\. {expected_count} passed; 0 failed; 0 ignored; "
+        r"0 measured; 0 filtered out; finished in [0-9]+(?:\.[0-9]+)?s\r?$"
+    )
+    summaries = list(summary_re.finditer(text))
+    if len(summaries) != 1:
+        _fail(label, "must contain exactly one complete passing libtest summary")
+
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else summaries[0].start()
+        segment = text[heading.start():end]
+        if re.search(r"(?:\.\.\. ok(?:\r?$)|^ok\r?$)", segment, re.MULTILINE) is None:
+            _fail(label, f"does not record an ok outcome for {heading.group(1)}")
+    return text
+
+
+def _validate_linux_x86_64_test_elf(
+    binary: bytes,
+    label: str,
+    *,
+    required_strings: set[str],
+    require_fault_symbols: bool = False,
+) -> list[str]:
+    if len(binary) < 64 or binary[:4] != b"\x7fELF":
+        _fail(label, "is not an ELF file")
+    if binary[4:7] != bytes((2, 1, 1)) or binary[7] not in (0, 3):
+        _fail(label, "must be a 64-bit little-endian Linux/System-V ELF")
+    try:
+        header = struct.unpack_from("<HHIQQQIHHHHHH", binary, 16)
+    except struct.error as error:
+        _fail(label, f"has a truncated ELF header: {error}")
+    elf_type, machine, version = header[:3]
+    entry, phoff, phentsize, phnum = header[3], header[4], header[8], header[9]
+    if elf_type not in (2, 3) or machine != 62 or version != 1 or entry == 0:
+        _fail(label, "must be an executable Linux x86-64 ET_EXEC/ET_DYN ELF")
+    if phentsize != 56 or phnum == 0 or phoff + phentsize * phnum > len(binary):
+        _fail(label, "has an invalid ELF program-header table")
+    executable_load = False
+    for index in range(phnum):
+        try:
+            segment = struct.unpack_from("<IIQQQQQQ", binary, phoff + index * phentsize)
+        except struct.error as error:
+            _fail(label, f"has a truncated program header: {error}")
+        segment_type, flags, offset, file_size = segment[0], segment[1], segment[2], segment[5]
+        if offset + file_size > len(binary):
+            _fail(label, "contains an out-of-range ELF segment")
+        if segment_type == 1 and flags & 1 and file_size > 0:
+            executable_load = True
+    if not executable_load:
+        _fail(label, "does not contain an executable PT_LOAD segment")
+    try:
+        dependencies, dynamic_paths = inspect_elf_dynamic(binary)
+    except ReleaseContractError as error:
+        _fail(label, f"ELF dynamic inspection failed: {error}")
+    if dynamic_paths:
+        _fail(label, "contains DT_RPATH or DT_RUNPATH")
+    if "libcuda.so.1" not in dependencies or not any(
+        dependency.startswith("libcudart.so") for dependency in dependencies
+    ):
+        _fail(label, "does not directly link the CUDA driver and runtime")
+    if any(FORBIDDEN_DEPENDENCY_RE.search(dependency) for dependency in dependencies):
+        _fail(label, "contains a forbidden dynamic dependency")
+    missing_strings = sorted(
+        value for value in required_strings if value.encode("ascii") not in binary
+    )
+    if missing_strings:
+        _fail(label, f"omits reviewed test/marker strings: {missing_strings}")
+    has_fault_symbol = FAULT_PREFIX.encode("ascii") in binary
+    if require_fault_symbols and not has_fault_symbol:
+        _fail(label, "does not contain the test-only CUDA fault-injection symbol prefix")
+    if not require_fault_symbols and has_fault_symbol:
+        _fail(label, "unexpectedly contains the CUDA fault-injection symbol prefix")
+    return dependencies
+
+
+def _parse_nvidia_evidence(files: dict[str, bytes], environment: dict[str, str]) -> dict[str, Any]:
+    list_text = _text(files["nvidia-smi-list.txt"], "nvidia-smi-list.txt", ascii_only=True)
+    csv_text = _text(
+        files["nvidia-smi-device-metadata.csv"],
+        "nvidia-smi-device-metadata.csv",
+        ascii_only=True,
+    )
+    if not list_text.endswith("\n") or not csv_text.endswith("\n"):
+        _fail("nvidia-smi evidence", "both files must be newline terminated")
+    list_lines = list_text.splitlines()
+    csv_lines = csv_text.splitlines()
+    if len(list_lines) != 1 or len(csv_lines) != 1:
+        _fail("nvidia-smi evidence", "must describe exactly one visible GPU")
+    list_match = NVIDIA_LIST_RE.fullmatch(list_lines[0])
+    if list_match is None:
+        _fail("nvidia-smi-list.txt", "does not contain the canonical one-GPU inventory")
+    fields = [field.strip() for field in csv_lines[0].split(",")]
+    if len(fields) != 6:
+        _fail("nvidia-smi-device-metadata.csv", "must contain exactly six query fields")
+    index, uuid, name, capability, memory_mib_text, driver = fields
+    if not index.isdigit() or NVIDIA_UUID_RE.fullmatch(uuid) is None:
+        _fail("nvidia-smi-device-metadata.csv", "has an invalid index or UUID")
+    if COMPUTE_CAPABILITY_RE.fullmatch(capability) is None:
+        _fail("nvidia-smi-device-metadata.csv", "has an invalid compute capability")
+    if not memory_mib_text.isdigit() or int(memory_mib_text) < 1024:
+        _fail("nvidia-smi-device-metadata.csv", "has an invalid total-memory value")
+    if DRIVER_VERSION_RE.fullmatch(driver) is None:
+        _fail("nvidia-smi-device-metadata.csv", "has an invalid driver version")
+    if (index, uuid, name) != (
+        list_match.group("index"),
+        list_match.group("uuid"),
+        list_match.group("name"),
+    ):
+        _fail("nvidia-smi evidence", "list and query rows identify different devices")
+    if name != EXPECTED_GPU_NAME or capability != EXPECTED_COMPUTE_CAPABILITY:
+        _fail(
+            "nvidia-smi-device-metadata.csv",
+            "does not identify the reviewed RTX 4090/sm89 release GPU",
+        )
+    for key in ("cuda_visible_devices", "nvidia_visible_devices"):
+        selected = environment[key]
+        if selected not in {"all", "0", uuid}:
+            _fail(f"environment.txt.{key}", "does not select the recorded GPU")
+    return {
+        "index": int(index),
+        "uuid": uuid,
+        "name": name,
+        "compute_capability": capability,
+        "memory_mib": int(memory_mib_text),
+        "driver_version": driver,
+    }
+
+
+def _validate_driver_library_inventory(contents: bytes) -> None:
+    text = _text(contents, "cuda-driver-libraries.txt")
+    if not text.endswith("\n") or "/stubs/" in text:
+        _fail(
+            "cuda-driver-libraries.txt",
+            "must be newline terminated and must not resolve CUDA driver stubs",
+        )
+    for library in ("libcuda.so.1", "libcudart.so"):
+        if library not in text:
+            _fail("cuda-driver-libraries.txt", f"does not resolve {library}")
+
+
+def _validate_test_elf_logs(
+    files: dict[str, bytes],
+    *,
+    prefix: str,
+    artifact_path: str,
+    binary_sha256: str,
+    dependencies: list[str],
+    require_fault_symbols: bool = False,
+) -> None:
+    headers = f"artifact={artifact_path}\nsha256={binary_sha256}\n"
+    labels = {
+        "ldd": f"{prefix}-ldd.txt",
+        "readelf": f"{prefix}-readelf.txt",
+        "nm": f"{prefix}-nm.txt",
+    }
+    values: dict[str, str] = {}
+    for kind, label in labels.items():
+        value = _text(files[label], label)
+        if not value.startswith(headers):
+            _fail(label, "does not bind the exact inspected ELF path and SHA-256")
+        body = value[len(headers):]
+        if not body.strip():
+            _fail(label, "contains no inspection output")
+        values[kind] = body
+
+    ldd = values["ldd"]
+    readelf = values["readelf"]
+    nm = values["nm"]
+    if re.search(r"=>\s+not found", ldd):
+        _fail(labels["ldd"], "contains an unresolved dependency")
+    if "/stubs/" in ldd or "/stubs/" in readelf:
+        _fail(f"{prefix} ELF evidence", "resolves or embeds CUDA driver stubs")
+    needed = re.findall(r"NEEDED[^\r\n]*Shared library: \[([^\]]+)\]", readelf)
+    if needed != list(dict.fromkeys(needed)) or set(needed) != set(dependencies):
+        _fail(
+            labels["readelf"],
+            "DT_NEEDED inventory differs from the preserved ELF bytes",
+        )
+    if re.search(r"\b(?:RPATH|RUNPATH)\b", readelf):
+        _fail(labels["readelf"], "contains an unreviewed runtime search path")
+    for library in ("libcudart.so", "libcuda.so.1"):
+        if library not in ldd:
+            _fail(labels["ldd"], f"does not resolve {library}")
+    if FORBIDDEN_DEPENDENCY_RE.search(ldd) or FORBIDDEN_DEPENDENCY_RE.search(readelf):
+        _fail(f"{prefix} ELF evidence", "contains a forbidden runtime dependency")
+    has_fault_symbol = FAULT_PREFIX in nm
+    if require_fault_symbols and not has_fault_symbol:
+        _fail(labels["nm"], "does not show the test-only CUDA fault symbols")
+    if not require_fault_symbols and has_fault_symbol:
+        _fail(labels["nm"], "unexpectedly shows a CUDA fault-injection symbol")
+
+
 
 
 def _validate_fault_log(contents: bytes) -> None:
     text = _text(contents, "memory-fault-tests.log")
+    if "FAILED" in text or len(re.findall(r"(?m)^running 1 test\r?$", text)) != 5:
+        _fail(
+            "memory-fault-tests.log",
+            "must contain five isolated one-test executions and no failure",
+        )
     matches = list(MARKER_RE.finditer(text))
     if text.count(MARKER_PREFIX) != 16 or len(matches) != 16:
         _fail("memory-fault-tests.log", "must contain exactly four markers for each fault case")
@@ -320,39 +638,104 @@ def _validate_fault_log(contents: bytes) -> None:
             "memory-fault-tests.log",
             "must contain four child and one parent passing test summaries",
         )
-    child_ok = len(re.findall(r"test memory_fault_subprocess \.\.\. ok", text))
-    parent_ok = len(
-        re.findall(r"test memory_fault_cases_are_subprocess_isolated \.\.\. ok", text)
+    child_runs = len(
+        re.findall(r"(?m)^test memory_fault_subprocess \.\.\.", text)
     )
-    if child_ok != 4 or parent_ok != 1:
+    parent_runs = len(
+        re.findall(
+            r"(?m)^test memory_fault_cases_are_subprocess_isolated \.\.\.",
+            text,
+        )
+    )
+    successful_outcomes = len(
+        re.findall(r"(?m)(?:\.\.\. ok\r?$|^ok\r?$)", text)
+    )
+    if child_runs != 4 or parent_runs != 1 or successful_outcomes != 5:
         _fail("memory-fault-tests.log", "does not prove four child passes and one parent pass")
 
 
-def _validate_release_logs(files: dict[str, bytes]) -> None:
-    ldd = _text(files["release-ldd.txt"], "release-ldd.txt")
-    readelf = _text(files["release-readelf.txt"], "release-readelf.txt")
-    nm = _text(files["release-nm.txt"], "release-nm.txt")
-    header = "artifact=target/release/rustinfer\n"
-    for label, value in (
-        ("release-ldd.txt", ldd),
-        ("release-readelf.txt", readelf),
-        ("release-nm.txt", nm),
+def _validate_host_runtime_log(
+    contents: bytes,
+    environment: dict[str, str],
+    gpu: dict[str, Any],
+) -> None:
+    text = _validate_test_execution_log(
+        contents,
+        "host-runtime-tests.log",
+        HOST_RUNTIME_TESTS,
+    )
+    metadata_re = re.compile(
+        r"(?m)rustinfer-cuda-device-metadata "
+        r"ordinal=(?P<ordinal>[0-9]+) "
+        r"name=(?P<name>.+?) "
+        r"compute_capability=(?P<capability>[0-9]+\.[0-9]+) "
+        r"total_memory_bytes=(?P<memory>[1-9][0-9]*) "
+        r"multiprocessor_count=(?P<multiprocessors>[1-9][0-9]*) "
+        r"driver_version=(?P<driver>[1-9][0-9]*) "
+        r"runtime_version=(?P<runtime>[1-9][0-9]*)\r?$"
+    )
+    metadata = list(metadata_re.finditer(text))
+    if len(metadata) != 1:
+        _fail("host-runtime-tests.log", "must contain one complete CUDA device marker")
+    marker = metadata[0]
+    if (
+        int(marker.group("ordinal")) != gpu["index"]
+        or marker.group("name") != gpu["name"]
+        or marker.group("capability") != gpu["compute_capability"]
     ):
-        if not value.startswith(header):
-            _fail(label, "does not identify target/release/rustinfer")
-    if re.search(r"=>\s+not found", ldd):
-        _fail("release-ldd.txt", "contains an unresolved dependency")
-    for library in ("libcudart.so", "libcuda.so.1"):
-        if library not in ldd:
-            _fail("release-ldd.txt", f"does not resolve {library}")
-        if re.search(rf"NEEDED.*{re.escape(library)}", readelf) is None:
-            _fail("release-readelf.txt", f"does not declare {library}")
-    if re.search(r"\b(?:RPATH|RUNPATH)\b", readelf):
-        _fail("release-readelf.txt", "contains an unreviewed runtime search path")
-    if FAULT_PREFIX in nm:
-        _fail("release-nm.txt", "contains a test-only fault-injection symbol")
-    if FORBIDDEN_DEPENDENCY_RE.search(ldd) or FORBIDDEN_DEPENDENCY_RE.search(readelf):
-        _fail("release ELF evidence", "contains a forbidden runtime dependency")
+        _fail(
+            "host-runtime-tests.log",
+            "CUDA runtime marker identifies a different device than nvidia-smi",
+        )
+    runtime_memory = int(marker.group("memory"))
+    reported_memory = int(gpu["memory_mib"]) * 1024 * 1024
+    if not reported_memory - 2 * 1024 * 1024 * 1024 <= runtime_memory <= reported_memory:
+        _fail(
+            "host-runtime-tests.log",
+            "CUDA runtime memory is inconsistent with nvidia-smi total memory",
+        )
+
+    leak_re = re.compile(
+        r"(?m)rustinfer-cuda-leak-smoke "
+        r"iterations=(?P<iterations>[0-9]+) "
+        r"before_free_bytes=(?P<before>[1-9][0-9]*) "
+        r"after_free_bytes=(?P<after>[1-9][0-9]*)\r?$"
+    )
+    leaks = list(leak_re.finditer(text))
+    if len(leaks) != 1:
+        _fail("host-runtime-tests.log", "must contain one complete CUDA leak marker")
+    leak = leaks[0]
+    if leak.group("iterations") != environment["leak_iterations"]:
+        _fail("host-runtime-tests.log", "leak marker iteration count differs from environment")
+    before = int(leak.group("before"))
+    after = int(leak.group("after"))
+    if after + 64 * 1024 * 1024 < before:
+        _fail("host-runtime-tests.log", "free GPU memory dropped beyond the reviewed tolerance")
+
+
+def _validate_memory_log(contents: bytes, label: str = "memory-tests.log") -> None:
+    text = _validate_test_execution_log(contents, label, MEMORY_TESTS)
+    accounting = (
+        "rustinfer-cuda-memory-accounting device_live_bytes=0 "
+        "device_live_allocations=0 pinned_host_live_bytes=0 "
+        "pinned_host_live_allocations=0"
+    )
+    if len(re.findall(rf"(?m)^{re.escape(accounting)}\r?$", text)) != 1:
+        _fail(label, "must contain exactly one all-zero CUDA allocation marker")
+
+
+def _validate_release_logs(
+    files: dict[str, bytes],
+    binary_sha256: str,
+    dependencies: list[str],
+) -> None:
+    _validate_test_elf_logs(
+        files,
+        prefix="release",
+        artifact_path="target/release/rustinfer",
+        binary_sha256=binary_sha256,
+        dependencies=dependencies,
+    )
 
 
 def _validate_evidence_files(
@@ -638,7 +1021,7 @@ def _validate_bound_evidence(
     if FAULT_PREFIX.encode("ascii") in binary:
         _fail("--release-binary", "contains a test-only CUDA fault-injection symbol")
     try:
-        validate_binary(binary)
+        release_dependencies = validate_binary(binary)
     except ReleaseContractError as error:
         _fail("--release-binary", f"ELF validation failed: {error}")
     release_binary_sha256 = hashlib.sha256(binary).hexdigest()
@@ -657,23 +1040,113 @@ def _validate_bound_evidence(
         if environment[key] != expected:
             _fail(f"environment.txt.{key}", "does not match the supplied immutable input")
 
+    gpu = _parse_nvidia_evidence(files, environment)
+    _validate_driver_library_inventory(files["cuda-driver-libraries.txt"])
+    _validate_test_inventory(
+        files["host-runtime-test-list.txt"],
+        "host-runtime-test-list.txt",
+        HOST_RUNTIME_TESTS,
+    )
+    _validate_test_inventory(
+        files["memory-test-list.txt"],
+        "memory-test-list.txt",
+        MEMORY_TESTS,
+    )
     _validate_fault_inventory(files["memory-fault-test-list.txt"])
+    _validate_host_runtime_log(files["host-runtime-tests.log"], environment, gpu)
+    _validate_memory_log(files["memory-tests.log"])
     _validate_fault_log(files["memory-fault-tests.log"])
-    _single_test_binary_checksum(
+
+    host_digest, host_path = _single_test_binary_checksum(
         files["host-runtime-test-binary.sha256"],
         "host-runtime-test-binary.sha256",
         "host_runtime_gpu",
     )
-    _single_test_binary_checksum(
+    memory_digest, memory_path = _single_test_binary_checksum(
         files["memory-test-binary.sha256"],
         "memory-test-binary.sha256",
         "memory_gpu",
     )
-    _single_test_binary_checksum(
+    fault_digest, fault_path = _single_test_binary_checksum(
         files["memory-fault-test-binary.sha256"],
         "memory-fault-test-binary.sha256",
         "memory_fault_injection_gpu",
     )
+    binary_specs = (
+        (
+            "host-runtime-test-binary",
+            host_digest,
+            host_path,
+            HOST_RUNTIME_TESTS | {
+                "rustinfer-cuda-device-metadata",
+                "rustinfer-cuda-leak-smoke",
+            },
+            "host-runtime",
+            False,
+            "host-runtime-test-list.txt",
+            "host-runtime-tests.log",
+        ),
+        (
+            "memory-test-binary",
+            memory_digest,
+            memory_path,
+            MEMORY_TESTS | {"rustinfer-cuda-memory-accounting"},
+            "memory",
+            False,
+            "memory-test-list.txt",
+            "memory-tests.log",
+        ),
+        (
+            "memory-fault-test-binary",
+            fault_digest,
+            fault_path,
+            FAULT_TESTS
+            | set(FAULT_CASES)
+            | {MARKER_PREFIX, "RUSTINFER_CUDA_MEMORY_FAULT_CHILD"},
+            "memory-fault",
+            True,
+            "memory-fault-test-list.txt",
+            "memory-fault-tests.log",
+        ),
+    )
+    for (
+        evidence_name,
+        receipt_digest,
+        artifact_path,
+        required_strings,
+        log_prefix,
+        requires_fault_symbols,
+        list_name,
+        execution_name,
+    ) in binary_specs:
+        test_binary = files[evidence_name]
+        actual_digest = hashlib.sha256(test_binary).hexdigest()
+        if actual_digest != receipt_digest:
+            _fail(
+                f"{evidence_name}.sha256",
+                f"checksum receipt does not match preserved {evidence_name} bytes",
+            )
+        for log_name in (list_name, execution_name):
+            log_text = _text(files[log_name], log_name)
+            if log_text.count(f"({artifact_path})") != 1:
+                _fail(
+                    log_name,
+                    "does not identify exactly once the test executable from its checksum receipt",
+                )
+        dependencies = _validate_linux_x86_64_test_elf(
+            test_binary,
+            evidence_name,
+            required_strings=required_strings,
+            require_fault_symbols=requires_fault_symbols,
+        )
+        _validate_test_elf_logs(
+            files,
+            prefix=log_prefix,
+            artifact_path=artifact_path,
+            binary_sha256=receipt_digest,
+            dependencies=dependencies,
+            require_fault_symbols=requires_fault_symbols,
+        )
 
     release_checksum = _text(
         files["release-binary.sha256"], "release-binary.sha256", ascii_only=True
@@ -684,7 +1157,7 @@ def _validate_bound_evidence(
             "release-binary.sha256",
             "does not bind the inspected production release binary",
         )
-    _validate_release_logs(files)
+    _validate_release_logs(files, release_binary_sha256, release_dependencies)
 
     if environment["compute_sanitizer"] == "1":
         for name in sorted(SANITIZER_FILES):
@@ -693,6 +1166,15 @@ def _validate_bound_evidence(
                 r"LEAK SUMMARY:\s+0 bytes leaked", text
             ):
                 _fail(name, "does not contain the required zero-error/zero-leak result")
+        _validate_host_runtime_log(
+            files["compute-sanitizer-memcheck.log"],
+            environment,
+            gpu,
+        )
+        _validate_memory_log(
+            files["compute-sanitizer-memory-memcheck.log"],
+            "compute-sanitizer-memory-memcheck.log",
+        )
 
     source = {
         "git_revision": source_revision,

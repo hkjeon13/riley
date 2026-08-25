@@ -7,10 +7,16 @@ it does not write or approve its own release attestation.
 The raw directory is a closed contract. In addition to the existing host and
 memory GPU evidence it contains:
 
+- `host-runtime-test-binary`, `memory-test-binary`, and
+  `memory-fault-test-binary`, preserving the exact Linux x86-64 test ELF bytes
+  that ran on the GPU;
+- one `*.sha256` receipt for each preserved test ELF, with the original
+  `target/debug/deps/*` path;
 - `memory-fault-test-list.txt`, with exactly the parent harness and child test;
 - `memory-fault-tests.log`, with one spawn/start/pass/join marker sequence for
   each of the four reviewed cases and a distinct child PID for each case;
-- `memory-fault-test-binary.sha256`;
+- `host-runtime-*`, `memory-*`, and `memory-fault-*` `ldd`, `readelf`, and `nm`
+  output whose two-line header binds the original artifact path and ELF digest;
 - `release-binary.sha256` for `target/release/rustinfer`; and
 - `release-ldd.txt`, `release-readelf.txt`, and `release-nm.txt` for that exact
   production binary.
@@ -44,6 +50,24 @@ the build-image evidence to be byte-identical to `--release-binary`, verifies
 that binary as Linux x86-64 ELF, verifies the release bundle contains the same
 binary and source revision, and rejects the test-only native symbol prefix in
 both the supplied binary bytes and `nm` evidence.
+
+The three test checksum receipts are not treated as claims. The checker hashes
+the preserved ELF bytes, requires each digest and original path to match its
+receipt, independently parses ELF64/x86-64 program and dynamic headers, and
+cross-checks the direct `DT_NEEDED` inventory against `readelf`. The ordinary
+test binaries must omit fault-injection symbols; the fault harness must contain
+them. Reviewed libtest names and native success-marker strings must be present
+in the corresponding ELF bytes. The list and execution logs must identify the
+same original test path, enumerate exactly 8 host-runtime, 5 memory, or 2 fault
+tests as applicable, and contain the exact passing summaries and runtime
+markers rather than a self-declared `passed` line.
+
+The remote environment is also replayed semantically: it must prove Rust/Cargo
+1.85.0, CUDA 12.8, the CUDA-enabled release executable, the immutable build
+image, and one visible RTX 4090/sm89 GPU. The two `nvidia-smi` views must agree
+on index, canonical UUID, model, memory, and driver. The CUDA device marker is
+cross-bound to that GPU, the leak iteration marker to `environment.txt`, and
+the allocation marker must report all counters at zero.
 
 The source archive must be the uncompressed output of
 `git archive --format=tar HEAD`: its SHA-256 must match `environment.txt` and
