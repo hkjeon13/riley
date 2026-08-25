@@ -227,7 +227,7 @@ pub enum LlamaGenerationEvent<'a> {
 #[non_exhaustive]
 pub enum LlamaGenerationCleanupError {
     /// Decoder reset or explicit decoder close failed.
-    Decode(LlamaDecodeError),
+    Decode(Box<LlamaDecodeError>),
     /// CUDA timing-event close failed.
     Cuda(CudaError),
 }
@@ -249,7 +249,7 @@ impl fmt::Display for LlamaGenerationCleanupError {
 impl error::Error for LlamaGenerationCleanupError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
-            Self::Decode(source) => Some(source),
+            Self::Decode(source) => Some(source.as_ref()),
             Self::Cuda(source) => Some(source),
         }
     }
@@ -287,7 +287,7 @@ pub enum LlamaGenerationFailure<CallbackError> {
     /// Raw caller-buffer token decoding failed.
     Tokenizer(ModelError),
     /// Llama prefill, decode, logits download, reset, or close failed.
-    Decode(LlamaDecodeError),
+    Decode(Box<LlamaDecodeError>),
     /// CUDA timing-event creation, record, synchronization, or close failed.
     Cuda(CudaError),
     /// The user-provided token consumer returned an error.
@@ -392,7 +392,7 @@ where
             LlamaGenerationFailure::Sampling(source) => Some(source),
             LlamaGenerationFailure::Rng(source) => Some(source),
             LlamaGenerationFailure::Tokenizer(source) => Some(source),
-            LlamaGenerationFailure::Decode(source) => Some(source),
+            LlamaGenerationFailure::Decode(source) => Some(source.as_ref()),
             LlamaGenerationFailure::Cuda(source) => Some(source),
             LlamaGenerationFailure::Callback(source) => Some(source),
             LlamaGenerationFailure::Cleanup => self
@@ -578,7 +578,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
                     cleanup.record(LlamaGenerationCleanupError::Cuda(cleanup_source));
                 }
                 return Err(LlamaGenerationError::new(
-                    LlamaGenerationFailure::Decode(source),
+                    LlamaGenerationFailure::Decode(Box::new(source)),
                     cleanup,
                 ));
             }
@@ -757,13 +757,13 @@ impl<'model> PreparedLlamaGeneration<'model> {
                     .as_mut()
                     .ok_or(LlamaGenerationFailure::Terminal)?
                     .decode(token_id, stream)
-                    .map_err(LlamaGenerationFailure::Decode)?,
+                    .map_err(|source| LlamaGenerationFailure::Decode(Box::new(source)))?,
                 None => self
                     .decode
                     .as_mut()
                     .ok_or(LlamaGenerationFailure::Terminal)?
                     .prefill(&state.request().prompt_token_ids, stream)
-                    .map_err(LlamaGenerationFailure::Decode)?,
+                    .map_err(|source| LlamaGenerationFailure::Decode(Box::new(source)))?,
             }
             self.model_end_event
                 .as_mut()
@@ -803,7 +803,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
                 .as_mut()
                 .ok_or(LlamaGenerationFailure::Terminal)?
                 .download_last_logits(&mut self.logits_bf16_native, stream)
-                .map_err(LlamaGenerationFailure::Decode)?;
+                .map_err(|source| LlamaGenerationFailure::Decode(Box::new(source)))?;
             let logits_download_wall = download_started.elapsed();
 
             let sampling_started = Instant::now();
@@ -959,7 +959,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
             return failures;
         };
         if let Err(source) = decode.reset() {
-            failures.record(LlamaGenerationCleanupError::Decode(source));
+            failures.record(LlamaGenerationCleanupError::Decode(Box::new(source)));
             failures.absorb(self.close_owned_resources());
         }
         failures
@@ -970,7 +970,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
         let mut failures = CleanupFailures::default();
         if let Some(decode) = self.decode.take() {
             if let Err(source) = decode.close() {
-                failures.record(LlamaGenerationCleanupError::Decode(source));
+                failures.record(LlamaGenerationCleanupError::Decode(Box::new(source)));
             }
         }
         if let Some(event) = self.model_start_event.take() {
