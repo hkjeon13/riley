@@ -652,6 +652,14 @@ impl<'stream> CudaCommandBatch<'stream> {
 /// ```
 ///
 /// ```compile_fail
+/// fn cannot_recover_guarded_stream(
+///     commands: &mut rustinfer_cuda::CudaCommandStream<'_, '_>,
+/// ) {
+///     let _: &mut rustinfer_cuda::CudaStream = commands;
+/// }
+/// ```
+///
+/// ```compile_fail
 /// fn assert_send<T: Send>() {}
 /// assert_send::<rustinfer_cuda::CudaCommandStream<'static, 'static>>();
 /// ```
@@ -686,6 +694,11 @@ mod execution_stream_sealed {
 /// CUDA operations use this bound to preserve existing direct-stream callers
 /// while accepting the non-replaceable command-batch proxy. External crates
 /// cannot implement the trait or recover the underlying stream from it.
+///
+/// ```compile_fail
+/// struct ExternalStream;
+/// impl rustinfer_cuda::CudaExecutionStream for ExternalStream {}
+/// ```
 #[allow(private_bounds)]
 pub trait CudaExecutionStream: execution_stream_sealed::Sealed {}
 
