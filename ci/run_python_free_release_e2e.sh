@@ -23,7 +23,8 @@ checker="$repo_root/benchmarks/scripts/check_python_free_release_e2e.py"
 : "${RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH:?set the primary weights path below the model directory}"
 : "${RUSTINFER_E2E_WEIGHTS_SHA256:?set its reviewed SHA-256}"
 : "${RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH:?set the tokenizer path below the model directory}"
-: "${RUSTINFER_E2E_TOKENIZER_SHA256:?set its reviewed SHA-256}"
+: "${RUSTINFER_E2E_TOKENIZER_JSON_SHA256:?set the reviewed tokenizer.json SHA-256}"
+: "${RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256:?set the native correctness tokenizer aggregate SHA-256}"
 : "${RUSTINFER_E2E_CORRECTNESS_GOLDEN:?set the approved E2E golden JSON path}"
 : "${RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256:?set its reviewed SHA-256}"
 : "${RUSTINFER_E2E_CORRECTNESS_REPORT:?set the passing native E0 correctness report}"
@@ -49,7 +50,8 @@ for digest in \
     "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256" \
     "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
     "$RUSTINFER_E2E_WEIGHTS_SHA256" \
-    "$RUSTINFER_E2E_TOKENIZER_SHA256" \
+    "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
+    "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
     "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
     "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
 do
@@ -93,7 +95,7 @@ test "$(sha_file "$RUSTINFER_E2E_SOURCE_ARCHIVE")" = "$RUSTINFER_E2E_SOURCE_ARCH
 test "$(sha_file "$RUSTINFER_E2E_RELEASE_BINARY")" = "$RUSTINFER_E2E_RELEASE_BINARY_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_RELEASE_BUNDLE")" = "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH")" = "$RUSTINFER_E2E_TOKENIZER_SHA256"
+test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256"
 test "$(sha_file "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
 python3 "$repo_root/ci/release/verify_release_bundle.py" "$RUSTINFER_E2E_RELEASE_BUNDLE" >/dev/null
@@ -131,22 +133,23 @@ test "$(sha_file "$model_manifest")" = "$RUSTINFER_E2E_MODEL_TREE_SHA256"
 
 golden_schema=$(jq -er '.schema_version' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
 test "$golden_schema" = rustinfer.python-free-release-e2e-golden.v1
-jq -e 'keys == ["correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_sha256","weights_sha256"]' \
+jq -e 'keys == ["correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_aggregate_sha256","tokenizer_json_sha256","weights_sha256"]' \
     "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" >/dev/null
 test "$(jq -er '.correctness_gate_id' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v2
 test "$(jq -er '.correctness_report_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
 test "$(jq -er '.source_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.model_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_MODEL_REVISION"
 test "$(jq -er '.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(jq -er '.tokenizer_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_SHA256"
+test "$(jq -er '.tokenizer_json_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
+test "$(jq -er '.tokenizer_aggregate_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
 test "$(jq -er '.gate_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = smollm2-fp32-bf16-native-e0-v2
 test "$(jq -er '.status' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = pass
 test "$(jq -er '.bindings.candidate_git_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.bindings.candidate_git_status_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$(printf '' | sha256sum | awk '{print $1}')"
 test "$(jq -er '.bindings.model_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_MODEL_REVISION"
 test "$(jq -er '.bindings.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(jq -er '.bindings.tokenizer_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_TOKENIZER_SHA256"
-model_id=$(jq -er '.model_id | select(test("^[A-Za-z0-9][A-Za-z0-9._:-]*$"))' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
+test "$(jq -er '.bindings.tokenizer_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
+model_id=$(jq -er '.model_id | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"))' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
 test "$(jq -er '.bindings.model_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$model_id"
 golden_prompt=$(jq -er '.prompt | select(type == "string" and length > 0)' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
 [[ $golden_prompt != *$'\n'* && $golden_prompt != *$'\r'* ]] || { echo "golden prompt must be one line" >&2; exit 2; }
@@ -424,7 +427,8 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     --arg model_revision "$RUSTINFER_E2E_MODEL_REVISION" \
     --arg model_tree_sha256 "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
     --arg weights_sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
-    --arg tokenizer_sha256 "$RUSTINFER_E2E_TOKENIZER_SHA256" \
+    --arg tokenizer_aggregate_sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
+    --arg tokenizer_json_sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
     --arg correctness_gate_id smollm2-fp32-bf16-native-e0-v2 \
     --arg correctness_report_sha256 "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256" \
     --arg correctness_golden_sha256 "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
@@ -462,7 +466,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
       recorded_at_utc:$recorded_at_utc,status:"success",
       source:{git_revision:$git_revision,git_dirty:false,source_archive_sha256:$source_archive_sha256},
       release:{binary_sha256:$binary_sha256,bundle_sha256:$bundle_sha256,image_sha256:$image_sha256},
-      model:{model_id:$model_id,model_revision:$model_revision,model_tree_sha256:$model_tree_sha256,weights_sha256:$weights_sha256,tokenizer_sha256:$tokenizer_sha256,correctness_gate_id:$correctness_gate_id,correctness_report_sha256:$correctness_report_sha256,correctness_golden_sha256:$correctness_golden_sha256},
+      model:{model_id:$model_id,model_revision:$model_revision,model_tree_sha256:$model_tree_sha256,weights_sha256:$weights_sha256,tokenizer_aggregate_sha256:$tokenizer_aggregate_sha256,tokenizer_json_sha256:$tokenizer_json_sha256,correctness_gate_id:$correctness_gate_id,correctness_report_sha256:$correctness_report_sha256,correctness_golden_sha256:$correctness_golden_sha256},
       runtime:{container_ids:[$first_container_id,$second_container_id],network_mode:"none",image_id:$image_id,image_binary_sha256:$image_binary_sha256},
       observations:{
         readyz:{http_status:200,ready:true,accepting:true},models:{http_status:200,model_ids:($model_ids|fromjson)},
@@ -487,7 +491,8 @@ python3 "$checker" \
     --weights "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH" \
     --weights-sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
     --tokenizer "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH" \
-    --tokenizer-sha256 "$RUSTINFER_E2E_TOKENIZER_SHA256" \
+    --tokenizer-json-sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
+    --tokenizer-aggregate-sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
     --correctness-golden "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
     --correctness-golden-sha256 "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
     --correctness-report "$RUSTINFER_E2E_CORRECTNESS_REPORT" \

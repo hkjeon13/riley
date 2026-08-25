@@ -25,6 +25,9 @@ SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+MODEL_ID_RE = re.compile(
+    r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"
+)
 CONTAINER_RE = re.compile(r"^[0-9a-f]{12,64}$")
 MODEL_PATH_RE = re.compile(r"^[A-Za-z0-9._/+@=-]+$")
 MAX_JSON_BYTES = 16 * 1024 * 1024
@@ -231,7 +234,8 @@ def _validate_golden(document: Mapping[str, Any]) -> dict[str, Any]:
         {
             "schema_version", "correctness_gate_id", "correctness_report_sha256",
             "source_revision", "model_id", "model_revision", "weights_sha256",
-            "tokenizer_sha256", "prompt", "max_tokens", "expected_greedy_text_sha256",
+            "tokenizer_aggregate_sha256", "tokenizer_json_sha256", "prompt", "max_tokens",
+            "expected_greedy_text_sha256",
         },
         "correctness golden",
     )
@@ -252,13 +256,20 @@ def _validate_golden(document: Mapping[str, Any]) -> dict[str, Any]:
         "source_revision": _string(
             row["source_revision"], "correctness golden.source_revision", GIT_RE
         ),
-        "model_id": _string(row["model_id"], "correctness golden.model_id", ID_RE),
+        "model_id": _string(
+            row["model_id"], "correctness golden.model_id", MODEL_ID_RE
+        ),
         "model_revision": _string(
             row["model_revision"], "correctness golden.model_revision"
         ),
         "weights_sha256": _sha(row["weights_sha256"], "correctness golden.weights_sha256"),
-        "tokenizer_sha256": _sha(
-            row["tokenizer_sha256"], "correctness golden.tokenizer_sha256"
+        "tokenizer_aggregate_sha256": _sha(
+            row["tokenizer_aggregate_sha256"],
+            "correctness golden.tokenizer_aggregate_sha256",
+        ),
+        "tokenizer_json_sha256": _sha(
+            row["tokenizer_json_sha256"],
+            "correctness golden.tokenizer_json_sha256",
         ),
         "prompt": prompt,
         "max_tokens": _integer(row["max_tokens"], "correctness golden.max_tokens", 2),
@@ -295,14 +306,18 @@ def _validate_correctness_report(document: Mapping[str, Any]) -> dict[str, str]:
             "correctness report.bindings.candidate_git_revision",
             GIT_RE,
         ),
-        "model_id": _string(bindings["model_id"], "correctness report.bindings.model_id"),
+        "model_id": _string(
+            bindings["model_id"],
+            "correctness report.bindings.model_id",
+            MODEL_ID_RE,
+        ),
         "model_revision": _string(
             bindings["model_revision"], "correctness report.bindings.model_revision"
         ),
         "weights_sha256": _sha(
             bindings["weights_sha256"], "correctness report.bindings.weights_sha256"
         ),
-        "tokenizer_sha256": _sha(
+        "tokenizer_aggregate_sha256": _sha(
             bindings["tokenizer_sha256"], "correctness report.bindings.tokenizer_sha256"
         ),
     }
@@ -366,17 +381,23 @@ def _validate_raw(document: Mapping[str, Any]) -> dict[str, Any]:
         row["model"],
         {
             "model_id", "model_revision", "model_tree_sha256", "weights_sha256",
-            "tokenizer_sha256", "correctness_gate_id", "correctness_report_sha256",
-            "correctness_golden_sha256",
+            "tokenizer_aggregate_sha256", "tokenizer_json_sha256", "correctness_gate_id",
+            "correctness_report_sha256", "correctness_golden_sha256",
         },
         "raw.model",
     )
     model_result = {
-        "model_id": _string(model["model_id"], "raw.model.model_id", ID_RE),
+        "model_id": _string(model["model_id"], "raw.model.model_id", MODEL_ID_RE),
         "model_revision": _string(model["model_revision"], "raw.model.model_revision"),
         "model_tree_sha256": _sha(model["model_tree_sha256"], "raw.model.model_tree_sha256"),
         "weights_sha256": _sha(model["weights_sha256"], "raw.model.weights_sha256"),
-        "tokenizer_sha256": _sha(model["tokenizer_sha256"], "raw.model.tokenizer_sha256"),
+        "tokenizer_aggregate_sha256": _sha(
+            model["tokenizer_aggregate_sha256"],
+            "raw.model.tokenizer_aggregate_sha256",
+        ),
+        "tokenizer_json_sha256": _sha(
+            model["tokenizer_json_sha256"], "raw.model.tokenizer_json_sha256"
+        ),
         "correctness_gate_id": _string(
             model["correctness_gate_id"], "raw.model.correctness_gate_id"
         ),
@@ -617,7 +638,8 @@ def evaluate(
     weights: Path,
     expected_weights_sha256: str,
     tokenizer: Path,
-    expected_tokenizer_sha256: str,
+    expected_tokenizer_json_sha256: str,
+    expected_tokenizer_aggregate_sha256: str,
     correctness_golden: Path,
     expected_correctness_golden_sha256: str,
     correctness_report: Path,
@@ -635,7 +657,12 @@ def evaluate(
         image_sha256 = _sha(image_id.removeprefix("sha256:"), "--image-id")
         expected_model = _sha(expected_model_tree_sha256, "--model-tree-sha256")
         expected_weights = _sha(expected_weights_sha256, "--weights-sha256")
-        expected_tokenizer = _sha(expected_tokenizer_sha256, "--tokenizer-sha256")
+        expected_tokenizer_json = _sha(
+            expected_tokenizer_json_sha256, "--tokenizer-json-sha256"
+        )
+        expected_tokenizer_aggregate = _sha(
+            expected_tokenizer_aggregate_sha256, "--tokenizer-aggregate-sha256"
+        )
         expected_golden = _sha(expected_correctness_golden_sha256, "--correctness-golden-sha256")
         expected_correctness = _sha(
             expected_correctness_report_sha256, "--correctness-report-sha256"
@@ -686,8 +713,21 @@ def evaluate(
             _fail("raw.model.model_tree_sha256", "model tree binding mismatch")
         if actual_weights != expected_weights or validated["model"]["weights_sha256"] != expected_weights:
             _fail("raw.model.weights_sha256", "weights binding mismatch")
-        if actual_tokenizer != expected_tokenizer or validated["model"]["tokenizer_sha256"] != expected_tokenizer:
-            _fail("raw.model.tokenizer_sha256", "tokenizer binding mismatch")
+        if (
+            actual_tokenizer != expected_tokenizer_json
+            or validated["model"]["tokenizer_json_sha256"]
+            != expected_tokenizer_json
+            or golden["tokenizer_json_sha256"] != expected_tokenizer_json
+        ):
+            _fail("raw.model.tokenizer_json_sha256", "tokenizer.json binding mismatch")
+        if (
+            validated["model"]["tokenizer_aggregate_sha256"]
+            != expected_tokenizer_aggregate
+        ):
+            _fail(
+                "raw.model.tokenizer_aggregate_sha256",
+                "tokenizer aggregate binding mismatch",
+            )
         if actual_golden != expected_golden or validated["model"]["correctness_golden_sha256"] != expected_golden:
             _fail("raw.model.correctness_golden_sha256", "correctness golden binding mismatch")
         if (
@@ -702,7 +742,7 @@ def evaluate(
             "model_id": validated["model"]["model_id"],
             "model_revision": validated["model"]["model_revision"],
             "weights_sha256": expected_weights,
-            "tokenizer_sha256": expected_tokenizer,
+            "tokenizer_aggregate_sha256": expected_tokenizer_aggregate,
         }
         golden_provenance = {
             key: golden[key] for key in expected_provenance
@@ -778,7 +818,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--weights-sha256", required=True)
     parser.add_argument("--tokenizer", required=True, type=Path)
-    parser.add_argument("--tokenizer-sha256", required=True)
+    parser.add_argument("--tokenizer-json-sha256", required=True)
+    parser.add_argument("--tokenizer-aggregate-sha256", required=True)
     parser.add_argument("--correctness-golden", required=True, type=Path)
     parser.add_argument("--correctness-golden-sha256", required=True)
     parser.add_argument("--correctness-report", required=True, type=Path)
@@ -803,7 +844,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         weights=args.weights,
         expected_weights_sha256=args.weights_sha256,
         tokenizer=args.tokenizer,
-        expected_tokenizer_sha256=args.tokenizer_sha256,
+        expected_tokenizer_json_sha256=args.tokenizer_json_sha256,
+        expected_tokenizer_aggregate_sha256=args.tokenizer_aggregate_sha256,
         correctness_golden=args.correctness_golden,
         expected_correctness_golden_sha256=args.correctness_golden_sha256,
         correctness_report=args.correctness_report,

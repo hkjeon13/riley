@@ -16,10 +16,11 @@ file with this closed schema:
   "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
   "correctness_report_sha256": "reviewed-lowercase-sha256",
   "source_revision": "clean-40-character-candidate-revision",
-  "model_id": "reviewed-model-id",
+  "model_id": "HuggingFaceTB/SmolLM2-135M",
   "model_revision": "immutable-model-revision",
   "weights_sha256": "reviewed-lowercase-sha256",
-  "tokenizer_sha256": "reviewed-lowercase-sha256",
+  "tokenizer_aggregate_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
+  "tokenizer_json_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
   "prompt": "One-line fixed release prompt",
   "max_tokens": 8,
   "expected_greedy_text_sha256": "reviewed-lowercase-sha256"
@@ -51,7 +52,8 @@ export RUSTINFER_E2E_MODEL_REVISION=<immutable-model-revision>
 export RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH=model.safetensors
 export RUSTINFER_E2E_WEIGHTS_SHA256=<reviewed-digest>
 export RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH=tokenizer.json
-export RUSTINFER_E2E_TOKENIZER_SHA256=<reviewed-digest>
+export RUSTINFER_E2E_TOKENIZER_JSON_SHA256=9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c
+export RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256=51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db
 export RUSTINFER_E2E_CORRECTNESS_GOLDEN=/artifacts/python-free-e2e-golden.json
 export RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256=<reviewed-digest>
 export RUSTINFER_E2E_CORRECTNESS_REPORT=/artifacts/native-e0-correctness-report.json
@@ -80,7 +82,8 @@ final release-candidate gate.
 
 The golden cannot self-authorize a new output: it must bind the exact passing
 `smollm2-fp32-bf16-native-e0-v2` report, clean candidate revision, immutable
-model revision, weights, and tokenizer. The closed raw evidence repeats those
+model revision, weights, the native five-file tokenizer aggregate, and the
+exact runtime `tokenizer.json`. The closed raw evidence repeats those
 bindings and is itself SHA-bound by the attestation. The attestation root stays
 compatible with the final candidate's closed schema; the transitive provenance
 is therefore exposed through `raw_evidence_sha256`, not an unreviewed root

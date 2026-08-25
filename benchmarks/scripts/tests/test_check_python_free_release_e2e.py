@@ -55,6 +55,8 @@ class E2EFixture:
         self.weights.write_bytes(b"safetensors fixture")
         self.expected_text_sha256 = sha_bytes(b"fixture completion")
         self.model_revision = "model-revision-fixture"
+        self.model_id = "HuggingFaceTB/SmolLM2-135M"
+        self.tokenizer_aggregate_sha256 = sha_bytes(b"tokenizer aggregate fixture")
         self.correctness_report.write_text(
             json.dumps(
                 {
@@ -63,10 +65,10 @@ class E2EFixture:
                     "bindings": {
                         "candidate_git_revision": self.revision,
                         "candidate_git_status_sha256": sha_bytes(b""),
-                        "model_id": "fixture-model",
+                        "model_id": self.model_id,
                         "model_revision": self.model_revision,
                         "weights_sha256": sha_bytes(self.weights.read_bytes()),
-                        "tokenizer_sha256": sha_bytes(self.tokenizer.read_bytes()),
+                        "tokenizer_sha256": self.tokenizer_aggregate_sha256,
                     },
                 },
                 sort_keys=True,
@@ -83,10 +85,11 @@ class E2EFixture:
                     "correctness_gate_id": checker.CORRECTNESS_GATE,
                     "correctness_report_sha256": correctness_report_sha256,
                     "source_revision": self.revision,
-                    "model_id": "fixture-model",
+                    "model_id": self.model_id,
                     "model_revision": self.model_revision,
                     "weights_sha256": sha_bytes(self.weights.read_bytes()),
-                    "tokenizer_sha256": sha_bytes(self.tokenizer.read_bytes()),
+                    "tokenizer_aggregate_sha256": self.tokenizer_aggregate_sha256,
+                    "tokenizer_json_sha256": sha_bytes(self.tokenizer.read_bytes()),
                     "prompt": "A bounded release probe",
                     "max_tokens": 8,
                     "expected_greedy_text_sha256": self.expected_text_sha256,
@@ -122,7 +125,8 @@ class E2EFixture:
             "bundle": sha_bytes(self.release_bundle.read_bytes()),
             "model": checker.model_tree_sha256(self.model_dir),
             "weights": sha_bytes(self.weights.read_bytes()),
-            "tokenizer": sha_bytes(self.tokenizer.read_bytes()),
+            "tokenizer_json": sha_bytes(self.tokenizer.read_bytes()),
+            "tokenizer_aggregate": self.tokenizer_aggregate_sha256,
             "golden": sha_bytes(self.golden.read_bytes()),
             "correctness": sha_bytes(self.correctness_report.read_bytes()),
         }
@@ -160,11 +164,12 @@ class E2EFixture:
                 "image_sha256": self.image_id.removeprefix("sha256:"),
             },
             "model": {
-                "model_id": "fixture-model",
+                "model_id": self.model_id,
                 "model_revision": self.model_revision,
                 "model_tree_sha256": self.hashes["model"],
                 "weights_sha256": self.hashes["weights"],
-                "tokenizer_sha256": self.hashes["tokenizer"],
+                "tokenizer_aggregate_sha256": self.hashes["tokenizer_aggregate"],
+                "tokenizer_json_sha256": self.hashes["tokenizer_json"],
                 "correctness_gate_id": checker.CORRECTNESS_GATE,
                 "correctness_report_sha256": self.hashes["correctness"],
                 "correctness_golden_sha256": self.hashes["golden"],
@@ -177,7 +182,7 @@ class E2EFixture:
             },
             "observations": {
                 "readyz": {"http_status": 200, "ready": True, "accepting": True},
-                "models": {"http_status": 200, "model_ids": ["fixture-model"]},
+                "models": {"http_status": 200, "model_ids": [self.model_id]},
                 "greedy": {
                     "non_stream_http_status": 200,
                     "stream_http_status": 200,
@@ -289,7 +294,10 @@ class E2EFixture:
             weights=self.weights,
             expected_weights_sha256=self.hashes["weights"],
             tokenizer=self.tokenizer,
-            expected_tokenizer_sha256=self.hashes["tokenizer"],
+            expected_tokenizer_json_sha256=self.hashes["tokenizer_json"],
+            expected_tokenizer_aggregate_sha256=self.hashes[
+                "tokenizer_aggregate"
+            ],
             correctness_golden=self.golden,
             expected_correctness_golden_sha256=self.hashes["golden"],
             correctness_report=self.correctness_report,
@@ -311,7 +319,8 @@ class E2EFixture:
             "--weights", str(self.weights),
             "--weights-sha256", self.hashes["weights"],
             "--tokenizer", str(self.tokenizer),
-            "--tokenizer-sha256", self.hashes["tokenizer"],
+            "--tokenizer-json-sha256", self.hashes["tokenizer_json"],
+            "--tokenizer-aggregate-sha256", self.hashes["tokenizer_aggregate"],
             "--correctness-golden", str(self.golden),
             "--correctness-golden-sha256", self.hashes["golden"],
             "--correctness-report", str(self.correctness_report),
