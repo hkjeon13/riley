@@ -591,9 +591,26 @@ struct RawBpe {
     end_of_word_suffix: serde_json::Value,
     fuse_unk: bool,
     byte_fallback: bool,
-    ignore_merges: serde_json::Value,
+    #[serde(default)]
+    ignore_merges: RawOptionalJson,
     vocab: BTreeMap<String, u32>,
     merges: Vec<RawMerge>,
+}
+
+#[derive(Default)]
+enum RawOptionalJson {
+    #[default]
+    Missing,
+    Present(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for RawOptionalJson {
+    fn deserialize<Deserializer>(deserializer: Deserializer) -> Result<Self, Deserializer::Error>
+    where
+        Deserializer: serde::Deserializer<'de>,
+    {
+        serde_json::Value::deserialize(deserializer).map(Self::Present)
+    }
 }
 
 #[derive(Deserialize)]
@@ -640,7 +657,10 @@ fn validate_bpe_profile(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelR
         TokenizerProfile::SmolLm2 => {
             if !model.continuing_subword_prefix.is_null()
                 || !model.end_of_word_suffix.is_null()
-                || model.ignore_merges.as_bool() != Some(false)
+                || !matches!(
+                    model.ignore_merges,
+                    RawOptionalJson::Present(serde_json::Value::Bool(false))
+                )
             {
                 return Err(invalid(
                     "SmolLM2 BPE requires null subword prefixes/suffixes and ignore_merges=false",
@@ -650,10 +670,10 @@ fn validate_bpe_profile(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelR
         TokenizerProfile::Qwen2 => {
             if model.continuing_subword_prefix.as_str() != Some("")
                 || model.end_of_word_suffix.as_str() != Some("")
-                || !model.ignore_merges.is_null()
+                || !matches!(model.ignore_merges, RawOptionalJson::Missing)
             {
                 return Err(invalid(
-                    "Qwen2 BPE requires empty subword prefixes/suffixes and ignore_merges=null",
+                    "Qwen2 BPE requires empty subword prefixes/suffixes and omitted ignore_merges",
                 ));
             }
         }
@@ -2077,6 +2097,7 @@ mod tests {
             FIXTURE.replace(r#""use_regex":true}]"#, r#""use_regex":false}]"#),
             FIXTURE.replace(r#""ignore_merges":false"#, r#""ignore_merges":true"#),
             FIXTURE.replace(r#""ignore_merges":false"#, r#""ignore_merges":null"#),
+            FIXTURE.replace(r#""ignore_merges":false,"#, ""),
             FIXTURE.replace(
                 r#""continuing_subword_prefix":null"#,
                 r#""continuing_subword_prefix":"""#,

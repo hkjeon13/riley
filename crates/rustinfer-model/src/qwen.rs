@@ -662,7 +662,6 @@ mod tests {
                 "end_of_word_suffix": "",
                 "fuse_unk": false,
                 "byte_fallback": false,
-                "ignore_merges": null,
                 "vocab": vocab,
                 "merges": []
             }
@@ -761,7 +760,7 @@ mod tests {
     #[test]
     fn qwen_tokenizer_rejects_pipeline_and_addressable_domain_variants() {
         let fixture = tokenizer_fixture();
-        for variant in [
+        let mut variants = vec![
             fixture.replace(r#"{"type":"NFC"}"#, r#"{"type":"NFD"}"#),
             fixture.replace("(?i:'s", "(?i:'z"),
             fixture.replace(r#""trim_offsets":false"#, r#""trim_offsets":true"#),
@@ -771,8 +770,16 @@ mod tests {
                 r#""continuing_subword_prefix":null"#,
             ),
             fixture.replace(r#""end_of_word_suffix":"""#, r#""end_of_word_suffix":"x""#),
-            fixture.replace(r#""ignore_merges":null"#, r#""ignore_merges":false"#),
-        ] {
+        ];
+        for unexpected in [Value::Null, Value::Bool(false)] {
+            let mut variant: Value = serde_json::from_str(&fixture).unwrap();
+            variant["model"]
+                .as_object_mut()
+                .unwrap()
+                .insert("ignore_merges".to_owned(), unexpected);
+            variants.push(serde_json::to_string(&variant).unwrap());
+        }
+        for variant in variants {
             assert!(matches!(
                 Qwen2Tokenizer::from_json_slice(variant.as_bytes()),
                 Err(ModelError::InvalidTokenizer { .. })
