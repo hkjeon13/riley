@@ -26,9 +26,12 @@ const TOKENS_A: [u32; 7] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 const TOKENS_B: [u32; 4] = [504, 2_365, 42, 43];
 const BF16_BYTES: usize = 2;
 const ONE_GIB: u64 = 1 << 30;
-// Carried forward unchanged from the initial PR13 gate into the cross-model
-// remote run. This guards exact top-1 and must not be relaxed from observations.
-const BATCH_LOGIT_COSINE_MIN: f64 = 0.997;
+// Reuse the immutable PR01 E0 v2 full-corpus final-logit bounds. These are
+// conservative secondary guards beside exact greedy top-1 and are not fitted
+// to the PR13 differential runs.
+const BATCH_LOGIT_COSINE_MIN: f64 = 0.997_903_530_549_539_3;
+const BATCH_LOGIT_MAX_ABS_MAX: f64 = 5.852_936_458_587_647;
+const BATCH_LOGIT_MEAN_ABS_MAX: f64 = 1.151_280_319_263_363;
 
 #[derive(Clone, Copy, Debug)]
 struct LogitMetrics {
@@ -226,11 +229,21 @@ fn assert_semantic_parity(label: &str, actual: &[u8], expected: &[u8]) -> LogitM
         "pr13-batch-parity schema_version=1 label={label} cosine={cosine:.12} \
 max_abs={max_abs:.9} mean_abs={mean_abs:.9} actual_top1={actual_top1} \
 expected_top1={expected_top1} actual_top1_value={actual_top1_value:.6} \
-expected_top1_value={expected_top1_value:.6} top1_exact=true cosine_min={BATCH_LOGIT_COSINE_MIN}"
+expected_top1_value={expected_top1_value:.6} top1_exact=true \
+cosine_min={BATCH_LOGIT_COSINE_MIN} max_abs_max={BATCH_LOGIT_MAX_ABS_MAX} \
+mean_abs_max={BATCH_LOGIT_MEAN_ABS_MAX}"
     );
     assert!(
         cosine >= BATCH_LOGIT_COSINE_MIN,
         "{label} failed the predeclared batch cosine gate: {metrics:?}"
+    );
+    assert!(
+        max_abs <= BATCH_LOGIT_MAX_ABS_MAX,
+        "{label} failed the predeclared batch max-abs gate: {metrics:?}"
+    );
+    assert!(
+        mean_abs <= BATCH_LOGIT_MEAN_ABS_MAX,
+        "{label} failed the predeclared batch mean-abs gate: {metrics:?}"
     );
     metrics
 }
