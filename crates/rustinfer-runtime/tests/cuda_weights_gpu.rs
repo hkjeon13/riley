@@ -11,7 +11,7 @@ use rustinfer_cuda::{
 use rustinfer_model::{LoadLimits, LoadedModel, WeightSlot};
 use rustinfer_runtime::{CudaUploadedWeights, CudaWeightUploadError};
 
-type TestResult = Result<(), Box<dyn Error>>;
+type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 fn download(
     context: &CudaContext,
