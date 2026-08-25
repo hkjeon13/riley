@@ -98,7 +98,10 @@ smollm2-multi-step-greedy-exact-build.log
 `write_optimization_execution_evidence.py` rejects command substitution,
 reordering, nonzero exits, compiler-artifact substitution, subject-byte
 substitution, GPU substitution, and semantic/parity marker mismatch before the
-independent package/replay checker runs.
+independent package/replay checker runs. Host-side packaging uses a clean
+Python environment through `run_release_python.py`, so the same checker also
+runs on the designated Ubuntu 22.04 host's Python 3.10 without importing user
+packages or weakening the standard-library-only contract.
 
 The replay checker must recognize receipt v2, the three additional build logs,
 the eight-command order above, and the expanded subject fields.  Keeping the

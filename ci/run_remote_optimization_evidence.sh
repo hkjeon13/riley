@@ -119,6 +119,19 @@ nvidia-smi --id="${DESIGNATED_GPU_UUID}" \
 repository_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 cd "${repository_root}"
 
+run_release_python() {
+    /usr/bin/env -i \
+        PATH=/usr/bin:/bin \
+        PYTHONHASHSEED=0 \
+        PYTHONNOUSERSITE=1 \
+        PYTHONDONTWRITEBYTECODE=1 \
+        LC_ALL=C \
+        TZ=UTC \
+        /usr/bin/python3 \
+        "${repository_root}/ci/release/run_release_python.py" \
+        "$@"
+}
+
 resolved_revision=$(git rev-parse --verify "${source_revision}^{commit}")
 [[ ${resolved_revision} =~ ^[0-9a-f]{40}$ ]]
 source_date_epoch=$(git show -s --format=%ct "${resolved_revision}")
@@ -276,7 +289,7 @@ require_exact_clean_checkout
 report="${output_dir}/optimization-correctness-report.json"
 receipt="${output_dir}/evidence/run-receipt.json"
 recorded_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-/usr/bin/python3 "${repository_root}/ci/release/write_optimization_execution_evidence.py" \
+run_release_python "${repository_root}/ci/release/write_optimization_execution_evidence.py" \
     --evidence-dir "${output_dir}/evidence" \
     --command-records "${output_dir}/runner-output/commands.v2" \
     --subject-records "${output_dir}/runner-output/subjects.v2" \
@@ -292,7 +305,7 @@ recorded_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     >"${output_dir}/writer-result.json"
 
 raw_evidence="${output_dir}/optimization-correctness-evidence.tar"
-/usr/bin/python3 "${repository_root}/ci/release/check_optimization_evidence.py" \
+run_release_python "${repository_root}/ci/release/check_optimization_evidence.py" \
     --evidence-dir "${output_dir}/evidence" \
     --raw-evidence "${raw_evidence}" \
     --report "${report}" \

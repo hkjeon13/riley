@@ -162,6 +162,11 @@ class Fixture:
             "test native_symbols_link_without_device_initialization ... ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=0)
             + "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
+            "error: failed to run custom build command for `rustinfer-cuda v0.1.0`\n"
+            "Caused by:\n"
+            "  process didn't exit successfully: "
+            "`/tmp/rustinfer-invalid-cuda-target/debug/build/"
+            "rustinfer-cuda-fixture/build-script-build` (exit status: 1)\n"
             "error: rustinfer-cuda native build failed: "
             "CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda is not a directory\n"
             "artifact=target/release/rustinfer\n"
@@ -489,6 +494,18 @@ class OptimizationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(OptimizationEvidenceError, "failing test-run marker"):
             self.fixture.produce()
 
+    def test_compile_log_allows_only_the_one_expected_negative_process(self) -> None:
+        contents = (
+            self.fixture.logs["cuda-compile-only"]
+            + b"process didn't exit successfully: unrelated command\n"
+        )
+        self.fixture.refresh_log("cuda-compile-only", contents)
+        with self.assertRaisesRegex(
+            OptimizationEvidenceError,
+            "unexpected count of Cargo process-failure markers",
+        ):
+            self.fixture.produce()
+
     def test_test_binary_bytes_must_match_subject_receipt(self) -> None:
         path = self.fixture.evidence / "host-runtime-gpu-test"
         path.write_bytes(path.read_bytes() + b"tamper")
@@ -645,6 +662,32 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.fixture._write_report()
         with self.assertRaisesRegex(OptimizationEvidenceError, "exact submitted report"):
             self.fixture.replay(raw)
+
+
+class RemoteOptimizationRunnerStaticTests(unittest.TestCase):
+    def test_host_packaging_uses_clean_python_310_compatibility_runner(self) -> None:
+        root = Path(__file__).resolve().parents[2]
+        contents = (root / "ci/run_remote_optimization_evidence.sh").read_text(
+            encoding="utf-8"
+        )
+        for marker in (
+            "run_release_python() {",
+            "PATH=/usr/bin:/bin",
+            "PYTHONHASHSEED=0",
+            "PYTHONNOUSERSITE=1",
+            "PYTHONDONTWRITEBYTECODE=1",
+            '"${repository_root}/ci/release/run_release_python.py"',
+            'run_release_python "${repository_root}/ci/release/'
+            'write_optimization_execution_evidence.py"',
+            'run_release_python "${repository_root}/ci/release/'
+            'check_optimization_evidence.py"',
+        ):
+            self.assertIn(marker, contents)
+        self.assertNotIn(
+            '/usr/bin/python3 "${repository_root}/ci/release/'
+            'check_optimization_evidence.py"',
+            contents,
+        )
 
 
 if __name__ == "__main__":

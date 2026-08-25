@@ -389,24 +389,36 @@ def _validate_executable_elf(contents: bytes, label: str) -> None:
         _fail(label, "does not contain an executable PT_LOAD segment")
 
 
-def _validate_summaries(text: str, label: str, *, minimum: int = 1) -> list[re.Match[str]]:
+def _validate_summaries(
+    text: str,
+    label: str,
+    *,
+    minimum: int = 1,
+    expected_process_failure_count: int = 0,
+) -> list[re.Match[str]]:
     summaries = list(TEST_SUMMARY_RE.finditer(text))
     if len(summaries) < minimum:
         _fail(label, "does not contain a complete Cargo test summary")
     for summary in summaries:
         if int(summary.group("failed")) != 0:
             _fail(label, "contains a failed Cargo test summary")
-    for marker in (
+    failure_markers = (
         "test result: FAILED",
         "fatal runtime error",
         "panicked at",
         "error: test failed",
-        "process didn't exit successfully",
         "SIGSEGV",
         "signal: 11",
-    ):
+    )
+    for marker in failure_markers:
         if marker in text:
             _fail(label, f"contains failing test-run marker {marker!r}")
+    process_marker = "process didn't exit successfully"
+    if text.count(process_marker) != expected_process_failure_count:
+        _fail(
+            label,
+            "contains an unexpected count of Cargo process-failure markers",
+        )
     return summaries
 
 
@@ -450,20 +462,33 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
     }
 
     compile_log = texts["cuda-compile-only"]
+    invalid_cuda_root_marker = (
+        "error: rustinfer-cuda native build failed: "
+        "CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda is not a directory"
+    )
     for marker in (
         "rustc 1.85.0",
         "cargo 1.85.0",
         "Cuda compilation tools, release 12.8, V12.8.93",
         "test native_symbols_link_without_device_initialization ... ok",
         "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)",
-        "error: rustinfer-cuda native build failed: CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda is not a directory",
+        invalid_cuda_root_marker,
         "artifact=target/release/rustinfer\n",
         "artifact=target/release/rustinfer-profile\n",
         "Python-free CUDA production/profile compile, C ABI link, tensor memory, version, and dependency smoke passed",
     ):
         if marker not in compile_log:
             _fail(LOG_FILES["cuda-compile-only"], f"missing reviewed marker {marker!r}")
-    _validate_summaries(compile_log, LOG_FILES["cuda-compile-only"])
+    _single_marker(
+        compile_log,
+        invalid_cuda_root_marker,
+        LOG_FILES["cuda-compile-only"],
+    )
+    _validate_summaries(
+        compile_log,
+        LOG_FILES["cuda-compile-only"],
+        expected_process_failure_count=1,
+    )
 
     workspace = texts["workspace-all-features-all-targets"]
     summaries = _validate_summaries(
