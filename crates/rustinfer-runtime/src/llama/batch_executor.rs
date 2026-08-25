@@ -409,6 +409,12 @@ impl PreparedLlamaBatchExecutor {
     /// `max_input_tokens` is the fixed dense GEMM row count M and must not
     /// exceed the model's maximum sequence length while this implementation
     /// reuses [`PreparedLlamaForward`]'s fixed-S plans.
+    ///
+    /// # Errors
+    ///
+    /// Returns a model/configuration, host allocation, CUDA preparation, weight
+    /// upload, or checked KV-layout error. No partially prepared owner is
+    /// returned.
     #[allow(clippy::too_many_lines)]
     pub fn prepare(
         model: &LoadedModel,
@@ -599,6 +605,12 @@ impl PreparedLlamaBatchExecutor {
     /// All host/model bounds are checked before the first device mutation.
     /// Packing, encoding, upload, execution, and output routing reuse cold
     /// storage and perform no host or device allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns for malformed or over-capacity metadata, invalid token/position
+    /// IDs, a poisoned owner, or any CUDA operation failure. Native execution
+    /// failures poison the owner because KV mutation may be partial.
     pub fn execute(
         &mut self,
         rows: &[LlamaBatchRow<'_>],
@@ -667,6 +679,11 @@ impl PreparedLlamaBatchExecutor {
     }
 
     /// Exact BF16 byte length of the most recently gathered `[O,V]` output.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the output shape cannot be represented as a host byte
+    /// length.
     pub fn output_byte_len(&self) -> LlamaBatchExecutorResult<usize> {
         let bytes = self
             .output_count
@@ -679,6 +696,12 @@ impl PreparedLlamaBatchExecutor {
     }
 
     /// Downloads only gathered sampled rows `[O,V]`, in dense output-slot order.
+    ///
+    /// # Errors
+    ///
+    /// Returns when execution has not produced output, the owner is poisoned,
+    /// the destination length differs from [`Self::output_byte_len`], or the
+    /// synchronous CUDA transfer fails.
     pub fn download_logits(
         &mut self,
         destination: &mut [u8],
@@ -721,6 +744,11 @@ impl PreparedLlamaBatchExecutor {
 
     /// Explicitly closes all extra batch allocations, then the reused forward.
     /// Every resource is attempted even after the first cleanup failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first CUDA cleanup failure after attempting every owned
+    /// device resource and the underlying prepared forward.
     #[allow(clippy::too_many_lines)]
     pub fn close(self) -> LlamaBatchExecutorResult<()> {
         let Self {
