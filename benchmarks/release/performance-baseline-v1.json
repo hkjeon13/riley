@@ -1,0 +1,64 @@
+{
+  "schema_version": "rustinfer.release-performance-baseline.v1",
+  "baseline_id": "pr15-command-batch-smollm2-c1-p128-o32-rtx4090-v1",
+  "accepted": true,
+  "measurement_binding": {
+    "git_commit": "1826d09fd28825582f22a2d49390f6ed047562ea",
+    "source_archive_sha256": "39ce9b9898defc9cbc3b0a346739d0743de3833e189f65434985b38606abb86d",
+    "binary_sha256": "60650fa3af1d8a761432672862d1c464db86f2080d1acd5d81dccc6d1f7c9be8",
+    "image_sha256": "fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
+    "correctness_report_sha256": "de5c7c1564290e2ea16cb05f24501f508fd84fd563b2527887ebd6b731bbce39",
+    "semantic_class": "E0"
+  },
+  "promotion_binding": {
+    "git_commit": "c6e1c9140753c34de27156a107e106a1672a82e3",
+    "source_archive_sha256": "913093e20a0564d8abbd3d4c13200ab8465d2759138eb4e73238209fdc3a5ad9"
+  },
+  "model": {
+    "model_id": "HuggingFaceTB/SmolLM2-135M",
+    "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bf16",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+  },
+  "environment": {
+    "environment_id": "server-4096-rtx4090-pr15-v1",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "compute_capability": "8.9",
+    "driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architecture": "89"
+  },
+  "workload": {
+    "workload_id": "smollm2-c1-p128-o32-greedy-v1",
+    "concurrency": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 32,
+    "warmups_per_run": 5,
+    "measured_iterations_per_run": 30,
+    "independent_runs": 5,
+    "sampling": "greedy",
+    "execution_completion": "iteration-batch",
+    "residual_rmsnorm": "separate"
+  },
+  "metrics": {
+    "ttft_p95_ms": 7.176,
+    "tpot_p95_ms": 8.883,
+    "e2e_median_ms": 281.699,
+    "throughput_median_output_tokens_per_second": 113.543
+  },
+  "thresholds": {
+    "ttft_p95_ratio_max": 1.05,
+    "tpot_p95_ratio_max": 1.05,
+    "e2e_median_ratio_max": 1.05,
+    "throughput_median_ratio_min": 0.95
+  },
+  "evidence": {
+    "pair_report_sha256": "804f6ee39d3aada4bfb8853eaa4772941b7dfc545c9def7816c9d711a894e060",
+    "root_sha256s_sha256": "f25393c891a78cfcf661e525192e1c24b2f472440221b49cc0820815acc22d20",
+    "evidence_index": "benchmarks/results/20260825T184555Z-rustinfer-profiling-pr15-run001/README.md",
+    "metric_precision_note": "Version-controlled metrics preserve the published PR15 evidence-index precision; thresholds are intentionally larger than measurement noise."
+  }
+}
