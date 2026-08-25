@@ -580,23 +580,23 @@ fn elapsed_event_ns(
     end: &CudaEvent,
     operation: &'static str,
 ) -> IterationAdapterResult<u64> {
-    let elapsed_ms = start
+    let device_milliseconds = start
         .elapsed_ms(end)
         .map_err(|source| IterationAdapterError::CudaTiming { operation, source })?;
-    if !elapsed_ms.is_finite() || elapsed_ms.is_sign_negative() {
+    if !device_milliseconds.is_finite() || device_milliseconds.is_sign_negative() {
         return Err(IterationAdapterError::InvalidRuntimeOutput {
             field: "CUDA event elapsed milliseconds",
             reason: "timing result must be finite and non-negative",
         });
     }
-    let elapsed_ns = f64::from(elapsed_ms) * 1_000_000.0;
-    if elapsed_ns >= 18_446_744_073_709_551_616.0 {
+    let converted_nanoseconds = f64::from(device_milliseconds) * 1_000_000.0;
+    if converted_nanoseconds >= 18_446_744_073_709_551_616.0 {
         return Err(IterationAdapterError::ArithmeticOverflow {
             field: "CUDA event elapsed nanoseconds",
         });
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let rounded_ns = elapsed_ns.round() as u64;
+    let rounded_ns = converted_nanoseconds.round() as u64;
     Ok(rounded_ns)
 }
 

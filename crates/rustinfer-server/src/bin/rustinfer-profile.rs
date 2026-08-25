@@ -195,6 +195,8 @@ struct Environment {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+// These names are part of the versioned native-profile JSON contract.
+#[allow(clippy::struct_field_names)]
 struct Workload {
     workload_id: String,
     model_id: String,
@@ -328,7 +330,7 @@ impl Options {
 
 enum Command {
     Help,
-    Run(Options),
+    Run(Box<Options>),
 }
 
 fn main() -> ExitCode {
@@ -337,7 +339,7 @@ fn main() -> ExitCode {
             print!("{USAGE}");
             ExitCode::SUCCESS
         }
-        Ok(Command::Run(options)) => match run_profile(options) {
+        Ok(Command::Run(options)) => match run_profile(*options) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
                 eprintln!("rustinfer-profile: {error}");
@@ -390,7 +392,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
     }
 
     let output = values.remove("--output").unwrap_or_else(|| "-".to_owned());
-    let role = parse_role(take_required(&mut values, "--role")?)?;
+    let role = parse_role(&take_required(&mut values, "--role")?)?;
     let git_dirty = match take_required(&mut values, "--git-dirty")?.as_str() {
         "false" => false,
         "true" => true,
@@ -410,7 +412,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
         prompts_path: PathBuf::from(take_required(&mut values, "--prompts")?),
         output_path: (output != "-").then(|| PathBuf::from(output)),
         role,
-        pair_index: parse_number(take_required(&mut values, "--pair-index")?, "--pair-index")?,
+        pair_index: parse_number(&take_required(&mut values, "--pair-index")?, "--pair-index")?,
         run_id: take_required(&mut values, "--run-id")?,
         recorded_at_utc: take_required(&mut values, "--recorded-at-utc")?,
         source: SourceProvenance {
@@ -431,13 +433,13 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
                 model: take_required(&mut values, "--gpu-model")?,
                 uuid: take_required(&mut values, "--gpu-uuid")?,
                 device_index: parse_number(
-                    take_required(&mut values, "--device-index")?,
+                    &take_required(&mut values, "--device-index")?,
                     "--device-index",
                 )?,
                 pci_bus_id: take_required(&mut values, "--gpu-pci-bus-id")?,
                 compute_capability: take_required(&mut values, "--gpu-compute-capability")?,
                 vram_bytes: parse_number(
-                    take_required(&mut values, "--gpu-vram-bytes")?,
+                    &take_required(&mut values, "--gpu-vram-bytes")?,
                     "--gpu-vram-bytes",
                 )?,
             },
@@ -445,14 +447,17 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
                 environment_id: take_required(&mut values, "--environment-id")?,
                 cpu_model: take_required(&mut values, "--cpu-model")?,
                 physical_core_count: parse_number(
-                    take_required(&mut values, "--physical-core-count")?,
+                    &take_required(&mut values, "--physical-core-count")?,
                     "--physical-core-count",
                 )?,
                 logical_core_count: parse_number(
-                    take_required(&mut values, "--logical-core-count")?,
+                    &take_required(&mut values, "--logical-core-count")?,
                     "--logical-core-count",
                 )?,
-                ram_bytes: parse_number(take_required(&mut values, "--ram-bytes")?, "--ram-bytes")?,
+                ram_bytes: parse_number(
+                    &take_required(&mut values, "--ram-bytes")?,
+                    "--ram-bytes",
+                )?,
                 os_release: take_required(&mut values, "--os-release")?,
                 kernel_release: take_required(&mut values, "--kernel-release")?,
                 architecture: take_required(&mut values, "--architecture")?,
@@ -473,20 +478,20 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
             tokenizer_sha256: take_required(&mut values, "--tokenizer-sha256")?,
             dtype: take_required(&mut values, "--dtype")?,
             concurrency: parse_number(
-                take_required(&mut values, "--concurrency")?,
+                &take_required(&mut values, "--concurrency")?,
                 "--concurrency",
             )?,
             prompt_tokens: parse_number(
-                take_required(&mut values, "--prompt-tokens")?,
+                &take_required(&mut values, "--prompt-tokens")?,
                 "--prompt-tokens",
             )?,
             output_tokens: parse_number(
-                take_required(&mut values, "--output-tokens")?,
+                &take_required(&mut values, "--output-tokens")?,
                 "--output-tokens",
             )?,
-            warmups: parse_number(take_required(&mut values, "--warmups")?, "--warmups")?,
+            warmups: parse_number(&take_required(&mut values, "--warmups")?, "--warmups")?,
             measured_iterations: parse_number(
-                take_required(&mut values, "--measured-iterations")?,
+                &take_required(&mut values, "--measured-iterations")?,
                 "--measured-iterations",
             )?,
             sampling_id: take_required(&mut values, "--sampling-id")?,
@@ -500,7 +505,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
         return Err("--pair-index must be in 1..=5".to_owned());
     }
     options.validate()?;
-    Ok(Command::Run(options))
+    Ok(Command::Run(Box::new(options)))
 }
 
 fn take_required(values: &mut BTreeMap<String, String>, flag: &str) -> Result<String, String> {
@@ -509,15 +514,15 @@ fn take_required(values: &mut BTreeMap<String, String>, flag: &str) -> Result<St
         .ok_or_else(|| format!("missing required option {flag}"))
 }
 
-fn parse_role(value: String) -> Result<Role, String> {
-    match value.as_str() {
+fn parse_role(value: &str) -> Result<Role, String> {
+    match value {
         "baseline" => Ok(Role::Baseline),
         "candidate" => Ok(Role::Candidate),
         _ => Err("--role requires baseline or candidate".to_owned()),
     }
 }
 
-fn parse_number<T>(value: String, flag: &str) -> Result<T, String>
+fn parse_number<T>(value: &str, flag: &str) -> Result<T, String>
 where
     T: std::str::FromStr,
 {
@@ -915,6 +920,8 @@ impl<T> Measurement<T> {
 }
 
 #[derive(Serialize)]
+// These names are part of the versioned native-profile JSON contract.
+#[allow(clippy::struct_field_names)]
 struct HostAggregate {
     plan_ns: Measurement<u64>,
     execute_ns: Measurement<u64>,

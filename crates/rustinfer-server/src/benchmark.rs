@@ -910,47 +910,32 @@ mod cuda_executor {
             let context = device
                 .create_context()
                 .map_err(|_| NativeBenchmarkError::Preparation)?;
-            let mut stream = match context.create_stream() {
-                Ok(stream) => stream,
-                Err(_) => {
-                    let _ = context.close();
-                    return Err(NativeBenchmarkError::Preparation);
-                }
+            let Ok(mut stream) = context.create_stream() else {
+                let _ = context.close();
+                return Err(NativeBenchmarkError::Preparation);
             };
-            let executor = match PreparedLlamaBatchExecutor::prepare(
-                &model,
-                &context,
-                &mut stream,
-                config.executor,
-            ) {
-                Ok(executor) => executor,
-                Err(_) => {
-                    let _ = stream.synchronize();
-                    let _ = stream.close();
-                    let _ = context.close();
-                    return Err(NativeBenchmarkError::Preparation);
-                }
+            let Ok(executor) =
+                PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, config.executor)
+            else {
+                let _ = stream.synchronize();
+                let _ = stream.close();
+                let _ = context.close();
+                return Err(NativeBenchmarkError::Preparation);
             };
-            let scheduler = match Scheduler::new(config.scheduler, executor.kv_layout()) {
-                Ok(scheduler) => scheduler,
-                Err(_) => {
-                    let _ = executor.close();
-                    let _ = stream.synchronize();
-                    let _ = stream.close();
-                    let _ = context.close();
-                    return Err(NativeBenchmarkError::Preparation);
-                }
+            let Ok(scheduler) = Scheduler::new(config.scheduler, executor.kv_layout()) else {
+                let _ = executor.close();
+                let _ = stream.synchronize();
+                let _ = stream.close();
+                let _ = context.close();
+                return Err(NativeBenchmarkError::Preparation);
             };
-            let timer = match LlamaIterationCudaTimer::prepare(&context) {
-                Ok(timer) => timer,
-                Err(_) => {
-                    let _ = scheduler.close(0, None);
-                    let _ = executor.close();
-                    let _ = stream.synchronize();
-                    let _ = stream.close();
-                    let _ = context.close();
-                    return Err(NativeBenchmarkError::Preparation);
-                }
+            let Ok(timer) = LlamaIterationCudaTimer::prepare(&context) else {
+                let _ = scheduler.close(0, None);
+                let _ = executor.close();
+                let _ = stream.synchronize();
+                let _ = stream.close();
+                let _ = context.close();
+                return Err(NativeBenchmarkError::Preparation);
             };
             let model_sequence_tokens = model.spec().max_sequence_length();
             Ok(Self {
@@ -1133,29 +1118,26 @@ mod cuda_executor {
                     }
                 };
                 let commit_started_ns = self.now_ns()?;
-                let updates = match self
+                let Ok(updates) = self
                     .scheduler_mut()?
                     .complete_iteration(&result, commit_started_ns)
-                {
-                    Ok(updates) => updates,
-                    Err(_) => {
-                        if self
-                            .scheduler
-                            .as_ref()
-                            .and_then(Scheduler::inflight_iteration_id)
-                            == Some(result.iteration_id())
-                        {
-                            let now_ns = self.now_ns()?;
-                            self.scheduler_mut()?
-                                .abort_iteration(
-                                    result.iteration_id(),
-                                    ExecutionAbort::DeviceQuiescedMutationUnknown,
-                                    now_ns,
-                                )
-                                .map_err(|_| NativeBenchmarkError::Commit)?;
-                        }
-                        return Err(NativeBenchmarkError::Commit);
+                else {
+                    if self
+                        .scheduler
+                        .as_ref()
+                        .and_then(Scheduler::inflight_iteration_id)
+                        == Some(result.iteration_id())
+                    {
+                        let now_ns = self.now_ns()?;
+                        self.scheduler_mut()?
+                            .abort_iteration(
+                                result.iteration_id(),
+                                ExecutionAbort::DeviceQuiescedMutationUnknown,
+                                now_ns,
+                            )
+                            .map_err(|_| NativeBenchmarkError::Commit)?;
                     }
+                    return Err(NativeBenchmarkError::Commit);
                 };
                 let commit_observed_ns = self.now_ns()?;
                 let metric = updates
