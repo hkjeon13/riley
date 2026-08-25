@@ -39,6 +39,11 @@ path = "tests/primitives_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "batch_gpu"
+path = "tests/batch_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "row_bias_gpu"
 path = "tests/row_bias_gpu.rs"
 required-features = ["cuda"]
