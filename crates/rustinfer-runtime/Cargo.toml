@@ -33,3 +33,13 @@ required-features = ["cuda"]
 name = "llama_forward_gpu"
 path = "tests/llama_forward_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "llama_decode_gpu"
+path = "tests/llama_decode_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "llama_generation_gpu"
+path = "tests/llama_generation_gpu.rs"
+required-features = ["cuda"]
