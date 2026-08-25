@@ -962,6 +962,36 @@ fn stream_completion(
             return;
         };
         match submitted.recv_timeout(wait) {
+            Ok(_) if stopping.load(Ordering::Acquire) => {
+                if client_disconnected(stream) {
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::ClientDisconnected,
+                        None,
+                        Some(ServiceErrorClass::Cancelled),
+                        None,
+                    );
+                    return;
+                }
+                let delivered =
+                    write_stream_error(stream, &mut encoder, &ApiError::ShuttingDown).is_ok();
+                tracker.finish(
+                    backend,
+                    if delivered {
+                        RequestObservationStatus::Failed
+                    } else {
+                        RequestObservationStatus::ClientDisconnected
+                    },
+                    None,
+                    Some(if delivered {
+                        ServiceErrorClass::ShuttingDown
+                    } else {
+                        ServiceErrorClass::Cancelled
+                    }),
+                    None,
+                );
+                return;
+            }
             Ok(event) => {
                 if matches!(event, GenerationEvent::TokenDelta { .. }) {
                     tracker.token_delta();
@@ -1123,6 +1153,35 @@ fn collect_completion(
             return;
         };
         match submitted.recv_timeout(wait) {
+            Ok(_) if stopping.load(Ordering::Acquire) => {
+                if client_disconnected(stream) {
+                    tracker.finish(
+                        backend,
+                        RequestObservationStatus::ClientDisconnected,
+                        None,
+                        Some(ServiceErrorClass::Cancelled),
+                        None,
+                    );
+                    return;
+                }
+                let delivered = write_api_error(stream, &ApiError::ShuttingDown).is_ok();
+                tracker.finish(
+                    backend,
+                    if delivered {
+                        RequestObservationStatus::Failed
+                    } else {
+                        RequestObservationStatus::ClientDisconnected
+                    },
+                    None,
+                    Some(if delivered {
+                        ServiceErrorClass::ShuttingDown
+                    } else {
+                        ServiceErrorClass::Cancelled
+                    }),
+                    None,
+                );
+                return;
+            }
             Ok(GenerationEvent::TokenDelta { text: delta }) => {
                 tracker.token_delta();
                 if tracker.delta_events % NON_STREAMING_PROBE_DELTA_INTERVAL == 0
@@ -1397,6 +1456,7 @@ mod tests {
     enum Script {
         Complete(Vec<String>),
         WaitForCancellation,
+        CancelOnShutdown,
         FloodUntilDisconnected,
         Reject(ServiceErrorClass),
     }
@@ -1436,6 +1496,7 @@ mod tests {
         waiting: AtomicUsize,
         next_id: AtomicU64,
         cancellation_count: Arc<AtomicUsize>,
+        shutdown_signal: Arc<AtomicBool>,
         shutdown_called: AtomicBool,
     }
 
@@ -1456,6 +1517,7 @@ mod tests {
                 waiting: AtomicUsize::new(0),
                 next_id: AtomicU64::new(1),
                 cancellation_count: Arc::new(AtomicUsize::new(0)),
+                shutdown_signal: Arc::new(AtomicBool::new(false)),
                 shutdown_called: AtomicBool::new(false),
             })
         }
@@ -1504,6 +1566,7 @@ mod tests {
                 Arc::new(TestCancellation::new(Arc::clone(&self.cancellation_count)));
             let worker_cancellation = Arc::clone(&cancellation);
             let active = Arc::clone(&self.active);
+            let shutdown_signal = Arc::clone(&self.shutdown_signal);
             active.fetch_add(1, Ordering::AcqRel);
             thread::spawn(move || {
                 match script {
@@ -1527,6 +1590,16 @@ mod tests {
                             thread::sleep(Duration::from_millis(2));
                         }
                     }
+                    Script::CancelOnShutdown => {
+                        while !shutdown_signal.load(Ordering::Acquire) {
+                            thread::sleep(Duration::from_millis(2));
+                        }
+                        let usage = TokenUsage::new(2, 0).expect("fixture usage");
+                        let _ = sender.send(GenerationEvent::Finished {
+                            reason: FinishReason::Cancelled,
+                            usage,
+                        });
+                    }
                     Script::FloodUntilDisconnected => {
                         let text = "x".repeat(4 * 1_024);
                         while !worker_cancellation.is_cancelled() {
@@ -1548,6 +1621,7 @@ mod tests {
 
         fn begin_shutdown(&self) {
             self.accepting.store(false, Ordering::Release);
+            self.shutdown_signal.store(true, Ordering::Release);
         }
 
         fn shutdown(&self, deadline: Instant) -> Result<(), ServiceErrorClass> {
@@ -2010,7 +2084,7 @@ mod tests {
 
     #[test]
     fn graceful_shutdown_stops_admission_cancels_active_and_joins() {
-        let backend = TestBackend::new([Script::WaitForCancellation]);
+        let backend = TestBackend::new([Script::CancelOnShutdown]);
         let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
         let server = start_server(test_config(), backend_trait).expect("start server");
         let address = server.local_address();

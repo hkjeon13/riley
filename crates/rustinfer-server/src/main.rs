@@ -433,8 +433,10 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         .map_err(|error| format!("inference engine startup failed: {error}"))?,
     );
 
-    let mut request_limits = RequestLimits::default();
-    request_limits.max_output_tokens = max_output_tokens;
+    let request_limits = RequestLimits {
+        max_output_tokens,
+        ..RequestLimits::default()
+    };
     let server_config = ServerConfig {
         bind_address,
         request_limits,
