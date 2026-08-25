@@ -108,10 +108,10 @@ fn qwen_load_limits() -> TestResult<LoadLimits> {
 }
 
 fn exact_qwen_decode_config() -> PreparedLlamaDecodeConfig {
-    // The optimized online decoder is a tolerance-tested performance path,
-    // not a bit-exact oracle for the staged-BF16 eager attention golden. Keep
-    // the exact-token compatibility gate on the explicit reference policy.
-    PreparedLlamaDecodeConfig::default()
+    // The optimized online attention backends are tolerance-tested performance
+    // paths, not bit-exact oracles for the staged-BF16 eager attention golden.
+    // Keep both prefill and decode on the explicit reference policy here.
+    PreparedLlamaDecodeConfig::new(PreparedLlamaForwardConfig::default().with_reference_attention())
         .with_paged_kv_cache()
         .with_reference_decode_attention()
 }
