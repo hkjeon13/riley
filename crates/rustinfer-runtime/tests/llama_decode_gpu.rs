@@ -27,6 +27,15 @@ const LONG_PARITY_DECODE_CALLS: usize = 128;
 const PR01_E0_V2_FINAL_LOGITS_COSINE_MIN: f64 = 0.997_903_530_549_539_3;
 const PR01_E0_V2_FINAL_LOGITS_MAX_ABS_MAX: f64 = 5.852_936_458_587_647;
 const PR01_E0_V2_FINAL_LOGITS_MEAN_ABS_MAX: f64 = 1.151_280_319_263_363;
+// PR01's immutable limits compare one BF16 candidate with the FP32 oracle. PR09
+// compares two BF16 execution paths, so its compatibility envelope is the
+// pairwise closure of those one-sided limits: angular and absolute-error
+// triangle inequalities give cos(2 * acos(c)) = 2*c^2-1 and twice each
+// absolute-error bound. This is not an FP32-oracle recertification.
+const PR09_PAIRWISE_LOGITS_COSINE_MIN: f64 =
+    2.0 * PR01_E0_V2_FINAL_LOGITS_COSINE_MIN * PR01_E0_V2_FINAL_LOGITS_COSINE_MIN - 1.0;
+const PR09_PAIRWISE_LOGITS_MAX_ABS_MAX: f64 = 2.0 * PR01_E0_V2_FINAL_LOGITS_MAX_ABS_MAX;
+const PR09_PAIRWISE_LOGITS_MEAN_ABS_MAX: f64 = 2.0 * PR01_E0_V2_FINAL_LOGITS_MEAN_ABS_MAX;
 const REFERENCE_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.materialized-gqa-decode.bf16";
 const OPTIMIZED_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64";
 
@@ -154,19 +163,19 @@ fn top1(bytes: &[u8]) -> usize {
     best_index
 }
 
-fn assert_e0_logits(label: &str, actual: &[u8], expected: &[u8]) -> NumericMetrics {
+fn assert_pairwise_logits(label: &str, actual: &[u8], expected: &[u8]) -> NumericMetrics {
     let metrics = numeric_metrics(actual, expected);
     assert!(
-        metrics.cosine >= PR01_E0_V2_FINAL_LOGITS_COSINE_MIN,
-        "{label} cosine failed the immutable PR01 E0 v2 gate: {metrics:?}"
+        metrics.cosine >= PR09_PAIRWISE_LOGITS_COSINE_MIN,
+        "{label} cosine failed the PR01 E0 v2 derived pairwise envelope: {metrics:?}"
     );
     assert!(
-        metrics.max_abs <= PR01_E0_V2_FINAL_LOGITS_MAX_ABS_MAX,
-        "{label} max abs failed the immutable PR01 E0 v2 gate: {metrics:?}"
+        metrics.max_abs <= PR09_PAIRWISE_LOGITS_MAX_ABS_MAX,
+        "{label} max abs failed the PR01 E0 v2 derived pairwise envelope: {metrics:?}"
     );
     assert!(
-        metrics.mean_abs <= PR01_E0_V2_FINAL_LOGITS_MEAN_ABS_MAX,
-        "{label} mean abs failed the immutable PR01 E0 v2 gate: {metrics:?}"
+        metrics.mean_abs <= PR09_PAIRWISE_LOGITS_MEAN_ABS_MAX,
+        "{label} mean abs failed the PR01 E0 v2 derived pairwise envelope: {metrics:?}"
     );
     assert_eq!(top1(actual), top1(expected), "{label} top-1 token");
     metrics
@@ -493,7 +502,7 @@ same_shape_cache_free=true byte_exact=true cached_top1={} cache_free_top1={}",
         let full_end = full_start + cached.row_bytes;
         let cached_logits = &cached.logits[cached_start..cached_end];
         let cache_free_logits = &cache_free[full_start..full_end];
-        let metrics = assert_e0_logits(
+        let metrics = assert_pairwise_logits(
             &format!("cache-on/cache-off causal row {causal_row}"),
             cached_logits,
             cache_free_logits,
@@ -501,7 +510,8 @@ same_shape_cache_free=true byte_exact=true cached_top1={} cache_free_top1={}",
         println!(
             "pr09-llama-cache-parity schema_version=1 implementation_id={} decode_calls_target={} \
 causal_row={} full_forward_row={} cosine={:.12} max_abs={:.9} mean_abs={:.9} \
-cached_top1={} cache_free_top1={} immutable_gate=smollm2-fp32-bf16-native-e0-v2-final-logits-3metric",
+cached_top1={} cache_free_top1={} gate=pr01-e0-v2-derived-pairwise-envelope \
+oracle_recertification=false",
             cached.implementation_id,
             decode_calls,
             causal_row,
@@ -567,7 +577,7 @@ fn pinned_smollm2_reference_and_optimized_decode_preserve_logits_and_top1() -> T
     for row in 0..=2 {
         let start = row * reference.row_bytes;
         let end = start + reference.row_bytes;
-        let metrics = assert_e0_logits(
+        let metrics = assert_pairwise_logits(
             &format!("optimized/reference decode row {row}"),
             &optimized.logits[start..end],
             &reference.logits[start..end],
