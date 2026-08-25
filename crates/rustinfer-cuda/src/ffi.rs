@@ -46,7 +46,9 @@ const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
 const ROPE_PARAMS_SIZE: u32 = 288;
+const INDEXED_ROPE_PARAMS_SIZE: u32 = 320;
 const CAST_PARAMS_SIZE: u32 = 152;
+const ROW_GATHER_PARAMS_SIZE: u32 = 208;
 const QK_GQA_PARAMS_SIZE: u32 = 216;
 const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
 const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
@@ -60,6 +62,9 @@ const PAGED_KV_BLOCK_TABLE_V1_SIZE: u32 = 168;
 const PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 432;
 const PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 480;
 const PAGED_DECODE_ATTENTION_PARAMS_SIZE: u32 = 488;
+const PACKED_BATCH_V1_SIZE: u32 = 320;
+const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
+const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 
@@ -73,6 +78,7 @@ pub(super) const PREFILL_MASK_CAUSAL: u32 = 1;
 pub(super) const PREFILL_MASK_CAUSAL_LOCAL: u32 = 2;
 pub(super) const DECODE_REDUCTION_LOGICAL_ASCENDING: u32 = 1;
 pub(super) const DECODE_REDUCTION_LOGICAL_DESCENDING: u32 = 2;
+pub(super) const PACKED_BATCH_VERSION: u32 = 1;
 
 const GEMM_TRANSPOSE_N: u32 = 0;
 const GEMM_TRANSPOSE_T: u32 = 1;
@@ -351,6 +357,23 @@ struct RawRopeParams {
 }
 
 #[repr(C)]
+struct RawIndexedRopeParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    cos: RawBufferSpan,
+    sin: RawBufferSpan,
+    positions: RawBufferSpan,
+    output: RawBufferSpan,
+    active_row_count: u64,
+    head_count: u64,
+    head_size: u64,
+    rotary_dimension: u64,
+    table_position_count: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
 struct RawCastParams {
     struct_size: u32,
     reserved0: u32,
@@ -358,6 +381,19 @@ struct RawCastParams {
     output: RawBufferSpan,
     element_count: u64,
     reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawRowGatherParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    row_indices: RawBufferSpan,
+    output: RawBufferSpan,
+    input_row_count: u64,
+    output_row_count: u64,
+    column_count: u64,
+    reserved: [u64; 4],
 }
 
 #[repr(C)]
@@ -567,6 +603,57 @@ struct RawPagedDecodeAttentionParams {
     partial_state_capacity: u64,
     scale: f32,
     reduction_order: u32,
+    reserved: [u64; 4],
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+struct RawPackedBatchV1 {
+    struct_size: u32,
+    format_version: u32,
+    sequence_block_offsets: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    row_sequence_slots: RawBufferSpan,
+    row_positions: RawBufferSpan,
+    sequence_count: u64,
+    block_count: u64,
+    active_row_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    reserved0: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawRaggedPagedKvCacheWriteParams {
+    struct_size: u32,
+    reserved0: u32,
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    batch: RawPackedBatchV1,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawRaggedPagedAttentionParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: RawPackedBatchV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    scale: f32,
+    reserved1: u32,
     reserved: [u64; 4],
 }
 
@@ -871,8 +958,18 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_indexed_rope_execute(
+        params: *const RawIndexedRopeParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_cast_execute(
         params: *const RawCastParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_row_gather_execute(
+        params: *const RawRowGatherParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -933,6 +1030,16 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_paged_decode_attention_execute(
         params: *const RawPagedDecodeAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_ragged_paged_kv_cache_write_execute(
+        params: *const RawRaggedPagedKvCacheWriteParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_ragged_paged_attention_execute(
+        params: *const RawRaggedPagedAttentionParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1823,6 +1930,42 @@ pub(super) fn rope_execute(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn indexed_rope_execute(
+    input: RawBufferSpan,
+    cos: RawBufferSpan,
+    sin: RawBufferSpan,
+    positions: RawBufferSpan,
+    output: RawBufferSpan,
+    active_row_count: u64,
+    head_count: u64,
+    head_size: u64,
+    rotary_dimension: u64,
+    table_position_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawIndexedRopeParams {
+        struct_size: INDEXED_ROPE_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        cos,
+        sin,
+        positions,
+        output,
+        active_row_count,
+        head_count,
+        head_size,
+        rotary_dimension,
+        table_position_count,
+        reserved: [0; 4],
+    };
+    primitive_status("execute CUDA indexed RoPE", stream, |stream, error| {
+        // SAFETY: params and every borrowed opaque resource remain live for
+        // the synchronously completing native operation.
+        unsafe { rustinfer_cuda_indexed_rope_execute(&params, stream, error) }
+    })
+}
+
 pub(super) fn cast_execute(
     input: RawBufferSpan,
     output: RawBufferSpan,
@@ -1841,6 +1984,34 @@ pub(super) fn cast_execute(
         // SAFETY: params and the borrowed opaque resources outlive the
         // synchronously completing native operation.
         unsafe { rustinfer_cuda_cast_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn row_gather_execute(
+    input: RawBufferSpan,
+    row_indices: RawBufferSpan,
+    output: RawBufferSpan,
+    input_row_count: u64,
+    output_row_count: u64,
+    column_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRowGatherParams {
+        struct_size: ROW_GATHER_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        row_indices,
+        output,
+        input_row_count,
+        output_row_count,
+        column_count,
+        reserved: [0; 4],
+    };
+    primitive_status("execute CUDA row gather", stream, |stream, error| {
+        // SAFETY: params and every borrowed opaque resource remain live for
+        // the synchronously completing native operation.
+        unsafe { rustinfer_cuda_row_gather_execute(&params, stream, error) }
     })
 }
 
@@ -2346,6 +2517,114 @@ pub(super) fn paged_decode_attention_execute(
     )
 }
 
+#[derive(Clone, Copy)]
+pub(super) struct PackedBatchRawV1 {
+    pub(super) sequence_block_offsets: RawBufferSpan,
+    pub(super) block_ids: RawBufferSpan,
+    pub(super) valid_tokens: RawBufferSpan,
+    pub(super) row_sequence_slots: RawBufferSpan,
+    pub(super) row_positions: RawBufferSpan,
+    pub(super) sequence_count: u64,
+    pub(super) block_count: u64,
+    pub(super) active_row_count: u64,
+    pub(super) physical_block_count: u64,
+    pub(super) block_size: u32,
+}
+
+fn raw_packed_batch_v1(batch: PackedBatchRawV1) -> RawPackedBatchV1 {
+    RawPackedBatchV1 {
+        struct_size: PACKED_BATCH_V1_SIZE,
+        format_version: PACKED_BATCH_VERSION,
+        sequence_block_offsets: batch.sequence_block_offsets,
+        block_ids: batch.block_ids,
+        valid_tokens: batch.valid_tokens,
+        row_sequence_slots: batch.row_sequence_slots,
+        row_positions: batch.row_positions,
+        sequence_count: batch.sequence_count,
+        block_count: batch.block_count,
+        active_row_count: batch.active_row_count,
+        physical_block_count: batch.physical_block_count,
+        block_size: batch.block_size,
+        reserved0: 0,
+        reserved: [0; 4],
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn ragged_paged_kv_cache_write_execute(
+    key_source: RawBufferSpan,
+    value_source: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    batch: PackedBatchRawV1,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRaggedPagedKvCacheWriteParams {
+        struct_size: RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE,
+        reserved0: 0,
+        key_source,
+        value_source,
+        key_pool,
+        value_pool,
+        batch: raw_packed_batch_v1(batch),
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "write CUDA ragged paged KV cache",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and all exclusively borrowed
+            // buffers remain live through synchronous completion.
+            unsafe { rustinfer_cuda_ragged_paged_kv_cache_write_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn ragged_paged_attention_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: PackedBatchRawV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRaggedPagedAttentionParams {
+        struct_size: RAGGED_PAGED_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        output,
+        batch: raw_packed_batch_v1(batch),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        output_row_count,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA ragged paged attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and all exclusively
+            // borrowed buffers remain live through synchronous completion.
+            unsafe { rustinfer_cuda_ragged_paged_attention_execute(&params, stream, error) }
+        },
+    )
+}
+
 /// Runs the existing staged-BF16 primitives for every dense batch while
 /// reusing one `[QH,S,S]` score/probability workspace.
 #[allow(clippy::too_many_arguments)]
@@ -2799,7 +3078,14 @@ const _: () = assert!(size_of::<RawSiluParams>() == 152);
 const _: () = assert!(size_of::<RawGatedMultiplyParams>() == 200);
 const _: () = assert!(size_of::<RawRopeParams>() == 288);
 const _: () = assert!(offset_of!(RawRopeParams, position_offset) == 240);
+const _: () = assert!(size_of::<RawIndexedRopeParams>() == 320);
+const _: () = assert!(offset_of!(RawIndexedRopeParams, input) == 8);
+const _: () = assert!(offset_of!(RawIndexedRopeParams, active_row_count) == 248);
+const _: () = assert!(offset_of!(RawIndexedRopeParams, reserved) == 288);
 const _: () = assert!(size_of::<RawCastParams>() == 152);
+const _: () = assert!(size_of::<RawRowGatherParams>() == 208);
+const _: () = assert!(offset_of!(RawRowGatherParams, input_row_count) == 152);
+const _: () = assert!(offset_of!(RawRowGatherParams, reserved) == 176);
 const _: () = assert!(size_of::<RawQkGqaParams>() == 216);
 const _: () = assert!(offset_of!(RawQkGqaParams, token_count) == 152);
 const _: () = assert!(offset_of!(RawQkGqaParams, reserved) == 184);
@@ -2855,6 +3141,20 @@ const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, block_table) == 
 const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, query_head_count) == 416);
 const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, scale) == 448);
 const _: () = assert!(offset_of!(RawPagedDecodeAttentionParams, reserved) == 456);
+const _: () = assert!(size_of::<RawPackedBatchV1>() == 320);
+const _: () = assert!(offset_of!(RawPackedBatchV1, sequence_block_offsets) == 8);
+const _: () = assert!(offset_of!(RawPackedBatchV1, sequence_count) == 248);
+const _: () = assert!(offset_of!(RawPackedBatchV1, reserved) == 288);
+const _: () = assert!(size_of::<RawRaggedPagedKvCacheWriteParams>() == 568);
+const _: () = assert!(offset_of!(RawRaggedPagedKvCacheWriteParams, batch) == 200);
+const _: () = assert!(offset_of!(RawRaggedPagedKvCacheWriteParams, key_value_head_count) == 520);
+const _: () = assert!(offset_of!(RawRaggedPagedKvCacheWriteParams, reserved) == 536);
+const _: () = assert!(size_of::<RawRaggedPagedAttentionParams>() == 592);
+const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, batch) == 200);
+const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, query_head_count) == 520);
+const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, output_row_count) == 544);
+const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, scale) == 552);
+const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, reserved) == 560);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);

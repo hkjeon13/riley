@@ -5,6 +5,7 @@
 //! remain confined to the private FFI module.
 
 mod attention;
+mod batch;
 mod decode;
 mod error;
 #[cfg(feature = "cuda")]
@@ -19,6 +20,11 @@ mod runtime;
 pub use attention::{
     AvGqaParams, CausalSoftmaxInPlaceParams, QkGqaParams, ScaleCausalMaskInPlaceParams, av_gqa,
     causal_softmax_in_place, qk_gqa, scale_causal_mask_in_place,
+};
+pub use batch::{
+    IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE, PACKED_BATCH_VERSION, PackedBatchHostV1,
+    PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, RowGatherParams,
+    indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write, row_gather,
 };
 pub use decode::{
     DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,
