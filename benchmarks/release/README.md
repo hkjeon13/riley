@@ -58,3 +58,6 @@ exclusive and is never overwritten.
 This baseline makes no claim for other GPUs, drivers/toolkits, models,
 concurrency, or sequence lengths. Such a change needs a separately reviewed
 baseline rather than relaxing this checker.
+
+The independent real-model clean-runtime release gate and its remote-only
+execution contract are documented in [PYTHON_FREE_E2E.md](PYTHON_FREE_E2E.md).
