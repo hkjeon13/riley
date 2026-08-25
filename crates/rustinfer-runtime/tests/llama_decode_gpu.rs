@@ -274,7 +274,8 @@ device_ordinal={} compute_capability={}.{} prompt_length={} maximum_length={} \
 decode_calls={} workspace_bytes={} materialized_score_bytes={} partial_state_bytes={} \
 partial_state_capacity={} tokens_per_partition={} kv_cache_bytes={} rope_table_bytes={} \
 decode_gemm_workspace_bytes={} total_device_bytes={} device_allocation_count={} \
-timing_boundary=decode_plus_stream_synchronize sampling=greedy_test_harness",
+timing_boundary=decode_call_plus_event_synchronize native_completion=per_primitive_stream_synchronize \
+sampling=greedy_test_harness",
         trace.implementation_id(),
         trace.implementation_version(),
         trace.native_dependency(),
@@ -329,7 +330,7 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
     let mut consumed_tokens = Vec::with_capacity(decode_calls);
     let mut wall_latencies_ns = Vec::with_capacity(decode_calls);
     let mut gpu_stream_latencies_ns = Vec::with_capacity(decode_calls);
-    let mut cpu_enqueue_latencies_ns = Vec::with_capacity(decode_calls);
+    let mut decode_call_return_latencies_ns = Vec::with_capacity(decode_calls);
     let mut host_outside_event_latencies_ns = Vec::with_capacity(decode_calls);
     let mut decode_start_event = context.create_event()?;
     let mut decode_end_event = context.create_event()?;
@@ -344,9 +345,10 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
         let logical_before = decode.logical_length();
         let wall_started = Instant::now();
         decode_start_event.record(stream)?;
-        let enqueue_started = Instant::now();
+        let decode_call_started = Instant::now();
         decode.decode(token_id, stream)?;
-        let cpu_enqueue_latency_ns = u64::try_from(enqueue_started.elapsed().as_nanos())?;
+        let decode_call_return_latency_ns =
+            u64::try_from(decode_call_started.elapsed().as_nanos())?;
         decode_end_event.record(stream)?;
         decode_end_event.synchronize()?;
         let wall_latency_ns = u64::try_from(wall_started.elapsed().as_nanos())?;
@@ -357,7 +359,7 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
         let host_outside_event_latency_ns = wall_latency_ns.saturating_sub(gpu_stream_latency_ns);
         wall_latencies_ns.push(wall_latency_ns);
         gpu_stream_latencies_ns.push(gpu_stream_latency_ns);
-        cpu_enqueue_latencies_ns.push(cpu_enqueue_latency_ns);
+        decode_call_return_latencies_ns.push(decode_call_return_latency_ns);
         host_outside_event_latencies_ns.push(host_outside_event_latency_ns);
         let next_start = current_end;
         let next_end = next_start + row_bytes;
@@ -373,8 +375,9 @@ latency_ns={} timing_boundary=prefill_cache_write_plus_stream_synchronize",
         println!(
             "pr09-llama-decode-raw schema_version=1 implementation_id={} decode_call={} \
 logical_before={} logical_after={} token_id={} latency_ns={} gpu_stream_elapsed_ns={} \
-cpu_enqueue_ns={} host_outside_event_ns={} \
-timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=true",
+decode_call_return_ns={} host_outside_event_ns={} \
+timing_boundary=decode_call_plus_event_synchronize native_completion=per_primitive_stream_synchronize \
+logits_download_excluded=true",
             trace.implementation_id(),
             decode_call + 1,
             logical_before,
@@ -382,7 +385,7 @@ timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=t
             token_id,
             wall_latency_ns,
             gpu_stream_latency_ns,
-            cpu_enqueue_latency_ns,
+            decode_call_return_latency_ns,
             host_outside_event_latency_ns,
         );
     }
@@ -392,22 +395,23 @@ timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=t
     if !wall_latencies_ns.is_empty() {
         wall_latencies_ns.sort_unstable();
         gpu_stream_latencies_ns.sort_unstable();
-        cpu_enqueue_latencies_ns.sort_unstable();
+        decode_call_return_latencies_ns.sort_unstable();
         host_outside_event_latencies_ns.sort_unstable();
         println!(
             "pr09-llama-decode-summary schema_version=1 implementation_id={} samples={} \
 median_ns={} p95_ns={} median_gpu_stream_elapsed_ns={} p95_gpu_stream_elapsed_ns={} \
-median_cpu_enqueue_ns={} p95_cpu_enqueue_ns={} median_host_outside_event_ns={} \
+median_decode_call_return_ns={} p95_decode_call_return_ns={} median_host_outside_event_ns={} \
 p95_host_outside_event_ns={} first_logical_length={} final_logical_length={} \
-timing_boundary=decode_enqueue_plus_event_synchronize logits_download_excluded=true",
+timing_boundary=decode_call_plus_event_synchronize native_completion=per_primitive_stream_synchronize \
+logits_download_excluded=true",
             trace.implementation_id(),
             wall_latencies_ns.len(),
             percentile_nearest_rank(&wall_latencies_ns, 50),
             percentile_nearest_rank(&wall_latencies_ns, 95),
             percentile_nearest_rank(&gpu_stream_latencies_ns, 50),
             percentile_nearest_rank(&gpu_stream_latencies_ns, 95),
-            percentile_nearest_rank(&cpu_enqueue_latencies_ns, 50),
-            percentile_nearest_rank(&cpu_enqueue_latencies_ns, 95),
+            percentile_nearest_rank(&decode_call_return_latencies_ns, 50),
+            percentile_nearest_rank(&decode_call_return_latencies_ns, 95),
             percentile_nearest_rank(&host_outside_event_latencies_ns, 50),
             percentile_nearest_rank(&host_outside_event_latencies_ns, 95),
             prompt.len(),
