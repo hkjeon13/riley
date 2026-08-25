@@ -1,0 +1,206 @@
+{
+  "artifact_kind": "rustinfer-pr12-qwen2-compatibility-evidence",
+  "created_at_utc": "2026-08-25T12:33:33Z",
+  "schema_id": "rustinfer.pr12.qwen2-compatibility-evidence.v1",
+  "status": "passed",
+  "benchmark_scope": "functional-validation",
+  "scope_note": "Reference correctness, cross-family reuse, lifecycle, sanitizer, and regression evidence; no performance claim.",
+  "semantic_class": "reference",
+  "source": {
+    "branch": "codex/pr-12-qwen-compatibility",
+    "git_dirty": false,
+    "git_revision": "842b1cdc68b46bc32ed2e72041c91e62c6e25fc7",
+    "source_tar_bytes": 29633370,
+    "source_tar_sha256": "cc3cd6afeb59d3303cb682b8ab1435a36675d6bfd2b5bcc7eff9569e89076a70"
+  },
+  "environment": {
+    "host": "server-4096",
+    "host_kernel": "Linux 6.8.0-138-generic x86_64",
+    "container_network": "disabled",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_mib": 24564,
+    "compute_capability": "8.9",
+    "nvidia_driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architectures": "89",
+    "rustc_version": "1.85.0",
+    "cargo_version": "1.85.0"
+  },
+  "model": {
+    "id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+    "source_architecture": "Qwen2ForCausalLM",
+    "dtype": "bfloat16",
+    "batch_size": 1,
+    "layer_count": 24,
+    "hidden_size": 896,
+    "intermediate_size": 4864,
+    "query_heads": 14,
+    "key_value_heads": 2,
+    "head_dimension": 64,
+    "vocabulary_size": 151936,
+    "addressable_token_count": 151665,
+    "padded_token_count": 271,
+    "maximum_sequence_length": 32768,
+    "logical_weight_bindings": 291,
+    "tied_lm_head": true
+  },
+  "checkpoint": {
+    "files": [
+      {
+        "path": "config.json",
+        "size_bytes": 659,
+        "sha256": "18e18afcaccafade98daf13a54092927904649e1dd4eba8299ab717d5d94ff45"
+      },
+      {
+        "path": "tokenizer.json",
+        "size_bytes": 7031645,
+        "sha256": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "size_bytes": 7305,
+        "sha256": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583"
+      },
+      {
+        "path": "model.safetensors",
+        "size_bytes": 988097824,
+        "sha256": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe"
+      }
+    ]
+  },
+  "compatibility_contract": {
+    "canonical_execution_topology": "shared dense Llama/Qwen decoder modules",
+    "family_adapter_boundary": "config, tokenizer, chat template, and weight mapping",
+    "semantic_parameters": [
+      "optional attention projection bias",
+      "query and key-value head counts",
+      "head dimension",
+      "normalization epsilon",
+      "RoPE theta",
+      "activation and MLP dimensions",
+      "tied token embedding and LM head",
+      "addressable tokenizer domain"
+    ],
+    "hot_path_model_name_branch": false,
+    "unsupported_variants_fail_closed": [
+      "sliding-window attention",
+      "scaled or multi-axis RoPE",
+      "Qwen MoE",
+      "Qwen VL",
+      "Qwen3",
+      "quantized checkpoint",
+      "remote code"
+    ]
+  },
+  "oracle": {
+    "fixture_schema": "rustinfer-qwen2-compat-v1",
+    "fixture_sha256": "42cc7f3fd04098bc4d70836ee9d18dbf919f158a010da3da6fdaa3d9deeceab7",
+    "producer": "Hugging Face Transformers 5.15.1",
+    "producer_attention": "eager",
+    "producer_dtype": "bfloat16",
+    "runtime_prefill_policy": "general materialized reference attention selected explicitly",
+    "runtime_decode_policy": "general reference decode attention selected explicitly",
+    "kv_cache_policy": "paged",
+    "selection_is_model_name_branch": false,
+    "optimized_path_class": "E0 tolerance and performance path; not the exact eager oracle"
+  },
+  "golden": {
+    "case_names": ["english", "korean", "code"],
+    "case_count": 3,
+    "prompt_token_counts": [40, 46, 30],
+    "generated_tokens_per_case": 8,
+    "direct_decode_exact": true,
+    "generation_adapter_exact": true,
+    "fixture_cache_on_off_exact": true,
+    "runtime_cached_exact": true,
+    "raw_top1_exact": true,
+    "raw_top10_token_set_exact": true,
+    "raw_sparse_logit_max_abs_tolerance": 5.852936458587647,
+    "raw_probe_count_per_case": 9,
+    "greedy_rng_draws": 0,
+    "addressable_tail_masked": true
+  },
+  "gemm": {
+    "workspace_cap_bytes": 16777216,
+    "validated_shape_count": 20,
+    "qwen_down_projection": {
+      "m": [1, 30, 40, 46],
+      "n": 896,
+      "k": 4864
+    },
+    "deterministic_candidates": true,
+    "split_k": false
+  },
+  "row_bias": {
+    "dtype": "bfloat16",
+    "operation": "in-place row bias",
+    "gpu_tests_passed": 2,
+    "validates_odd_and_boundary_shapes": true,
+    "validates_nan_and_infinity": true,
+    "validates_overflow_capacity_and_context_ownership": true,
+    "memcheck_errors": 0,
+    "memcheck_leaked_bytes": 0,
+    "racecheck_hazards": 0,
+    "racecheck_errors": 0,
+    "racecheck_warnings": 0
+  },
+  "cross_family": {
+    "load_order": ["HuggingFaceTB/SmolLM2-135M", "Qwen/Qwen2.5-0.5B-Instruct"],
+    "executed_each": true,
+    "cuda_allocation_zero_after_each_close": true
+  },
+  "smollm2_regression": {
+    "generation_cases": 31,
+    "generation_exact": true,
+    "reference_forward_golden": "passed",
+    "online_prefill_golden": "passed",
+    "online_prefill_byte_determinism_runs": 100,
+    "online_prefill_byte_determinism": true
+  },
+  "validation": {
+    "remote_strict_clippy_all_features": "passed",
+    "remote_workspace_all_targets_all_features": "184 passed, 0 failed, 55 ignored",
+    "remote_workspace_doctests_all_features": "13 passed, 0 failed",
+    "remote_qwen_loading": "3 passed",
+    "remote_row_bias_gpu": "2 passed",
+    "remote_gemm": "20 shapes passed including Qwen M=1/30/40/46 at 16 MiB",
+    "remote_qwen_gpu_parity": "3 cases x 8 tokens direct decode and generation exact",
+    "remote_cross_model_owner": "passed; allocation accounting zero after each close",
+    "remote_smollm2_generation": "31 cases exact",
+    "remote_smollm2_reference_forward": "passed",
+    "remote_smollm2_online_prefill": "golden and 100-run byte determinism passed",
+    "remote_row_bias_memcheck": "0 errors, 0 leaked bytes",
+    "remote_row_bias_racecheck": "0 hazards, 0 errors, 0 warnings"
+  },
+  "provenance": {
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr12/842b1cd/full",
+    "remote_payload_lines": 24,
+    "remote_regular_file_count_including_checksum": 25,
+    "remote_regular_file_bytes": 29707038,
+    "remote_root_apparent_bytes": 29711134,
+    "remote_checksum_file": "SHA256SUMS",
+    "remote_sha256sums_sha256": "863090e529e8f4a860ce1fad4008f56915f2097aef132044aa9305b284717b63",
+    "diagnostic_roots": ["cb70581", "a6004d6", "243b3ff"],
+    "diagnostics_authoritative": false,
+    "raw_metadata": [
+      "GPU, compute capability, driver, and memory query",
+      "container image and CUDA runtime",
+      "host kernel and Rust/Cargo/nvcc toolchains",
+      "checkpoint and golden SHA-256 values",
+      "source revision and exact source archive SHA-256",
+      "normalized offline container commands"
+    ]
+  },
+  "limitations": [
+    "This is reference functional validation and makes no latency, throughput, or performance-improvement claim.",
+    "Exact Qwen parity explicitly selects the general reference prefill and decode policies; optimized attention remains an E0 tolerance/performance path.",
+    "Single-request batch-one execution only; scheduler and continuous batching are outside PR12.",
+    "Only the pinned dense Qwen2.5 revision is covered; VL, MoE, Qwen3, quantization, remote code, and sliding attention are excluded.",
+    "Runtime CUDA allocation accounting is not process peak VRAM.",
+    "GPU compatibility was validated only on sm89 with the recorded driver, toolkit, checkpoint, and fixture."
+  ]
+}
