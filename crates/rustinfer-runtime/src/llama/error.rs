@@ -42,6 +42,8 @@ pub enum LlamaOp {
     RaggedPagedAttention,
     /// Select sampled rows from the fixed-width language-model head output.
     OutputGather,
+    /// Begin or finish the completion boundary for one fixed-graph iteration.
+    IterationCompletion,
     /// Attention output projection.
     OutputProjection,
     /// Post-attention residual addition.
@@ -88,6 +90,7 @@ impl LlamaOp {
             Self::BatchMetadataUpload => "batch_metadata_upload",
             Self::RaggedPagedAttention => "ragged_paged_attention",
             Self::OutputGather => "output_gather",
+            Self::IterationCompletion => "iteration_completion",
             Self::OutputProjection => "output_projection",
             Self::AttentionResidual => "attention_residual",
             Self::PostAttentionNorm => "post_attention_norm",

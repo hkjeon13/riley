@@ -20,8 +20,8 @@ pub use batch::{
 
 #[cfg(feature = "cuda")]
 pub use batch_executor::{
-    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
-    PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
+    ExecutionCompletionImplementation, LlamaBatchExecutorError, LlamaBatchExecutorResource,
+    LlamaBatchExecutorResult, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
     PreparedLlamaBatchExecutorConfig, ResidualNormImplementation,
 };
 
@@ -66,7 +66,8 @@ pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
 mod source_contract_tests {
     use super::batch::LlamaBatchMetadataConfig;
     use super::batch_executor::{
-        PreparedLlamaBatchExecutorConfig, ResidualNormImplementation, normalize_prepared_config,
+        ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
+        ResidualNormImplementation, normalize_prepared_config,
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
@@ -102,6 +103,43 @@ mod source_contract_tests {
         assert_eq!(
             normalized.residual_norm_implementation(),
             ResidualNormImplementation::Fused
+        );
+        assert_eq!(
+            normalized.forward().attention_preference(),
+            AttentionPreference::Optimized
+        );
+    }
+
+    #[test]
+    fn batch_prepare_normalization_preserves_iteration_completion_selection() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid bounds");
+        let defaults =
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
+        assert_eq!(
+            defaults.execution_completion_implementation(),
+            ExecutionCompletionImplementation::PerOperation
+        );
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            metadata,
+            PreparedLlamaForwardConfig::default().with_reference_attention(),
+        )
+        .with_iteration_batch_completion()
+        .with_fused_residual_norm();
+
+        let normalized = normalize_prepared_config(config);
+        assert_eq!(
+            normalized.execution_completion_implementation(),
+            ExecutionCompletionImplementation::IterationBatch
+        );
+        assert_eq!(
+            normalized.residual_norm_implementation(),
+            ResidualNormImplementation::Fused
+        );
+        assert_eq!(
+            normalized
+                .with_per_operation_completion()
+                .execution_completion_implementation(),
+            ExecutionCompletionImplementation::PerOperation
         );
         assert_eq!(
             normalized.forward().attention_preference(),
@@ -277,5 +315,39 @@ mod source_contract_tests {
                 "batch hot execute source omits required tensor-batch contract {required:?}"
             );
         }
+    }
+
+    #[test]
+    fn iteration_completion_guard_wraps_only_the_fixed_graph_and_output_gather() {
+        let source = include_str!("batch_executor.rs");
+        let begin = source
+            .find("// HOT_BATCH_EXECUTE_BEGIN")
+            .expect("batch hot execute begin marker");
+        let end = source
+            .find("// HOT_BATCH_EXECUTE_END")
+            .expect("batch hot execute end marker");
+        let hot = &source[begin..end];
+
+        let metadata_upload = hot
+            .find("let batch = PackedBatchV1::new(")
+            .expect("metadata is bound before execution");
+        let command_begin = hot
+            .find("let mut command_batch = stream")
+            .expect("iteration completion begins explicitly");
+        let body_result = hot
+            .find("let body_result = execute_iteration_body(command_batch.stream_mut());")
+            .expect("iteration body uses the guarded stream");
+        let command_finish = hot
+            .find("let completion_result = command_batch")
+            .expect("iteration completion finishes explicitly");
+
+        assert!(metadata_upload < command_begin);
+        assert!(command_begin < body_result);
+        assert!(body_result < command_finish);
+        assert!(
+            hot[body_result..command_finish].contains("command_batch.stream_mut()"),
+            "body errors must be retained without skipping command-batch finish"
+        );
+        assert!(hot.contains("LlamaOp::IterationCompletion"));
     }
 }

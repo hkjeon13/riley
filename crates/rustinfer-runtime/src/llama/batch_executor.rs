@@ -249,12 +249,23 @@ pub enum ResidualNormImplementation {
     Fused,
 }
 
+/// Completion boundary selected for one fixed-graph batch iteration.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum ExecutionCompletionImplementation {
+    /// Preserve the established primitive-local completion boundary.
+    #[default]
+    PerOperation,
+    /// Submit the fixed graph and optional output gather under one completion guard.
+    IterationBatch,
+}
+
 /// Cold bounds for one reusable fixed-M continuous-batch owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PreparedLlamaBatchExecutorConfig {
     metadata: LlamaBatchMetadataConfig,
     forward: PreparedLlamaForwardConfig,
     residual_norm: ResidualNormImplementation,
+    execution_completion: ExecutionCompletionImplementation,
 }
 
 impl PreparedLlamaBatchExecutorConfig {
@@ -267,6 +278,7 @@ impl PreparedLlamaBatchExecutorConfig {
             metadata,
             forward,
             residual_norm: ResidualNormImplementation::Separate,
+            execution_completion: ExecutionCompletionImplementation::PerOperation,
         }
     }
 
@@ -297,6 +309,25 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn residual_norm_implementation(self) -> ResidualNormImplementation {
         self.residual_norm
+    }
+
+    /// Selects the established primitive-local completion boundary.
+    #[must_use]
+    pub const fn with_per_operation_completion(mut self) -> Self {
+        self.execution_completion = ExecutionCompletionImplementation::PerOperation;
+        self
+    }
+
+    /// Selects one completion boundary for the fixed graph and output gather.
+    #[must_use]
+    pub const fn with_iteration_batch_completion(mut self) -> Self {
+        self.execution_completion = ExecutionCompletionImplementation::IterationBatch;
+        self
+    }
+
+    #[must_use]
+    pub const fn execution_completion_implementation(self) -> ExecutionCompletionImplementation {
+        self.execution_completion
     }
 }
 
@@ -922,6 +953,7 @@ pub(super) const fn normalize_prepared_config(
         metadata: config.metadata,
         forward: config.forward.with_optimized_attention(),
         residual_norm: config.residual_norm,
+        execution_completion: config.execution_completion,
     }
 }
 
@@ -1066,70 +1098,90 @@ fn execute_packed(
     )
     .map_err(|source| batch_cuda(metadata_site, source))?;
 
-    execute_fixed_graph(
-        forward,
-        config.residual_norm,
-        layout,
-        key_cache,
-        value_cache,
-        rope_cos,
-        rope_sin,
-        batch,
-        packed.position_ids(),
-        stream,
-    )?;
-
-    if packed.output_count() != 0 {
-        let output_indices = device.output_token_indices.as_ref().ok_or(
-            LlamaBatchExecutorError::InvalidConfiguration {
-                field: "output_token_indices",
-                reason: "non-empty output has no cold-prepared device index buffer",
-            },
+    let mut execute_iteration_body = |stream: &mut CudaStream| -> LlamaBatchExecutorResult<()> {
+        execute_fixed_graph(
+            forward,
+            config.residual_norm,
+            layout,
+            key_cache,
+            value_cache,
+            rope_cos,
+            rope_sin,
+            batch,
+            packed.position_ids(),
+            stream,
         )?;
-        let output =
-            gathered_logits
-                .as_mut()
-                .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "gathered_logits",
-                    reason: "non-empty output has no cold-prepared device buffer",
-                })?;
-        let site = ExecutionSite::global(LlamaOp::OutputGather);
-        let mut params = RowGatherParams {
-            input: span(
-                &forward.buffers.logits,
-                CudaDType::BF16,
-                forward.plan.workspace_spec().logits_bytes(),
-                site,
-            )?,
-            row_indices: device_span(
-                output_indices,
-                CudaDType::U32,
-                packed.output_count() * U32_BYTES,
-                site,
-            )?,
-            row_indices_host: packed.output_token_indices(),
-            output: CudaBufferSpanMut::new(
-                output,
-                CudaDType::BF16,
-                0,
-                output_logits_bytes(
-                    packed.output_count(),
-                    forward.plan.dimensions().vocabulary_size(),
+
+        if packed.output_count() != 0 {
+            let output_indices = device.output_token_indices.as_ref().ok_or(
+                LlamaBatchExecutorError::InvalidConfiguration {
+                    field: "output_token_indices",
+                    reason: "non-empty output has no cold-prepared device index buffer",
+                },
+            )?;
+            let output =
+                gathered_logits
+                    .as_mut()
+                    .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
+                        field: "gathered_logits",
+                        reason: "non-empty output has no cold-prepared device buffer",
+                    })?;
+            let site = ExecutionSite::global(LlamaOp::OutputGather);
+            let mut params = RowGatherParams {
+                input: span(
+                    &forward.buffers.logits,
+                    CudaDType::BF16,
+                    forward.plan.workspace_spec().logits_bytes(),
+                    site,
                 )?,
-            )
-            .map_err(|source| batch_cuda(site, source))?,
-            input_row_count: usize_u64(
-                bounds.max_input_tokens(),
-                LlamaBatchExecutorResource::GatheredLogits,
-            )?,
-            column_count: usize_u64(
-                forward.plan.dimensions().vocabulary_size(),
-                LlamaBatchExecutorResource::GatheredLogits,
-            )?,
-        };
-        row_gather(&mut params, stream).map_err(|source| batch_cuda(site, source))?;
+                row_indices: device_span(
+                    output_indices,
+                    CudaDType::U32,
+                    packed.output_count() * U32_BYTES,
+                    site,
+                )?,
+                row_indices_host: packed.output_token_indices(),
+                output: CudaBufferSpanMut::new(
+                    output,
+                    CudaDType::BF16,
+                    0,
+                    output_logits_bytes(
+                        packed.output_count(),
+                        forward.plan.dimensions().vocabulary_size(),
+                    )?,
+                )
+                .map_err(|source| batch_cuda(site, source))?,
+                input_row_count: usize_u64(
+                    bounds.max_input_tokens(),
+                    LlamaBatchExecutorResource::GatheredLogits,
+                )?,
+                column_count: usize_u64(
+                    forward.plan.dimensions().vocabulary_size(),
+                    LlamaBatchExecutorResource::GatheredLogits,
+                )?,
+            };
+            row_gather(&mut params, stream).map_err(|source| batch_cuda(site, source))?;
+        }
+        Ok(())
+    };
+
+    match config.execution_completion {
+        ExecutionCompletionImplementation::PerOperation => execute_iteration_body(stream),
+        ExecutionCompletionImplementation::IterationBatch => {
+            let completion_site = ExecutionSite::global(LlamaOp::IterationCompletion);
+            let mut command_batch = stream
+                .begin_command_batch()
+                .map_err(|source| batch_cuda(completion_site, source))?;
+            let body_result = execute_iteration_body(command_batch.stream_mut());
+            let completion_result = command_batch
+                .finish()
+                .map_err(|source| batch_cuda(completion_site, source));
+            match completion_result {
+                Err(error) => Err(error),
+                Ok(()) => body_result,
+            }
+        }
     }
-    Ok(())
 }
 
 #[allow(
