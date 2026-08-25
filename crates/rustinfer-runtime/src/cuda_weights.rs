@@ -331,7 +331,6 @@ impl CudaUploadedWeights {
         let dtype = match tensor.dtype {
             CudaDType::BF16 => DType::BF16,
             CudaDType::F32 => DType::F32,
-            CudaDType::U8 | CudaDType::U32 => return None,
             _ => return None,
         };
         Some(PhysicalWeightMetadata {
