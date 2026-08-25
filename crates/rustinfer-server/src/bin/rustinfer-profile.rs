@@ -265,24 +265,7 @@ impl Options {
         }
     }
 
-    fn validate(&self) -> Result<(), String> {
-        validate_id("--run-id", &self.run_id)?;
-        validate_rfc3339_utc(&self.recorded_at_utc)?;
-        validate_git_commit(&self.source.git_commit)?;
-        if self.source.git_dirty {
-            return Err("--git-dirty must be false for source-bound evidence".to_owned());
-        }
-        validate_sha256("--executable-sha256", &self.source.executable_sha256)?;
-        validate_id("--implementation-id", &self.source.implementation_id)?;
-        validate_id("--runtime-flag-name", &self.source.runtime_flag.name)?;
-        if self.source.semantic_class != "E0" {
-            return Err("--semantic-class must be E0".to_owned());
-        }
-        validate_id("--correctness-gate-id", &self.source.correctness_gate_id)?;
-        validate_sha256(
-            "--correctness-report-sha256",
-            &self.source.correctness_report_sha256,
-        )?;
+    fn validate_runtime_binding(&self) -> Result<(), String> {
         let runtime_selection = self.runtime_selection()?;
         let expected_correctness_gate = match runtime_selection {
             RuntimeSelection::ResidualRmsNorm(_) => RESIDUAL_RMSNORM_CORRECTNESS_GATE,
@@ -303,15 +286,34 @@ impl Options {
                 Role::Candidate,
                 RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused)
                 | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
-            ) => {}
-            _ => {
-                return Err(
-                    "runtime flag must bind baseline/candidate to separate/fused or \
-                     per-operation/iteration-batch"
-                        .to_owned(),
-                );
-            }
+            ) => Ok(()),
+            _ => Err(
+                "runtime flag must bind baseline/candidate to separate/fused or \
+                 per-operation/iteration-batch"
+                    .to_owned(),
+            ),
         }
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        validate_id("--run-id", &self.run_id)?;
+        validate_rfc3339_utc(&self.recorded_at_utc)?;
+        validate_git_commit(&self.source.git_commit)?;
+        if self.source.git_dirty {
+            return Err("--git-dirty must be false for source-bound evidence".to_owned());
+        }
+        validate_sha256("--executable-sha256", &self.source.executable_sha256)?;
+        validate_id("--implementation-id", &self.source.implementation_id)?;
+        validate_id("--runtime-flag-name", &self.source.runtime_flag.name)?;
+        if self.source.semantic_class != "E0" {
+            return Err("--semantic-class must be E0".to_owned());
+        }
+        validate_id("--correctness-gate-id", &self.source.correctness_gate_id)?;
+        validate_sha256(
+            "--correctness-report-sha256",
+            &self.source.correctness_report_sha256,
+        )?;
+        self.validate_runtime_binding()?;
 
         validate_nonempty_environment(&self.environment)?;
         validate_id("--environment-id", &self.environment.host.environment_id)?;
