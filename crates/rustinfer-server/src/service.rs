@@ -13,7 +13,7 @@ use std::error;
 use std::fmt;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -25,6 +25,7 @@ use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
     RequestMetadata, ServiceErrorClass,
 };
+use crate::engine::EngineMetricsSnapshot;
 use crate::http::{
     HttpLimits, HttpMethod, HttpReadError, HttpRequest, read_request, write_response,
     write_sse_head,
@@ -99,6 +100,51 @@ struct ObservationState {
     dropped: u64,
 }
 
+#[derive(Debug, Default)]
+struct ServiceMetrics {
+    cancellations: AtomicU64,
+    disconnects: AtomicU64,
+    overloads: AtomicU64,
+}
+
+impl ServiceMetrics {
+    fn record_overload(&self) {
+        let _ = self
+            .overloads
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                value.checked_add(1)
+            });
+    }
+
+    fn record_terminal(
+        &self,
+        status: RequestObservationStatus,
+        error_class: Option<ServiceErrorClass>,
+    ) {
+        if status == RequestObservationStatus::ClientDisconnected {
+            let _ = self
+                .disconnects
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                    value.checked_add(1)
+                });
+        }
+        if matches!(
+            error_class,
+            Some(
+                ServiceErrorClass::Cancelled
+                    | ServiceErrorClass::Timeout
+                    | ServiceErrorClass::ShuttingDown
+            )
+        ) {
+            let _ = self
+                .cancellations
+                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |value| {
+                    value.checked_add(1)
+                });
+        }
+    }
+}
+
 impl ObservationBuffer {
     fn try_new(capacity: usize) -> Result<Self, ServerStartError> {
         let mut entries = VecDeque::new();
@@ -138,6 +184,13 @@ impl ObservationBuffer {
             dropped_observations: state.dropped,
         }
     }
+
+    fn dropped(&self) -> u64 {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .dropped
+    }
 }
 
 /// Cancellation operation attached to one admitted generation request.
@@ -166,6 +219,17 @@ pub trait CompletionBackend: Send + Sync {
 
     /// Returns a non-blocking readiness and load snapshot.
     fn status(&self) -> BackendStatus;
+
+    /// Returns a bounded operational snapshot without exposing request text.
+    /// Backends without scheduler or native allocation state return empty
+    /// optional fields in the snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable class when a consistent snapshot cannot be produced.
+    fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, ServiceErrorClass> {
+        Ok(EngineMetricsSnapshot::default())
+    }
 
     /// Admits a normalized request and returns its bounded event stream.
     ///
@@ -449,6 +513,7 @@ pub struct ServerHandle {
     worker_threads: Vec<JoinHandle<()>>,
     connections: Arc<ConnectionRegistry>,
     observations: Arc<ObservationBuffer>,
+    metrics: Arc<ServiceMetrics>,
     joined: bool,
 }
 
@@ -563,6 +628,16 @@ impl ServerHandle {
     #[must_use]
     pub fn observations(&self) -> ObservationSnapshot {
         self.observations.snapshot()
+    }
+
+    /// Returns the same sanitized, fixed-shape snapshot exposed at `/metrics`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable class if the backend worker cannot produce a
+    /// consistent point-in-time snapshot.
+    pub fn metrics_snapshot(&self) -> Result<OperationalMetricsSnapshot, ServiceErrorClass> {
+        operational_metrics(self.backend.as_ref(), &self.metrics, &self.observations)
     }
 
     /// Begins graceful shutdown, joins every service thread, then drains the
@@ -724,6 +799,7 @@ pub fn start_server(
         mpsc::sync_channel::<ConnectionJob>(config.connection_queue_capacity);
     let connection_receiver = Arc::new(Mutex::new(connection_receiver));
     let observations = Arc::new(ObservationBuffer::try_new(config.observation_capacity)?);
+    let metrics = Arc::new(ServiceMetrics::default());
 
     let mut worker_threads = Vec::new();
     worker_threads
@@ -736,6 +812,7 @@ pub fn start_server(
         let worker_backend = Arc::clone(&backend);
         let worker_stopping = Arc::clone(&stopping);
         let worker_observations = Arc::clone(&observations);
+        let worker_metrics = Arc::clone(&metrics);
         let worker_connections = Arc::clone(&connections);
         worker_threads.push(
             thread::Builder::new()
@@ -747,6 +824,7 @@ pub fn start_server(
                         &worker_stopping,
                         &worker_connections,
                         &worker_observations,
+                        &worker_metrics,
                         config,
                     );
                 })?,
@@ -755,6 +833,7 @@ pub fn start_server(
 
     let listener_stopping = Arc::clone(&stopping);
     let listener_connections = Arc::clone(&connections);
+    let listener_metrics = Arc::clone(&metrics);
     let listener_thread = thread::Builder::new()
         .name("rustinfer-listener".to_owned())
         .spawn(move || {
@@ -763,6 +842,7 @@ pub fn start_server(
                 &connection_sender,
                 &listener_stopping,
                 &listener_connections,
+                &listener_metrics,
                 config.write_timeout,
             );
         })?;
@@ -776,6 +856,7 @@ pub fn start_server(
         worker_threads,
         connections,
         observations,
+        metrics,
         joined: false,
     })
 }
@@ -785,6 +866,7 @@ fn listener_loop(
     sender: &SyncSender<ConnectionJob>,
     stopping: &AtomicBool,
     connections: &ConnectionRegistry,
+    metrics: &ServiceMetrics,
     write_timeout: Duration,
 ) {
     while !stopping.load(Ordering::Acquire) {
@@ -801,6 +883,7 @@ fn listener_loop(
                 }
                 let _ = stream.set_nodelay(true);
                 let Ok(registry_slot) = connections.register(&stream) else {
+                    metrics.record_overload();
                     let _ = write_api_error(&mut stream, &ApiError::Overloaded);
                     let _ = stream.shutdown(Shutdown::Both);
                     continue;
@@ -811,6 +894,7 @@ fn listener_loop(
                 }) {
                     Ok(()) => {}
                     Err(TrySendError::Full(mut job)) => {
+                        metrics.record_overload();
                         connections.unregister(job.registry_slot);
                         let _ = write_api_error(&mut job.stream, &ApiError::Overloaded);
                         let _ = job.stream.shutdown(Shutdown::Both);
@@ -838,6 +922,7 @@ fn worker_loop(
     stopping: &AtomicBool,
     connections: &ConnectionRegistry,
     observations: &Arc<ObservationBuffer>,
+    metrics: &Arc<ServiceMetrics>,
     config: ServerConfig,
 ) {
     loop {
@@ -851,15 +936,15 @@ fn worker_loop(
                     let _ = write_api_error(&mut job.stream, &ApiError::ShuttingDown);
                     let _ = job.stream.shutdown(Shutdown::Both);
                 } else {
-                    handle_connection(
-                        &mut job.stream,
+                    let context = ConnectionContext {
                         backend,
                         stopping,
                         connections,
-                        job.registry_slot,
                         observations,
+                        metrics,
                         config,
-                    );
+                    };
+                    handle_connection(&mut job.stream, job.registry_slot, &context);
                     let _ = job.stream.shutdown(Shutdown::Both);
                 }
                 connections.unregister(job.registry_slot);
@@ -870,31 +955,38 @@ fn worker_loop(
     }
 }
 
+struct ConnectionContext<'a> {
+    backend: &'a dyn CompletionBackend,
+    stopping: &'a AtomicBool,
+    connections: &'a ConnectionRegistry,
+    observations: &'a Arc<ObservationBuffer>,
+    metrics: &'a Arc<ServiceMetrics>,
+    config: ServerConfig,
+}
+
 fn handle_connection(
     stream: &mut TcpStream,
-    backend: &dyn CompletionBackend,
-    stopping: &AtomicBool,
-    connections: &ConnectionRegistry,
     registry_slot: usize,
-    observations: &Arc<ObservationBuffer>,
-    config: ServerConfig,
+    context: &ConnectionContext<'_>,
 ) {
-    if stream.set_read_timeout(Some(config.read_timeout)).is_err()
+    if stream
+        .set_read_timeout(Some(context.config.read_timeout))
+        .is_err()
         || stream
-            .set_write_timeout(Some(config.write_timeout))
+            .set_write_timeout(Some(context.config.write_timeout))
             .is_err()
     {
         return;
     }
     let framing_deadline = Instant::now()
-        .checked_add(config.framing_timeout)
+        .checked_add(context.config.framing_timeout)
         .unwrap_or_else(Instant::now);
     let mut reader = FramingReader {
         stream,
-        inactivity_timeout: config.read_timeout,
+        inactivity_timeout: context.config.read_timeout,
         deadline: framing_deadline,
     };
-    let request = match read_request(&mut reader, config.http_limits) {
+    let request = match read_request(&mut reader, context.config.http_limits) {
         Ok(request) => request,
         Err(error) => {
             if !is_peer_gone(&error) {
@@ -903,8 +995,16 @@ fn handle_connection(
             return;
         }
     };
-    connections.mark_serving(registry_slot);
-    route_request(stream, backend, stopping, observations, config, &request);
+    context.connections.mark_serving(registry_slot);
+    route_request(
+        stream,
+        context.backend,
+        context.stopping,
+        context.observations,
+        context.metrics,
+        context.config,
+        &request,
+    );
 }
 
 struct FramingReader<'a> {
@@ -936,6 +1036,7 @@ fn route_request(
     backend: &dyn CompletionBackend,
     stopping: &AtomicBool,
     observations: &Arc<ObservationBuffer>,
+    metrics: &Arc<ServiceMetrics>,
     config: ServerConfig,
     request: &HttpRequest,
 ) {
@@ -943,6 +1044,9 @@ fn route_request(
     match (request.method(), path) {
         (HttpMethod::Get, "/healthz") => write_health(stream, backend.status(), false),
         (HttpMethod::Get, "/readyz") => write_health(stream, backend.status(), true),
+        (HttpMethod::Get, "/metrics") => {
+            write_operational_metrics(stream, backend, metrics, observations);
+        }
         (HttpMethod::Get, "/v1/models") => write_model_list(stream, backend),
         (HttpMethod::Get, path) if path.starts_with("/v1/models/") => {
             write_model(stream, backend, &path["/v1/models/".len()..]);
@@ -953,12 +1057,13 @@ fn route_request(
                 backend,
                 stopping,
                 observations,
+                metrics,
                 config,
                 request.body(),
             );
         }
         (HttpMethod::Get, "/v1/completions")
-        | (HttpMethod::Post, "/healthz" | "/readyz" | "/v1/models") => {
+        | (HttpMethod::Post, "/healthz" | "/readyz" | "/metrics" | "/v1/models") => {
             let _ = write_public_error(
                 stream,
                 405,
@@ -980,6 +1085,103 @@ struct HealthResponse {
     accepting: bool,
     active_requests: usize,
     waiting_requests: usize,
+}
+
+/// Native live-allocation gauges in the operational metrics response.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct OperationalAllocationMetrics {
+    /// Number of live CUDA device allocations.
+    pub device_live_count: u64,
+    /// Bytes retained by live CUDA device allocations.
+    pub device_live_bytes: u64,
+    /// Number of live pinned-host allocations.
+    pub pinned_live_count: u64,
+    /// Bytes retained by live pinned-host allocations.
+    pub pinned_live_bytes: u64,
+}
+
+/// Monotonic service counters in the operational metrics response.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct OperationalCounters {
+    /// Cancellation terminals observed by the scheduler or transport.
+    pub cancellations: u64,
+    /// Client disconnect terminals observed by the service.
+    pub disconnects: u64,
+    /// Requests or connections rejected at bounded overload boundaries.
+    pub overloads: u64,
+    /// Observation samples evicted from the fixed-capacity ring.
+    pub dropped_samples: u64,
+}
+
+/// Fixed, prompt-free JSON contract used by release and soak gates.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct OperationalMetricsSnapshot {
+    /// Requests currently admitted to backend ownership.
+    pub active_requests: u64,
+    /// Requests waiting in bounded admission state.
+    pub waiting_requests: u64,
+    /// Physical KV blocks currently allocated.
+    pub kv_allocated_blocks: u64,
+    /// Native allocation gauges.
+    pub allocation: OperationalAllocationMetrics,
+    /// Monotonic service counters.
+    pub counters: OperationalCounters,
+}
+
+fn operational_metrics(
+    backend: &dyn CompletionBackend,
+    metrics: &ServiceMetrics,
+    observations: &ObservationBuffer,
+) -> Result<OperationalMetricsSnapshot, ServiceErrorClass> {
+    let status = backend.status();
+    let backend_metrics = backend.metrics_snapshot()?;
+    let scheduler_cancellations = backend_metrics
+        .scheduler
+        .map_or(0, |snapshot| snapshot.requests_cancelled);
+    let kv_allocated_blocks = backend_metrics.scheduler.map_or(0, |snapshot| {
+        u64::try_from(snapshot.gauges.allocated_kv_blocks).unwrap_or(u64::MAX)
+    });
+    let allocation = backend_metrics.allocation.unwrap_or_default();
+    Ok(OperationalMetricsSnapshot {
+        active_requests: u64::try_from(status.active_requests).unwrap_or(u64::MAX),
+        waiting_requests: u64::try_from(status.waiting_requests).unwrap_or(u64::MAX),
+        kv_allocated_blocks,
+        allocation: OperationalAllocationMetrics {
+            device_live_count: allocation.device_live_allocations,
+            device_live_bytes: allocation.device_live_bytes,
+            pinned_live_count: allocation.pinned_host_live_allocations,
+            pinned_live_bytes: allocation.pinned_host_live_bytes,
+        },
+        counters: OperationalCounters {
+            cancellations: scheduler_cancellations
+                .max(metrics.cancellations.load(Ordering::Acquire)),
+            disconnects: metrics.disconnects.load(Ordering::Acquire),
+            overloads: metrics.overloads.load(Ordering::Acquire),
+            dropped_samples: observations.dropped(),
+        },
+    })
+}
+
+fn write_operational_metrics(
+    stream: &mut TcpStream,
+    backend: &dyn CompletionBackend,
+    metrics: &ServiceMetrics,
+    observations: &ObservationBuffer,
+) {
+    match operational_metrics(backend, metrics, observations) {
+        Ok(snapshot) => {
+            let _ = write_json(stream, 200, &snapshot);
+        }
+        Err(_) => {
+            let _ = write_public_error(
+                stream,
+                503,
+                "metrics_unavailable",
+                "operational metrics are temporarily unavailable",
+                None,
+            );
+        }
+    }
 }
 
 fn write_health(stream: &mut TcpStream, backend: BackendStatus, readiness: bool) {
@@ -1020,6 +1222,7 @@ fn handle_completion(
     backend: &dyn CompletionBackend,
     stopping: &AtomicBool,
     observations: &Arc<ObservationBuffer>,
+    metrics: &Arc<ServiceMetrics>,
     config: ServerConfig,
     body: &[u8],
 ) {
@@ -1081,6 +1284,9 @@ fn handle_completion(
     let submitted = match backend.submit(request) {
         Ok(submitted) => submitted,
         Err(class) => {
+            if class == ServiceErrorClass::Overloaded {
+                metrics.record_overload();
+            }
             let _ = write_api_error(stream, &ApiError::from(class));
             return;
         }
@@ -1090,6 +1296,7 @@ fn handle_completion(
         submitted.metadata().clone(),
         queue_wait,
         Arc::clone(observations),
+        Arc::clone(metrics),
     );
     let deadline = Instant::now()
         .checked_add(config.request_timeout)
@@ -1116,6 +1323,7 @@ struct RequestTracker {
     time_to_first_token: Option<Duration>,
     delta_events: u64,
     observations: Arc<ObservationBuffer>,
+    metrics: Arc<ServiceMetrics>,
 }
 
 impl RequestTracker {
@@ -1123,6 +1331,7 @@ impl RequestTracker {
         metadata: RequestMetadata,
         queue_wait: Duration,
         observations: Arc<ObservationBuffer>,
+        metrics: Arc<ServiceMetrics>,
     ) -> Self {
         Self {
             metadata,
@@ -1131,6 +1340,7 @@ impl RequestTracker {
             time_to_first_token: None,
             delta_events: 0,
             observations,
+            metrics,
         }
     }
 
@@ -1150,6 +1360,7 @@ impl RequestTracker {
         tokens_generated: Option<u64>,
     ) {
         let backend_status = backend.status();
+        self.metrics.record_terminal(status, error_class);
         self.observations.record(RequestObservation {
             request_id: self.metadata.request_id,
             model_id: self.metadata.model_id,
@@ -1698,9 +1909,9 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        BackendStatus, CompletionBackend, ObservationBuffer, RequestCancellation,
-        RequestObservation, RequestObservationStatus, ServerConfig, ServerShutdownError,
-        SubmittedRequest, start_server,
+        BackendStatus, CompletionBackend, ObservationBuffer, OperationalMetricsSnapshot,
+        RequestCancellation, RequestObservation, RequestObservationStatus, ServerConfig,
+        ServerShutdownError, SubmittedRequest, start_server,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
@@ -2083,6 +2294,41 @@ mod tests {
             b"GET /readyz HTTP/1.1\r\nHost: localhost\r\n\r\n",
         );
         assert_eq!(response_status(&readiness), 200);
+        let metrics = send_request(
+            server.local_address(),
+            b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&metrics), 200);
+        let metrics_json: Value =
+            serde_json::from_slice(response_body(&metrics)).expect("metrics JSON");
+        assert_eq!(
+            metrics_json
+                .as_object()
+                .expect("metrics object")
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            [
+                "active_requests",
+                "allocation",
+                "counters",
+                "kv_allocated_blocks",
+                "waiting_requests",
+            ]
+            .into_iter()
+            .collect()
+        );
+        assert_eq!(metrics_json["active_requests"], 0);
+        assert_eq!(metrics_json["waiting_requests"], 0);
+        assert_eq!(metrics_json["kv_allocated_blocks"], 0);
+        assert_eq!(metrics_json["allocation"]["device_live_count"], 0);
+        assert_eq!(metrics_json["allocation"]["device_live_bytes"], 0);
+        assert_eq!(metrics_json["allocation"]["pinned_live_count"], 0);
+        assert_eq!(metrics_json["allocation"]["pinned_live_bytes"], 0);
+        assert_eq!(
+            server.metrics_snapshot().expect("snapshot"),
+            OperationalMetricsSnapshot::default()
+        );
         let models = send_request(
             server.local_address(),
             b"GET /v1/models HTTP/1.1\r\nHost: localhost\r\n\r\n",
@@ -2230,6 +2476,14 @@ mod tests {
             statuses.push(response_status(&response));
         }
         assert!(statuses.contains(&429));
+        assert!(
+            server
+                .metrics_snapshot()
+                .expect("operational metrics")
+                .counters
+                .overloads
+                >= 2
+        );
         drop(first);
         drop(second);
         server.shutdown().expect("graceful shutdown");
@@ -2409,6 +2663,9 @@ mod tests {
         assert!(observations.observations.iter().any(|observation| {
             observation.status == RequestObservationStatus::ClientDisconnected
         }));
+        let metrics = server.metrics_snapshot().expect("operational metrics");
+        assert!(metrics.counters.cancellations >= 4);
+        assert!(metrics.counters.disconnects >= 3);
         server.shutdown().expect("graceful shutdown");
     }
 

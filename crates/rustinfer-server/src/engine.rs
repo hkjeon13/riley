@@ -17,6 +17,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use rustinfer_scheduler::SchedulerMetricsSnapshot;
+
 use crate::domain::{
     GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata, ServiceErrorClass,
 };
@@ -292,6 +294,16 @@ pub trait EngineBackend: Send + 'static {
     #[must_use]
     fn is_idle(&self) -> bool;
 
+    /// Returns the scheduler's sanitized, bounded operational snapshot when
+    /// the backend owns one.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the backend cannot produce a consistent snapshot.
+    fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, BackendError> {
+        Ok(EngineMetricsSnapshot::default())
+    }
+
     /// Cancels remaining work and explicitly closes owned resources.
     ///
     /// # Errors
@@ -321,6 +333,9 @@ enum Command {
         cancellation: Arc<AtomicU8>,
         events: SyncSender<GenerationEvent>,
         admitted: SyncSender<Result<(), EngineError>>,
+    },
+    Metrics {
+        response: SyncSender<Result<EngineMetricsSnapshot, EngineError>>,
     },
     Wake,
 }
@@ -414,6 +429,28 @@ pub struct EngineStatus {
     pub active_requests: usize,
     /// Submit commands waiting for backend admission.
     pub waiting_requests: usize,
+}
+
+/// Native allocation gauges sampled from the backend's owned CUDA context.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineAllocationMetrics {
+    /// Bytes in live device allocations.
+    pub device_live_bytes: u64,
+    /// Number of live device allocations.
+    pub device_live_allocations: u64,
+    /// Bytes in live pinned-host allocations.
+    pub pinned_host_live_bytes: u64,
+    /// Number of live pinned-host allocations.
+    pub pinned_host_live_allocations: u64,
+}
+
+/// Bounded operational snapshot produced on the exclusive backend worker.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineMetricsSnapshot {
+    /// Scheduler counters, gauges, and fixed-window p95 values when available.
+    pub scheduler: Option<SchedulerMetricsSnapshot>,
+    /// CUDA allocation gauges when a native context is active.
+    pub allocation: Option<EngineAllocationMetrics>,
 }
 
 impl fmt::Debug for InferenceEngine {
@@ -510,6 +547,41 @@ impl InferenceEngine {
             active_requests: self.inner.stats.active_requests.load(Ordering::Acquire),
             waiting_requests: self.inner.stats.waiting_requests.load(Ordering::Acquire),
         }
+    }
+
+    /// Requests one bounded operational metrics snapshot from the worker.
+    ///
+    /// Backends without a scheduler or CUDA context leave those fields empty.
+    /// The request shares the bounded command queue and never reads backend
+    /// state concurrently with an execution iteration.
+    ///
+    /// # Errors
+    ///
+    /// Returns for overload, shutdown, worker failure, or a snapshot timeout.
+    pub fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, EngineError> {
+        if !self.is_ready() {
+            return Err(match self.inner.lifecycle.load() {
+                LIFECYCLE_DRAINING | LIFECYCLE_STOPPED => EngineError::ShuttingDown,
+                _ => EngineError::WorkerUnavailable,
+            });
+        }
+        let (response, receiver) = mpsc::sync_channel(1);
+        match self.inner.commands.try_send(Command::Metrics { response }) {
+            Ok(()) => {}
+            Err(TrySendError::Full(_)) => return Err(EngineError::Overloaded),
+            Err(TrySendError::Disconnected(_)) => return Err(EngineError::WorkerUnavailable),
+        }
+        receiver
+            .recv_timeout(
+                self.inner
+                    .config
+                    .admission_timeout
+                    .min(Duration::from_millis(250)),
+            )
+            .map_err(|error| match error {
+                RecvTimeoutError::Timeout => EngineError::Timeout,
+                RecvTimeoutError::Disconnected => EngineError::WorkerUnavailable,
+            })?
     }
 
     /// Submits one request without blocking on generation.
@@ -953,6 +1025,13 @@ fn process_command<B: EngineBackend>(
         admitted,
     } = command
     else {
+        if let Command::Metrics { response } = command {
+            let result = backend.metrics_snapshot().map_err(|error| {
+                eprintln!("rustinfer metrics snapshot failure: {}", error.detail());
+                EngineError::Internal
+            });
+            let _ = response.try_send(result);
+        }
         return;
     };
     stats.waiting_requests.fetch_sub(1, Ordering::AcqRel);
@@ -1121,6 +1200,9 @@ fn reject_pending_commands(commands: &Receiver<Command>, stats: &EngineStats) {
                 stats.waiting_requests.fetch_sub(1, Ordering::AcqRel);
                 let _ = admitted.try_send(Err(EngineError::ShuttingDown));
             }
+            Ok(Command::Metrics { response }) => {
+                let _ = response.try_send(Err(EngineError::ShuttingDown));
+            }
             Ok(Command::Wake) => {}
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => break,
         }
@@ -1146,6 +1228,10 @@ impl crate::service::CompletionBackend for InferenceEngine {
             active_requests: status.active_requests,
             waiting_requests: status.waiting_requests,
         }
+    }
+
+    fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, ServiceErrorClass> {
+        InferenceEngine::metrics_snapshot(self).map_err(|error| error.service_class())
     }
 
     fn submit(
@@ -1201,8 +1287,9 @@ mod cuda_backend {
     };
 
     use super::{
-        BackendError, BackendEvent, EngineBackend, EngineConfig, EngineError, EngineRequestId,
-        InferenceEngine, private_request_error, visible_utf8_prefix,
+        BackendError, BackendEvent, EngineAllocationMetrics, EngineBackend, EngineConfig,
+        EngineError, EngineMetricsSnapshot, EngineRequestId, InferenceEngine,
+        private_request_error, visible_utf8_prefix,
     };
 
     /// Cold CUDA, scheduler, and fixed-batch preparation settings.
@@ -1966,6 +2053,30 @@ mod cuda_backend {
             self.requests.is_empty() && self.pending_events.is_empty()
         }
 
+        fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, BackendError> {
+            let scheduler = self
+                .scheduler
+                .as_ref()
+                .ok_or_else(|| internal("scheduler is already closed"))?
+                .metrics_snapshot()
+                .map_err(|source| internal(format!("scheduler metrics failed: {source}")))?;
+            let allocation = self
+                .context
+                .as_ref()
+                .ok_or_else(|| internal("CUDA context is already closed"))?
+                .allocation_stats()
+                .map_err(|source| internal(format!("allocation metrics failed: {source}")))?;
+            Ok(EngineMetricsSnapshot {
+                scheduler: Some(scheduler),
+                allocation: Some(EngineAllocationMetrics {
+                    device_live_bytes: allocation.device_live_bytes(),
+                    device_live_allocations: allocation.device_live_allocations(),
+                    pinned_host_live_bytes: allocation.pinned_host_live_bytes(),
+                    pinned_host_live_allocations: allocation.pinned_host_live_allocations(),
+                }),
+            })
+        }
+
         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
             if self.scheduler.is_none()
                 && self.executor.is_none()
@@ -2207,6 +2318,17 @@ mod tests {
             MockBackend::new(counters, step_delay),
         )
         .expect("mock engine")
+    }
+
+    #[test]
+    fn metrics_snapshot_is_serialized_through_the_worker() {
+        let counters = Arc::new(MockCounters::default());
+        let engine = engine(counters, 2, 2, Duration::ZERO);
+        assert_eq!(
+            engine.metrics_snapshot().expect("metrics snapshot"),
+            super::EngineMetricsSnapshot::default()
+        );
+        engine.shutdown(Duration::from_secs(1)).expect("shutdown");
     }
 
     #[test]
