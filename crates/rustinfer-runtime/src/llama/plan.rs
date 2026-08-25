@@ -235,47 +235,47 @@ impl LlamaLayerPlan {
         self.post_attention_norm_epsilon
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn input_norm_weight(&self) -> PhysicalWeightId {
         self.input_norm
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn query_weight(&self) -> PhysicalWeightId {
         self.query
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn key_weight(&self) -> PhysicalWeightId {
         self.key
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn value_weight(&self) -> PhysicalWeightId {
         self.value
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn output_weight(&self) -> PhysicalWeightId {
         self.output
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn post_attention_norm_weight(&self) -> PhysicalWeightId {
         self.post_attention_norm
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn gate_weight(&self) -> PhysicalWeightId {
         self.gate
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn up_weight(&self) -> PhysicalWeightId {
         self.up
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn down_weight(&self) -> PhysicalWeightId {
         self.down
     }
@@ -305,7 +305,7 @@ impl LlamaExecutionPlan {
     /// Returns before execution for unsupported dtype/bias/RoPE, inconsistent
     /// dimensions or layer order, missing/mismatched weights, invalid fixed
     /// sequence length, or checked workspace arithmetic overflow.
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub fn prepare(
         spec: &ModelSpec,
         weights: &crate::cuda_weights::CudaUploadedWeights,
@@ -477,17 +477,17 @@ impl LlamaExecutionPlan {
         self.workspace
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn embedding_weight(&self) -> PhysicalWeightId {
         self.embedding
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn final_norm_weight(&self) -> PhysicalWeightId {
         self.final_norm
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn lm_head_weight(&self) -> PhysicalWeightId {
         self.lm_head
     }
@@ -967,7 +967,7 @@ fn finite_positive_f32(
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", test))]
 impl PlanWeightCatalog for crate::cuda_weights::CudaUploadedWeights {
     fn resolve_slot(&self, slot: WeightSlot) -> Option<PhysicalWeightId> {
         crate::cuda_weights::CudaUploadedWeights::resolve_slot(self, slot)

@@ -4,7 +4,7 @@ mod kernel;
 pub mod llama;
 pub mod reference;
 
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", test))]
 mod cuda_weights;
 
 #[cfg(feature = "cuda")]

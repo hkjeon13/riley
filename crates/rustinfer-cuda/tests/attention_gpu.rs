@@ -11,7 +11,8 @@ use rustinfer_cuda::{
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
-const S: usize = 5;
+const EXACT_SEQUENCE_LENGTH: usize = 5;
+const CAUSAL_SEQUENCE_LENGTHS: &[usize] = &[1, 2, 7, 31, 32, 33];
 const QH: usize = 6;
 const KVH: usize = 2;
 const D: usize = 4;
@@ -120,17 +121,17 @@ fn kv_index(token: usize, head: usize, depth: usize) -> usize {
     (token * KVH + head) * D + depth
 }
 
-fn score_index(head: usize, query_token: usize, key_token: usize) -> usize {
-    (head * S + query_token) * S + key_token
+fn score_index(token_count: usize, head: usize, query_token: usize, key_token: usize) -> usize {
+    (head * token_count + query_token) * token_count + key_token
 }
 
-fn cpu_qk(query: &[u16], key: &[u16]) -> Vec<u16> {
-    let mut scores = vec![0_u16; QH * S * S];
+fn cpu_qk(query: &[u16], key: &[u16], token_count: usize) -> Vec<u16> {
+    let mut scores = vec![0_u16; QH * token_count * token_count];
     let group_size = QH / KVH;
     for query_head in 0..QH {
         let key_value_head = query_head / group_size;
-        for query_token in 0..S {
-            for key_token in 0..S {
+        for query_token in 0..token_count {
+            for key_token in 0..token_count {
                 let mut accumulator = 0.0_f32;
                 for depth in 0..D {
                     accumulator = bf16_to_f32(query[q_index(query_token, query_head, depth)])
@@ -139,7 +140,7 @@ fn cpu_qk(query: &[u16], key: &[u16]) -> Vec<u16> {
                             accumulator,
                         );
                 }
-                scores[score_index(query_head, query_token, key_token)] =
+                scores[score_index(token_count, query_head, query_token, key_token)] =
                     f32_to_bf16_bits(accumulator);
             }
         }
@@ -147,11 +148,11 @@ fn cpu_qk(query: &[u16], key: &[u16]) -> Vec<u16> {
     scores
 }
 
-fn cpu_scale_mask(scores: &mut [u16]) {
+fn cpu_scale_mask(scores: &mut [u16], token_count: usize) {
     for head in 0..QH {
-        for query_token in 0..S {
-            for key_token in 0..S {
-                let index = score_index(head, query_token, key_token);
+        for query_token in 0..token_count {
+            for key_token in 0..token_count {
+                let index = score_index(token_count, head, query_token, key_token);
                 let scaled = f32_to_bf16_bits(bf16_to_f32(scores[index]) * SCALE);
                 let mask = if key_token > query_token {
                     bf16_to_f32(FUTURE_MASK_BITS)
@@ -164,19 +165,19 @@ fn cpu_scale_mask(scores: &mut [u16]) {
     }
 }
 
-fn cpu_softmax(scores: &mut [u16]) {
+fn cpu_softmax(scores: &mut [u16], token_count: usize) {
     for head in 0..QH {
-        for query_token in 0..S {
-            let base = score_index(head, query_token, 0);
+        for query_token in 0..token_count {
+            let base = score_index(token_count, head, query_token, 0);
             let mut maximum = f32::NEG_INFINITY;
-            for key_token in 0..S {
+            for key_token in 0..token_count {
                 maximum = maximum.max(bf16_to_f32(scores[base + key_token]));
             }
             let mut denominator = 0.0_f32;
-            for key_token in 0..S {
+            for key_token in 0..token_count {
                 denominator += (bf16_to_f32(scores[base + key_token]) - maximum).exp();
             }
-            for key_token in 0..S {
+            for key_token in 0..token_count {
                 let numerator = (bf16_to_f32(scores[base + key_token]) - maximum).exp();
                 scores[base + key_token] = f32_to_bf16_bits(numerator / denominator);
             }
@@ -184,21 +185,22 @@ fn cpu_softmax(scores: &mut [u16]) {
     }
 }
 
-fn cpu_av(probabilities: &[u16], value: &[u16]) -> Vec<u16> {
-    let mut output = vec![0_u16; S * QH * D];
+fn cpu_av(probabilities: &[u16], value: &[u16], token_count: usize) -> Vec<u16> {
+    let mut output = vec![0_u16; token_count * QH * D];
     let group_size = QH / KVH;
-    for query_token in 0..S {
+    for query_token in 0..token_count {
         for query_head in 0..QH {
             let key_value_head = query_head / group_size;
             for depth in 0..D {
                 let mut accumulator = 0.0_f32;
-                for key_token in 0..S {
-                    accumulator =
-                        bf16_to_f32(probabilities[score_index(query_head, query_token, key_token)])
-                            .mul_add(
-                                bf16_to_f32(value[kv_index(key_token, key_value_head, depth)]),
-                                accumulator,
-                            );
+                for key_token in 0..token_count {
+                    accumulator = bf16_to_f32(
+                        probabilities[score_index(token_count, query_head, query_token, key_token)],
+                    )
+                    .mul_add(
+                        bf16_to_f32(value[kv_index(key_token, key_value_head, depth)]),
+                        accumulator,
+                    );
                 }
                 output[q_index(query_token, query_head, depth)] = f32_to_bf16_bits(accumulator);
             }
@@ -208,6 +210,7 @@ fn cpu_av(probabilities: &[u16], value: &[u16]) -> Vec<u16> {
 }
 
 fn execute_attention(
+    token_count: usize,
     query: &CudaDeviceBuffer,
     key: &CudaDeviceBuffer,
     value: &CudaDeviceBuffer,
@@ -222,7 +225,7 @@ fn execute_attention(
             query: CudaBufferSpan::new(query, CudaDType::BF16, 0, query.byte_len())?,
             key: CudaBufferSpan::new(key, CudaDType::BF16, 0, key.byte_len())?,
             output: CudaBufferSpanMut::new(scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             key_value_head_count: u64::try_from(KVH)?,
             head_size: u64::try_from(D)?,
@@ -232,7 +235,7 @@ fn execute_attention(
     {
         let mut params = ScaleCausalMaskInPlaceParams {
             scores: CudaBufferSpanMut::new(scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             scale: SCALE,
         };
@@ -241,7 +244,7 @@ fn execute_attention(
     {
         let mut params = CausalSoftmaxInPlaceParams {
             scores: CudaBufferSpanMut::new(scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
         };
         causal_softmax_in_place(&mut params, stream)?;
@@ -251,7 +254,7 @@ fn execute_attention(
             probabilities: CudaBufferSpan::new(scores, CudaDType::BF16, 0, score_bytes)?,
             value: CudaBufferSpan::new(value, CudaDType::BF16, 0, value.byte_len())?,
             output: CudaBufferSpanMut::new(output, CudaDType::BF16, 0, output_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             key_value_head_count: u64::try_from(KVH)?,
             head_size: u64::try_from(D)?,
@@ -261,21 +264,154 @@ fn execute_attention(
     Ok(())
 }
 
+fn assert_causal_length_matches_cpu_reference(
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    staging: &mut CudaPinnedHostBuffer,
+    token_count: usize,
+) -> TestResult {
+    let query_host: Vec<f32> = (0..token_count * QH * D)
+        .map(|index| (f32::from(u8::try_from((index * 11 + 5) % 29).unwrap_or(0)) - 14.0) * 0.0625)
+        .collect();
+    let key_host: Vec<f32> = (0..token_count * KVH * D)
+        .map(|index| (f32::from(u8::try_from((index * 7 + 3) % 17).unwrap_or(0)) - 8.0) * 0.125)
+        .collect();
+    let value_host: Vec<f32> = (0..token_count * KVH * D)
+        .map(|index| (f32::from(u8::try_from((index * 5 + 1) % 23).unwrap_or(0)) - 11.0) * 0.25)
+        .collect();
+    let query_bytes = encode_bf16(&query_host);
+    let key_bytes = encode_bf16(&key_host);
+    let value_bytes = encode_bf16(&value_host);
+    let query_bits = decode_bf16_bits(&query_bytes);
+    let key_bits = decode_bf16_bits(&key_bytes);
+    let value_bits = decode_bf16_bits(&value_bytes);
+
+    let query = upload(context, stream, staging, &query_bytes)?;
+    let key = upload(context, stream, staging, &key_bytes)?;
+    let value = upload(context, stream, staging, &value_bytes)?;
+    let score_bytes = u64::try_from(QH * token_count * token_count * 2)?;
+    let output_bytes = u64::try_from(token_count * QH * D * 2)?;
+    let mut scores = context.allocate_device_buffer(score_bytes)?;
+    let mut output = context.allocate_device_buffer(output_bytes)?;
+
+    let expected_qk = cpu_qk(&query_bits, &key_bits, token_count);
+    {
+        let mut params = QkGqaParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+            output: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
+            token_count: u64::try_from(token_count)?,
+            query_head_count: u64::try_from(QH)?,
+            key_value_head_count: u64::try_from(KVH)?,
+            head_size: u64::try_from(D)?,
+        };
+        qk_gqa(&mut params, stream)?;
+    }
+    let actual_qk = decode_bf16_bits(&download(context, stream, &mut scores)?);
+    assert_eq!(
+        actual_qk, expected_qk,
+        "raw QK BF16 checkpoint at S={token_count}"
+    );
+
+    let mut expected_probabilities = expected_qk;
+    cpu_scale_mask(&mut expected_probabilities, token_count);
+    {
+        let mut params = ScaleCausalMaskInPlaceParams {
+            scores: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
+            token_count: u64::try_from(token_count)?,
+            query_head_count: u64::try_from(QH)?,
+            scale: SCALE,
+        };
+        scale_causal_mask_in_place(&mut params, stream)?;
+    }
+    let actual_masked = decode_bf16_bits(&download(context, stream, &mut scores)?);
+    assert_eq!(
+        actual_masked, expected_probabilities,
+        "scale/mask BF16 checkpoint at S={token_count}"
+    );
+    for head in 0..QH {
+        for query_token in 0..token_count {
+            for key_token in query_token + 1..token_count {
+                assert_eq!(
+                    actual_masked[score_index(token_count, head, query_token, key_token)],
+                    FUTURE_MASK_BITS,
+                    "future mask bits at S={token_count}, h={head}, q={query_token}, k={key_token}"
+                );
+            }
+        }
+    }
+
+    cpu_softmax(&mut expected_probabilities, token_count);
+    {
+        let mut params = CausalSoftmaxInPlaceParams {
+            scores: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
+            token_count: u64::try_from(token_count)?,
+            query_head_count: u64::try_from(QH)?,
+        };
+        causal_softmax_in_place(&mut params, stream)?;
+    }
+    let actual_probabilities = decode_bf16_bits(&download(context, stream, &mut scores)?);
+    assert_bf16_ulps(
+        &actual_probabilities,
+        &expected_probabilities,
+        1,
+        &format!("softmax probability at S={token_count}"),
+    );
+    for head in 0..QH {
+        for query_token in 0..token_count {
+            for key_token in query_token + 1..token_count {
+                assert_eq!(
+                    actual_probabilities[score_index(token_count, head, query_token, key_token,)],
+                    0,
+                    "future probability at S={token_count}, h={head}, q={query_token}, k={key_token}"
+                );
+            }
+        }
+    }
+
+    let expected_output = cpu_av(&actual_probabilities, &value_bits, token_count);
+    {
+        let mut params = AvGqaParams {
+            probabilities: CudaBufferSpan::new(&scores, CudaDType::BF16, 0, score_bytes)?,
+            value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_bytes)?,
+            token_count: u64::try_from(token_count)?,
+            query_head_count: u64::try_from(QH)?,
+            key_value_head_count: u64::try_from(KVH)?,
+            head_size: u64::try_from(D)?,
+        };
+        av_gqa(&mut params, stream)?;
+    }
+    let actual_output = decode_bf16_bits(&download(context, stream, &mut output)?);
+    assert_eq!(
+        actual_output, expected_output,
+        "AV BF16 checkpoint at S={token_count}"
+    );
+
+    query.close()?;
+    key.close()?;
+    value.close()?;
+    scores.close()?;
+    output.close()?;
+    Ok(())
+}
+
 #[test]
 #[ignore = "remote GPU"]
 fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> TestResult {
+    let token_count = EXACT_SEQUENCE_LENGTH;
     let (_runtime, device) = first_device()?;
     let context = device.create_context()?;
     let mut stream = context.create_stream()?;
     let mut staging = context.allocate_pinned_host_buffer(4_096)?;
 
-    let query_host: Vec<f32> = (0..S * QH * D)
+    let query_host: Vec<f32> = (0..token_count * QH * D)
         .map(|index| (f32::from(u8::try_from(index % 19).unwrap_or(0)) - 9.0) * 0.125)
         .collect();
-    let key_host: Vec<f32> = (0..S * KVH * D)
+    let key_host: Vec<f32> = (0..token_count * KVH * D)
         .map(|index| (f32::from(u8::try_from((index * 7 + 3) % 17).unwrap_or(0)) - 8.0) * 0.0625)
         .collect();
-    let value_host: Vec<f32> = (0..S * KVH * D)
+    let value_host: Vec<f32> = (0..token_count * KVH * D)
         .map(|index| (f32::from(u8::try_from((index * 5 + 1) % 23).unwrap_or(0)) - 11.0) * 0.25)
         .collect();
     let query_bytes = encode_bf16(&query_host);
@@ -288,18 +424,18 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
     let query = upload(&context, &mut stream, &mut staging, &query_bytes)?;
     let key = upload(&context, &mut stream, &mut staging, &key_bytes)?;
     let value = upload(&context, &mut stream, &mut staging, &value_bytes)?;
-    let score_bytes = u64::try_from(QH * S * S * 2)?;
-    let output_bytes = u64::try_from(S * QH * D * 2)?;
+    let score_bytes = u64::try_from(QH * token_count * token_count * 2)?;
+    let output_bytes = u64::try_from(token_count * QH * D * 2)?;
     let mut scores = context.allocate_device_buffer(score_bytes)?;
     let mut output = context.allocate_device_buffer(output_bytes)?;
 
-    let expected_qk = cpu_qk(&query_bits, &key_bits);
+    let expected_qk = cpu_qk(&query_bits, &key_bits, token_count);
     {
         let mut params = QkGqaParams {
             query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
             key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
             output: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             key_value_head_count: u64::try_from(KVH)?,
             head_size: u64::try_from(D)?,
@@ -310,11 +446,11 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
     assert_eq!(actual_qk, expected_qk, "raw QK BF16 checkpoint");
 
     let mut expected_probabilities = expected_qk;
-    cpu_scale_mask(&mut expected_probabilities);
+    cpu_scale_mask(&mut expected_probabilities, token_count);
     {
         let mut params = ScaleCausalMaskInPlaceParams {
             scores: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             scale: SCALE,
         };
@@ -326,10 +462,10 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
         "scale/mask BF16 checkpoint"
     );
     for head in 0..QH {
-        for query_token in 0..S {
-            for key_token in query_token + 1..S {
+        for query_token in 0..token_count {
+            for key_token in query_token + 1..token_count {
                 assert_eq!(
-                    actual_masked[score_index(head, query_token, key_token)],
+                    actual_masked[score_index(token_count, head, query_token, key_token)],
                     FUTURE_MASK_BITS,
                     "future mask bits at h={head}, q={query_token}, k={key_token}"
                 );
@@ -337,11 +473,11 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
         }
     }
 
-    cpu_softmax(&mut expected_probabilities);
+    cpu_softmax(&mut expected_probabilities, token_count);
     {
         let mut params = CausalSoftmaxInPlaceParams {
             scores: CudaBufferSpanMut::new(&mut scores, CudaDType::BF16, 0, score_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
         };
         causal_softmax_in_place(&mut params, &mut stream)?;
@@ -354,10 +490,10 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
         "softmax probability",
     );
     for head in 0..QH {
-        for query_token in 0..S {
-            for key_token in query_token + 1..S {
+        for query_token in 0..token_count {
+            for key_token in query_token + 1..token_count {
                 assert_eq!(
-                    actual_probabilities[score_index(head, query_token, key_token)],
+                    actual_probabilities[score_index(token_count, head, query_token, key_token,)],
                     0,
                     "future probability at h={head}, q={query_token}, k={key_token}"
                 );
@@ -365,13 +501,13 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
         }
     }
 
-    let expected_output = cpu_av(&actual_probabilities, &value_bits);
+    let expected_output = cpu_av(&actual_probabilities, &value_bits, token_count);
     {
         let mut params = AvGqaParams {
             probabilities: CudaBufferSpan::new(&scores, CudaDType::BF16, 0, score_bytes)?,
             value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
             output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_bytes)?,
-            token_count: u64::try_from(S)?,
+            token_count: u64::try_from(token_count)?,
             query_head_count: u64::try_from(QH)?,
             key_value_head_count: u64::try_from(KVH)?,
             head_size: u64::try_from(D)?,
@@ -384,7 +520,15 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
     let before = context.allocation_stats()?;
     let baseline_output = actual_output;
     for _ in 0..16 {
-        execute_attention(&query, &key, &value, &mut scores, &mut output, &mut stream)?;
+        execute_attention(
+            token_count,
+            &query,
+            &key,
+            &value,
+            &mut scores,
+            &mut output,
+            &mut stream,
+        )?;
     }
     let after = context.allocation_stats()?;
     assert_eq!(before, after, "attention execution changed allocations");
@@ -399,6 +543,34 @@ fn materialized_gqa_matches_the_staged_bf16_contract_without_allocating() -> Tes
     value.close()?;
     scores.close()?;
     output.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn causal_mask_matches_staged_bf16_reference_across_sequence_lengths() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(4_096)?;
+    let baseline = context.allocation_stats()?;
+
+    for &token_count in CAUSAL_SEQUENCE_LENGTHS {
+        assert_causal_length_matches_cpu_reference(
+            &context,
+            &mut stream,
+            &mut staging,
+            token_count,
+        )?;
+        assert_eq!(
+            context.allocation_stats()?,
+            baseline,
+            "S={token_count} leaked a CUDA allocation"
+        );
+    }
+
     staging.close()?;
     stream.close()?;
     close_context(context)
