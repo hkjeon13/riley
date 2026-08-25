@@ -201,18 +201,24 @@ fn residual_rms_norm_exact_case(
     let hidden_size_usize = usize::try_from(hidden_size)?;
     let left_host: Vec<_> = (0..element_count)
         .map(|index| {
-            let centered = i32::try_from(index.wrapping_mul(17) % 37).unwrap_or(0) - 18;
-            centered as f32 / 9.0
+            let bounded =
+                i16::try_from(index.wrapping_mul(17) % 37).expect("modulo 37 always fits i16");
+            f32::from(bounded - 18) / 9.0
         })
         .collect();
     let right_host: Vec<_> = (0..element_count)
         .map(|index| {
-            let centered = i32::try_from(index.wrapping_mul(11) % 29).unwrap_or(0) - 14;
-            centered as f32 / 13.0
+            let bounded =
+                i16::try_from(index.wrapping_mul(11) % 29).expect("modulo 29 always fits i16");
+            f32::from(bounded - 14) / 13.0
         })
         .collect();
     let weight_host: Vec<_> = (0..hidden_size_usize)
-        .map(|index| 0.625 + (index.wrapping_mul(7) % 19) as f32 / 16.0)
+        .map(|index| {
+            let bounded =
+                u8::try_from(index.wrapping_mul(7) % 19).expect("modulo 19 always fits u8");
+            0.625 + f32::from(bounded) / 16.0
+        })
         .collect();
     let left_bytes = storage.bytes(&left_host);
     let right_bytes = storage.bytes(&right_host);
