@@ -25,7 +25,9 @@ easier release lane. The exact materialized manifest SHA-256 is recorded in
 `cycle_interval_ms` bounds raw request evidence growth without sampling or
 aggregating away any request.  It is part of the bound manifest; burst-idle
 requires at least one second, while long and near-KV requests naturally
-dominate their configured interval.
+dominate their configured interval. The overload arm uses 96 concurrent
+requests, exceeding the release defaults of 8 active plus 64 waiting slots, so
+the required client- and service-observed 429 responses are actually induced.
 
 ## Target contract
 
