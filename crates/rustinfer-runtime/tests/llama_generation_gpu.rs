@@ -11,7 +11,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use rustinfer_cuda::{CudaAllocationStats, CudaContext, CudaRuntime, CudaStream};
-use rustinfer_model::{LoadLimits, LoadedModel, Tokenizer};
+use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::generation::{FinishReason, GenerationRequest, GenerationState};
 use rustinfer_runtime::llama::{
     GenerationModelStage, GenerationTokenTiming, LlamaDecodePhase, LlamaGenerationEvent,
