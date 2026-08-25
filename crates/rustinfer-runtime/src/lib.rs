@@ -3,6 +3,15 @@
 mod kernel;
 pub mod reference;
 
+#[cfg(feature = "cuda")]
+mod cuda_weights;
+
+#[cfg(feature = "cuda")]
+pub use cuda_weights::{
+    CudaUploadedTensor, CudaUploadedWeight, CudaUploadedWeights, CudaWeightUploadError,
+    CudaWeightUploadResult,
+};
+
 pub use kernel::{
     KernelCapability, KernelImplementation, KernelKey, KernelOrigin, KernelPreference,
     KernelRegistry, KernelRegistryError, OpId,

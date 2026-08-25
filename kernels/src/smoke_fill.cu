@@ -139,6 +139,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_smoke_fill_launch(
                             "launch smoke fill",
                             "buffer and stream belong to different contexts");
   }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "launch smoke fill",
+                            "stream has an active asynchronous use");
+  }
   if (buffer->in_flight) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
@@ -200,6 +206,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_smoke_copy_to_host(
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "copy smoke buffer to host",
                             "buffer and stream belong to different contexts");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            "copy smoke buffer to host",
+                            "stream has an active asynchronous use");
   }
   if (host_element_capacity < buffer->element_count) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
@@ -330,6 +342,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_smoke_invalid_launch(
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "launch intentionally invalid smoke kernel",
                             "stream is null");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        "launch intentionally invalid smoke kernel",
+        "stream has an active asynchronous use");
   }
   CurrentContext scope(stream->owner);
   RustInferCudaStatus status = scope.enter(

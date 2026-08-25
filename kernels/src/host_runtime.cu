@@ -463,6 +463,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_query(
                             "stream or out_complete is null");
   }
   *out_complete = 0;
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                            "query CUDA stream",
+                            "stream has an active asynchronous use");
+  }
   CurrentContext scope(stream->owner);
   RustInferCudaStatus status = scope.enter(
       error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, "query CUDA stream");
@@ -485,6 +491,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_synchronize(
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "synchronize CUDA stream", "stream is null");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                            "synchronize CUDA stream",
+                            "stream has an active asynchronous use");
   }
   CurrentContext scope(stream->owner);
   RustInferCudaStatus status = scope.enter(
@@ -515,6 +527,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_wait_event(
                             "wait for CUDA event",
                             "stream and event belong to different contexts");
   }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+                            "wait for CUDA event",
+                            "stream has an active asynchronous use");
+  }
   CurrentContext scope(stream->owner);
   RustInferCudaStatus status = scope.enter(
       error, RUSTINFER_CUDA_ERROR_STAGE_RECORD, "wait for CUDA event");
@@ -538,11 +556,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
   if (*stream == nullptr) {
     return RUSTINFER_CUDA_STATUS_SUCCESS;
   }
-  if ((*stream)->active_copies.load(std::memory_order_acquire) != 0) {
+  if ((*stream)->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA stream",
-                            "stream still owns an active copy token");
+                            "stream still has an active asynchronous use");
   }
   CurrentContext scope((*stream)->owner);
   RustInferCudaStatus status = scope.enter(
@@ -638,6 +656,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_event_record(
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "record CUDA event",
                             "event and stream belong to different contexts");
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+                            RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+                            "record CUDA event",
+                            "stream has an active asynchronous use");
   }
   CurrentContext scope(event->owner);
   RustInferCudaStatus status = scope.enter(

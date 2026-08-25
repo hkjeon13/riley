@@ -43,11 +43,13 @@ struct RustInferCudaContext {
 struct RustInferCudaStream {
   RustInferCudaStream(RustInferCudaContext* owning_context,
                       cudaStream_t native_stream) noexcept
-      : owner(owning_context), stream(native_stream), active_copies(0) {}
+      : owner(owning_context), stream(native_stream), active_uses(0) {}
 
   RustInferCudaContext* owner;
   cudaStream_t stream;
-  std::atomic<uint32_t> active_copies;
+  // One exclusive asynchronous-use lease covers copies and synchronously
+  // completing primitives. A stuck value is an intentional fail-closed leak.
+  std::atomic<uint32_t> active_uses;
 };
 
 struct RustInferCudaEvent {
@@ -69,12 +71,12 @@ struct RustInferCudaDeviceBuffer {
       : owner(owning_context),
         device_data(allocation),
         byte_len(allocation_bytes),
-        active_copies(0) {}
+        active_uses(0) {}
 
   RustInferCudaContext* owner;
   void* device_data;
   uint64_t byte_len;
-  std::atomic<uint32_t> active_copies;
+  std::atomic<uint32_t> active_uses;
 };
 
 struct RustInferCudaPinnedHostBuffer {
@@ -84,12 +86,12 @@ struct RustInferCudaPinnedHostBuffer {
       : owner(owning_context),
         host_data(allocation),
         byte_len(allocation_bytes),
-        active_copies(0) {}
+        active_uses(0) {}
 
   RustInferCudaContext* owner;
   void* host_data;
   uint64_t byte_len;
-  std::atomic<uint32_t> active_copies;
+  std::atomic<uint32_t> active_uses;
 };
 
 struct RustInferCudaCopy {
@@ -148,6 +150,74 @@ static_assert(offsetof(RustInferCudaAllocationStats, device_live_bytes) == 8,
 static_assert(
     offsetof(RustInferCudaAllocationStats, pinned_host_live_allocations) == 32,
     "RustInferCudaAllocationStats ABI tail layout changed");
+static_assert(sizeof(void*) * 8 == RUSTINFER_CUDA_ABI_POINTER_WIDTH,
+              "rustinfer CUDA ABI requires 64-bit pointers");
+static_assert(sizeof(RustInferCudaDType) == 4,
+              "RustInferCudaDType ABI width changed");
+static_assert(RUSTINFER_CUDA_DTYPE_F32 == 1 &&
+                  RUSTINFER_CUDA_DTYPE_BF16 == 2 &&
+                  RUSTINFER_CUDA_DTYPE_U32 == 3 &&
+                  RUSTINFER_CUDA_DTYPE_U8 == 4,
+              "RustInferCudaDType ABI discriminants changed");
+static_assert(sizeof(RustInferCudaBufferSpan) == 48,
+              "RustInferCudaBufferSpan ABI size changed");
+static_assert(offsetof(RustInferCudaBufferSpan, buffer) == 8,
+              "RustInferCudaBufferSpan ABI handle offset changed");
+static_assert(offsetof(RustInferCudaBufferSpan, reserved) == 32,
+              "RustInferCudaBufferSpan ABI tail changed");
+static_assert(sizeof(RustInferCudaEmbeddingErrorReport) == 32,
+              "RustInferCudaEmbeddingErrorReport ABI size changed");
+static_assert(offsetof(RustInferCudaEmbeddingErrorReport, token_position) == 8,
+              "embedding error report ABI layout changed");
+static_assert(sizeof(RustInferCudaEmbeddingParams) == 256,
+              "RustInferCudaEmbeddingParams ABI size changed");
+static_assert(offsetof(RustInferCudaEmbeddingParams, table) == 8,
+              "embedding params ABI first span changed");
+static_assert(offsetof(RustInferCudaEmbeddingParams, out_report) == 200,
+              "embedding params ABI report offset changed");
+static_assert(offsetof(RustInferCudaEmbeddingParams, reserved) == 232,
+              "embedding params ABI tail changed");
+static_assert(sizeof(RustInferCudaRmsNormParams) == 208,
+              "RustInferCudaRmsNormParams ABI size changed");
+static_assert(offsetof(RustInferCudaRmsNormParams, epsilon) == 168,
+              "RMSNorm params ABI epsilon offset changed");
+static_assert(sizeof(RustInferCudaResidualAddParams) == 200,
+              "RustInferCudaResidualAddParams ABI size changed");
+static_assert(sizeof(RustInferCudaSiluParams) == 152,
+              "RustInferCudaSiluParams ABI size changed");
+static_assert(sizeof(RustInferCudaGatedMultiplyParams) == 200,
+              "RustInferCudaGatedMultiplyParams ABI size changed");
+static_assert(sizeof(RustInferCudaRopeParams) == 288,
+              "RustInferCudaRopeParams ABI size changed");
+static_assert(offsetof(RustInferCudaRopeParams, token_count) == 200,
+              "RoPE params ABI dimension offset changed");
+static_assert(sizeof(RustInferCudaCastParams) == 152,
+              "RustInferCudaCastParams ABI size changed");
+static_assert(sizeof(RustInferCudaGemmConfig) == 112,
+              "RustInferCudaGemmConfig ABI size changed");
+static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&
+                  RUSTINFER_CUDA_GEMM_TRANSPOSE_T == 1 &&
+                  RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR == 1 &&
+                  RUSTINFER_CUDA_GEMM_EPILOGUE_NONE == 0 &&
+                  RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED == 1 &&
+                  RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1,
+              "GEMM ABI discriminants changed");
+static_assert(offsetof(RustInferCudaGemmConfig, m) == 8,
+              "GEMM config dimension layout changed");
+static_assert(offsetof(RustInferCudaGemmConfig, input_dtype) == 32,
+              "GEMM config dtype layout changed");
+static_assert(offsetof(RustInferCudaGemmConfig, max_workspace_bytes) == 80,
+              "GEMM config workspace layout changed");
+static_assert(sizeof(RustInferCudaGemmAlgorithmInfo) == 112,
+              "RustInferCudaGemmAlgorithmInfo ABI size changed");
+static_assert(offsetof(RustInferCudaGemmAlgorithmInfo, workspace_bytes) == 40,
+              "GEMM algorithm workspace layout changed");
+static_assert(
+    offsetof(RustInferCudaGemmAlgorithmInfo,
+             numerical_implementation_flags) == 48,
+    "GEMM algorithm numerical metadata layout changed");
+static_assert(offsetof(RustInferCudaGemmAlgorithmInfo, m) == 72,
+              "GEMM algorithm dimension layout changed");
 
 inline void clear_error(RustInferCudaErrorInfo* error) noexcept {
   if (error == nullptr || error->struct_size < sizeof(*error)) {
@@ -375,6 +445,20 @@ class CurrentContext final {
 inline bool same_context(const RustInferCudaContext* left,
                          const RustInferCudaContext* right) noexcept {
   return left != nullptr && left == right;
+}
+
+inline bool try_acquire_exclusive_use(std::atomic<uint32_t>& active) noexcept {
+  uint32_t expected = 0;
+  return active.compare_exchange_strong(expected, 1,
+                                        std::memory_order_acq_rel,
+                                        std::memory_order_acquire);
+}
+
+inline bool release_exclusive_use(std::atomic<uint32_t>& active) noexcept {
+  uint32_t expected = 1;
+  return active.compare_exchange_strong(expected, 0,
+                                        std::memory_order_release,
+                                        std::memory_order_relaxed);
 }
 
 inline bool retain_child(RustInferCudaContext* context) noexcept {

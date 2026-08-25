@@ -32,3 +32,13 @@ required-features = ["cuda"]
 name = "memory_gpu"
 path = "tests/memory_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "primitives_gpu"
+path = "tests/primitives_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "gemm_gpu"
+path = "tests/gemm_gpu.rs"
+required-features = ["cuda"]

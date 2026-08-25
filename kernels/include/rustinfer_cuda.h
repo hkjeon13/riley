@@ -7,6 +7,10 @@
 #define RUSTINFER_CUDA_ERROR_MESSAGE_CAPACITY 256
 #define RUSTINFER_CUDA_DEVICE_NAME_CAPACITY 256
 
+// ABI v1 is a 64-bit ABI. New entry points below are additive: existing v1
+// callers remain link- and layout-compatible.
+#define RUSTINFER_CUDA_ABI_POINTER_WIDTH 64u
+
 typedef int32_t RustInferCudaStatus;
 
 #define RUSTINFER_CUDA_STATUS_SUCCESS ((RustInferCudaStatus)0)
@@ -19,12 +23,15 @@ typedef int32_t RustInferCudaStatus;
 #define RUSTINFER_CUDA_STATUS_RUNTIME_ERROR ((RustInferCudaStatus)7)
 #define RUSTINFER_CUDA_STATUS_INVALID_STATE ((RustInferCudaStatus)8)
 #define RUSTINFER_CUDA_STATUS_INTERNAL_ERROR ((RustInferCudaStatus)9)
+#define RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR ((RustInferCudaStatus)10)
+#define RUSTINFER_CUDA_STATUS_NOT_SUPPORTED ((RustInferCudaStatus)11)
 
 #define RUSTINFER_CUDA_ERROR_DOMAIN_NONE 0u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_VALIDATION 1u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_DRIVER 2u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_RUNTIME 3u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL 4u
+#define RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT 5u
 
 #define RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE 1u
 #define RUSTINFER_CUDA_ERROR_STAGE_VALIDATION 2u
@@ -35,6 +42,7 @@ typedef int32_t RustInferCudaStatus;
 #define RUSTINFER_CUDA_ERROR_STAGE_RECORD 7u
 #define RUSTINFER_CUDA_ERROR_STAGE_COPY 8u
 #define RUSTINFER_CUDA_ERROR_STAGE_CLOSE 9u
+#define RUSTINFER_CUDA_ERROR_STAGE_PREPARE 10u
 
 typedef struct RustInferCudaErrorInfo {
   uint32_t struct_size;
@@ -75,6 +83,203 @@ typedef struct RustInferCudaSmokeBuffer RustInferCudaSmokeBuffer;
 typedef struct RustInferCudaDeviceBuffer RustInferCudaDeviceBuffer;
 typedef struct RustInferCudaPinnedHostBuffer RustInferCudaPinnedHostBuffer;
 typedef struct RustInferCudaCopy RustInferCudaCopy;
+typedef struct RustInferCudaGemmPlan RustInferCudaGemmPlan;
+
+// Raw C callers must externally synchronize opaque-handle lifetime: no call
+// may begin with a handle while another thread can close that same handle.
+// Native active-use guards reject close/reuse after an operation has entered,
+// but cannot make a stale raw pointer safe if close races a new call. The safe
+// Rust boundary enforces this rule with ownership and exclusive borrows.
+
+typedef int32_t RustInferCudaDType;
+
+#define RUSTINFER_CUDA_DTYPE_INVALID ((RustInferCudaDType)0)
+#define RUSTINFER_CUDA_DTYPE_F32 ((RustInferCudaDType)1)
+#define RUSTINFER_CUDA_DTYPE_BF16 ((RustInferCudaDType)2)
+#define RUSTINFER_CUDA_DTYPE_U32 ((RustInferCudaDType)3)
+#define RUSTINFER_CUDA_DTYPE_U8 ((RustInferCudaDType)4)
+
+// A borrowed, typed subspan of an opaque device allocation. byte_len is the
+// caller-declared accessible capacity from byte_offset, not the allocation's
+// total size. All known reserved fields must be zero. Primitive calls validate
+// both this capacity and the underlying allocation before pointer arithmetic.
+typedef struct RustInferCudaBufferSpan {
+  uint32_t struct_size;
+  RustInferCudaDType dtype;
+  RustInferCudaDeviceBuffer* buffer;
+  uint64_t byte_offset;
+  uint64_t byte_len;
+  uint64_t reserved[2];
+} RustInferCudaBufferSpan;
+
+#define RUSTINFER_CUDA_EMBEDDING_ERROR_NONE 0u
+#define RUSTINFER_CUDA_EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE 1u
+
+// Embedding execution uses a caller-owned device scratch span of exactly this
+// record shape and copies the completed record to out_report before returning.
+// For code NONE, token_position and token_id are zero. For OOB, they identify
+// the lowest invalid token position and its id deterministically.
+typedef struct RustInferCudaEmbeddingErrorReport {
+  uint32_t struct_size;
+  uint32_t code;
+  uint64_t token_position;
+  uint64_t token_id;
+  uint64_t reserved;
+} RustInferCudaEmbeddingErrorReport;
+
+// Every parameter record below is caller-owned for the synchronous call. Set
+// struct_size to sizeof(the record) and every known reserved field to zero;
+// larger forward-compatible records are accepted only for additive ABI tails.
+
+typedef struct RustInferCudaEmbeddingParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan table;
+  RustInferCudaBufferSpan token_ids;
+  RustInferCudaBufferSpan output;
+  RustInferCudaBufferSpan device_error_scratch;
+  RustInferCudaEmbeddingErrorReport* out_report;
+  uint64_t token_count;
+  uint64_t vocabulary_size;
+  uint64_t hidden_size;
+  uint64_t reserved[3];
+} RustInferCudaEmbeddingParams;
+
+typedef struct RustInferCudaRmsNormParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan weight;
+  RustInferCudaBufferSpan output;
+  uint64_t row_count;
+  uint64_t hidden_size;
+  float epsilon;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaRmsNormParams;
+
+typedef struct RustInferCudaResidualAddParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan left;
+  RustInferCudaBufferSpan right;
+  RustInferCudaBufferSpan output;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaResidualAddParams;
+
+typedef struct RustInferCudaSiluParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan output;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaSiluParams;
+
+// activated_gate is already SiLU-activated. This operation is deliberately a
+// plain multiply; SiLU+multiply fusion is outside ABI v1's PR 06 path.
+typedef struct RustInferCudaGatedMultiplyParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan activated_gate;
+  RustInferCudaBufferSpan up;
+  RustInferCudaBufferSpan output;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaGatedMultiplyParams;
+
+// Standard non-interleaved Llama RoPE rotates the two contiguous halves of
+// rotary_dimension. cos and sin are F32 tables with logical shape
+// [table_position_count, rotary_dimension / 2]. The input/output logical shape
+// is [token_count, head_count, head_size].
+typedef struct RustInferCudaRopeParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan cos;
+  RustInferCudaBufferSpan sin;
+  RustInferCudaBufferSpan output;
+  uint64_t token_count;
+  uint64_t head_count;
+  uint64_t head_size;
+  uint64_t rotary_dimension;
+  uint64_t table_position_count;
+  uint64_t position_offset;
+  uint64_t reserved[5];
+} RustInferCudaRopeParams;
+
+// Only BF16<->F32 conversions are accepted by this operation.
+typedef struct RustInferCudaCastParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan input;
+  RustInferCudaBufferSpan output;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaCastParams;
+
+#define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
+#define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
+#define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
+#define RUSTINFER_CUDA_GEMM_EPILOGUE_NONE 0u
+#define RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED 1u
+#define RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT 1u
+
+// PR 06 deliberately exposes one exact dense GEMM contract. The logical
+// operation is row-major Y[M,N] = X[M,K] * W[N,K]^T with BF16 X/W/Y and F32
+// accumulation. input_transpose must be N, weight_transpose must be T, all
+// layouts must be ROW_MAJOR, epilogue must be NONE, and deterministic must be
+// DETERMINISTIC_REQUIRED. max_workspace_bytes is a preparation-time cap; the
+// selected exact requirement is returned by gemm_plan_info. flags, reserved0,
+// and every reserved element must be zero.
+typedef struct RustInferCudaGemmConfig {
+  uint32_t struct_size;
+  uint32_t flags;
+  uint64_t m;
+  uint64_t n;
+  uint64_t k;
+  RustInferCudaDType input_dtype;
+  RustInferCudaDType weight_dtype;
+  RustInferCudaDType accumulator_dtype;
+  RustInferCudaDType output_dtype;
+  uint32_t input_transpose;
+  uint32_t weight_transpose;
+  uint32_t input_layout;
+  uint32_t weight_layout;
+  uint32_t output_layout;
+  uint32_t epilogue;
+  uint32_t deterministic;
+  uint32_t reserved0;
+  uint64_t max_workspace_bytes;
+  uint64_t reserved[3];
+} RustInferCudaGemmConfig;
+
+// Immutable metadata for the algorithm prepared into an opaque GEMM plan.
+// IDs are cuBLASLt algorithm configuration values and are meaningful together
+// with compute capability and the recorded CUDA Runtime/cuBLASLt versions.
+typedef struct RustInferCudaGemmAlgorithmInfo {
+  uint32_t struct_size;
+  uint32_t backend;
+  int32_t algorithm_id;
+  uint32_t tile_id;
+  uint32_t stages_id;
+  uint32_t split_k;
+  uint32_t reduction_scheme;
+  uint32_t cta_swizzling;
+  uint32_t custom_option;
+  uint32_t deterministic;
+  uint64_t workspace_bytes;
+  uint64_t numerical_implementation_flags;
+  uint32_t compute_capability_major;
+  uint32_t compute_capability_minor;
+  int32_t runtime_version;
+  int32_t cublaslt_version;
+  uint64_t m;
+  uint64_t n;
+  uint64_t k;
+  uint64_t reserved[2];
+} RustInferCudaGemmAlgorithmInfo;
 
 #ifdef __cplusplus
 #define RUSTINFER_CUDA_NOEXCEPT noexcept
@@ -174,7 +379,7 @@ RustInferCudaStatus rustinfer_cuda_device_buffer_create(
     uint64_t byte_len,
     RustInferCudaDeviceBuffer** out_buffer,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
-// Active copy tokens make close fail with INVALID_STATE before cudaFree.
+// Active copy/primitive uses make close fail with INVALID_STATE before cudaFree.
 // Once cudaFree is attempted, the handle follows the single-shot close rule.
 // An ambiguous failed free stays logically accounted and keeps a context-child
 // lease so allocation stats/context teardown remain fail closed.
@@ -187,7 +392,7 @@ RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
     uint64_t byte_len,
     RustInferCudaPinnedHostBuffer** out_buffer,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
-// Synchronous CPU access is rejected while an async copy token is active.
+// Synchronous CPU access is rejected while an async use is active.
 RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_write(
     RustInferCudaPinnedHostBuffer* buffer,
     uint64_t destination_offset,
@@ -200,7 +405,7 @@ RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_read(
     uint8_t* destination,
     uint64_t destination_len,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
-// Active copy tokens make close fail before cudaFreeHost. A free attempt is
+// Active copy uses make close fail before cudaFreeHost. A free attempt is
 // otherwise single-shot even when CUDA reports a deferred earlier error;
 // ambiguous failure remains logically live/accounted.
 RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
@@ -243,6 +448,111 @@ RustInferCudaStatus rustinfer_cuda_copy_synchronize(
 // completion is confirmed; otherwise the handle and active-use guards remain.
 RustInferCudaStatus rustinfer_cuda_copy_close(
     RustInferCudaCopy** copy,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Core primitive calls are synchronously complete even though their device
+// work is enqueued on the explicit stream: each call validates and exclusively
+// borrows all opaque handles, launches without host/device allocation, then
+// synchronizes that same stream before returning. A synchronization or CUDA
+// context-restoration failure leaves the handles permanently busy/poisoned so
+// close or reuse fails closed instead of risking use-after-free.
+//
+// Declared spans may have excess trailing capacity, but every touched byte is
+// checked against both span.byte_len and the opaque allocation. Exact
+// input/output alias is accepted only where documented below; all partial
+// write/input overlap is rejected. Zero logical elements are a validated
+// allocation-free no-op and do not launch or synchronize. Arithmetic follows
+// CUDA IEEE NaN/Inf propagation and BF16 round-to-nearest behavior; values are
+// never silently sanitized.
+
+// table/output accept F32 or BF16 and must match; token_ids is U32 and scratch
+// is U8. output may not alias any input or scratch. If any token is OOB, output
+// remains untouched, the lowest bad token is reported, and OUT_OF_RANGE is
+// returned only after the stream is confirmed complete. A zero-token call
+// clears only out_report; its device scratch is intentionally untouched.
+RustInferCudaStatus rustinfer_cuda_embedding_execute(
+    const RustInferCudaEmbeddingParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// RMSNorm accumulates sum(x*x), mean, reciprocal square root, and scaling in
+// F32 for both accepted storage dtypes. Exact input/output alias is supported;
+// weight/output overlap and partial input/output overlap are rejected.
+RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
+    const RustInferCudaRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Exact output alias with either input is supported. Partial overlap is not.
+RustInferCudaStatus rustinfer_cuda_residual_add_execute(
+    const RustInferCudaResidualAddParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Exact input/output alias is supported. silu(x) is evaluated as
+// x / (1 + exp(-x)); exceptional values follow CUDA arithmetic.
+RustInferCudaStatus rustinfer_cuda_silu_execute(
+    const RustInferCudaSiluParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Computes activated_gate * up. Exact output alias with either input is
+// supported; partial overlap is rejected.
+RustInferCudaStatus rustinfer_cuda_gated_multiply_execute(
+    const RustInferCudaGatedMultiplyParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// cos/sin must be F32. input/output accept one matching F32 or BF16 dtype.
+// Exact input/output alias is supported because each rotary pair is owned by a
+// single CUDA thread; table/output overlap and partial alias are rejected.
+RustInferCudaStatus rustinfer_cuda_rope_execute(
+    const RustInferCudaRopeParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// BF16<->F32 only. F32 NaNs narrow to CUDA's canonical BF16 NaN 0x7fff;
+// BF16-to-F32 expansion preserves the source BF16 bits. Any input/output
+// overlap is rejected.
+RustInferCudaStatus rustinfer_cuda_cast_execute(
+    const RustInferCudaCastParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Plan creation performs all cuBLASLt descriptor construction and heuristic
+// selection. A successful plan owns one context-child lease and is immutable.
+RustInferCudaStatus rustinfer_cuda_gemm_plan_create(
+    RustInferCudaContext* context,
+    const RustInferCudaGemmConfig* config,
+    RustInferCudaGemmPlan** out_plan,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_gemm_plan_info(
+    RustInferCudaGemmPlan* plan,
+    RustInferCudaGemmAlgorithmInfo* out_info,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Executes the prepared logical row-major operation without byte reordering:
+// cuBLASLt sees column-major TN(W, X, Y). Every span must have exactly the
+// prepared byte length (workspace uses the selected requirement), a
+// 256-byte-aligned byte_offset, and a handle owned by the plan's context. Any
+// overlap among X/W/Y/workspace is rejected. The call exclusively borrows the
+// plan, buffers, and explicit stream, synchronizes that same stream, and only
+// releases the guards after completion and context restoration are confirmed.
+// No allocation, heuristic query, or descriptor creation occurs here.
+RustInferCudaStatus rustinfer_cuda_gemm_plan_execute(
+    RustInferCudaGemmPlan* plan,
+    const RustInferCudaBufferSpan* input,
+    const RustInferCudaBufferSpan* weight,
+    const RustInferCudaBufferSpan* output,
+    const RustInferCudaBufferSpan* workspace,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Active or permanently guarded plans cannot close. Native descriptor
+// destruction and context restoration must both complete before *plan is
+// consumed and its context-child lease is released.
+RustInferCudaStatus rustinfer_cuda_gemm_plan_close(
+    RustInferCudaGemmPlan** plan,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
 // Diagnostic-only storage keeps generic tensor allocation outside PR 03.

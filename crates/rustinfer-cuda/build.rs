@@ -72,6 +72,7 @@ fn build_native_cuda() -> Result<(), String> {
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
     run(&mut configure, "configure the native CUDA library")?;
 
+    let cublaslt_link_dir = discover_dynamic_cublaslt(&build_dir, profile, &toolkit)?;
     let cudart_link_dir = discover_dynamic_cudart(&build_dir, profile, &toolkit)?;
     let cuda_driver_link_dir = discover_cuda_driver(&build_dir, profile)?;
 
@@ -109,6 +110,10 @@ fn build_native_cuda() -> Result<(), String> {
     );
     println!(
         "cargo:rustc-link-search=native={}",
+        cublaslt_link_dir.display()
+    );
+    println!(
+        "cargo:rustc-link-search=native={}",
         cudart_link_dir.display()
     );
     println!(
@@ -116,6 +121,11 @@ fn build_native_cuda() -> Result<(), String> {
         cuda_driver_link_dir.display()
     );
     println!("cargo:rustc-link-lib=static=rustinfer_cuda_native");
+    // The static adapter archive retains cuBLASLt calls. Forward the exact
+    // toolkit-selected shared library after the archive so its symbols are
+    // resolved without accidentally accepting a driver stub or another CUDA
+    // installation found earlier on the host search path.
+    println!("cargo:rustc-link-lib=dylib=cublasLt");
     // nvcc emits fatbinary registration calls for the AOT CUDA translation
     // units. Use the selected toolkit's shared CUDA Runtime to satisfy those
     // symbols; the release environment must provide cudart.
@@ -129,13 +139,137 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         cmake_lists,
         kernels_dir.join("include/rustinfer_cuda.h"),
         kernels_dir.join("src/ffi_internal.hpp"),
+        kernels_dir.join("src/gemm.cu"),
         kernels_dir.join("src/host_runtime.cu"),
         kernels_dir.join("src/memory.cu"),
+        kernels_dir.join("src/primitives.cu"),
         kernels_dir.join("src/smoke_fill.cu"),
         kernels_dir.join("src/version.cu"),
+        kernels_dir.join("tests/abi_layout.c"),
     ] {
         println!("cargo:rerun-if-changed={}", source.display());
     }
+}
+
+fn discover_dynamic_cublaslt(
+    build_dir: &Path,
+    profile: &str,
+    toolkit: &CudaToolkit,
+) -> Result<PathBuf, String> {
+    let metadata = build_dir.join(format!("rustinfer-cuda-cublaslt-{profile}.path"));
+    let contents = fs::read_to_string(&metadata).map_err(|error| {
+        format!(
+            "CMake did not produce cuBLASLt link metadata at {}: {error}; ensure the selected toolkit includes the shared cuBLASLt development library",
+            metadata.display()
+        )
+    })?;
+    let linker_path = contents.trim();
+    if linker_path.is_empty() || linker_path.lines().count() != 1 {
+        return Err(format!(
+            "invalid cuBLASLt link metadata in {}: expected one non-empty path",
+            metadata.display()
+        ));
+    }
+
+    let linker_path = PathBuf::from(linker_path);
+    if !linker_path.is_absolute() || !linker_path.is_file() {
+        return Err(format!(
+            "CMake selected cuBLASLt linker file {}, but it is not an absolute existing file",
+            linker_path.display()
+        ));
+    }
+    if !is_dynamic_cublaslt_path(&linker_path) {
+        return Err(format!(
+            "CMake selected {}, which is not a shared cuBLASLt linker file; static cuBLASLt is unsupported by this Cargo link contract",
+            linker_path.display()
+        ));
+    }
+    if linker_path
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+    {
+        return Err(format!(
+            "CMake selected cuBLASLt linker file {} from a stubs directory; select the real shared cuBLASLt library",
+            linker_path.display()
+        ));
+    }
+
+    let canonical_linker = linker_path.canonicalize().map_err(|error| {
+        format!(
+            "cannot resolve cuBLASLt linker file {}: {error}",
+            linker_path.display()
+        )
+    })?;
+    if canonical_linker
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+    {
+        return Err(format!(
+            "CMake selected cuBLASLt linker file {} that resolves through a stubs directory",
+            linker_path.display()
+        ));
+    }
+    if !canonical_linker.starts_with(&toolkit.root) {
+        return Err(format!(
+            "CMake selected cuBLASLt {} outside the nvcc toolkit root {}; clear the CMake cache and select one CUDA toolkit",
+            canonical_linker.display(),
+            toolkit.root.display()
+        ));
+    }
+
+    let link_dir = linker_path.parent().ok_or_else(|| {
+        format!(
+            "cuBLASLt linker file {} has no parent directory",
+            linker_path.display()
+        )
+    })?;
+    let expected_linker = link_dir.join(dynamic_cublaslt_filename());
+    if !expected_linker.is_file() {
+        return Err(format!(
+            "cuBLASLt shared development linker file {} is missing; install the complete CUDA toolkit rather than a static- or runtime-only package",
+            expected_linker.display()
+        ));
+    }
+    validate_cublaslt_development_linker(&expected_linker, &canonical_linker, toolkit)?;
+
+    println!(
+        "cargo:warning=rustinfer-cuda: cuBLASLt strategy=shared linker={}",
+        expected_linker.display()
+    );
+    Ok(link_dir.to_path_buf())
+}
+
+fn validate_cublaslt_development_linker(
+    linker: &Path,
+    cmake_selection: &Path,
+    toolkit: &CudaToolkit,
+) -> Result<(), String> {
+    let canonical = linker.canonicalize().map_err(|error| {
+        format!(
+            "cannot resolve cuBLASLt development linker file {}: {error}",
+            linker.display()
+        )
+    })?;
+    if canonical
+        .components()
+        .any(|component| component.as_os_str() == "stubs")
+        || !canonical.starts_with(&toolkit.root)
+    {
+        return Err(format!(
+            "cuBLASLt development linker {} resolves outside the selected real toolkit {}",
+            linker.display(),
+            toolkit.root.display()
+        ));
+    }
+    if canonical != cmake_selection {
+        return Err(format!(
+            "cuBLASLt development linker {} resolves to {}, but CMake selected {}; refusing mixed libraries",
+            linker.display(),
+            canonical.display(),
+            cmake_selection.display()
+        ));
+    }
+    Ok(())
 }
 
 fn discover_cuda_driver(build_dir: &Path, profile: &str) -> Result<PathBuf, String> {
@@ -490,6 +624,33 @@ fn dynamic_cudart_filename() -> &'static str {
         "libcudart.dylib"
     } else {
         "libcudart.so"
+    }
+}
+
+fn dynamic_cublaslt_filename() -> &'static str {
+    if cfg!(windows) {
+        "cublasLt.lib"
+    } else if cfg!(target_os = "macos") {
+        "libcublasLt.dylib"
+    } else {
+        "libcublasLt.so"
+    }
+}
+
+fn is_dynamic_cublaslt_path(path: &Path) -> bool {
+    let Some(filename) = path.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    if cfg!(windows) {
+        filename.eq_ignore_ascii_case("cublasLt.lib")
+    } else if cfg!(target_os = "macos") {
+        filename.starts_with("libcublasLt")
+            && path
+                .extension()
+                .and_then(OsStr::to_str)
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("dylib"))
+    } else {
+        filename == "libcublasLt.so" || filename.starts_with("libcublasLt.so.")
     }
 }
 

@@ -138,16 +138,16 @@ bool release_copy_uses(RustInferCudaCopy* copy) noexcept {
   if (copy->completed) {
     return true;
   }
-  if (copy->stream->active_copies.load(std::memory_order_acquire) != 1 ||
-      copy->device->active_copies.load(std::memory_order_acquire) != 1 ||
-      copy->host->active_copies.load(std::memory_order_acquire) != 1) {
+  if (copy->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      copy->device->active_uses.load(std::memory_order_acquire) != 1 ||
+      copy->host->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
   }
   // Raw C callers must serialize mutation of opaque handles. Under that ABI
   // rule this precheck makes the three-resource state transition all-or-none.
-  copy->stream->active_copies.store(0, std::memory_order_release);
-  copy->device->active_copies.store(0, std::memory_order_release);
-  copy->host->active_copies.store(0, std::memory_order_release);
+  copy->stream->active_uses.store(0, std::memory_order_release);
+  copy->device->active_uses.store(0, std::memory_order_release);
+  copy->host->active_uses.store(0, std::memory_order_release);
   copy->completed = true;
   return true;
 }
@@ -188,6 +188,12 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
                             "submit CUDA copy",
                             "copy resources belong to different context owners");
   }
+  if (device->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "submit CUDA copy",
+        "CUDA context is poisoned by a prior restoration failure");
+  }
   if (!valid_range(device->byte_len, device_offset, byte_len) ||
       !valid_range(host->byte_len, host_offset, byte_len)) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
@@ -196,9 +202,9 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
                             "copy offset and length exceed a buffer range");
   }
   if (byte_len == 0) {
-    if (device->active_copies.load(std::memory_order_acquire) != 0 ||
-        host->active_copies.load(std::memory_order_acquire) != 0 ||
-        stream->active_copies.load(std::memory_order_acquire) != 0) {
+    if (device->active_uses.load(std::memory_order_acquire) != 0 ||
+        host->active_uses.load(std::memory_order_acquire) != 0 ||
+        stream->active_uses.load(std::memory_order_acquire) != 0) {
       return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                               RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                               "submit CUDA copy",
@@ -214,24 +220,24 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
                      RUSTINFER_CUDA_ERROR_STAGE_CREATE, "submit CUDA copy",
                      "host copy-token allocation failed");
   }
-  if (!try_acquire_copy(device->active_copies)) {
+  if (!try_acquire_copy(device->active_uses)) {
     std::free(copy_storage);
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "device buffer already has an active copy token");
   }
-  if (!try_acquire_copy(host->active_copies)) {
-    (void)release_copy(device->active_copies);
+  if (!try_acquire_copy(host->active_uses)) {
+    (void)release_copy(device->active_uses);
     std::free(copy_storage);
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "pinned host buffer already has an active copy token");
   }
-  if (!try_acquire_copy(stream->active_copies)) {
-    (void)release_copy(host->active_copies);
-    (void)release_copy(device->active_copies);
+  if (!try_acquire_copy(stream->active_uses)) {
+    (void)release_copy(host->active_uses);
+    (void)release_copy(device->active_uses);
     std::free(copy_storage);
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
@@ -239,9 +245,9 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
                             "stream already has an active copy token");
   }
   if (!retain_child(device->owner)) {
-    (void)release_copy(stream->active_copies);
-    (void)release_copy(host->active_copies);
-    (void)release_copy(device->active_copies);
+    (void)release_copy(stream->active_uses);
+    (void)release_copy(host->active_uses);
+    (void)release_copy(device->active_uses);
     std::free(copy_storage);
     return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
                           "submit CUDA copy",
@@ -289,9 +295,9 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
     copy->~RustInferCudaCopy();
     std::free(copy);
     (void)release_child(device->owner);
-    (void)release_copy(stream->active_copies);
-    (void)release_copy(host->active_copies);
-    (void)release_copy(device->active_copies);
+    (void)release_copy(stream->active_uses);
+    (void)release_copy(host->active_uses);
+    (void)release_copy(device->active_uses);
     publish_error(error, operation_error);
     return status;
   }
@@ -401,11 +407,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
   if (*buffer == nullptr) {
     return RUSTINFER_CUDA_STATUS_SUCCESS;
   }
-  if ((*buffer)->active_copies.load(std::memory_order_acquire) != 0) {
+  if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA device buffer",
-                            "device buffer still has an active copy token");
+                            "device buffer still has an active asynchronous use");
   }
 
   RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
@@ -553,7 +559,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_write(
                             "write pinned host buffer",
                             "write exceeds pinned host buffer range");
   }
-  if (buffer->active_copies.load(std::memory_order_acquire) != 0) {
+  if (buffer->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "write pinned host buffer",
@@ -584,7 +590,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_read(
                             "read pinned host buffer",
                             "read exceeds pinned host buffer range");
   }
-  if (buffer->active_copies.load(std::memory_order_acquire) != 0) {
+  if (buffer->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
                             "read pinned host buffer",
@@ -610,7 +616,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
   if (*buffer == nullptr) {
     return RUSTINFER_CUDA_STATUS_SUCCESS;
   }
-  if ((*buffer)->active_copies.load(std::memory_order_acquire) != 0) {
+  if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
                             RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
                             "close pinned host buffer",

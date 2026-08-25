@@ -18,3 +18,8 @@ rustinfer-tensor = { path = "../rustinfer-tensor" }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "cuda_weights_gpu"
+path = "tests/cuda_weights_gpu.rs"
+required-features = ["cuda"]

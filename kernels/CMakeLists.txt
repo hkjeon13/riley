@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(rustinfer_cuda_native VERSION 0.1.0 LANGUAGES CUDA)
+project(rustinfer_cuda_native VERSION 0.1.0 LANGUAGES C CUDA)
 
 find_package(CUDAToolkit REQUIRED)
 
@@ -13,11 +13,24 @@ message(STATUS
     "rustinfer CUDA AOT architectures: ${CMAKE_CUDA_ARCHITECTURES} (compile targets only)")
 
 add_library(rustinfer_cuda_native STATIC
+    src/gemm.cu
     src/host_runtime.cu
     src/memory.cu
+    src/primitives.cu
     src/smoke_fill.cu
     src/version.cu
 )
+
+# This target compiles the installed header as C11 and pins every public PR 06
+# struct layout independently of the CUDA implementation's C++ assertions.
+add_library(rustinfer_cuda_abi_checks OBJECT
+    tests/abi_layout.c
+)
+target_include_directories(rustinfer_cuda_abi_checks PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+target_compile_features(rustinfer_cuda_abi_checks PRIVATE c_std_11)
+add_dependencies(rustinfer_cuda_native rustinfer_cuda_abi_checks)
 
 target_include_directories(rustinfer_cuda_native
     PUBLIC
@@ -28,9 +41,10 @@ target_include_directories(rustinfer_cuda_native
 target_compile_features(rustinfer_cuda_native PUBLIC cuda_std_17)
 
 # Static archives do not carry transitive linker directives into Cargo. Keep
-# the CMake dependency accurate and emit the toolkit-selected shared cudart
-# linker file for build.rs to validate and forward explicitly.
+# the CMake dependencies accurate and emit the toolkit-selected linker files
+# for build.rs to validate and forward explicitly.
 target_link_libraries(rustinfer_cuda_native PRIVATE
+    CUDA::cublasLt
     CUDA::cudart
     CUDA::cuda_driver
 )
@@ -54,6 +68,10 @@ file(GENERATE
 file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-driver-$<CONFIG>.path"
     CONTENT "$<TARGET_FILE:CUDA::cuda_driver>\n"
+)
+file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-cublaslt-$<CONFIG>.path"
+    CONTENT "$<TARGET_FILE:CUDA::cublasLt>\n"
 )
 
 set_target_properties(rustinfer_cuda_native PROPERTIES

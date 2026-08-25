@@ -20,9 +20,11 @@ pub enum CudaErrorKind {
     NotReady,
     /// Host or device allocation failed.
     OutOfMemory,
+    /// The requested operation or exact contract is unsupported.
+    NotSupported,
     /// The CUDA Driver API returned an error.
     Driver,
-    /// The CUDA Runtime API returned an error.
+    /// A CUDA runtime or execution-library API returned an error.
     Runtime,
     /// Resource ownership or lifecycle state is invalid.
     InvalidState,
@@ -42,6 +44,8 @@ pub enum CudaErrorDomain {
     Driver,
     /// CUDA Runtime API.
     Runtime,
+    /// cuBLASLt execution and algorithm-selection API.
+    CuBlasLt,
     /// Native implementation invariant.
     Internal,
 }
@@ -56,6 +60,8 @@ pub enum CudaErrorStage {
     Validation,
     /// Resource creation.
     Create,
+    /// Immutable execution-plan preparation and algorithm selection.
+    Prepare,
     /// CUDA kernel launch and immediate launch checking.
     Launch,
     /// Asynchronous completion and late error checking.
@@ -115,6 +121,17 @@ impl CudaError {
     pub(crate) fn invalid_state(operation: &'static str, message: impl Into<String>) -> Self {
         Self::new(
             CudaErrorKind::InvalidState,
+            CudaErrorDomain::Rust,
+            CudaErrorStage::Validation,
+            0,
+            operation,
+            message,
+        )
+    }
+
+    pub(crate) fn invalid_argument(operation: &'static str, message: impl Into<String>) -> Self {
+        Self::new(
+            CudaErrorKind::InvalidArgument,
             CudaErrorDomain::Rust,
             CudaErrorStage::Validation,
             0,

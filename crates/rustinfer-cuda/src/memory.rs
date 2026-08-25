@@ -234,6 +234,85 @@ impl CudaDeviceBuffer {
         self.byte_len
     }
 
+    pub(crate) fn context_owner(&self) -> &Arc<ContextInner> {
+        &self.context
+    }
+
+    pub(crate) fn ensure_idle_for_operation(&self, operation: &'static str) -> CudaResult<()> {
+        self.use_state.ensure_idle(operation, "device buffer")
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn native_handle(&self) -> &ffi::DeviceBufferHandle {
+        &self.native
+    }
+
+    /// Uploads ordinary host bytes through a caller-owned reusable pinned
+    /// staging buffer and waits for every chunk before reusing that staging
+    /// storage.
+    ///
+    /// This helper is intended for model initialization. It performs no device
+    /// or pinned allocation; a non-empty source requires a non-empty staging
+    /// buffer. Validation happens before the first partial upload.
+    ///
+    /// # Errors
+    ///
+    /// Returns a range, context, staging-capacity, copy, or synchronization
+    /// error. A failed completion retains the existing fail-closed copy guards.
+    pub fn upload_from_slice(
+        &mut self,
+        destination_offset: u64,
+        source: &[u8],
+        staging: &mut CudaPinnedHostBuffer,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaDeviceBuffer::upload_from_slice";
+        let source_len = u64::try_from(source.len()).map_err(|_| {
+            CudaError::out_of_range(OPERATION, "source length does not fit the CUDA ABI")
+        })?;
+        ensure_same_context(&self.context, &staging.context, OPERATION)?;
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_range(self.byte_len, destination_offset, source_len, OPERATION)?;
+        self.use_state.ensure_idle(OPERATION, "device buffer")?;
+        staging
+            .use_state
+            .ensure_idle(OPERATION, "pinned host buffer")?;
+
+        if source.is_empty() {
+            return self
+                .copy_from_pinned_async(destination_offset, staging, 0, 0, stream)?
+                .synchronize();
+        }
+        if staging.byte_len == 0 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "a non-empty upload requires a non-empty pinned staging buffer",
+            ));
+        }
+        let staging_capacity = usize::try_from(staging.byte_len).unwrap_or(usize::MAX);
+        let mut source_offset = 0_usize;
+        while source_offset < source.len() {
+            let chunk_len = staging_capacity.min(source.len() - source_offset);
+            let chunk = &source[source_offset..source_offset + chunk_len];
+            staging.write(0, chunk)?;
+            let uploaded = u64::try_from(source_offset).map_err(|_| {
+                CudaError::out_of_range(OPERATION, "uploaded byte count does not fit the CUDA ABI")
+            })?;
+            let chunk_len = u64::try_from(chunk_len).map_err(|_| {
+                CudaError::out_of_range(OPERATION, "chunk length does not fit the CUDA ABI")
+            })?;
+            let chunk_destination = destination_offset
+                .checked_add(uploaded)
+                .ok_or_else(|| CudaError::out_of_range(OPERATION, "destination offset overflow"))?;
+            self.copy_from_pinned_async(chunk_destination, staging, 0, chunk_len, stream)?
+                .synchronize()?;
+            source_offset += usize::try_from(chunk_len).map_err(|_| {
+                CudaError::out_of_range(OPERATION, "completed chunk does not fit host usize")
+            })?;
+        }
+        Ok(())
+    }
+
     /// Enqueues an asynchronous pinned-host-to-device copy.
     ///
     /// The returned pending token exclusively borrows the originating stream

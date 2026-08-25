@@ -78,8 +78,8 @@ impl error::Error for ReferenceError {}
 ///
 /// # Errors
 ///
-/// Returns an error for zero hidden size, dimension overflow, mismatched slice
-/// lengths, or a token ID outside the vocabulary.
+/// Returns an error for zero vocabulary/hidden size, dimension overflow,
+/// mismatched slice lengths, or a token ID outside the vocabulary.
 pub fn embedding(
     table: &[f32],
     vocabulary_size: usize,
@@ -87,6 +87,7 @@ pub fn embedding(
     token_ids: &[u32],
     output: &mut [f32],
 ) -> ReferenceResult<()> {
+    require_nonzero("vocabulary_size", vocabulary_size)?;
     require_nonzero("hidden_size", hidden_size)?;
     let table_len = checked_product("embedding", vocabulary_size, hidden_size)?;
     require_len("table", table_len, table.len())?;
@@ -273,7 +274,11 @@ pub fn llama_rope(
     Ok(())
 }
 
-/// Casts `f32` values to IEEE bfloat16 storage bits with ties-to-even rounding.
+/// Casts `f32` values to bfloat16 with ties-to-even rounding.
+///
+/// NaNs use CUDA's canonical bfloat16 representation `0x7fff`, matching the
+/// production `__float2bfloat16_rn` conversion rather than preserving payload
+/// bits from the wider input.
 ///
 /// # Errors
 ///
@@ -303,12 +308,12 @@ fn f32_to_bf16_bits(value: f32) -> u16 {
     let bits = value.to_bits();
     let is_nan = bits & 0x7f80_0000 == 0x7f80_0000 && bits & 0x007f_ffff != 0;
     let rounded = if is_nan {
-        (bits >> 16) | 0x0040
+        0x7fff
     } else {
         let tie = (bits >> 16) & 1;
         bits.wrapping_add(0x7fff + tie) >> 16
     };
-    u16::try_from(rounded).unwrap_or(0x7fc0)
+    u16::try_from(rounded).unwrap_or(0x7fff)
 }
 
 /// Row-major dimensions and transpose flags for deterministic reference GEMM.
@@ -441,6 +446,14 @@ mod tests {
             })
         ));
         assert_close(&output, &[-1.0; 9], 0.0);
+
+        assert!(matches!(
+            embedding(&[], 0, 3, &[], &mut []),
+            Err(ReferenceError::InvalidParameter {
+                name: "vocabulary_size",
+                ..
+            })
+        ));
     }
 
     #[test]
@@ -531,7 +544,7 @@ mod tests {
         let mut bits = [0_u16; 6];
         cast_f32_to_bf16(&input, &mut bits).unwrap();
         assert_eq!(&bits[..5], &[0x3f80, 0xc020, 0x3f80, 0x3f82, 0x7f80]);
-        assert_eq!(bits[5] & 0x7fc0, 0x7fc0);
+        assert_eq!(bits[5], 0x7fff);
 
         let mut expanded = [0.0; 6];
         cast_bf16_to_f32(&bits, &mut expanded).unwrap();

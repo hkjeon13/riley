@@ -8,12 +8,20 @@ mod error;
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
 mod ffi;
+mod gemm;
 mod memory;
+mod primitives;
 mod runtime;
 
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
+};
+pub use primitives::{
+    CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
+    GatedMultiplyParams, ResidualAddParams, RmsNormParams, RopeParams, SiluParams, cast, embedding,
+    gated_multiply, residual_add, rms_norm, rope, silu,
 };
 pub use runtime::{
     CudaContext, CudaDevice, CudaEvent, CudaKernel, CudaPendingFill, CudaRuntime, CudaStream,

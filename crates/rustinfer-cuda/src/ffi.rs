@@ -14,12 +14,18 @@ const STATUS_OUT_OF_MEMORY: i32 = 5;
 const STATUS_DRIVER_ERROR: i32 = 6;
 const STATUS_RUNTIME_ERROR: i32 = 7;
 const STATUS_INVALID_STATE: i32 = 8;
+const STATUS_INTERNAL_ERROR: i32 = 9;
+const STATUS_CUBLASLT_ERROR: i32 = 10;
+const STATUS_NOT_SUPPORTED: i32 = 11;
 
 const DOMAIN_VALIDATION: u32 = 1;
 const DOMAIN_DRIVER: u32 = 2;
 const DOMAIN_RUNTIME: u32 = 3;
+const DOMAIN_INTERNAL: u32 = 4;
+const DOMAIN_CUBLASLT: u32 = 5;
 
 const STAGE_INITIALIZE: u32 = 1;
+const STAGE_VALIDATION: u32 = 2;
 const STAGE_CREATE: u32 = 3;
 const STAGE_LAUNCH: u32 = 4;
 const STAGE_SYNCHRONIZE: u32 = 5;
@@ -27,12 +33,35 @@ const STAGE_QUERY: u32 = 6;
 const STAGE_RECORD: u32 = 7;
 const STAGE_COPY: u32 = 8;
 const STAGE_CLOSE: u32 = 9;
+const STAGE_PREPARE: u32 = 10;
 
 const ERROR_MESSAGE_CAPACITY: usize = 256;
 const DEVICE_NAME_CAPACITY: usize = 256;
 const ERROR_INFO_SIZE: u32 = 272;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
 const ALLOCATION_STATS_SIZE: u32 = 40;
+const BUFFER_SPAN_SIZE: u32 = 48;
+const EMBEDDING_ERROR_REPORT_SIZE: u32 = 32;
+const EMBEDDING_PARAMS_SIZE: u32 = 256;
+const RMS_NORM_PARAMS_SIZE: u32 = 208;
+const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
+const SILU_PARAMS_SIZE: u32 = 152;
+const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
+const ROPE_PARAMS_SIZE: u32 = 288;
+const CAST_PARAMS_SIZE: u32 = 152;
+const GEMM_CONFIG_SIZE: u32 = 112;
+const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
+
+pub(super) const DTYPE_F32: i32 = 1;
+pub(super) const DTYPE_BF16: i32 = 2;
+pub(super) const DTYPE_U32: i32 = 3;
+pub(super) const DTYPE_U8: i32 = 4;
+
+const GEMM_TRANSPOSE_N: u32 = 0;
+const GEMM_TRANSPOSE_T: u32 = 1;
+const GEMM_LAYOUT_ROW_MAJOR: u32 = 1;
+const GEMM_EPILOGUE_NONE: u32 = 0;
+const GEMM_DETERMINISTIC_REQUIRED: u32 = 1;
 
 #[repr(C)]
 struct ErrorInfo {
@@ -177,6 +206,266 @@ struct RawCopy {
     _not_send_sync: PhantomData<*mut ()>,
 }
 
+#[repr(C)]
+struct RawGemmPlan {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub(super) struct RawBufferSpan {
+    struct_size: u32,
+    dtype: i32,
+    buffer: *mut RawDeviceBuffer,
+    byte_offset: u64,
+    byte_len: u64,
+    reserved: [u64; 2],
+}
+
+#[repr(C)]
+struct RawEmbeddingErrorReport {
+    struct_size: u32,
+    code: u32,
+    token_position: u64,
+    token_id: u64,
+    reserved: u64,
+}
+
+impl RawEmbeddingErrorReport {
+    const fn new() -> Self {
+        Self {
+            struct_size: EMBEDDING_ERROR_REPORT_SIZE,
+            code: 0,
+            token_position: 0,
+            token_id: 0,
+            reserved: 0,
+        }
+    }
+}
+
+#[repr(C)]
+struct RawEmbeddingParams {
+    struct_size: u32,
+    reserved0: u32,
+    table: RawBufferSpan,
+    token_ids: RawBufferSpan,
+    output: RawBufferSpan,
+    device_error_scratch: RawBufferSpan,
+    out_report: *mut RawEmbeddingErrorReport,
+    token_count: u64,
+    vocabulary_size: u64,
+    hidden_size: u64,
+    reserved: [u64; 3],
+}
+
+#[repr(C)]
+struct RawRmsNormParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawResidualAddParams {
+    struct_size: u32,
+    reserved0: u32,
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawSiluParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawGatedMultiplyParams {
+    struct_size: u32,
+    reserved0: u32,
+    activated_gate: RawBufferSpan,
+    up: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawRopeParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    cos: RawBufferSpan,
+    sin: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    head_count: u64,
+    head_size: u64,
+    rotary_dimension: u64,
+    table_position_count: u64,
+    position_offset: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawCastParams {
+    struct_size: u32,
+    reserved0: u32,
+    input: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawGemmConfig {
+    struct_size: u32,
+    flags: u32,
+    m: u64,
+    n: u64,
+    k: u64,
+    input_dtype: i32,
+    weight_dtype: i32,
+    accumulator_dtype: i32,
+    output_dtype: i32,
+    input_transpose: u32,
+    weight_transpose: u32,
+    input_layout: u32,
+    weight_layout: u32,
+    output_layout: u32,
+    epilogue: u32,
+    deterministic: u32,
+    reserved0: u32,
+    max_workspace_bytes: u64,
+    reserved: [u64; 3],
+}
+
+impl RawGemmConfig {
+    const fn new(m: u64, n: u64, k: u64, max_workspace_bytes: u64) -> Self {
+        Self {
+            struct_size: GEMM_CONFIG_SIZE,
+            flags: 0,
+            m,
+            n,
+            k,
+            input_dtype: DTYPE_BF16,
+            weight_dtype: DTYPE_BF16,
+            accumulator_dtype: DTYPE_F32,
+            output_dtype: DTYPE_BF16,
+            input_transpose: GEMM_TRANSPOSE_N,
+            weight_transpose: GEMM_TRANSPOSE_T,
+            input_layout: GEMM_LAYOUT_ROW_MAJOR,
+            weight_layout: GEMM_LAYOUT_ROW_MAJOR,
+            output_layout: GEMM_LAYOUT_ROW_MAJOR,
+            epilogue: GEMM_EPILOGUE_NONE,
+            deterministic: GEMM_DETERMINISTIC_REQUIRED,
+            reserved0: 0,
+            max_workspace_bytes,
+            reserved: [0; 3],
+        }
+    }
+}
+
+#[repr(C)]
+struct RawGemmAlgorithmInfo {
+    struct_size: u32,
+    backend: u32,
+    algorithm_id: i32,
+    tile_id: u32,
+    stages_id: u32,
+    split_k: u32,
+    reduction_scheme: u32,
+    cta_swizzling: u32,
+    custom_option: u32,
+    deterministic: u32,
+    workspace_bytes: u64,
+    numerical_implementation_flags: u64,
+    compute_capability_major: u32,
+    compute_capability_minor: u32,
+    runtime_version: i32,
+    cublaslt_version: i32,
+    m: u64,
+    n: u64,
+    k: u64,
+    reserved: [u64; 2],
+}
+
+impl RawGemmAlgorithmInfo {
+    const fn new() -> Self {
+        Self {
+            struct_size: GEMM_ALGORITHM_INFO_SIZE,
+            backend: 0,
+            algorithm_id: 0,
+            tile_id: 0,
+            stages_id: 0,
+            split_k: 0,
+            reduction_scheme: 0,
+            cta_swizzling: 0,
+            custom_option: 0,
+            deterministic: 0,
+            workspace_bytes: 0,
+            numerical_implementation_flags: 0,
+            compute_capability_major: 0,
+            compute_capability_minor: 0,
+            runtime_version: 0,
+            cublaslt_version: 0,
+            m: 0,
+            n: 0,
+            k: 0,
+            reserved: [0; 2],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeGemmAlgorithmInfo {
+    pub(super) backend: u32,
+    pub(super) algorithm_id: i32,
+    pub(super) tile_id: u32,
+    pub(super) stages_id: u32,
+    pub(super) split_k: u32,
+    pub(super) reduction_scheme: u32,
+    pub(super) cta_swizzling: u32,
+    pub(super) custom_option: u32,
+    pub(super) deterministic: u32,
+    pub(super) workspace_bytes: u64,
+    pub(super) numerical_implementation_flags: u64,
+    pub(super) compute_capability_major: u32,
+    pub(super) compute_capability_minor: u32,
+    pub(super) runtime_version: i32,
+    pub(super) cublaslt_version: i32,
+    pub(super) m: u64,
+    pub(super) n: u64,
+    pub(super) k: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct NativeEmbeddingReport {
+    pub(super) code: u32,
+    pub(super) token_position: u64,
+    pub(super) token_id: u64,
+}
+
+pub(super) struct NativeEmbeddingCompletion {
+    pub(super) report: NativeEmbeddingReport,
+    pub(super) result: CudaResult<()>,
+}
+
 unsafe extern "C" {
     fn rustinfer_cuda_abi_version() -> u32;
     fn rustinfer_cuda_build_info() -> *const c_char;
@@ -309,6 +598,62 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_copy_close(copy: *mut *mut RawCopy, error: *mut ErrorInfo) -> i32;
+    fn rustinfer_cuda_embedding_execute(
+        params: *const RawEmbeddingParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_residual_add_execute(
+        params: *const RawResidualAddParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_silu_execute(
+        params: *const RawSiluParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_gated_multiply_execute(
+        params: *const RawGatedMultiplyParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_rope_execute(
+        params: *const RawRopeParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_cast_execute(
+        params: *const RawCastParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_gemm_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        out_plan: *mut *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_gemm_plan_info(
+        plan: *mut RawGemmPlan,
+        out_info: *mut RawGemmAlgorithmInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_gemm_plan_execute(
+        plan: *mut RawGemmPlan,
+        input: *const RawBufferSpan,
+        weight: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        workspace: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_gemm_plan_close(plan: *mut *mut RawGemmPlan, error: *mut ErrorInfo) -> i32;
     fn rustinfer_cuda_smoke_buffer_create(
         context: *mut RawContext,
         element_count: u64,
@@ -703,6 +1048,17 @@ impl DeviceBufferHandle {
         self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
     }
 
+    pub(super) fn span(&self, dtype: i32, byte_offset: u64, byte_len: u64) -> RawBufferSpan {
+        RawBufferSpan {
+            struct_size: BUFFER_SPAN_SIZE,
+            dtype,
+            buffer: self.as_ptr(),
+            byte_offset,
+            byte_len,
+            reserved: [0; 2],
+        }
+    }
+
     pub(super) fn close(&mut self) -> CudaResult<()> {
         let Some(pointer) = self.pointer else {
             return Ok(());
@@ -966,6 +1322,334 @@ impl Drop for CopyHandle {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn embedding_execute(
+    table: RawBufferSpan,
+    token_ids: RawBufferSpan,
+    output: RawBufferSpan,
+    device_error_scratch: RawBufferSpan,
+    token_count: u64,
+    vocabulary_size: u64,
+    hidden_size: u64,
+    stream: &mut StreamHandle,
+) -> NativeEmbeddingCompletion {
+    let mut report = RawEmbeddingErrorReport::new();
+    let params = RawEmbeddingParams {
+        struct_size: EMBEDDING_PARAMS_SIZE,
+        reserved0: 0,
+        table,
+        token_ids,
+        output,
+        device_error_scratch,
+        out_report: &mut report,
+        token_count,
+        vocabulary_size,
+        hidden_size,
+        reserved: [0; 3],
+    };
+    let mut error = ErrorInfo::new();
+    // SAFETY: every repr(C) descriptor and the report/error outputs remain
+    // alive for this synchronously completing native call. Safe wrappers keep
+    // all referenced opaque buffers and the stream borrowed throughout.
+    let status = unsafe { rustinfer_cuda_embedding_execute(&params, stream.as_ptr(), &mut error) };
+    NativeEmbeddingCompletion {
+        report: NativeEmbeddingReport {
+            code: report.code,
+            token_position: report.token_position,
+            token_id: report.token_id,
+        },
+        result: status_result(status, "execute CUDA embedding", &error),
+    }
+}
+
+pub(super) fn rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status("execute CUDA RMSNorm", stream, |stream, error| {
+        // SAFETY: params and both output buffers remain live for the complete
+        // synchronous C call; the safe wrapper retains every opaque handle.
+        unsafe { rustinfer_cuda_rms_norm_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn residual_add_execute(
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawResidualAddParams {
+        struct_size: RESIDUAL_ADD_PARAMS_SIZE,
+        reserved0: 0,
+        left,
+        right,
+        output,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA residual add", stream, |stream, error| {
+        // SAFETY: params and the borrowed opaque resources outlive the
+        // synchronously completing native operation.
+        unsafe { rustinfer_cuda_residual_add_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn silu_execute(
+    input: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawSiluParams {
+        struct_size: SILU_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        output,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA SiLU", stream, |stream, error| {
+        // SAFETY: params and the borrowed opaque resources outlive the
+        // synchronously completing native operation.
+        unsafe { rustinfer_cuda_silu_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn gated_multiply_execute(
+    activated_gate: RawBufferSpan,
+    up: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawGatedMultiplyParams {
+        struct_size: GATED_MULTIPLY_PARAMS_SIZE,
+        reserved0: 0,
+        activated_gate,
+        up,
+        output,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA gated multiply", stream, |stream, error| {
+        // SAFETY: params and the borrowed opaque resources outlive the
+        // synchronously completing native operation.
+        unsafe { rustinfer_cuda_gated_multiply_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn rope_execute(
+    input: RawBufferSpan,
+    cos: RawBufferSpan,
+    sin: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    head_count: u64,
+    head_size: u64,
+    rotary_dimension: u64,
+    table_position_count: u64,
+    position_offset: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRopeParams {
+        struct_size: ROPE_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        cos,
+        sin,
+        output,
+        token_count,
+        head_count,
+        head_size,
+        rotary_dimension,
+        table_position_count,
+        position_offset,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA RoPE", stream, |stream, error| {
+        // SAFETY: params and the borrowed opaque resources outlive the
+        // synchronously completing native operation.
+        unsafe { rustinfer_cuda_rope_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn cast_execute(
+    input: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawCastParams {
+        struct_size: CAST_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        output,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status("execute CUDA cast", stream, |stream, error| {
+        // SAFETY: params and the borrowed opaque resources outlive the
+        // synchronously completing native operation.
+        unsafe { rustinfer_cuda_cast_execute(&params, stream, error) }
+    })
+}
+
+fn primitive_status(
+    operation: &'static str,
+    stream: &mut StreamHandle,
+    call: impl FnOnce(*mut RawStream, *mut ErrorInfo) -> i32,
+) -> CudaResult<()> {
+    let mut error = ErrorInfo::new();
+    let status = call(stream.as_ptr(), &mut error);
+    status_result(status, operation, &error)
+}
+
+pub(super) struct GemmPlanHandle {
+    pointer: Option<NonNull<RawGemmPlan>>,
+}
+
+// SAFETY: the opaque plan can move between host threads because each native
+// call restores its retained CUDA context. The safe wrapper serializes plan
+// access with `&mut self` and deliberately does not make this handle Sync.
+unsafe impl Send for GemmPlanHandle {}
+
+impl GemmPlanHandle {
+    pub(super) fn create(
+        context: &ContextHandle,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+    ) -> CudaResult<Self> {
+        let config = RawGemmConfig::new(m, n, k, max_workspace_bytes);
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the context is retained by the native plan on success, the
+        // fixed-layout config remains live, and both outputs are writable for
+        // this synchronously completing preparation call.
+        let status = unsafe {
+            rustinfer_cuda_gemm_plan_create(context.as_ptr(), &config, &mut pointer, &mut error)
+        };
+        status_result(status, "prepare CUDA GEMM plan", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output("prepare CUDA GEMM plan", "native GEMM plan handle is null")
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawGemmPlan {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn info(&self) -> CudaResult<NativeGemmAlgorithmInfo> {
+        let mut info = RawGemmAlgorithmInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the owned plan and correctly sized output buffers remain
+        // live for the complete native metadata snapshot.
+        let status = unsafe { rustinfer_cuda_gemm_plan_info(self.as_ptr(), &mut info, &mut error) };
+        status_result(status, "query CUDA GEMM plan metadata", &error)?;
+        if info.struct_size != GEMM_ALGORITHM_INFO_SIZE || info.reserved != [0; 2] {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "query CUDA GEMM plan metadata",
+                "native GEMM metadata has an incompatible struct_size or non-zero reserved field",
+            ));
+        }
+        Ok(NativeGemmAlgorithmInfo {
+            backend: info.backend,
+            algorithm_id: info.algorithm_id,
+            tile_id: info.tile_id,
+            stages_id: info.stages_id,
+            split_k: info.split_k,
+            reduction_scheme: info.reduction_scheme,
+            cta_swizzling: info.cta_swizzling,
+            custom_option: info.custom_option,
+            deterministic: info.deterministic,
+            workspace_bytes: info.workspace_bytes,
+            numerical_implementation_flags: info.numerical_implementation_flags,
+            compute_capability_major: info.compute_capability_major,
+            compute_capability_minor: info.compute_capability_minor,
+            runtime_version: info.runtime_version,
+            cublaslt_version: info.cublaslt_version,
+            m: info.m,
+            n: info.n,
+            k: info.k,
+        })
+    }
+
+    pub(super) fn execute(
+        &mut self,
+        input: RawBufferSpan,
+        weight: RawBufferSpan,
+        output: RawBufferSpan,
+        workspace: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe layer exclusively borrows the plan, output,
+        // workspace, and stream and keeps the immutable inputs live. Native
+        // synchronizes the explicit stream before returning and retains every
+        // active-use guard if completion or context restoration is ambiguous.
+        let status = unsafe {
+            rustinfer_cuda_gemm_plan_execute(
+                self.as_ptr(),
+                &input,
+                &weight,
+                &output,
+                &workspace,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "execute CUDA GEMM plan", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw uniquely owns the native plan. Native leaves it non-null
+        // after any ambiguous destruction or permanent-use failure and nulls
+        // it only after descriptor teardown and context restoration complete.
+        let status = unsafe { rustinfer_cuda_gemm_plan_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close CUDA GEMM plan", &error)
+    }
+}
+
+impl Drop for GemmPlanHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct SmokeHandle {
     pointer: Option<NonNull<RawSmokeBuffer>>,
 }
@@ -1098,17 +1782,24 @@ fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> Cud
         STATUS_DRIVER_ERROR => CudaErrorKind::Driver,
         STATUS_RUNTIME_ERROR => CudaErrorKind::Runtime,
         STATUS_INVALID_STATE => CudaErrorKind::InvalidState,
+        STATUS_INTERNAL_ERROR => CudaErrorKind::Internal,
+        STATUS_CUBLASLT_ERROR => CudaErrorKind::Runtime,
+        STATUS_NOT_SUPPORTED => CudaErrorKind::NotSupported,
         _ => CudaErrorKind::Internal,
     };
     let domain = match error.domain {
         DOMAIN_VALIDATION => CudaErrorDomain::Validation,
         DOMAIN_DRIVER => CudaErrorDomain::Driver,
         DOMAIN_RUNTIME => CudaErrorDomain::Runtime,
+        DOMAIN_INTERNAL => CudaErrorDomain::Internal,
+        DOMAIN_CUBLASLT => CudaErrorDomain::CuBlasLt,
         _ => CudaErrorDomain::Internal,
     };
     let stage = match error.stage {
         STAGE_INITIALIZE => CudaErrorStage::Initialize,
+        STAGE_VALIDATION => CudaErrorStage::Validation,
         STAGE_CREATE => CudaErrorStage::Create,
+        STAGE_PREPARE => CudaErrorStage::Prepare,
         STAGE_LAUNCH => CudaErrorStage::Launch,
         STAGE_SYNCHRONIZE => CudaErrorStage::Synchronize,
         STAGE_QUERY => CudaErrorStage::Query,
@@ -1160,3 +1851,26 @@ const _: () = assert!(offset_of!(RawDeviceProperties, name) == 64);
 const _: () = assert!(size_of::<RawAllocationStats>() == 40);
 const _: () = assert!(offset_of!(RawAllocationStats, device_live_bytes) == 8);
 const _: () = assert!(offset_of!(RawAllocationStats, pinned_host_live_allocations) == 32);
+const _: () = assert!(size_of::<RawBufferSpan>() == 48);
+const _: () = assert!(offset_of!(RawBufferSpan, buffer) == 8);
+const _: () = assert!(offset_of!(RawBufferSpan, reserved) == 32);
+const _: () = assert!(size_of::<RawEmbeddingErrorReport>() == 32);
+const _: () = assert!(offset_of!(RawEmbeddingErrorReport, token_position) == 8);
+const _: () = assert!(size_of::<RawEmbeddingParams>() == 256);
+const _: () = assert!(offset_of!(RawEmbeddingParams, out_report) == 200);
+const _: () = assert!(size_of::<RawRmsNormParams>() == 208);
+const _: () = assert!(offset_of!(RawRmsNormParams, epsilon) == 168);
+const _: () = assert!(size_of::<RawResidualAddParams>() == 200);
+const _: () = assert!(size_of::<RawSiluParams>() == 152);
+const _: () = assert!(size_of::<RawGatedMultiplyParams>() == 200);
+const _: () = assert!(size_of::<RawRopeParams>() == 288);
+const _: () = assert!(offset_of!(RawRopeParams, position_offset) == 240);
+const _: () = assert!(size_of::<RawCastParams>() == 152);
+const _: () = assert!(size_of::<RawGemmConfig>() == 112);
+const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
+const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);
+const _: () = assert!(offset_of!(RawGemmConfig, max_workspace_bytes) == 80);
+const _: () = assert!(size_of::<RawGemmAlgorithmInfo>() == 112);
+const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, workspace_bytes) == 40);
+const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, numerical_implementation_flags) == 48);
+const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, m) == 72);
