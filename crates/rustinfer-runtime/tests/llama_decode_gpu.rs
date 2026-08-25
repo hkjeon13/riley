@@ -165,6 +165,7 @@ fn top1(bytes: &[u8]) -> usize {
 
 fn assert_pairwise_logits(label: &str, actual: &[u8], expected: &[u8]) -> NumericMetrics {
     let metrics = numeric_metrics(actual, expected);
+    assert_eq!(top1(actual), top1(expected), "{label} top-1 token");
     assert!(
         metrics.cosine >= PR09_PAIRWISE_LOGITS_COSINE_MIN,
         "{label} cosine failed the PR01 E0 v2 derived pairwise envelope: {metrics:?}"
@@ -177,7 +178,6 @@ fn assert_pairwise_logits(label: &str, actual: &[u8], expected: &[u8]) -> Numeri
         metrics.mean_abs <= PR09_PAIRWISE_LOGITS_MEAN_ABS_MAX,
         "{label} mean abs failed the PR01 E0 v2 derived pairwise envelope: {metrics:?}"
     );
-    assert_eq!(top1(actual), top1(expected), "{label} top-1 token");
     metrics
 }
 
@@ -559,7 +559,7 @@ fn pinned_smollm2_reference_and_optimized_decode_preserve_logits_and_top1() -> T
         &context,
         &mut stream,
         &PINNED_TOKENS_A,
-        2,
+        DEFAULT_PARITY_DECODE_CALLS,
         true,
         None,
     )?;
@@ -568,13 +568,13 @@ fn pinned_smollm2_reference_and_optimized_decode_preserve_logits_and_top1() -> T
         &context,
         &mut stream,
         &PINNED_TOKENS_A,
-        2,
+        DEFAULT_PARITY_DECODE_CALLS,
         false,
         Some(&reference.consumed_tokens),
     )?;
     assert_eq!(reference.row_bytes, optimized.row_bytes);
     assert_eq!(reference.consumed_tokens, optimized.consumed_tokens);
-    for row in 0..=2 {
+    for row in 0..=DEFAULT_PARITY_DECODE_CALLS {
         let start = row * reference.row_bytes;
         let end = start + reference.row_bytes;
         let metrics = assert_pairwise_logits(

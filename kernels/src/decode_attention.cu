@@ -832,9 +832,14 @@ __global__ void decode_partial_state_reduce_kernel(
             partial_states[state_base + 2 + depth], &maximum, &denominator,
             &numerator);
       }
-      const float normalized = denominator == 0.0F
-                                   ? 0.0F
-                                   : numerator / denominator;
+      // Match the prefill online kernel's single final normalization so the
+      // one-partition decode path does not introduce an avoidable rounding
+      // difference before the BF16 cast.
+      const float inverse_denominator =
+          isnan(denominator)
+              ? CUDART_NAN_F
+              : (denominator > 0.0F ? 1.0F / denominator : 0.0F);
+      const float normalized = numerator * inverse_denominator;
       output[query_head * head_size + depth] =
           __float2bfloat16_rn(normalized);
     }
