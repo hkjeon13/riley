@@ -1,5 +1,13 @@
 //! Model, tensor, and backend orchestration boundary.
 
+mod kernel;
+pub mod reference;
+
+pub use kernel::{
+    KernelCapability, KernelImplementation, KernelKey, KernelOrigin, KernelPreference,
+    KernelRegistry, KernelRegistryError, OpId,
+};
+
 /// Static build information that does not initialize a CUDA device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct BuildInfo {
