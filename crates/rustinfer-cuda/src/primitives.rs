@@ -350,7 +350,7 @@ pub fn embedding(
             params.hidden_size,
             &mut stream.native,
         );
-        return match (completion.result, completion.report.code) {
+        match (completion.result, completion.report.code) {
             (Ok(()), 0) => Ok(()),
             (Err(source), EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE)
                 if source.kind() == CudaErrorKind::OutOfRange
@@ -368,7 +368,7 @@ pub fn embedding(
                 OPERATION,
                 format!("native embedding succeeded with unexpected report code {code}"),
             ))),
-        };
+        }
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -437,7 +437,7 @@ pub fn rms_norm(params: &mut RmsNormParams<'_>, stream: &mut CudaStream) -> Cuda
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::rms_norm_execute(
+        ffi::rms_norm_execute(
             params.input.raw(),
             params.weight.raw(),
             params.output.raw(),
@@ -445,7 +445,7 @@ pub fn rms_norm(params: &mut RmsNormParams<'_>, stream: &mut CudaStream) -> Cuda
             params.hidden_size,
             params.epsilon,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -492,13 +492,13 @@ pub fn residual_add(params: &mut ResidualAddParams<'_>, stream: &mut CudaStream)
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::residual_add_execute(
+        ffi::residual_add_execute(
             params.left.raw(),
             params.right.raw(),
             params.output.raw(),
             params.element_count,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -537,12 +537,12 @@ pub fn silu(params: &mut SiluParams<'_>, stream: &mut CudaStream) -> CudaResult<
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::silu_execute(
+        ffi::silu_execute(
             params.input.raw(),
             params.output.raw(),
             params.element_count,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -592,13 +592,13 @@ pub fn gated_multiply(
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::gated_multiply_execute(
+        ffi::gated_multiply_execute(
             params.activated_gate.raw(),
             params.up.raw(),
             params.output.raw(),
             params.element_count,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -695,7 +695,7 @@ pub fn rope(params: &mut RopeParams<'_>, stream: &mut CudaStream) -> CudaResult<
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::rope_execute(
+        ffi::rope_execute(
             params.input.raw(),
             params.cos.raw(),
             params.sin.raw(),
@@ -707,7 +707,7 @@ pub fn rope(params: &mut RopeParams<'_>, stream: &mut CudaStream) -> CudaResult<
             params.table_position_count,
             params.position_offset,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {
@@ -763,12 +763,12 @@ pub fn cast(params: &mut CastParams<'_>, stream: &mut CudaStream) -> CudaResult<
     )?;
     #[cfg(feature = "cuda")]
     {
-        return ffi::cast_execute(
+        ffi::cast_execute(
             params.input.raw(),
             params.output.raw(),
             params.element_count,
             &mut stream.native,
-        );
+        )
     }
     #[cfg(not(feature = "cuda"))]
     {

@@ -14,18 +14,15 @@ const STATUS_OUT_OF_MEMORY: i32 = 5;
 const STATUS_DRIVER_ERROR: i32 = 6;
 const STATUS_RUNTIME_ERROR: i32 = 7;
 const STATUS_INVALID_STATE: i32 = 8;
-const STATUS_INTERNAL_ERROR: i32 = 9;
 const STATUS_CUBLASLT_ERROR: i32 = 10;
 const STATUS_NOT_SUPPORTED: i32 = 11;
 
 const DOMAIN_VALIDATION: u32 = 1;
 const DOMAIN_DRIVER: u32 = 2;
 const DOMAIN_RUNTIME: u32 = 3;
-const DOMAIN_INTERNAL: u32 = 4;
 const DOMAIN_CUBLASLT: u32 = 5;
 
 const STAGE_INITIALIZE: u32 = 1;
-const STAGE_VALIDATION: u32 = 2;
 const STAGE_CREATE: u32 = 3;
 const STAGE_LAUNCH: u32 = 4;
 const STAGE_SYNCHRONIZE: u32 = 5;
@@ -1780,10 +1777,8 @@ fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> Cud
         STATUS_NOT_READY => CudaErrorKind::NotReady,
         STATUS_OUT_OF_MEMORY => CudaErrorKind::OutOfMemory,
         STATUS_DRIVER_ERROR => CudaErrorKind::Driver,
-        STATUS_RUNTIME_ERROR => CudaErrorKind::Runtime,
+        STATUS_RUNTIME_ERROR | STATUS_CUBLASLT_ERROR => CudaErrorKind::Runtime,
         STATUS_INVALID_STATE => CudaErrorKind::InvalidState,
-        STATUS_INTERNAL_ERROR => CudaErrorKind::Internal,
-        STATUS_CUBLASLT_ERROR => CudaErrorKind::Runtime,
         STATUS_NOT_SUPPORTED => CudaErrorKind::NotSupported,
         _ => CudaErrorKind::Internal,
     };
@@ -1791,13 +1786,11 @@ fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> Cud
         DOMAIN_VALIDATION => CudaErrorDomain::Validation,
         DOMAIN_DRIVER => CudaErrorDomain::Driver,
         DOMAIN_RUNTIME => CudaErrorDomain::Runtime,
-        DOMAIN_INTERNAL => CudaErrorDomain::Internal,
         DOMAIN_CUBLASLT => CudaErrorDomain::CuBlasLt,
         _ => CudaErrorDomain::Internal,
     };
     let stage = match error.stage {
         STAGE_INITIALIZE => CudaErrorStage::Initialize,
-        STAGE_VALIDATION => CudaErrorStage::Validation,
         STAGE_CREATE => CudaErrorStage::Create,
         STAGE_PREPARE => CudaErrorStage::Prepare,
         STAGE_LAUNCH => CudaErrorStage::Launch,
