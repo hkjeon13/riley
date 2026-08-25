@@ -516,7 +516,7 @@ fn one_thousand_iterations_do_not_allocate_or_leak() -> TestResult {
         .map(u32::try_from)
         .collect::<Result<_, _>>()?;
     let mut valid = vec![u16::try_from(KV_BLOCK_SIZE)?; maximum_blocks];
-    let mut logits = vec![0_u8; batch.output_byte_len()?];
+    let mut logits = vec![0_u8; vocabulary_row_bytes(&model)?];
     for target_length in 1_usize..=1_001 {
         let block_count = target_length.div_ceil(KV_BLOCK_SIZE);
         valid[block_count - 1] = u16::try_from(target_length - (block_count - 1) * KV_BLOCK_SIZE)?;
