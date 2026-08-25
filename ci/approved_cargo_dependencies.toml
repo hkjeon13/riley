@@ -30,6 +30,13 @@ version = "0.11.0"
 default_features = false
 features = []
 
+[[direct_dependencies]]
+owner = "rustinfer-runtime"
+name = "sha2"
+version = "0.11.0"
+default_features = false
+features = []
+
 [[packages]]
 name = "block-buffer"
 version = "0.12.1"

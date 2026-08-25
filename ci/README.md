@@ -32,7 +32,11 @@ and it is not part of a production artifact. The checker fails closed unless:
 - crate edges and feature ownership match `crates/README.md`;
 - every crate inherits `publish = false`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
-  `serde_json`, and `sha2` requirements owned by `rustinfer-model`;
+  `serde_json`, and `sha2` requirements owned by `rustinfer-model`, plus the
+  same reviewed `sha2` package used directly by `rustinfer-runtime`;
+- development-only dependency declarations match their own exact allowlist and
+  do not count as production edges, while their resolved registry packages
+  remain inside the exact lockfile closure below;
 - the complete resolved third-party graph exactly matches
   `ci/approved_cargo_dependencies.toml`, including crates.io source, checksum,
   license expression, MSRV, and dependency edges;

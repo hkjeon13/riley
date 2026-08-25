@@ -99,6 +99,26 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
         "default_features": False,
         "features": [],
     },
+    ("rustinfer-runtime", "sha2"): {
+        "version": "0.11.0",
+        "default_features": False,
+        "features": [],
+    },
+}
+
+EXPECTED_DEV_DEPENDENCIES = {
+    ("rustinfer-runtime", "rustinfer-cuda"): {
+        "req": "*",
+        "default_features": True,
+        "features": [],
+        "path": "crates/rustinfer-cuda",
+    },
+    ("rustinfer-runtime", "serde_json"): {
+        "req": "=1.0.145",
+        "default_features": True,
+        "features": [],
+        "path": None,
+    },
 }
 
 EXPECTED_PROFILES = {
@@ -233,7 +253,8 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
     if direct_keys != set(EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES):
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
-            "rustinfer-model -> serde, serde_json, and sha2"
+            "rustinfer-model -> serde, serde_json, and sha2 plus "
+            "rustinfer-runtime -> sha2"
         )
     for dependency in direct_dependencies:
         expected = EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES[
@@ -523,7 +544,68 @@ def validate_dependencies(
     for name, package in packages.items():
         actual_internal: set[str] = set()
         actual_external: set[tuple[str, str]] = set()
+        actual_dev: set[tuple[str, str]] = set()
         for dependency in package.get("dependencies", []):
+            if dependency.get("kind") == "dev":
+                dependency_name = dependency.get("name")
+                key = (name, dependency_name)
+                expected = EXPECTED_DEV_DEPENDENCIES.get(key)
+                if expected is None:
+                    raise BoundaryError(
+                        f"{name}: development Cargo dependency {dependency_name!r} "
+                        "is not in the exact dev-dependency allowlist"
+                    )
+                if dependency.get("req") != expected["req"]:
+                    raise BoundaryError(
+                        f"{name} -> {dependency_name}: development requirement must be "
+                        f"{expected['req']!r}"
+                    )
+                if dependency.get("rename") is not None or dependency.get("target") is not None:
+                    raise BoundaryError(
+                        f"{name} -> {dependency_name}: development dependency must be "
+                        "unrenamed and unconditional"
+                    )
+                if dependency.get("optional") is not False:
+                    raise BoundaryError(
+                        f"{name} -> {dependency_name}: development dependency cannot be optional"
+                    )
+                if dependency.get("uses_default_features") is not expected["default_features"]:
+                    raise BoundaryError(
+                        f"{name} -> {dependency_name}: development default-feature policy drifted"
+                    )
+                if dependency.get("features") != expected["features"]:
+                    raise BoundaryError(
+                        f"{name} -> {dependency_name}: development features must be "
+                        f"{expected['features']!r}"
+                    )
+                expected_path = expected["path"]
+                if expected_path is None:
+                    if dependency.get("source") != policy["registry_source"]:
+                        raise BoundaryError(
+                            f"{name} -> {dependency_name}: development dependency must use "
+                            "the approved crates.io source"
+                        )
+                    if dependency.get("path") is not None:
+                        raise BoundaryError(
+                            f"{name} -> {dependency_name}: registry development dependency "
+                            "cannot have a path"
+                        )
+                else:
+                    if dependency.get("source") is not None:
+                        raise BoundaryError(
+                            f"{name} -> {dependency_name}: workspace development dependency "
+                            "cannot use a registry source"
+                        )
+                    dependency_path_raw = dependency.get("path")
+                    if not isinstance(dependency_path_raw, str) or normalized_relative(
+                        Path(dependency_path_raw), root
+                    ) != expected_path:
+                        raise BoundaryError(
+                            f"{name} -> {dependency_name}: development path must resolve to "
+                            f"{expected_path}"
+                        )
+                actual_dev.add(key)
+                continue
             dependency_name = dependency.get("name")
             if dependency_name not in production_names:
                 approved = approved_direct.get((name, dependency_name))
@@ -613,6 +695,13 @@ def validate_dependencies(
                 f"{name}: approved external dependency boundary drifted; expected "
                 f"{sorted(dependency for _, dependency in expected_external)}, found "
                 f"{sorted(dependency for _, dependency in actual_external)}"
+            )
+        expected_dev = {key for key in EXPECTED_DEV_DEPENDENCIES if key[0] == name}
+        if actual_dev != expected_dev:
+            raise BoundaryError(
+                f"{name}: development dependency boundary drifted; expected "
+                f"{sorted(dependency for _, dependency in expected_dev)}, found "
+                f"{sorted(dependency for _, dependency in actual_dev)}"
             )
         graph[name] = actual_internal
 
@@ -869,7 +958,8 @@ def main() -> int:
     print("  excluded tool/research roots: tools/python, tools/native, experiments/triton")
     print(
         "  approved direct third-party Cargo dependencies: "
-        f"{len(dependency_policy['direct_dependencies'])} (rustinfer-model only)"
+        f"{len(dependency_policy['direct_dependencies'])} "
+        "(rustinfer-model and rustinfer-runtime)"
     )
     print(
         "  approved third-party Cargo package closure: "
