@@ -80,12 +80,12 @@
     },
     "counters": {
       "type": "object", "additionalProperties": false,
-      "required": ["cancellations", "disconnects", "overloads", "dropped_samples"],
+      "required": ["cancellations", "disconnects", "overloads", "dropped_observations"],
       "properties": {
         "cancellations": {"type": "integer", "minimum": 0},
         "disconnects": {"type": "integer", "minimum": 0},
         "overloads": {"type": "integer", "minimum": 0},
-        "dropped_samples": {"type": "integer", "minimum": 0}
+        "dropped_observations": {"type": "integer", "minimum": 0}
       }
     }
   }

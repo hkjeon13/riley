@@ -111,7 +111,7 @@ class SoakFixture:
         return {
             "active_requests": active, "waiting_requests": 0, "kv_allocated_blocks": 0,
             "allocation": {"device_live_count": 0, "device_live_bytes": 0, "pinned_live_count": 0, "pinned_live_bytes": 0},
-            "counters": {"cancellations": 1, "disconnects": 1, "overloads": 1, "dropped_samples": 0},
+            "counters": {"cancellations": 1, "disconnects": 1, "overloads": 1, "dropped_observations": 0},
         }
 
     def _sample(self, scenario_id: str | None) -> None:
@@ -223,9 +223,26 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         def mutate(fixture: SoakFixture) -> None:
             samples = [event for event in fixture.events if event["scenario_id"] == "steady" and event["kind"] == "sample"]
             samples[1]["sample_dropped"] = True
-            samples[1]["metrics"]["counters"]["dropped_samples"] = 1
         report = self.evaluate(mutate)
         self.assertFalse(next(check for check in report["checks"] if check["name"] == "no_dropped_samples")["passed"])
+
+    def test_bounded_request_observation_eviction_is_not_sample_loss(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            samples = [
+                event
+                for event in fixture.events
+                if event["scenario_id"] == "steady" and event["kind"] == "sample"
+            ]
+            samples[1]["metrics"]["counters"]["dropped_observations"] = 10_000
+
+        report = self.evaluate(mutate)
+        self.assertTrue(
+            next(
+                check
+                for check in report["checks"]
+                if check["name"] == "no_dropped_samples"
+            )["passed"]
+        )
 
     def test_sample_gap_fails(self) -> None:
         def mutate(fixture: SoakFixture) -> None:

@@ -52,12 +52,16 @@ integers):
     "cancellations": 0,
     "disconnects": 0,
     "overloads": 0,
-    "dropped_samples": 0
+    "dropped_observations": 0
   }
 }
 ```
 
-Counters are monotonic for one server lifetime.  For only the last server
+Counters are monotonic for one server lifetime. `dropped_observations` is the
+number of request summaries evicted from the bounded diagnostics ring; a
+nonzero value is expected under a long load and is not a monitoring sample
+loss. Evidence sample loss is checked independently through sequence numbers,
+monotonic time gaps, and each event's `sample_dropped` flag. For only the last server
 lifetime, the driver maps the new absolute `RUSTINFER_SOAK_FINAL_METRICS_JSON`
 path to `RUSTINFER_SHUTDOWN_METRICS_PATH`.  On final shutdown the CLI must
 create (never replace) the same metric shape there, after

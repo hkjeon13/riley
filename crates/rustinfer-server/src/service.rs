@@ -1144,8 +1144,8 @@ pub struct OperationalCounters {
     pub disconnects: u64,
     /// Requests or connections rejected at bounded overload boundaries.
     pub overloads: u64,
-    /// Observation samples evicted from the fixed-capacity ring.
-    pub dropped_samples: u64,
+    /// Request observations evicted from the fixed-capacity ring.
+    pub dropped_observations: u64,
 }
 
 /// Fixed, prompt-free JSON contract used by release and soak gates.
@@ -1206,7 +1206,7 @@ fn operational_metrics_from_snapshot(
                 .max(metrics.cancellations.load(Ordering::Acquire)),
             disconnects: metrics.disconnects.load(Ordering::Acquire),
             overloads: metrics.overloads.load(Ordering::Acquire),
-            dropped_samples: observations.dropped(),
+            dropped_observations: observations.dropped(),
         },
     }
 }

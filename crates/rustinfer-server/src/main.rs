@@ -878,6 +878,8 @@ mod tests {
         let decoded: serde_json::Value =
             serde_json::from_slice(&encoded).expect("decode shutdown metrics");
         assert_eq!(decoded["active_requests"], 0);
+        assert_eq!(decoded["counters"]["dropped_observations"], 0);
+        assert!(decoded["counters"].get("dropped_samples").is_none());
         std::fs::remove_file(&path).expect("remove exact test artifact");
     }
 }

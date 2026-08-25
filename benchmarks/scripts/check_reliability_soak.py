@@ -332,7 +332,7 @@ def _validate_sample(event: dict[str, Any], path: str) -> None:
     allocation = _exact(metrics["allocation"], {"device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"}, f"{path}.metrics.allocation")
     for key, value in allocation.items():
         _integer(value, f"{path}.metrics.allocation.{key}")
-    counters = _exact(metrics["counters"], {"cancellations", "disconnects", "overloads", "dropped_samples"}, f"{path}.metrics.counters")
+    counters = _exact(metrics["counters"], {"cancellations", "disconnects", "overloads", "dropped_observations"}, f"{path}.metrics.counters")
     for key, value in counters.items():
         _integer(value, f"{path}.metrics.counters.{key}")
     if not isinstance(event["sample_dropped"], bool):
@@ -538,7 +538,10 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
                     if PYTHON_RE.search(child["comm"]) or PYTHON_RE.search(child["executable"]):
                         python_children.append(child)
         checks.append(_check("no_python_children", not python_children, python_children, []))
-        dropped = any(event["kind"] == "sample" and (event["sample_dropped"] or event["metrics"]["counters"]["dropped_samples"] != 0) for event in rows)
+        dropped = any(
+            event["kind"] == "sample" and event["sample_dropped"]
+            for event in rows
+        )
         checks.append(_check("no_dropped_samples", not dropped, dropped, False))
         failures = [event for event in rows if event["kind"] == "failure"]
         checks.append(_check("no_failure_events", not failures, len(failures), 0))
