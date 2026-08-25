@@ -1,0 +1,111 @@
+{
+  "artifact_kind": "rustinfer-pr14-api-streaming-evidence",
+  "created_at_utc": "2026-08-25T16:08:59Z",
+  "schema_id": "rustinfer.pr14.api-streaming-evidence.v1",
+  "status": "passed",
+  "benchmark_scope": "functional-validation",
+  "scope_note": "Bounded HTTP/SSE, cancellation, concurrency, shutdown, CUDA engine lifecycle, and release CLI evidence; no performance claim.",
+  "source": {
+    "branch": "codex/pr-14-api-streaming",
+    "git_dirty": false,
+    "git_revision": "8782121068909cc4fc6ff8d13f97e629aaabe271",
+    "source_tar_bytes": 50237440,
+    "source_tar_sha256": "d30bcec86fa0df57fc5aa492cb32e0261bf79d7a8e25b02077ab497e65d00766"
+  },
+  "environment": {
+    "host": "server-4096",
+    "host_os": "Ubuntu 22.04.5 LTS",
+    "host_kernel": "Linux 6.8.0-138-generic x86_64",
+    "cpu": "13th Gen Intel Core i7-13700K",
+    "logical_cpu_count": 24,
+    "ram_bytes": 67185598464,
+    "container_network": "disabled",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_mib": 24564,
+    "compute_capability": "8.9",
+    "nvidia_driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architectures": "89",
+    "rustc_version": "1.85.0",
+    "cargo_version": "1.85.0"
+  },
+  "models": [
+    {
+      "id": "HuggingFaceTB/SmolLM2-135M",
+      "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+      "dtype": "bfloat16",
+      "checkpoint_manifest_sha256": "feb8977cf0ee1840ad2e8aa44203948a7380c242da99d061fa35633f46a012b8"
+    },
+    {
+      "id": "Qwen/Qwen2.5-0.5B-Instruct",
+      "revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+      "dtype": "bfloat16",
+      "checkpoint_manifest_sha256": "69065d1cae54c007e3204255f8e7d7ba77bc5cd391d395ad8fc0a3965bc653b4"
+    }
+  ],
+  "api_contract": {
+    "protocol": "bounded HTTP/1.1 connection-close",
+    "endpoints": [
+      "/healthz",
+      "/readyz",
+      "/v1/models",
+      "/v1/models/{id}",
+      "/v1/completions"
+    ],
+    "request_schema_isolated_from_runtime": true,
+    "streaming": "SSE delta* then finish/error then [DONE]",
+    "bounded_connection_queue": true,
+    "bounded_engine_command_queue": true,
+    "bounded_request_event_channel": true,
+    "prompt_or_generated_text_logged": false,
+    "post_execute_cancellation_requires_quiescence": true
+  },
+  "validation": {
+    "remote_strict_clippy_all_targets_all_features": "passed",
+    "remote_workspace_all_targets_all_features": "275 passed, 0 failed, 66 ignored",
+    "remote_workspace_doctests_all_features": "14 passed, 0 failed",
+    "smollm2_api_gpu": "1 passed in 6.23 seconds",
+    "qwen_api_gpu": "1 passed in 21.35 seconds",
+    "streaming_non_streaming_parity": "passed for both checkpoints",
+    "sse_terminal_order": "finish immediately before [DONE]",
+    "prefill_disconnect": "before first token; TTFT absent, generated tokens zero, active/waiting zero",
+    "decode_disconnect": "after first non-empty delta; TTFT present, active/waiting zero",
+    "concurrency": "3 clients completed without deadlock",
+    "active_shutdown": "HTTP 503 and drained non-ready/non-accepting engine",
+    "release_cli": "health, model list, non-stream completion, SSE completion, stdin graceful shutdown passed"
+  },
+  "release_binary": {
+    "size_bytes": 9565408,
+    "sha256": "6cad437c640d32cd05eeac9bdd612671a6742de2c83b2c3023a37d8a6601de74"
+  },
+  "performance": {
+    "claim": null,
+    "warmup_count": null,
+    "measurement_count": null,
+    "ttft_ms": null,
+    "itl_ms": null,
+    "throughput_tokens_per_second": null,
+    "peak_vram_bytes": null,
+    "not_applicable_reason": "PR14 is Gate D functional validation; PR15 owns profiling and optimization measurement."
+  },
+  "provenance": {
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr14/8782121068909cc4fc6ff8d13f97e629aaabe271/run-20260825T160859Z",
+    "remote_payload_lines": 23,
+    "remote_regular_file_count_including_checksum": 24,
+    "remote_regular_file_bytes": 59868341,
+    "remote_root_apparent_bytes": 59876533,
+    "remote_checksum_file": "SHA256SUMS",
+    "remote_sha256sums_sha256": "f79fc20db0de4c3e8f73d5047d6778c7389188ee8e72304f49405951f4ec5e73"
+  },
+  "limitations": [
+    "This is functional validation and makes no latency, throughput, or performance-improvement claim.",
+    "Only the completions endpoint is implemented; chat, TLS, authentication, tenant quotas, and multi-GPU routing are out of scope.",
+    "The server uses bounded blocking threads and HTTP/1.1 connection-close framing rather than HTTP/2 or keep-alive.",
+    "Portable CLI graceful shutdown is stdin-driven; process-signal integration belongs to PR16.",
+    "GPU cancellation occurs at a safe quiescent iteration boundary rather than interrupting a running kernel.",
+    "GPU compatibility was validated only on the recorded single sm89 device, driver, toolkit, and checkpoints."
+  ]
+}
