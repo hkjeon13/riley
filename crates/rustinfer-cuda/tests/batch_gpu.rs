@@ -248,7 +248,7 @@ fn cpu_ragged_attention(
                     );
                     dot = query[query_base + depth].mul_add(key_pool[cache], dot);
                 }
-                *score = dot * SCALE;
+                *score = round_bf16(round_bf16(dot) * SCALE);
             }
             let maximum = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
             let denominator: f32 = scores.iter().map(|score| (*score - maximum).exp()).sum();
@@ -266,7 +266,7 @@ fn cpu_ragged_attention(
                     );
                     numerator = ((*score - maximum).exp()).mul_add(value_pool[cache], numerator);
                 }
-                output[query_base + depth] = round_bf16(numerator / denominator);
+                output[query_base + depth] = round_bf16(numerator * denominator.recip());
             }
         }
     }

@@ -737,6 +737,16 @@ __device__ __forceinline__ float warp_sum(float value) {
   return value;
 }
 
+__device__ __forceinline__ float staged_attention_score(float dot_product,
+                                                         float scale) {
+  // Preserve the established BF16 attention-score contract: the reference,
+  // online-prefill, and optimized-decode paths round once after QK and once
+  // after scaling before softmax state is updated.
+  const __nv_bfloat16 staged_dot = __float2bfloat16_rn(dot_product);
+  return __bfloat162float(
+      __float2bfloat16_rn(__bfloat162float(staged_dot) * scale));
+}
+
 __device__ __forceinline__ void update_online_state(
     float score, float* maximum, float* denominator, float* alpha,
     float* beta) {
@@ -832,7 +842,8 @@ __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
         __bfloat162float(key_pool[cache_base + lane + kWarpSize]);
     float score = fmaf(query_low, key_low, query_high * key_high);
     score = warp_sum(score);
-    score = __shfl_sync(kFullWarpMask, score, 0) * scale;
+    score = staged_attention_score(
+        __shfl_sync(kFullWarpMask, score, 0), scale);
 
     float alpha = 0.0F;
     float beta = 0.0F;
@@ -853,12 +864,13 @@ __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
   // Only lane zero owns the scalar online state. Broadcast its final
   // denominator before every lane normalizes its two value dimensions.
   denominator = __shfl_sync(kFullWarpMask, denominator, 0);
-  const float output_low =
-      valid && denominator != 0.0F ? numerator_low / denominator
-                                  : (valid ? 0.0F : CUDART_NAN_F);
-  const float output_high =
-      valid && denominator != 0.0F ? numerator_high / denominator
-                                  : (valid ? 0.0F : CUDART_NAN_F);
+  const float inverse_denominator =
+      !valid ? CUDART_NAN_F
+             : (isnan(denominator)
+                    ? CUDART_NAN_F
+                    : (denominator > 0.0F ? 1.0F / denominator : 0.0F));
+  const float output_low = numerator_low * inverse_denominator;
+  const float output_high = numerator_high * inverse_denominator;
   output[output_base + lane] = __float2bfloat16_rn(output_low);
   output[output_base + lane + kWarpSize] =
       __float2bfloat16_rn(output_high);
