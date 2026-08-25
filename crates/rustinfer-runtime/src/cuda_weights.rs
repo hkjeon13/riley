@@ -245,7 +245,7 @@ impl CudaUploadedWeights {
 
     /// Number of unique physical CUDA allocations.
     #[must_use]
-    pub const fn physical_tensor_count(&self) -> usize {
+    pub fn physical_tensor_count(&self) -> usize {
         self.physical.len()
     }
 
