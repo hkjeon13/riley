@@ -16,9 +16,11 @@ checkout and replace:
 - `golden.provenance_sha256` with the SHA-256 of that immutable correctness
   report.
 
-The checker and runner reject the placeholder.  The materialized manifest's
-byte-level SHA-256 is recorded in `run.json`, so changing a request, threshold,
-scenario, or golden requires a new run.
+The checker and runner reject the placeholder. The checker also pins the
+canonical checked-in contract after normalizing only those two golden fields;
+changing a request, threshold, duration, scenario, or target cannot define an
+easier release lane. The exact materialized manifest SHA-256 is recorded in
+`run.json`, so changing either approved golden digest requires a new run.
 
 `cycle_interval_ms` bounds raw request evidence growth without sampling or
 aggregating away any request.  It is part of the bound manifest; burst-idle
@@ -110,5 +112,6 @@ non-contiguous events, clock or sample gaps, missing scenarios, request or
 failure events outside each scenario's policy, Python descendants, nonzero
 final active/waiting/KV/native allocation state, insufficient cancellation,
 disconnect or overload evidence, RSS/VRAM plateau or slope excess, dropped
-samples, drift in every success from a golden-only scenario, unbounded restart,
-and restart/rollback mismatch with the bound golden.
+samples, a scenario shorter than its reviewed duration, samples that do not
+span that duration, drift in every success from a golden-only scenario,
+unbounded restart, and restart/rollback mismatch with the bound golden.

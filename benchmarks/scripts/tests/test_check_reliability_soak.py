@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check_reliability_soak.py"
@@ -181,7 +182,13 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             mutate(fixture)
             fixture.renumber()
             fixture.write()
-        return checker.evaluate(fixture.manifest_path, fixture.run_directory)
+        fixture_contract = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            fixture_contract,
+        ):
+            return checker.evaluate(fixture.manifest_path, fixture.run_directory)
 
     def test_short_complete_fixture_passes(self) -> None:
         report = self.evaluate()
@@ -255,6 +262,45 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             fixture.manifest["thresholds"]["maximum_sample_gap_ms"] = 500
         report = self.evaluate(mutate)
         self.assertFalse(next(check for check in report["checks"] if check["name"] == "steady.sample_gap_ms")["passed"])
+
+    def test_truncated_scenario_cannot_claim_planned_duration(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            scenario = next(
+                scenario
+                for scenario in fixture.manifest["scenarios"]
+                if scenario["id"] == "steady"
+            )
+            scenario["duration_seconds"] = 60
+
+        report = self.evaluate(mutate)
+        failed = {check["name"] for check in report["checks"] if not check["passed"]}
+        self.assertIn("steady.duration_seconds", failed)
+        self.assertIn("steady.sample_coverage_seconds", failed)
+
+    def test_manifest_contract_is_pinned_except_materialized_golden(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        fixture.manifest["thresholds"]["minimum_overloads"] = 2
+        fixture.write()
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            report = checker.evaluate(fixture.manifest_path, fixture.run_directory)
+        self.assertEqual(report["status"], "error")
+        self.assertIn("reviewed PR16 soak contract", report["errors"][0])
+
+    def test_checked_in_template_digest_is_reviewed(self) -> None:
+        template = json.loads(
+            (SCRIPT.parents[1] / "soak/reliability-soak-v1.json").read_text()
+        )
+        self.assertEqual(
+            checker._normalized_manifest_sha256(template),
+            checker.REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256,
+        )
 
     def test_cancellation_and_overload_must_be_observed(self) -> None:
         def mutate(fixture: SoakFixture) -> None:

@@ -33,6 +33,9 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 PYTHON_RE = re.compile(r"(^|/)(python|python[23](?:\.[0-9]+)?)(?:$|\s)", re.IGNORECASE)
 MAX_INPUT_BYTES = 512 * 1024 * 1024
+REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256 = (
+    "5ef79434e79e6ac36e6fab4a54b2466572a62b98f972059a20fa59d4f8e7a096"
+)
 
 
 class InputError(ValueError):
@@ -163,6 +166,17 @@ def _canonical_sha256(value: Mapping[str, Any]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _normalized_manifest_sha256(manifest: Mapping[str, Any]) -> str:
+    """Hash the reviewed contract while allowing only materialized golden hashes."""
+
+    normalized = dict(manifest)
+    golden = dict(_object(manifest.get("golden"), "manifest.golden"))
+    golden["generated_sha256"] = "0" * 64
+    golden["provenance_sha256"] = "0" * 64
+    normalized["golden"] = golden
+    return _canonical_sha256(normalized)
+
+
 def _validate_manifest(value: dict[str, Any], path: str) -> dict[str, Any]:
     manifest = _exact(
         value,
@@ -269,6 +283,12 @@ def _validate_manifest(value: dict[str, Any], path: str) -> dict[str, Any]:
         _fail(f"{path}.scenarios", f"required kind counts mismatch: {dict(kind_counts)}")
     if rollback_modes != {"iteration-batch", "per-operation"}:
         _fail(f"{path}.scenarios", "rollback must cover both exact completion modes")
+    normalized_digest = _normalized_manifest_sha256(manifest)
+    if normalized_digest != REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256:
+        _fail(
+            path,
+            "does not match the reviewed PR16 soak contract after golden normalization",
+        )
     return manifest
 
 
@@ -462,6 +482,7 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
             samples = [event for event in events if event["kind"] == "sample"]
             requests = [event for event in events if event["kind"] == "request"]
             starts = [event for event in events if event["kind"] == "scenario_start"]
+            ends = [event for event in events if event["kind"] == "scenario_end"]
             for request in requests:
                 outcome_counts[request["outcome"]] += 1
             for sample in samples:
@@ -479,6 +500,43 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
             checks.append(_check(f"{scenario_id}.service_counters_monotonic", counters_monotonic, counters_monotonic, True))
             checks.append(_check(f"{scenario_id}.samples", len(samples) >= thresholds["minimum_samples_per_scenario"], len(samples), thresholds["minimum_samples_per_scenario"]))
             checks.append(_check(f"{scenario_id}.requests", bool(requests), len(requests), ">= 1"))
+            observed_duration_seconds = (
+                (ends[0]["monotonic_ns"] - starts[0]["monotonic_ns"])
+                / 1_000_000_000
+                if len(starts) == 1 and len(ends) == 1
+                else 0.0
+            )
+            required_duration_seconds = scenario["duration_seconds"]
+            checks.append(
+                _check(
+                    f"{scenario_id}.duration_seconds",
+                    observed_duration_seconds >= required_duration_seconds,
+                    observed_duration_seconds,
+                    required_duration_seconds,
+                )
+            )
+            sample_span_seconds = (
+                (samples[-1]["monotonic_ns"] - samples[0]["monotonic_ns"])
+                / 1_000_000_000
+                if len(samples) >= 2
+                else 0.0
+            )
+            sample_coverage_tolerance_seconds = max(
+                thresholds["maximum_sample_gap_ms"] / 1000,
+                thresholds["sample_interval_ms"] * 2 / 1000,
+            )
+            required_sample_span_seconds = max(
+                0.0,
+                required_duration_seconds - sample_coverage_tolerance_seconds,
+            )
+            checks.append(
+                _check(
+                    f"{scenario_id}.sample_coverage_seconds",
+                    sample_span_seconds >= required_sample_span_seconds,
+                    sample_span_seconds,
+                    required_sample_span_seconds,
+                )
+            )
             restart_times = [event["monotonic_ns"] for event in events if event["kind"] == "restart"]
             gaps = [
                 (right["monotonic_ns"] - left["monotonic_ns"]) / 1_000_000
@@ -535,6 +593,8 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
             report["scenario_summaries"].append({
                 "scenario_id": scenario_id, "kind": scenario["kind"], "events": len(events),
                 "samples": len(samples), "requests": len(requests), "maximum_sample_gap_ms": maximum_gap,
+                "observed_duration_seconds": observed_duration_seconds,
+                "sample_span_seconds": sample_span_seconds,
                 "rss_slope_bytes_per_hour": rss_slope, "vram_slope_bytes_per_hour": vram_slope,
             })
         final_samples = [event for event in rows if event["kind"] == "sample" and event["scenario_id"] is None]
