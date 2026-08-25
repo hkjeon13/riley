@@ -1,4 +1,15 @@
-# PR 01 baseline evidence
+# Version-controlled benchmark evidence
+
+## PR 08 online prefill
+
+[`20260825T053620Z-rustinfer-online-prefill-pr08-run001`](20260825T053620Z-rustinfer-online-prefill-pr08-run001/)
+은 `73cbdad9e0f6b04dd46a9e719be33ae050aa4836`의 materialized reference 대
+online-softmax CUDA prefill 결과다. S128/1K/4K raw latency, S128 SmolLM2 prepared
+prefill proxy, pinned S7 correctness, Nsight Compute DRAM counters와 Compute Sanitizer
+결과를 묶는다. 원문 대형 로그는 artifact가 고정한 checksum과 함께 `server-4096`의
+append-only evidence root에 보존한다.
+
+## PR 01 baseline
 
 이 디렉터리의 두 `run003` bundle이 PR 01 Gate A의 canonical, version-controlled
 증거다. 모델 실행은 primary RTX 4090 원격 host에서만 수행했고, source checkout은

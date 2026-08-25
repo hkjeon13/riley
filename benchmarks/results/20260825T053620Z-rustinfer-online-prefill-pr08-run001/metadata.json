@@ -1,0 +1,166 @@
+{
+  "artifact_kind": "rustinfer-pr08-prefill-attention-evidence",
+  "created_at_utc": "2026-08-25T05:36:20Z",
+  "schema_id": "rustinfer.pr08.prefill-evidence.v1",
+  "status": "passed",
+  "source": {
+    "branch": "codex/pr-08-prefill-attention",
+    "cargo_lock_sha256": "e16ed64807799c380c808bdb7f0061359f880690240f914246fad56717ac52c0",
+    "git_dirty": false,
+    "git_revision": "73cbdad9e0f6b04dd46a9e719be33ae050aa4836",
+    "source_bundle_sha256": "185bb513206ccee51c7c1de5aadf134d9de278e2fc6494b55953cefe5680d6fe",
+    "source_tar_sha256": "b369b80a92212a0a480fa83c6a62a61905bf6aba7d4ef121d13c016bb4cfc509"
+  },
+  "environment": {
+    "cargo_version": "1.85.0",
+    "compute_capability": "8.9",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "cuda_architectures": "89",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "host": "server-4096",
+    "network": "disabled",
+    "nvidia_driver_version": "580.173.02",
+    "nsight_compute_version": "2025.1.1.0",
+    "python": "absent",
+    "python3": "absent",
+    "rustc_version": "1.85.0"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bfloat16",
+    "batch_size": 1,
+    "query_heads": 9,
+    "key_value_heads": 3,
+    "head_size": 64
+  },
+  "implementations": [
+    {
+      "backend": "reference",
+      "implementation_id": "rustinfer.cuda.materialized-gqa-prefill.bf16",
+      "implementation_version": "1",
+      "score_materialization": "full_staged_bf16",
+      "layout": "dense_bshd",
+      "layout_copy_bytes": 0
+    },
+    {
+      "backend": "online",
+      "implementation_id": "rustinfer.cuda.online-gqa-prefill.bf16.d64",
+      "implementation_version": "1",
+      "score_materialization": "none",
+      "layout": "dense_bshd",
+      "layout_copy_bytes": 0,
+      "accumulator_dtype": "float32",
+      "score_rounding": "register-only BF16 after QK and after scale"
+    }
+  ],
+  "correctness": {
+    "semantic_class": "E0",
+    "classification_scope": "Pinned S=7 BF16 golden, target direct shape matrix, extreme finite scores, mask boundaries, and S=128 model regression",
+    "full_pr01_gate_reactivated": false,
+    "predeclared_threshold_source": "smollm2-fp32-bf16-native-e0-v2 final_logits cosine/max_abs/mean_abs bounds only",
+    "online_vs_hf_bf16_golden_s7": {
+      "cosine": "0.999985581919",
+      "max_abs": "0.312500000",
+      "mean_abs": "0.058640185",
+      "top1": 4052,
+      "top10_set_exact": true,
+      "first_causal_row_byte_exact": true
+    },
+    "online_vs_materialized_s7": {
+      "cosine": "0.999958345718",
+      "max_abs": "0.540039062",
+      "mean_abs": "0.216633855"
+    },
+    "online_vs_materialized_s128_model": {
+      "cosine": "0.999901240213",
+      "max_abs": "0.406250000",
+      "mean_abs": "0.111404342",
+      "reference_top1": 6354,
+      "online_top1": 6354
+    },
+    "online_vs_materialized_s128_kernel": {
+      "cosine": "0.999996006219",
+      "max_abs": "0.001953125"
+    },
+    "determinism": {
+      "executions": 100,
+      "all_full_logit_outputs_byte_exact": true,
+      "logits_sha256": "7660d1ef201e6342fe84d5deb19594690a78507c21de71f5c6d0ea9f37f6257d"
+    }
+  },
+  "performance": {
+    "kernel_timing_boundary": "synchronized native execute wall time",
+    "kernel_medians": [
+      {
+        "sequence_length": 128,
+        "reference_ms": "0.131209",
+        "online_ms": "0.050771",
+        "speedup": "2.5843",
+        "reference_workspace_bytes": 294912,
+        "online_workspace_bytes": 0
+      },
+      {
+        "sequence_length": 1024,
+        "reference_ms": "2.804055",
+        "online_ms": "0.848067",
+        "speedup": "3.3064",
+        "reference_workspace_bytes": 18874368,
+        "online_workspace_bytes": 0
+      },
+      {
+        "sequence_length": 4096,
+        "reference_ms": "43.465677",
+        "online_ms": "10.008649",
+        "speedup": "4.3428",
+        "reference_workspace_bytes": 301989888,
+        "online_workspace_bytes": 0
+      }
+    ],
+    "llama_s128_prefill_execute_proxy": {
+      "timing_boundary": "prepared execute plus stream synchronize",
+      "reference_median_ns": 7565736,
+      "online_median_ns": 5125984,
+      "speedup": "1.4760",
+      "decode_sampling_included": false
+    },
+    "nsight_compute_dram_bytes": [
+      {
+        "sequence_length": 128,
+        "reference": 1167488,
+        "online": 260096
+      },
+      {
+        "sequence_length": 1024,
+        "reference": 58658304,
+        "online": 1980544
+      },
+      {
+        "sequence_length": 4096,
+        "reference": 2330735104,
+        "online": 7878784
+      }
+    ]
+  },
+  "validation": {
+    "workspace_all_features": "passed",
+    "strict_clippy_all_features": "passed",
+    "direct_gpu_tests": "8 passed",
+    "materialized_regressions": "2 passed",
+    "compute_sanitizer_memcheck": "0 errors, 0 bytes leaked",
+    "compute_sanitizer_racecheck": "0 errors, 0 warnings",
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr08/73cbdad9e0f6b04dd46a9e719be33ae050aa4836",
+    "remote_sha256sums_sha256": "e4dd63012044b84532990bc8150e000bb61201a6deedb296a47e4a4605411212"
+  },
+  "limitations": [
+    "The model timing is a prepared prefill execute proxy, not serving TTFT; decode and sampling are not implemented yet.",
+    "CUDA allocation-accounting live bytes are not an observed peak-VRAM measurement.",
+    "The PR01 31-prompt FP32/relative-error gate was not rerun or reactivated.",
+    "Only sm89 with the recorded CUDA toolkit and driver was validated.",
+    "The online path preserves two BF16 score rounding boundaries but is not bit-exact with the materialized probability path.",
+    "NaN and infinity policies are API-defined diagnostics; the model E0 evidence covers finite inputs."
+  ]
+}
