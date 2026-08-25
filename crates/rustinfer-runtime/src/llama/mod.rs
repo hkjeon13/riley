@@ -2,6 +2,8 @@
 
 mod batch;
 #[cfg(any(feature = "cuda", test))]
+mod batch_executor;
+#[cfg(any(feature = "cuda", test))]
 mod decode;
 mod error;
 #[cfg(any(feature = "cuda", test))]
@@ -14,6 +16,13 @@ pub use batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LLAMA_BATCH_NO_OUTPUT_SLOT, LlamaBatchBlockTable,
     LlamaBatchBufferCapacities, LlamaBatchError, LlamaBatchMetadataConfig, LlamaBatchResult,
     LlamaBatchRow, LlamaBatchRowKind, LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
+};
+
+#[cfg(feature = "cuda")]
+pub use batch_executor::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
+    PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
+    PreparedLlamaBatchExecutorConfig,
 };
 
 pub use error::{
@@ -202,5 +211,47 @@ mod source_contract_tests {
                 "last_logits",
             ]
         );
+    }
+
+    #[test]
+    fn continuous_batch_hot_source_is_allocation_free_and_not_serial_dispatch() {
+        let source = include_str!("batch_executor.rs");
+        let begin = source
+            .find("// HOT_BATCH_EXECUTE_BEGIN")
+            .expect("batch hot execute begin marker");
+        let end = source
+            .find("// HOT_BATCH_EXECUTE_END")
+            .expect("batch hot execute end marker");
+        let hot = &source[begin..end];
+
+        for forbidden in [
+            "Vec::",
+            "Box::",
+            "vec!",
+            ".collect(",
+            "String::",
+            "format!",
+            "allocate_device_buffer",
+            "allocate_pinned_host_buffer",
+            "PreparedLlamaForward::prepare",
+            ".execute(stream)",
+            "for row in",
+        ] {
+            assert!(
+                !hot.contains(forbidden),
+                "batch hot execute source contains forbidden token {forbidden:?}"
+            );
+        }
+        for required in [
+            "execute_fixed_graph(",
+            "PackedBatchHostV1::new(",
+            "PackedBatchV1::new(",
+            "output_token_indices",
+        ] {
+            assert!(
+                hot.contains(required),
+                "batch hot execute source omits required tensor-batch contract {required:?}"
+            );
+        }
     }
 }

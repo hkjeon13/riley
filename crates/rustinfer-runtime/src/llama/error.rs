@@ -36,6 +36,12 @@ pub enum LlamaOp {
     KvCacheWrite,
     /// Single-query attention over a request-local KV cache.
     DecodeAttention,
+    /// Upload and bind one immutable packed continuous-batch descriptor.
+    BatchMetadataUpload,
+    /// Multi-sequence causal attention over the shared paged KV arena.
+    RaggedPagedAttention,
+    /// Select sampled rows from the fixed-width language-model head output.
+    OutputGather,
     /// Attention output projection.
     OutputProjection,
     /// Post-attention residual addition.
@@ -79,6 +85,9 @@ impl LlamaOp {
             Self::PrefillAttention => "prefill_attention",
             Self::KvCacheWrite => "kv_cache_write",
             Self::DecodeAttention => "decode_attention",
+            Self::BatchMetadataUpload => "batch_metadata_upload",
+            Self::RaggedPagedAttention => "ragged_paged_attention",
+            Self::OutputGather => "output_gather",
             Self::OutputProjection => "output_projection",
             Self::AttentionResidual => "attention_residual",
             Self::PostAttentionNorm => "post_attention_norm",

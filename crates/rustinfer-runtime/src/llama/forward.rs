@@ -935,16 +935,16 @@ impl PreparedLlamaAllocationReport {
     }
 }
 
-struct GemmPlans {
-    hidden: CudaPreparedGemm,
-    key_value: CudaPreparedGemm,
-    intermediate: CudaPreparedGemm,
-    down: CudaPreparedGemm,
-    lm_head: CudaPreparedGemm,
+pub(super) struct GemmPlans {
+    pub(super) hidden: CudaPreparedGemm,
+    pub(super) key_value: CudaPreparedGemm,
+    pub(super) intermediate: CudaPreparedGemm,
+    pub(super) down: CudaPreparedGemm,
+    pub(super) lm_head: CudaPreparedGemm,
 }
 
 impl GemmPlans {
-    fn any_poisoned(&self) -> bool {
+    pub(super) fn any_poisoned(&self) -> bool {
         self.hidden.is_poisoned()
             || self.key_value.is_poisoned()
             || self.intermediate.is_poisoned()
@@ -979,7 +979,7 @@ pub(super) struct ForwardBuffers {
 pub struct PreparedLlamaForward {
     pub(super) plan: LlamaExecutionPlan,
     pub(super) weights: CudaUploadedWeights,
-    gemms: GemmPlans,
+    pub(super) gemms: GemmPlans,
     attention: PreparedPrefillAttention,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,

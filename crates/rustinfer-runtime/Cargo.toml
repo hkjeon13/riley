@@ -43,3 +43,8 @@ required-features = ["cuda"]
 name = "llama_generation_gpu"
 path = "tests/llama_generation_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "llama_batch_gpu"
+path = "tests/llama_batch_gpu.rs"
+required-features = ["cuda"]
