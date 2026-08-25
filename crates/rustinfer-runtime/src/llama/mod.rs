@@ -5,6 +5,8 @@ mod decode;
 mod error;
 #[cfg(any(feature = "cuda", test))]
 mod forward;
+#[cfg(feature = "cuda")]
+mod generation;
 mod plan;
 
 pub use error::{
@@ -29,6 +31,13 @@ pub use decode::{
     LlamaDecodeError, LlamaDecodePhase, LlamaDecodeResource, LlamaDecodeResult, LlamaKvCacheLayout,
     LlamaKvCachePolicy, LlamaKvCacheStorageLayout, PreparedLlamaDecode,
     PreparedLlamaDecodeAllocationReport, PreparedLlamaDecodeAttention, PreparedLlamaDecodeConfig,
+};
+
+#[cfg(feature = "cuda")]
+pub use generation::{
+    GenerationModelStage, GenerationTokenTiming, LlamaGenerationCleanupError, LlamaGenerationError,
+    LlamaGenerationEvent, LlamaGenerationFailure, LlamaGenerationResult,
+    LlamaGenerationTimingSummary, PreparedLlamaGeneration,
 };
 
 #[cfg(feature = "cuda")]
