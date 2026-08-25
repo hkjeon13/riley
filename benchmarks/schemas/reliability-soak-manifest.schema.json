@@ -59,13 +59,14 @@
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
     "scenario": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "kind", "required", "duration_seconds", "concurrency", "request_profile", "execution_completion"],
+      "required": ["id", "kind", "required", "duration_seconds", "concurrency", "cycle_interval_ms", "request_profile", "execution_completion"],
       "properties": {
         "id": {"$ref": "#/$defs/id"},
         "kind": {"enum": ["steady", "burst-idle", "mixed", "invalid", "overload", "cancellation-disconnect", "near-kv", "graceful-restart", "rollback"]},
         "required": {"type": "boolean"},
         "duration_seconds": {"type": "integer", "minimum": 1},
         "concurrency": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "cycle_interval_ms": {"type": "integer", "minimum": 0, "maximum": 60000},
         "request_profile": {"$ref": "#/$defs/id"},
         "secondary_request_profile": {"$ref": "#/$defs/id"},
         "execution_completion": {"enum": ["iteration-batch", "per-operation"]}

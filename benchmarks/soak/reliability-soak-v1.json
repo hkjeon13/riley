@@ -47,15 +47,15 @@
     "provenance_sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
   "scenarios": [
-    {"id": "steady", "kind": "steady", "required": true, "duration_seconds": 14400, "concurrency": 4, "request_profile": "short", "execution_completion": "iteration-batch"},
-    {"id": "burst-idle", "kind": "burst-idle", "required": true, "duration_seconds": 3600, "concurrency": 16, "request_profile": "short", "execution_completion": "iteration-batch"},
-    {"id": "mixed-short-long", "kind": "mixed", "required": true, "duration_seconds": 3600, "concurrency": 8, "request_profile": "short", "secondary_request_profile": "long", "execution_completion": "iteration-batch"},
-    {"id": "invalid", "kind": "invalid", "required": true, "duration_seconds": 300, "concurrency": 4, "request_profile": "invalid", "execution_completion": "iteration-batch"},
-    {"id": "overload", "kind": "overload", "required": true, "duration_seconds": 600, "concurrency": 64, "request_profile": "long", "execution_completion": "iteration-batch"},
-    {"id": "cancellation-disconnect", "kind": "cancellation-disconnect", "required": true, "duration_seconds": 900, "concurrency": 16, "request_profile": "long", "execution_completion": "iteration-batch"},
-    {"id": "near-kv", "kind": "near-kv", "required": true, "duration_seconds": 1800, "concurrency": 1, "request_profile": "near_kv", "execution_completion": "iteration-batch"},
-    {"id": "graceful-restart", "kind": "graceful-restart", "required": true, "duration_seconds": 300, "concurrency": 4, "request_profile": "short", "execution_completion": "iteration-batch"},
-    {"id": "rollback-iteration-batch", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "request_profile": "short", "execution_completion": "iteration-batch"},
-    {"id": "rollback-per-operation", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "request_profile": "short", "execution_completion": "per-operation"}
+    {"id": "steady", "kind": "steady", "required": true, "duration_seconds": 14400, "concurrency": 4, "cycle_interval_ms": 100, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "burst-idle", "kind": "burst-idle", "required": true, "duration_seconds": 3600, "concurrency": 16, "cycle_interval_ms": 5000, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "mixed-short-long", "kind": "mixed", "required": true, "duration_seconds": 3600, "concurrency": 8, "cycle_interval_ms": 100, "request_profile": "short", "secondary_request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "invalid", "kind": "invalid", "required": true, "duration_seconds": 300, "concurrency": 4, "cycle_interval_ms": 100, "request_profile": "invalid", "execution_completion": "iteration-batch"},
+    {"id": "overload", "kind": "overload", "required": true, "duration_seconds": 600, "concurrency": 64, "cycle_interval_ms": 250, "request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "cancellation-disconnect", "kind": "cancellation-disconnect", "required": true, "duration_seconds": 900, "concurrency": 16, "cycle_interval_ms": 100, "request_profile": "long", "execution_completion": "iteration-batch"},
+    {"id": "near-kv", "kind": "near-kv", "required": true, "duration_seconds": 1800, "concurrency": 1, "cycle_interval_ms": 0, "request_profile": "near_kv", "execution_completion": "iteration-batch"},
+    {"id": "graceful-restart", "kind": "graceful-restart", "required": true, "duration_seconds": 300, "concurrency": 4, "cycle_interval_ms": 100, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "rollback-iteration-batch", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "cycle_interval_ms": 100, "request_profile": "short", "execution_completion": "iteration-batch"},
+    {"id": "rollback-per-operation", "kind": "rollback", "required": true, "duration_seconds": 300, "concurrency": 1, "cycle_interval_ms": 100, "request_profile": "short", "execution_completion": "per-operation"}
   ]
 }

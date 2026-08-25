@@ -63,6 +63,7 @@ class SoakFixture:
             scenario = {
                 "id": scenario_id, "kind": kind, "required": True,
                 "duration_seconds": 2, "concurrency": 2,
+                "cycle_interval_ms": 1000 if kind == "burst-idle" else 0,
                 "request_profile": "short", "execution_completion": mode,
             }
             if kind == "mixed":

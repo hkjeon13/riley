@@ -275,10 +275,11 @@ probe_hash() {
 }
 
 run_scenario() {
-    local encoded=$1 id kind duration concurrency primary secondary mode deadline iteration=0 before after restart_start restart_elapsed worker profile action worker_pid
+    local encoded=$1 id kind duration concurrency cycle_interval_ms primary secondary mode deadline iteration=0 before after restart_start restart_elapsed worker profile action worker_pid
     local -a worker_pids=()
     id=$(jq -r '.id' <<<"$encoded"); kind=$(jq -r '.kind' <<<"$encoded")
     duration=$(jq -r '.duration_seconds' <<<"$encoded"); concurrency=$(jq -r '.concurrency' <<<"$encoded")
+    cycle_interval_ms=$(jq -r '.cycle_interval_ms' <<<"$encoded")
     primary=$(jq -r '.request_profile' <<<"$encoded"); secondary=$(jq -r '.secondary_request_profile // .request_profile' <<<"$encoded")
     mode=$(jq -r '.execution_completion' <<<"$encoded")
     launch_target "$mode"
@@ -298,7 +299,9 @@ run_scenario() {
         done
         for worker_pid in "${worker_pids[@]}"; do wait "$worker_pid"; done
         worker_pids=()
-        [ "$kind" = burst-idle ] && sleep 5
+        if [ "$cycle_interval_ms" -gt 0 ]; then
+            sleep "$(awk -v ms="$cycle_interval_ms" 'BEGIN {printf "%.3f", ms / 1000}')"
+        fi
     done
     if [ "$kind" = graceful-restart ]; then
         before=$(probe_hash "$primary")
@@ -307,10 +310,10 @@ run_scenario() {
         wait "$sampler_pid" 2>/dev/null || true
         stop_target
         launch_target "$mode"
-        sampler_loop "$id" & sampler_pid=$!
         after=$(probe_hash "$primary")
         restart_elapsed=$(( ($(monotonic_ns) - restart_start) / 1000000 ))
         append_event "$(jq -cn --arg id "$id" --argjson elapsed_ms "$restart_elapsed" --arg before "$before" --arg after "$after" '{kind:"restart",scenario_id:$id,graceful:true,exit_code:0,elapsed_ms:$elapsed_ms,before_generated_sha256:$before,after_generated_sha256:$after}')"
+        sampler_loop "$id" & sampler_pid=$!
     fi
     kill "$sampler_pid" 2>/dev/null || true
     wait "$sampler_pid" 2>/dev/null || true

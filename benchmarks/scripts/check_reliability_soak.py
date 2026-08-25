@@ -236,7 +236,7 @@ def _validate_manifest(value: dict[str, Any], path: str) -> dict[str, Any]:
     for index, raw in enumerate(scenarios):
         scenario_path = f"{path}.scenarios[{index}]"
         scenario = _object(raw, scenario_path)
-        required = {"id", "kind", "required", "duration_seconds", "concurrency", "request_profile", "execution_completion"}
+        required = {"id", "kind", "required", "duration_seconds", "concurrency", "cycle_interval_ms", "request_profile", "execution_completion"}
         if scenario.get("kind") == "mixed":
             required.add("secondary_request_profile")
         _exact(scenario, required, scenario_path)
@@ -252,6 +252,9 @@ def _validate_manifest(value: dict[str, Any], path: str) -> dict[str, Any]:
         kind_counts[kind] += 1
         _integer(scenario["duration_seconds"], f"{scenario_path}.duration_seconds", 1)
         _integer(scenario["concurrency"], f"{scenario_path}.concurrency", 1)
+        cycle_interval_ms = _integer(scenario["cycle_interval_ms"], f"{scenario_path}.cycle_interval_ms")
+        if kind == "burst-idle" and cycle_interval_ms < 1000:
+            _fail(f"{scenario_path}.cycle_interval_ms", "burst-idle requires a visible idle interval")
         profile = _string(scenario["request_profile"], f"{scenario_path}.request_profile")
         if profile not in requests:
             _fail(f"{scenario_path}.request_profile", "references an absent request")

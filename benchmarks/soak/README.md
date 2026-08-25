@@ -20,6 +20,11 @@ The checker and runner reject the placeholder.  The materialized manifest's
 byte-level SHA-256 is recorded in `run.json`, so changing a request, threshold,
 scenario, or golden requires a new run.
 
+`cycle_interval_ms` bounds raw request evidence growth without sampling or
+aggregating away any request.  It is part of the bound manifest; burst-idle
+requires at least one second, while long and near-KV requests naturally
+dominate their configured interval.
+
 ## Target contract
 
 Run the driver in the production process namespace.  For a CLI artifact this
