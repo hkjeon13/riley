@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import math
 import re
@@ -13,10 +14,21 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
+_NATIVE_CHECKER_PATH = Path(__file__).with_name("check_native_profile_pair.py")
+_NATIVE_SPEC = importlib.util.spec_from_file_location(
+    "rustinfer_release_native_profile_contract", _NATIVE_CHECKER_PATH
+)
+if _NATIVE_SPEC is None or _NATIVE_SPEC.loader is None:  # pragma: no cover
+    raise RuntimeError(f"cannot load native profile contract: {_NATIVE_CHECKER_PATH}")
+native_profile = importlib.util.module_from_spec(_NATIVE_SPEC)
+sys.modules[_NATIVE_SPEC.name] = native_profile
+_NATIVE_SPEC.loader.exec_module(native_profile)
+
+
 BASELINE_SCHEMA = "rustinfer.release-performance-baseline.v1"
 CANDIDATE_SCHEMA = "rustinfer.release-performance-candidate.v1"
 REPORT_SCHEMA = "rustinfer.release-performance-report.v1"
-BASELINE_SHA256 = "323b59886d00e0bb512aed5ab55ceb42d714cd70a0030ff6e9d65b8289b8e117"
+BASELINE_SHA256 = "38ac9581c68ef1b229849529574755326f21d94a0b6787bc1e9f69c2cb9f6209"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
@@ -246,8 +258,8 @@ def _validate_baseline(document: Mapping[str, Any], raw: bytes) -> dict[str, Any
         {
             "git_commit",
             "source_archive_sha256",
-            "binary_sha256",
-            "image_sha256",
+            "profile_binary_sha256",
+            "profile_image_sha256",
             "correctness_gate_id",
             "correctness_report_sha256",
             "semantic_class",
@@ -257,8 +269,8 @@ def _validate_baseline(document: Mapping[str, Any], raw: bytes) -> dict[str, Any
         raise InputError("baseline.git_commit: invalid commit")
     for field in [
         "source_archive_sha256",
-        "binary_sha256",
-        "image_sha256",
+        "profile_binary_sha256",
+        "profile_image_sha256",
         "correctness_report_sha256",
     ]:
         _sha256(binding[field], f"baseline.measurement_binding.{field}")
@@ -310,6 +322,7 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
             "workload",
             "run_summary",
             "metrics",
+            "raw_runs",
         },
     )
     _literal(row["schema_version"], CANDIDATE_SCHEMA, "candidate.schema_version")
@@ -324,8 +337,10 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
             "git_commit",
             "git_dirty",
             "source_archive_sha256",
-            "binary_sha256",
-            "image_sha256",
+            "profile_binary_sha256",
+            "release_binary_sha256",
+            "profile_image_sha256",
+            "release_image_sha256",
             "semantic_class",
             "correctness_gate_id",
             "correctness_report_sha256",
@@ -346,8 +361,10 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
     }
     for field in [
         "source_archive_sha256",
-        "binary_sha256",
-        "image_sha256",
+        "profile_binary_sha256",
+        "release_binary_sha256",
+        "profile_image_sha256",
+        "release_image_sha256",
         "correctness_report_sha256",
     ]:
         source_result[field] = _sha256(source[field], f"candidate.source.{field}")
@@ -376,6 +393,35 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
         )
     if summary_result["failure_count"] != 0 or summary_result["dropped_trace_records"] != 0:
         raise InputError("candidate run must have zero failures and dropped records")
+    raw_runs = row["raw_runs"]
+    if not isinstance(raw_runs, list) or len(raw_runs) != 5:
+        raise InputError("candidate.raw_runs: must contain exactly five bindings")
+    raw_result = []
+    for index, value in enumerate(raw_runs):
+        binding = _closed_object(
+            value,
+            f"candidate.raw_runs[{index}]",
+            {"pair_index", "run_id", "sha256"},
+        )
+        raw_result.append(
+            {
+                "pair_index": _integer(
+                    binding["pair_index"],
+                    f"candidate.raw_runs[{index}].pair_index",
+                    1,
+                ),
+                "run_id": _string(
+                    binding["run_id"], f"candidate.raw_runs[{index}].run_id"
+                ),
+                "sha256": _sha256(
+                    binding["sha256"], f"candidate.raw_runs[{index}].sha256"
+                ),
+            }
+        )
+    if sorted(binding["pair_index"] for binding in raw_result) != list(range(1, 6)):
+        raise InputError("candidate.raw_runs: pair_index values must be exactly 1..5")
+    if len({binding["run_id"] for binding in raw_result}) != 5:
+        raise InputError("candidate.raw_runs: run_id values must be unique")
     return {
         "baseline_sha256": _sha256(
             row["baseline_sha256"], "candidate.baseline_sha256"
@@ -390,6 +436,7 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
         "workload": _validate_workload(row["workload"], "candidate.workload"),
         "run_summary": summary_result,
         "metrics": _validate_metrics(row["metrics"], "candidate.metrics"),
+        "raw_runs": sorted(raw_result, key=lambda binding: binding["pair_index"]),
     }
 
 
@@ -417,16 +464,173 @@ def _empty_report() -> dict[str, Any]:
     }
 
 
+def _load_raw_runs(
+    paths: Sequence[Path | str], candidate: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
+    run_paths = [Path(path) for path in paths]
+    if len(run_paths) != 5:
+        raise InputError(
+            f"candidate: expected exactly 5 independent run files, got {len(run_paths)}"
+        )
+    loaded: list[tuple[Path, dict[str, Any], str]] = []
+    try:
+        for path in run_paths:
+            run, raw = _load_json_bytes(path, "raw native profile run")
+            native_profile._validate_run(run, str(path))
+            if run["role"] != "candidate":
+                raise InputError(
+                    f"{path}.role: expected 'candidate', got {run['role']!r}"
+                )
+            loaded.append((path, run, _digest_bytes(raw)))
+        if sorted(run["pair_index"] for _, run, _ in loaded) != list(range(1, 6)):
+            raise InputError("candidate: pair_index values must be exactly 1..5")
+        loaded.sort(key=lambda row: row[1]["pair_index"])
+        runs = [run for _, run, _ in loaded]
+        source = native_profile._require_equal(
+            [run["source"] for run in runs], "release candidate raw source"
+        )
+        environment = native_profile._require_equal(
+            [run["environment"] for run in runs],
+            "release candidate raw environment",
+        )
+        workload = native_profile._require_equal(
+            [run["workload"] for run in runs], "release candidate raw workload"
+        )
+        native_profile._require_equal(
+            [native_profile._request_identity(run) for run in runs],
+            "release candidate raw request identities",
+        )
+    except native_profile.ComparabilityError as error:
+        raise ComparabilityError(str(error)) from error
+    except native_profile.InputError as error:
+        raise InputError(str(error)) from error
+
+    declared_by_pair = {
+        binding["pair_index"]: binding for binding in candidate["raw_runs"]
+    }
+    for path, run, actual_digest in loaded:
+        pair_index = run["pair_index"]
+        if declared_by_pair.get(pair_index) != {
+            "pair_index": pair_index,
+            "run_id": run["run_id"],
+            "sha256": actual_digest,
+        }:
+            raise InputError(f"{path}: raw run binding does not match file contents")
+
+    candidate_source = candidate["source"]
+    expected_source = {
+        "git_commit": candidate_source["git_commit"],
+        "git_dirty": False,
+        "executable_sha256": candidate_source["profile_binary_sha256"],
+        "semantic_class": "E0",
+        "correctness_gate_id": candidate_source["correctness_gate_id"],
+        "correctness_report_sha256": candidate_source[
+            "correctness_report_sha256"
+        ],
+    }
+    for field, expected in expected_source.items():
+        if source[field] != expected:
+            raise InputError(
+                f"raw source.{field} does not match candidate source binding"
+            )
+    if source["runtime_flag"] != {
+        "name": "execution_completion",
+        "value": "iteration-batch",
+    }:
+        raise ComparabilityError(
+            "raw source.runtime_flag must select execution_completion=iteration-batch"
+        )
+
+    raw_model = {
+        "model_id": workload["model_id"],
+        "model_revision": workload["model_revision"],
+        "dtype": workload["dtype"],
+        "weights_sha256": workload["weights_sha256"],
+        "tokenizer_sha256": workload["tokenizer_sha256"],
+    }
+    raw_environment = {
+        "environment_id": environment["host"]["environment_id"],
+        "gpu_uuid": environment["gpu"]["uuid"],
+        "compute_capability": environment["gpu"]["compute_capability"],
+        "driver_version": environment["software"]["nvidia_driver_version"],
+        "cuda_runtime_version": environment["software"]["cuda_runtime_version"],
+        "cuda_toolkit_version": environment["software"]["cuda_toolkit_version"],
+        "cuda_architecture": environment["gpu"]["compute_capability"].replace(
+            ".", ""
+        ),
+    }
+    raw_workload = {
+        "workload_id": workload["workload_id"],
+        "concurrency": workload["concurrency"],
+        "prompt_tokens": workload["prompt_tokens"],
+        "output_tokens": workload["output_tokens"],
+        "warmups_per_run": workload["warmups"],
+        "measured_iterations_per_run": workload["measured_iterations"],
+        "independent_runs": len(runs),
+        "sampling": workload["sampling_id"],
+        "execution_completion": "iteration-batch",
+        "residual_rmsnorm": "separate",
+    }
+    for name, raw_value in [
+        ("model", raw_model),
+        ("environment", raw_environment),
+        ("workload", raw_workload),
+    ]:
+        if candidate[name] != raw_value:
+            raise ComparabilityError(
+                f"candidate {name} does not match its raw native profile runs"
+            )
+    if environment["software"]["container_image_sha256"] != candidate_source[
+        "profile_image_sha256"
+    ]:
+        raise InputError(
+            "raw environment producer image does not match profile_image_sha256"
+        )
+
+    derived_summary = {
+        "independent_runs": len(runs),
+        "warmups_per_run": workload["warmups"],
+        "measured_iterations_per_run": workload["measured_iterations"],
+        "failure_count": sum(run["failure_count"] for run in runs),
+        "dropped_trace_records": sum(
+            run["trace"]["dropped_records"] for run in runs
+        ),
+    }
+    request_rows = [request for run in runs for request in run["requests"]]
+    derived_metrics = {
+        "ttft_p95_ms": native_profile.r7(
+            [request["ttft_ms"] for request in request_rows], 0.95
+        ),
+        "tpot_p95_ms": native_profile.r7(
+            [request["tpot_ms"] for request in request_rows], 0.95
+        ),
+        "e2e_median_ms": native_profile.r7(
+            [request["e2e_ms"] for request in request_rows], 0.50
+        ),
+        "throughput_median_output_tokens_per_second": native_profile.r7(
+            [native_profile._throughput(run) for run in runs], 0.50
+        ),
+    }
+    if candidate["run_summary"] != derived_summary:
+        raise InputError("candidate.run_summary does not equal raw-derived summary")
+    if candidate["metrics"] != derived_metrics:
+        raise InputError("candidate.metrics do not equal raw-derived R7 metrics")
+    return runs, derived_summary, derived_metrics
+
+
 def evaluate(
     baseline_path: Path | str,
     candidate_path: Path | str,
     *,
     source_archive: Path | str,
-    binary: Path | str,
+    profile_binary: Path | str,
+    release_binary: Path | str,
     weights: Path | str,
     tokenizer: Path | str,
     correctness_report: Path | str,
-    image_id: str,
+    profile_image_id: str,
+    release_image_id: str,
+    run_paths: Sequence[Path | str],
 ) -> dict[str, Any]:
     """Evaluate already-produced CPU-readable release evidence."""
 
@@ -439,16 +643,26 @@ def evaluate(
         if candidate["baseline_sha256"] != baseline["sha256"]:
             raise InputError("candidate does not bind the reviewed baseline bytes")
 
-        if not image_id.startswith("sha256:"):
-            raise InputError("--image-id: expected sha256:<lowercase digest>")
-        image_digest = image_id.removeprefix("sha256:")
-        _sha256(image_digest, "--image-id")
+        if not profile_image_id.startswith("sha256:"):
+            raise InputError("--profile-image-id: expected sha256:<lowercase digest>")
+        if not release_image_id.startswith("sha256:"):
+            raise InputError("--release-image-id: expected sha256:<lowercase digest>")
+        profile_image_digest = profile_image_id.removeprefix("sha256:")
+        release_image_digest = release_image_id.removeprefix("sha256:")
+        _sha256(profile_image_digest, "--profile-image-id")
+        _sha256(release_image_digest, "--release-image-id")
         actual = {
             "source_archive_sha256": _digest_file(
                 Path(source_archive), "source archive"
             ),
-            "binary_sha256": _digest_file(Path(binary), "release binary"),
-            "image_sha256": image_digest,
+            "profile_binary_sha256": _digest_file(
+                Path(profile_binary), "profile binary"
+            ),
+            "release_binary_sha256": _digest_file(
+                Path(release_binary), "release binary"
+            ),
+            "profile_image_sha256": profile_image_digest,
+            "release_image_sha256": release_image_digest,
             "correctness_report_sha256": _digest_file(
                 Path(correctness_report), "correctness report"
             ),
@@ -465,10 +679,12 @@ def evaluate(
         if candidate["model"]["tokenizer_sha256"] != tokenizer_digest:
             raise InputError("candidate.model.tokenizer_sha256 does not match --tokenizer")
 
+        _runs, raw_summary, raw_metrics = _load_raw_runs(run_paths, candidate)
+
         for field in ["model", "environment", "workload"]:
             if candidate[field] != baseline[field]:
                 raise ComparabilityError(f"candidate {field} differs from baseline lane")
-        summary = candidate["run_summary"]
+        summary = raw_summary
         workload = baseline["workload"]
         for field in [
             "independent_runs",
@@ -481,7 +697,7 @@ def evaluate(
                 )
 
         metrics = baseline["metrics"]
-        candidate_metrics = candidate["metrics"]
+        candidate_metrics = raw_metrics
         ratios = {
             field: candidate_metrics[field] / metrics[field] for field in METRIC_FIELDS
         }
@@ -513,6 +729,7 @@ def evaluate(
                     "source": candidate["source"],
                     "metrics": candidate_metrics,
                     "run_summary": summary,
+                    "raw_runs": candidate["raw_runs"],
                 },
                 "ratios": ratios,
                 "checks": checks,
@@ -531,11 +748,14 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--baseline", required=True, type=Path)
     parser.add_argument("--candidate", required=True, type=Path)
     parser.add_argument("--source-archive", required=True, type=Path)
-    parser.add_argument("--binary", required=True, type=Path)
+    parser.add_argument("--profile-binary", required=True, type=Path)
+    parser.add_argument("--release-binary", required=True, type=Path)
     parser.add_argument("--weights", required=True, type=Path)
     parser.add_argument("--tokenizer", required=True, type=Path)
     parser.add_argument("--correctness-report", required=True, type=Path)
-    parser.add_argument("--image-id", required=True)
+    parser.add_argument("--profile-image-id", required=True)
+    parser.add_argument("--release-image-id", required=True)
+    parser.add_argument("--run", required=True, nargs=5, type=Path)
     parser.add_argument("--report", type=Path)
     return parser
 
@@ -546,11 +766,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         args.baseline,
         args.candidate,
         source_archive=args.source_archive,
-        binary=args.binary,
+        profile_binary=args.profile_binary,
+        release_binary=args.release_binary,
         weights=args.weights,
         tokenizer=args.tokenizer,
         correctness_report=args.correctness_report,
-        image_id=args.image_id,
+        profile_image_id=args.profile_image_id,
+        release_image_id=args.release_image_id,
+        run_paths=args.run,
     )
     encoded = json.dumps(
         report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False

@@ -7,6 +7,9 @@ It binds the measurement source archive, profiler binary, container image,
 model revision/files, correctness report, runtime flags, workload, metrics, and
 the append-only PR15 evidence root. The later CLI-default promotion source is
 recorded separately and is not misrepresented as a performance measurement.
+The metric baseline is the accepted `iteration-batch` candidate arm—not the
+rejected-for-release `per-operation` comparison arm—and preserves the exact
+aggregate values from the append-only PR15 pair report.
 
 The PR16 candidate document uses schema version
 `rustinfer.release-performance-candidate.v1` and is intentionally closed. See
@@ -14,12 +17,15 @@ the fixture builder in `benchmarks/scripts/tests/test_check_release_performance.
 for the exact shape. It must contain:
 
 - a SHA-256 of the baseline file bytes;
-- clean candidate git/source-archive, release-binary, image, correctness-report,
-  weights, and tokenizer bindings;
+- clean candidate git/source-archive, exact `rustinfer-profile` producer binary
+  and producer image, release `rustinfer` binary and runtime image,
+  correctness-report, weights, and tokenizer bindings;
 - the exact baseline model/environment/workload records;
-- five independent successful runs, at least five warmups and thirty measured
-  iterations per run, with zero failures and dropped trace records;
-- TTFT p95, TPOT p95, E2E median, and median output throughput.
+- exactly five SHA-bound raw `rustinfer.native-profile-run.v1` candidate files.
+  The checker validates every closed raw record, source/model/environment/
+  workload binding, status, trace, warmup/iteration count, and token identity;
+- TTFT p95, TPOT p95, E2E median, and median output throughput exactly
+  recomputed from those five raw files. Self-asserted aggregates are rejected.
 
 Run the standard-library-only checker on the authorized GPU host after the
 candidate measurement has completed. The checker does not start CUDA or load a
@@ -30,11 +36,14 @@ python3 benchmarks/scripts/check_release_performance.py \
   --baseline benchmarks/release/performance-baseline-v1.json \
   --candidate /evidence/release-performance-candidate.json \
   --source-archive /evidence/source.tar \
-  --binary /release/rustinfer \
+  --profile-binary /evidence/rustinfer-profile \
+  --release-binary /release/rustinfer \
   --weights /models/smollm2/model.safetensors \
   --tokenizer /models/smollm2/tokenizer.json \
   --correctness-report /evidence/correctness-report.json \
-  --image-id sha256:<candidate-image-digest> \
+  --profile-image-id sha256:<measurement-image-digest> \
+  --release-image-id sha256:<runtime-image-digest> \
+  --run /evidence/candidate-{1,2,3,4,5}.json \
   --report /evidence/release-performance-report.json
 ```
 

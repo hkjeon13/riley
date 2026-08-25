@@ -5,8 +5,8 @@
   "measurement_binding": {
     "git_commit": "1826d09fd28825582f22a2d49390f6ed047562ea",
     "source_archive_sha256": "39ce9b9898defc9cbc3b0a346739d0743de3833e189f65434985b38606abb86d",
-    "binary_sha256": "60650fa3af1d8a761432672862d1c464db86f2080d1acd5d81dccc6d1f7c9be8",
-    "image_sha256": "fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "profile_binary_sha256": "60650fa3af1d8a761432672862d1c464db86f2080d1acd5d81dccc6d1f7c9be8",
+    "profile_image_sha256": "fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
     "correctness_gate_id": "pr15-iteration-command-batch-exact-v1",
     "correctness_report_sha256": "de5c7c1564290e2ea16cb05f24501f508fd84fd563b2527887ebd6b731bbce39",
     "semantic_class": "E0"
@@ -44,10 +44,10 @@
     "residual_rmsnorm": "separate"
   },
   "metrics": {
-    "ttft_p95_ms": 7.176,
-    "tpot_p95_ms": 8.883,
-    "e2e_median_ms": 281.699,
-    "throughput_median_output_tokens_per_second": 113.543
+    "ttft_p95_ms": 5.54688055,
+    "tpot_p95_ms": 7.259536079032258,
+    "e2e_median_ms": 230.022339,
+    "throughput_median_output_tokens_per_second": 139.0239444358622
   },
   "thresholds": {
     "ttft_p95_ratio_max": 1.05,
@@ -59,6 +59,6 @@
     "pair_report_sha256": "804f6ee39d3aada4bfb8853eaa4772941b7dfc545c9def7816c9d711a894e060",
     "root_sha256s_sha256": "f25393c891a78cfcf661e525192e1c24b2f472440221b49cc0820815acc22d20",
     "evidence_index": "benchmarks/results/20260825T184555Z-rustinfer-profiling-pr15-run001/README.md",
-    "metric_precision_note": "Version-controlled metrics preserve the published PR15 evidence-index precision; thresholds are intentionally larger than measurement noise."
+    "metric_precision_note": "Metrics are the accepted iteration-batch candidate aggregates copied exactly from the append-only PR15 pair report; thresholds are intentionally larger than measurement noise."
   }
 }
