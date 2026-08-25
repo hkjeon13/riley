@@ -1,0 +1,168 @@
+{
+  "artifact_kind": "rustinfer-pr11-sampling-generation-evidence",
+  "created_at_utc": "2026-08-25T10:40:35Z",
+  "schema_id": "rustinfer.pr11.sampling-generation-evidence.v1",
+  "status": "passed",
+  "benchmark_scope": "functional-validation",
+  "scope_note": "Correctness, determinism, lifecycle, timing-boundary, and cleanup evidence; no performance claim.",
+  "semantic_class": "reference",
+  "source": {
+    "branch": "codex/pr-11-sampling-and-generation",
+    "git_dirty": false,
+    "git_revision": "d018c2fb0f74417df65a2faa2dcd66151a78fe47",
+    "source_tar_sha256": "4cd807fcb2e5a59723b0ab1f3d559d68e62e195071c52d0223bb9ffd8b2fb341"
+  },
+  "environment": {
+    "host": "server-4096",
+    "host_cpu": "13th Gen Intel(R) Core(TM) i7-13700K",
+    "host_logical_cpus": 24,
+    "host_ram_bytes": 67185598464,
+    "host_kernel": "Linux 6.8.0-138-generic x86_64",
+    "container_os": "Ubuntu 22.04",
+    "container_network": "disabled",
+    "container_image": "rustinfer-native-cuda:pr04-c6c93e2",
+    "container_image_id": "sha256:fe0f909b27532a472f4417dc613271727651d2e52ce4b9fdb702c39f1e890849",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_memory_mib": 24564,
+    "compute_capability": "8.9",
+    "nvidia_driver_version": "580.173.02",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cuda_architectures": "89",
+    "rustc_version": "1.85.0",
+    "cargo_version": "1.85.0"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bfloat16",
+    "batch_size": 1,
+    "vocabulary_size": 49152,
+    "maximum_sequence_length": 8192
+  },
+  "rng_contract": {
+    "algorithm_id": "rustinfer.philox4x32-10.v1",
+    "request_local": true,
+    "snapshot_restore": true,
+    "fork": true,
+    "greedy_draws": 0,
+    "successful_stochastic_draws_per_token": 1,
+    "uniform_mapping": "(f64(u32) + 0.5) * 2^-32",
+    "maximum_words": "2^66",
+    "exhaustion_policy": "fail without counter wrap"
+  },
+  "sampling_contract": {
+    "pipeline_id": "bf16ne-constraints-unique-repetition-temperature-top-k-top-p-f64-v1",
+    "pipeline_version": 1,
+    "categorical_algorithm_id": "u32-midpoint-token-id-ascending-categorical-v1",
+    "pipeline": [
+      "token constraints",
+      "one sign-aware repetition penalty per unique history token",
+      "temperature",
+      "top-k",
+      "top-p",
+      "f64 normalization",
+      "ascending-token-id categorical traversal"
+    ],
+    "greedy_tie_break": "lowest token ID",
+    "all_masked_policy": "structured error before RNG draw",
+    "input_logits": "native-endian BF16 vocabulary row"
+  },
+  "generation_contract": {
+    "finish_precedence": ["eos", "stop_token", "raw_byte_stop_string", "length"],
+    "finish_reasons": ["eos", "stop_token", "stop_string", "length", "cancelled", "error"],
+    "minimum_token_gate": "Only stop strings beginning in bytes from tokens accepted after the gate opens are eligible; cross-gate prefixes never reactivate.",
+    "visible_text": "safely emittable strict UTF-8 prefix after stop-prefix disambiguation",
+    "pending_valid_bytes": "valid bytes that remain a possible stop-string prefix are withheld in pending_bytes",
+    "raw_tail": "from the first unrepresentable byte onward, retained losslessly and in order in pending_bytes",
+    "raw_reconstruction": "text bytes followed by pending_bytes equals retained decoded raw output before a matched stop string",
+    "model_steps": "one prefill plus at most N-1 decode calls for N sampled tokens",
+    "cache_policy": "default exact paged KV with optimized decode attention",
+    "hot_buffers": "sampling, tokenizer, logits staging, timing events, decode workspace and KV storage prepared before generation"
+  },
+  "golden": {
+    "fixture_cases": 31,
+    "prompt_shape_count": 9,
+    "prompt_lengths": [1, 2, 10, 48, 54, 128, 1024, 4096, 8064],
+    "maximum_new_tokens": 16,
+    "cache_modes": ["on", "off"],
+    "fixture_cache_on_off_exact": true,
+    "adapter_cache_on_exact": true,
+    "adapter_cache_off_exact": true,
+    "greedy_rng_draws": 0,
+    "length_finish_cases": 30,
+    "eos_finish_cases": 1,
+    "terminal_utf8_tail_cases": 11,
+    "terminal_incomplete_utf8_cases": 6,
+    "terminal_invalid_utf8_cases": 5,
+    "terminal_utf8_tail_bytes": 184
+  },
+  "lifecycle": {
+    "stochastic_tokens": 8,
+    "stochastic_rng_draws": 8,
+    "fixed_seed_token_text_exact": true,
+    "rng_snapshot_repeat_exact": true,
+    "pre_model_cancel_rng_draws": 0,
+    "post_model_cancel_rng_draws": 0,
+    "callback_error_rng_draws": 1,
+    "callback_error_recovered": true,
+    "healthy_owner_reused": true,
+    "kv_pool_reset": true,
+    "cuda_allocation_zero_after_close": true
+  },
+  "timing_contract": {
+    "per_token_fields": [
+      "model_stage",
+      "model_gpu_milliseconds",
+      "model_wall",
+      "logits_download_bytes",
+      "logits_download_wall",
+      "sampling_cpu",
+      "detokenize_stop_cpu",
+      "total_wall"
+    ],
+    "full_bf16_logits_d2h_bytes_per_token": 98304,
+    "performance_claim": null,
+    "reason": "Debug functional gate without fixed clocks or a warmup/measurement protocol."
+  },
+  "validation": {
+    "remote_strict_clippy_all_features": "passed",
+    "remote_workspace_all_targets_all_features": "168 passed, 0 failed, 48 ignored",
+    "remote_workspace_doctests_all_features": "13 passed, 0 failed",
+    "remote_generation_golden": "1 passed; 31 cases",
+    "remote_generation_lifecycle": "1 passed",
+    "non_authoritative_diagnostic_log": "validation/generation-lifecycle.log compiled the test but omitted --ignored and executed 0 tests",
+    "authoritative_lifecycle_log": "validation/generation-lifecycle-executed.log"
+  },
+  "provenance": {
+    "remote_evidence_root": "server-4096:/home/psyche/rustinfer-artifacts/pr11/d018c2f/full",
+    "remote_payload_entries": 28,
+    "remote_regular_file_count": 25,
+    "remote_regular_file_bytes": 49135087,
+    "remote_root_apparent_bytes": 49151471,
+    "remote_checksum_file": "SHA256SUMS.v3",
+    "remote_sha256sums_sha256": "46491762270d014b87421f954a6e6c71a576791cf613c0f72cc008c729b7b7ca",
+    "initial_checksum_file": "SHA256SUMS",
+    "initial_sha256sums_sha256": "0d12892bdf0dc4546998dcd98eef928070df0810b605debfd78b72ee00ec9bbe",
+    "intermediate_checksum_file": "SHA256SUMS.v2",
+    "intermediate_sha256sums_sha256": "432b46d726b7237f73df93f8cdba29be5d974d42fe9f65423300448a1724e4fe",
+    "raw_metadata": [
+      "GPU and driver query",
+      "container image inspect and OS release",
+      "host kernel, CPU, physical pages, and page size",
+      "Rust, Cargo, and nvcc toolchains",
+      "checkpoint file SHA-256 values",
+      "checkpoint provenance manifest and model config",
+      "source, checkpoint, registry, target, and evidence paths",
+      "normalized container flags, mounts, environment, and Cargo commands"
+    ]
+  },
+  "limitations": [
+    "Single request and batch one only; no scheduler or continuous batching.",
+    "The sampler is CPU-side and downloads a full 98,304-byte BF16 vocabulary row per sampled token.",
+    "Lossless arbitrary tokenizer output requires consuming terminal pending_bytes in addition to strict visible text.",
+    "Collected timings validate boundaries only and are not a performance benchmark.",
+    "Runtime CUDA allocation accounting is not process peak VRAM.",
+    "GPU generation was validated only on sm89 with the recorded driver, toolkit, checkpoint, and fixture."
+  ]
+}

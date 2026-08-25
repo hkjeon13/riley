@@ -1,5 +1,14 @@
 # Version-controlled benchmark evidence
 
+## PR 11 sampling and generation
+
+[`20260825T104035Z-rustinfer-generation-pr11-run001`](20260825T104035Z-rustinfer-generation-pr11-run001/)
+은 `d018c2fb0f74417df65a2faa2dcd66151a78fe47`의 request-local Philox RNG, CPU sampling,
+strict-UTF-8/raw-tail streaming과 CUDA Llama generation 검증 결과다. RTX 4090 원격
+서버에서 31-case cache-on/off/native-adapter greedy exact, fixed-seed stochastic,
+cancellation/callback cleanup, timing boundary와 full-logits D2H byte accounting을 확인했다.
+Debug functional gate이므로 성능 benchmark로 해석하지 않는다.
+
 ## PR 08 online prefill
 
 [`20260825T053620Z-rustinfer-online-prefill-pr08-run001`](20260825T053620Z-rustinfer-online-prefill-pr08-run001/)
