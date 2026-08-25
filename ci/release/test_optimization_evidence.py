@@ -18,6 +18,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from check_optimization_evidence import (  # noqa: E402
     CHECKSUM_FILE,
+    COMMAND_LOG_FILES,
+    COMMAND_TEST_BINARIES,
+    COMPILE_LOG_FILES,
     EXPECTED_COMMANDS,
     EXPECTED_TOKENS,
     GATE_ID,
@@ -28,12 +31,14 @@ from check_optimization_evidence import (  # noqa: E402
     RECEIPT_VERSION,
     REPORT_FILE,
     TEST_BINARIES,
+    TEST_SUBJECTS,
     OptimizationEvidenceError,
     _json,
     load_raw_evidence_archive,
     produce,
     replay_raw_evidence,
 )
+import write_optimization_execution_evidence as writer_contract  # noqa: E402
 from release_common import canonical_json_bytes  # noqa: E402
 from test_release import fixture_elf  # noqa: E402
 
@@ -95,6 +100,10 @@ class Fixture:
                 + b"\0"
             )
 
+        self.compile_logs = self._compile_logs()
+        for command_id, name in COMPILE_LOG_FILES.items():
+            (self.evidence / name).write_bytes(self.compile_logs[command_id])
+
         self.logs = self._logs()
         for test_id, name in LOG_FILES.items():
             (self.evidence / name).write_bytes(self.logs[test_id])
@@ -102,6 +111,46 @@ class Fixture:
         self._write_report()
         self.receipt = self._receipt()
         self._write_receipt()
+
+    @staticmethod
+    def _compile_logs() -> dict[str, bytes]:
+        result: dict[str, bytes] = {}
+        for specification in TEST_SUBJECTS.values():
+            executable = (
+                f"{specification['target_dir']}/debug/deps/"
+                f"{specification['cargo_test_target']}-fixture"
+            )
+            events = [
+                {
+                    "reason": "compiler-artifact",
+                    "package_id": f"path+file:///workspace#{specification['package']}@0.1.0",
+                    "manifest_path": f"/workspace/crates/{specification['package']}/Cargo.toml",
+                    "target": {
+                        "kind": ["test"],
+                        "crate_types": ["bin"],
+                        "name": specification["cargo_test_target"],
+                        "src_path": f"/workspace/tests/{specification['cargo_test_target']}.rs",
+                        "edition": "2024",
+                        "doc": False,
+                        "doctest": False,
+                        "test": True,
+                    },
+                    "profile": {"test": True},
+                    "features": ["cuda"],
+                    "filenames": [executable],
+                    "executable": executable,
+                    "fresh": False,
+                },
+                {"reason": "build-finished", "success": True},
+            ]
+            result[specification["compile_command_id"]] = b"".join(
+                (
+                    json.dumps(event, sort_keys=True, separators=(",", ":"))
+                    + "\n"
+                ).encode("utf-8")
+                for event in events
+            )
+        return result
 
     def _logs(self) -> dict[str, bytes]:
         compile_log = (
@@ -119,12 +168,18 @@ class Fixture:
             "Python-free CUDA production/profile compile, C ABI link, tensor memory, "
             "version, and dependency smoke passed\n"
         ).encode()
+        workspace_targets = "".join(
+            "Running unittests "
+            f"src/fixture_{index}.rs (target/debug/deps/fixture-{index})\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=0)
+            for index in range(20)
+        )
         workspace = (
             "Finished `test` profile [unoptimized + debuginfo]\n"
             "test command_batch_proxy_is_one_shot_and_drop_restores_stream_use ... ignored\n"
             "test command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... ignored\n"
             "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ... ignored\n"
-            + SUMMARY.format(passed=1, ignored=0, filtered=0) * 20
+            + workspace_targets
         ).encode()
         lifecycle = (
             "Running tests/host_runtime_gpu.rs (target/debug/deps/host_runtime_gpu-fixture)\n"
@@ -259,6 +314,8 @@ class Fixture:
             environment = {
                 "CARGO_NET_OFFLINE": "true",
                 "CARGO_TERM_COLOR": "never",
+                "CUDA_HOME": "/usr/local/cuda",
+                "CUDAToolkit_ROOT": "/usr/local/cuda",
                 "RUSTINFER_CUDA_ARCHITECTURES": "89",
             }
             if command_id == "smollm2-multi-step-greedy-exact":
@@ -266,11 +323,11 @@ class Fixture:
             commands.append(
                 {
                     "id": command_id,
-                    "argv": argv,
+                    "argv": list(argv),
                     "environment": environment,
                     "exit_code": 0,
-                    "log": LOG_FILES[command_id],
-                    "test_binary": TEST_BINARIES.get(command_id),
+                    "log": COMMAND_LOG_FILES[command_id],
+                    "test_binary": COMMAND_TEST_BINARIES[command_id],
                 }
             )
         return {
@@ -285,8 +342,25 @@ class Fixture:
                 name: {
                     "sha256": digest((self.evidence / name).read_bytes()),
                     "size": (self.evidence / name).stat().st_size,
+                    "cargo_test_target": TEST_SUBJECTS[name][
+                        "cargo_test_target"
+                    ],
+                    "cargo_executable_path": (
+                        f"{TEST_SUBJECTS[name]['target_dir']}/debug/deps/"
+                        f"{TEST_SUBJECTS[name]['cargo_test_target']}-fixture"
+                    ),
+                    "cargo_executable_sha256": digest(
+                        (self.evidence / name).read_bytes()
+                    ),
+                    "copied_executable_path": f"/evidence/{name}",
+                    "compile_command_id": TEST_SUBJECTS[name][
+                        "compile_command_id"
+                    ],
+                    "execute_command_id": TEST_SUBJECTS[name][
+                        "execute_command_id"
+                    ],
                 }
-                for name in sorted(TEST_BINARIES.values())
+                for name in TEST_SUBJECTS
             },
             "commands": commands,
         }
@@ -350,9 +424,28 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.assertEqual(raw_sha, digest(first_raw.read_bytes()))
         self.assertEqual(first["profile_binary_sha256"], digest(self.fixture.profile_binary.read_bytes()))
 
+    def test_writer_and_replay_contracts_match(self) -> None:
+        self.assertEqual(RECEIPT_VERSION, writer_contract.RECEIPT_VERSION)
+        self.assertEqual(COMPILE_LOG_FILES, writer_contract.COMPILE_LOG_FILES)
+        self.assertEqual(TEST_SUBJECTS, writer_contract.TEST_SUBJECTS)
+        observed = {
+            command_id: {
+                "argv": argv,
+                "log": COMMAND_LOG_FILES[command_id],
+                "test_binary": COMMAND_TEST_BINARIES[command_id],
+            }
+            for command_id, argv in EXPECTED_COMMANDS.items()
+        }
+        self.assertEqual(observed, writer_contract.EXPECTED_COMMANDS)
+        self.assertEqual(list(EXPECTED_COMMANDS), writer_contract.COMMAND_ORDER)
+
     def test_overflowing_json_float_is_rejected(self) -> None:
         with self.assertRaisesRegex(OptimizationEvidenceError, "non-finite"):
             _json(b'{"value":1e309}', "fixture")
+
+    def test_utf16_json_is_rejected(self) -> None:
+        with self.assertRaisesRegex(OptimizationEvidenceError, "strict UTF-8"):
+            _json('{"value":1}'.encode("utf-16"), "fixture")
 
     def test_empty_synthetic_logs_are_rejected(self) -> None:
         self.fixture.refresh_log("command-batch-lifecycle", b"\n")
@@ -383,10 +476,51 @@ class OptimizationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(OptimizationEvidenceError, "failed Cargo test summary"):
             self.fixture.produce()
 
+    def test_workspace_requires_distinct_test_target_headings(self) -> None:
+        contents = self.fixture.logs["workspace-all-features-all-targets"]
+        for index in range(1, 20):
+            contents = contents.replace(
+                f"src/fixture_{index}.rs (target/debug/deps/fixture-{index})".encode(),
+                b"src/fixture_0.rs (target/debug/deps/fixture-0)",
+            )
+        self.fixture.refresh_log("workspace-all-features-all-targets", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "distinct Cargo"):
+            self.fixture.produce()
+
+    def test_failure_marker_after_exact_test_is_rejected(self) -> None:
+        contents = self.fixture.logs["command-batch-lifecycle"] + b"error: test failed\n"
+        self.fixture.refresh_log("command-batch-lifecycle", contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "failing test-run marker"):
+            self.fixture.produce()
+
     def test_test_binary_bytes_must_match_subject_receipt(self) -> None:
         path = self.fixture.evidence / "host-runtime-gpu-test"
         path.write_bytes(path.read_bytes() + b"tamper")
         with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
+    def test_subject_provenance_must_bind_compile_and_execute_commands(self) -> None:
+        subject = self.fixture.receipt["subjects"]["host-runtime-gpu-test"]  # type: ignore[index]
+        subject["execute_command_id"] = "command-batch-resource-ledger"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
+    def test_compile_log_must_bind_one_fresh_cargo_executable(self) -> None:
+        command_id = "compile-command-batch-lifecycle"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        contents = path.read_bytes().replace(
+            b"host_runtime_gpu-fixture", b"host_runtime_gpu-substitute", 1
+        )
+        path.write_bytes(contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "compiler-artifact"):
+            self.fixture.produce()
+
+    def test_compile_log_failure_after_artifact_is_rejected(self) -> None:
+        command_id = "compile-command-batch-resource-ledger"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        path.write_bytes(path.read_bytes() + b"error: could not compile fixture\n")
+        with self.assertRaisesRegex(OptimizationEvidenceError, "failing Cargo marker"):
             self.fixture.produce()
 
     def test_test_binary_must_be_elf_with_embedded_test_marker(self) -> None:
@@ -415,6 +549,17 @@ class OptimizationEvidenceTests(unittest.TestCase):
 
     def test_command_argv_receipt_is_closed(self) -> None:
         self.fixture.receipt["commands"][0]["argv"] = ["true"]  # type: ignore[index]
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_direct_execution_receipt_names_copied_elf(self) -> None:
+        command = next(
+            row
+            for row in self.fixture.receipt["commands"]  # type: ignore[index]
+            if row["id"] == "command-batch-lifecycle"
+        )
+        command["argv"][0] = "cargo"
         self.fixture._write_receipt()
         with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
             self.fixture.produce()

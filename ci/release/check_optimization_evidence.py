@@ -26,7 +26,7 @@ from release_common import ReleaseContractError, canonical_json_bytes, validate_
 
 
 GATE_ID = "pr15-iteration-command-batch-exact-v1"
-RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v1"
+RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v2"
 EXPECTED_TOKENS = [
     4052,
     2025,
@@ -58,11 +58,74 @@ TEST_BINARIES = {
     "command-batch-resource-ledger": "primitives-gpu-test",
     "smollm2-multi-step-greedy-exact": "llama-batch-gpu-test",
 }
+COMPILE_LOG_FILES = {
+    "compile-command-batch-lifecycle": "command-batch-lifecycle-build.log",
+    "compile-command-batch-resource-ledger": "command-batch-resource-ledger-build.log",
+    "compile-smollm2-multi-step-greedy-exact": "smollm2-multi-step-greedy-exact-build.log",
+}
 REPORT_FILE = "optimization-correctness-report.json"
 RECEIPT_FILE = "run-receipt.json"
 CHECKSUM_FILE = "SHA256SUMS"
-INPUT_FILES = set(LOG_FILES.values()) | set(TEST_BINARIES.values()) | {RECEIPT_FILE}
+INPUT_FILES = (
+    set(LOG_FILES.values())
+    | set(COMPILE_LOG_FILES.values())
+    | set(TEST_BINARIES.values())
+    | {RECEIPT_FILE}
+)
 RAW_FILES = INPUT_FILES | {REPORT_FILE, CHECKSUM_FILE}
+
+
+def _compile_argv(package: str, test_target: str, target_dir: str) -> list[str]:
+    return [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "--package",
+        package,
+        "--no-default-features",
+        "--features",
+        "cuda",
+        "--test",
+        test_target,
+        "--no-run",
+        "--message-format=json-render-diagnostics",
+        "--color",
+        "never",
+        "--target-dir",
+        target_dir,
+    ]
+
+
+TEST_SUBJECTS: dict[str, dict[str, str]] = {
+    "host-runtime-gpu-test": {
+        "cargo_test_target": "host_runtime_gpu",
+        "compile_command_id": "compile-command-batch-lifecycle",
+        "execute_command_id": "command-batch-lifecycle",
+        "compile_log": COMPILE_LOG_FILES["compile-command-batch-lifecycle"],
+        "package": "rustinfer-cuda",
+        "target_dir": "/workspace/target/optimizer-evidence/command-batch-lifecycle",
+        "test_name": "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
+    },
+    "primitives-gpu-test": {
+        "cargo_test_target": "primitives_gpu",
+        "compile_command_id": "compile-command-batch-resource-ledger",
+        "execute_command_id": "command-batch-resource-ledger",
+        "compile_log": COMPILE_LOG_FILES["compile-command-batch-resource-ledger"],
+        "package": "rustinfer-cuda",
+        "target_dir": "/workspace/target/optimizer-evidence/command-batch-resource-ledger",
+        "test_name": "command_batch_releases_multi_primitive_resource_ledger_after_validation_error",
+    },
+    "llama-batch-gpu-test": {
+        "cargo_test_target": "llama_batch_gpu",
+        "compile_command_id": "compile-smollm2-multi-step-greedy-exact",
+        "execute_command_id": "smollm2-multi-step-greedy-exact",
+        "compile_log": COMPILE_LOG_FILES["compile-smollm2-multi-step-greedy-exact"],
+        "package": "rustinfer-runtime",
+        "target_dir": "/workspace/target/optimizer-evidence/smollm2-multi-step-greedy-exact",
+        "test_name": "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
+    },
+}
 
 EXPECTED_COMMANDS: dict[str, list[str]] = {
     "cuda-compile-only": ["/bin/sh", "ci/verify_python_free_cuda.sh"],
@@ -77,20 +140,14 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "--color",
         "never",
     ],
-    "command-batch-lifecycle": [
-        "cargo",
-        "test",
-        "--locked",
-        "--offline",
-        "--package",
+    "compile-command-batch-lifecycle": _compile_argv(
         "rustinfer-cuda",
-        "--no-default-features",
-        "--features",
-        "cuda",
-        "--test",
         "host_runtime_gpu",
+        TEST_SUBJECTS["host-runtime-gpu-test"]["target_dir"],
+    ),
+    "command-batch-lifecycle": [
+        "/evidence/host-runtime-gpu-test",
         "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
-        "--",
         "--ignored",
         "--exact",
         "--nocapture",
@@ -98,20 +155,14 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "--color",
         "never",
     ],
-    "command-batch-resource-ledger": [
-        "cargo",
-        "test",
-        "--locked",
-        "--offline",
-        "--package",
+    "compile-command-batch-resource-ledger": _compile_argv(
         "rustinfer-cuda",
-        "--no-default-features",
-        "--features",
-        "cuda",
-        "--test",
         "primitives_gpu",
+        TEST_SUBJECTS["primitives-gpu-test"]["target_dir"],
+    ),
+    "command-batch-resource-ledger": [
+        "/evidence/primitives-gpu-test",
         "command_batch_releases_multi_primitive_resource_ledger_after_validation_error",
-        "--",
         "--ignored",
         "--exact",
         "--nocapture",
@@ -119,20 +170,14 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "--color",
         "never",
     ],
-    "smollm2-multi-step-greedy-exact": [
-        "cargo",
-        "test",
-        "--locked",
-        "--offline",
-        "--package",
+    "compile-smollm2-multi-step-greedy-exact": _compile_argv(
         "rustinfer-runtime",
-        "--no-default-features",
-        "--features",
-        "cuda",
-        "--test",
         "llama_batch_gpu",
+        TEST_SUBJECTS["llama-batch-gpu-test"]["target_dir"],
+    ),
+    "smollm2-multi-step-greedy-exact": [
+        "/evidence/llama-batch-gpu-test",
         "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
-        "--",
         "--ignored",
         "--exact",
         "--nocapture",
@@ -141,17 +186,55 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "never",
     ],
 }
+COMMAND_LOG_FILES = {
+    "cuda-compile-only": LOG_FILES["cuda-compile-only"],
+    "workspace-all-features-all-targets": LOG_FILES[
+        "workspace-all-features-all-targets"
+    ],
+    "compile-command-batch-lifecycle": COMPILE_LOG_FILES[
+        "compile-command-batch-lifecycle"
+    ],
+    "command-batch-lifecycle": LOG_FILES["command-batch-lifecycle"],
+    "compile-command-batch-resource-ledger": COMPILE_LOG_FILES[
+        "compile-command-batch-resource-ledger"
+    ],
+    "command-batch-resource-ledger": LOG_FILES["command-batch-resource-ledger"],
+    "compile-smollm2-multi-step-greedy-exact": COMPILE_LOG_FILES[
+        "compile-smollm2-multi-step-greedy-exact"
+    ],
+    "smollm2-multi-step-greedy-exact": LOG_FILES[
+        "smollm2-multi-step-greedy-exact"
+    ],
+}
+COMMAND_TEST_BINARIES = {
+    "cuda-compile-only": None,
+    "workspace-all-features-all-targets": None,
+    "compile-command-batch-lifecycle": "host-runtime-gpu-test",
+    "command-batch-lifecycle": "host-runtime-gpu-test",
+    "compile-command-batch-resource-ledger": "primitives-gpu-test",
+    "command-batch-resource-ledger": "primitives-gpu-test",
+    "compile-smollm2-multi-step-greedy-exact": "llama-batch-gpu-test",
+    "smollm2-multi-step-greedy-exact": "llama-batch-gpu-test",
+}
 
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 IMAGE_RE = re.compile(r"^sha256:([0-9a-f]{64})$")
 UTC_RE = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")
 CHECKSUM_RE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._+-]*)$")
+ABSOLUTE_EVIDENCE_PATH_RE = re.compile(r"^/[A-Za-z0-9._/+@=-]+$")
 ANSI_RE = re.compile(rb"\x1b\[[0-9;]*[A-Za-z]")
 TEST_SUMMARY_RE = re.compile(
     r"test result: ok\. (?P<passed>[0-9]+) passed; (?P<failed>[0-9]+) failed; "
     r"(?P<ignored>[0-9]+) ignored; (?P<measured>[0-9]+) measured; "
     r"(?P<filtered>[0-9]+) filtered out;"
+)
+WORKSPACE_HEADING_RE = re.compile(
+    r"(?m)^\s*(?:Running (?:unittests|tests/)[^\r\n]+|Doc-tests [A-Za-z0-9_-]+)\r?$"
+)
+EXACT_SUMMARY_END_RE = re.compile(
+    r"test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; "
+    r"(?P<filtered>[0-9]+) filtered out; finished in [0-9]+(?:\.[0-9]+)?s\r?\n\Z"
 )
 PARITY_RE = re.compile(
     r"pr15-execution-completion-parity schema_version=1 decode_steps=(?P<steps>[0-9]+) "
@@ -199,8 +282,9 @@ def _json(contents: bytes, label: str) -> dict[str, Any]:
     if not contents or len(contents) > MAX_JSON_BYTES:
         _fail(label, "must be nonempty and within the JSON size bound")
     try:
+        text = contents.decode("utf-8")
         value = json.loads(
-            contents,
+            text,
             object_pairs_hook=_pairs,
             parse_constant=_nonfinite,
             parse_float=_finite_float,
@@ -304,14 +388,51 @@ def _validate_summaries(text: str, label: str, *, minimum: int = 1) -> list[re.M
     for summary in summaries:
         if int(summary.group("failed")) != 0:
             _fail(label, "contains a failed Cargo test summary")
-    if "test result: FAILED" in text or "fatal runtime error" in text:
-        _fail(label, "contains a failing test-run marker")
+    for marker in (
+        "test result: FAILED",
+        "fatal runtime error",
+        "panicked at",
+        "error: test failed",
+        "process didn't exit successfully",
+        "SIGSEGV",
+        "signal: 11",
+    ):
+        if marker in text:
+            _fail(label, f"contains failing test-run marker {marker!r}")
     return summaries
 
 
 def _single_marker(text: str, marker: str, label: str) -> None:
     if text.count(marker) != 1:
         _fail(label, f"must contain exactly one {marker!r} marker")
+
+
+def _validate_exact_test_log(
+    text: str,
+    label: str,
+    *,
+    test_heading: str,
+    semantic_marker: str,
+    filtered: int,
+) -> None:
+    running = "running 1 test\n"
+    ok_line = "\nok\n"
+    _single_marker(text, running, label)
+    _single_marker(text, test_heading, label)
+    _single_marker(text, semantic_marker, label)
+    _single_marker(text, ok_line, label)
+    summary = EXACT_SUMMARY_END_RE.search(text)
+    if summary is None or int(summary.group("filtered")) != filtered:
+        _fail(label, "does not end with the exact passing libtest summary")
+    positions = (
+        text.index(running),
+        text.index(test_heading),
+        text.index(semantic_marker),
+        text.index(ok_line),
+        summary.start(),
+    )
+    if positions != tuple(sorted(positions)) or len(set(positions)) != len(positions):
+        _fail(label, "test execution records are not in the reviewed order")
 
 
 def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[str, str]:
@@ -344,6 +465,12 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
     )
     if not any(int(row.group("passed")) > 0 for row in summaries):
         _fail(LOG_FILES["workspace-all-features-all-targets"], "contains no executed tests")
+    headings = WORKSPACE_HEADING_RE.findall(workspace)
+    if len(headings) < 20 or len(set(headings)) != len(headings):
+        _fail(
+            LOG_FILES["workspace-all-features-all-targets"],
+            "must record at least 20 distinct Cargo test-target headings",
+        )
     for marker in (
         "command_batch_proxy_is_one_shot_and_drop_restores_stream_use ... ignored",
         "command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... ignored",
@@ -358,19 +485,14 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
         "pr16-command-batch-lifecycle schema_version=1 one_shot_finish=true "
         "drop_restores_stream=true status=passed"
     )
-    _single_marker(lifecycle, lifecycle_test, LOG_FILES["command-batch-lifecycle"])
-    _single_marker(lifecycle, lifecycle_marker, LOG_FILES["command-batch-lifecycle"])
-    lifecycle_summaries = _validate_summaries(
-        lifecycle, LOG_FILES["command-batch-lifecycle"]
+    _validate_summaries(lifecycle, LOG_FILES["command-batch-lifecycle"])
+    _validate_exact_test_log(
+        lifecycle,
+        LOG_FILES["command-batch-lifecycle"],
+        test_heading=lifecycle_test,
+        semantic_marker=lifecycle_marker,
+        filtered=7,
     )
-    if len(lifecycle_summaries) != 1 or lifecycle_summaries[0].groupdict() != {
-        "passed": "1",
-        "failed": "0",
-        "ignored": "0",
-        "measured": "0",
-        "filtered": "7",
-    }:
-        _fail(LOG_FILES["command-batch-lifecycle"], "unexpected exact-test summary")
 
     ledger = texts["command-batch-resource-ledger"]
     ledger_test = (
@@ -382,39 +504,30 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
         "cuda_live_allocation_delta=0 stream_reuse_after_finish=true "
         "owner_close_live_allocation_count=0 status=passed"
     )
-    _single_marker(ledger, ledger_test, LOG_FILES["command-batch-resource-ledger"])
-    _single_marker(ledger, ledger_marker, LOG_FILES["command-batch-resource-ledger"])
-    ledger_summaries = _validate_summaries(
-        ledger, LOG_FILES["command-batch-resource-ledger"]
+    _validate_summaries(ledger, LOG_FILES["command-batch-resource-ledger"])
+    _validate_exact_test_log(
+        ledger,
+        LOG_FILES["command-batch-resource-ledger"],
+        test_heading=ledger_test,
+        semantic_marker=ledger_marker,
+        filtered=5,
     )
-    if len(ledger_summaries) != 1 or ledger_summaries[0].groupdict() != {
-        "passed": "1",
-        "failed": "0",
-        "ignored": "0",
-        "measured": "0",
-        "filtered": "5",
-    }:
-        _fail(LOG_FILES["command-batch-resource-ledger"], "unexpected exact-test summary")
 
     parity = texts["smollm2-multi-step-greedy-exact"]
     parity_test = (
         "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ..."
     )
-    _single_marker(parity, parity_test, LOG_FILES["smollm2-multi-step-greedy-exact"])
     matches = list(PARITY_RE.finditer(parity))
     if len(matches) != 1:
         _fail(LOG_FILES["smollm2-multi-step-greedy-exact"], "must contain one closed parity marker")
-    parity_summaries = _validate_summaries(
-        parity, LOG_FILES["smollm2-multi-step-greedy-exact"]
+    _validate_summaries(parity, LOG_FILES["smollm2-multi-step-greedy-exact"])
+    _validate_exact_test_log(
+        parity,
+        LOG_FILES["smollm2-multi-step-greedy-exact"],
+        test_heading=parity_test,
+        semantic_marker=matches[0].group(0),
+        filtered=6,
     )
-    if len(parity_summaries) != 1 or parity_summaries[0].groupdict() != {
-        "passed": "1",
-        "failed": "0",
-        "ignored": "0",
-        "measured": "0",
-        "filtered": "6",
-    }:
-        _fail(LOG_FILES["smollm2-multi-step-greedy-exact"], "unexpected exact-test summary")
     match = matches[0]
     ids = [int(value) for value in match.group("ids").split(", ")]
     derived = {
@@ -486,6 +599,67 @@ def _validate_report(report: Mapping[str, Any]) -> None:
         _fail(REPORT_FILE, "recorded_at_utc must be a UTC second timestamp")
 
 
+def _validate_cargo_provenance(
+    files: Mapping[str, bytes], subjects: Mapping[str, Mapping[str, Any]]
+) -> None:
+    """Bind each copied ELF to one fresh Cargo compiler-artifact record."""
+
+    for filename, subject in subjects.items():
+        spec = TEST_SUBJECTS[filename]
+        label = spec["compile_log"]
+        text = _text(files[label], label)
+        for marker in (
+            "error: could not compile",
+            "error: test failed",
+            "process didn't exit successfully",
+            "fatal runtime error",
+        ):
+            if marker in text:
+                _fail(label, f"contains failing Cargo marker {marker!r}")
+        target_artifacts: list[dict[str, Any]] = []
+        build_finished: list[dict[str, Any]] = []
+        for line_number, line in enumerate(text.splitlines(), 1):
+            if not line.startswith("{"):
+                continue
+            event = _json(line.encode("utf-8"), f"{label}:{line_number}")
+            reason = event.get("reason")
+            if reason == "build-finished":
+                build_finished.append(event)
+            if reason != "compiler-artifact":
+                continue
+            target = event.get("target")
+            if isinstance(target, dict) and target.get("name") == spec[
+                "cargo_test_target"
+            ]:
+                target_artifacts.append(event)
+        if len(build_finished) != 1 or build_finished[0].get("success") is not True:
+            _fail(label, "must contain exactly one successful Cargo build-finished record")
+        if (
+            len(target_artifacts) != 1
+            or target_artifacts[0].get("executable")
+            != subject["cargo_executable_path"]
+        ):
+            _fail(
+                label,
+                f"must contain exactly one matching compiler-artifact for {filename}",
+            )
+        artifact = target_artifacts[0]
+        target = artifact["target"]
+        profile = artifact.get("profile")
+        if (
+            target.get("kind") != ["test"]
+            or target.get("crate_types") != ["bin"]
+            or not isinstance(profile, dict)
+            or profile.get("test") is not True
+            or artifact.get("fresh") is not False
+            or artifact.get("features") != ["cuda"]
+        ):
+            _fail(
+                label,
+                f"compiler-artifact for {filename} is not a fresh CUDA test executable",
+            )
+
+
 def _validate_receipt(
     receipt: Mapping[str, Any],
     report: Mapping[str, Any],
@@ -545,14 +719,44 @@ def _validate_receipt(
     if row["profile_binary_sha256"] != profile_binary_sha256:
         _fail(RECEIPT_FILE, "profile binary differs from the supplied executable")
 
-    subjects = _closed(row["subjects"], set(TEST_BINARIES.values()), f"{RECEIPT_FILE}.subjects")
-    for filename in sorted(TEST_BINARIES.values()):
+    subjects = _closed(
+        row["subjects"], set(TEST_SUBJECTS), f"{RECEIPT_FILE}.subjects"
+    )
+    for filename, specification in TEST_SUBJECTS.items():
         subject = _closed(
             subjects[filename],
-            {"sha256", "size"},
+            {
+                "sha256",
+                "size",
+                "cargo_test_target",
+                "cargo_executable_path",
+                "cargo_executable_sha256",
+                "copied_executable_path",
+                "compile_command_id",
+                "execute_command_id",
+            },
             f"{RECEIPT_FILE}.subjects.{filename}",
         )
-        if subject["sha256"] != _sha256(files[filename]) or subject["size"] != len(files[filename]):
+        cargo_path = subject["cargo_executable_path"]
+        expected_cargo_prefix = (
+            f"{specification['target_dir']}/debug/deps/"
+            f"{specification['cargo_test_target']}-"
+        )
+        file_sha256 = _sha256(files[filename])
+        if (
+            not isinstance(cargo_path, str)
+            or ABSOLUTE_EVIDENCE_PATH_RE.fullmatch(cargo_path) is None
+            or not cargo_path.startswith(expected_cargo_prefix)
+            or subject["sha256"] != file_sha256
+            or subject["cargo_executable_sha256"] != file_sha256
+            or subject["copied_executable_path"] != f"/evidence/{filename}"
+            or subject["cargo_test_target"] != specification["cargo_test_target"]
+            or subject["compile_command_id"] != specification["compile_command_id"]
+            or subject["execute_command_id"] != specification["execute_command_id"]
+            or isinstance(subject["size"], bool)
+            or not isinstance(subject["size"], int)
+            or subject["size"] != len(files[filename])
+        ):
             _fail(RECEIPT_FILE, f"subject differs from raw test executable: {filename}")
 
     commands = row["commands"]
@@ -580,20 +784,23 @@ def _validate_receipt(
         expected_environment = {
             "CARGO_NET_OFFLINE": "true",
             "CARGO_TERM_COLOR": "never",
+            "CUDA_HOME": "/usr/local/cuda",
+            "CUDAToolkit_ROOT": "/usr/local/cuda",
             "RUSTINFER_CUDA_ARCHITECTURES": "89",
         }
         if command_id == "smollm2-multi-step-greedy-exact":
             expected_environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
-        expected_binary = TEST_BINARIES.get(command_id)
+        expected_binary = COMMAND_TEST_BINARIES[command_id]
         if command != {
             "id": command_id,
             "argv": argv,
             "environment": expected_environment,
             "exit_code": 0,
-            "log": LOG_FILES[command_id],
+            "log": COMMAND_LOG_FILES[command_id],
             "test_binary": expected_binary,
         }:
             _fail(RECEIPT_FILE, f"command {command_id!r} differs from the reviewed invocation")
+    _validate_cargo_provenance(files, subjects)
 
 
 def _parse_checksums(contents: bytes) -> dict[str, str]:
