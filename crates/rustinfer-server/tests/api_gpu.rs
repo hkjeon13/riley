@@ -130,6 +130,7 @@ fn server_config() -> ServerConfig {
         worker_threads: 6,
         connection_queue_capacity: 8,
         read_timeout: Duration::from_secs(10),
+        framing_timeout: Duration::from_secs(15),
         write_timeout: Duration::from_secs(30),
         request_timeout: Duration::from_secs(120),
         shutdown_grace: Duration::from_secs(60),

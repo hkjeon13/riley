@@ -11,10 +11,10 @@
 use std::collections::VecDeque;
 use std::error;
 use std::fmt;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, TryRecvError, TrySendError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -271,6 +271,8 @@ pub struct ServerConfig {
     pub connection_queue_capacity: usize,
     /// Maximum inactivity while framing one request.
     pub read_timeout: Duration,
+    /// Absolute wall-clock bound for receiving headers and the declared body.
+    pub framing_timeout: Duration,
     /// Maximum inactivity while writing headers, JSON, or one SSE frame.
     pub write_timeout: Duration,
     /// End-to-end event-wait deadline after backend admission.
@@ -294,6 +296,7 @@ impl Default for ServerConfig {
             worker_threads: 8,
             connection_queue_capacity: 128,
             read_timeout: Duration::from_secs(10),
+            framing_timeout: Duration::from_secs(15),
             write_timeout: Duration::from_secs(30),
             request_timeout: Duration::from_secs(120),
             shutdown_grace: Duration::from_secs(30),
@@ -319,6 +322,7 @@ impl ServerConfig {
         }
         for (field, duration) in [
             ("read_timeout", self.read_timeout),
+            ("framing_timeout", self.framing_timeout),
             ("write_timeout", self.write_timeout),
             ("request_timeout", self.request_timeout),
             ("shutdown_grace", self.shutdown_grace),
@@ -409,6 +413,10 @@ pub enum ServerShutdownError {
     ThreadPanicked,
     /// The backend did not shut down cleanly.
     Backend(ServiceErrorClass),
+    /// The configured global shutdown deadline elapsed before one stage ended.
+    DeadlineExceeded { stage: &'static str },
+    /// The bounded backend-shutdown coordinator thread could not be started.
+    CoordinatorUnavailable,
 }
 
 impl fmt::Display for ServerShutdownError {
@@ -416,6 +424,15 @@ impl fmt::Display for ServerShutdownError {
         match self {
             Self::ThreadPanicked => formatter.write_str("an HTTP service thread panicked"),
             Self::Backend(class) => write!(formatter, "backend shutdown failed: {class:?}"),
+            Self::DeadlineExceeded { stage } => {
+                write!(
+                    formatter,
+                    "shutdown deadline exceeded while waiting for {stage}"
+                )
+            }
+            Self::CoordinatorUnavailable => {
+                formatter.write_str("could not start the backend shutdown coordinator")
+            }
         }
     }
 }
@@ -430,8 +447,109 @@ pub struct ServerHandle {
     shutdown_grace: Duration,
     listener_thread: Option<JoinHandle<()>>,
     worker_threads: Vec<JoinHandle<()>>,
+    connections: Arc<ConnectionRegistry>,
     observations: Arc<ObservationBuffer>,
     joined: bool,
+}
+
+#[derive(Debug)]
+struct ConnectionRegistry {
+    slots: Mutex<Vec<Option<RegisteredConnection>>>,
+}
+
+#[derive(Debug)]
+struct RegisteredConnection {
+    stream: TcpStream,
+    phase: ConnectionPhase,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ConnectionPhase {
+    Framing,
+    Serving,
+}
+
+impl ConnectionRegistry {
+    fn try_new(capacity: usize) -> Result<Self, ServerStartError> {
+        let mut slots = Vec::new();
+        slots
+            .try_reserve_exact(capacity)
+            .map_err(|_| ServerStartError::HostAllocation {
+                resource: "connection registry",
+            })?;
+        slots.resize_with(capacity, || None);
+        Ok(Self {
+            slots: Mutex::new(slots),
+        })
+    }
+
+    fn register(&self, stream: &TcpStream) -> io::Result<usize> {
+        let duplicate = stream.try_clone()?;
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some((slot, entry)) = slots
+            .iter_mut()
+            .enumerate()
+            .find(|(_, entry)| entry.is_none())
+        else {
+            return Err(io::Error::other("connection registry capacity exhausted"));
+        };
+        *entry = Some(RegisteredConnection {
+            stream: duplicate,
+            phase: ConnectionPhase::Framing,
+        });
+        Ok(slot)
+    }
+
+    fn mark_serving(&self, slot: usize) {
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(Some(connection)) = slots.get_mut(slot) {
+            connection.phase = ConnectionPhase::Serving;
+        }
+    }
+
+    fn unregister(&self, slot: usize) {
+        let mut slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(entry) = slots.get_mut(slot) {
+            *entry = None;
+        }
+    }
+
+    fn shutdown_all(&self) {
+        let slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for connection in slots.iter().flatten() {
+            let _ = connection.stream.shutdown(Shutdown::Both);
+        }
+    }
+
+    fn shutdown_framing(&self) {
+        let slots = self
+            .slots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for connection in slots.iter().flatten() {
+            if connection.phase == ConnectionPhase::Framing {
+                let _ = connection.stream.shutdown(Shutdown::Both);
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ConnectionJob {
+    stream: TcpStream,
+    registry_slot: usize,
 }
 
 impl ServerHandle {
@@ -461,28 +579,74 @@ impl ServerHandle {
         if self.joined {
             return Ok(());
         }
+        // This is a one-shot ownership transition. If a deadline expires,
+        // unfinished threads are detached instead of making Drop retry an
+        // unbounded join.
+        self.joined = true;
         self.stopping.store(true, Ordering::Release);
         self.backend.begin_shutdown();
         let deadline = Instant::now()
             .checked_add(self.shutdown_grace)
             .unwrap_or_else(Instant::now);
+        self.connections.shutdown_framing();
+
+        let (backend_sender, backend_receiver) = mpsc::sync_channel(1);
+        let backend = Arc::clone(&self.backend);
+        let backend_thread = thread::Builder::new()
+            .name("rustinfer-backend-shutdown".to_owned())
+            .spawn(move || {
+                let _ = backend_sender.send(backend.shutdown(deadline));
+            })
+            .map_err(|_| ServerShutdownError::CoordinatorUnavailable)?;
 
         let mut thread_panicked = false;
-        if self
-            .listener_thread
-            .take()
-            .is_some_and(|handle| handle.join().is_err())
-        {
-            thread_panicked = true;
-        }
-
-        let backend_result = self.backend.shutdown(deadline);
-        for handle in self.worker_threads.drain(..) {
-            if handle.join().is_err() {
+        if let Some(handle) = self.listener_thread.take() {
+            if join_until(handle, deadline, "listener thread")? {
                 thread_panicked = true;
             }
         }
-        self.joined = true;
+        let force_close_reserve = self
+            .shutdown_grace
+            .checked_div(4)
+            .unwrap_or(Duration::ZERO)
+            .min(Duration::from_millis(250));
+        let graceful_transport_deadline = deadline
+            .checked_sub(force_close_reserve)
+            .unwrap_or_else(Instant::now);
+        while self
+            .worker_threads
+            .iter()
+            .any(|handle| !handle.is_finished())
+            && Instant::now() < graceful_transport_deadline
+        {
+            thread::sleep(Duration::from_millis(1));
+        }
+        self.connections.shutdown_all();
+        for handle in self.worker_threads.drain(..) {
+            if join_until(handle, deadline, "HTTP worker thread")? {
+                thread_panicked = true;
+            }
+        }
+
+        let backend_result = match backend_receiver.try_recv() {
+            Ok(result) => result,
+            Err(TryRecvError::Disconnected) => return Err(ServerShutdownError::ThreadPanicked),
+            Err(TryRecvError::Empty) => backend_receiver
+                .recv_timeout(remaining_until(deadline).ok_or(
+                    ServerShutdownError::DeadlineExceeded {
+                        stage: "backend shutdown",
+                    },
+                )?)
+                .map_err(|error| match error {
+                    RecvTimeoutError::Timeout => ServerShutdownError::DeadlineExceeded {
+                        stage: "backend shutdown",
+                    },
+                    RecvTimeoutError::Disconnected => ServerShutdownError::ThreadPanicked,
+                })?,
+        };
+        if join_until(backend_thread, deadline, "backend shutdown thread")? {
+            thread_panicked = true;
+        }
 
         if let Err(class) = backend_result {
             return Err(ServerShutdownError::Backend(class));
@@ -492,6 +656,24 @@ impl ServerHandle {
         }
         Ok(())
     }
+}
+
+fn remaining_until(deadline: Instant) -> Option<Duration> {
+    deadline.checked_duration_since(Instant::now())
+}
+
+fn join_until(
+    handle: JoinHandle<()>,
+    deadline: Instant,
+    stage: &'static str,
+) -> Result<bool, ServerShutdownError> {
+    while !handle.is_finished() {
+        let Some(remaining) = remaining_until(deadline) else {
+            return Err(ServerShutdownError::DeadlineExceeded { stage });
+        };
+        thread::sleep(remaining.min(Duration::from_millis(1)));
+    }
+    Ok(handle.join().is_err())
 }
 
 impl fmt::Debug for ServerHandle {
@@ -531,8 +713,15 @@ pub fn start_server(
     listener.set_nonblocking(true)?;
     let local_address = listener.local_addr()?;
     let stopping = Arc::new(AtomicBool::new(false));
+    let connection_capacity = config
+        .worker_threads
+        .checked_add(config.connection_queue_capacity)
+        .ok_or(ServerStartError::InvalidConfig {
+            field: "connection capacity",
+        })?;
+    let connections = Arc::new(ConnectionRegistry::try_new(connection_capacity)?);
     let (connection_sender, connection_receiver) =
-        mpsc::sync_channel::<TcpStream>(config.connection_queue_capacity);
+        mpsc::sync_channel::<ConnectionJob>(config.connection_queue_capacity);
     let connection_receiver = Arc::new(Mutex::new(connection_receiver));
     let observations = Arc::new(ObservationBuffer::try_new(config.observation_capacity)?);
 
@@ -547,6 +736,7 @@ pub fn start_server(
         let worker_backend = Arc::clone(&backend);
         let worker_stopping = Arc::clone(&stopping);
         let worker_observations = Arc::clone(&observations);
+        let worker_connections = Arc::clone(&connections);
         worker_threads.push(
             thread::Builder::new()
                 .name(format!("rustinfer-http-{worker_index}"))
@@ -555,6 +745,7 @@ pub fn start_server(
                         &receiver,
                         worker_backend.as_ref(),
                         &worker_stopping,
+                        &worker_connections,
                         &worker_observations,
                         config,
                     );
@@ -563,6 +754,7 @@ pub fn start_server(
     }
 
     let listener_stopping = Arc::clone(&stopping);
+    let listener_connections = Arc::clone(&connections);
     let listener_thread = thread::Builder::new()
         .name("rustinfer-listener".to_owned())
         .spawn(move || {
@@ -570,6 +762,7 @@ pub fn start_server(
                 &listener,
                 &connection_sender,
                 &listener_stopping,
+                &listener_connections,
                 config.write_timeout,
             );
         })?;
@@ -581,6 +774,7 @@ pub fn start_server(
         shutdown_grace: config.shutdown_grace,
         listener_thread: Some(listener_thread),
         worker_threads,
+        connections,
         observations,
         joined: false,
     })
@@ -588,27 +782,43 @@ pub fn start_server(
 
 fn listener_loop(
     listener: &TcpListener,
-    sender: &mpsc::SyncSender<TcpStream>,
+    sender: &SyncSender<ConnectionJob>,
     stopping: &AtomicBool,
+    connections: &ConnectionRegistry,
     write_timeout: Duration,
 ) {
     while !stopping.load(Ordering::Acquire) {
         match listener.accept() {
-            Ok((stream, _peer)) => {
+            Ok((mut stream, _peer)) => {
+                if stopping.load(Ordering::Acquire) {
+                    let _ = write_api_error(&mut stream, &ApiError::ShuttingDown);
+                    let _ = stream.shutdown(Shutdown::Both);
+                    break;
+                }
                 if stream.set_write_timeout(Some(write_timeout)).is_err() {
                     let _ = stream.shutdown(Shutdown::Both);
                     continue;
                 }
                 let _ = stream.set_nodelay(true);
-                match sender.try_send(stream) {
+                let Ok(registry_slot) = connections.register(&stream) else {
+                    let _ = write_api_error(&mut stream, &ApiError::Overloaded);
+                    let _ = stream.shutdown(Shutdown::Both);
+                    continue;
+                };
+                match sender.try_send(ConnectionJob {
+                    stream,
+                    registry_slot,
+                }) {
                     Ok(()) => {}
-                    Err(TrySendError::Full(mut stream)) => {
-                        let _ = write_api_error(&mut stream, &ApiError::Overloaded);
-                        let _ = stream.shutdown(Shutdown::Both);
+                    Err(TrySendError::Full(mut job)) => {
+                        connections.unregister(job.registry_slot);
+                        let _ = write_api_error(&mut job.stream, &ApiError::Overloaded);
+                        let _ = job.stream.shutdown(Shutdown::Both);
                     }
-                    Err(TrySendError::Disconnected(mut stream)) => {
-                        let _ = write_api_error(&mut stream, &ApiError::ShuttingDown);
-                        let _ = stream.shutdown(Shutdown::Both);
+                    Err(TrySendError::Disconnected(mut job)) => {
+                        connections.unregister(job.registry_slot);
+                        let _ = write_api_error(&mut job.stream, &ApiError::ShuttingDown);
+                        let _ = job.stream.shutdown(Shutdown::Both);
                         break;
                     }
                 }
@@ -623,9 +833,10 @@ fn listener_loop(
 }
 
 fn worker_loop(
-    receiver: &Mutex<Receiver<TcpStream>>,
+    receiver: &Mutex<Receiver<ConnectionJob>>,
     backend: &dyn CompletionBackend,
     stopping: &AtomicBool,
+    connections: &ConnectionRegistry,
     observations: &Arc<ObservationBuffer>,
     config: ServerConfig,
 ) {
@@ -635,14 +846,23 @@ fn worker_loop(
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .recv_timeout(CONNECTION_POLL_INTERVAL);
         match job_result {
-            Ok(mut stream) => {
+            Ok(mut job) => {
                 if stopping.load(Ordering::Acquire) {
-                    let _ = write_api_error(&mut stream, &ApiError::ShuttingDown);
-                    let _ = stream.shutdown(Shutdown::Both);
+                    let _ = write_api_error(&mut job.stream, &ApiError::ShuttingDown);
+                    let _ = job.stream.shutdown(Shutdown::Both);
                 } else {
-                    handle_connection(&mut stream, backend, stopping, observations, config);
-                    let _ = stream.shutdown(Shutdown::Both);
+                    handle_connection(
+                        &mut job.stream,
+                        backend,
+                        stopping,
+                        connections,
+                        job.registry_slot,
+                        observations,
+                        config,
+                    );
+                    let _ = job.stream.shutdown(Shutdown::Both);
                 }
+                connections.unregister(job.registry_slot);
             }
             Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
@@ -654,6 +874,8 @@ fn handle_connection(
     stream: &mut TcpStream,
     backend: &dyn CompletionBackend,
     stopping: &AtomicBool,
+    connections: &ConnectionRegistry,
+    registry_slot: usize,
     observations: &Arc<ObservationBuffer>,
     config: ServerConfig,
 ) {
@@ -664,7 +886,15 @@ fn handle_connection(
     {
         return;
     }
-    let request = match read_request(stream, config.http_limits) {
+    let framing_deadline = Instant::now()
+        .checked_add(config.framing_timeout)
+        .unwrap_or_else(Instant::now);
+    let mut reader = FramingReader {
+        stream,
+        inactivity_timeout: config.read_timeout,
+        deadline: framing_deadline,
+    };
+    let request = match read_request(&mut reader, config.http_limits) {
         Ok(request) => request,
         Err(error) => {
             if !is_peer_gone(&error) {
@@ -673,7 +903,32 @@ fn handle_connection(
             return;
         }
     };
+    connections.mark_serving(registry_slot);
     route_request(stream, backend, stopping, observations, config, &request);
+}
+
+struct FramingReader<'a> {
+    stream: &'a mut TcpStream,
+    inactivity_timeout: Duration,
+    deadline: Instant,
+}
+
+impl Read for FramingReader<'_> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let remaining = self
+            .deadline
+            .checked_duration_since(Instant::now())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::TimedOut, "framing deadline elapsed"))?;
+        if remaining.is_zero() {
+            return Err(io::Error::new(
+                io::ErrorKind::TimedOut,
+                "framing deadline elapsed",
+            ));
+        }
+        self.stream
+            .set_read_timeout(Some(self.inactivity_timeout.min(remaining)))?;
+        self.stream.read(buffer)
+    }
 }
 
 fn route_request(
@@ -1444,7 +1699,8 @@ mod tests {
 
     use super::{
         BackendStatus, CompletionBackend, ObservationBuffer, RequestCancellation,
-        RequestObservation, RequestObservationStatus, ServerConfig, SubmittedRequest, start_server,
+        RequestObservation, RequestObservationStatus, ServerConfig, ServerShutdownError,
+        SubmittedRequest, start_server,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
@@ -1498,6 +1754,7 @@ mod tests {
         cancellation_count: Arc<AtomicUsize>,
         shutdown_signal: Arc<AtomicBool>,
         shutdown_called: AtomicBool,
+        shutdown_delay: Mutex<Option<Duration>>,
     }
 
     impl TestBackend {
@@ -1519,11 +1776,19 @@ mod tests {
                 cancellation_count: Arc::new(AtomicUsize::new(0)),
                 shutdown_signal: Arc::new(AtomicBool::new(false)),
                 shutdown_called: AtomicBool::new(false),
+                shutdown_delay: Mutex::new(None),
             })
         }
 
         fn cancellations(&self) -> usize {
             self.cancellation_count.load(Ordering::Acquire)
+        }
+
+        fn delay_shutdown_by(&self, delay: Duration) {
+            *self
+                .shutdown_delay
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(delay);
         }
     }
 
@@ -1626,6 +1891,14 @@ mod tests {
 
         fn shutdown(&self, deadline: Instant) -> Result<(), ServiceErrorClass> {
             self.shutdown_called.store(true, Ordering::Release);
+            if let Some(delay) = *self
+                .shutdown_delay
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+            {
+                thread::sleep(delay);
+                return Ok(());
+            }
             while self.active.load(Ordering::Acquire) != 0 {
                 if Instant::now() >= deadline {
                     return Err(ServiceErrorClass::Timeout);
@@ -1642,6 +1915,7 @@ mod tests {
             worker_threads: 4,
             connection_queue_capacity: 32,
             read_timeout: Duration::from_millis(500),
+            framing_timeout: Duration::from_secs(1),
             write_timeout: Duration::from_millis(500),
             request_timeout: Duration::from_secs(2),
             shutdown_grace: Duration::from_secs(2),
@@ -1959,6 +2233,95 @@ mod tests {
         drop(first);
         drop(second);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn absolute_framing_deadline_rejects_trickle_and_releases_worker() {
+        let backend = TestBackend::new([]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let mut config = test_config();
+        config.worker_threads = 1;
+        config.connection_queue_capacity = 1;
+        config.read_timeout = Duration::from_millis(500);
+        config.framing_timeout = Duration::from_millis(100);
+        let server = start_server(config, backend_trait).expect("start server");
+
+        let mut trickle = TcpStream::connect(server.local_address()).expect("connect trickle");
+        trickle
+            .set_read_timeout(Some(TEST_TIMEOUT))
+            .expect("set trickle timeout");
+        // Each byte arrives well inside the 500 ms inactivity timeout, but
+        // the request remains incomplete across the 100 ms absolute bound.
+        for byte in b"GET /healthz HTTP/1.1\r\n".iter().take(7) {
+            if trickle.write_all(std::slice::from_ref(byte)).is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(15));
+        }
+        let _ = trickle.shutdown(Shutdown::Write);
+        let mut response = Vec::new();
+        if let Err(error) = trickle.read_to_end(&mut response) {
+            assert_eq!(error.kind(), std::io::ErrorKind::ConnectionReset);
+        }
+        assert_eq!(response_status(&response), 408);
+
+        let response = send_request(
+            server.local_address(),
+            b"GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 200);
+        server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn shutdown_interrupts_partial_requests_within_global_grace() {
+        let backend = TestBackend::new([]);
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let mut config = test_config();
+        config.worker_threads = 1;
+        config.connection_queue_capacity = 1;
+        config.read_timeout = Duration::from_secs(30);
+        config.framing_timeout = Duration::from_secs(30);
+        config.shutdown_grace = Duration::from_millis(150);
+        let server = start_server(config, backend_trait).expect("start server");
+
+        let mut partial = TcpStream::connect(server.local_address()).expect("connect partial");
+        partial
+            .write_all(b"POST /v1/completions HTTP/1.1\r\n")
+            .expect("write partial request");
+        thread::sleep(Duration::from_millis(30));
+
+        let started = Instant::now();
+        server.shutdown().expect("bounded graceful shutdown");
+        assert!(
+            started.elapsed() < Duration::from_millis(500),
+            "shutdown exceeded its bounded grace: {:?}",
+            started.elapsed()
+        );
+        assert!(backend.shutdown_called.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn shutdown_deadline_contains_a_backend_that_violates_its_contract() {
+        let backend = TestBackend::new([]);
+        backend.delay_shutdown_by(Duration::from_secs(1));
+        let backend_trait: Arc<dyn CompletionBackend> = backend;
+        let mut config = test_config();
+        config.shutdown_grace = Duration::from_millis(80);
+        let server = start_server(config, backend_trait).expect("start server");
+
+        let started = Instant::now();
+        assert!(matches!(
+            server.shutdown(),
+            Err(ServerShutdownError::DeadlineExceeded {
+                stage: "backend shutdown"
+            })
+        ));
+        assert!(
+            started.elapsed() < Duration::from_millis(400),
+            "misbehaving backend escaped shutdown deadline: {:?}",
+            started.elapsed()
+        );
     }
 
     #[test]
