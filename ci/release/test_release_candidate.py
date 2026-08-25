@@ -13,6 +13,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -31,6 +32,7 @@ from check_release_candidate import (  # noqa: E402
     SOAK_SCENARIOS,
     SOAK_TEMPLATE_CANONICAL_SHA256,
     evaluate,
+    reliability_soak,
     release_performance,
 )
 from test_release import EPOCH, fixture_elf  # noqa: E402
@@ -100,6 +102,7 @@ class CandidateFixture:
             "performance": root / "performance-report.json",
             "performance_raw": root / "performance-evidence.tar",
             "soak": root / "soak-report.json",
+            "soak_raw": root / "soak-evidence.tar",
         }
         self._write_tar(
             self.paths["source"],
@@ -116,6 +119,7 @@ class CandidateFixture:
             source_date_epoch=EPOCH,
         )
         self.paths["cuda_raw"].write_bytes(b"cuda fault raw evidence")
+        self.paths["soak_raw"].write_bytes(b"soak raw evidence fixture")
         self._write_tar(
             self.paths["native_replay"],
             {"replay-summary.json": b'{"status":"passed"}\n'},
@@ -746,7 +750,10 @@ class CandidateFixture:
                     "report": artifact("performance"),
                     "raw_evidence": artifact("performance_raw"),
                 },
-                "reliability_soak": {"report": artifact("soak")},
+                "reliability_soak": {
+                    "report": artifact("soak"),
+                    "raw_evidence": artifact("soak_raw"),
+                },
             },
         }
         self.write_manifest()
@@ -757,7 +764,13 @@ class CandidateFixture:
         )
 
     def evaluate(self) -> dict[str, object]:
-        return evaluate(self.manifest_path, self.root)
+        replay = {"report": copy.deepcopy(self.documents["soak"])}
+        with mock.patch.object(
+            reliability_soak,
+            "replay_raw_evidence_archive",
+            return_value=replay,
+        ):
+            return evaluate(self.manifest_path, self.root)
 
 
 class ReleaseCandidateTests(unittest.TestCase):
@@ -773,7 +786,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["bindings"]["git_revision"], REVISION)
-        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 12)
+        self.assertEqual(len(report["bindings"]["evidence_sha256"]), 13)
 
     def test_failed_or_missing_gate_fails_closed(self) -> None:
         del self.fixture.documents["performance"]["status"]
@@ -975,6 +988,19 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = second_fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("exact reviewed soak check inventory", report["errors"][0])
+
+    def test_soak_submitted_report_must_equal_raw_replay(self) -> None:
+        replayed = copy.deepcopy(self.fixture.documents["soak"])
+        self.fixture.documents["soak"]["scenario_summaries"][0]["events"] += 1
+        self.fixture.refresh_manifest()
+        with mock.patch.object(
+            reliability_soak,
+            "replay_raw_evidence_archive",
+            return_value={"report": replayed},
+        ):
+            report = evaluate(self.fixture.manifest_path, self.fixture.root)
+        self.assertFalse(report["passed"])
+        self.assertIn("differs from the raw-replayed report", report["errors"][0])
 
     def test_soak_summary_must_span_the_reviewed_duration(self) -> None:
         summary = next(

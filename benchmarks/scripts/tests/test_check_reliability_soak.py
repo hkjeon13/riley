@@ -3,8 +3,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import sys
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +23,29 @@ SPEC.loader.exec_module(checker)
 
 def digest(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
+
+
+def write_raw_tar(path: Path, payloads: dict[str, bytes]) -> None:
+    with tarfile.open(path, "w:", format=tarfile.USTAR_FORMAT) as archive:
+        for name in sorted(payloads):
+            contents = payloads[name]
+            member = tarfile.TarInfo(name)
+            member.size = len(contents)
+            member.mode = 0o644
+            member.uid = 0
+            member.gid = 0
+            member.uname = ""
+            member.gname = ""
+            member.mtime = 0
+            archive.addfile(member, io.BytesIO(contents))
+
+
+def read_raw_tar(path: Path) -> dict[str, bytes]:
+    with tarfile.open(path, "r:") as archive:
+        return {
+            member.name: archive.extractfile(member).read()
+            for member in archive.getmembers()
+        }
 
 
 class SoakFixture:
@@ -355,6 +380,116 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             samples[1]["process"]["rss_bytes"] = 1_000_000
         report = self.evaluate(mutate)
         self.assertFalse(next(check for check in report["checks"] if check["name"] == "steady.rss_slope_per_hour")["passed"])
+
+    def test_raw_packager_is_deterministic_and_replays_exact_report(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        first = fixture.root / "first.tar"
+        second = fixture.root / "second.tar"
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            expected = checker.evaluate(fixture.manifest_path, fixture.run_directory)
+            first_replay = checker.package_raw_evidence(
+                fixture.manifest_path, fixture.run_directory, first
+            )
+            checker.package_raw_evidence(
+                fixture.manifest_path, fixture.run_directory, second
+            )
+        self.assertEqual(first.read_bytes(), second.read_bytes())
+        self.assertEqual(first_replay["report"], expected)
+        self.assertEqual(
+            first_replay["archive_sha256"],
+            hashlib.sha256(first.read_bytes()).hexdigest(),
+        )
+        with tarfile.open(first, "r:") as archive:
+            self.assertEqual(
+                [member.name for member in archive.getmembers()],
+                sorted(checker.RAW_ARCHIVE_MEMBERS),
+            )
+
+    def test_raw_replay_rejects_checksum_tampering(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        original = fixture.root / "original.tar"
+        tampered = fixture.root / "tampered.tar"
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            checker.package_raw_evidence(
+                fixture.manifest_path, fixture.run_directory, original
+            )
+            payloads = read_raw_tar(original)
+            payloads["events.jsonl"] += b"\n"
+            write_raw_tar(tampered, payloads)
+            with self.assertRaisesRegex(checker.InputError, "SHA256SUMS"):
+                checker.replay_raw_evidence_archive(tampered)
+
+    def test_raw_replay_rejects_extra_member(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        original = fixture.root / "original.tar"
+        expanded = fixture.root / "expanded.tar"
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            checker.package_raw_evidence(
+                fixture.manifest_path, fixture.run_directory, original
+            )
+            payloads = read_raw_tar(original)
+            payloads["self-asserted-report.json"] = b'{"passed":true}\n'
+            write_raw_tar(expanded, payloads)
+            with self.assertRaisesRegex(checker.InputError, "exact ordered inventory"):
+                checker.replay_raw_evidence_archive(expanded)
+
+    def test_raw_packager_is_create_only(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        output = fixture.root / "existing.tar"
+        output.write_bytes(b"owner data")
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            with self.assertRaises(FileExistsError):
+                checker.package_raw_evidence(
+                    fixture.manifest_path, fixture.run_directory, output
+                )
+        self.assertEqual(output.read_bytes(), b"owner data")
+
+    def test_raw_packager_refuses_failed_run(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        fixture.events[-1]["status"] = "failure"
+        fixture.write()
+        reviewed_digest = checker._normalized_manifest_sha256(fixture.manifest)
+        output = fixture.root / "failed.tar"
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            reviewed_digest,
+        ):
+            with self.assertRaisesRegex(checker.InputError, "non-passing"):
+                checker.package_raw_evidence(
+                    fixture.manifest_path, fixture.run_directory, output
+                )
+        self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":

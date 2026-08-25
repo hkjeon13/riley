@@ -48,6 +48,20 @@ python_free_e2e = importlib.util.module_from_spec(_PYTHON_FREE_E2E_SPEC)
 sys.modules[_PYTHON_FREE_E2E_SPEC.name] = python_free_e2e
 _PYTHON_FREE_E2E_SPEC.loader.exec_module(python_free_e2e)
 
+_RELIABILITY_SOAK_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "benchmarks/scripts/check_reliability_soak.py"
+)
+_RELIABILITY_SOAK_SPEC = importlib.util.spec_from_file_location(
+    "rustinfer_final_candidate_reliability_soak_contract",
+    _RELIABILITY_SOAK_PATH,
+)
+if _RELIABILITY_SOAK_SPEC is None or _RELIABILITY_SOAK_SPEC.loader is None:  # pragma: no cover
+    raise RuntimeError(f"cannot load reliability soak contract: {_RELIABILITY_SOAK_PATH}")
+reliability_soak = importlib.util.module_from_spec(_RELIABILITY_SOAK_SPEC)
+sys.modules[_RELIABILITY_SOAK_SPEC.name] = reliability_soak
+_RELIABILITY_SOAK_SPEC.loader.exec_module(reliability_soak)
+
 
 MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v1"
 ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
@@ -193,6 +207,16 @@ def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _nonfinite(value: str) -> NoReturn:
     raise CandidateError(f"non-finite JSON number {value!r} is forbidden")
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def _load_json(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
@@ -1057,7 +1081,15 @@ def _validate_soak(
     archive_sha256: str,
     binary_sha256: str,
     image_sha256: str,
+    raw_evidence_path: Path,
 ) -> None:
+    try:
+        replay = reliability_soak.replay_raw_evidence_archive(raw_evidence_path)
+    except reliability_soak.InputError as error:
+        _fail(f"{path}.raw_evidence", str(error))
+    replayed_report = replay["report"]
+    if _canonical_json_bytes(replayed_report) != _canonical_json_bytes(report):
+        _fail(path, "submitted report differs from the raw-replayed report")
     row = _exact(
         report,
         {"schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"},
@@ -1376,12 +1408,24 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
         raw_paths["performance"] = performance_raw_path
 
         for gate_name in ("reliability_soak",):
-            gate = _exact(evidence_row[gate_name], {"report"}, f"manifest.evidence.{gate_name}")
+            gate = _exact(
+                evidence_row[gate_name],
+                {"report", "raw_evidence"},
+                f"manifest.evidence.{gate_name}",
+            )
             report_path, report_sha, _ = _resolve_artifact(
                 gate["report"], f"manifest.evidence.{gate_name}.report", evidence_root, seen_paths
             )
+            raw_path, raw_sha, _ = _resolve_artifact(
+                gate["raw_evidence"],
+                f"manifest.evidence.{gate_name}.raw_evidence",
+                evidence_root,
+                seen_paths,
+            )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
+            raw_hashes[gate_name] = raw_sha
+            raw_paths[gate_name] = raw_path
 
         native = _exact(
             evidence_row["native_correctness"],
@@ -1476,6 +1520,7 @@ def evaluate(manifest_path: Path, evidence_root: Path) -> dict[str, Any]:
             loaded["reliability_soak"][0], "reliability_soak", revision=revision,
             archive_sha256=archive_sha256, binary_sha256=binary_sha256,
             image_sha256=image_sha256,
+            raw_evidence_path=raw_paths["reliability_soak"],
         )
         evidence_hashes = {name: digest for name, (_, digest) in loaded.items()}
         evidence_hashes.update({f"{name}_raw": digest for name, digest in raw_hashes.items()})

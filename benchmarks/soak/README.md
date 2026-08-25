@@ -104,7 +104,22 @@ python3 benchmarks/scripts/check_reliability_soak.py \
   --manifest /var/tmp/rustinfer-soak-manifest.json \
   --run-directory /var/tmp/rustinfer-soak-run001 \
   --report /var/tmp/rustinfer-soak-run001.report.json
+
+python3 benchmarks/scripts/package_reliability_soak_evidence.py \
+  --manifest /var/tmp/rustinfer-soak-manifest.json \
+  --run-directory /var/tmp/rustinfer-soak-run001 \
+  --output /var/tmp/rustinfer-soak-run001.evidence.tar
 ```
+
+The create-only packager refuses a non-passing run. It preserves exactly the
+materialized manifest plus the run directory's `run.json` and `events.jsonl`
+in a deterministic uncompressed USTAR with canonical ownership, mode, order,
+and timestamps. An internal bytewise-sorted `SHA256SUMS` covers all three raw
+payloads. The loader rejects additional files, links, special members,
+noncanonical metadata or tar encoding, checksum drift, and oversized inputs.
+It then reconstructs the existing run-directory contract and recomputes the
+report; the final release-candidate gate requires that result to equal the
+separately submitted report exactly.
 
 The checker runs outside the production dependency boundary and uses only the
 Python standard library.  It fails closed on malformed/duplicate JSON,

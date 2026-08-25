@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
+import os
 import re
+import stat
 import sys
+import tarfile
+import tempfile
+from contextlib import ExitStack
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Mapping, NoReturn, Sequence
@@ -33,6 +39,15 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 PYTHON_RE = re.compile(r"(^|/)(python|python[23](?:\.[0-9]+)?)(?:$|\s)", re.IGNORECASE)
 MAX_INPUT_BYTES = 512 * 1024 * 1024
+RAW_ARCHIVE_PAYLOADS = ("events.jsonl", "manifest.json", "run.json")
+RAW_ARCHIVE_MEMBERS = (*RAW_ARCHIVE_PAYLOADS, "SHA256SUMS")
+RAW_MEMBER_MAX_BYTES = {
+    "events.jsonl": MAX_INPUT_BYTES,
+    "manifest.json": 4 * 1024 * 1024,
+    "run.json": 4 * 1024 * 1024,
+    "SHA256SUMS": 1024,
+}
+MAX_RAW_ARCHIVE_BYTES = sum(RAW_MEMBER_MAX_BYTES.values()) + 64 * 1024
 REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256 = (
     "5ef79434e79e6ac36e6fab4a54b2466572a62b98f972059a20fa59d4f8e7a096"
 )
@@ -159,11 +174,53 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _regular_file(path: Path, label: str, maximum_bytes: int) -> tuple[Any, os.stat_result]:
+    try:
+        link_metadata = path.lstat()
+        if not stat.S_ISREG(link_metadata.st_mode):
+            _fail(label, "must be a regular file, not a link or device")
+        handle = path.open("rb")
+        metadata = os.fstat(handle.fileno())
+    except (FileNotFoundError, OSError) as error:
+        _fail(label, f"cannot open evidence file: {error}")
+    if not stat.S_ISREG(metadata.st_mode):
+        handle.close()
+        _fail(label, "must be a regular file, not a link or device")
+    if metadata.st_size <= 0 or metadata.st_size > maximum_bytes:
+        handle.close()
+        _fail(label, f"must be between 1 and {maximum_bytes} bytes")
+    return handle, metadata
+
+
+def _stream_sha256(handle: Any) -> str:
+    digest = hashlib.sha256()
+    while block := handle.read(1024 * 1024):
+        digest.update(block)
+    handle.seek(0)
+    return digest.hexdigest()
+
+
+def _canonical_tar_info(name: str, size: int) -> tarfile.TarInfo:
+    member = tarfile.TarInfo(name)
+    member.size = size
+    member.mode = 0o644
+    member.uid = 0
+    member.gid = 0
+    member.uname = ""
+    member.gname = ""
+    member.mtime = 0
+    return member
+
+
 def _canonical_sha256(value: Mapping[str, Any]) -> str:
-    encoded = json.dumps(
+    encoded = _canonical_json_bytes(value)
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _canonical_json_bytes(value: Any) -> bytes:
+    return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _normalized_manifest_sha256(manifest: Mapping[str, Any]) -> str:
@@ -657,6 +714,191 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
     except InputError as error:
         report["errors"] = [str(error)]
     return report
+
+
+def _raw_payload_paths(
+    manifest_path: Path | str, run_directory: Path | str
+) -> dict[str, Path]:
+    directory = Path(run_directory)
+    return {
+        "manifest.json": Path(manifest_path),
+        "run.json": directory / "run.json",
+        "events.jsonl": directory / "events.jsonl",
+    }
+
+
+def _write_raw_archive(output: Path, inputs: Mapping[str, Path]) -> None:
+    if set(inputs) != set(RAW_ARCHIVE_PAYLOADS):
+        _fail("raw evidence inputs", "exact three-file payload inventory is required")
+    created = False
+    try:
+        with ExitStack() as stack:
+            opened: dict[str, tuple[Any, os.stat_result]] = {}
+            digests: dict[str, str] = {}
+            for name in RAW_ARCHIVE_PAYLOADS:
+                handle, metadata = _regular_file(
+                    inputs[name], name, RAW_MEMBER_MAX_BYTES[name]
+                )
+                stack.callback(handle.close)
+                opened[name] = (handle, metadata)
+                digests[name] = _stream_sha256(handle)
+            checksums = b"".join(
+                f"{digests[name]}  {name}\n".encode("ascii")
+                for name in RAW_ARCHIVE_PAYLOADS
+            )
+            payloads: dict[str, tuple[int, Any]] = {
+                name: (metadata.st_size, handle)
+                for name, (handle, metadata) in opened.items()
+            }
+            payloads["SHA256SUMS"] = (len(checksums), io.BytesIO(checksums))
+            with tarfile.open(output, "x:", format=tarfile.USTAR_FORMAT) as archive:
+                created = True
+                for name in sorted(payloads):
+                    size, handle = payloads[name]
+                    archive.addfile(_canonical_tar_info(name, size), handle)
+        descriptor = os.open(output, os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except Exception:
+        if created:
+            try:
+                output.unlink()
+            except FileNotFoundError:
+                pass
+        raise
+
+
+def _files_equal(left: Path, right: Path) -> bool:
+    try:
+        if left.stat().st_size != right.stat().st_size:
+            return False
+        with left.open("rb") as left_handle, right.open("rb") as right_handle:
+            while True:
+                left_block = left_handle.read(1024 * 1024)
+                right_block = right_handle.read(1024 * 1024)
+                if left_block != right_block:
+                    return False
+                if not left_block:
+                    return True
+    except OSError as error:
+        _fail("raw evidence archive", f"cannot compare canonical archive: {error}")
+
+
+def _materialize_raw_evidence_archive(path: Path, destination: Path) -> dict[str, str]:
+    label = "raw evidence archive"
+    try:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode):
+            _fail(label, "must be a regular file, not a link or device")
+        if metadata.st_size <= 0 or metadata.st_size > MAX_RAW_ARCHIVE_BYTES:
+            _fail(label, f"must be between 1 and {MAX_RAW_ARCHIVE_BYTES} bytes")
+        archive_sha256 = _sha256(path)
+        with tarfile.open(path, "r:") as archive:
+            members = archive.getmembers()
+            expected_names = sorted(RAW_ARCHIVE_MEMBERS)
+            if [member.name for member in members] != expected_names:
+                _fail(label, f"exact ordered inventory required: {expected_names}")
+            digests: dict[str, str] = {}
+            checksum_bytes: bytes | None = None
+            for member in members:
+                name = member.name
+                if not member.isreg():
+                    _fail(label, f"member must be a regular file: {name}")
+                if member.pax_headers:
+                    _fail(label, f"PAX extensions are forbidden: {name}")
+                if (
+                    member.uid != 0
+                    or member.gid != 0
+                    or member.uname != ""
+                    or member.gname != ""
+                    or member.mode != 0o644
+                    or member.mtime != 0
+                ):
+                    _fail(label, f"non-canonical metadata for {name}")
+                maximum = RAW_MEMBER_MAX_BYTES[name]
+                if member.size <= 0 or member.size > maximum:
+                    _fail(label, f"invalid size for {name}")
+                source = archive.extractfile(member)
+                if source is None:
+                    _fail(label, f"cannot read {name}")
+                target_path = destination / name
+                digest = hashlib.sha256()
+                total = 0
+                with target_path.open("xb") as target:
+                    while block := source.read(1024 * 1024):
+                        total += len(block)
+                        if total > maximum:
+                            _fail(label, f"oversized member {name}")
+                        digest.update(block)
+                        target.write(block)
+                if total != member.size:
+                    _fail(label, f"truncated member {name}")
+                digests[name] = digest.hexdigest()
+                if name == "SHA256SUMS":
+                    checksum_bytes = target_path.read_bytes()
+    except InputError:
+        raise
+    except (FileExistsError, OSError, tarfile.TarError) as error:
+        _fail(label, f"cannot materialize deterministic uncompressed tar: {error}")
+
+    expected_checksums = b"".join(
+        f"{digests[name]}  {name}\n".encode("ascii")
+        for name in RAW_ARCHIVE_PAYLOADS
+    )
+    if checksum_bytes != expected_checksums:
+        _fail(f"{label}.SHA256SUMS", "does not exactly checksum the three payload files")
+    canonical = destination / "canonical.tar"
+    _write_raw_archive(
+        canonical,
+        {name: destination / name for name in RAW_ARCHIVE_PAYLOADS},
+    )
+    if not _files_equal(path, canonical):
+        _fail(label, "bytes are not the canonical deterministic USTAR encoding")
+    return {
+        "archive_sha256": archive_sha256,
+        **{f"{name}_sha256": digests[name] for name in RAW_ARCHIVE_PAYLOADS},
+    }
+
+
+def replay_raw_evidence_archive(path: Path | str) -> dict[str, Any]:
+    """Rebuild a soak report only from a canonical raw evidence archive."""
+
+    with tempfile.TemporaryDirectory(prefix="rustinfer-soak-replay-") as temporary:
+        directory = Path(temporary)
+        bindings = _materialize_raw_evidence_archive(Path(path), directory)
+        report = evaluate(directory / "manifest.json", directory)
+        return {"report": report, **bindings}
+
+
+def package_raw_evidence(
+    manifest_path: Path | str,
+    run_directory: Path | str,
+    output: Path | str,
+) -> dict[str, Any]:
+    """Create and self-replay the canonical raw soak evidence archive."""
+
+    report = evaluate(manifest_path, run_directory)
+    if report["passed"] is not True:
+        detail = "; ".join(report["errors"]) or report["status"]
+        _fail("soak run", f"cannot package non-passing evidence: {detail}")
+    output_path = Path(output)
+    _write_raw_archive(
+        output_path,
+        _raw_payload_paths(manifest_path, run_directory),
+    )
+    try:
+        replay = replay_raw_evidence_archive(output_path)
+        if _canonical_json_bytes(replay["report"]) != _canonical_json_bytes(report):
+            _fail("raw evidence archive", "self-replayed report differs from source run")
+        return replay
+    except Exception:
+        try:
+            output_path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def _parser() -> argparse.ArgumentParser:

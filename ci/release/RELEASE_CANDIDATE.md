@@ -17,7 +17,7 @@ python3 ci/release/check_release_candidate.py \
 
 The report path is create-only. Only `status=passed` and `passed=true` exits
 zero. A passed report binds the SHA-256 of the exact input manifest, source
-archive, release binary, release bundle, six gate decisions, five raw/replay
+archive, release binary, release bundle, six gate decisions, six raw/replay
 archives, and the immutable release image digest.
 
 ## Closed candidate manifest
@@ -65,7 +65,10 @@ shape is:
       "report": {"path": "release-performance-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_evidence": {"path": "release-performance-evidence.tar", "sha256": "LOWERCASE_SHA256"}
     },
-    "reliability_soak": {"report": {"path": "reliability-soak-report.json", "sha256": "LOWERCASE_SHA256"}}
+    "reliability_soak": {
+      "report": {"path": "reliability-soak-report.json", "sha256": "LOWERCASE_SHA256"},
+      "raw_evidence": {"path": "reliability-soak-evidence.tar", "sha256": "LOWERCASE_SHA256"}
+    }
   }
 }
 ```
@@ -210,9 +213,14 @@ The remaining cross-bindings are:
   inventory, show every scenario ran for its reviewed duration with samples
   spanning that interval, and retain the reviewed cancellation/disconnect/
   overload and resource-slope bounds. A shortened or threshold-relaxed soak
-  report cannot be promoted. Its own checker remains responsible for raw event
-  sequencing, final allocation/KV quiescence, restart, and rollback golden
-  parity.
+  report cannot be promoted. Its deterministic uncompressed USTAR must contain
+  exactly canonical `manifest.json`, `run.json`, `events.jsonl`, and internal
+  `SHA256SUMS` members. The final gate safely materializes those known members,
+  rejects any noncanonical tar bytes or checksum/inventory drift, reruns the
+  soak checker from that run directory, and requires the recomputed report to
+  equal the submitted report exactly. Thus raw event sequencing, final
+  allocation/KV quiescence, restart, and rollback golden parity are evidence,
+  not self-asserted report fields.
 
 Any missing or extra top-level contract field, duplicate JSON key, non-finite
 JSON value, failed check, hash mismatch, source drift, artifact substitution,
@@ -224,6 +232,9 @@ explicit owner action outside this tool.
 
 ```sh
 python3 -m unittest ci/release/test_release_candidate.py -v
+python3 -m unittest benchmarks.scripts.tests.test_check_reliability_soak -v
 python3 -m unittest discover -s ci/release -p 'test_*.py' -v
-python3 -m py_compile ci/release/check_release_candidate.py
+python3 -m py_compile ci/release/check_release_candidate.py \
+  benchmarks/scripts/check_reliability_soak.py \
+  benchmarks/scripts/package_reliability_soak_evidence.py
 ```
