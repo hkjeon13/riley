@@ -338,8 +338,9 @@ RustInferCudaStatus complete_execution(ExclusiveUses* uses,
                                        RustInferCudaStatus operation_status,
                                        bool launch_attempted,
                                        RustInferCudaErrorInfo* error,
-                                       const char* operation) noexcept {
-  if (uses->command_batch()) {
+                                       const char* operation,
+                                       bool defer_in_command_batch = true) noexcept {
+  if (uses->command_batch() && defer_in_command_batch) {
     return scope->leave(operation_status, error,
                         RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
   }
@@ -982,8 +983,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_embedding_execute(
         error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
         "copy completed embedding error report");
   }
+  // host_report is stack-backed and is read immediately below. Complete its
+  // asynchronous D2H copy even inside a command batch; release_completed()
+  // remains a batch no-op, so the ledger leases stay held until batch end.
   status = complete_execution(&uses, &scope, stream, status,
-                              launch_attempted, error, kOperation);
+                              launch_attempted, error, kOperation, false);
   if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
     return status;
   }
