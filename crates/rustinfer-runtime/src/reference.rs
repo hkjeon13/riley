@@ -184,6 +184,38 @@ pub fn residual_add(lhs: &[f32], rhs: &[f32], output: &mut [f32]) -> ReferenceRe
     Ok(())
 }
 
+/// Adds a BF16 per-column bias to a row-major BF16 matrix in place.
+///
+/// Both operands are expanded to FP32 for one addition and every result is
+/// rounded to BF16 with round-to-nearest-even. `column_count` must be non-zero;
+/// a zero-row matrix is valid. All dimensions and exact slice lengths are
+/// validated before the matrix is modified.
+///
+/// # Errors
+///
+/// Returns an error for zero columns, dimension overflow, or a matrix/bias
+/// length that does not exactly match the declared shape.
+pub fn row_bias_add_in_place_bf16(
+    matrix: &mut [u16],
+    bias: &[u16],
+    row_count: usize,
+    column_count: usize,
+) -> ReferenceResult<()> {
+    require_nonzero("column_count", column_count)?;
+    let matrix_len = checked_product("row_bias_add_in_place_bf16", row_count, column_count)?;
+    require_len("matrix", matrix_len, matrix.len())?;
+    require_len("bias", column_count, bias.len())?;
+
+    for row in matrix.chunks_exact_mut(column_count) {
+        for (value, &bias_bits) in row.iter_mut().zip(bias) {
+            let matrix_value = f32::from_bits(u32::from(*value) << 16);
+            let bias_value = f32::from_bits(u32::from(bias_bits) << 16);
+            *value = f32_to_bf16_bits(matrix_value + bias_value);
+        }
+    }
+    Ok(())
+}
+
 /// Applies the `SiLU` activation `x / (1 + exp(-x))` elementwise.
 ///
 /// # Errors
@@ -507,6 +539,57 @@ mod tests {
             ],
             1.0e-7,
         );
+    }
+
+    #[test]
+    fn row_bias_bf16_is_in_place_rowwise_and_rounds_ties_to_even() {
+        let mut ties = [0x3f80_u16, 0x3f81];
+        row_bias_add_in_place_bf16(&mut ties, &[0x3b80, 0x3b80], 1, 2).unwrap();
+        assert_eq!(ties, [0x3f80, 0x3f82]);
+
+        let source_values = [
+            -7.0_f32, -2.0, -0.5, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0,
+        ];
+        let bias_values = [0.5_f32, -1.0, 2.0, 0.25, -0.125];
+        let mut matrix = source_values.map(f32_to_bf16_bits);
+        let bias = bias_values.map(f32_to_bf16_bits);
+        row_bias_add_in_place_bf16(&mut matrix, &bias, 3, 5).unwrap();
+        let expected = std::array::from_fn(|index| {
+            f32_to_bf16_bits(source_values[index] + bias_values[index % 5])
+        });
+        assert_eq!(matrix, expected);
+
+        let mut nan = [0x7fc1_u16];
+        row_bias_add_in_place_bf16(&mut nan, &[0], 1, 1).unwrap();
+        assert_eq!(nan, [0x7fff]);
+    }
+
+    #[test]
+    fn row_bias_bf16_validates_boundaries_before_writing() {
+        row_bias_add_in_place_bf16(&mut [], &[0, 0, 0], 0, 3)
+            .expect("zero rows with a non-zero column count are valid");
+
+        let original = [0x3f80_u16, 0x4000];
+        let mut matrix = original;
+        assert!(matches!(
+            row_bias_add_in_place_bf16(&mut matrix, &[0], 1, 2),
+            Err(ReferenceError::LengthMismatch { name: "bias", .. })
+        ));
+        assert_eq!(matrix, original, "validation must happen before writes");
+
+        assert!(matches!(
+            row_bias_add_in_place_bf16(&mut [], &[], 0, 0),
+            Err(ReferenceError::InvalidParameter {
+                name: "column_count",
+                ..
+            })
+        ));
+        assert!(matches!(
+            row_bias_add_in_place_bf16(&mut [], &[0, 0], usize::MAX, 2),
+            Err(ReferenceError::DimensionOverflow {
+                operation: "row_bias_add_in_place_bf16"
+            })
+        ));
     }
 
     #[test]

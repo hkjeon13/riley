@@ -1,5 +1,7 @@
 use rustinfer_tensor::DType;
 use serde::Serialize;
+use serde::Serializer;
+use serde::ser::SerializeStruct;
 
 use crate::{ModelError, ModelResult};
 
@@ -7,7 +9,11 @@ use crate::{ModelError, ModelResult};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ModelArchitecture {
-    /// Llama-compatible dense decoder-only model.
+    /// Llama-layout dense decoder-only model.
+    ///
+    /// This canonical topology also covers dense Qwen2 models. Source-family
+    /// differences are represented by semantic fields in the IR rather than
+    /// by a second execution topology.
     Llama,
 }
 
@@ -135,14 +141,81 @@ impl RopeSpec {
     }
 }
 
-/// Self-attention dimensions and bias contract.
+/// Serialized bias presence for each attention projection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AttentionBiasSpec {
+    mask: u8,
+}
+
+impl AttentionBiasSpec {
+    const QUERY: u8 = 1 << 0;
+    const KEY: u8 = 1 << 1;
+    const VALUE: u8 = 1 << 2;
+    const OUTPUT: u8 = 1 << 3;
+    const ALL: u8 = Self::QUERY | Self::KEY | Self::VALUE | Self::OUTPUT;
+
+    pub(crate) const fn uniform(enabled: bool) -> Self {
+        Self {
+            mask: if enabled { Self::ALL } else { 0 },
+        }
+    }
+
+    pub(crate) const fn qkv() -> Self {
+        Self {
+            mask: Self::QUERY | Self::KEY | Self::VALUE,
+        }
+    }
+
+    /// Returns whether the query projection has a serialized bias.
+    #[must_use]
+    pub const fn query(&self) -> bool {
+        self.mask & Self::QUERY != 0
+    }
+
+    /// Returns whether the key projection has a serialized bias.
+    #[must_use]
+    pub const fn key(&self) -> bool {
+        self.mask & Self::KEY != 0
+    }
+
+    /// Returns whether the value projection has a serialized bias.
+    #[must_use]
+    pub const fn value(&self) -> bool {
+        self.mask & Self::VALUE != 0
+    }
+
+    /// Returns whether the output projection has a serialized bias.
+    #[must_use]
+    pub const fn output(&self) -> bool {
+        self.mask & Self::OUTPUT != 0
+    }
+
+    /// Returns whether any attention projection has a serialized bias.
+    #[must_use]
+    pub const fn any(&self) -> bool {
+        self.mask != 0
+    }
+}
+
+impl Serialize for AttentionBiasSpec {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut state = serializer.serialize_struct("AttentionBiasSpec", 4)?;
+        state.serialize_field("query", &self.query())?;
+        state.serialize_field("key", &self.key())?;
+        state.serialize_field("value", &self.value())?;
+        state.serialize_field("output", &self.output())?;
+        state.end()
+    }
+}
+
+/// Self-attention dimensions and projection-specific bias contract.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AttentionSpec {
     hidden_size: usize,
     query_heads: usize,
     key_value_heads: usize,
     head_dimension: usize,
-    bias: bool,
+    bias: AttentionBiasSpec,
     rope: RopeSpec,
 }
 
@@ -152,7 +225,7 @@ impl AttentionSpec {
         query_heads: usize,
         key_value_heads: usize,
         head_dimension: usize,
-        bias: bool,
+        bias: AttentionBiasSpec,
         rope: RopeSpec,
     ) -> Self {
         Self {
@@ -189,10 +262,16 @@ impl AttentionSpec {
         self.head_dimension
     }
 
-    /// Returns whether Q/K/V/O projections have serialized biases.
+    /// Returns the projection-specific serialized bias contract.
+    #[must_use]
+    pub const fn bias(&self) -> &AttentionBiasSpec {
+        &self.bias
+    }
+
+    /// Returns whether any attention projection has a serialized bias.
     #[must_use]
     pub const fn has_bias(&self) -> bool {
-        self.bias
+        self.bias.any()
     }
 
     /// Returns the rotary embedding contract.
@@ -425,7 +504,7 @@ impl ModelSpec {
             _ => unreachable!("validated model dtype must be f16 or bf16"),
         };
         Self {
-            snapshot_version: "rustinfer-model-spec-v1",
+            snapshot_version: "rustinfer-model-spec-v2",
             architecture: ModelArchitecture::Llama,
             source_architecture,
             dtype,

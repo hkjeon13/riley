@@ -13,6 +13,8 @@ pub enum OpId {
     RmsNorm,
     /// Elementwise residual addition.
     ResidualAdd,
+    /// In-place addition of one bias vector across contiguous matrix rows.
+    RowBiasAddInPlace,
     /// Elementwise `SiLU` activation.
     Silu,
     /// Elementwise multiplication of an activated gate and value.
@@ -34,6 +36,15 @@ pub struct KernelKey {
     accumulator_dtype: Option<DType>,
     output_dtype: DType,
 }
+
+/// Canonical BF16 row-bias signature: BF16 matrix/bias, FP32 add, BF16 output.
+pub const ROW_BIAS_ADD_IN_PLACE_BF16_KEY: KernelKey = KernelKey::new(
+    OpId::RowBiasAddInPlace,
+    DType::BF16,
+    Some(DType::BF16),
+    Some(DType::F32),
+    DType::BF16,
+);
 
 impl KernelKey {
     /// Constructs an exact operation and dtype signature.
@@ -506,6 +517,53 @@ mod tests {
                 .id(),
             "cublaslt-bf16-f32acc-bf16-v1"
         );
+    }
+
+    #[test]
+    fn row_bias_capability_is_semantic_and_exact() {
+        let capability = KernelCapability::new(ROW_BIAS_ADD_IN_PLACE_BF16_KEY, true, true);
+        assert_eq!(capability.key().op(), OpId::RowBiasAddInPlace);
+        assert_eq!(capability.key().input_dtype(), DType::BF16);
+        assert_eq!(capability.key().weight_dtype(), Some(DType::BF16));
+        assert_eq!(capability.key().accumulator_dtype(), Some(DType::F32));
+        assert_eq!(capability.key().output_dtype(), DType::BF16);
+        assert!(capability.deterministic());
+        assert!(capability.requires_contiguous());
+
+        let mut registry = KernelRegistry::new();
+        registry
+            .register(KernelImplementation::new(
+                "rustinfer.reference.row-bias-add-in-place.bf16.v1",
+                KernelOrigin::ReferenceCpu,
+                capability,
+            ))
+            .unwrap();
+        registry
+            .register(KernelImplementation::new(
+                "rustinfer.cuda.row-bias-add-in-place.bf16.v1",
+                KernelOrigin::CudaCpp,
+                capability,
+            ))
+            .unwrap();
+        assert_eq!(
+            registry
+                .select(ROW_BIAS_ADD_IN_PLACE_BF16_KEY, KernelPreference::Optimized,)
+                .unwrap()
+                .id(),
+            "rustinfer.cuda.row-bias-add-in-place.bf16.v1"
+        );
+
+        let wrong_accumulator = KernelKey::new(
+            OpId::RowBiasAddInPlace,
+            DType::BF16,
+            Some(DType::BF16),
+            Some(DType::BF16),
+            DType::BF16,
+        );
+        assert!(matches!(
+            registry.select(wrong_accumulator, KernelPreference::Optimized),
+            Err(KernelRegistryError::NoDeterministicImplementation { .. })
+        ));
     }
 
     #[test]

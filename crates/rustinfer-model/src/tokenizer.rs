@@ -2,12 +2,24 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap};
 
 use serde::Deserialize;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::{ArtifactKind, LoadLimits, ModelError, ModelResult, strict_json};
 
 const TOKENIZER_VERSION: &str = "1.0";
 const MAX_ADDED_TOKEN_BYTES: usize = 4096;
 const MAX_TOTAL_ADDED_TOKEN_BYTES: usize = 1024 * 1024;
+
+// Pinned by Qwen/Qwen2.5-0.5B-Instruct revision
+// 7ae557604adf67be50417f59c2c2f167def9a775. This expression is validated as
+// artifact metadata, then executed by the allocation-bounded scanner below;
+// the production crate intentionally does not embed a general regex engine.
+pub(crate) const QWEN2_SPLIT_REGEX: &str = concat!(
+    "(?i:'s|'t|'re|'ve|'m|'ll|'d)|",
+    "[^\\r\\n\\p{L}\\p{N}]?\\p{L}+|",
+    "\\p{N}| ?[^\\s\\p{L}\\p{N}]+[\\r\\n]*|",
+    "\\s*[\\r\\n]+|\\s+(?!\\S)|\\s+",
+);
 
 /// Options controlling tokenizer encoding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -40,7 +52,7 @@ pub struct DecodeOptions {
 /// Artifact parsing is resource-bounded. Request-level input and output limits
 /// remain the caller's responsibility until the serving API applies its model
 /// context and admission-control policy.
-pub trait Tokenizer {
+pub trait Tokenizer: Send + Sync {
     /// Encodes UTF-8 text into model token IDs.
     ///
     /// # Errors
@@ -48,6 +60,15 @@ pub trait Tokenizer {
     /// Returns an error when a pre-token cannot be represented by the strict
     /// vocabulary and merge table.
     fn encode(&self, input: &str, options: EncodeOptions) -> ModelResult<Vec<u32>>;
+
+    /// Returns the exclusive upper bound of token IDs addressable by this
+    /// tokenizer.
+    ///
+    /// This can be smaller than the model's padded logits vocabulary. Serving
+    /// code must mask logits in `addressable_token_count()..model_vocab_size`
+    /// before sampling.
+    #[must_use]
+    fn addressable_token_count(&self) -> usize;
 
     /// Returns an upper bound for the raw decoded bytes of one token.
     ///
@@ -117,10 +138,18 @@ pub struct SmolLm2Tokenizer {
     vocab_by_id: Box<[String]>,
     merge_ranks: BTreeMap<String, BTreeMap<String, usize>>,
     special_ids: BTreeSet<u32>,
+    added_ids: BTreeSet<u32>,
     added_trie: AddedTrie,
     byte_encoder: [char; 256],
     byte_decoder: BTreeMap<char, u8>,
     maximum_decoded_token_bytes: usize,
+    profile: TokenizerProfile,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TokenizerProfile {
+    SmolLm2,
+    Qwen2,
 }
 
 impl SmolLm2Tokenizer {
@@ -141,9 +170,24 @@ impl SmolLm2Tokenizer {
     /// Returns an error for malformed, duplicate, oversized, or unsupported
     /// tokenizer JSON and for inconsistent vocabularies or merge tables.
     pub fn from_json_slice_with_limits(input: &[u8], limits: LoadLimits) -> ModelResult<Self> {
+        Self::from_json_slice_with_profile(input, limits, TokenizerProfile::SmolLm2)
+    }
+
+    pub(crate) fn from_qwen2_json_slice_with_limits(
+        input: &[u8],
+        limits: LoadLimits,
+    ) -> ModelResult<Self> {
+        Self::from_json_slice_with_profile(input, limits, TokenizerProfile::Qwen2)
+    }
+
+    fn from_json_slice_with_profile(
+        input: &[u8],
+        limits: LoadLimits,
+        profile: TokenizerProfile,
+    ) -> ModelResult<Self> {
         enforce_count_limit("tokenizer JSON", limits.tokenizer_bytes(), input.len())?;
         let raw: RawTokenizer = strict_json::from_slice(input, ArtifactKind::Tokenizer)?;
-        validate_format(&raw)?;
+        validate_format(&raw, profile)?;
         enforce_count_limit(
             "tokenizer vocabulary",
             usize_to_u64(limits.vocabulary_entries()),
@@ -161,14 +205,28 @@ impl SmolLm2Tokenizer {
         )?;
 
         let (byte_encoder, byte_decoder) = byte_maps();
-        let (vocab, vocab_by_id) = validate_vocab(raw.model.vocab)?;
-        let (special_ids, added_trie) =
-            validate_added_tokens(raw.added_tokens, &vocab, vocab_by_id.len())?;
+        let (vocab, mut vocab_by_id) = validate_vocab(raw.model.vocab)?;
+        let validated_added =
+            validate_added_tokens(raw.added_tokens, &vocab, &mut vocab_by_id, profile)?;
+        let special_ids = validated_added.special_ids;
+        let added_ids = validated_added.added_ids;
+        let added_trie = validated_added.trie;
         validate_byte_alphabet(&vocab, &special_ids, &byte_decoder)?;
         let merge_ranks = validate_merges(raw.model.merges, &vocab)?;
         let maximum_decoded_token_bytes = vocab_by_id
             .iter()
-            .map(|token| DecodedToken::classify(token, &byte_decoder).byte_len())
+            .enumerate()
+            .map(|(id, token)| {
+                if profile == TokenizerProfile::Qwen2
+                    && u32::try_from(id)
+                        .ok()
+                        .is_some_and(|id| added_ids.contains(&id))
+                {
+                    token.len()
+                } else {
+                    DecodedToken::classify(token, &byte_decoder).byte_len()
+                }
+            })
             .max()
             .unwrap_or(0);
 
@@ -177,16 +235,24 @@ impl SmolLm2Tokenizer {
             vocab_by_id: vocab_by_id.into_boxed_slice(),
             merge_ranks,
             special_ids,
+            added_ids,
             added_trie,
             byte_encoder,
             byte_decoder,
             maximum_decoded_token_bytes,
+            profile,
         })
     }
 
     /// Returns the dense vocabulary size.
     #[must_use]
     pub fn vocabulary_size(&self) -> usize {
+        self.vocab_by_id.len()
+    }
+
+    /// Returns the exclusive upper bound of addressable token IDs.
+    #[must_use]
+    pub fn addressable_token_count(&self) -> usize {
         self.vocab_by_id.len()
     }
 
@@ -213,15 +279,27 @@ impl SmolLm2Tokenizer {
     }
 
     fn encode_plain(&self, input: &str, output: &mut Vec<u32>) -> ModelResult<()> {
-        for digit_segment in split_individual_decimal_digits(input) {
-            for piece in gpt2_pieces(digit_segment) {
-                let mapped = piece
-                    .as_bytes()
-                    .iter()
-                    .map(|byte| self.byte_encoder[usize::from(*byte)])
-                    .collect::<String>();
-                output.extend(self.bpe(&mapped)?);
-            }
+        let normalized;
+        let input = if self.profile == TokenizerProfile::Qwen2 {
+            normalized = input.nfc().collect::<String>();
+            normalized.as_str()
+        } else {
+            input
+        };
+        let pieces = match self.profile {
+            TokenizerProfile::SmolLm2 => split_individual_decimal_digits(input)
+                .into_iter()
+                .flat_map(gpt2_pieces)
+                .collect::<Vec<_>>(),
+            TokenizerProfile::Qwen2 => qwen2_pieces(input),
+        };
+        for piece in pieces {
+            let mapped = piece
+                .as_bytes()
+                .iter()
+                .map(|byte| self.byte_encoder[usize::from(*byte)])
+                .collect::<String>();
+            output.extend(self.bpe(&mapped)?);
         }
         Ok(())
     }
@@ -285,6 +363,9 @@ impl SmolLm2Tokenizer {
             .ok_or(ModelError::InvalidTokenId { id })?;
         if self.is_special_id(id) && options.skip_special_tokens {
             return Ok(None);
+        }
+        if self.profile == TokenizerProfile::Qwen2 && self.added_ids.contains(&id) {
+            return Ok(Some(DecodedToken::Raw(token.as_bytes())));
         }
         Ok(Some(DecodedToken::classify(token, &self.byte_decoder)))
     }
@@ -354,6 +435,10 @@ impl Tokenizer for SmolLm2Tokenizer {
             cursor = end;
         }
         Ok(output)
+    }
+
+    fn addressable_token_count(&self) -> usize {
+        self.addressable_token_count()
     }
 
     fn maximum_decoded_token_bytes(&self) -> usize {
@@ -472,6 +557,17 @@ enum RawPreTokenizer {
         trim_offsets: bool,
         use_regex: bool,
     },
+    Split {
+        pattern: RawSplitPattern,
+        behavior: String,
+        invert: bool,
+    },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+enum RawSplitPattern {
+    Regex(String),
 }
 
 #[derive(Deserialize)]
@@ -479,12 +575,9 @@ enum RawPreTokenizer {
 struct RawByteLevel {
     #[serde(rename = "type")]
     kind: String,
-    #[serde(rename = "add_prefix_space")]
-    _add_prefix_space: bool,
-    #[serde(rename = "trim_offsets")]
-    _trim_offsets: bool,
-    #[serde(rename = "use_regex")]
-    _use_regex: bool,
+    add_prefix_space: bool,
+    trim_offsets: bool,
+    use_regex: bool,
 }
 
 #[derive(Deserialize)]
@@ -498,7 +591,7 @@ struct RawBpe {
     end_of_word_suffix: serde_json::Value,
     fuse_unk: bool,
     byte_fallback: bool,
-    ignore_merges: bool,
+    ignore_merges: serde_json::Value,
     vocab: BTreeMap<String, u32>,
     merges: Vec<RawMerge>,
 }
@@ -514,7 +607,7 @@ enum RawMerge {
 #[serde(transparent)]
 struct JsonBool(bool);
 
-fn validate_format(raw: &RawTokenizer) -> ModelResult<()> {
+fn validate_format(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResult<()> {
     if raw.version != TOKENIZER_VERSION {
         return Err(invalid(format!(
             "unsupported tokenizer version {:?}",
@@ -524,59 +617,161 @@ fn validate_format(raw: &RawTokenizer) -> ModelResult<()> {
     for (name, value) in [
         ("truncation", &raw.truncation),
         ("padding", &raw.padding),
-        ("normalizer", &raw.normalizer),
-        ("post_processor", &raw.post_processor),
         ("model.dropout", &raw.model.dropout),
         ("model.unk_token", &raw.model.unk_token),
-        (
-            "model.continuing_subword_prefix",
-            &raw.model.continuing_subword_prefix,
-        ),
-        ("model.end_of_word_suffix", &raw.model.end_of_word_suffix),
     ] {
         if !value.is_null() {
             return Err(invalid(format!("{name} must be null")));
         }
     }
-    validate_pipeline(raw)?;
-    if raw.model.kind != "BPE"
-        || raw.model.fuse_unk
-        || raw.model.byte_fallback
-        || raw.model.ignore_merges
-    {
+    validate_bpe_profile(raw, profile)?;
+    validate_pipeline(raw, profile)?;
+    if raw.model.kind != "BPE" || raw.model.fuse_unk || raw.model.byte_fallback {
         return Err(invalid(
-            "only BPE with fuse_unk=false, byte_fallback=false, and ignore_merges=false is supported",
+            "only BPE with fuse_unk=false and byte_fallback=false is supported",
         ));
     }
     Ok(())
 }
 
-fn validate_pipeline(raw: &RawTokenizer) -> ModelResult<()> {
-    if raw.pre_tokenizer.kind != "Sequence" || raw.pre_tokenizer.pretokenizers.len() != 2 {
-        return Err(invalid("pre_tokenizer must be Sequence(Digits, ByteLevel)"));
-    }
-    match (
-        &raw.pre_tokenizer.pretokenizers[0],
-        &raw.pre_tokenizer.pretokenizers[1],
-    ) {
-        (
-            RawPreTokenizer::Digits {
-                individual_digits: true,
-            },
-            RawPreTokenizer::ByteLevel {
-                add_prefix_space: false,
-                trim_offsets: true,
-                use_regex: true,
-            },
-        ) => {}
-        _ => {
-            return Err(invalid(
-                "pre_tokenizer must use individual digits and ByteLevel(false,true,true)",
-            ));
+fn validate_bpe_profile(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResult<()> {
+    let model = &raw.model;
+    match profile {
+        TokenizerProfile::SmolLm2 => {
+            if !model.continuing_subword_prefix.is_null()
+                || !model.end_of_word_suffix.is_null()
+                || model.ignore_merges.as_bool() != Some(false)
+            {
+                return Err(invalid(
+                    "SmolLM2 BPE requires null subword prefixes/suffixes and ignore_merges=false",
+                ));
+            }
+        }
+        TokenizerProfile::Qwen2 => {
+            if model.continuing_subword_prefix.as_str() != Some("")
+                || model.end_of_word_suffix.as_str() != Some("")
+                || !model.ignore_merges.is_null()
+            {
+                return Err(invalid(
+                    "Qwen2 BPE requires empty subword prefixes/suffixes and ignore_merges=null",
+                ));
+            }
         }
     }
-    if raw.decoder.kind != "ByteLevel" {
-        return Err(invalid("decoder must be ByteLevel"));
+    Ok(())
+}
+
+fn validate_pipeline(raw: &RawTokenizer, profile: TokenizerProfile) -> ModelResult<()> {
+    if raw.pre_tokenizer.kind != "Sequence" || raw.pre_tokenizer.pretokenizers.len() != 2 {
+        return Err(invalid(match profile {
+            TokenizerProfile::SmolLm2 => "pre_tokenizer must be Sequence(Digits, ByteLevel)",
+            TokenizerProfile::Qwen2 => "pre_tokenizer must be Sequence(Split, ByteLevel)",
+        }));
+    }
+
+    match profile {
+        TokenizerProfile::SmolLm2 => {
+            if !raw.normalizer.is_null() || !raw.post_processor.is_null() {
+                return Err(invalid(
+                    "SmolLM2 normalizer and post_processor must be null",
+                ));
+            }
+            if !matches!(
+                (
+                    &raw.pre_tokenizer.pretokenizers[0],
+                    &raw.pre_tokenizer.pretokenizers[1]
+                ),
+                (
+                    RawPreTokenizer::Digits {
+                        individual_digits: true
+                    },
+                    RawPreTokenizer::ByteLevel {
+                        add_prefix_space: false,
+                        trim_offsets: true,
+                        use_regex: true
+                    }
+                )
+            ) {
+                return Err(invalid(
+                    "pre_tokenizer must use individual digits and ByteLevel(false,true,true)",
+                ));
+            }
+        }
+        TokenizerProfile::Qwen2 => {
+            validate_qwen2_normalizer(&raw.normalizer)?;
+            validate_qwen2_post_processor(&raw.post_processor)?;
+            if !matches!(
+                (&raw.pre_tokenizer.pretokenizers[0], &raw.pre_tokenizer.pretokenizers[1]),
+                (
+                    RawPreTokenizer::Split {
+                        pattern: RawSplitPattern::Regex(pattern),
+                        behavior,
+                        invert: false,
+                    },
+                    RawPreTokenizer::ByteLevel {
+                        add_prefix_space: false,
+                        trim_offsets: false,
+                        use_regex: false,
+                    }
+                ) if pattern == QWEN2_SPLIT_REGEX && behavior == "Isolated"
+            ) {
+                return Err(invalid(
+                    "Qwen2 pre_tokenizer must use the pinned Split regex with Isolated(false) and ByteLevel(false,false,false)",
+                ));
+            }
+        }
+    }
+
+    let decoder_matches = match profile {
+        TokenizerProfile::SmolLm2 => {
+            raw.decoder.kind == "ByteLevel"
+                && raw.decoder.add_prefix_space
+                && raw.decoder.trim_offsets
+                && raw.decoder.use_regex
+        }
+        TokenizerProfile::Qwen2 => {
+            raw.decoder.kind == "ByteLevel"
+                && !raw.decoder.add_prefix_space
+                && !raw.decoder.trim_offsets
+                && !raw.decoder.use_regex
+        }
+    };
+    if !decoder_matches {
+        return Err(invalid(match profile {
+            TokenizerProfile::SmolLm2 => "decoder must be ByteLevel(true,true,true)",
+            TokenizerProfile::Qwen2 => "decoder must be ByteLevel(false,false,false)",
+        }));
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawNfcNormalizer {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+fn validate_qwen2_normalizer(value: &serde_json::Value) -> ModelResult<()> {
+    let normalizer: RawNfcNormalizer = serde_json::from_value(value.clone())
+        .map_err(|error| invalid(format!("unsupported Qwen2 normalizer: {error}")))?;
+    if normalizer.kind != "NFC" {
+        return Err(invalid("Qwen2 normalizer must be NFC"));
+    }
+    Ok(())
+}
+
+fn validate_qwen2_post_processor(value: &serde_json::Value) -> ModelResult<()> {
+    let processor: RawByteLevel = serde_json::from_value(value.clone())
+        .map_err(|error| invalid(format!("unsupported Qwen2 post_processor: {error}")))?;
+    if processor.kind != "ByteLevel"
+        || processor.add_prefix_space
+        || processor.trim_offsets
+        || processor.use_regex
+    {
+        return Err(invalid(
+            "Qwen2 post_processor must be ByteLevel(false,false,false)",
+        ));
     }
     Ok(())
 }
@@ -627,11 +822,18 @@ fn validate_byte_alphabet(
     Ok(())
 }
 
+struct ValidatedAddedTokens {
+    special_ids: BTreeSet<u32>,
+    added_ids: BTreeSet<u32>,
+    trie: AddedTrie,
+}
+
 fn validate_added_tokens(
     added: Vec<RawAddedToken>,
     vocab: &BTreeMap<String, u32>,
-    vocabulary_size: usize,
-) -> ModelResult<(BTreeSet<u32>, AddedTrie)> {
+    vocab_by_id: &mut Vec<String>,
+    profile: TokenizerProfile,
+) -> ModelResult<ValidatedAddedTokens> {
     let mut total_bytes = 0_usize;
     for token in &added {
         if token.content.is_empty() || token.content.len() > MAX_ADDED_TOKEN_BYTES {
@@ -652,37 +854,72 @@ fn validate_added_tokens(
         total_bytes,
     )?;
 
-    let mut ids = BTreeSet::new();
+    let mut added_ids = BTreeSet::new();
+    let mut special_ids = BTreeSet::new();
     let mut contents = BTreeSet::new();
     let mut trie = AddedTrie::default();
+    let mut extensions = BTreeMap::new();
     for token in added {
-        if token.single_word.0
-            || token.lstrip.0
-            || token.rstrip.0
-            || token.normalized.0
-            || !token.special.0
-        {
+        if token.single_word.0 || token.lstrip.0 || token.rstrip.0 || token.normalized.0 {
             return Err(invalid(format!(
                 "added token {} uses unsupported matching semantics",
                 token.id
             )));
         }
-        if usize::try_from(token.id)
-            .ok()
-            .is_none_or(|id| id >= vocabulary_size)
-            || vocab.get(&token.content) != Some(&token.id)
-        {
+        if profile == TokenizerProfile::SmolLm2 && !token.special.0 {
+            return Err(invalid(format!(
+                "SmolLM2 added token {} must be special",
+                token.id
+            )));
+        }
+        if !added_ids.insert(token.id) || !contents.insert(token.content.clone()) {
+            return Err(invalid("duplicate added-token ID or content"));
+        }
+        if token.special.0 {
+            special_ids.insert(token.id);
+        }
+
+        let index = usize::try_from(token.id)
+            .map_err(|_| invalid(format!("added token ID {} does not fit usize", token.id)))?;
+        if index < vocab_by_id.len() {
+            if vocab_by_id[index] != token.content || vocab.get(&token.content) != Some(&token.id) {
+                return Err(invalid(format!(
+                    "added token {} conflicts with the base vocabulary",
+                    token.id
+                )));
+            }
+        } else if profile == TokenizerProfile::SmolLm2 {
             return Err(invalid(format!(
                 "added token {} must match the base vocabulary",
                 token.id
             )));
-        }
-        if !ids.insert(token.id) || !contents.insert(token.content.clone()) {
-            return Err(invalid("duplicate added-token ID or content"));
+        } else {
+            if vocab.contains_key(&token.content) {
+                return Err(invalid(format!(
+                    "added token {} duplicates base-vocabulary content",
+                    token.id
+                )));
+            }
+            extensions.insert(index, token.content.clone());
         }
         trie.insert(token.content.as_bytes(), token.id)?;
     }
-    Ok((ids, trie))
+
+    for (index, content) in extensions {
+        if index != vocab_by_id.len() {
+            return Err(invalid(format!(
+                "addressable added-token IDs must be dense; expected {}, found {index}",
+                vocab_by_id.len()
+            )));
+        }
+        vocab_by_id.push(content);
+    }
+
+    Ok(ValidatedAddedTokens {
+        special_ids,
+        added_ids,
+        trie,
+    })
 }
 
 fn validate_merges(
@@ -971,6 +1208,152 @@ fn consume_whitespace(input: &str, start: usize) -> usize {
     } else {
         run_end
     }
+}
+
+fn qwen2_pieces(input: &str) -> Vec<&str> {
+    let mut pieces = Vec::new();
+    let mut cursor = 0_usize;
+    while cursor < input.len() {
+        let end = next_qwen2_piece_end(input, cursor);
+        debug_assert!(end > cursor && end <= input.len());
+        pieces.push(&input[cursor..end]);
+        cursor = end;
+    }
+    pieces
+}
+
+fn next_qwen2_piece_end(input: &str, start: usize) -> usize {
+    if let Some(end) = qwen2_contraction_end(input, start) {
+        return end;
+    }
+
+    if let Some(end) = qwen2_word_end(input, start) {
+        return end;
+    }
+
+    let first = input[start..].chars().next().expect("start is in bounds");
+    if first.is_numeric() {
+        return start + first.len_utf8();
+    }
+    if let Some(end) = qwen2_punctuation_end(input, start) {
+        return end;
+    }
+    if first.is_whitespace() {
+        if let Some(end) = qwen2_newline_whitespace_end(input, start) {
+            return end;
+        }
+        return consume_whitespace(input, start);
+    }
+
+    // The pinned alternation is exhaustive over Unicode scalar values. Keep a
+    // scalar-sized fallback so a future Unicode table change cannot livelock.
+    start + first.len_utf8()
+}
+
+fn qwen2_contraction_end(input: &str, start: usize) -> Option<usize> {
+    for contraction in ["'s", "'t", "'re", "'ve", "'m", "'ll", "'d"] {
+        let mut cursor = start;
+        let mut matched = true;
+        for expected in contraction.chars() {
+            let Some(actual) = input.get(cursor..)?.chars().next() else {
+                matched = false;
+                break;
+            };
+            if !qwen2_regex_case_eq(actual, expected) {
+                matched = false;
+                break;
+            }
+            cursor += actual.len_utf8();
+        }
+        if matched {
+            return Some(cursor);
+        }
+    }
+    None
+}
+
+// Unicode simple case-fold equivalence classes for the ASCII letters used by
+// the pinned `(?i:'s|'t|'re|'ve|'m|'ll|'d)` alternative were audited in full.
+// Only `s` has a non-ASCII equivalent: LATIN SMALL LETTER LONG S (U+017F).
+fn qwen2_regex_case_eq(actual: char, expected: char) -> bool {
+    if expected == 's' {
+        matches!(actual, 's' | 'S' | '\u{17f}')
+    } else {
+        actual.eq_ignore_ascii_case(&expected)
+    }
+}
+
+fn qwen2_word_end(input: &str, start: usize) -> Option<usize> {
+    let first = input[start..].chars().next()?;
+    let prefixed_start = if qwen2_optional_word_prefix(first) {
+        start + first.len_utf8()
+    } else {
+        start
+    };
+    if let Some(end) = qwen2_letters_end(input, prefixed_start) {
+        return Some(end);
+    }
+    if prefixed_start == start {
+        None
+    } else {
+        qwen2_letters_end(input, start)
+    }
+}
+
+fn qwen2_letters_end(input: &str, start: usize) -> Option<usize> {
+    let first = input.get(start..)?.chars().next()?;
+    is_general_category_letter(first)
+        .then(|| consume_while(input, start, is_general_category_letter))
+}
+
+fn qwen2_optional_word_prefix(character: char) -> bool {
+    character != '\r'
+        && character != '\n'
+        && !is_general_category_letter(character)
+        && !character.is_numeric()
+}
+
+fn qwen2_punctuation_end(input: &str, start: usize) -> Option<usize> {
+    let mut cursor = start;
+    if input[cursor..].starts_with(' ') {
+        cursor += 1;
+    }
+    let punctuation_start = cursor;
+    cursor = consume_while(input, cursor, |character| {
+        !character.is_whitespace()
+            && !is_general_category_letter(character)
+            && !character.is_numeric()
+    });
+    if cursor == punctuation_start {
+        return None;
+    }
+    Some(consume_while(input, cursor, |character| {
+        matches!(character, '\r' | '\n')
+    }))
+}
+
+fn qwen2_newline_whitespace_end(input: &str, start: usize) -> Option<usize> {
+    let mut last_newline_end = None;
+    for (relative, character) in input[start..].char_indices() {
+        if !character.is_whitespace() {
+            break;
+        }
+        if matches!(character, '\r' | '\n') {
+            last_newline_end = Some(start + relative + character.len_utf8());
+        }
+    }
+    last_newline_end
+}
+
+fn consume_while(input: &str, start: usize, predicate: impl Fn(char) -> bool) -> usize {
+    let mut end = start;
+    for (relative, character) in input[start..].char_indices() {
+        if !predicate(character) {
+            break;
+        }
+        end = start + relative + character.len_utf8();
+    }
+    end
 }
 
 fn byte_maps() -> ([char; 256], BTreeMap<char, u8>) {
@@ -1619,6 +2002,18 @@ mod tests {
     }
 
     #[test]
+    fn scanner_matches_pinned_qwen_split_for_contractions_korean_and_newlines() {
+        assert_eq!(
+            qwen2_pieces("can't CAN'T 안녕12  !!/\n\n  tail  "),
+            [
+                "can", "'t", " CAN", "'T", " 안녕", "1", "2", " ", " !!/\n\n", " ", " tail", "  "
+            ]
+        );
+        assert_eq!(qwen2_pieces("A\u{0301}가Ⅻ"), ["A", "\u{0301}가", "Ⅻ"]);
+        assert_eq!(qwen2_pieces("'ſabc"), ["'ſ", "abc"]);
+    }
+
+    #[test]
     fn added_trie_chooses_earliest_then_longest_exact_match() {
         let mut trie = AddedTrie::default();
         trie.insert(b"<|x|>", 1).unwrap();
@@ -1639,7 +2034,12 @@ mod tests {
                 special: JsonBool(true),
             })
             .collect();
-        let Err(error) = validate_added_tokens(tokens, &BTreeMap::new(), 257) else {
+        let Err(error) = validate_added_tokens(
+            tokens,
+            &BTreeMap::new(),
+            &mut Vec::new(),
+            TokenizerProfile::SmolLm2,
+        ) else {
             panic!("oversized added-token trie must fail before allocation");
         };
         assert!(matches!(
@@ -1676,6 +2076,11 @@ mod tests {
         for malformed in [
             FIXTURE.replace(r#""use_regex":true}]"#, r#""use_regex":false}]"#),
             FIXTURE.replace(r#""ignore_merges":false"#, r#""ignore_merges":true"#),
+            FIXTURE.replace(r#""ignore_merges":false"#, r#""ignore_merges":null"#),
+            FIXTURE.replace(
+                r#""continuing_subword_prefix":null"#,
+                r#""continuing_subword_prefix":"""#,
+            ),
             FIXTURE.replace(r#""special":true"#, r#""special":false"#),
             FIXTURE.replace(r#""h":1"#, r#""h":2"#),
             FIXTURE.replace(r#""merges":["h e""#, r#""merges":["missing e""#),

@@ -215,9 +215,13 @@ pub struct LlamaLayerPlan {
     index: usize,
     input_norm: PhysicalWeightId,
     query: PhysicalWeightId,
+    query_bias: Option<PhysicalWeightId>,
     key: PhysicalWeightId,
+    key_bias: Option<PhysicalWeightId>,
     value: PhysicalWeightId,
+    value_bias: Option<PhysicalWeightId>,
     output: PhysicalWeightId,
+    output_bias: Option<PhysicalWeightId>,
     post_attention_norm: PhysicalWeightId,
     gate: PhysicalWeightId,
     up: PhysicalWeightId,
@@ -254,8 +258,18 @@ impl LlamaLayerPlan {
     }
 
     #[cfg(any(feature = "cuda", test))]
+    pub(crate) const fn query_bias(&self) -> Option<PhysicalWeightId> {
+        self.query_bias
+    }
+
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn key_weight(&self) -> PhysicalWeightId {
         self.key
+    }
+
+    #[cfg(any(feature = "cuda", test))]
+    pub(crate) const fn key_bias(&self) -> Option<PhysicalWeightId> {
+        self.key_bias
     }
 
     #[cfg(any(feature = "cuda", test))]
@@ -264,8 +278,18 @@ impl LlamaLayerPlan {
     }
 
     #[cfg(any(feature = "cuda", test))]
+    pub(crate) const fn value_bias(&self) -> Option<PhysicalWeightId> {
+        self.value_bias
+    }
+
+    #[cfg(any(feature = "cuda", test))]
     pub(crate) const fn output_weight(&self) -> PhysicalWeightId {
         self.output
+    }
+
+    #[cfg(any(feature = "cuda", test))]
+    pub(crate) const fn output_bias(&self) -> Option<PhysicalWeightId> {
+        self.output_bias
     }
 
     #[cfg(any(feature = "cuda", test))]
@@ -310,7 +334,7 @@ impl LlamaExecutionPlan {
     ///
     /// # Errors
     ///
-    /// Returns before execution for unsupported dtype/bias/RoPE, inconsistent
+    /// Returns before execution for unsupported dtype/MLP bias/RoPE, inconsistent
     /// dimensions or layer order, missing/mismatched weights, invalid fixed
     /// sequence length, or checked workspace arithmetic overflow.
     #[cfg(any(feature = "cuda", test))]
@@ -429,11 +453,21 @@ impl LlamaExecutionPlan {
             return Err(LlamaPlanError::TiedWeightIdentityMismatch);
         }
 
-        let logical_weight_count = layers
-            .len()
-            .checked_mul(9)
-            .and_then(|count| count.checked_add(3))
-            .ok_or(LlamaPlanError::LogicalWeightCountOverflow)?;
+        let logical_weight_count = layers.iter().try_fold(3_usize, |count, layer| {
+            let projection_biases = [
+                layer.query_bias,
+                layer.key_bias,
+                layer.value_bias,
+                layer.output_bias,
+            ]
+            .into_iter()
+            .flatten()
+            .count();
+            count
+                .checked_add(9)
+                .and_then(|count| count.checked_add(projection_biases))
+                .ok_or(LlamaPlanError::LogicalWeightCountOverflow)
+        })?;
         let workspace = build_workspace_spec(sequence_length, dimensions)?;
 
         Ok(Self {
@@ -576,6 +610,18 @@ fn validate_lm_head(spec: &ModelSpec, dimensions: LlamaDimensions) -> LlamaPlanR
 }
 
 #[cfg(any(feature = "cuda", test))]
+struct AttentionWeightBindings {
+    query: PhysicalWeightId,
+    query_bias: Option<PhysicalWeightId>,
+    key: PhysicalWeightId,
+    key_bias: Option<PhysicalWeightId>,
+    value: PhysicalWeightId,
+    value_bias: Option<PhysicalWeightId>,
+    output: PhysicalWeightId,
+    output_bias: Option<PhysicalWeightId>,
+}
+
+#[cfg(any(feature = "cuda", test))]
 fn build_layer_plan<C: PlanWeightCatalog>(
     block: &rustinfer_model::DecoderBlockSpec,
     weights: &C,
@@ -604,8 +650,14 @@ fn build_layer_plan<C: PlanWeightCatalog>(
 
     let decoder = |parameter| WeightSlot::Decoder { layer, parameter };
     let hidden = dimensions.hidden_size;
-    let kv = dimensions.key_value_width;
     let intermediate = dimensions.intermediate_size;
+    let attention_weights = bind_attention_weights(
+        block.attention(),
+        weights,
+        layer,
+        hidden,
+        dimensions.key_value_width,
+    )?;
     Ok(LlamaLayerPlan {
         index: layer,
         input_norm: bind_weight(
@@ -614,30 +666,14 @@ fn build_layer_plan<C: PlanWeightCatalog>(
             decoder(DecoderWeight::InputNormScale),
             &[hidden],
         )?,
-        query: bind_weight(
-            weights,
-            ExecutionSite::layer(layer, LlamaOp::QueryProjection),
-            decoder(DecoderWeight::QueryWeight),
-            &[hidden, hidden],
-        )?,
-        key: bind_weight(
-            weights,
-            ExecutionSite::layer(layer, LlamaOp::KeyProjection),
-            decoder(DecoderWeight::KeyWeight),
-            &[kv, hidden],
-        )?,
-        value: bind_weight(
-            weights,
-            ExecutionSite::layer(layer, LlamaOp::ValueProjection),
-            decoder(DecoderWeight::ValueWeight),
-            &[kv, hidden],
-        )?,
-        output: bind_weight(
-            weights,
-            ExecutionSite::layer(layer, LlamaOp::OutputProjection),
-            decoder(DecoderWeight::OutputWeight),
-            &[hidden, hidden],
-        )?,
+        query: attention_weights.query,
+        query_bias: attention_weights.query_bias,
+        key: attention_weights.key,
+        key_bias: attention_weights.key_bias,
+        value: attention_weights.value,
+        value_bias: attention_weights.value_bias,
+        output: attention_weights.output,
+        output_bias: attention_weights.output_bias,
         post_attention_norm: bind_weight(
             weights,
             post_norm_site,
@@ -664,6 +700,75 @@ fn build_layer_plan<C: PlanWeightCatalog>(
         )?,
         input_norm_epsilon,
         post_attention_norm_epsilon,
+    })
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn bind_attention_weights<C: PlanWeightCatalog>(
+    attention: &rustinfer_model::AttentionSpec,
+    weights: &C,
+    layer: usize,
+    hidden: usize,
+    key_value_width: usize,
+) -> LlamaPlanResult<AttentionWeightBindings> {
+    let decoder = |parameter| WeightSlot::Decoder { layer, parameter };
+    let query_site = ExecutionSite::layer(layer, LlamaOp::QueryProjection);
+    let key_site = ExecutionSite::layer(layer, LlamaOp::KeyProjection);
+    let value_site = ExecutionSite::layer(layer, LlamaOp::ValueProjection);
+    let output_site = ExecutionSite::layer(layer, LlamaOp::OutputProjection);
+    Ok(AttentionWeightBindings {
+        query: bind_weight(
+            weights,
+            query_site,
+            decoder(DecoderWeight::QueryWeight),
+            &[hidden, hidden],
+        )?,
+        query_bias: bind_optional_weight(
+            attention.bias().query(),
+            weights,
+            query_site,
+            decoder(DecoderWeight::QueryBias),
+            &[hidden],
+        )?,
+        key: bind_weight(
+            weights,
+            key_site,
+            decoder(DecoderWeight::KeyWeight),
+            &[key_value_width, hidden],
+        )?,
+        key_bias: bind_optional_weight(
+            attention.bias().key(),
+            weights,
+            key_site,
+            decoder(DecoderWeight::KeyBias),
+            &[key_value_width],
+        )?,
+        value: bind_weight(
+            weights,
+            value_site,
+            decoder(DecoderWeight::ValueWeight),
+            &[key_value_width, hidden],
+        )?,
+        value_bias: bind_optional_weight(
+            attention.bias().value(),
+            weights,
+            value_site,
+            decoder(DecoderWeight::ValueBias),
+            &[key_value_width],
+        )?,
+        output: bind_weight(
+            weights,
+            output_site,
+            decoder(DecoderWeight::OutputWeight),
+            &[hidden, hidden],
+        )?,
+        output_bias: bind_optional_weight(
+            attention.bias().output(),
+            weights,
+            output_site,
+            decoder(DecoderWeight::OutputBias),
+            &[hidden],
+        )?,
     })
 }
 
@@ -717,11 +822,6 @@ fn validate_attention(
         ),
     ] {
         require_equal(site, dimension, expected, actual)?;
-    }
-    if attention.has_bias() {
-        return Err(LlamaPlanError::UnsupportedBias {
-            site: ExecutionSite::layer(layer, LlamaOp::QueryProjection),
-        });
     }
     let rope = attention.rope();
     let rope_site = ExecutionSite::layer(layer, LlamaOp::QueryRope);
@@ -827,6 +927,19 @@ fn bind_weight<C: PlanWeightCatalog>(
         });
     }
     Ok(id)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn bind_optional_weight<C: PlanWeightCatalog>(
+    present: bool,
+    weights: &C,
+    site: ExecutionSite,
+    slot: WeightSlot,
+    expected_shape: &[usize],
+) -> LlamaPlanResult<Option<PhysicalWeightId>> {
+    present
+        .then(|| bind_weight(weights, site, slot, expected_shape))
+        .transpose()
 }
 
 #[cfg(any(feature = "cuda", test))]
@@ -998,7 +1111,7 @@ impl PlanWeightCatalog for crate::cuda_weights::CudaUploadedWeights {
 mod tests {
     use std::collections::BTreeMap;
 
-    use rustinfer_model::{DecoderWeight, LlamaConfig, ModelSpec, WeightSlot};
+    use rustinfer_model::{DecoderWeight, LlamaConfig, ModelConfig, ModelSpec, WeightSlot};
     use rustinfer_tensor::DType;
 
     use super::{
@@ -1036,6 +1149,27 @@ mod tests {
       "transformers_version":"4.40.0",
       "use_cache":true,
       "vocab_size":49152
+    }"#;
+
+    const TINY_QWEN2_CONFIG: &str = r#"{
+      "architectures":["Qwen2ForCausalLM"],
+      "bos_token_id":6,
+      "eos_token_id":7,
+      "hidden_act":"silu",
+      "hidden_size":4,
+      "intermediate_size":8,
+      "max_position_embeddings":16,
+      "model_type":"qwen2",
+      "num_attention_heads":2,
+      "num_hidden_layers":1,
+      "num_key_value_heads":1,
+      "rms_norm_eps":0.000001,
+      "rope_scaling":null,
+      "rope_theta":1000000,
+      "tie_word_embeddings":true,
+      "torch_dtype":"bfloat16",
+      "use_sliding_window":false,
+      "vocab_size":8
     }"#;
 
     struct FakeTensor {
@@ -1119,6 +1253,16 @@ mod tests {
             ] {
                 catalog.insert(decoder(parameter), &shape);
             }
+            for (present, parameter, width) in [
+                (attention.bias().query(), DecoderWeight::QueryBias, hidden),
+                (attention.bias().key(), DecoderWeight::KeyBias, kv),
+                (attention.bias().value(), DecoderWeight::ValueBias, kv),
+                (attention.bias().output(), DecoderWeight::OutputBias, hidden),
+            ] {
+                if present {
+                    catalog.insert(decoder(parameter), &[width]);
+                }
+            }
         }
         catalog.insert(WeightSlot::FinalNormScale, &[hidden]);
         if spec.lm_head().tied_to_embedding() {
@@ -1199,7 +1343,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_dtype_and_biases_fail_closed() {
+    fn projection_biases_are_bound_semantically_and_mlp_bias_fails_closed() {
         let empty = FakeCatalog::default();
         let fp16 = spec(&SMOL_CONFIG.replace("bfloat16", "float16"));
         assert_eq!(
@@ -1210,16 +1354,15 @@ mod tests {
         let attention_bias =
             spec(&SMOL_CONFIG.replace("\"attention_bias\":false", "\"attention_bias\":true"));
         let attention_catalog = catalog_for(&attention_bias);
-        assert!(matches!(
-            LlamaExecutionPlan::prepare_with_catalog(
-                &attention_bias,
-                &attention_catalog,
-                7
-            ),
-            Err(LlamaPlanError::UnsupportedBias {
-                site
-            }) if site == ExecutionSite::layer(0, LlamaOp::QueryProjection)
-        ));
+        let attention_plan =
+            LlamaExecutionPlan::prepare_with_catalog(&attention_bias, &attention_catalog, 7)
+                .unwrap();
+        assert_eq!(attention_plan.logical_weight_count(), 393);
+        let first = &attention_plan.layers()[0];
+        assert!(first.query_bias().is_some());
+        assert!(first.key_bias().is_some());
+        assert!(first.value_bias().is_some());
+        assert!(first.output_bias().is_some());
 
         let mlp_bias = spec(&SMOL_CONFIG.replace("\"mlp_bias\":false", "\"mlp_bias\":true"));
         let mlp_catalog = catalog_for(&mlp_bias);
@@ -1228,6 +1371,24 @@ mod tests {
             Err(LlamaPlanError::UnsupportedBias { site })
                 if site == ExecutionSite::layer(0, LlamaOp::GateProjection)
         ));
+    }
+
+    #[test]
+    fn qwen2_reuses_the_plan_with_qkv_bias_and_a_tied_head() {
+        let spec = ModelConfig::from_json_slice(TINY_QWEN2_CONFIG.as_bytes())
+            .unwrap()
+            .to_model_spec();
+        let catalog = catalog_for(&spec);
+        let plan = LlamaExecutionPlan::prepare_with_catalog(&spec, &catalog, 4).unwrap();
+        let layer = &plan.layers()[0];
+
+        assert_eq!(plan.logical_weight_count(), 15);
+        assert_eq!(catalog.physical.len(), 14);
+        assert_eq!(plan.embedding, plan.lm_head);
+        assert!(layer.query_bias().is_some());
+        assert!(layer.key_bias().is_some());
+        assert!(layer.value_bias().is_some());
+        assert!(layer.output_bias().is_none());
     }
 
     #[test]

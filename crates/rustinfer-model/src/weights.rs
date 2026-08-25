@@ -517,7 +517,7 @@ fn extend_block_requirements(
         hidden,
         query_width,
         key_value_width,
-        attention.has_bias(),
+        *attention.bias(),
     );
     push_requirement(
         output,
@@ -537,7 +537,7 @@ fn extend_attention_requirements(
     hidden: usize,
     query_width: usize,
     key_value_width: usize,
-    has_bias: bool,
+    bias: crate::AttentionBiasSpec,
 ) {
     for (parameter, suffix, shape) in [
         (
@@ -569,25 +569,33 @@ fn extend_attention_requirements(
             shape,
         );
     }
-    if has_bias {
-        for (parameter, suffix, width) in [
-            (
-                DecoderWeight::QueryBias,
-                "self_attn.q_proj.bias",
-                query_width,
-            ),
-            (
-                DecoderWeight::KeyBias,
-                "self_attn.k_proj.bias",
-                key_value_width,
-            ),
-            (
-                DecoderWeight::ValueBias,
-                "self_attn.v_proj.bias",
-                key_value_width,
-            ),
-            (DecoderWeight::OutputBias, "self_attn.o_proj.bias", hidden),
-        ] {
+    for (present, parameter, suffix, width) in [
+        (
+            bias.query(),
+            DecoderWeight::QueryBias,
+            "self_attn.q_proj.bias",
+            query_width,
+        ),
+        (
+            bias.key(),
+            DecoderWeight::KeyBias,
+            "self_attn.k_proj.bias",
+            key_value_width,
+        ),
+        (
+            bias.value(),
+            DecoderWeight::ValueBias,
+            "self_attn.v_proj.bias",
+            key_value_width,
+        ),
+        (
+            bias.output(),
+            DecoderWeight::OutputBias,
+            "self_attn.o_proj.bias",
+            hidden,
+        ),
+    ] {
+        if present {
             push_requirement(
                 output,
                 layer,
@@ -668,4 +676,70 @@ fn checked_product(left: usize, right: usize, field: &str) -> ModelResult<usize>
         .ok_or_else(|| ModelError::NumericOverflow {
             field: field.to_owned(),
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::requirements;
+    use crate::{ModelConfig, WeightSlot};
+
+    const TINY_QWEN2_CONFIG: &str = r#"{
+      "architectures":["Qwen2ForCausalLM"],
+      "bos_token_id":0,
+      "eos_token_id":1,
+      "hidden_act":"silu",
+      "hidden_size":4,
+      "intermediate_size":8,
+      "max_position_embeddings":16,
+      "model_type":"qwen2",
+      "num_attention_heads":2,
+      "num_hidden_layers":1,
+      "num_key_value_heads":1,
+      "rms_norm_eps":0.000001,
+      "rope_scaling":null,
+      "rope_theta":1000000,
+      "tie_word_embeddings":true,
+      "torch_dtype":"bfloat16",
+      "use_sliding_window":false,
+      "vocab_size":8
+    }"#;
+
+    #[test]
+    fn qwen2_weight_spec_requires_qkv_bias_but_not_output_bias() {
+        let spec = ModelConfig::from_json_slice(TINY_QWEN2_CONFIG.as_bytes())
+            .unwrap()
+            .to_model_spec();
+        let requirements = requirements(&spec).unwrap();
+        let by_name: BTreeMap<_, _> = requirements
+            .iter()
+            .map(|requirement| {
+                (
+                    requirement.source_name.as_str(),
+                    requirement.shape.as_slice(),
+                )
+            })
+            .collect();
+
+        assert_eq!(
+            by_name.get("model.layers.0.self_attn.q_proj.bias").copied(),
+            Some(&[4][..])
+        );
+        assert_eq!(
+            by_name.get("model.layers.0.self_attn.k_proj.bias").copied(),
+            Some(&[2][..])
+        );
+        assert_eq!(
+            by_name.get("model.layers.0.self_attn.v_proj.bias").copied(),
+            Some(&[2][..])
+        );
+        assert!(!by_name.contains_key("model.layers.0.self_attn.o_proj.bias"));
+        assert_eq!(by_name.len(), 14);
+        assert!(
+            requirements
+                .iter()
+                .all(|requirement| { !matches!(requirement.slot, WeightSlot::LmHead) })
+        );
+    }
 }

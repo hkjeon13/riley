@@ -31,6 +31,13 @@ default_features = false
 features = []
 
 [[direct_dependencies]]
+owner = "rustinfer-model"
+name = "unicode-normalization"
+version = "0.1.25"
+default_features = true
+features = []
+
+[[direct_dependencies]]
 owner = "rustinfer-runtime"
 name = "sha2"
 version = "0.11.0"
@@ -206,6 +213,24 @@ rust_version = "1.71"
 dependencies = ["proc-macro2@1.0.107", "quote@1.0.47", "unicode-ident@1.0.24"]
 
 [[packages]]
+name = "tinyvec"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb4ebadaa0af04fab11ae01eb5f9fdb5f9c5b875506e210e71c07873528baa7f"
+license = "Zlib OR Apache-2.0 OR MIT"
+rust_version = "unspecified"
+dependencies = ["tinyvec_macros@0.1.1"]
+
+[[packages]]
+name = "tinyvec_macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
+license = "MIT OR Apache-2.0 OR Zlib"
+rust_version = "unspecified"
+dependencies = []
+
+[[packages]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -222,3 +247,12 @@ checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
 license = "(MIT OR Apache-2.0) AND Unicode-3.0"
 rust_version = "1.71"
 dependencies = []
+
+[[packages]]
+name = "unicode-normalization"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fd4f6878c9cb28d874b009da9e8d183b5abc80117c40bbd187a1fde336be6e8"
+license = "MIT OR Apache-2.0"
+rust_version = "1.36"
+dependencies = ["tinyvec@1.12.0"]

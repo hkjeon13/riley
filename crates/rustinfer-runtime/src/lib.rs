@@ -19,7 +19,7 @@ pub use cuda_weights::{
 
 pub use kernel::{
     KernelCapability, KernelImplementation, KernelKey, KernelOrigin, KernelPreference,
-    KernelRegistry, KernelRegistryError, OpId,
+    KernelRegistry, KernelRegistryError, OpId, ROW_BIAS_ADD_IN_PLACE_BF16_KEY,
 };
 
 #[cfg(feature = "cuda")]

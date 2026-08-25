@@ -498,6 +498,21 @@ __global__ void residual_add_kernel(const T* left, const T* right, T* output,
   }
 }
 
+__global__ void row_bias_add_in_place_kernel(__nv_bfloat16* matrix,
+                                             const __nv_bfloat16* bias,
+                                             uint64_t column_count,
+                                             uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const uint64_t column = index % column_count;
+    const float sum = __fadd_rn(__bfloat162float(matrix[index]),
+                                __bfloat162float(bias[column]));
+    matrix[index] = __float2bfloat16_rn(sum);
+  }
+}
+
 template <typename T>
 __global__ void silu_kernel(const T* input, T* output,
                             uint64_t element_count) {
@@ -636,6 +651,18 @@ void launch_residual_add(const ResolvedSpan& left, const ResolvedSpan& right,
       reinterpret_cast<const T*>(left.data),
       reinterpret_cast<const T*>(right.data),
       reinterpret_cast<T*>(output.data), element_count);
+}
+
+void launch_row_bias_add_in_place(const ResolvedSpan& matrix,
+                                  const ResolvedSpan& bias,
+                                  uint64_t column_count,
+                                  uint64_t element_count,
+                                  cudaStream_t stream) {
+  row_bias_add_in_place_kernel
+      <<<block_count(element_count), kThreads, 0, stream>>>(
+          reinterpret_cast<__nv_bfloat16*>(matrix.data),
+          reinterpret_cast<const __nv_bfloat16*>(bias.data), column_count,
+          element_count);
 }
 
 template <typename T>
@@ -1117,6 +1144,106 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_add_execute(
       launch_residual_add<__nv_bfloat16>(
           left, right, output, params->element_count, stream->stream);
     }
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_row_bias_add_in_place_execute(
+    const RustInferCudaRowBiasAddInPlaceParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute row-bias add in place";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (params->matrix.dtype != RUSTINFER_CUDA_DTYPE_BF16 ||
+      params->bias.dtype != RUSTINFER_CUDA_DTYPE_BF16) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "matrix and bias must both use BF16 dtype");
+  }
+  if (params->column_count == 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "column_count must be non-zero");
+  }
+
+  uint64_t matrix_elements = 0;
+  if (!checked_multiply(params->row_count, params->column_count,
+                        &matrix_elements)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "row-bias shape product overflows uint64_t");
+  }
+  uint64_t matrix_bytes = 0;
+  uint64_t bias_bytes = 0;
+  RustInferCudaStatus status =
+      element_bytes(matrix_elements, RUSTINFER_CUDA_DTYPE_BF16,
+                    &matrix_bytes, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = element_bytes(params->column_count, RUSTINFER_CUDA_DTYPE_BF16,
+                           &bias_bytes, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan matrix{};
+  ResolvedSpan bias{};
+  status = resolve_span(params->matrix, matrix_bytes, &matrix, error,
+                        kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->bias, bias_bytes, &bias, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(matrix, bias, false, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  const ResolvedSpan spans[] = {matrix, bias};
+  status = validate_contexts(stream, spans, 2, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  if (!uses.add(matrix.buffer) || !uses.add(bias.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "primitive buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (matrix_elements == 0) {
+    return uses.release_completed()
+               ? RUSTINFER_CUDA_STATUS_SUCCESS
+               : internal_error(error,
+                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation,
+                                "exclusive-use accounting was corrupted");
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    launch_row_bias_add_in_place(matrix, bias, params->column_count,
+                                 matrix_elements, stream->stream);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,

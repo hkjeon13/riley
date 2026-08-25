@@ -1,0 +1,363 @@
+{
+  "cases": [
+    {
+      "greedy": {
+        "addressable_token_count": 151665,
+        "cache_off_token_ids": [
+          785,
+          12884,
+          7952,
+          6303,
+          1576,
+          432,
+          374,
+          23415
+        ],
+        "cache_on_token_ids": [
+          785,
+          12884,
+          7952,
+          6303,
+          1576,
+          432,
+          374,
+          23415
+        ],
+        "max_new_tokens": 8
+      },
+      "messages": [
+        {
+          "content": "Explain why the sky is blue in one sentence.",
+          "role": "user"
+        }
+      ],
+      "name": "english",
+      "prompt_token_ids": [
+        151644,
+        8948,
+        198,
+        2610,
+        525,
+        1207,
+        16948,
+        11,
+        3465,
+        553,
+        54364,
+        14817,
+        13,
+        1446,
+        525,
+        264,
+        10950,
+        17847,
+        13,
+        151645,
+        198,
+        151644,
+        872,
+        198,
+        840,
+        20772,
+        3170,
+        279,
+        12884,
+        374,
+        6303,
+        304,
+        825,
+        11652,
+        13,
+        151645,
+        198,
+        151644,
+        77091,
+        198
+      ],
+      "raw_last_logits": {
+        "probe_values_f32": {
+          "0": 2.546875,
+          "1": 14.5625,
+          "151643": 5.25,
+          "151644": -5.40625,
+          "151645": -5.625,
+          "151657": -2.625,
+          "151664": -5.40625,
+          "151665": -5.40625,
+          "151935": -5.40625
+        },
+        "top_token_ids": [
+          785,
+          641,
+          4498,
+          2121,
+          10022,
+          10331,
+          1,
+          32,
+          2132,
+          1249
+        ],
+        "top_values_f32": [
+          21.375,
+          17.625,
+          16.75,
+          16.125,
+          14.875,
+          14.5625,
+          14.5625,
+          14.4375,
+          14.25,
+          14.1875
+        ]
+      },
+      "rendered_chat": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\nExplain why the sky is blue in one sentence.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "greedy": {
+        "addressable_token_count": 151665,
+        "cache_off_token_ids": [
+          26698,
+          126893,
+          20401,
+          35509,
+          17877,
+          33704,
+          5140,
+          250
+        ],
+        "cache_on_token_ids": [
+          26698,
+          126893,
+          20401,
+          35509,
+          17877,
+          33704,
+          5140,
+          250
+        ],
+        "max_new_tokens": 8
+      },
+      "messages": [
+        {
+          "content": "서울의 가을을 한 문장으로 묘사해 주세요.",
+          "role": "user"
+        }
+      ],
+      "name": "korean",
+      "prompt_token_ids": [
+        151644,
+        8948,
+        198,
+        2610,
+        525,
+        1207,
+        16948,
+        11,
+        3465,
+        553,
+        54364,
+        14817,
+        13,
+        1446,
+        525,
+        264,
+        10950,
+        17847,
+        13,
+        151645,
+        198,
+        151644,
+        872,
+        198,
+        26698,
+        126893,
+        20401,
+        35509,
+        17877,
+        17877,
+        61298,
+        53435,
+        40853,
+        42039,
+        133552,
+        246,
+        55054,
+        33883,
+        55673,
+        50302,
+        13,
+        151645,
+        198,
+        151644,
+        77091,
+        198
+      ],
+      "raw_last_logits": {
+        "probe_values_f32": {
+          "0": -0.66796875,
+          "1": 13.3125,
+          "151643": -1.5390625,
+          "151644": -2.515625,
+          "151645": -3.15625,
+          "151657": -1.8828125,
+          "151664": -2.515625,
+          "151665": -2.515625,
+          "151935": -2.515625
+        },
+        "top_token_ids": [
+          26698,
+          136905,
+          1,
+          18493,
+          126893,
+          12881,
+          31079,
+          89860,
+          23573,
+          126550
+        ],
+        "top_values_f32": [
+          15.0,
+          13.4375,
+          13.3125,
+          12.6875,
+          11.5,
+          11.4375,
+          11.25,
+          11.25,
+          11.125,
+          11.125
+        ]
+      },
+      "rendered_chat": "<|im_start|>system\nYou are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>\n<|im_start|>user\n서울의 가을을 한 문장으로 묘사해 주세요.<|im_end|>\n<|im_start|>assistant\n"
+    },
+    {
+      "greedy": {
+        "addressable_token_count": 151665,
+        "cache_off_token_ids": [
+          73594,
+          35788,
+          198,
+          8822,
+          912,
+          7300,
+          18,
+          17
+        ],
+        "cache_on_token_ids": [
+          73594,
+          35788,
+          198,
+          8822,
+          912,
+          7300,
+          18,
+          17
+        ],
+        "max_new_tokens": 8
+      },
+      "messages": [
+        {
+          "content": "Answer with code only.",
+          "role": "system"
+        },
+        {
+          "content": "Write a Rust function that adds two u32 values.",
+          "role": "user"
+        }
+      ],
+      "name": "code",
+      "prompt_token_ids": [
+        151644,
+        8948,
+        198,
+        16141,
+        448,
+        2038,
+        1172,
+        13,
+        151645,
+        198,
+        151644,
+        872,
+        198,
+        7985,
+        264,
+        33789,
+        729,
+        429,
+        11367,
+        1378,
+        575,
+        18,
+        17,
+        2750,
+        13,
+        151645,
+        198,
+        151644,
+        77091,
+        198
+      ],
+      "raw_last_logits": {
+        "probe_values_f32": {
+          "0": 12.375,
+          "1": 7.28125,
+          "151643": 7.84375,
+          "151644": -2.5,
+          "151645": -4.25,
+          "151657": -0.0859375,
+          "151664": -2.921875,
+          "151665": -2.90625,
+          "151935": -2.90625
+        },
+        "top_token_ids": [
+          73594,
+          8420,
+          95456,
+          13874,
+          39814,
+          1249,
+          8822,
+          38214,
+          35788,
+          49
+        ],
+        "top_values_f32": [
+          24.625,
+          20.0,
+          19.125,
+          19.0,
+          18.125,
+          17.25,
+          16.25,
+          16.125,
+          15.3125,
+          15.125
+        ]
+      },
+      "rendered_chat": "<|im_start|>system\nAnswer with code only.<|im_end|>\n<|im_start|>user\nWrite a Rust function that adds two u32 values.<|im_end|>\n<|im_start|>assistant\n"
+    }
+  ],
+  "environment": {
+    "compute_capability": "8.9",
+    "device": "NVIDIA GeForce RTX 4090",
+    "python": "3.13.15",
+    "torch": "2.13.0+cu130",
+    "transformers": "5.15.1"
+  },
+  "model": {
+    "attention": "eager",
+    "dtype": "bfloat16",
+    "files_sha256": {
+      "config.json": "18e18afcaccafade98daf13a54092927904649e1dd4eba8299ab717d5d94ff45",
+      "model.safetensors": "fdf756fa7fcbe7404d5c60e26bff1a0c8b8aa1f72ced49e7dd0210fe288fb7fe",
+      "tokenizer.json": "c0382117ea329cdf097041132f6d735924b697924d6f6fc3945713e96ce87539",
+      "tokenizer_config.json": "5b5d4f65d0acd3b2d56a35b56d374a36cbc1c8fa5cf3b3febbbfabf22f359583"
+    },
+    "id": "Qwen/Qwen2.5-0.5B-Instruct",
+    "revision": "7ae557604adf67be50417f59c2c2f167def9a775"
+  },
+  "schema_version": "rustinfer-qwen2-compat-v1"
+}

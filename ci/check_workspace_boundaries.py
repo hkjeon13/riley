@@ -99,6 +99,11 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
         "default_features": False,
         "features": [],
     },
+    ("rustinfer-model", "unicode-normalization"): {
+        "version": "0.1.25",
+        "default_features": True,
+        "features": [],
+    },
     ("rustinfer-runtime", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
@@ -253,7 +258,7 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
     if direct_keys != set(EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES):
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
-            "rustinfer-model -> serde, serde_json, and sha2 plus "
+            "rustinfer-model -> serde, serde_json, sha2, and unicode-normalization plus "
             "rustinfer-runtime -> sha2"
         )
     for dependency in direct_dependencies:
@@ -300,8 +305,11 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
             raise BoundaryError(f"{policy_path}: {identity}: invalid SHA-256 checksum")
         if not isinstance(package["license"], str) or not package["license"].strip():
             raise BoundaryError(f"{policy_path}: {identity}: license is required")
-        package_msrv = parse_rust_version(
-            package["rust_version"], f"{policy_path}: {identity}"
+        rust_version = package["rust_version"]
+        package_msrv = (
+            (0, 0, 0)
+            if rust_version == "unspecified"
+            else parse_rust_version(rust_version, f"{policy_path}: {identity}")
         )
         if package_msrv > workspace_msrv:
             raise BoundaryError(
@@ -910,10 +918,13 @@ def validate_external_metadata(metadata: dict[str, Any], policy: dict[str, Any])
                 f"resolved {display}: license metadata drifted; expected "
                 f"{approved['license']!r}, found {package.get('license')!r}"
             )
-        if package.get("rust_version") != approved["rust_version"]:
+        expected_rust_version = (
+            None if approved["rust_version"] == "unspecified" else approved["rust_version"]
+        )
+        if package.get("rust_version") != expected_rust_version:
             raise BoundaryError(
                 f"resolved {display}: MSRV metadata drifted; expected "
-                f"{approved['rust_version']!r}, found {package.get('rust_version')!r}"
+                f"{expected_rust_version!r}, found {package.get('rust_version')!r}"
             )
 
 

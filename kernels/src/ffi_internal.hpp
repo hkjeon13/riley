@@ -184,6 +184,14 @@ static_assert(offsetof(RustInferCudaRmsNormParams, epsilon) == 168,
               "RMSNorm params ABI epsilon offset changed");
 static_assert(sizeof(RustInferCudaResidualAddParams) == 200,
               "RustInferCudaResidualAddParams ABI size changed");
+static_assert(sizeof(RustInferCudaRowBiasAddInPlaceParams) == 152,
+              "RustInferCudaRowBiasAddInPlaceParams ABI size changed");
+static_assert(offsetof(RustInferCudaRowBiasAddInPlaceParams, matrix) == 8,
+              "row-bias params ABI matrix offset changed");
+static_assert(offsetof(RustInferCudaRowBiasAddInPlaceParams, row_count) == 104,
+              "row-bias params ABI dimensions changed");
+static_assert(offsetof(RustInferCudaRowBiasAddInPlaceParams, reserved) == 120,
+              "row-bias params ABI tail changed");
 static_assert(sizeof(RustInferCudaSiluParams) == 152,
               "RustInferCudaSiluParams ABI size changed");
 static_assert(sizeof(RustInferCudaGatedMultiplyParams) == 200,

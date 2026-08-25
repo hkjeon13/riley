@@ -511,6 +511,70 @@ pub fn residual_add(params: &mut ResidualAddParams<'_>, stream: &mut CudaStream)
     }
 }
 
+/// A contiguous BF16 matrix and per-column BF16 bias for exact in-place add.
+#[derive(Debug)]
+pub struct RowBiasAddInPlaceParams<'a> {
+    /// Mutable `[row_count, column_count]` BF16 matrix and sole output.
+    pub matrix: CudaBufferSpanMut<'a>,
+    /// Immutable `[column_count]` BF16 bias vector.
+    pub bias: CudaBufferSpan<'a>,
+    /// Number of matrix rows. Zero rows are a validated no-op.
+    pub row_count: u64,
+    /// Number of matrix columns. This must be non-zero.
+    pub column_count: u64,
+}
+
+/// Adds a per-column BF16 bias to a contiguous BF16 matrix in place.
+///
+/// Each matrix and bias element is expanded to FP32, added once, and narrowed
+/// with BF16 round-to-nearest-even. Validation completes before any write and
+/// the repeated execution path performs no allocation. Safe Rust ownership
+/// makes the matrix exact-in-place and prevents it from aliasing `bias`; the C
+/// ABI independently rejects overlapping raw spans.
+///
+/// # Errors
+///
+/// Returns a dtype, zero-column, checked shape/byte overflow, span-capacity,
+/// context, launch, or synchronization error.
+pub fn row_bias_add_in_place(
+    params: &mut RowBiasAddInPlaceParams<'_>,
+    stream: &mut CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "row_bias_add_in_place";
+    require_nonzero(OPERATION, "column_count", params.column_count)?;
+    require_dtype(OPERATION, "matrix", params.matrix.dtype, CudaDType::BF16)?;
+    require_dtype(OPERATION, "bias", params.bias.dtype, CudaDType::BF16)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.column_count,
+        CudaDType::BF16,
+    )?;
+    let bias_bytes = required_vector_bytes(OPERATION, params.column_count, CudaDType::BF16)?;
+    require_capacity(OPERATION, "matrix", params.matrix.byte_len, matrix_bytes)?;
+    require_capacity(OPERATION, "bias", params.bias.byte_len, bias_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[params.matrix.buffer, params.bias.buffer],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::row_bias_add_in_place_execute(
+            params.matrix.raw(),
+            params.bias.raw(),
+            params.row_count,
+            params.column_count,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Inputs for elementwise `SiLU` activation.
 #[derive(Debug)]
 pub struct SiluParams<'a> {

@@ -452,6 +452,7 @@ pub struct PreparedLlamaGeneration<'model> {
     prompt_length: usize,
     output_capacity: usize,
     vocabulary_size: usize,
+    addressable_token_count: usize,
     terminal: bool,
 }
 
@@ -462,6 +463,7 @@ impl fmt::Debug for PreparedLlamaGeneration<'_> {
             .field("prompt_length", &self.prompt_length)
             .field("output_capacity", &self.output_capacity)
             .field("vocabulary_size", &self.vocabulary_size)
+            .field("addressable_token_count", &self.addressable_token_count)
             .field("logits_bytes", &self.logits_bf16_native.len())
             .field("terminal", &self.terminal)
             .finish_non_exhaustive()
@@ -511,6 +513,16 @@ impl<'model> PreparedLlamaGeneration<'model> {
                 )
             })?;
         let vocabulary_size = model.spec().embedding().vocabulary_size();
+        let addressable_token_count = model.tokenizer().addressable_token_count();
+        if addressable_token_count == 0 || addressable_token_count > vocabulary_size {
+            return Err(LlamaGenerationError::new(
+                LlamaGenerationFailure::InvalidConfiguration {
+                    field: "tokenizer.addressable_token_count",
+                    reason: "must be non-zero and no larger than the model vocabulary",
+                },
+                CleanupFailures::default(),
+            ));
+        }
         let logits_bytes = vocabulary_size.checked_mul(BF16_BYTES).ok_or_else(|| {
             LlamaGenerationError::new(
                 LlamaGenerationFailure::ArithmeticOverflow {
@@ -537,7 +549,8 @@ impl<'model> PreparedLlamaGeneration<'model> {
             )
         })?;
         let logits_bf16_native = allocate_filled(logits_bytes, 0_u8, "logits row")?;
-        let allowed_tokens = allocate_filled(vocabulary_size, true, "allowed-token mask")?;
+        let mut allowed_tokens = allocate_filled(vocabulary_size, false, "allowed-token mask")?;
+        allowed_tokens[..addressable_token_count].fill(true);
         let decoded_token_bytes =
             allocate_filled(maximum_decoded_token_bytes, 0_u8, "decoded-token bytes")?;
 
@@ -596,6 +609,7 @@ impl<'model> PreparedLlamaGeneration<'model> {
             prompt_length,
             output_capacity,
             vocabulary_size,
+            addressable_token_count,
             terminal: false,
         })
     }
@@ -616,6 +630,12 @@ impl<'model> PreparedLlamaGeneration<'model> {
     #[must_use]
     pub const fn vocabulary_size(&self) -> usize {
         self.vocabulary_size
+    }
+
+    /// Exclusive upper bound of tokenizer-addressable token IDs.
+    #[must_use]
+    pub const fn addressable_token_count(&self) -> usize {
+        self.addressable_token_count
     }
 
     /// BF16 bytes copied for every sampled token.
@@ -808,10 +828,13 @@ impl<'model> PreparedLlamaGeneration<'model> {
 
             let sampling_started = Instant::now();
             let masked_finish_ids = state.masked_finish_token_ids();
-            let constraints = if masked_finish_ids.is_empty() {
+            let constraints = if masked_finish_ids.is_empty()
+                && self.addressable_token_count == self.vocabulary_size
+            {
                 TokenConstraints::AllowAll
             } else {
-                self.allowed_tokens.fill(true);
+                self.allowed_tokens.fill(false);
+                self.allowed_tokens[..self.addressable_token_count].fill(true);
                 for &token_id in masked_finish_ids {
                     let index = usize::try_from(token_id).map_err(|_| {
                         LlamaGenerationFailure::InvalidConfiguration {

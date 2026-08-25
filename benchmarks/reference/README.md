@@ -19,4 +19,17 @@ case와 cache on/off 16-token exact window를 포함하며, 파일 SHA-256은
 `709612e45d735888b240951d51b979b7ded1e87ef6cae9296f0b1250647255d2`이다.
 두 checksum은 파일을 이동하거나 복사한 뒤에도 반드시 다시 검증한다.
 
+PR 12의 Qwen2 호환성 artifact는
+`qwen2.5-0.5b-instruct-bf16.json`이다. 고정 revision
+`7ae557604adf67be50417f59c2c2f167def9a775`의
+`Qwen/Qwen2.5-0.5B-Instruct`를 primary RTX 4090 원격 환경에서
+Transformers eager/BF16으로 실행한 결과다. 영어·한국어·Rust 코드 3개 chat
+case에 대해 rendered chat, prompt token IDs, masking 전 raw last logits의 top-10과
+probe 값, addressable tokenizer domain으로 masking한 cache on/off 8-token greedy
+parity를 기록한다. 파일 SHA-256은
+`42cc7f3fd04098bc4d70836ee9d18dbf919f158a010da3da6fdaa3d9deeceab7`이다.
+생성과 standard-library-only 정적 검증은
+`rustinfer_reference.qwen2_compat` 모듈을 사용하며, 모델/CUDA 생성 명령은
+반드시 `server-4096`에서만 실행한다.
+
 생성과 검증 명령은 `tools/python/reference/README.md`를 따른다.

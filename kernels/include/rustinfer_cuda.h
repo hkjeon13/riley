@@ -169,6 +169,20 @@ typedef struct RustInferCudaResidualAddParams {
   uint64_t reserved[5];
 } RustInferCudaResidualAddParams;
 
+// Adds one BF16 [column_count] bias vector to every row of a contiguous BF16
+// [row_count, column_count] matrix in place. Each pair is expanded to F32,
+// added once, then rounded to BF16 with round-to-nearest-even. column_count
+// must be non-zero; row_count may be zero.
+typedef struct RustInferCudaRowBiasAddInPlaceParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan matrix;
+  RustInferCudaBufferSpan bias;
+  uint64_t row_count;
+  uint64_t column_count;
+  uint64_t reserved[4];
+} RustInferCudaRowBiasAddInPlaceParams;
+
 typedef struct RustInferCudaSiluParams {
   uint32_t struct_size;
   uint32_t reserved0;
@@ -774,6 +788,13 @@ RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
 // Exact output alias with either input is supported. Partial overlap is not.
 RustInferCudaStatus rustinfer_cuda_residual_add_execute(
     const RustInferCudaResidualAddParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// BF16-only row-wise bias addition. matrix is the sole output and therefore
+// is always exact-in-place. bias may not overlap any touched matrix byte.
+RustInferCudaStatus rustinfer_cuda_row_bias_add_in_place_execute(
+    const RustInferCudaRowBiasAddInPlaceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

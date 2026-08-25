@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use crate::artifact::VerifiedArtifactSession;
 use crate::{
-    CheckpointProvenance, LlamaConfig, LoadLimits, LoadedWeights, ModelError, ModelResult,
-    ModelSpec, SmolLm2Tokenizer,
+    CheckpointProvenance, LoadLimits, LoadedWeights, ModelConfig, ModelError, ModelFamily,
+    ModelResult, ModelSpec, Qwen2Tokenizer, Qwen2TokenizerConfig, SmolLm2Tokenizer, Tokenizer,
 };
 
 /// Required Hugging Face configuration filename.
@@ -13,6 +13,9 @@ pub const CONFIG_FILENAME: &str = "config.json";
 /// Required Hugging Face tokenizer filename.
 pub const TOKENIZER_FILENAME: &str = "tokenizer.json";
 
+/// Required Qwen chat/tokenizer metadata filename.
+pub const TOKENIZER_CONFIG_FILENAME: &str = "tokenizer_config.json";
+
 /// A checksum-verified, Python-free model artifact ready for runtime planning.
 ///
 /// The checkpoint directory must remain trusted and immutable for the duration
@@ -20,9 +23,10 @@ pub const TOKENIZER_FILENAME: &str = "tokenizer.json";
 /// symlinks and verifies every byte, but cannot make path resolution and open
 /// atomic on every supported operating system.
 pub struct LoadedModel {
-    config: LlamaConfig,
+    config: ModelConfig,
     spec: ModelSpec,
-    tokenizer: SmolLm2Tokenizer,
+    tokenizer: Box<dyn Tokenizer>,
+    qwen2_tokenizer_config: Option<Qwen2TokenizerConfig>,
     weights: LoadedWeights,
     verified_files: BTreeSet<PathBuf>,
 }
@@ -30,12 +34,12 @@ pub struct LoadedModel {
 impl LoadedModel {
     /// Loads and cross-validates one complete local checkpoint directory.
     ///
-    /// The mandatory provenance manifest must list exactly `config.json`,
-    /// `tokenizer.json`, and either the single safetensors file or the complete
-    /// shard-index layout. Each payload checksum is verified before that
-    /// payload's parser runs; the manifest cannot checksum itself. No
-    /// subprocess, Python interpreter, network request, or model-specific
-    /// executable code is used.
+    /// The mandatory provenance manifest must list `config.json`,
+    /// `tokenizer.json`, Qwen's `tokenizer_config.json` when applicable, and
+    /// either the single safetensors file or the complete shard-index layout.
+    /// Each payload checksum is verified before that payload's parser runs; the
+    /// manifest cannot checksum itself. No subprocess, Python interpreter,
+    /// network request, or model-specific executable code is used.
     ///
     /// # Errors
     ///
@@ -49,7 +53,7 @@ impl LoadedModel {
             limits.config_bytes(),
             "config.json",
         )?;
-        let config = LlamaConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
+        let config = ModelConfig::from_json_slice_with_limits(config_artifact.bytes(), limits)?;
         let spec = config.to_model_spec();
         validate_manifest_dtype(session.provenance(), &spec)?;
 
@@ -58,9 +62,38 @@ impl LoadedModel {
             limits.tokenizer_bytes(),
             "tokenizer.json",
         )?;
-        let tokenizer =
-            SmolLm2Tokenizer::from_json_slice_with_limits(tokenizer_artifact.bytes(), limits)?;
-        validate_tokenizer_coherence(&spec, &tokenizer)?;
+        let (tokenizer, qwen2_tokenizer_config): (
+            Box<dyn Tokenizer>,
+            Option<Qwen2TokenizerConfig>,
+        ) = match config.family() {
+            ModelFamily::Llama => {
+                let tokenizer = SmolLm2Tokenizer::from_json_slice_with_limits(
+                    tokenizer_artifact.bytes(),
+                    limits,
+                )?;
+                validate_dense_tokenizer_coherence(&spec, &tokenizer)?;
+                (Box::new(tokenizer), None)
+            }
+            ModelFamily::Qwen2 => {
+                let tokenizer = Qwen2Tokenizer::from_json_slice_with_limits(
+                    tokenizer_artifact.bytes(),
+                    limits,
+                )?;
+                validate_padded_tokenizer_coherence(&spec, &tokenizer)?;
+                let tokenizer_config_artifact = session.read_once(
+                    Path::new(TOKENIZER_CONFIG_FILENAME),
+                    limits.config_bytes(),
+                    "tokenizer_config.json",
+                )?;
+                let tokenizer_config = Qwen2TokenizerConfig::from_json_slice_with_limits(
+                    tokenizer_config_artifact.bytes(),
+                    limits,
+                )?;
+                tokenizer_config.validate_tokenizer(&tokenizer)?;
+                validate_qwen_context_bound(&spec, &tokenizer_config)?;
+                (Box::new(tokenizer), Some(tokenizer_config))
+            }
+        };
 
         let weights = LoadedWeights::load_verified_subset(&mut session, &spec, limits)?;
         let verified_files = session.finish_exact()?;
@@ -69,6 +102,7 @@ impl LoadedModel {
             config,
             spec,
             tokenizer,
+            qwen2_tokenizer_config,
             weights,
             verified_files,
         })
@@ -76,7 +110,7 @@ impl LoadedModel {
 
     /// Returns the validated source configuration and its inert-field warnings.
     #[must_use]
-    pub const fn config(&self) -> &LlamaConfig {
+    pub const fn config(&self) -> &ModelConfig {
         &self.config
     }
 
@@ -88,8 +122,14 @@ impl LoadedModel {
 
     /// Returns the Rust-native tokenizer backend.
     #[must_use]
-    pub const fn tokenizer(&self) -> &SmolLm2Tokenizer {
-        &self.tokenizer
+    pub fn tokenizer(&self) -> &dyn Tokenizer {
+        self.tokenizer.as_ref()
+    }
+
+    /// Returns validated Qwen chat metadata, or `None` for a non-Qwen model.
+    #[must_use]
+    pub const fn qwen2_tokenizer_config(&self) -> Option<&Qwen2TokenizerConfig> {
+        self.qwen2_tokenizer_config.as_ref()
     }
 
     /// Returns validated canonical weight bindings and borrowed tensor views.
@@ -125,9 +165,12 @@ fn validate_manifest_dtype(provenance: &CheckpointProvenance, spec: &ModelSpec) 
     Ok(())
 }
 
-fn validate_tokenizer_coherence(spec: &ModelSpec, tokenizer: &SmolLm2Tokenizer) -> ModelResult<()> {
+fn validate_dense_tokenizer_coherence(
+    spec: &ModelSpec,
+    tokenizer: &SmolLm2Tokenizer,
+) -> ModelResult<()> {
     let expected_vocabulary = spec.embedding().vocabulary_size();
-    let actual_vocabulary = tokenizer.vocabulary_size();
+    let actual_vocabulary = tokenizer.addressable_token_count();
     if actual_vocabulary != expected_vocabulary {
         return Err(ModelError::InvalidArtifact {
             artifact: TOKENIZER_FILENAME.to_owned(),
@@ -138,15 +181,38 @@ fn validate_tokenizer_coherence(spec: &ModelSpec, tokenizer: &SmolLm2Tokenizer) 
     }
 
     if let Some(bos) = spec.special_tokens().bos() {
-        validate_special_token(tokenizer, "bos_token_id", bos)?;
+        validate_smol_special_token(tokenizer, "bos_token_id", bos)?;
     }
     for &eos in spec.special_tokens().eos() {
-        validate_special_token(tokenizer, "eos_token_id", eos)?;
+        validate_smol_special_token(tokenizer, "eos_token_id", eos)?;
     }
     Ok(())
 }
 
-fn validate_special_token(
+fn validate_padded_tokenizer_coherence(
+    spec: &ModelSpec,
+    tokenizer: &Qwen2Tokenizer,
+) -> ModelResult<()> {
+    let model_vocabulary = spec.embedding().vocabulary_size();
+    let addressable = tokenizer.addressable_token_count();
+    if addressable == 0 || addressable > model_vocabulary {
+        return Err(ModelError::InvalidArtifact {
+            artifact: TOKENIZER_FILENAME.to_owned(),
+            reason: format!(
+                "tokenizer addressable token count {addressable} must be in 1..={model_vocabulary}"
+            ),
+        });
+    }
+    if let Some(bos) = spec.special_tokens().bos() {
+        validate_qwen_special_token(tokenizer, "bos_token_id", bos)?;
+    }
+    for &eos in spec.special_tokens().eos() {
+        validate_qwen_special_token(tokenizer, "eos_token_id", eos)?;
+    }
+    Ok(())
+}
+
+fn validate_smol_special_token(
     tokenizer: &SmolLm2Tokenizer,
     field: &'static str,
     id: u32,
@@ -164,4 +230,57 @@ fn validate_special_token(
         });
     }
     Ok(())
+}
+
+fn validate_qwen_special_token(
+    tokenizer: &Qwen2Tokenizer,
+    field: &'static str,
+    id: u32,
+) -> ModelResult<()> {
+    if !tokenizer.contains_id(id) {
+        return Err(ModelError::InvalidArtifact {
+            artifact: TOKENIZER_FILENAME.to_owned(),
+            reason: format!("config {field} {id} is absent from the tokenizer vocabulary"),
+        });
+    }
+    if !tokenizer.is_special_id(id) {
+        return Err(ModelError::InvalidArtifact {
+            artifact: TOKENIZER_FILENAME.to_owned(),
+            reason: format!("config {field} {id} is not declared as a special added token"),
+        });
+    }
+    Ok(())
+}
+
+fn validate_qwen_context_bound(
+    spec: &ModelSpec,
+    tokenizer_config: &Qwen2TokenizerConfig,
+) -> ModelResult<()> {
+    let tokenizer_max = usize::try_from(tokenizer_config.model_max_length()).map_err(|_| {
+        ModelError::NumericOverflow {
+            field: "tokenizer_config.model_max_length".to_owned(),
+        }
+    })?;
+    if tokenizer_max < spec.max_sequence_length() {
+        return Err(ModelError::InvalidArtifact {
+            artifact: TOKENIZER_CONFIG_FILENAME.to_owned(),
+            reason: format!(
+                "tokenizer model_max_length {tokenizer_max} is smaller than model context {}",
+                spec.max_sequence_length()
+            ),
+        });
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::LoadedModel;
+
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn loaded_model_remains_send_and_sync() {
+        assert_send_sync::<LoadedModel>();
+    }
 }

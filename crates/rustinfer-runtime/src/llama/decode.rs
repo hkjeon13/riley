@@ -27,8 +27,8 @@ use crate::paged_kv::{
 
 use super::forward::{
     LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, execute_gemm, poison_for_cuda_error, poison_for_forward_error,
-    span, span_mut, weight_span,
+    PreparedLlamaForwardConfig, execute_gemm, execute_projection_bias, poison_for_cuda_error,
+    poison_for_forward_error, span, span_mut, weight_span,
 };
 use super::{ExecutionSite, LlamaOp};
 
@@ -1916,6 +1916,12 @@ impl PreparedLlamaDecode {
         let key_value_heads =
             decode_u64(dimensions.key_value_heads(), LlamaDecodeResource::KeyCache)?;
         let head_size = decode_u64(dimensions.head_dimension(), LlamaDecodeResource::KeyCache)?;
+        let key_value_width =
+            key_value_heads
+                .checked_mul(head_size)
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::KeyCache,
+                })?;
         let position = decode_u64(position, LlamaDecodeResource::KeyCache)?;
         let logical_token_count =
             position
@@ -1929,12 +1935,11 @@ impl PreparedLlamaDecode {
                 .ok_or(LlamaDecodeError::ArithmeticOverflow {
                     resource: LlamaDecodeResource::GemmWorkspace,
                 })?;
-        let key_value_bytes = key_value_heads
-            .checked_mul(head_size)
-            .and_then(|elements| elements.checked_mul(BF16_BYTES))
-            .ok_or(LlamaDecodeError::ArithmeticOverflow {
+        let key_value_bytes = key_value_width.checked_mul(BF16_BYTES).ok_or(
+            LlamaDecodeError::ArithmeticOverflow {
                 resource: LlamaDecodeResource::KeyCache,
-            })?;
+            },
+        )?;
         let intermediate_bytes =
             intermediate
                 .checked_mul(BF16_BYTES)
@@ -2020,6 +2025,15 @@ impl PreparedLlamaDecode {
                 stream,
                 query_site,
             )?;
+            execute_projection_bias(
+                weights,
+                layer.query_bias(),
+                &mut buffers.hidden_projection,
+                1,
+                hidden,
+                stream,
+                query_site,
+            )?;
             let key_site = ExecutionSite::layer(layer_index, LlamaOp::KeyProjection);
             let key_weight = weight_span(weights, layer.key_weight(), key_site)?;
             execute_gemm(
@@ -2031,6 +2045,15 @@ impl PreparedLlamaDecode {
                 stream,
                 key_site,
             )?;
+            execute_projection_bias(
+                weights,
+                layer.key_bias(),
+                &mut buffers.key_raw,
+                1,
+                key_value_width,
+                stream,
+                key_site,
+            )?;
             let value_site = ExecutionSite::layer(layer_index, LlamaOp::ValueProjection);
             let value_weight = weight_span(weights, layer.value_weight(), value_site)?;
             execute_gemm(
@@ -2039,6 +2062,15 @@ impl PreparedLlamaDecode {
                 value_weight,
                 &mut buffers.value_raw,
                 &mut decode_buffers.gemm_workspace,
+                stream,
+                value_site,
+            )?;
+            execute_projection_bias(
+                weights,
+                layer.value_bias(),
+                &mut buffers.value_raw,
+                1,
+                key_value_width,
                 stream,
                 value_site,
             )?;
@@ -2219,6 +2251,15 @@ impl PreparedLlamaDecode {
                 output_weight,
                 &mut buffers.hidden_projection,
                 &mut decode_buffers.gemm_workspace,
+                stream,
+                output_site,
+            )?;
+            execute_projection_bias(
+                weights,
+                layer.output_bias(),
+                &mut buffers.hidden_projection,
+                1,
+                hidden,
                 stream,
                 output_site,
             )?;

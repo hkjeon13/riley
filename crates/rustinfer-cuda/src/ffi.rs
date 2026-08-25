@@ -42,6 +42,7 @@ const EMBEDDING_ERROR_REPORT_SIZE: u32 = 32;
 const EMBEDDING_PARAMS_SIZE: u32 = 256;
 const RMS_NORM_PARAMS_SIZE: u32 = 208;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
+const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
 const ROPE_PARAMS_SIZE: u32 = 288;
@@ -298,6 +299,17 @@ struct RawResidualAddParams {
     output: RawBufferSpan,
     element_count: u64,
     reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawRowBiasAddInPlaceParams {
+    struct_size: u32,
+    reserved0: u32,
+    matrix: RawBufferSpan,
+    bias: RawBufferSpan,
+    row_count: u64,
+    column_count: u64,
+    reserved: [u64; 4],
 }
 
 #[repr(C)]
@@ -836,6 +848,11 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_residual_add_execute(
         params: *const RawResidualAddParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_row_bias_add_in_place_execute(
+        params: *const RawRowBiasAddInPlaceParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1697,6 +1714,33 @@ pub(super) fn residual_add_execute(
         // synchronously completing native operation.
         unsafe { rustinfer_cuda_residual_add_execute(&params, stream, error) }
     })
+}
+
+pub(super) fn row_bias_add_in_place_execute(
+    matrix: RawBufferSpan,
+    bias: RawBufferSpan,
+    row_count: u64,
+    column_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRowBiasAddInPlaceParams {
+        struct_size: ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE,
+        reserved0: 0,
+        matrix,
+        bias,
+        row_count,
+        column_count,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA row-bias add in place",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and both borrowed opaque buffers remain live
+            // for the synchronously completing native operation.
+            unsafe { rustinfer_cuda_row_bias_add_in_place_execute(&params, stream, error) }
+        },
+    )
 }
 
 pub(super) fn silu_execute(
@@ -2747,6 +2791,10 @@ const _: () = assert!(offset_of!(RawEmbeddingParams, out_report) == 200);
 const _: () = assert!(size_of::<RawRmsNormParams>() == 208);
 const _: () = assert!(offset_of!(RawRmsNormParams, epsilon) == 168);
 const _: () = assert!(size_of::<RawResidualAddParams>() == 200);
+const _: () = assert!(size_of::<RawRowBiasAddInPlaceParams>() == 152);
+const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, matrix) == 8);
+const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, row_count) == 104);
+const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, reserved) == 120);
 const _: () = assert!(size_of::<RawSiluParams>() == 152);
 const _: () = assert!(size_of::<RawGatedMultiplyParams>() == 200);
 const _: () = assert!(size_of::<RawRopeParams>() == 288);

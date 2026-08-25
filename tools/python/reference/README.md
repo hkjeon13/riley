@@ -120,6 +120,53 @@ accumulation paths. The tool therefore rejects a fixture request above 16
 instead of recording a false parity result or silently selecting one path.
 This limit does not change the 32/128-token cache-on performance matrix.
 
+## PR 12 Qwen2 compatibility golden
+
+`rustinfer_reference.qwen2_compat` is a separate, deliberately narrow producer
+for `benchmarks/reference/qwen2.5-0.5b-instruct-bf16.json`. It does not change
+the SmolLM2 lane contract above. The producer binds
+`Qwen/Qwen2.5-0.5B-Instruct` revision
+`7ae557604adf67be50417f59c2c2f167def9a775` through the exact SHA-256 of
+`config.json`, `tokenizer.json`, `tokenizer_config.json`, and
+`model.safetensors`. It accepts only the pinned Linux RTX 4090 environment:
+driver 580.173.02, compute capability 8.9, Python 3.13.15, PyTorch
+2.13.0+cu130, and Transformers 5.15.1. CUDA generation is remote-only.
+
+Run the producer on `server-4096` with the already-pinned checkpoint and Python
+environment. The output remains outside the checkout and is never overwritten:
+
+```sh
+ssh server-4096
+cd /absolute/path/to/clean/rustinfer-checkout
+QWEN_PYTHON=/tmp/rustinfer-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-0c690f8a782a/bin/python
+QWEN_CHECKPOINT=/tmp/rustinfer-pr12-qwen2.5-0.5b-instruct-7ae557604adf67be50417f59c2c2f167def9a775
+QWEN_OUTPUT=/home/psyche/rustinfer-artifacts/pr12/reference-hf-v1/qwen2-compat-golden-regenerated.json
+test ! -e "$QWEN_OUTPUT"
+CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=tools/python/reference \
+  "$QWEN_PYTHON" -m rustinfer_reference.qwen2_compat generate \
+  --checkpoint "$QWEN_CHECKPOINT" \
+  --output "$QWEN_OUTPUT" \
+  --device cuda:0
+sha256sum "$QWEN_OUTPUT"
+```
+
+The producer has exactly three chat cases (English, Korean, and Rust code), an
+8-token greedy window, and an addressable tokenizer count of 151,665. It emits
+the unmasked final-logit top-10 and fixed boundary probes, while greedy decoding
+masks the model's padded vocabulary tail. Cache-on and full-prefix cache-off
+tokens must match before publication. Canonical output has SHA-256
+`42cc7f3fd04098bc4d70836ee9d18dbf919f158a010da3da6fdaa3d9deeceab7`;
+generation aborts instead of publishing if any byte drifts.
+
+Artifact validation imports neither PyTorch nor Transformers and is safe on a
+model-free CPU checkout:
+
+```sh
+PYTHONPATH=tools/python/reference \
+  python3 -m rustinfer_reference.qwen2_compat validate \
+  benchmarks/reference/qwen2.5-0.5b-instruct-bf16.json
+```
+
 ## HF eager benchmark
 
 One invocation represents one independent process run and writes a new result

@@ -13,21 +13,24 @@ mod ir;
 mod limits;
 mod model;
 mod provenance;
+mod qwen;
 mod safetensors;
 mod shard_index;
 mod strict_json;
 mod tokenizer;
 mod weights;
 
-pub use config::{ConfigWarning, LlamaConfig};
+pub use config::{ConfigWarning, LlamaConfig, ModelConfig, ModelFamily, Qwen2Config};
 pub use error::{ArtifactKind, ModelError, ModelResult};
 pub use ir::{
-    Activation, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec, LmHeadSpec,
-    ModelArchitecture, ModelSpec, NormKind, NormSpec, RopeLayout, RopeSpec, SpecialTokenSpec,
+    Activation, AttentionBiasSpec, AttentionSpec, DecoderBlockSpec, EmbeddingSpec, GatedMlpSpec,
+    LmHeadSpec, ModelArchitecture, ModelSpec, NormKind, NormSpec, RopeLayout, RopeSpec,
+    SpecialTokenSpec,
 };
 pub use limits::LoadLimits;
-pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_FILENAME};
+pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_CONFIG_FILENAME, TOKENIZER_FILENAME};
 pub use provenance::{CheckpointProvenance, PROVENANCE_FILENAME, ProvenanceFile};
+pub use qwen::{ChatMessage, ChatRole, ChatTemplateOptions, Qwen2Tokenizer, Qwen2TokenizerConfig};
 pub use tokenizer::{DecodeOptions, EncodeOptions, SmolLm2Tokenizer, Tokenizer};
 pub use weights::{
     BoundWeight, DecoderWeight, LoadedWeights, TensorSource, WeightBinding, WeightSlot,

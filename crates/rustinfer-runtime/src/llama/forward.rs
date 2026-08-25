@@ -12,8 +12,8 @@ use rustinfer_cuda::{
     CudaDeviceBuffer, CudaError, CudaErrorStage, CudaGemmConfig, CudaPinnedHostBuffer,
     CudaPreparedGemm, CudaStream, EmbeddingError, EmbeddingParams, GatedMultiplyParams, GemmParams,
     PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams,
-    RmsNormParams, RopeParams, SiluParams, embedding, gated_multiply, residual_add, rms_norm, rope,
-    silu,
+    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, embedding, gated_multiply,
+    residual_add, rms_norm, rope, row_bias_add_in_place, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -425,6 +425,30 @@ pub(super) fn execute_gemm(
         workspace,
     };
     plan.execute(&mut params, stream)
+        .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
+pub(super) fn execute_projection_bias(
+    weights: &CudaUploadedWeights,
+    bias_id: Option<PhysicalWeightId>,
+    output: &mut CudaDeviceBuffer,
+    row_count: u64,
+    column_count: u64,
+    stream: &mut CudaStream,
+    site: ExecutionSite,
+) -> LlamaForwardResult<()> {
+    let Some(bias_id) = bias_id else {
+        return Ok(());
+    };
+    let bias = weight_span(weights, bias_id, site)?;
+    let output_bytes = output.byte_len();
+    let mut params = RowBiasAddInPlaceParams {
+        matrix: span_mut(output, CudaDType::BF16, output_bytes, site)?,
+        bias,
+        row_count,
+        column_count,
+    };
+    row_bias_add_in_place(&mut params, stream)
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
@@ -1454,6 +1478,7 @@ impl PreparedLlamaForward {
             dimensions.hidden_size(),
             LlamaForwardResource::HiddenCurrent,
         )?;
+        let key_value_width = to_u64(dimensions.key_value_width(), LlamaForwardResource::KeyRaw)?;
         let query_heads = to_u64(dimensions.query_heads(), LlamaForwardResource::Attention)?;
         let key_value_heads = to_u64(dimensions.key_value_heads(), LlamaForwardResource::KeyRaw)?;
         let head_size = to_u64(
@@ -1558,6 +1583,15 @@ impl PreparedLlamaForward {
                 stream,
                 query_site,
             )?;
+            execute_projection_bias(
+                weights,
+                layer.query_bias(),
+                &mut buffers.hidden_projection,
+                sequence,
+                hidden,
+                stream,
+                query_site,
+            )?;
             if layer_index == 0 {
                 capture_trace(
                     &mut trace,
@@ -1580,6 +1614,15 @@ impl PreparedLlamaForward {
                 stream,
                 key_site,
             )?;
+            execute_projection_bias(
+                weights,
+                layer.key_bias(),
+                &mut buffers.key_raw,
+                sequence,
+                key_value_width,
+                stream,
+                key_site,
+            )?;
             if layer_index == 0 {
                 capture_trace(
                     &mut trace,
@@ -1599,6 +1642,15 @@ impl PreparedLlamaForward {
                 value_weight,
                 &mut buffers.value_raw,
                 &mut buffers.gemm_workspace,
+                stream,
+                value_site,
+            )?;
+            execute_projection_bias(
+                weights,
+                layer.value_bias(),
+                &mut buffers.value_raw,
+                sequence,
+                key_value_width,
                 stream,
                 value_site,
             )?;
@@ -1790,6 +1842,15 @@ impl PreparedLlamaForward {
                 output_weight,
                 &mut buffers.hidden_projection,
                 &mut buffers.gemm_workspace,
+                stream,
+                output_site,
+            )?;
+            execute_projection_bias(
+                weights,
+                layer.output_bias(),
+                &mut buffers.hidden_projection,
+                sequence,
+                hidden,
                 stream,
                 output_site,
             )?;

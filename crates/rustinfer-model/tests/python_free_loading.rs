@@ -178,7 +178,7 @@ fn remote_pinned_smollm2_checkpoint_matches_reference_contract() {
     );
 }
 
-fn assert_reference_encoding(tokenizer: &impl Tokenizer, text: &str, expected: &[u32]) {
+fn assert_reference_encoding(tokenizer: &dyn Tokenizer, text: &str, expected: &[u32]) {
     let actual = tokenizer
         .encode(text, EncodeOptions::default())
         .expect("Rust-native tokenizer encode must match the reference artifact");
