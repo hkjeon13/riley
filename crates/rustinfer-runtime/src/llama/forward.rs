@@ -2198,7 +2198,8 @@ fn build_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTableB
     for position in 0..plan.sequence_length() {
         for pair in 0..half {
             let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let angle = position as f32 / theta.powf(exponent);
+            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let angle = position as f32 * inverse_frequency;
             let (sine, cosine) = angle.sin_cos();
             let element = position
                 .checked_mul(half)

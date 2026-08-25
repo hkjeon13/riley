@@ -369,6 +369,21 @@ __device__ void store_f32<__nv_bfloat16>(__nv_bfloat16* values,
   values[index] = __float2bfloat16_rn(value);
 }
 
+template <typename T>
+__device__ float round_to_storage(float value) {
+  return value;
+}
+
+template <>
+__device__ float round_to_storage<__nv_bfloat16>(float value) {
+  return __bfloat162float(__float2bfloat16_rn(value));
+}
+
+template <typename T>
+__device__ float multiply_in_storage(float left, float right) {
+  return round_to_storage<T>(left * right);
+}
+
 __global__ void reset_embedding_error(
     RustInferCudaEmbeddingErrorReport* report) {
   if (blockIdx.x == 0 && threadIdx.x == 0) {
@@ -459,8 +474,12 @@ __global__ void rms_norm_kernel(const T* input, const T* weight, T* output,
     for (uint64_t column = threadIdx.x; column < hidden_size;
          column += blockDim.x) {
       const float normalized = load_f32(input, base + column) * inverse_rms;
+      // Hugging Face Llama RMSNorm converts the normalized FP32 activation
+      // back to the input dtype before multiplying by the dtype-matched
+      // learned weight. Preserve that explicit BF16 boundary here.
+      const float normalized_for_weight = round_to_storage<T>(normalized);
       store_f32(output, base + column,
-                normalized * load_f32(weight, column));
+                normalized_for_weight * load_f32(weight, column));
     }
     __syncthreads();
   }
@@ -525,12 +544,20 @@ __global__ void rope_kernel(const T* input, const float* cos,
       const uint64_t table_index = (position_offset + token) * half + unit;
       const float first_value = load_f32(input, first_index);
       const float second_value = load_f32(input, second_index);
-      const float cosine = cos[table_index];
-      const float sine = sin[table_index];
+      // The pinned Llama implementation casts its FP32 rotary tables to the
+      // query dtype, rounds each elementwise product in that dtype, and only
+      // then performs the final add. Model those BF16 boundaries explicitly;
+      // the F32 specialization remains algebraically unchanged.
+      const float cosine = round_to_storage<T>(cos[table_index]);
+      const float sine = round_to_storage<T>(sin[table_index]);
+      const float first_cosine = multiply_in_storage<T>(first_value, cosine);
+      const float second_sine = multiply_in_storage<T>(second_value, sine);
+      const float second_cosine = multiply_in_storage<T>(second_value, cosine);
+      const float first_sine = multiply_in_storage<T>(first_value, sine);
       store_f32(output, first_index,
-                first_value * cosine - second_value * sine);
+                first_cosine - second_sine);
       store_f32(output, second_index,
-                second_value * cosine + first_value * sine);
+                second_cosine + first_sine);
     } else {
       const uint64_t dimension = rotary_dimension + (unit - half);
       // The non-rotary tail is an exact storage copy, including NaN payloads.
