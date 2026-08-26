@@ -88,6 +88,57 @@ fn finish_with_cleanup<const N: usize>(
     failure.map_or(Ok(()), Err)
 }
 
+fn capture_phase(
+    variant: ReductionVariant,
+    phase: &'static str,
+    operation: impl FnOnce() -> ProducerResult<()>,
+) -> ProducerResult<()> {
+    eprintln!(
+        "rustinfer-native-calibration event=start variant={} phase={phase}",
+        variant.id()
+    );
+    match operation() {
+        Ok(()) => {
+            eprintln!(
+                "rustinfer-native-calibration event=complete variant={} phase={phase}",
+                variant.id()
+            );
+            Ok(())
+        }
+        Err(error) => {
+            eprintln!(
+                "rustinfer-native-calibration event=failed variant={} phase={phase}",
+                variant.id()
+            );
+            Err(NativeCalibrationError::context(
+                error,
+                &format!("capture phase={phase} variant={}", variant.id()),
+            ))
+        }
+    }
+}
+
+fn require_cache_off_exact_token(
+    prompt_id: &str,
+    variant: ReductionVariant,
+    step: usize,
+    cache_on_token_ids: &[u32],
+    observed: u32,
+) -> ProducerResult<()> {
+    if step >= CROSS_CACHE_EXACT_WINDOW {
+        return Ok(());
+    }
+    let expected = cache_on_token_ids.get(step).copied();
+    if expected == Some(observed) {
+        return Ok(());
+    }
+    Err(NativeCalibrationError::new(format!(
+        "phase=cache-off prompt_id={prompt_id} variant={} step={step} \
+expected={expected:?} observed={observed} exact_window={CROSS_CACHE_EXACT_WINDOW}",
+        variant.id()
+    )))
+}
+
 #[derive(Clone, Debug)]
 struct CaseState {
     prompt: PromptRecord,
@@ -627,18 +678,26 @@ fn capture_all_variants(
         .map_err(|error| NativeCalibrationError::context(error, "prepare fixed37 log-softmax"))?;
     let operation = (|| {
         for variant in crate::REQUIRED_REDUCTION_VARIANTS {
-            capture_numeric_variant(
-                model,
-                context,
-                stream,
-                sidecar,
-                cases,
-                variant,
-                &mut fixed_log_softmax,
-            )?;
-            capture_cache_on_variant(model, context, stream, cases, variant)?;
-            capture_cache_off_variant(model, context, stream, cases, variant)?;
-            validate_variant_semantics(cases, variant)?;
+            capture_phase(variant, "numeric", || {
+                capture_numeric_variant(
+                    model,
+                    context,
+                    stream,
+                    sidecar,
+                    cases,
+                    variant,
+                    &mut fixed_log_softmax,
+                )
+            })?;
+            capture_phase(variant, "cache-on", || {
+                capture_cache_on_variant(model, context, stream, cases, variant)
+            })?;
+            capture_phase(variant, "cache-off", || {
+                capture_cache_off_variant(model, context, stream, cases, variant)
+            })?;
+            capture_phase(variant, "semantic-validation", || {
+                validate_variant_semantics(cases, variant)
+            })?;
         }
         Ok(())
     })();
@@ -882,14 +941,34 @@ fn capture_cache_off_variant(
             let sequence_length = base_length
                 .checked_add(generated_count)
                 .ok_or_else(|| NativeCalibrationError::new("cache-off length overflow"))?;
+            let active_count = active.len();
+            eprintln!(
+                "rustinfer-native-calibration event=start variant={} phase=cache-off-step \
+base_length={base_length} sequence_length={sequence_length} step={generated_count} \
+active_cases={active_count}",
+                variant.id()
+            );
             let config = PreparedLlamaForwardConfig::default().with_reduction_profile(profile);
-            let mut forward =
-                PreparedLlamaForward::prepare(model, context, stream, sequence_length, config)
-                    .map_err(|error| {
-                        NativeCalibrationError::context(error, "prepare growing-prefix forward")
-                    })?;
+            let mut forward = PreparedLlamaForward::prepare(
+                model,
+                context,
+                stream,
+                sequence_length,
+                config,
+            )
+            .map_err(|error| {
+                NativeCalibrationError::context(
+                    error,
+                    &format!(
+                        "prepare growing-prefix forward variant={} base_length={base_length} \
+sequence_length={sequence_length} step={generated_count}",
+                        variant.id()
+                    ),
+                )
+            })?;
             let operation = (|| {
                 for index in active {
+                    let prompt_id = &cases[index].prompt.prompt_id;
                     let generated = &cases[index]
                         .variants
                         .get(variant.id())
@@ -906,11 +985,38 @@ fn capture_cache_off_variant(
                         .forward(&prefix, stream)
                         .and_then(|()| forward.download_last_logits(&mut logits, stream))
                         .map_err(|error| {
-                            NativeCalibrationError::context(error, "execute cache-off forward")
+                            NativeCalibrationError::context(
+                                error,
+                                &format!(
+                                    "execute cache-off forward prompt_id={prompt_id} \
+variant={} sequence_length={sequence_length} step={generated_count}",
+                                    variant.id()
+                                ),
+                            )
                         })?;
                     let (next, _) = ranked_top_k_bf16(&logits).map_err(|error| {
-                        NativeCalibrationError::context(error, "rank cache-off logits")
+                        NativeCalibrationError::context(
+                            error,
+                            &format!(
+                                "rank cache-off logits prompt_id={prompt_id} variant={} \
+sequence_length={sequence_length} step={generated_count}",
+                                variant.id()
+                            ),
+                        )
                     })?;
+                    let cache_on_token_ids = &cases[index]
+                        .variants
+                        .get(variant.id())
+                        .and_then(|state| state.cache_on.as_ref())
+                        .ok_or_else(|| NativeCalibrationError::new("cache-on state is absent"))?
+                        .generated_token_ids;
+                    require_cache_off_exact_token(
+                        prompt_id,
+                        variant,
+                        generated_count,
+                        cache_on_token_ids,
+                        next,
+                    )?;
                     let path = cases[index]
                         .variants
                         .get_mut(variant.id())
@@ -924,9 +1030,22 @@ fn capture_cache_off_variant(
                 Ok(())
             })();
             let close = forward.close().map_err(|error| {
-                NativeCalibrationError::context(error, "close growing-prefix forward")
+                NativeCalibrationError::context(
+                    error,
+                    &format!(
+                        "close growing-prefix forward variant={} base_length={base_length} \
+sequence_length={sequence_length} step={generated_count}",
+                        variant.id()
+                    ),
+                )
             });
             finish_with_cleanup(operation, [close])?;
+            eprintln!(
+                "rustinfer-native-calibration event=complete variant={} phase=cache-off-step \
+base_length={base_length} sequence_length={sequence_length} step={generated_count} \
+active_cases={active_count}",
+                variant.id()
+            );
         }
     }
     finalize_cache_off_paths(cases, variant)
@@ -937,11 +1056,25 @@ fn initialize_cache_off_paths(
     variant: ReductionVariant,
 ) -> ProducerResult<()> {
     for case in cases.iter_mut() {
-        let top_1 = case
+        let state = case
             .variants
             .get(variant.id())
-            .and_then(|state| state.top_1_token_id)
+            .ok_or_else(|| NativeCalibrationError::new("numeric variant is absent"))?;
+        let top_1 = state
+            .top_1_token_id
             .ok_or_else(|| NativeCalibrationError::new("numeric top-1 is absent"))?;
+        let cache_on_token_ids = &state
+            .cache_on
+            .as_ref()
+            .ok_or_else(|| NativeCalibrationError::new("cache-on state is absent"))?
+            .generated_token_ids;
+        require_cache_off_exact_token(
+            &case.prompt.prompt_id,
+            variant,
+            0,
+            cache_on_token_ids,
+            top_1,
+        )?;
         let stop_reason = (top_1 == EOS_TOKEN_ID).then_some("eos");
         case.variants
             .get_mut(variant.id())
@@ -1345,7 +1478,11 @@ fn write_json_exclusive(path: &Path, value: &Value) -> ProducerResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{cuda_version_text, semantic_stop_reason};
+    use super::{
+        NativeCalibrationError, capture_phase, cuda_version_text, finish_with_cleanup,
+        require_cache_off_exact_token, semantic_stop_reason,
+    };
+    use crate::ReductionVariant;
     use rustinfer_runtime::generation::FinishReason;
 
     #[test]
@@ -1360,5 +1497,51 @@ mod tests {
             "max_new_tokens"
         );
         assert!(semantic_stop_reason(Some(FinishReason::Cancelled)).is_err());
+    }
+
+    #[test]
+    fn cache_off_exact_window_fails_fast_at_the_declared_boundary() {
+        let variant = ReductionVariant::FixedContiguous37Balanced;
+        let cache_on = (100_u32..116).collect::<Vec<_>>();
+        require_cache_off_exact_token("prompt", variant, 0, &cache_on, 100)
+            .expect("step zero matches");
+        require_cache_off_exact_token("prompt", variant, 15, &cache_on, 115)
+            .expect("last exact-window step matches");
+
+        let mismatch = require_cache_off_exact_token("prompt", variant, 15, &cache_on, 999)
+            .expect_err("step fifteen mismatch fails");
+        let diagnostic = mismatch.to_string();
+        assert!(diagnostic.contains("prompt_id=prompt"));
+        assert!(diagnostic.contains("variant=fixed-contiguous-37-balanced-v1"));
+        assert!(diagnostic.contains("step=15"));
+        assert!(diagnostic.contains("expected=Some(115) observed=999"));
+
+        require_cache_off_exact_token("prompt", variant, 16, &cache_on, 999)
+            .expect("the contract permits divergence after the exact window");
+        let missing = require_cache_off_exact_token("prompt", variant, 1, &[100], 101)
+            .expect_err("missing cache-on token inside the window fails");
+        assert!(missing.to_string().contains("expected=None observed=101"));
+    }
+
+    #[test]
+    fn phase_context_and_cleanup_preserve_the_primary_failure() {
+        let phase = capture_phase(ReductionVariant::Canonical, "test-phase", || {
+            Err(NativeCalibrationError::new("phase source"))
+        })
+        .expect_err("injected phase failure");
+        assert_eq!(
+            phase.to_string(),
+            "capture phase=test-phase variant=canonical-v1: phase source"
+        );
+
+        let combined = finish_with_cleanup(
+            Err(NativeCalibrationError::new("semantic mismatch")),
+            [Err(NativeCalibrationError::new("close failure"))],
+        )
+        .expect_err("primary and cleanup both fail");
+        assert_eq!(
+            combined.to_string(),
+            "semantic mismatch; cleanup also failed: close failure"
+        );
     }
 }
