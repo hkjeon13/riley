@@ -300,7 +300,7 @@ fn run_contiguous(
         }
         observed = Some(current);
     }
-    if let Some(mut workspace) = workspace {
+    if let Some(workspace) = workspace {
         workspace.close()?;
     }
     output.close()?;
@@ -490,7 +490,7 @@ fn run_paged(
         }
         observed = Some(current);
     }
-    if let Some(mut workspace) = workspace {
+    if let Some(workspace) = workspace {
         workspace.close()?;
     }
     output.close()?;
