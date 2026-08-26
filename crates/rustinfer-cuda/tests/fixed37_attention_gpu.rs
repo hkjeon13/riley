@@ -306,9 +306,9 @@ fn fixed37_materialized_two_pass_local_and_cpu_oracle_agree() -> TestResult {
             .max(value_bytes.len()),
     )?;
     let mut staging = context.allocate_pinned_host_buffer(staging_len)?;
-    let mut query = upload(&context, &mut stream, &mut staging, &query_bytes)?;
-    let mut key = upload(&context, &mut stream, &mut staging, &key_bytes)?;
-    let mut value = upload(&context, &mut stream, &mut staging, &value_bytes)?;
+    let query = upload(&context, &mut stream, &mut staging, &query_bytes)?;
+    let key = upload(&context, &mut stream, &mut staging, &key_bytes)?;
+    let value = upload(&context, &mut stream, &mut staging, &value_bytes)?;
     let mut materialized_output =
         context.allocate_device_buffer(u64::try_from(query_bytes.len())?)?;
     let mut two_pass_output = context.allocate_device_buffer(u64::try_from(query_bytes.len())?)?;
@@ -487,9 +487,9 @@ fn fixed37_two_pass_short_sequences_reserve_both_partial_arrays() -> TestResult 
         let ones = vec![1.0_f32; sequence * D];
         let zero_bytes = encode_bf16(&zeros);
         let one_bytes = encode_bf16(&ones);
-        let mut query = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
-        let mut key = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
-        let mut value = upload(&context, &mut stream, &mut staging, &one_bytes)?;
+        let query = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
+        let key = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
+        let value = upload(&context, &mut stream, &mut staging, &one_bytes)?;
         let mut output = context.allocate_device_buffer(u64::try_from(zero_bytes.len())?)?;
         let prepared = PreparedPrefillAttention::select_with_reduction_profile(
             &context,
@@ -560,8 +560,8 @@ fn fixed37_qk_and_av_order_witnesses_survive_bf16_rounding() -> TestResult {
         .fold(0.0_f32, |sum, (&left, &right)| left.mul_add(right, sum));
     assert_ne!(f32_to_bf16_bits(fixed_qk), f32_to_bf16_bits(flat_qk));
     let mut staging = context.allocate_pinned_host_buffer((74 * 74 * 2) as u64)?;
-    let mut query = upload(&context, &mut stream, &mut staging, &encode_bf16(&qk_left))?;
-    let mut key = upload(&context, &mut stream, &mut staging, &encode_bf16(&qk_right))?;
+    let query = upload(&context, &mut stream, &mut staging, &encode_bf16(&qk_left))?;
+    let key = upload(&context, &mut stream, &mut staging, &encode_bf16(&qk_right))?;
     let mut scores = context.allocate_device_buffer(2)?;
     let mut qk_params = QkGqaParams {
         query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
@@ -589,13 +589,13 @@ fn fixed37_qk_and_av_order_witnesses_survive_bf16_rounding() -> TestResult {
         .fold(0.0_f32, |sum, (&left, &right)| left.mul_add(right, sum));
     assert_ne!(f32_to_bf16_bits(fixed_av), f32_to_bf16_bits(flat_av));
     let probabilities_matrix = probabilities_host.repeat(S);
-    let mut probabilities = upload(
+    let probabilities = upload(
         &context,
         &mut stream,
         &mut staging,
         &encode_bf16(&probabilities_matrix),
     )?;
-    let mut values = upload(
+    let values = upload(
         &context,
         &mut stream,
         &mut staging,
@@ -675,8 +675,8 @@ fn fixed37_softmax_special_rows_are_complete_qnan_rows() -> TestResult {
 
     let probability_bytes = encode_bf16(&[1.0, 0.0, 1.0, 0.0]);
     let value_bytes = encode_bf16(&[1.0, f32::INFINITY]);
-    let mut probabilities = upload(&context, &mut stream, &mut staging, &probability_bytes)?;
-    let mut values = upload(&context, &mut stream, &mut staging, &value_bytes)?;
+    let probabilities = upload(&context, &mut stream, &mut staging, &probability_bytes)?;
+    let values = upload(&context, &mut stream, &mut staging, &value_bytes)?;
     let mut av_output = context.allocate_device_buffer(4)?;
     let mut av_params = AvGqaParams {
         probabilities: CudaBufferSpan::new(&probabilities, CudaDType::BF16, 0, 8)?,
@@ -714,9 +714,9 @@ fn fixed37_s8192_bound_and_softmax_order_witness() -> TestResult {
     let softmax_bytes = SOFTMAX_S * SOFTMAX_S * 2;
     let mut staging =
         context.allocate_pinned_host_buffer(u64::try_from(zero_bytes.len().max(softmax_bytes))?)?;
-    let mut query = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
-    let mut key = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
-    let mut value = upload(&context, &mut stream, &mut staging, &one_bytes)?;
+    let query = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
+    let key = upload(&context, &mut stream, &mut staging, &zero_bytes)?;
+    let value = upload(&context, &mut stream, &mut staging, &one_bytes)?;
     let mut output = context.allocate_device_buffer(u64::try_from(zero_bytes.len())?)?;
     let prepared = PreparedPrefillAttention::select_with_reduction_profile(
         &context,
