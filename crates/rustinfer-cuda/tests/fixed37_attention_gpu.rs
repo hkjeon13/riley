@@ -388,7 +388,7 @@ fn fixed37_materialized_two_pass_local_and_cpu_oracle_agree() -> TestResult {
         .enumerate()
     {
         assert!(
-            (actual - expected).abs() <= 0.015625,
+            (actual - expected).abs() <= 0.015_625,
             "causal output[{index}] expected {expected}, got {actual}"
         );
     }
@@ -459,7 +459,7 @@ fn fixed37_materialized_two_pass_local_and_cpu_oracle_agree() -> TestResult {
     );
     for (index, (&actual, &expected)) in local_actual.iter().zip(&local_expected).enumerate() {
         assert!(
-            (actual - expected).abs() <= 0.015625,
+            (actual - expected).abs() <= 0.015_625,
             "local37 output[{index}] expected {expected}, got {actual}"
         );
     }
@@ -522,7 +522,8 @@ fn fixed37_two_pass_short_sequences_reserve_both_partial_arrays() -> TestResult 
         )?;
         let actual = download(&context, &mut stream, &mut output)?;
         for query_token in 0..sequence {
-            let probability = round_bf16(1.0 / (query_token + 1) as f32);
+            let visible_count = f32::from(u16::try_from(query_token + 1)?);
+            let probability = round_bf16(1.0 / visible_count);
             let mut contributions = vec![0.0_f32; sequence];
             contributions[..=query_token].fill(probability);
             let expected = f32_to_bf16_bits(fixed37_sum(&contributions));
@@ -548,6 +549,7 @@ fn fixed37_two_pass_short_sequences_reserve_both_partial_arrays() -> TestResult 
 #[test]
 #[ignore = "requires remote CUDA GPU"]
 fn fixed37_qk_and_av_order_witnesses_survive_bf16_rounding() -> TestResult {
+    const S: usize = 74;
     let (context, mut stream) = first_context()?;
     let mut qk_left = vec![1.0_f32; D];
     qk_left[0] = 16_777_216.0;
@@ -577,7 +579,6 @@ fn fixed37_qk_and_av_order_witnesses_survive_bf16_rounding() -> TestResult {
     let qk_bits = u16::from_ne_bytes([qk_bytes[0], qk_bytes[1]]);
     assert_eq!(qk_bits, f32_to_bf16_bits(fixed_qk));
 
-    const S: usize = 74;
     let mut probabilities_host = vec![1.0_f32; S];
     probabilities_host[0] = 16_777_216.0;
     probabilities_host[S - 1] = -16_777_216.0;
@@ -741,7 +742,8 @@ fn fixed37_s8192_bound_and_softmax_order_witness() -> TestResult {
     )?;
     let output_bytes = download(&context, &mut stream, &mut output)?;
     for query_token in [0_usize, 36, 37, S - 1] {
-        let probability = round_bf16(1.0 / (query_token + 1) as f32);
+        let visible_count = f32::from(u16::try_from(query_token + 1)?);
+        let probability = round_bf16(1.0 / visible_count);
         let mut contributions = vec![0.0_f32; S];
         contributions[..=query_token].fill(probability);
         let expected_bits = f32_to_bf16_bits(fixed37_sum(&contributions));
