@@ -1123,6 +1123,42 @@ RustInferCudaStatus rustinfer_cuda_av_gqa_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
+// Fixed-contiguous-37 materialized attention siblings. Every reduction axis
+// is split into ascending chunks of 37 elements. Each chunk is accumulated by
+// an ascending F32 left fold, then adjacent partials are merged by a balanced
+// binary tree with odd carry. QK and AV round once to BF16 after their complete
+// dot product. The existing scale/causal-mask primitive stages the canonical
+// finite BF16-minimum mask. Softmax reduces the complete logical S axis,
+// including masked entries, and rounds each probability to BF16 before AV.
+// A row containing NaN, with a +Inf maximum, or containing only -Inf becomes
+// a complete canonical BF16 qNaN row (bits 0x7fff). With a finite maximum,
+// -Inf entries produce zero probability; because AV consumes the rounded BF16
+// probabilities, zero probability multiplied by an infinite value produces the
+// same canonical BF16 qNaN result.
+RustInferCudaStatus rustinfer_cuda_fixed37_qk_gqa_execute(
+    const RustInferCudaQkGqaParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_fixed37_causal_softmax_in_place_execute(
+    const RustInferCudaCausalSoftmaxParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_fixed37_av_gqa_execute(
+    const RustInferCudaAvGqaParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Fixed37 no-HBM two-pass prefill. The current implementation requires D=64
+// and S<=8192, uses no caller workspace, and has the same dense BSHD and mask
+// contract as RustInferCudaPrefillAttentionParams except that CAUSAL_LOCAL with
+// local_window_size=0 returns NOT_SUPPORTED. Its two score passes reproduce the
+// materialized raw-BF16 -> scaled-BF16 -> finite-min-mask-BF16 staging and the
+// same fixed37 maximum, denominator, BF16-probability, and AV reduction order.
+RustInferCudaStatus rustinfer_cuda_fixed37_prefill_attention_execute(
+    const RustInferCudaPrefillAttentionParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
 // Executes the dense online-softmax prefill contract above synchronously on
 // stream. Unsupported head dimensions return NOT_SUPPORTED before launching.
 RustInferCudaStatus rustinfer_cuda_prefill_attention_execute(

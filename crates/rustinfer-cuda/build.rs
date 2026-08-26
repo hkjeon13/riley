@@ -167,6 +167,7 @@ fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
         kernels_dir.join("src/batch_primitives.cu"),
         kernels_dir.join("src/decode_attention.cu"),
         kernels_dir.join("src/fixed37_gemm.cu"),
+        kernels_dir.join("src/fixed37_attention.cu"),
         kernels_dir.join("src/fixed37_primitives.cu"),
         kernels_dir.join("src/fixed37_reduction.cuh"),
         kernels_dir.join("src/gemm.cu"),

@@ -406,9 +406,23 @@ static RustInferCudaStatus (*const causal_softmax_symbol)(
 static RustInferCudaStatus (*const av_gqa_symbol)(
     const RustInferCudaAvGqaParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_av_gqa_execute;
+static RustInferCudaStatus (*const fixed37_qk_gqa_symbol)(
+    const RustInferCudaQkGqaParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_qk_gqa_execute;
+static RustInferCudaStatus (*const fixed37_causal_softmax_symbol)(
+    const RustInferCudaCausalSoftmaxParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_causal_softmax_in_place_execute;
+static RustInferCudaStatus (*const fixed37_av_gqa_symbol)(
+    const RustInferCudaAvGqaParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_av_gqa_execute;
 static RustInferCudaStatus (*const prefill_attention_symbol)(
     const RustInferCudaPrefillAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_prefill_attention_execute;
+static RustInferCudaStatus (*const fixed37_prefill_attention_symbol)(
+    const RustInferCudaPrefillAttentionParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_prefill_attention_execute;
 static RustInferCudaStatus (*const kv_cache_write_symbol)(
     const RustInferCudaKvCacheWriteParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_kv_cache_write_execute;
@@ -486,9 +500,13 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&rope_symbol,           (const void*)&indexed_rope_symbol,
     (const void*)&cast_symbol,           (const void*)&row_gather_symbol,
     (const void*)&qk_gqa_symbol,
+    (const void*)&fixed37_qk_gqa_symbol,
     (const void*)&scale_causal_mask_symbol,
-    (const void*)&causal_softmax_symbol, (const void*)&av_gqa_symbol,
+    (const void*)&causal_softmax_symbol,
+    (const void*)&fixed37_causal_softmax_symbol,
+    (const void*)&av_gqa_symbol, (const void*)&fixed37_av_gqa_symbol,
     (const void*)&prefill_attention_symbol,
+    (const void*)&fixed37_prefill_attention_symbol,
     (const void*)&kv_cache_write_symbol,
     (const void*)&decode_attention_reference_symbol,
     (const void*)&decode_attention_symbol,

@@ -1167,6 +1167,26 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_fixed37_qk_gqa_execute(
+        params: *const RawQkGqaParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_causal_softmax_in_place_execute(
+        params: *const RawCausalSoftmaxParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_av_gqa_execute(
+        params: *const RawAvGqaParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_prefill_attention_execute(
+        params: *const RawPrefillAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_prefill_attention_execute(
         params: *const RawPrefillAttentionParams,
         stream: *mut RawStream,
@@ -2424,6 +2444,36 @@ pub(super) fn qk_gqa_execute(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_qk_gqa_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawQkGqaParams {
+        struct_size: QK_GQA_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key,
+        output,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("execute fixed37 CUDA QK GQA", stream, |stream, error| {
+        // SAFETY: the descriptor and borrowed native handles remain live until
+        // the synchronous fixed37 operation completes.
+        unsafe { rustinfer_cuda_fixed37_qk_gqa_execute(&params, stream, error) }
+    })
+}
+
 pub(super) fn scale_causal_mask_in_place_execute(
     scores: RawBufferSpan,
     token_count: u64,
@@ -2473,6 +2523,33 @@ pub(super) fn causal_softmax_in_place_execute(
     })
 }
 
+pub(super) fn fixed37_causal_softmax_in_place_execute(
+    scores: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawCausalSoftmaxParams {
+        struct_size: CAUSAL_SOFTMAX_PARAMS_SIZE,
+        reserved0: 0,
+        scores,
+        token_count,
+        query_head_count,
+        reserved: [0; 5],
+    };
+    primitive_status(
+        "execute fixed37 CUDA causal softmax",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and exclusively borrowed score buffer remain
+            // live until the synchronous native operation completes.
+            unsafe {
+                rustinfer_cuda_fixed37_causal_softmax_in_place_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn av_gqa_execute(
     probabilities: RawBufferSpan,
@@ -2500,6 +2577,36 @@ pub(super) fn av_gqa_execute(
         // SAFETY: the fixed-layout descriptor and every borrowed native handle
         // remain live for the synchronously completing native call.
         unsafe { rustinfer_cuda_av_gqa_execute(&params, stream, error) }
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_av_gqa_execute(
+    probabilities: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawAvGqaParams {
+        struct_size: AV_GQA_PARAMS_SIZE,
+        reserved0: 0,
+        probabilities,
+        value,
+        output,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        reserved: [0; 4],
+    };
+    primitive_status("execute fixed37 CUDA AV GQA", stream, |stream, error| {
+        // SAFETY: the descriptor and borrowed native handles remain live until
+        // the synchronous fixed37 operation completes.
+        unsafe { rustinfer_cuda_fixed37_av_gqa_execute(&params, stream, error) }
     })
 }
 
@@ -2543,6 +2650,50 @@ pub(super) fn prefill_attention_execute(
             // SAFETY: the descriptor and all opaque resources remain live for the
             // synchronously completing native call.
             unsafe { rustinfer_cuda_prefill_attention_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_prefill_attention_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    batch_size: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    mask_kind: u32,
+    local_window: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPrefillAttentionParams {
+        struct_size: PREFILL_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key,
+        value,
+        output,
+        batch_size,
+        token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        mask_kind,
+        local_window,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA two-pass prefill attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and all opaque resources remain live until
+            // the synchronous native operation completes.
+            unsafe { rustinfer_cuda_fixed37_prefill_attention_execute(&params, stream, error) }
         },
     )
 }
@@ -3058,6 +3209,74 @@ pub(super) fn prefill_attention_reference_execute(
         )?;
         causal_softmax_in_place_execute(workspace, token_count, query_head_count, stream)?;
         av_gqa_execute(
+            workspace,
+            value_batch,
+            output_batch,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            stream,
+        )?;
+    }
+    Ok(())
+}
+
+/// Runs fixed37 QK/softmax/AV for every dense batch while reusing one
+/// `[QH,S,S]` BF16 workspace. Score scale and finite-minimum causal masking
+/// intentionally reuse the canonical elementwise staging primitive.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn prefill_attention_fixed37_materialized_execute(
+    query: RawBufferSpan,
+    key: RawBufferSpan,
+    value: RawBufferSpan,
+    output: RawBufferSpan,
+    workspace: RawBufferSpan,
+    batch_size: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    const OPERATION: &str = "execute fixed37 CUDA materialized prefill attention";
+    let query_batch_bytes =
+        raw_bf16_product(OPERATION, &[token_count, query_head_count, head_size])?;
+    let key_value_batch_bytes =
+        raw_bf16_product(OPERATION, &[token_count, key_value_head_count, head_size])?;
+
+    for batch in 0..batch_size {
+        let query_offset = batch.checked_mul(query_batch_bytes).ok_or_else(|| {
+            CudaError::out_of_range(OPERATION, "query batch offset overflows u64")
+        })?;
+        let key_value_offset = batch.checked_mul(key_value_batch_bytes).ok_or_else(|| {
+            CudaError::out_of_range(OPERATION, "key/value batch offset overflows u64")
+        })?;
+        let query_batch = raw_subspan(query, query_offset, query_batch_bytes, OPERATION)?;
+        let key_batch = raw_subspan(key, key_value_offset, key_value_batch_bytes, OPERATION)?;
+        let value_batch = raw_subspan(value, key_value_offset, key_value_batch_bytes, OPERATION)?;
+        let output_batch = raw_subspan(output, query_offset, query_batch_bytes, OPERATION)?;
+
+        fixed37_qk_gqa_execute(
+            query_batch,
+            key_batch,
+            workspace,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            stream,
+        )?;
+        scale_causal_mask_in_place_execute(
+            workspace,
+            token_count,
+            query_head_count,
+            scale,
+            stream,
+        )?;
+        fixed37_causal_softmax_in_place_execute(workspace, token_count, query_head_count, stream)?;
+        fixed37_av_gqa_execute(
             workspace,
             value_batch,
             output_batch,

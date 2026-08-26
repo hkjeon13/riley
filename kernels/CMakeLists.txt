@@ -21,6 +21,7 @@ add_library(rustinfer_cuda_native STATIC
     src/batch_primitives.cu
     src/decode_attention.cu
     src/fixed37_gemm.cu
+    src/fixed37_attention.cu
     src/fixed37_primitives.cu
     src/gemm.cu
     src/host_runtime.cu

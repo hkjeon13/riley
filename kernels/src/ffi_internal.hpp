@@ -185,6 +185,14 @@ static_assert(offsetof(RustInferCudaBufferSpan, buffer) == 8,
               "RustInferCudaBufferSpan ABI handle offset changed");
 static_assert(offsetof(RustInferCudaBufferSpan, reserved) == 32,
               "RustInferCudaBufferSpan ABI tail changed");
+static_assert(sizeof(RustInferCudaQkGqaParams) == 216,
+              "QK GQA params ABI size changed");
+static_assert(sizeof(RustInferCudaCausalSoftmaxParams) == 112,
+              "causal softmax params ABI size changed");
+static_assert(sizeof(RustInferCudaAvGqaParams) == 216,
+              "AV GQA params ABI size changed");
+static_assert(sizeof(RustInferCudaPrefillAttentionParams) == 288,
+              "prefill attention params ABI size changed");
 static_assert(sizeof(RustInferCudaEmbeddingErrorReport) == 32,
               "RustInferCudaEmbeddingErrorReport ABI size changed");
 static_assert(offsetof(RustInferCudaEmbeddingErrorReport, token_position) == 8,

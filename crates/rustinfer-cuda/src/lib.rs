@@ -19,7 +19,8 @@ mod runtime;
 
 pub use attention::{
     AvGqaParams, CausalSoftmaxInPlaceParams, QkGqaParams, ScaleCausalMaskInPlaceParams, av_gqa,
-    causal_softmax_in_place, qk_gqa, scale_causal_mask_in_place,
+    causal_softmax_in_place, fixed37_av_gqa, fixed37_causal_softmax_in_place, fixed37_qk_gqa,
+    qk_gqa, scale_causal_mask_in_place,
 };
 pub use batch::{
     IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE, PACKED_BATCH_VERSION, PackedBatchHostV1,
@@ -50,9 +51,10 @@ pub use memory::{
 pub use memory::{CudaMemoryFault, CudaMemoryFaultStats};
 pub use prefill::{
     AttentionBackend, AttentionBackendAvailability, AttentionCapability, AttentionLayout,
-    AttentionMask, AttentionMode, AttentionPreference, AttentionScoreMaterialization,
-    AttentionSelectionReason, AttentionSelectionTrace, OnlineSoftmaxError, OnlineSoftmaxState,
-    PrefillAttentionParams, PrefillAttentionRequest, PreparedPrefillAttention,
+    AttentionMask, AttentionMode, AttentionPreference, AttentionReductionProfile,
+    AttentionScoreMaterialization, AttentionSelectionReason, AttentionSelectionTrace,
+    OnlineSoftmaxError, OnlineSoftmaxState, PrefillAttentionParams, PrefillAttentionRequest,
+    PreparedPrefillAttention,
 };
 pub use primitives::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,

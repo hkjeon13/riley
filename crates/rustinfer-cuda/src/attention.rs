@@ -1,6 +1,7 @@
 //! Correctness-first, materialized BF16 GQA attention primitives.
 
-use crate::error::{CudaError, CudaResult};
+use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+use crate::gemm::FIXED37_MAX_REDUCTION_ELEMENTS;
 use crate::memory::CudaDeviceBuffer;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
 use crate::runtime::{CudaStream, ensure_same_context};
@@ -64,6 +65,59 @@ pub fn qk_gqa(params: &mut QkGqaParams<'_>, stream: &mut CudaStream) -> CudaResu
     #[cfg(feature = "cuda")]
     {
         ffi::qk_gqa_execute(
+            params.query.raw(),
+            params.key.raw(),
+            params.output.raw(),
+            params.token_count,
+            params.query_head_count,
+            params.key_value_head_count,
+            params.head_size,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Computes QK with ascending 37-element F32 left folds and an adjacent
+/// balanced tree over the depth-axis partials.
+///
+/// # Errors
+///
+/// Returns [`CudaErrorKind::NotSupported`] when `D` exceeds the fixed37
+/// partial capacity, in addition to the errors documented by [`qk_gqa`].
+pub fn fixed37_qk_gqa(params: &mut QkGqaParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_qk_gqa";
+    validate_fixed37_axis(OPERATION, params.head_size)?;
+    let shape = validate_gqa_shape(
+        OPERATION,
+        params.token_count,
+        params.query_head_count,
+        params.key_value_head_count,
+        params.head_size,
+    )?;
+    require_bf16(OPERATION, "query", params.query.dtype())?;
+    require_bf16(OPERATION, "key", params.key.dtype())?;
+    require_bf16(OPERATION, "output", params.output.dtype())?;
+    require_capacity(OPERATION, "query", params.query.byte_len(), shape.query)?;
+    require_capacity(OPERATION, "key", params.key.byte_len(), shape.key_value)?;
+    require_capacity(OPERATION, "output", params.output.byte_len(), shape.scores)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.query.buffer(),
+            params.key.buffer(),
+            params.output.buffer(),
+        ],
+    )?;
+
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_qk_gqa_execute(
             params.query.raw(),
             params.key.raw(),
             params.output.raw(),
@@ -179,6 +233,43 @@ pub fn causal_softmax_in_place(
     }
 }
 
+/// Applies softmax with fixed37 maximum and denominator reductions over the
+/// complete logical `S` axis, then rounds every probability to BF16.
+///
+/// NaN input, a `+Inf` maximum, or an all-`-Inf` row produces a complete BF16
+/// NaN row. Finite canonical causal-mask values participate normally.
+///
+/// # Errors
+///
+/// Returns [`CudaErrorKind::NotSupported`] when `S` exceeds the fixed37
+/// partial capacity, in addition to ordinary shape/resource failures.
+pub fn fixed37_causal_softmax_in_place(
+    params: &mut CausalSoftmaxInPlaceParams<'_>,
+    stream: &mut CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_causal_softmax_in_place";
+    validate_fixed37_axis(OPERATION, params.token_count)?;
+    let score_bytes = validate_score_shape(OPERATION, params.token_count, params.query_head_count)?;
+    require_bf16(OPERATION, "scores", params.scores.dtype())?;
+    require_capacity(OPERATION, "scores", params.scores.byte_len(), score_bytes)?;
+    validate_resources(OPERATION, stream, &[params.scores.buffer()])?;
+
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_causal_softmax_in_place_execute(
+            params.scores.raw(),
+            params.token_count,
+            params.query_head_count,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Inputs and output for grouped-query probability/value dot products.
 #[derive(Debug)]
 pub struct AvGqaParams<'a> {
@@ -240,6 +331,65 @@ pub fn av_gqa(params: &mut AvGqaParams<'_>, stream: &mut CudaStream) -> CudaResu
     #[cfg(feature = "cuda")]
     {
         ffi::av_gqa_execute(
+            params.probabilities.raw(),
+            params.value.raw(),
+            params.output.raw(),
+            params.token_count,
+            params.query_head_count,
+            params.key_value_head_count,
+            params.head_size,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Computes AV with fixed37 reductions over the complete logical `S` axis.
+/// The input probabilities are BF16, so the softmax narrowing boundary is
+/// preserved before the ascending chunk folds begin.
+///
+/// # Errors
+///
+/// Returns [`CudaErrorKind::NotSupported`] when `S` exceeds the fixed37
+/// partial capacity, in addition to the errors documented by [`av_gqa`].
+pub fn fixed37_av_gqa(params: &mut AvGqaParams<'_>, stream: &mut CudaStream) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_av_gqa";
+    validate_fixed37_axis(OPERATION, params.token_count)?;
+    let shape = validate_gqa_shape(
+        OPERATION,
+        params.token_count,
+        params.query_head_count,
+        params.key_value_head_count,
+        params.head_size,
+    )?;
+    require_bf16(OPERATION, "probabilities", params.probabilities.dtype())?;
+    require_bf16(OPERATION, "value", params.value.dtype())?;
+    require_bf16(OPERATION, "output", params.output.dtype())?;
+    require_capacity(
+        OPERATION,
+        "probabilities",
+        params.probabilities.byte_len(),
+        shape.scores,
+    )?;
+    require_capacity(OPERATION, "value", params.value.byte_len(), shape.key_value)?;
+    require_capacity(OPERATION, "output", params.output.byte_len(), shape.query)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.probabilities.buffer(),
+            params.value.buffer(),
+            params.output.buffer(),
+        ],
+    )?;
+
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_av_gqa_execute(
             params.probabilities.raw(),
             params.value.raw(),
             params.output.raw(),
@@ -376,6 +526,23 @@ fn validate_scale(operation: &'static str, scale: f32) -> CudaResult<()> {
     }
 }
 
+fn validate_fixed37_axis(operation: &'static str, element_count: u64) -> CudaResult<()> {
+    require_nonzero(operation, "reduction_axis", element_count)?;
+    if element_count > FIXED37_MAX_REDUCTION_ELEMENTS {
+        return Err(CudaError::new(
+            CudaErrorKind::NotSupported,
+            CudaErrorDomain::Rust,
+            CudaErrorStage::Validation,
+            0,
+            operation,
+            format!(
+                "reduction axis {element_count} exceeds the fixed37 limit {FIXED37_MAX_REDUCTION_ELEMENTS}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn validate_resources(
     operation: &'static str,
     stream: &CudaStream,
@@ -390,8 +557,9 @@ fn validate_resources(
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_gqa_shape, validate_scale, validate_score_shape};
+    use super::{validate_fixed37_axis, validate_gqa_shape, validate_scale, validate_score_shape};
     use crate::CudaErrorKind;
+    use crate::FIXED37_MAX_REDUCTION_ELEMENTS;
 
     #[test]
     fn gqa_layout_byte_counts_are_checked() {
@@ -422,5 +590,14 @@ mod tests {
             let error = validate_scale("test", invalid).expect_err("invalid scale must fail");
             assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
         }
+    }
+
+    #[test]
+    fn fixed37_attention_axes_fail_closed_at_the_shared_partial_limit() {
+        validate_fixed37_axis("test", FIXED37_MAX_REDUCTION_ELEMENTS)
+            .expect("the maximum fixed37 axis must be supported");
+        let error = validate_fixed37_axis("test", FIXED37_MAX_REDUCTION_ELEMENTS + 1)
+            .expect_err("one element beyond the fixed37 axis must fail");
+        assert_eq!(error.kind(), CudaErrorKind::NotSupported);
     }
 }

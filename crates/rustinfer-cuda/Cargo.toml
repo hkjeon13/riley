@@ -68,6 +68,11 @@ path = "tests/fixed37_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "fixed37_attention_gpu"
+path = "tests/fixed37_attention_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "attention_gpu"
 path = "tests/attention_gpu.rs"
 required-features = ["cuda"]
