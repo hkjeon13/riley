@@ -1188,7 +1188,7 @@ impl PreparedDecodeAttention {
         )
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(feature = "cuda")))]
     fn select_for_compute_capability(
         context: &CudaContext,
         compute_capability: (u32, u32),
@@ -1540,7 +1540,7 @@ impl PreparedPagedDecodeAttention {
         )
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, not(feature = "cuda")))]
     fn select_for_compute_capability(
         context: &CudaContext,
         compute_capability: (u32, u32),
