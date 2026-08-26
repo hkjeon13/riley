@@ -1,6 +1,6 @@
 # PR 16 — 신뢰성, Soak Test, 첫 Release Gate
 
-**상태:** Planned  
+**상태:** Active
 **선행 조건:** [PR 15](15-profiling-and-optimization.md)  
 **다음:** [PR 17 — 확장 Gate](17-extension-gates.md)
 
@@ -191,7 +191,12 @@ Optional Python reference/calibration 도구는 별도 development package로 �
 
 ## 성능 회귀 gate
 
-허용 threshold는 PR 01 기준선에 상대적으로 정의한다.
+허용 threshold는 첫 serving 경로와 동일한 request identity, model, GPU/toolchain,
+warmup/measurement 횟수를 갖춘 PR 15의 accepted command-batch 기준선에 상대적으로
+정의한다. PR 01은 oracle·환경·초기 kernel 기준선의 provenance로 유지하지만, 당시에는
+PR 13~15의 scheduler/API/iteration-batch 경로가 없었으므로 release serving ratio의 직접
+분모로 사용하지 않는다. 고정 기준선과 threshold는
+`benchmarks/release/performance-baseline-v1.json`이 authoritative하다.
 
 예:
 
