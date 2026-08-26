@@ -79,11 +79,17 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         .arg(format!("-DCUDAToolkit_ROOT={}", toolkit.root.display()))
         .arg(format!("-DCMAKE_CUDA_COMPILER={}", toolkit.nvcc.display()));
     configure_fault_injection(&mut configure);
+    configure_nvml_probe(&mut configure);
     run(&mut configure, "configure the native CUDA library")?;
 
     let cublaslt_link_dir = discover_dynamic_cublaslt(&build_dir, profile, &toolkit)?;
     let cudart_link_dir = discover_dynamic_cudart(&build_dir, profile, &toolkit)?;
     let cuda_driver_link_dir = discover_cuda_driver(&build_dir, profile)?;
+    let nvml_link_dir = if nvml_probe_enabled() {
+        Some(discover_dynamic_nvml(&build_dir, profile)?)
+    } else {
+        None
+    };
 
     let mut build = Command::new(&cmake);
     build
@@ -113,22 +119,13 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
         ));
     }
 
-    println!(
-        "cargo:rustc-link-search=native={}",
-        native_lib_dir.display()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}",
-        cublaslt_link_dir.display()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}",
-        cudart_link_dir.display()
-    );
-    println!(
-        "cargo:rustc-link-search=native={}",
-        cuda_driver_link_dir.display()
-    );
+    emit_native_link_search(&native_lib_dir);
+    emit_native_link_search(&cublaslt_link_dir);
+    emit_native_link_search(&cudart_link_dir);
+    emit_native_link_search(&cuda_driver_link_dir);
+    if let Some(link_dir) = nvml_link_dir {
+        emit_native_link_search(&link_dir);
+    }
     println!("cargo:rustc-link-lib=static=rustinfer_cuda_native");
     // The static adapter archive retains cuBLASLt calls. Forward the exact
     // toolkit-selected shared library after the archive so its symbols are
@@ -140,7 +137,17 @@ fn build_native_cuda(architectures: &str) -> Result<(), String> {
     // symbols; the release environment must provide cudart.
     println!("cargo:rustc-link-lib=dylib=cudart");
     println!("cargo:rustc-link-lib=dylib=cuda");
+    // The probe links the toolkit-selected NVML development library (the
+    // toolkit stub is valid at build time). GPU execution must resolve the
+    // driver's real versioned NVML library supplied by the host.
+    if nvml_probe_enabled() {
+        println!("cargo:rustc-link-lib=dylib={}", dynamic_nvml_link_name());
+    }
     Ok(())
+}
+
+fn emit_native_link_search(directory: &Path) {
+    println!("cargo:rustc-link-search=native={}", directory.display());
 }
 
 fn configure_fault_injection(configure: &mut Command) {
@@ -154,6 +161,17 @@ fn configure_fault_injection(configure: &mut Command) {
     configure.arg(format!(
         "-DRUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION={enabled}"
     ));
+}
+
+fn configure_nvml_probe(configure: &mut Command) {
+    let enabled = if nvml_probe_enabled() { "ON" } else { "OFF" };
+    // Always overwrite a reused CMake cache so ordinary CUDA builds cannot
+    // inherit the development-only NVML dependency from a calibration build.
+    configure.arg(format!("-DRUSTINFER_CUDA_ENABLE_NVML_PROBE={enabled}"));
+}
+
+fn nvml_probe_enabled() -> bool {
+    env::var_os("CARGO_FEATURE_NVML").is_some()
 }
 
 fn emit_native_rerun_inputs(kernels_dir: &Path, cmake_lists: PathBuf) {
@@ -340,6 +358,54 @@ fn discover_cuda_driver(build_dir: &Path, profile: &str) -> Result<PathBuf, Stri
     }
     println!(
         "cargo:warning=rustinfer-cuda: CUDA Driver linker={}",
+        expected_linker.display()
+    );
+    Ok(link_dir.to_path_buf())
+}
+
+fn discover_dynamic_nvml(build_dir: &Path, profile: &str) -> Result<PathBuf, String> {
+    let metadata = build_dir.join(format!("rustinfer-cuda-nvml-{profile}.path"));
+    let contents = fs::read_to_string(&metadata).map_err(|error| {
+        format!(
+            "CMake did not produce NVML link metadata at {}: {error}; install the CUDA toolkit NVML development linker or toolkit stubs",
+            metadata.display()
+        )
+    })?;
+    let linker_path = contents.trim();
+    if linker_path.is_empty() || linker_path.lines().count() != 1 {
+        return Err(format!(
+            "invalid NVML link metadata in {}: expected one non-empty path",
+            metadata.display()
+        ));
+    }
+    let linker_path = PathBuf::from(linker_path);
+    if !linker_path.is_absolute() || !linker_path.is_file() {
+        return Err(format!(
+            "CMake selected NVML linker file {}, but it is not an absolute existing file",
+            linker_path.display()
+        ));
+    }
+    if !is_dynamic_nvml_path(&linker_path) {
+        return Err(format!(
+            "CMake selected {}, which is not a shared NVML linker file",
+            linker_path.display()
+        ));
+    }
+    let link_dir = linker_path.parent().ok_or_else(|| {
+        format!(
+            "NVML linker file {} has no parent directory",
+            linker_path.display()
+        )
+    })?;
+    let expected_linker = link_dir.join(dynamic_nvml_filename());
+    if !expected_linker.is_file() {
+        return Err(format!(
+            "NVML shared development linker file {} is missing; install the NVIDIA driver development package or complete toolkit stubs",
+            expected_linker.display()
+        ));
+    }
+    println!(
+        "cargo:warning=rustinfer-cuda: NVML strategy=shared linker={}",
         expected_linker.display()
     );
     Ok(link_dir.to_path_buf())
@@ -705,6 +771,37 @@ fn dynamic_cuda_driver_filename() -> &'static str {
         "libcuda.dylib"
     } else {
         "libcuda.so"
+    }
+}
+
+fn dynamic_nvml_filename() -> &'static str {
+    if cfg!(windows) {
+        "nvml.lib"
+    } else if cfg!(target_os = "macos") {
+        "libnvidia-ml.dylib"
+    } else {
+        "libnvidia-ml.so"
+    }
+}
+
+fn dynamic_nvml_link_name() -> &'static str {
+    if cfg!(windows) { "nvml" } else { "nvidia-ml" }
+}
+
+fn is_dynamic_nvml_path(path: &Path) -> bool {
+    let Some(filename) = path.file_name().and_then(OsStr::to_str) else {
+        return false;
+    };
+    if cfg!(windows) {
+        filename.eq_ignore_ascii_case("nvml.lib")
+    } else if cfg!(target_os = "macos") {
+        filename.starts_with("libnvidia-ml")
+            && path
+                .extension()
+                .and_then(OsStr::to_str)
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("dylib"))
+    } else {
+        filename == "libnvidia-ml.so" || filename.starts_with("libnvidia-ml.so.")
     }
 }
 

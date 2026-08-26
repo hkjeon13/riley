@@ -46,6 +46,14 @@ def _reviewed_packages() -> dict[str, dict[str, object]]:
         },
         {"name": "rustinfer_server", "kind": ["lib"]},
     ]
+    packages["rustinfer-native"]["targets"] = [
+        {"name": "rustinfer_native", "kind": ["lib"]},
+        {
+            "name": "rustinfer-native",
+            "kind": ["bin"],
+            "required-features": ["cuda"],
+        },
+    ]
     return packages
 
 
@@ -63,15 +71,13 @@ class WorkspaceRoleContractTests(unittest.TestCase):
         self.assertTrue(production.isdisjoint(development))
         self.assertEqual(EXPECTED_FEATURES["rustinfer-native"]["default"], [])
 
-    def test_pr_a_library_only_target_passes(self) -> None:
+    def test_cuda_gated_native_calibration_target_passes(self) -> None:
         validate_features(_reviewed_packages())
 
-    def test_pr_a_rejects_a_native_stub_binary(self) -> None:
+    def test_native_calibration_binary_must_be_cuda_gated(self) -> None:
         packages = _reviewed_packages()
-        packages["rustinfer-native"]["targets"].append(
-            {"name": "rustinfer-native", "kind": ["bin"]}
-        )
-        with self.assertRaisesRegex(BoundaryError, "feature-off library with no binary"):
+        packages["rustinfer-native"]["targets"][1]["required-features"] = []
+        with self.assertRaisesRegex(BoundaryError, "require exactly `cuda`"):
             validate_features(packages)
 
     def test_native_development_source_cannot_launch_python_or_subprocesses(self) -> None:

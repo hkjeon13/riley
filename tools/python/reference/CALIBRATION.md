@@ -1,9 +1,10 @@
 # FP32/BF16 correctness calibration
 
-This workflow creates two Hugging Face oracle artifacts and, in a later native
-PR, compares two `rustinfer-native` execution variants against them. It is not
-the PR 01 golden fixture and the HF BF16 run must never be presented as a
-native E0 candidate.
+This workflow creates two Hugging Face oracle artifacts, produces a Python-free
+native candidate under the explicit CUDA feature, and compares its two
+`rustinfer-native` execution variants against the oracles with separate Python
+comparison and raw-replay commands. It is not the PR 01 golden fixture and the
+HF BF16 run must never be presented as a native E0 candidate.
 
 Before either HF producer imports or loads a model, the shared standard-library
 host probe validates the exact primary host and the transient idle-GPU
@@ -137,15 +138,15 @@ report always contains `e0_candidate_evidence=false`.
 
 ## Native candidate contract
 
-Native candidate contract v2 reserves the non-default development workspace
-member `crates/rustinfer-native`. Its default feature set is empty; the future
-producer and native runtime dependencies are selected only by the explicit
-`cuda` feature. PR A contains a feature-off library and strict ABI parser only.
-It deliberately contains no binary target and cannot emit candidate evidence.
-The lane therefore remains `contract-only` until the real fixed-37 backend,
-producer, and raw replay land in later reviewed PRs.
+Native candidate contract v2 is owned by the non-default development workspace
+member `crates/rustinfer-native`. The crate owns both its library and the
+`rustinfer-native` binary. Its default feature set is empty, and the binary
+declares `required-features = ["cuda"]`; the producer and native runtime
+dependencies are selected only by the explicit `cuda` feature. The feature-off
+library retains the side-effect-free strict ABI parser, while evidence
+production requires defaults disabled and exactly `cuda` enabled.
 
-The exact future locked build argv is:
+The exact locked build argv bound into candidate evidence is:
 
 ```sh
 cargo build --locked --release --package rustinfer-native \
@@ -158,12 +159,21 @@ default member. Keeping CUDA explicit also preserves the CUDA-free
 package or a server-owned calibration binary would not satisfy the root
 `Cargo.lock`, non-default ownership, and release-artifact boundaries.
 
-A future candidate manifest has runtime dependency class `native-production`,
-uses the `rustinfer-native` lane and `Cargo.lock`, and records a clean candidate
-Git revision independently of the older oracle revision. It must bundle and
-hash the exact `rustinfer-native` executable beside its manifest, echo the
-locked release build argv above, and record the native calibration capture
-argv. Its exact ordered contract-v2 shape is:
+A candidate manifest has runtime dependency class `native-production`, uses
+the `rustinfer-native` lane and `Cargo.lock`, and records a clean candidate Git
+revision independently of the older oracle revision. The producer requires a
+clean, revision-bound release build and a clean runtime checkout at the exact
+Git revision embedded at build time, then rechecks repository provenance and
+bound source hashes after capture. It performs the CUDA/NVML and primary-host
+preflight, binds the CUDA and NVML observations, and validates the pinned model
+revision, configuration, weights, tokenizer files, and aggregate tokenizer
+hash.
+
+The producer emits a create-only manifest, safetensors sidecar, and bundled
+`rustinfer-native` executable as sibling files outside the repository. It
+refuses to overwrite any of them, hashes the bundled executable and sidecar,
+echoes the locked release build argv above, and records the native calibration
+capture argv. Its exact ordered contract-v2 shape is:
 
 ```sh
 rustinfer-native calibrate \
@@ -196,15 +206,22 @@ left fold, then merged as adjacent chunk partials in an ascending deterministic
 balanced binary tree; an unpaired final partial is carried to the next level.
 The accumulator dtype policy remains the canonical operator policy.
 
-Each candidate variant supplies independent tensors and cache-on/cache-off
-semantic paths. Numeric values are compared to FP32. Semantic values are
-path-matched to HF BF16 (`cache-on` to `cache-on`, `cache-off` to `cache-off`).
-Generated IDs and top-1 are ordered exact. Top-k is exact as a set, not as a
-ranked list. Cache paths must match through the predeclared 16-token window,
-and the zero-based first divergence step is recomputed from raw token IDs.
-Both variants and every prompt must pass.
+One capture covers exactly 31 ordered prompts, two reduction variants, and
+three tensors per prompt and variant: full first-layer hidden output, final
+logits, and final FP32 log probabilities. The sidecar inventory is therefore
+`31 * 2 * 3 = 186` tensors. Tensor capture uses the cache-off path; each
+candidate variant additionally supplies independent cache-on and cache-off
+semantic paths.
 
-The future comparison command is:
+Numeric values are compared to FP32. Semantic values are path-matched to HF
+BF16 (`cache-on` to `cache-on`, `cache-off` to `cache-off`). Generated IDs and
+top-1 are ordered exact. Top-k is exact as a set, not as a ranked list. Cache
+paths must match through the predeclared 16-token window, and the zero-based
+first divergence step is recomputed from raw token IDs. Both variants and
+every prompt must pass.
+
+Candidate production does not run the comparator. The separate Python
+comparison command is:
 
 ```sh
 "$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
@@ -221,17 +238,21 @@ The future comparison command is:
 reruns the entire comparison. Merely parsing a report, recomputing its nested
 booleans, or checking a sibling filename is not approval.
 
+The native lane remains `contract-only`; implementing or running the producer
+does not promote it. It stays contract-only until the separate Python
+comparator and validator complete a passing full raw-sidecar replay for all 31
+prompts and both variants under the immutable v2 gate.
+
 ## Evidence bundle and hashes
 
 The JSON manifests bind model revision, config and weights, tokenizer, ordered
 prompt rows, matrix, gate manifest, environment, lane, dependency lock, Git
 revision/status, sidecar path/hash/shape/dtype, and producer versions. Oracle
-and candidate Git revisions are deliberately separate. A future E0 result is
+and candidate Git revisions are deliberately separate. An E0 result is
 acceptable only with the replayable bundle named by the gate: both oracle
 manifests and sidecars, the passing oracle report, candidate manifest/sidecar/
-executable, and candidate correctness report. PR 01 marks the native lane
-`contract-only` and rejects E0 success rows until that raw replay integration
-exists.
+executable, and candidate correctness report. The native lane remains
+`contract-only` and rejects E0 success rows until that full raw replay passes.
 
 `correctness_report_sha256` is SHA-256 of the exact report file bytes. Reports
 contain no self-hash. The candidate manifest hash transitively binds its

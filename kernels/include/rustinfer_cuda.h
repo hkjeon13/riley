@@ -6,6 +6,9 @@
 #define RUSTINFER_CUDA_ABI_VERSION 1
 #define RUSTINFER_CUDA_ERROR_MESSAGE_CAPACITY 256
 #define RUSTINFER_CUDA_DEVICE_NAME_CAPACITY 256
+#define RUSTINFER_CUDA_NVIDIA_DRIVER_VERSION_CAPACITY 80
+#define RUSTINFER_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES 32u
+#define RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE UINT32_MAX
 
 // ABI v1 is a 64-bit ABI. New entry points below are additive: existing v1
 // callers remain link- and layout-compatible.
@@ -32,6 +35,7 @@ typedef int32_t RustInferCudaStatus;
 #define RUSTINFER_CUDA_ERROR_DOMAIN_RUNTIME 3u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL 4u
 #define RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT 5u
+#define RUSTINFER_CUDA_ERROR_DOMAIN_NVML 6u
 
 #define RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE 1u
 #define RUSTINFER_CUDA_ERROR_STAGE_VALIDATION 2u
@@ -66,6 +70,43 @@ typedef struct RustInferCudaDeviceProperties {
   uint32_t reserved[5];
   char name[RUSTINFER_CUDA_DEVICE_NAME_CAPACITY];
 } RustInferCudaDeviceProperties;
+
+#define RUSTINFER_CUDA_NVIDIA_PERSISTENCE_DISABLED 0u
+#define RUSTINFER_CUDA_NVIDIA_PERSISTENCE_ENABLED 1u
+
+// One process-local NVML device snapshot. used_memory_bytes is allocated
+// device memory and excludes the v2 system-reserved driver/firmware amount,
+// matching the user-visible nvidia-smi memory.used value. Application clocks use
+// RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE only when NVML reports that the
+// query is unsupported; every other NVML error fails the complete probe.
+typedef struct RustInferCudaNvidiaDeviceSnapshot {
+  uint32_t struct_size;
+  uint32_t index;
+  uint64_t total_memory_bytes;
+  uint64_t used_memory_bytes;
+  uint32_t temperature_c;
+  uint32_t persistence_mode;
+  uint32_t power_limit_milliwatts;
+  uint32_t application_graphics_clock_mhz;
+  uint32_t application_memory_clock_mhz;
+  uint32_t compute_process_count;
+  uint64_t reserved[2];
+  char name[RUSTINFER_CUDA_DEVICE_NAME_CAPACITY];
+} RustInferCudaNvidiaDeviceSnapshot;
+
+// Fixed-capacity, caller-owned output keeps NVML ownership and allocations
+// entirely inside one synchronous C call. Hosts with more than the documented
+// maximum fail closed instead of returning a truncated environment.
+typedef struct RustInferCudaNvidiaEnvironmentSnapshot {
+  uint32_t struct_size;
+  int32_t cuda_driver_api_version;
+  uint32_t device_count;
+  uint32_t compute_process_count;
+  uint64_t reserved[2];
+  char driver_version[RUSTINFER_CUDA_NVIDIA_DRIVER_VERSION_CAPACITY];
+  RustInferCudaNvidiaDeviceSnapshot
+      devices[RUSTINFER_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES];
+} RustInferCudaNvidiaEnvironmentSnapshot;
 
 typedef struct RustInferCudaAllocationStats {
   uint32_t struct_size;
@@ -830,6 +871,12 @@ RustInferCudaStatus rustinfer_cuda_device_count(
 RustInferCudaStatus rustinfer_cuda_device_properties(
     int32_t ordinal,
     RustInferCudaDeviceProperties* out_properties,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Performs one in-process NVML snapshot. It does not create a CUDA context or
+// launch CUDA work. On any error the compatible output record is zeroed except
+// for struct_size, and a successful NVML initialization is always shut down.
+RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
+    RustInferCudaNvidiaEnvironmentSnapshot* out_snapshot,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
 // Context is a retained lease on the target device's CUDA primary context.

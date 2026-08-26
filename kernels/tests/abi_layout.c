@@ -16,6 +16,22 @@ _Static_assert(RUSTINFER_CUDA_DTYPE_F32 == 1 &&
                "dtype discriminants changed");
 _Static_assert(sizeof(RustInferCudaErrorInfo) == 272,
                "error-info ABI size changed");
+_Static_assert(sizeof(RustInferCudaNvidiaDeviceSnapshot) == 320,
+               "NVIDIA device snapshot ABI size changed");
+_Static_assert(offsetof(RustInferCudaNvidiaDeviceSnapshot, name) == 64,
+               "NVIDIA device snapshot name offset changed");
+_Static_assert(sizeof(RustInferCudaNvidiaEnvironmentSnapshot) == 10352,
+               "NVIDIA environment snapshot ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaNvidiaEnvironmentSnapshot, driver_version) == 32,
+    "NVIDIA environment driver-version offset changed");
+_Static_assert(offsetof(RustInferCudaNvidiaEnvironmentSnapshot, devices) == 112,
+               "NVIDIA environment devices offset changed");
+_Static_assert(RUSTINFER_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES == 32 &&
+                   RUSTINFER_CUDA_NVIDIA_PERSISTENCE_DISABLED == 0 &&
+                   RUSTINFER_CUDA_NVIDIA_PERSISTENCE_ENABLED == 1 &&
+                   RUSTINFER_CUDA_ERROR_DOMAIN_NVML == 6,
+               "NVML ABI constants changed");
 _Static_assert(sizeof(RustInferCudaBufferSpan) == 48,
                "buffer-span ABI size changed");
 _Static_assert(offsetof(RustInferCudaBufferSpan, buffer) == 8,
@@ -396,6 +412,9 @@ _Static_assert(offsetof(RustInferCudaFixed37GemmPlanInfo, reserved) == 72,
 
 // Referencing every additive entry point makes incompatible C declarations a
 // compile error without requiring a CUDA device or executing native code.
+static RustInferCudaStatus (*const nvidia_environment_probe_symbol)(
+    RustInferCudaNvidiaEnvironmentSnapshot*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_nvidia_environment_probe;
 static RustInferCudaStatus (*const embedding_symbol)(
     const RustInferCudaEmbeddingParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_embedding_execute;
@@ -559,6 +578,7 @@ static RustInferCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 // Keep the otherwise compile-only references observably used under strict
 // warning configurations.
 const void* rustinfer_cuda_abi_symbol_references[] = {
+    (const void*)&nvidia_environment_probe_symbol,
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&fixed37_rms_norm_symbol,
     (const void*)&residual_add_symbol,

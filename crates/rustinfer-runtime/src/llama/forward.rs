@@ -170,6 +170,7 @@ struct LlamaTraceContract {
 pub struct PreparedLlamaTrace {
     contract: LlamaTraceContract,
     tensors: Box<[Box<[u8]>]>,
+    requested: u32,
     captured: u32,
 }
 
@@ -178,21 +179,25 @@ impl fmt::Debug for PreparedLlamaTrace {
         formatter
             .debug_struct("PreparedLlamaTrace")
             .field("contract", &self.contract)
+            .field("requested", &self.tensor_count())
             .field("captured", &self.captured_count())
             .finish_non_exhaustive()
     }
 }
 
 impl PreparedLlamaTrace {
-    fn prepare(plan: &LlamaExecutionPlan) -> LlamaForwardResult<Self> {
-        if plan.layers().len() <= 14 {
+    fn prepare(plan: &LlamaExecutionPlan, points: &[LlamaTracePoint]) -> LlamaForwardResult<Self> {
+        let requested = points
+            .iter()
+            .fold(0_u32, |mask, &point| mask | trace_bit(point));
+        if requested & trace_bit(LlamaTracePoint::Layer14Output) != 0 && plan.layers().len() <= 14 {
             return Err(LlamaForwardError::TraceLayerUnavailable {
                 required_layers: 15,
                 actual_layers: plan.layers().len(),
             });
         }
         let contract = trace_contract(plan);
-        let requested_bytes = trace_total_bytes(plan)?;
+        let requested_bytes = trace_total_bytes(plan, requested)?;
         let mut tensors = Vec::new();
         tensors.try_reserve_exact(TRACE_POINT_COUNT).map_err(|_| {
             LlamaForwardError::HostAllocation {
@@ -201,14 +206,19 @@ impl PreparedLlamaTrace {
             }
         })?;
         for point in LlamaTracePoint::ALL {
-            tensors.push(allocate_host_bytes(
-                trace_byte_len(plan, point)?,
-                LlamaForwardResource::TraceCapture,
-            )?);
+            tensors.push(if requested & trace_bit(point) == 0 {
+                Box::default()
+            } else {
+                allocate_host_bytes(
+                    trace_byte_len(plan, point)?,
+                    LlamaForwardResource::TraceCapture,
+                )?
+            });
         }
         Ok(Self {
             contract,
             tensors: tensors.into_boxed_slice(),
+            requested,
             captured: 0,
         })
     }
@@ -216,7 +226,7 @@ impl PreparedLlamaTrace {
     /// Number of canonical checkpoints in this trace contract.
     #[must_use]
     pub fn tensor_count(&self) -> usize {
-        self.tensors.len()
+        usize::try_from(self.requested.count_ones()).unwrap_or(TRACE_POINT_COUNT)
     }
 
     /// Number of checkpoints confirmed during the latest traced execution.
@@ -238,6 +248,12 @@ impl PreparedLlamaTrace {
     #[must_use]
     pub fn tensor_byte_len(&self, point: LlamaTracePoint) -> usize {
         self.tensors[point.index()].len()
+    }
+
+    /// Whether this owner reserved and will capture one checkpoint.
+    #[must_use]
+    pub const fn requests(&self, point: LlamaTracePoint) -> bool {
+        self.requested & trace_bit(point) != 0
     }
 
     fn validate(&self, plan: &LlamaExecutionPlan) -> LlamaForwardResult<()> {
@@ -640,9 +656,10 @@ fn trace_byte_len(plan: &LlamaExecutionPlan, point: LlamaTracePoint) -> LlamaFor
     Ok(bytes)
 }
 
-fn trace_total_bytes(plan: &LlamaExecutionPlan) -> LlamaForwardResult<u64> {
+fn trace_total_bytes(plan: &LlamaExecutionPlan, requested: u32) -> LlamaForwardResult<u64> {
     LlamaTracePoint::ALL
         .into_iter()
+        .filter(|&point| requested & trace_bit(point) != 0)
         .try_fold(0_u64, |total, point| {
             total.checked_add(trace_byte_len(plan, point)?).ok_or(
                 LlamaForwardError::ArithmeticOverflow {
@@ -664,6 +681,9 @@ fn capture_trace(
     let Some(trace) = trace.as_deref_mut() else {
         return Ok(());
     };
+    if !trace.requests(point) {
+        return Ok(());
+    }
     {
         let destination = trace.destination(point);
         buffer
@@ -1285,7 +1305,32 @@ impl PreparedLlamaForward {
         if self.attention.backend() != AttentionBackend::MaterializedReference {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
-        PreparedLlamaTrace::prepare(&self.plan)
+        PreparedLlamaTrace::prepare(&self.plan, &LlamaTracePoint::ALL)
+    }
+
+    /// Allocates host storage only for caller-selected diagnostic checkpoints.
+    ///
+    /// Unlike [`Self::prepare_trace`], this API does not require materialized
+    /// reference attention unless `Layer0AttentionProbabilities` is requested.
+    /// It is therefore suitable for bounded calibration capture on optimized
+    /// attention paths. Duplicate points are coalesced and an empty selection
+    /// is valid, although it performs no transfers.
+    ///
+    /// # Errors
+    ///
+    /// Returns when attention probabilities are unavailable, layer 14 was
+    /// requested from a shallower model, or host byte arithmetic/reservation
+    /// fails.
+    pub fn prepare_trace_points(
+        &self,
+        points: &[LlamaTracePoint],
+    ) -> LlamaForwardResult<PreparedLlamaTrace> {
+        if points.contains(&LlamaTracePoint::Layer0AttentionProbabilities)
+            && self.attention.backend() != AttentionBackend::MaterializedReference
+        {
+            return Err(LlamaForwardError::TraceRequiresReferenceAttention);
+        }
+        PreparedLlamaTrace::prepare(&self.plan, points)
     }
 
     /// Whether one valid exact-length token vector has been uploaded.
@@ -1459,7 +1504,9 @@ impl PreparedLlamaForward {
         if !self.tokens_ready {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
-        if self.attention.backend() != AttentionBackend::MaterializedReference {
+        if trace.requests(LlamaTracePoint::Layer0AttentionProbabilities)
+            && self.attention.backend() != AttentionBackend::MaterializedReference
+        {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
         trace.validate(&self.plan)?;
@@ -1950,7 +1997,11 @@ impl PreparedLlamaForward {
                     .execute(&mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(prefill_site, source))?;
             }
-            if layer_index == 0 && trace.is_some() {
+            if layer_index == 0
+                && trace.as_deref().is_some_and(|trace| {
+                    trace.requests(LlamaTracePoint::Layer0AttentionProbabilities)
+                })
+            {
                 let workspace = buffers
                     .attention_workspace
                     .as_mut()

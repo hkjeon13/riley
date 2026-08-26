@@ -1,9 +1,24 @@
-//! Development-only contract types for the future native calibration producer.
+//! Development-only contract and implementation for native calibration.
 //!
-//! This crate is a non-default workspace member. PR A deliberately exposes no
-//! binary and performs no CUDA or model work. The optional `cuda` feature only
-//! reserves the reviewed dependency edge that later PRs will use after the
-//! fixed-37 reduction backend exists.
+//! This crate remains a non-default workspace member. Its feature-off library
+//! owns the side-effect-free contract parser; the CUDA-gated binary owns the
+//! real Python-free candidate producer.
+
+#[cfg(any(feature = "cuda", test))]
+mod contract;
+#[cfg(any(feature = "cuda", test))]
+mod environment;
+#[cfg(any(feature = "cuda", test))]
+mod git;
+#[cfg(any(feature = "cuda", test))]
+mod numeric;
+#[cfg(feature = "cuda")]
+mod producer;
+#[cfg(any(feature = "cuda", test))]
+mod sidecar;
+
+#[cfg(feature = "cuda")]
+pub use producer::{NativeCalibrationError, run_calibration};
 
 use std::error::Error;
 use std::fmt;
@@ -15,11 +30,7 @@ pub const NATIVE_ENGINE_REVISION: &str = "rustinfer-native-contract-v2";
 /// Sibling executable name reserved by the candidate evidence manifest.
 pub const NATIVE_EXECUTABLE_FILENAME: &str = "rustinfer-native";
 
-/// Exact future build command bound into native candidate evidence.
-///
-/// The binary target is intentionally absent in PR A. Once later PRs provide
-/// the real fixed-37 backend and producer, this command will select this
-/// non-default package and explicitly opt into CUDA.
+/// Exact build command bound into native candidate evidence.
 pub const NATIVE_BUILD_ARGV: [&str; 11] = [
     "cargo",
     "build",

@@ -13,13 +13,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rustinfer_cuda::{
-    AttentionSelectionTrace, CudaAllocationStats, CudaContext, CudaErrorStage, CudaRuntime,
-    CudaStream,
+    AttentionReductionProfile, AttentionSelectionTrace, CudaAllocationStats, CudaContext,
+    CudaErrorStage, CudaRuntime, CudaStream,
 };
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
-    LlamaForwardError, LlamaPlanError, LlamaTracePoint, PreparedLlamaAllocationReport,
-    PreparedLlamaForward, PreparedLlamaForwardConfig, PreparedLlamaTrace,
+    LlamaForwardError, LlamaPlanError, LlamaReductionProfile, LlamaTracePoint,
+    PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig,
+    PreparedLlamaTrace,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -714,6 +715,12 @@ fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestR
     let mut trace = forward.prepare_trace()?;
     assert_eq!(trace.tensor_count(), LlamaTracePoint::ALL.len());
     assert_eq!(trace.captured_count(), 0);
+    assert!(
+        LlamaTracePoint::ALL
+            .into_iter()
+            .all(|point| trace.requests(point)),
+        "the legacy PR07 owner must still request every canonical checkpoint"
+    );
     forward.upload_tokens(&PINNED_TOKENS_A, &mut stream)?;
     forward.execute_traced(&mut stream, &mut trace)?;
     assert!(forward.tokens_ready());
@@ -810,6 +817,149 @@ fn pinned_smollm2_fixed_sequence_forward_matches_golden_and_is_causal() -> TestR
         context.allocation_stats()?.is_zero(),
         "explicit forward close must release weights, graph buffers, and pinned staging"
     );
+    stream.close()?;
+    context.close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned checkpoint and a CUDA GPU on server-4096"]
+fn pinned_smollm2_selective_layer0_capture_supports_optimized_reduction_profiles() -> TestResult {
+    let checkpoint = std::env::var_os("RUSTINFER_REAL_CHECKPOINT")
+        .map(PathBuf::from)
+        .expect("RUSTINFER_REAL_CHECKPOINT must name the remote checkpoint directory");
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+
+    let runtime = CudaRuntime::initialize()?;
+    assert!(
+        runtime.device_count() > 0,
+        "remote runner has no CUDA device"
+    );
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    for profile in [
+        LlamaReductionProfile::CanonicalV1,
+        LlamaReductionProfile::FixedContiguous37BalancedV1,
+    ] {
+        let config = PreparedLlamaForwardConfig::default()
+            .with_optimized_attention()
+            .with_reduction_profile(profile);
+        let mut forward =
+            PreparedLlamaForward::prepare(&model, &context, &mut stream, SEQUENCE_LENGTH, config)?;
+        assert_eq!(forward.reduction_profile(), profile);
+        let selection = forward.attention_selection();
+        let (expected_implementation, expected_attention_profile) = match profile {
+            LlamaReductionProfile::CanonicalV1 => (
+                "rustinfer.cuda.online-gqa-prefill.bf16.d64",
+                AttentionReductionProfile::CanonicalV1,
+            ),
+            LlamaReductionProfile::FixedContiguous37BalancedV1 => (
+                "rustinfer.cuda.fixed37.two-pass-gqa-prefill.bf16.d64.s8192",
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+            ),
+        };
+        assert_eq!(
+            selection.implementation_id(),
+            expected_implementation,
+            "{} optimized attention backend",
+            profile.id()
+        );
+        assert_eq!(selection.reduction_profile(), expected_attention_profile);
+        assert_eq!(selection.workspace_bytes(), 0);
+        assert_eq!(selection.materialized_score_bytes(), 0);
+
+        let device_allocations = context.allocation_stats()?;
+        let hidden_bytes = usize::try_from(forward.plan().workspace_spec().hidden_buffer_bytes())?;
+        let last_logits_bytes = VOCABULARY_SIZE
+            .checked_mul(2)
+            .ok_or("last-logits byte length overflow")?;
+        assert_eq!(hidden_bytes, SEQUENCE_LENGTH * HIDDEN_SIZE * 2);
+
+        let mut trace = forward.prepare_trace_points(&[
+            LlamaTracePoint::Layer0Output,
+            LlamaTracePoint::Layer0Output,
+            LlamaTracePoint::LastLogits,
+        ])?;
+        assert_eq!(trace.tensor_count(), 2, "duplicate requests are coalesced");
+        assert_eq!(trace.captured_count(), 0);
+        assert!(trace.requests(LlamaTracePoint::Layer0Output));
+        assert_eq!(
+            LlamaTracePoint::ALL
+                .into_iter()
+                .map(|point| trace.tensor_byte_len(point))
+                .sum::<usize>(),
+            hidden_bytes + last_logits_bytes,
+            "selective calibration capture must reserve only [S,H] and [V] BF16 payloads"
+        );
+        for point in LlamaTracePoint::ALL {
+            let requested = matches!(
+                point,
+                LlamaTracePoint::Layer0Output | LlamaTracePoint::LastLogits
+            );
+            assert_eq!(trace.requests(point), requested, "{} request", point.name());
+            assert_eq!(
+                trace.tensor_byte_len(point),
+                match point {
+                    LlamaTracePoint::Layer0Output => hidden_bytes,
+                    LlamaTracePoint::LastLogits => last_logits_bytes,
+                    _ => 0,
+                },
+                "{} reserved byte length",
+                point.name()
+            );
+            assert!(
+                trace.tensor(point).is_none(),
+                "{} before execution",
+                point.name()
+            );
+        }
+        assert_eq!(
+            context.allocation_stats()?,
+            device_allocations,
+            "host-only trace preparation must not change CUDA allocation accounting"
+        );
+
+        forward.upload_tokens(&PINNED_TOKENS_A, &mut stream)?;
+        forward.execute_traced(&mut stream, &mut trace)?;
+        assert_eq!(trace.captured_count(), 2);
+        let layer0 = trace
+            .tensor(LlamaTracePoint::Layer0Output)
+            .expect("selected layer-0 output was captured");
+        assert_eq!(layer0.len(), hidden_bytes);
+        assert_bf16_logits_are_finite(layer0);
+        let traced_last_logits = trace
+            .tensor(LlamaTracePoint::LastLogits)
+            .expect("selected last logits were captured");
+        assert_eq!(traced_last_logits.len(), last_logits_bytes);
+        assert_bf16_logits_are_finite(traced_last_logits);
+        let mut downloaded_last_logits = vec![0_u8; last_logits_bytes];
+        forward.download_last_logits(&mut downloaded_last_logits, &mut stream)?;
+        assert_eq!(traced_last_logits, downloaded_last_logits);
+        for point in LlamaTracePoint::ALL {
+            if !matches!(
+                point,
+                LlamaTracePoint::Layer0Output | LlamaTracePoint::LastLogits
+            ) {
+                assert!(
+                    trace.tensor(point).is_none(),
+                    "{} was not requested",
+                    point.name()
+                );
+            }
+        }
+        assert_eq!(
+            context.allocation_stats()?,
+            device_allocations,
+            "selective traced execution must reuse the prepared CUDA graph"
+        );
+
+        forward.close()?;
+        assert!(context.allocation_stats()?.is_zero());
+    }
+
     stream.close()?;
     context.close()?;
     Ok(())

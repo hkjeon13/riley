@@ -31,10 +31,11 @@ rustinfer-cuda   -> rustinfer-core
 | `rustinfer-scheduler` | bounded admission과 continuous-batching state 경계 | HTTP representation |
 | `rustinfer-server` | binary, HTTP DTO/transport, model/runtime/scheduler composition root | native C ABI 세부 구현 |
 
-`rustinfer-native`는 development-only calibration ABI/parser와 향후 native evidence
-producer를 소유한다. Optional `cuda` feature만 `rustinfer-model`과
-`rustinfer-runtime/cuda`를 활성화하며 production crate는 이 development crate에
-의존할 수 없다. PR A에는 library target만 있고 실행 가능한 producer binary는 없다.
+`rustinfer-native`는 development-only calibration ABI/parser library와
+`rustinfer-native` calibration binary를 소유한다. Binary는 정확히 `cuda` feature를
+요구하며, 이 feature는 optional `rustinfer-cuda`, `rustinfer-model`,
+`rustinfer-runtime`과 `rustinfer-cuda/{cuda,nvml}`, `rustinfer-runtime/cuda`를
+활성화한다. Production crate는 이 development crate에 의존할 수 없다.
 
 `tools/python`, `tools/native`, `experiments/triton`은 workspace member가 아니다.
 Python/Triton은 Cargo dependency나 build-script 입력도 아니다. Python 결과는
@@ -60,9 +61,14 @@ cargo build --locked --release --features cuda,server
   직렬화 경계를 활성화한다. 실행 binary는 추가로 `cuda`를 요구하며 production
   `rustinfer` artifact에는 포함되지 않는다.
 - `experimental`: 아직 구현을 활성화하지 않는 예약 opt-in 경계다.
-- `rustinfer-native/cuda`: 향후 calibration producer가 사용할 명시적 development
-  feature다. Non-default package이므로 `--package rustinfer-native` 없이 root build에
-  포함되지 않는다.
+- `rustinfer-native/cuda`: Python-free calibration producer를 gate하는 명시적
+  development feature다. 다음 locked release build만 binary를 만들며, non-default
+  package이므로 `--package rustinfer-native` 없이 root build에 포함되지 않는다.
+
+  ```bash
+  cargo build --locked --release --package rustinfer-native \
+    --no-default-features --features cuda --bin rustinfer-native
+  ```
 
 ## Panic과 error 원칙
 

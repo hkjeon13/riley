@@ -7,6 +7,7 @@
 mod attention;
 mod batch;
 mod decode;
+mod environment;
 mod error;
 #[cfg(feature = "cuda")]
 #[allow(unsafe_code)]
@@ -39,6 +40,10 @@ pub use decode::{
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
     PreparedDecodeAttention, PreparedPagedDecodeAttention, decode_partial_states_reduce,
     kv_cache_append, paged_kv_cache_append,
+};
+pub use environment::{
+    NVML_ENABLED, NvidiaDeviceSnapshot, NvidiaEnvironmentSnapshot, NvidiaPersistenceMode,
+    diagnose_null_nvidia_environment_output, probe_nvidia_environment,
 };
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 pub use gemm::{

@@ -30,6 +30,10 @@ documented in [`../../docs/cuda-abi-v1.md`](../../docs/cuda-abi-v1.md).
 - Driver symbols are linked through CMake's selected `CUDA::cuda_driver`
   development linker file. The deployed process resolves the host driver's
   `libcuda.so.1`; the build does not embed a toolkit-stub runtime path.
+- The development-only `nvml` feature includes `cuda` and adds the safe
+  in-process `probe_nvidia_environment` preflight plus a direct shared NVML
+  dependency. Ordinary `cuda` builds keep their existing dynamic dependency
+  inventory; no subprocess or `nvidia-smi` fallback exists.
 
 The host-only ABI/link smoke is:
 
@@ -60,6 +64,14 @@ The repository's Python-free GPU evidence workflow, sanitizer mode, and
 required environment variables are described in
 [`../../ci/README.md`](../../ci/README.md). None of these tests loads a model or
 runs inference.
+
+The separate NVML target is also remote-only and does not alter the fixed
+eight-test host-runtime evidence contract:
+
+```text
+cargo test --locked -p rustinfer-cuda --no-default-features --features nvml \
+  --test nvml_gpu -- --ignored --test-threads=1 --nocapture
+```
 
 ## Query-length-one decode
 

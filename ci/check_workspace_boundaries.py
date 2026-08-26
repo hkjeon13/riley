@@ -56,7 +56,7 @@ EXPECTED_INTERNAL_DEPENDENCIES = {
         "rustinfer-runtime",
         "rustinfer-scheduler",
     },
-    "rustinfer-native": {"rustinfer-model", "rustinfer-runtime"},
+    "rustinfer-native": {"rustinfer-cuda", "rustinfer-model", "rustinfer-runtime"},
 }
 
 EXPECTED_FEATURES = {
@@ -65,6 +65,7 @@ EXPECTED_FEATURES = {
         "cuda": [],
         "cuda-test-fault-injection": ["cuda"],
         "default": [],
+        "nvml": ["cuda"],
     },
     "rustinfer-tensor": {
         "cuda": ["dep:rustinfer-cuda", "rustinfer-cuda/cuda"],
@@ -92,8 +93,11 @@ EXPECTED_FEATURES = {
     },
     "rustinfer-native": {
         "cuda": [
+            "dep:rustinfer-cuda",
             "dep:rustinfer-model",
             "dep:rustinfer-runtime",
+            "rustinfer-cuda/cuda",
+            "rustinfer-cuda/nvml",
             "rustinfer-runtime/cuda",
         ],
         "default": [],
@@ -108,7 +112,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "rustinfer-runtime": {"rustinfer-cuda"},
     "rustinfer-scheduler": set(),
     "rustinfer-server": {"libc", "serde", "serde_json"},
-    "rustinfer-native": {"rustinfer-model", "rustinfer-runtime"},
+    "rustinfer-native": {"rustinfer-cuda", "rustinfer-model", "rustinfer-runtime"},
 }
 
 EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
@@ -133,6 +137,21 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
         "features": [],
     },
     ("rustinfer-runtime", "sha2"): {
+        "version": "0.11.0",
+        "default_features": False,
+        "features": [],
+    },
+    ("rustinfer-native", "serde"): {
+        "version": "1.0.228",
+        "default_features": True,
+        "features": ["derive"],
+    },
+    ("rustinfer-native", "serde_json"): {
+        "version": "1.0.145",
+        "default_features": True,
+        "features": [],
+    },
+    ("rustinfer-native", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
         "features": [],
@@ -921,9 +940,21 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
             raise BoundaryError(f"{name}: only rustinfer-server may own a binary")
 
     native_targets = packages["rustinfer-native"].get("targets", [])
-    if len(native_targets) != 1 or native_targets[0].get("kind") != ["lib"]:
+    native_libraries = [
+        target for target in native_targets if target.get("kind") == ["lib"]
+    ]
+    native_binaries = {
+        target.get("name"): target
+        for target in native_targets
+        if "bin" in target.get("kind", [])
+    }
+    if len(native_libraries) != 1 or set(native_binaries) != {"rustinfer-native"}:
         raise BoundaryError(
-            "rustinfer-native must remain a feature-off library with no binary in PR A"
+            "rustinfer-native must own exactly its library and calibration binary"
+        )
+    if native_binaries["rustinfer-native"].get("required-features") != ["cuda"]:
+        raise BoundaryError(
+            "the rustinfer-native calibration binary must require exactly `cuda`"
         )
 
 
@@ -1144,12 +1175,12 @@ def main() -> int:
 
     print("workspace boundary check passed")
     print("  production crates: 7")
-    print("  development crates: 1 (rustinfer-native, non-default, library-only)")
+    print("  development crates: 1 (rustinfer-native, non-default, CUDA-gated binary)")
     print("  excluded tool/research roots: tools/python, tools/native, experiments/triton")
     print(
         "  approved direct third-party Cargo dependencies: "
         f"{len(dependency_policy['direct_dependencies'])} "
-        "(rustinfer-model, rustinfer-runtime, and rustinfer-server)"
+        "(rustinfer-model, rustinfer-runtime, rustinfer-server, and rustinfer-native)"
     )
     print(
         "  approved third-party Cargo package closure: "

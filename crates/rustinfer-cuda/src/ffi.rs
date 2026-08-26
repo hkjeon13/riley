@@ -21,6 +21,7 @@ const DOMAIN_VALIDATION: u32 = 1;
 const DOMAIN_DRIVER: u32 = 2;
 const DOMAIN_RUNTIME: u32 = 3;
 const DOMAIN_CUBLASLT: u32 = 5;
+const DOMAIN_NVML: u32 = 6;
 
 const STAGE_INITIALIZE: u32 = 1;
 const STAGE_CREATE: u32 = 3;
@@ -34,8 +35,22 @@ const STAGE_PREPARE: u32 = 10;
 
 const ERROR_MESSAGE_CAPACITY: usize = 256;
 const DEVICE_NAME_CAPACITY: usize = 256;
+#[cfg(feature = "nvml")]
+const NVIDIA_DRIVER_VERSION_CAPACITY: usize = 80;
+#[cfg(feature = "nvml")]
+const NVIDIA_ENVIRONMENT_MAX_DEVICES: usize = 32;
+#[cfg(feature = "nvml")]
+const NVIDIA_CLOCK_NOT_AVAILABLE: u32 = u32::MAX;
+#[cfg(feature = "nvml")]
+const NVIDIA_PERSISTENCE_DISABLED: u32 = 0;
+#[cfg(feature = "nvml")]
+const NVIDIA_PERSISTENCE_ENABLED: u32 = 1;
 const ERROR_INFO_SIZE: u32 = 272;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
+#[cfg(feature = "nvml")]
+const NVIDIA_DEVICE_SNAPSHOT_SIZE: u32 = 320;
+#[cfg(feature = "nvml")]
+const NVIDIA_ENVIRONMENT_SNAPSHOT_SIZE: u32 = 10_352;
 const ALLOCATION_STATS_SIZE: u32 = 40;
 #[cfg(feature = "cuda-test-fault-injection")]
 const TEST_MEMORY_FAULT_STATS_SIZE: u32 = 64;
@@ -148,6 +163,71 @@ impl RawDeviceProperties {
     }
 }
 
+#[cfg(feature = "nvml")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct RawNvidiaDeviceSnapshot {
+    struct_size: u32,
+    index: u32,
+    total_memory_bytes: u64,
+    used_memory_bytes: u64,
+    temperature_c: u32,
+    persistence_mode: u32,
+    power_limit_milliwatts: u32,
+    application_graphics_clock_mhz: u32,
+    application_memory_clock_mhz: u32,
+    compute_process_count: u32,
+    reserved: [u64; 2],
+    name: [c_char; DEVICE_NAME_CAPACITY],
+}
+
+#[cfg(feature = "nvml")]
+impl RawNvidiaDeviceSnapshot {
+    const fn new() -> Self {
+        Self {
+            struct_size: NVIDIA_DEVICE_SNAPSHOT_SIZE,
+            index: 0,
+            total_memory_bytes: 0,
+            used_memory_bytes: 0,
+            temperature_c: 0,
+            persistence_mode: NVIDIA_PERSISTENCE_DISABLED,
+            power_limit_milliwatts: 0,
+            application_graphics_clock_mhz: NVIDIA_CLOCK_NOT_AVAILABLE,
+            application_memory_clock_mhz: NVIDIA_CLOCK_NOT_AVAILABLE,
+            compute_process_count: 0,
+            reserved: [0; 2],
+            name: [0; DEVICE_NAME_CAPACITY],
+        }
+    }
+}
+
+#[cfg(feature = "nvml")]
+#[repr(C)]
+struct RawNvidiaEnvironmentSnapshot {
+    struct_size: u32,
+    cuda_driver_api_version: i32,
+    device_count: u32,
+    compute_process_count: u32,
+    reserved: [u64; 2],
+    driver_version: [c_char; NVIDIA_DRIVER_VERSION_CAPACITY],
+    devices: [RawNvidiaDeviceSnapshot; NVIDIA_ENVIRONMENT_MAX_DEVICES],
+}
+
+#[cfg(feature = "nvml")]
+impl RawNvidiaEnvironmentSnapshot {
+    const fn new() -> Self {
+        Self {
+            struct_size: NVIDIA_ENVIRONMENT_SNAPSHOT_SIZE,
+            cuda_driver_api_version: 0,
+            device_count: 0,
+            compute_process_count: 0,
+            reserved: [0; 2],
+            driver_version: [0; NVIDIA_DRIVER_VERSION_CAPACITY],
+            devices: [RawNvidiaDeviceSnapshot::new(); NVIDIA_ENVIRONMENT_MAX_DEVICES],
+        }
+    }
+}
+
 #[repr(C)]
 struct RawAllocationStats {
     struct_size: u32,
@@ -228,6 +308,30 @@ pub(super) struct NativeDeviceProperties {
     pub(super) max_threads_per_block: u32,
     pub(super) driver_version: i32,
     pub(super) runtime_version: i32,
+}
+
+#[cfg(feature = "nvml")]
+#[derive(Debug)]
+pub(super) struct NativeNvidiaDeviceSnapshot {
+    pub(super) index: u32,
+    pub(super) name: String,
+    pub(super) total_memory_bytes: u64,
+    pub(super) used_memory_bytes: u64,
+    pub(super) temperature_c: u32,
+    pub(super) persistence_mode: u32,
+    pub(super) power_limit_milliwatts: u32,
+    pub(super) application_graphics_clock_mhz: Option<u32>,
+    pub(super) application_memory_clock_mhz: Option<u32>,
+    pub(super) compute_process_count: u32,
+}
+
+#[cfg(feature = "nvml")]
+#[derive(Debug)]
+pub(super) struct NativeNvidiaEnvironmentSnapshot {
+    pub(super) driver_version: String,
+    pub(super) cuda_driver_api_version: i32,
+    pub(super) compute_process_count: u32,
+    pub(super) devices: Vec<NativeNvidiaDeviceSnapshot>,
 }
 
 #[repr(C)]
@@ -949,6 +1053,11 @@ unsafe extern "C" {
         out_properties: *mut RawDeviceProperties,
         error: *mut ErrorInfo,
     ) -> i32;
+    #[cfg(feature = "nvml")]
+    fn rustinfer_cuda_nvidia_environment_probe(
+        out_snapshot: *mut RawNvidiaEnvironmentSnapshot,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_context_create(
         ordinal: i32,
         out_context: *mut *mut RawContext,
@@ -1384,6 +1493,152 @@ pub(super) fn build_info() -> CudaResult<String> {
             format!("native build info is not UTF-8: {error}"),
         )
     })
+}
+
+#[cfg(feature = "nvml")]
+pub(super) fn nvidia_environment_snapshot() -> CudaResult<NativeNvidiaEnvironmentSnapshot> {
+    let mut snapshot = RawNvidiaEnvironmentSnapshot::new();
+    let mut error = ErrorInfo::new();
+    // SAFETY: snapshot and error are initialized, correctly sized repr(C)
+    // caller buffers kept alive for the complete synchronous probe.
+    let status = unsafe { rustinfer_cuda_nvidia_environment_probe(&mut snapshot, &mut error) };
+    status_result(status, "probe NVIDIA environment", &error)?;
+
+    decode_nvidia_environment_snapshot(&snapshot)
+}
+
+#[cfg(feature = "nvml")]
+fn decode_nvidia_environment_snapshot(
+    snapshot: &RawNvidiaEnvironmentSnapshot,
+) -> CudaResult<NativeNvidiaEnvironmentSnapshot> {
+    if snapshot.struct_size != NVIDIA_ENVIRONMENT_SNAPSHOT_SIZE {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native environment struct_size is {}, expected {NVIDIA_ENVIRONMENT_SNAPSHOT_SIZE}",
+            snapshot.struct_size
+        )));
+    }
+    if snapshot.reserved != [0; 2] {
+        return Err(invalid_nvidia_snapshot(
+            "native environment reserved fields are non-zero",
+        ));
+    }
+    if snapshot.cuda_driver_api_version <= 0 {
+        return Err(invalid_nvidia_snapshot(
+            "native CUDA Driver API version is non-positive",
+        ));
+    }
+
+    let driver_version = fixed_c_string_to_utf8(&snapshot.driver_version, "NVIDIA driver version")?;
+    if driver_version.is_empty() {
+        return Err(invalid_nvidia_snapshot(
+            "native NVIDIA driver version is empty",
+        ));
+    }
+
+    let device_count = usize::try_from(snapshot.device_count)
+        .map_err(|_| invalid_nvidia_snapshot("native NVIDIA device count does not fit usize"))?;
+    if device_count > NVIDIA_ENVIRONMENT_MAX_DEVICES {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native NVIDIA device count {device_count} exceeds capacity {NVIDIA_ENVIRONMENT_MAX_DEVICES}"
+        )));
+    }
+
+    let mut devices = Vec::with_capacity(device_count);
+    let mut aggregate_process_count = 0_u32;
+    for (expected_index, raw) in (0_u32..).zip(&snapshot.devices[..device_count]) {
+        let device = decode_nvidia_device_snapshot(raw, expected_index)?;
+        aggregate_process_count = aggregate_process_count
+            .checked_add(device.compute_process_count)
+            .ok_or_else(|| {
+                invalid_nvidia_snapshot("native aggregate compute-process count overflowed")
+            })?;
+        devices.push(device);
+    }
+    if aggregate_process_count != snapshot.compute_process_count {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native aggregate compute-process count is {}, but devices sum to {aggregate_process_count}",
+            snapshot.compute_process_count
+        )));
+    }
+
+    Ok(NativeNvidiaEnvironmentSnapshot {
+        driver_version,
+        cuda_driver_api_version: snapshot.cuda_driver_api_version,
+        compute_process_count: snapshot.compute_process_count,
+        devices,
+    })
+}
+
+#[cfg(feature = "nvml")]
+fn decode_nvidia_device_snapshot(
+    raw: &RawNvidiaDeviceSnapshot,
+    expected_index: u32,
+) -> CudaResult<NativeNvidiaDeviceSnapshot> {
+    if raw.struct_size != NVIDIA_DEVICE_SNAPSHOT_SIZE {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device {} struct_size is {}, expected {NVIDIA_DEVICE_SNAPSHOT_SIZE}",
+            raw.index, raw.struct_size
+        )));
+    }
+    if raw.index != expected_index {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device index {} is out of order; expected {expected_index}",
+            raw.index
+        )));
+    }
+    if raw.reserved != [0; 2] {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device {} reserved fields are non-zero",
+            raw.index
+        )));
+    }
+    if raw.total_memory_bytes == 0 || raw.used_memory_bytes > raw.total_memory_bytes {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device {} returned inconsistent memory totals",
+            raw.index
+        )));
+    }
+    if !matches!(
+        raw.persistence_mode,
+        NVIDIA_PERSISTENCE_DISABLED | NVIDIA_PERSISTENCE_ENABLED
+    ) {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device {} returned unknown persistence mode {}",
+            raw.index, raw.persistence_mode
+        )));
+    }
+    let name = fixed_c_string_to_utf8(&raw.name, "NVIDIA device name")?;
+    if name.is_empty() {
+        return Err(invalid_nvidia_snapshot(format!(
+            "native device {} name is empty",
+            raw.index
+        )));
+    }
+    Ok(NativeNvidiaDeviceSnapshot {
+        index: raw.index,
+        name,
+        total_memory_bytes: raw.total_memory_bytes,
+        used_memory_bytes: raw.used_memory_bytes,
+        temperature_c: raw.temperature_c,
+        persistence_mode: raw.persistence_mode,
+        power_limit_milliwatts: raw.power_limit_milliwatts,
+        application_graphics_clock_mhz: (raw.application_graphics_clock_mhz
+            != NVIDIA_CLOCK_NOT_AVAILABLE)
+            .then_some(raw.application_graphics_clock_mhz),
+        application_memory_clock_mhz: (raw.application_memory_clock_mhz
+            != NVIDIA_CLOCK_NOT_AVAILABLE)
+            .then_some(raw.application_memory_clock_mhz),
+        compute_process_count: raw.compute_process_count,
+    })
+}
+
+#[cfg(feature = "nvml")]
+pub(super) fn diagnose_null_nvidia_environment_snapshot() -> CudaResult<()> {
+    let mut error = ErrorInfo::new();
+    // SAFETY: null is intentionally supplied to exercise validation before
+    // NVML initialization; the native contract never dereferences it.
+    let status = unsafe { rustinfer_cuda_nvidia_environment_probe(ptr::null_mut(), &mut error) };
+    status_result(status, "diagnose null NVIDIA environment output", &error)
 }
 
 pub(super) fn device_count() -> CudaResult<u32> {
@@ -4034,6 +4289,7 @@ fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> Cud
         DOMAIN_DRIVER => CudaErrorDomain::Driver,
         DOMAIN_RUNTIME => CudaErrorDomain::Runtime,
         DOMAIN_CUBLASLT => CudaErrorDomain::CuBlasLt,
+        DOMAIN_NVML => CudaErrorDomain::Nvml,
         _ => CudaErrorDomain::Internal,
     };
     let stage = match error.stage {
@@ -4074,6 +4330,36 @@ fn missing_output(operation: &'static str, message: &'static str) -> CudaError {
     )
 }
 
+#[cfg(feature = "nvml")]
+fn invalid_nvidia_snapshot(message: impl Into<String>) -> CudaError {
+    CudaError::new(
+        CudaErrorKind::Internal,
+        CudaErrorDomain::Internal,
+        CudaErrorStage::Query,
+        0,
+        "probe NVIDIA environment",
+        message,
+    )
+}
+
+#[cfg(feature = "nvml")]
+fn fixed_c_string_to_utf8<const N: usize>(
+    bytes: &[c_char; N],
+    field: &'static str,
+) -> CudaResult<String> {
+    let nul = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .ok_or_else(|| invalid_nvidia_snapshot(format!("native {field} is not NUL-terminated")))?;
+    let value: Vec<u8> = bytes[..nul]
+        .iter()
+        .copied()
+        .map(|byte| u8::from_ne_bytes(byte.to_ne_bytes()))
+        .collect();
+    String::from_utf8(value)
+        .map_err(|error| invalid_nvidia_snapshot(format!("native {field} is not UTF-8: {error}")))
+}
+
 fn c_array_to_string<const N: usize>(bytes: &[c_char; N]) -> String {
     let bytes: Vec<u8> = bytes
         .iter()
@@ -4088,6 +4374,16 @@ const _: () = assert!(size_of::<ErrorInfo>() == 272);
 const _: () = assert!(offset_of!(ErrorInfo, message) == 16);
 const _: () = assert!(size_of::<RawDeviceProperties>() == 320);
 const _: () = assert!(offset_of!(RawDeviceProperties, name) == 64);
+#[cfg(feature = "nvml")]
+const _: () = assert!(size_of::<RawNvidiaDeviceSnapshot>() == 320);
+#[cfg(feature = "nvml")]
+const _: () = assert!(offset_of!(RawNvidiaDeviceSnapshot, name) == 64);
+#[cfg(feature = "nvml")]
+const _: () = assert!(size_of::<RawNvidiaEnvironmentSnapshot>() == 10_352);
+#[cfg(feature = "nvml")]
+const _: () = assert!(offset_of!(RawNvidiaEnvironmentSnapshot, driver_version) == 32);
+#[cfg(feature = "nvml")]
+const _: () = assert!(offset_of!(RawNvidiaEnvironmentSnapshot, devices) == 112);
 const _: () = assert!(size_of::<RawAllocationStats>() == 40);
 const _: () = assert!(offset_of!(RawAllocationStats, device_live_bytes) == 8);
 const _: () = assert!(offset_of!(RawAllocationStats, pinned_host_live_allocations) == 32);

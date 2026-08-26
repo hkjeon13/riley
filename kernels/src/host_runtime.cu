@@ -1,6 +1,9 @@
 #include "ffi_internal.hpp"
 
 #include <climits>
+#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+#include <nvml.h>
+#endif
 
 namespace {
 
@@ -18,6 +21,101 @@ using rustinfer_cuda_internal::same_context;
 using rustinfer_cuda_internal::set_error;
 using rustinfer_cuda_internal::try_acquire_exclusive_use;
 using rustinfer_cuda_internal::validation_error;
+
+#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+RustInferCudaStatus nvml_error(nvmlReturn_t result,
+                               RustInferCudaErrorInfo* error, uint32_t stage,
+                               const char* operation) noexcept {
+  if (result == NVML_SUCCESS) {
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_RUNTIME_ERROR;
+  if (result == NVML_ERROR_INVALID_ARGUMENT) {
+    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+  } else if (result == NVML_ERROR_INSUFFICIENT_SIZE) {
+    status = RUSTINFER_CUDA_STATUS_OUT_OF_RANGE;
+  } else if (result == NVML_ERROR_NOT_SUPPORTED) {
+    status = RUSTINFER_CUDA_STATUS_NOT_SUPPORTED;
+  } else if (result == NVML_ERROR_DRIVER_NOT_LOADED ||
+             result == NVML_ERROR_LIBRARY_NOT_FOUND ||
+             result == NVML_ERROR_FUNCTION_NOT_FOUND ||
+             result == NVML_ERROR_GPU_IS_LOST) {
+    status = RUSTINFER_CUDA_STATUS_DRIVER_ERROR;
+  }
+  return set_error(error, status, static_cast<int32_t>(result),
+                   RUSTINFER_CUDA_ERROR_DOMAIN_NVML, stage, operation,
+                   nvmlErrorString(result));
+}
+
+class NvmlSession final {
+ public:
+  NvmlSession() noexcept : active_(false) {}
+  NvmlSession(const NvmlSession&) = delete;
+  NvmlSession& operator=(const NvmlSession&) = delete;
+
+  ~NvmlSession() noexcept {
+    if (active_) {
+      (void)nvmlShutdown();
+    }
+  }
+
+  RustInferCudaStatus initialize(RustInferCudaErrorInfo* error) noexcept {
+    const nvmlReturn_t result = nvmlInit_v2();
+    if (result == NVML_SUCCESS) {
+      active_ = true;
+      return RUSTINFER_CUDA_STATUS_SUCCESS;
+    }
+    return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+                      "initialize NVML");
+  }
+
+  RustInferCudaStatus shutdown(RustInferCudaStatus primary_status,
+                               RustInferCudaErrorInfo* error) noexcept {
+    if (!active_) {
+      return primary_status;
+    }
+    const nvmlReturn_t result = nvmlShutdown();
+    active_ = false;
+    if (primary_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      return primary_status;
+    }
+    return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                      "shutdown NVML after environment probe");
+  }
+
+ private:
+  bool active_;
+};
+#endif
+
+void clear_nvidia_environment_snapshot(
+    RustInferCudaNvidiaEnvironmentSnapshot* snapshot) noexcept {
+  if (snapshot == nullptr || snapshot->struct_size < sizeof(*snapshot)) {
+    return;
+  }
+  std::memset(snapshot, 0, sizeof(*snapshot));
+  snapshot->struct_size = sizeof(*snapshot);
+}
+
+#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+RustInferCudaStatus optional_application_clock(
+    nvmlDevice_t device, nvmlClockType_t clock_type, uint32_t* output,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  unsigned int clock_mhz = 0;
+  const nvmlReturn_t result =
+      nvmlDeviceGetApplicationsClock(device, clock_type, &clock_mhz);
+  if (result == NVML_ERROR_NOT_SUPPORTED) {
+    *output = RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }
+  const RustInferCudaStatus status =
+      nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, operation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    *output = static_cast<uint32_t>(clock_mhz);
+  }
+  return status;
+}
+#endif
 
 RustInferCudaStatus device_attribute(CUdevice device,
                                      CUdevice_attribute attribute,
@@ -69,6 +167,222 @@ void destroy_event_after_failed_create(RustInferCudaContext* context,
 }
 
 }  // namespace
+
+#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
+    RustInferCudaNvidiaEnvironmentSnapshot* out_snapshot,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (out_snapshot == nullptr ||
+      out_snapshot->struct_size < sizeof(*out_snapshot)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
+        "out_snapshot is null or has an incompatible struct_size");
+  }
+  clear_nvidia_environment_snapshot(out_snapshot);
+
+  NvmlSession session;
+  RustInferCudaStatus status = session.initialize(error);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  status = [&]() noexcept -> RustInferCudaStatus {
+    nvmlReturn_t result = nvmlSystemGetDriverVersion(
+        out_snapshot->driver_version,
+        RUSTINFER_CUDA_NVIDIA_DRIVER_VERSION_CAPACITY);
+    if (result != NVML_SUCCESS) {
+      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                        "query NVIDIA driver version");
+    }
+    if (out_snapshot->driver_version[0] == '\0') {
+      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                            "query NVIDIA driver version",
+                            "NVML returned an empty driver version");
+    }
+
+    result = nvmlSystemGetCudaDriverVersion_v2(
+        &out_snapshot->cuda_driver_api_version);
+    if (result != NVML_SUCCESS) {
+      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                        "query CUDA Driver API version through NVML");
+    }
+    if (out_snapshot->cuda_driver_api_version <= 0) {
+      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                            "query CUDA Driver API version through NVML",
+                            "NVML returned a non-positive CUDA version");
+    }
+
+    unsigned int device_count = 0;
+    result = nvmlDeviceGetCount_v2(&device_count);
+    if (result != NVML_SUCCESS) {
+      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                        "enumerate NVIDIA devices through NVML");
+    }
+    if (device_count > RUSTINFER_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES) {
+      return validation_error(
+          error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+          RUSTINFER_CUDA_ERROR_STAGE_QUERY, "probe NVIDIA environment",
+          "NVML device count exceeds the fixed environment snapshot capacity");
+    }
+    out_snapshot->device_count = static_cast<uint32_t>(device_count);
+
+    uint32_t aggregate_process_count = 0;
+    for (unsigned int ordinal = 0; ordinal < device_count; ++ordinal) {
+      nvmlDevice_t device = nullptr;
+      result = nvmlDeviceGetHandleByIndex_v2(ordinal, &device);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "select NVIDIA device through NVML");
+      }
+
+      RustInferCudaNvidiaDeviceSnapshot* output =
+          &out_snapshot->devices[ordinal];
+      output->struct_size = sizeof(*output);
+      output->application_graphics_clock_mhz =
+          RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+      output->application_memory_clock_mhz =
+          RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+
+      unsigned int index = 0;
+      result = nvmlDeviceGetIndex(device, &index);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA device index");
+      }
+      if (index != ordinal) {
+        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                              "query NVIDIA device index",
+                              "NVML device index disagrees with enumeration order");
+      }
+      output->index = static_cast<uint32_t>(index);
+
+      result = nvmlDeviceGetName(device, output->name,
+                                 RUSTINFER_CUDA_DEVICE_NAME_CAPACITY);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA device name");
+      }
+      if (output->name[0] == '\0') {
+        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                              "query NVIDIA device name",
+                              "NVML returned an empty device name");
+      }
+
+      nvmlMemory_v2_t memory{};
+      memory.version = nvmlMemory_v2;
+      result = nvmlDeviceGetMemoryInfo_v2(device, &memory);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA device memory");
+      }
+      output->total_memory_bytes = static_cast<uint64_t>(memory.total);
+      output->used_memory_bytes = static_cast<uint64_t>(memory.used);
+      if (output->total_memory_bytes == 0 || memory.reserved > memory.total ||
+          memory.used > memory.total - memory.reserved ||
+          output->used_memory_bytes > output->total_memory_bytes) {
+        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                              "query NVIDIA device memory",
+                              "NVML returned inconsistent device memory");
+      }
+
+      unsigned int temperature_c = 0;
+      result = nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU,
+                                        &temperature_c);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA device temperature");
+      }
+      output->temperature_c = static_cast<uint32_t>(temperature_c);
+
+      nvmlEnableState_t persistence_mode = NVML_FEATURE_DISABLED;
+      result = nvmlDeviceGetPersistenceMode(device, &persistence_mode);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA persistence mode");
+      }
+      if (persistence_mode == NVML_FEATURE_DISABLED) {
+        output->persistence_mode =
+            RUSTINFER_CUDA_NVIDIA_PERSISTENCE_DISABLED;
+      } else if (persistence_mode == NVML_FEATURE_ENABLED) {
+        output->persistence_mode = RUSTINFER_CUDA_NVIDIA_PERSISTENCE_ENABLED;
+      } else {
+        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                              "query NVIDIA persistence mode",
+                              "NVML returned an unknown persistence mode");
+      }
+
+      unsigned int power_limit_milliwatts = 0;
+      result =
+          nvmlDeviceGetPowerManagementLimit(device, &power_limit_milliwatts);
+      if (result != NVML_SUCCESS) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "query NVIDIA power limit");
+      }
+      output->power_limit_milliwatts =
+          static_cast<uint32_t>(power_limit_milliwatts);
+
+      RustInferCudaStatus clock_status = optional_application_clock(
+          device, NVML_CLOCK_GRAPHICS,
+          &output->application_graphics_clock_mhz, error,
+          "query NVIDIA application graphics clock");
+      if (clock_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+        return clock_status;
+      }
+      clock_status = optional_application_clock(
+          device, NVML_CLOCK_MEM, &output->application_memory_clock_mhz, error,
+          "query NVIDIA application memory clock");
+      if (clock_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+        return clock_status;
+      }
+
+      unsigned int process_count = 0;
+      result = nvmlDeviceGetComputeRunningProcesses_v3(device, &process_count,
+                                                       nullptr);
+      if (result != NVML_SUCCESS && result != NVML_ERROR_INSUFFICIENT_SIZE) {
+        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                          "count NVIDIA compute processes");
+      }
+      output->compute_process_count = static_cast<uint32_t>(process_count);
+      if (UINT32_MAX - aggregate_process_count <
+          output->compute_process_count) {
+        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                              "count NVIDIA compute processes",
+                              "aggregate compute-process count overflowed");
+      }
+      aggregate_process_count += output->compute_process_count;
+    }
+    out_snapshot->compute_process_count = aggregate_process_count;
+    return RUSTINFER_CUDA_STATUS_SUCCESS;
+  }();
+
+  status = session.shutdown(status, error);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    clear_nvidia_environment_snapshot(out_snapshot);
+  }
+  return status;
+}
+#else
+extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
+    RustInferCudaNvidiaEnvironmentSnapshot* out_snapshot,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (out_snapshot == nullptr ||
+      out_snapshot->struct_size < sizeof(*out_snapshot)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
+        "out_snapshot is null or has an incompatible struct_size");
+  }
+  clear_nvidia_environment_snapshot(out_snapshot);
+  return set_error(
+      error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
+      RUSTINFER_CUDA_ERROR_DOMAIN_NVML,
+      RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE, "probe NVIDIA environment",
+      "native archive was built without NVML probe support");
+}
+#endif
 
 extern "C" RustInferCudaStatus rustinfer_cuda_device_count(
     uint32_t* out_count, RustInferCudaErrorInfo* error) noexcept {

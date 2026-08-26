@@ -162,6 +162,21 @@ static_assert(sizeof(RustInferCudaDeviceProperties) == 320,
               "RustInferCudaDeviceProperties ABI size changed");
 static_assert(offsetof(RustInferCudaDeviceProperties, name) == 64,
               "RustInferCudaDeviceProperties ABI layout changed");
+static_assert(sizeof(RustInferCudaNvidiaDeviceSnapshot) == 320,
+              "RustInferCudaNvidiaDeviceSnapshot ABI size changed");
+static_assert(offsetof(RustInferCudaNvidiaDeviceSnapshot, name) == 64,
+              "RustInferCudaNvidiaDeviceSnapshot ABI layout changed");
+static_assert(sizeof(RustInferCudaNvidiaEnvironmentSnapshot) == 10352,
+              "RustInferCudaNvidiaEnvironmentSnapshot ABI size changed");
+static_assert(
+    offsetof(RustInferCudaNvidiaEnvironmentSnapshot, driver_version) == 32,
+    "RustInferCudaNvidiaEnvironmentSnapshot driver layout changed");
+static_assert(offsetof(RustInferCudaNvidiaEnvironmentSnapshot, devices) == 112,
+              "RustInferCudaNvidiaEnvironmentSnapshot device layout changed");
+static_assert(RUSTINFER_CUDA_NVIDIA_PERSISTENCE_DISABLED == 0 &&
+                  RUSTINFER_CUDA_NVIDIA_PERSISTENCE_ENABLED == 1 &&
+                  RUSTINFER_CUDA_ERROR_DOMAIN_NVML == 6,
+              "NVML ABI discriminants changed");
 static_assert(sizeof(RustInferCudaAllocationStats) == 40,
               "RustInferCudaAllocationStats ABI size changed");
 static_assert(offsetof(RustInferCudaAllocationStats, device_live_bytes) == 8,

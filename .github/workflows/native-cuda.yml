@@ -44,6 +44,7 @@ jobs:
           docker build \
             --file ci/cuda/Dockerfile \
             --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
+            --build-arg "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
             --progress plain \
             --tag rustinfer-native-cuda:ci \
             .
@@ -71,6 +72,7 @@ jobs:
           docker build \
             --file ci/cuda/Dockerfile \
             --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
+            --build-arg "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
             --progress plain \
             --tag rustinfer-native-cuda:gpu-ci \
             .

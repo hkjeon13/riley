@@ -6,6 +6,8 @@ find_package(CUDAToolkit REQUIRED)
 
 option(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION
     "Build destructive test-only CUDA memory fault injection hooks" OFF)
+option(RUSTINFER_CUDA_ENABLE_NVML_PROBE
+    "Build the development-only in-process NVML environment probe" OFF)
 
 if(NOT CMAKE_CUDA_ARCHITECTURES)
     message(FATAL_ERROR
@@ -55,6 +57,17 @@ if(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
         RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION=1)
 endif()
 
+if(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+    if(NOT TARGET CUDA::nvml)
+        message(FATAL_ERROR
+            "The selected CUDA toolkit does not provide the shared CUDA::nvml target")
+    endif()
+    target_compile_definitions(rustinfer_cuda_native PRIVATE
+        RUSTINFER_CUDA_ENABLE_NVML_PROBE=1)
+    target_compile_definitions(rustinfer_cuda_abi_checks PRIVATE
+        RUSTINFER_CUDA_ENABLE_NVML_PROBE=1)
+endif()
+
 # Static archives do not carry transitive linker directives into Cargo. Keep
 # the CMake dependencies accurate and emit the toolkit-selected linker files
 # for build.rs to validate and forward explicitly.
@@ -63,6 +76,9 @@ target_link_libraries(rustinfer_cuda_native PRIVATE
     CUDA::cudart
     CUDA::cuda_driver
 )
+if(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+    target_link_libraries(rustinfer_cuda_native PRIVATE CUDA::nvml)
+endif()
 
 if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")
     # nvcc otherwise names generated host intermediates with a process-derived
@@ -96,6 +112,12 @@ file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-cublaslt-$<CONFIG>.path"
     CONTENT "$<TARGET_FILE:CUDA::cublasLt>\n"
 )
+if(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+    file(GENERATE
+        OUTPUT "${CMAKE_BINARY_DIR}/rustinfer-cuda-nvml-$<CONFIG>.path"
+        CONTENT "$<TARGET_FILE:CUDA::nvml>\n"
+    )
+endif()
 
 set_target_properties(rustinfer_cuda_native PROPERTIES
     CUDA_ARCHITECTURES "${CMAKE_CUDA_ARCHITECTURES}"

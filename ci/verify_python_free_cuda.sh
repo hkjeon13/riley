@@ -14,6 +14,12 @@ done
 : "${CUDA_HOME:?CUDA_HOME must identify the pinned CUDA toolkit}"
 : "${CUDAToolkit_ROOT:?CUDAToolkit_ROOT must identify the pinned CUDA toolkit}"
 : "${RUSTINFER_CUDA_ARCHITECTURES:?RUSTINFER_CUDA_ARCHITECTURES must be explicit}"
+: "${RUSTINFER_SOURCE_REVISION:?RUSTINFER_SOURCE_REVISION must identify the exact source revision}"
+
+if ! printf '%s\n' "$RUSTINFER_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
+    echo "RUSTINFER_SOURCE_REVISION must be a full lowercase Git object ID" >&2
+    exit 1
+fi
 
 test "$CUDA_HOME" = "$CUDAToolkit_ROOT"
 test -x "$CUDA_HOME/bin/nvcc"
@@ -40,12 +46,17 @@ cleanup() {
 trap cleanup EXIT HUP INT TERM
 
 # PR 03 links the Driver API, while this compile-only image deliberately has no
-# host driver injection. Supply the toolkit stub under its SONAME only for the
-# two metadata-only executables below. Device/context calls remain forbidden;
-# the separate GPU verifier requires the real injected libcuda.so.1.
+# host driver injection. The CUDA-gated calibration producer additionally
+# links NVML but is never executed here. Supply both toolkit stubs under their
+# SONAMEs only for dependency inspection and the two metadata-only executables
+# below. Device/context/NVML calls remain forbidden; the separate GPU verifier
+# requires the real injected driver libraries.
 driver_stub_linker="$CUDA_HOME/lib64/stubs/libcuda.so"
+nvml_stub_linker="$CUDA_HOME/lib64/stubs/libnvidia-ml.so"
 test -f "$driver_stub_linker"
+test -f "$nvml_stub_linker"
 ln -s "$driver_stub_linker" "$driver_stub_runtime/libcuda.so.1"
+ln -s "$nvml_stub_linker" "$driver_stub_runtime/libnvidia-ml.so.1"
 run_host_metadata() {
     LD_LIBRARY_PATH="$driver_stub_runtime:$CUDA_HOME/lib64" "$@"
 }
@@ -78,6 +89,17 @@ cargo test \
     --features bench,cuda \
     --bin rustinfer-profile \
     --no-run
+
+# Build the Python-free calibration producer exactly once as a locked release
+# artifact. This command only compiles and links it; executing the producer or
+# allowing it to initialize NVML, CUDA, or a model is forbidden in this lane.
+cargo build \
+    --locked \
+    --release \
+    --package rustinfer-native \
+    --no-default-features \
+    --features cuda \
+    --bin rustinfer-native
 
 grep -Eiq \
     "CUDA.*architectures[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}|CUDA arch[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}" \
@@ -168,6 +190,14 @@ cargo clippy \
     --features server,bench,cuda \
     -- -D warnings
 
+cargo clippy \
+    --locked \
+    --package rustinfer-native \
+    --all-targets \
+    --no-default-features \
+    --features cuda \
+    -- -D warnings
+
 version_output=$(run_host_metadata target/release/rustinfer --version)
 printf '%s\n' "$version_output"
 printf '%s\n' "$version_output" | grep -Eiq 'rustinfer.*0\.1\.0'
@@ -195,6 +225,8 @@ grep -Eiq \
     run_host_metadata ldd target/release/rustinfer
     printf 'artifact=%s\n' target/release/rustinfer-profile
     run_host_metadata ldd target/release/rustinfer-profile
+    printf 'artifact=%s\n' target/release/rustinfer-native
+    run_host_metadata ldd target/release/rustinfer-native
     printf 'artifact=%s\n' "$abi_link_binary"
     run_host_metadata ldd "$abi_link_binary"
 } >"$ldd_log"
@@ -204,6 +236,8 @@ cat "$ldd_log"
     readelf -d target/release/rustinfer
     printf 'artifact=%s\n' target/release/rustinfer-profile
     readelf -d target/release/rustinfer-profile
+    printf 'artifact=%s\n' target/release/rustinfer-native
+    readelf -d target/release/rustinfer-native
     printf 'artifact=%s\n' "$abi_link_binary"
     readelf -d "$abi_link_binary"
 } >"$readelf_log"
@@ -213,6 +247,8 @@ cat "$readelf_log"
     nm -D --undefined-only target/release/rustinfer
     printf 'artifact=%s\n' target/release/rustinfer-profile
     nm -D --undefined-only target/release/rustinfer-profile
+    printf 'artifact=%s\n' target/release/rustinfer-native
+    nm -D --undefined-only target/release/rustinfer-native
     printf 'artifact=%s\n' "$abi_link_binary"
     nm -D --undefined-only "$abi_link_binary"
 } >"$nm_log"
@@ -234,6 +270,28 @@ if grep -Eq '(RPATH|RUNPATH).*stubs' "$readelf_log"; then
     exit 1
 fi
 
+# NVML is a development-only calibration dependency. The native producer must
+# declare and use it, while both shipped production/profile binaries must stay
+# free of an NVML DT_NEEDED entry and undefined NVML symbols.
+run_host_metadata ldd target/release/rustinfer-native \
+    | grep -F "libnvidia-ml.so.1 => $driver_stub_runtime/libnvidia-ml.so.1"
+readelf -d target/release/rustinfer-native \
+    | grep -Eq 'NEEDED.*libnvidia-ml\.so\.1'
+nm -D --undefined-only target/release/rustinfer-native \
+    | grep -Eq '[[:space:]]U[[:space:]]+nvml[A-Za-z0-9_]+'
+for production_artifact in target/release/rustinfer target/release/rustinfer-profile; do
+    if readelf -d "$production_artifact" | grep -Eq 'NEEDED.*libnvidia-ml\.so\.1'; then
+        echo "$production_artifact unexpectedly depends on NVML" >&2
+        exit 1
+    fi
+    if nm -D --undefined-only "$production_artifact" \
+        | grep -Eq '[[:space:]]U[[:space:]]+nvml[A-Za-z0-9_]+'
+    then
+        echo "$production_artifact unexpectedly imports NVML symbols" >&2
+        exit 1
+    fi
+done
+
 if grep -Eiq 'python|pytorch|torch|transformers|triton' \
     "$ldd_log" "$readelf_log" "$nm_log" Cargo.lock
 then
@@ -241,4 +299,4 @@ then
     exit 1
 fi
 
-echo "Python-free CUDA production/profile compile, C ABI link, tensor memory, version, and dependency smoke passed"
+echo "Python-free CUDA production/profile/native compile, C ABI link, tensor memory, version, and dependency smoke passed"

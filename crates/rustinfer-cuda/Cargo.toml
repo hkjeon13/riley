@@ -12,6 +12,10 @@ links = "rustinfer_cuda_native"
 [features]
 default = []
 cuda = []
+# Development/calibration-only in-process NVIDIA Management Library probe.
+# Keep this separate so ordinary CUDA production binaries do not acquire an
+# NVML DT_NEEDED dependency.
+nvml = ["cuda"]
 # Test infrastructure only. This deliberately changes the native archive and
 # must never be enabled in a production build.
 cuda-test-fault-injection = ["cuda"]
@@ -31,6 +35,11 @@ required-features = ["cuda"]
 name = "host_runtime_gpu"
 path = "tests/host_runtime_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "nvml_gpu"
+path = "tests/nvml_gpu.rs"
+required-features = ["nvml"]
 
 [[test]]
 name = "memory_gpu"

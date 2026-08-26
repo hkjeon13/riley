@@ -46,6 +46,8 @@ pub enum CudaErrorDomain {
     Runtime,
     /// cuBLASLt execution and algorithm-selection API.
     CuBlasLt,
+    /// NVIDIA Management Library (NVML).
+    Nvml,
     /// Native implementation invariant.
     Internal,
 }
@@ -115,6 +117,18 @@ impl CudaError {
             0,
             operation,
             "rustinfer-cuda was compiled without the `cuda` feature; rebuild with `--features cuda` on a host with the CUDA toolkit",
+        )
+    }
+
+    #[cfg(not(feature = "nvml"))]
+    pub(crate) fn nvml_unavailable(operation: &'static str) -> Self {
+        Self::new(
+            CudaErrorKind::Unavailable,
+            CudaErrorDomain::Rust,
+            CudaErrorStage::Initialize,
+            0,
+            operation,
+            "rustinfer-cuda was compiled without the `nvml` feature; rebuild the development/calibration binary with `--features nvml` on a host with the NVIDIA Management Library",
         )
     }
 

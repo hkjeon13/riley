@@ -117,8 +117,12 @@ dependencies = [
 name = "rustinfer-native"
 version = "0.1.0"
 dependencies = [
+ "rustinfer-cuda",
  "rustinfer-model",
  "rustinfer-runtime",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

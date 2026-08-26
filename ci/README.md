@@ -27,13 +27,14 @@ The boundary checker requires only Python 3.11 or newer and the standard
 library. Python is used to inspect Cargo metadata in CI; Cargo never invokes it
 and it is not part of a production artifact. The checker fails closed unless:
 
-- the workspace contains exactly seven production crates plus the non-default,
-  library-only `rustinfer-native` development contract member;
+- the workspace contains exactly seven production crates plus the non-default
+  `rustinfer-native` development member, which owns exactly its library and
+  CUDA-gated calibration binary;
 - `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
 - crate edges and feature ownership match `crates/README.md`;
-- `rustinfer` remains the sole `server` production binary and
-  `rustinfer-profile` requires exactly the non-default `bench,cuda` features;
-  PR A permits no `rustinfer-native` binary target;
+- `rustinfer` remains the sole `server` production binary,
+  `rustinfer-profile` requires exactly the non-default `bench,cuda` features,
+  and `rustinfer-native` requires exactly its non-default `cuda` feature;
 - every crate inherits `publish = false`;
 - every crate inherits the exact workspace `MIT` SPDX expression and the root
   `LICENSE` remains the reviewed MIT text for `rustinfer contributors`;
@@ -89,30 +90,36 @@ Compile for the RTX 4090's compute capability 8.9 without granting the
 container GPU access:
 
 ```sh
+SOURCE_REVISION=$(git rev-parse HEAD)
 docker build \
   --file ci/cuda/Dockerfile \
   --build-arg RUSTINFER_CUDA_ARCHITECTURES=89 \
+  --build-arg "RUSTINFER_SOURCE_REVISION=${SOURCE_REVISION}" \
   --progress plain \
   --tag rustinfer-native-cuda:local \
   .
 ```
 
 No `--gpus` flag is intentional: PR 02 validates AOT compilation and linking,
-not runtime device behavior. The container gate records or checks:
+not runtime device behavior. Since `.git` is deliberately excluded from the
+Docker context, the full lowercase source revision is a required build argument
+and is embedded into the release calibration producer. The container gate
+records or checks:
 
 1. exact Rust, Cargo, nvcc, toolkit root, and AOT architecture information;
 2. locked release build plus the plan's exact root command
    `cargo build --release --features cuda,server`;
-3. the bench/CUDA-only native profile producer plus the host-only C ABI link
-   test and ABI version 1;
+3. the bench/CUDA-only native profile producer, the CUDA-gated Python-free
+   calibration producer, plus the host-only C ABI link test and ABI version 1;
 4. compile-only `host_runtime_gpu` and `memory_gpu` test binaries plus the
    CUDA-backed `rustinfer-tensor` surface, without device access;
-5. CUDA feature-on `rustinfer-cuda`, `rustinfer-tensor`, and
-   `rustinfer-server` Clippy across all targets with warnings denied;
+5. CUDA feature-on `rustinfer-cuda`, `rustinfer-tensor`, `rustinfer-server`, and
+   `rustinfer-native` Clippy across all targets with warnings denied;
 6. `rustinfer --version` reporting the linked CUDA ABI;
 7. a clear failure for an explicit nonexistent CUDA toolkit root; and
 8. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
-   Transformers, or Triton runtime dependency.
+   Transformers, or Triton runtime dependency, and an NVML `DT_NEEDED` edge
+   confined to `rustinfer-native` rather than the production/profile binaries.
 
 PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
 compile-only image에는 실제 host driver가 없으므로, `abi_link`와 `--version`처럼
@@ -128,6 +135,8 @@ export CUDAToolkit_ROOT=/usr/local/cuda
 export CUDA_HOME=/usr/local/cuda
 export RUSTINFER_CUDA_ARCHITECTURES=89
 cargo build --locked --release --features cuda,server
+cargo build --locked --release --package rustinfer-native \
+  --no-default-features --features cuda --bin rustinfer-native
 cargo test --locked -p rustinfer-cuda --features cuda --test abi_link
 cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
   --test host_runtime_gpu --no-run

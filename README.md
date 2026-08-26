@@ -10,11 +10,12 @@ Implementation follows the numbered [deployment plan](deploy/README.md). See [CO
 
 The production runtime remains an explicitly bounded set of seven Rust crates.
 One additional non-default development member, `rustinfer-native`, owns the
-feature-off calibration ABI contract without entering the production dependency
-graph or default build. Responsibilities and dependency direction are documented
-in [`crates/README.md`](crates/README.md). Python reference tools and Triton
-experiments are intentionally outside the workspace and are never production
-Cargo features or build-script inputs.
+side-effect-free feature-off calibration contract/parser and a Python-free,
+`cuda`-gated native calibration producer. It does not enter the production
+dependency graph or default build. Responsibilities and dependency direction
+are documented in [`crates/README.md`](crates/README.md). Python reference tools
+and Triton experiments are intentionally outside the workspace and are never
+production Cargo features or build-script inputs.
 
 The repository is licensed under the [MIT License](LICENSE).
 
@@ -35,6 +36,15 @@ The build command below only compiles and links; it does not receive GPU access.
 ```bash
 cargo build --locked --release --features cuda,server
 ./target/release/rustinfer --version
+```
+
+The development calibration producer is built separately and is never included
+in the production/profile binaries. This command is compile-and-link only; model
+loading and GPU/NVML capture remain explicit remote operations.
+
+```bash
+cargo build --locked --release --package rustinfer-native \
+  --no-default-features --features cuda --bin rustinfer-native
 ```
 
 CUDA compilation/link validation is separate from the mandatory CPU gate.

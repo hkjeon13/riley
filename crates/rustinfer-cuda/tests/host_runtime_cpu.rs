@@ -7,7 +7,8 @@ use rustinfer_cuda::{
     CRATE_ROLE, CUDA_ENABLED, CudaAllocationStats, CudaContext, CudaDevice, CudaDeviceBuffer,
     CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaEvent, CudaKernel,
     CudaPendingD2H, CudaPendingFill, CudaPendingH2D, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
-    DeviceProperties, EXPECTED_ABI_VERSION,
+    DeviceProperties, EXPECTED_ABI_VERSION, NVML_ENABLED, NvidiaDeviceSnapshot,
+    NvidiaEnvironmentSnapshot, NvidiaPersistenceMode, probe_nvidia_environment,
 };
 
 fn assert_send<T: Send>() {}
@@ -48,6 +49,7 @@ fn feature_off_initialize_returns_an_actionable_owned_error() {
 #[test]
 fn feature_off_build_exposes_only_compile_time_contract_metadata() {
     assert!(!black_box(CUDA_ENABLED));
+    assert!(!black_box(NVML_ENABLED));
     assert_eq!(EXPECTED_ABI_VERSION, 1);
     assert_eq!(CRATE_ROLE, "native CUDA C ABI and host-runtime boundary");
 }
@@ -69,6 +71,49 @@ fn public_ownership_types_keep_their_thread_movement_contracts() {
     assert_send::<CudaPendingH2D<'static>>();
     assert_send::<CudaPendingD2H<'static>>();
     assert_send_sync::<CudaAllocationStats>();
+    assert_send_sync::<NvidiaEnvironmentSnapshot>();
+    assert_send_sync::<NvidiaDeviceSnapshot>();
+    assert_send_sync::<NvidiaPersistenceMode>();
+}
+
+#[test]
+fn feature_off_nvml_probe_is_actionable_and_owned() {
+    let error = probe_nvidia_environment().expect_err("NVML must remain opt-in");
+    assert_eq!(error.kind(), CudaErrorKind::Unavailable);
+    assert_eq!(error.domain(), CudaErrorDomain::Rust);
+    assert_eq!(error.stage(), CudaErrorStage::Initialize);
+    assert_eq!(error.operation(), "probe NVIDIA environment");
+    assert!(error.message().contains("`nvml` feature"));
+    assert!(error.message().contains("`--features nvml`"));
+    assert!(error.message().contains("NVIDIA Management Library"));
+}
+
+#[test]
+fn nvml_probe_is_in_process_and_does_not_change_production_cuda_linkage() {
+    let manifest = include_str!("../Cargo.toml");
+    let build = include_str!("../build.rs");
+    let cmake = include_str!("../../../kernels/CMakeLists.txt");
+    let environment = include_str!("../src/environment.rs");
+    let native = include_str!("../../../kernels/src/host_runtime.cu");
+    let release_dependencies = include_str!("../../../ci/release/release_common.py");
+
+    assert!(manifest.contains("nvml = [\"cuda\"]"));
+    assert!(build.contains("if nvml_probe_enabled()"));
+    assert!(build.contains("RUSTINFER_CUDA_ENABLE_NVML_PROBE"));
+    assert!(cmake.contains("if(RUSTINFER_CUDA_ENABLE_NVML_PROBE)"));
+    assert!(cmake.contains("CUDA::nvml"));
+    assert!(native.contains("nvmlInit_v2()"));
+    assert!(native.contains("nvmlShutdown()"));
+    assert!(native.contains("nvmlDeviceGetComputeRunningProcesses_v3"));
+    assert!(native.contains("nvmlDeviceGetMemoryInfo_v2"));
+    assert!(native.contains("memory.used > memory.total - memory.reserved"));
+    for forbidden in ["std::process", "Command::new", "nvidia-smi"] {
+        assert!(!environment.contains(forbidden));
+    }
+    for forbidden in ["popen(", "system("] {
+        assert!(!native.contains(forbidden));
+    }
+    assert!(!release_dependencies.contains("libnvidia-ml"));
 }
 
 #[test]
