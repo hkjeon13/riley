@@ -371,6 +371,7 @@ _Static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&
                    RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR == 1 &&
                    RUSTINFER_CUDA_GEMM_EPILOGUE_NONE == 0 &&
                    RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED == 1 &&
+                   RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K == 1 &&
                    RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1 &&
                    RUSTINFER_CUDA_GEMM_BACKEND_FIXED37 == 2 &&
                    RUSTINFER_CUDA_FIXED37_REDUCTION_VERSION == 1 &&
@@ -379,6 +380,8 @@ _Static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&
                "GEMM ABI discriminants changed");
 _Static_assert(sizeof(RustInferCudaGemmConfig) == 112,
                "GEMM config ABI size changed");
+_Static_assert(offsetof(RustInferCudaGemmConfig, flags) == 4,
+               "GEMM config flags offset changed");
 _Static_assert(offsetof(RustInferCudaGemmConfig, m) == 8,
                "GEMM config dimension offset changed");
 _Static_assert(offsetof(RustInferCudaGemmConfig, input_dtype) == 32,

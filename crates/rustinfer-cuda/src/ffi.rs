@@ -106,6 +106,7 @@ const GEMM_TRANSPOSE_T: u32 = 1;
 const GEMM_LAYOUT_ROW_MAJOR: u32 = 1;
 const GEMM_EPILOGUE_NONE: u32 = 0;
 const GEMM_DETERMINISTIC_REQUIRED: u32 = 1;
+const GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K: u32 = 1;
 
 #[repr(C)]
 struct ErrorInfo {
@@ -879,10 +880,10 @@ struct RawGemmConfig {
 }
 
 impl RawGemmConfig {
-    const fn new(m: u64, n: u64, k: u64, max_workspace_bytes: u64) -> Self {
+    const fn new(flags: u32, m: u64, n: u64, k: u64, max_workspace_bytes: u64) -> Self {
         Self {
             struct_size: GEMM_CONFIG_SIZE,
-            flags: 0,
+            flags,
             m,
             n,
             k,
@@ -3916,8 +3917,15 @@ impl GemmPlanHandle {
         n: u64,
         k: u64,
         max_workspace_bytes: u64,
+        flags: u32,
     ) -> CudaResult<Self> {
-        let config = RawGemmConfig::new(m, n, k, max_workspace_bytes);
+        if flags & !GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K != 0 {
+            return Err(CudaError::invalid_argument(
+                "prepare CUDA GEMM plan",
+                "unknown GEMM reduction-policy flags",
+            ));
+        }
+        let config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
         let mut pointer = ptr::null_mut();
         let mut error = ErrorInfo::new();
         // SAFETY: the context is retained by the native plan on success, the
@@ -4043,7 +4051,7 @@ impl Fixed37GemmPlanHandle {
         k: u64,
         max_workspace_bytes: u64,
     ) -> CudaResult<Self> {
-        let config = RawGemmConfig::new(m, n, k, max_workspace_bytes);
+        let config = RawGemmConfig::new(0, m, n, k, max_workspace_bytes);
         let mut pointer = ptr::null_mut();
         let mut error = ErrorInfo::new();
         // SAFETY: native retains the context on success and initializes the
@@ -4503,6 +4511,7 @@ const _: () = assert!(
 const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, scale) == 560);
 const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, reserved) == 568);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
+const _: () = assert!(offset_of!(RawGemmConfig, flags) == 4);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);
 const _: () = assert!(offset_of!(RawGemmConfig, max_workspace_bytes) == 80);

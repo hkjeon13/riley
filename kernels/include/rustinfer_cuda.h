@@ -781,6 +781,7 @@ typedef struct RustInferCudaFixed37RaggedPagedAttentionParams {
 #define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
 #define RUSTINFER_CUDA_GEMM_EPILOGUE_NONE 0u
 #define RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED 1u
+#define RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K 1u
 #define RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT 1u
 #define RUSTINFER_CUDA_GEMM_BACKEND_FIXED37 2u
 
@@ -793,8 +794,11 @@ typedef struct RustInferCudaFixed37RaggedPagedAttentionParams {
 // accumulation. input_transpose must be N, weight_transpose must be T, all
 // layouts must be ROW_MAJOR, epilogue must be NONE, and deterministic must be
 // DETERMINISTIC_REQUIRED. max_workspace_bytes is a preparation-time cap; the
-// selected exact requirement is returned by gemm_plan_info. flags, reserved0,
-// and every reserved element must be zero.
+// selected exact requirement is returned by gemm_plan_info. flags is either
+// zero for strict split-K=1/NONE selection or
+// GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K for the reviewed deterministic
+// split-K>1/OUTPUT_TYPE extension. Unknown flags, reserved0, and every
+// reserved element must be zero.
 typedef struct RustInferCudaGemmConfig {
   uint32_t struct_size;
   uint32_t flags;

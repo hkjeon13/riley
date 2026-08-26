@@ -41,23 +41,61 @@ const REDUCTION_SCHEME_NONE: u32 = 0;
 const REDUCTION_SCHEME_OUTPUT_TYPE: u32 = 4;
 
 #[cfg(any(feature = "cuda", test))]
-const fn is_deterministic_reduction_configuration(split_k: u32, scheme: u32) -> bool {
+const fn is_deterministic_reduction_configuration(
+    policy: CudaGemmReductionPolicy,
+    split_k: u32,
+    scheme: u32,
+) -> bool {
     (split_k <= 1 && scheme == REDUCTION_SCHEME_NONE)
-        || (split_k > 1 && scheme == REDUCTION_SCHEME_OUTPUT_TYPE)
+        || (matches!(policy, CudaGemmReductionPolicy::AllowOutputTypeSplitKV1)
+            && split_k > 1
+            && scheme == REDUCTION_SCHEME_OUTPUT_TYPE)
+}
+
+/// Reviewed deterministic cuBLASLt reduction policy selected during prepare.
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum CudaGemmReductionPolicy {
+    /// Require split-K at most one with the `NONE` reduction scheme.
+    #[default]
+    StrictNoSplitV1,
+    /// Also permit split-K greater than one with `OUTPUT_TYPE` reduction.
+    AllowOutputTypeSplitKV1,
+}
+
+impl CudaGemmReductionPolicy {
+    /// Stable diagnostic identifier.
+    #[must_use]
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::StrictNoSplitV1 => "strict-no-split-v1",
+            Self::AllowOutputTypeSplitKV1 => "allow-output-type-split-k-v1",
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    const fn abi_flags(self) -> u32 {
+        match self {
+            Self::StrictNoSplitV1 => 0,
+            Self::AllowOutputTypeSplitKV1 => 1,
+        }
+    }
 }
 
 /// Exact dense GEMM contract accepted by the PR 06 CUDA adapter.
 ///
 /// The logical operation is row-major `Y[M, N] = X[M, K] * W[N, K]^T`.
 /// Inputs, weights, and output are BF16, accumulation is F32, the epilogue is
-/// disabled, and deterministic algorithm selection is mandatory. Those
-/// properties are intentionally not configurable in this initial boundary.
+/// disabled, and deterministic algorithm selection is mandatory. The only
+/// selectable detail is the reviewed reduction policy; strict no-split is the
+/// fail-closed default.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CudaGemmConfig {
     m: u64,
     n: u64,
     k: u64,
     max_workspace_bytes: u64,
+    reduction_policy: CudaGemmReductionPolicy,
     input_bytes: u64,
     weight_bytes: u64,
     output_bytes: u64,
@@ -104,6 +142,7 @@ impl CudaGemmConfig {
             n,
             k,
             max_workspace_bytes,
+            reduction_policy: CudaGemmReductionPolicy::StrictNoSplitV1,
             input_bytes,
             weight_bytes,
             output_bytes,
@@ -132,6 +171,19 @@ impl CudaGemmConfig {
     #[must_use]
     pub const fn max_workspace_bytes(self) -> u64 {
         self.max_workspace_bytes
+    }
+
+    /// Returns a copy resolved to the reviewed deterministic reduction policy.
+    #[must_use]
+    pub const fn with_reduction_policy(mut self, policy: CudaGemmReductionPolicy) -> Self {
+        self.reduction_policy = policy;
+        self
+    }
+
+    /// Deterministic reduction policy used during native algorithm selection.
+    #[must_use]
+    pub const fn reduction_policy(self) -> CudaGemmReductionPolicy {
+        self.reduction_policy
     }
 
     /// Exact required bytes for row-major BF16 `X[M, K]`.
@@ -381,6 +433,7 @@ impl CudaContext {
                 config.n,
                 config.k,
                 config.max_workspace_bytes,
+                config.reduction_policy.abi_flags(),
             )?;
             let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
             Ok(CudaPreparedGemm {
@@ -734,6 +787,12 @@ impl CudaContext {
     ) -> CudaResult<CudaPreparedFixed37Gemm> {
         #[cfg(feature = "cuda")]
         {
+            if config.reduction_policy != CudaGemmReductionPolicy::StrictNoSplitV1 {
+                return Err(fixed37_not_supported(
+                    "CudaContext::prepare_fixed37_gemm",
+                    "fixed37 has its own exact reduction contract and rejects cuBLASLt split-K policy flags",
+                ));
+            }
             if config.k > FIXED37_MAX_REDUCTION_ELEMENTS {
                 return Err(fixed37_not_supported(
                     "CudaContext::prepare_fixed37_gemm",
@@ -982,7 +1041,11 @@ impl CudaGemmAlgorithmMetadata {
                 "native GEMM algorithm is not marked deterministic",
             ));
         }
-        if !is_deterministic_reduction_configuration(native.split_k, native.reduction_scheme) {
+        if !is_deterministic_reduction_configuration(
+            config.reduction_policy,
+            native.split_k,
+            native.reduction_scheme,
+        ) {
             return Err(native_metadata_error(format!(
                 "native GEMM algorithm violates the deterministic reduction contract: split_k={}, reduction_scheme={}",
                 native.split_k, native.reduction_scheme
@@ -1089,7 +1152,7 @@ fn ensure_distinct_buffers(
 #[cfg(test)]
 mod tests {
     use super::{
-        CudaGemmConfig, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
+        CudaGemmConfig, CudaGemmReductionPolicy, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
         FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, checked_bf16_matrix_bytes,
         is_deterministic_reduction_configuration,
     };
@@ -1103,6 +1166,20 @@ mod tests {
         assert_eq!(config.weight_bytes(), 70);
         assert_eq!(config.output_bytes(), 30);
         assert_eq!(config.max_workspace_bytes(), 4096);
+        assert_eq!(
+            config.reduction_policy(),
+            CudaGemmReductionPolicy::StrictNoSplitV1
+        );
+        let relaxed =
+            config.with_reduction_policy(CudaGemmReductionPolicy::AllowOutputTypeSplitKV1);
+        assert_eq!(
+            relaxed.reduction_policy(),
+            CudaGemmReductionPolicy::AllowOutputTypeSplitKV1
+        );
+        assert_eq!(
+            relaxed.reduction_policy().id(),
+            "allow-output-type-split-k-v1"
+        );
         assert_eq!(config.input_dtype(), CudaDType::BF16);
         assert_eq!(config.weight_dtype(), CudaDType::BF16);
         assert_eq!(config.accumulator_dtype(), CudaDType::F32);
@@ -1129,17 +1206,39 @@ mod tests {
     }
 
     #[test]
-    fn deterministic_cublaslt_reduction_contract_is_an_exact_two_arm_allowlist() {
+    fn deterministic_cublaslt_reduction_contract_is_policy_scoped() {
+        use CudaGemmReductionPolicy::{AllowOutputTypeSplitKV1, StrictNoSplitV1};
+
+        for accepted in [(0, 0), (1, 0)] {
+            assert!(
+                is_deterministic_reduction_configuration(StrictNoSplitV1, accepted.0, accepted.1),
+                "strict configuration {accepted:?} was rejected"
+            );
+        }
+        for rejected in [(0, 4), (1, 4), (2, 0), (2, 1), (2, 2), (2, 4), (2, 7)] {
+            assert!(
+                !is_deterministic_reduction_configuration(StrictNoSplitV1, rejected.0, rejected.1),
+                "strict policy accepted {rejected:?}"
+            );
+        }
         for accepted in [(0, 0), (1, 0), (2, 4), (42, 4)] {
             assert!(
-                is_deterministic_reduction_configuration(accepted.0, accepted.1),
-                "accepted configuration {accepted:?} was rejected"
+                is_deterministic_reduction_configuration(
+                    AllowOutputTypeSplitKV1,
+                    accepted.0,
+                    accepted.1
+                ),
+                "output-type split-K configuration {accepted:?} was rejected"
             );
         }
         for rejected in [(0, 4), (1, 4), (2, 0), (2, 1), (2, 2), (2, 7)] {
             assert!(
-                !is_deterministic_reduction_configuration(rejected.0, rejected.1),
-                "unreviewed configuration {rejected:?} was accepted"
+                !is_deterministic_reduction_configuration(
+                    AllowOutputTypeSplitKV1,
+                    rejected.0,
+                    rejected.1
+                ),
+                "output-type split-K policy accepted {rejected:?}"
             );
         }
     }

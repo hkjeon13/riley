@@ -98,12 +98,14 @@ algorithm metadata를 검사했다. 당시 Qwen down-projection의 decode `M=1` 
 `M=30/40/46` shape가 production과 같은 16 MiB cap으로 GPU correctness gate를
 통과했다.
 
-PR 16 release 재검증은 cuBLASLt가 직접 반환한 `split_k > 1` /
-`OUTPUT_TYPE` 조합을 pinned 환경의 두 번째 deterministic 형태로 보존한다. `INPLACE`,
-`COMPUTE_TYPE` 또는 그 밖의 조합만 기존 `split_k=1` / `NONE` fallback으로 정규화하고
-`cublasLtMatmulAlgoCheck`를 다시 수행한다. 이 변경으로 Qwen `M=30/40/46`은
-`split_k=9` / `OUTPUT_TYPE`을 선택하므로, 이전 결과를 재해석하지 않고 Qwen
-correctness와 반복 byte-determinism gate를 새 release revision에서 다시 실행한다.
+PR 16 release 진단에서 cuBLASLt가 직접 반환한 `split_k > 1` / `OUTPUT_TYPE` 조합을
+모든 모델에 보존한 실험은 Qwen 골든을 깨뜨렸다. 영어 case는 expected prefix 두 token
+뒤 step 2에서 `7952` 대신 `374`를 선택했다. 같은 revision에서 reduction을 기존
+`split_k <= 1` / `NONE`으로 고정한 A/B는 영어·한국어·코드 3 case의 cache-on/off와
+8-token generation을 다시 정확히 통과했다. 따라서 두 번째 deterministic 형태는
+전역 기본값이 아니라 명시적인 cold-prepare opt-in으로만 남기고, Qwen compatibility
+경로는 strict 정책을 유지한다. 이 결과는 threshold 완화나 과거 PR 12 evidence의
+재해석이 아니다.
 
 후속 진단에서는 optimized online attention과 staged-BF16 eager oracle 사이의
 허용 가능한 numerical tie가 exact token 비교에 섞여 있음을 분리했다. 이에 따라

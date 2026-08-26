@@ -47,8 +47,8 @@ pub use environment::{
 };
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 pub use gemm::{
-    CudaFixed37GemmMetadata, CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedFixed37Gemm,
-    CudaPreparedGemm, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
+    CudaFixed37GemmMetadata, CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaGemmReductionPolicy,
+    CudaPreparedFixed37Gemm, CudaPreparedGemm, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
 };
 pub use memory::{

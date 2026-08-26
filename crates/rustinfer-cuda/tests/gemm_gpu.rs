@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use rustinfer_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaDeviceBuffer,
-    CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
-    GemmParams,
+    CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaGemmReductionPolicy, CudaPinnedHostBuffer,
+    CudaRuntime, CudaStream, GemmParams,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -326,8 +326,10 @@ fn run_case(
     case: GemmCase,
     case_index: u64,
     max_workspace_bytes: u64,
-) -> TestResult {
-    let config = CudaGemmConfig::new(case.m, case.n, case.k, max_workspace_bytes)?;
+    reduction_policy: CudaGemmReductionPolicy,
+) -> TestResult<CudaGemmAlgorithmMetadata> {
+    let config = CudaGemmConfig::new(case.m, case.n, case.k, max_workspace_bytes)?
+        .with_reduction_policy(reduction_policy);
     assert_eq!(config.input_dtype(), CudaDType::BF16);
     assert_eq!(config.weight_dtype(), CudaDType::BF16);
     assert_eq!(config.accumulator_dtype(), CudaDType::F32);
@@ -346,14 +348,24 @@ fn run_case(
     assert!(metadata.runtime_version() > 0);
     assert!(metadata.cublaslt_version() > 0);
     assert!(metadata.workspace_bytes() <= config.max_workspace_bytes());
-    assert!(
-        (metadata.split_k() <= 1 && metadata.reduction_scheme() == 0)
-            || (metadata.split_k() > 1 && metadata.reduction_scheme() == 4),
-        "{} selected an unreviewed split-K/reduction pair ({}, {})",
-        case.label,
-        metadata.split_k(),
-        metadata.reduction_scheme(),
-    );
+    match reduction_policy {
+        CudaGemmReductionPolicy::StrictNoSplitV1 => assert!(
+            metadata.split_k() <= 1 && metadata.reduction_scheme() == 0,
+            "{} strict policy selected ({}, {})",
+            case.label,
+            metadata.split_k(),
+            metadata.reduction_scheme(),
+        ),
+        CudaGemmReductionPolicy::AllowOutputTypeSplitKV1 => assert!(
+            (metadata.split_k() <= 1 && metadata.reduction_scheme() == 0)
+                || (metadata.split_k() > 1 && metadata.reduction_scheme() == 4),
+            "{} output-type split-K policy selected ({}, {})",
+            case.label,
+            metadata.split_k(),
+            metadata.reduction_scheme(),
+        ),
+        _ => panic!("test does not recognize policy {reduction_policy:?}"),
+    }
 
     let input_seed = case_index.wrapping_mul(2).wrapping_add(1);
     let weight_seed = case_index.wrapping_mul(2).wrapping_add(2);
@@ -430,11 +442,12 @@ fn run_case(
     let p95_ms = percentile(&elapsed_ms, 95, 100);
     let median_tflops = effective_tflops(case, median_ms);
     println!(
-        "rustinfer-cuda-gemm case={} m={} n={} k={} latency_scope=ffi_execute_sync latency_median_ms={median_ms:.6} latency_p95_ms={p95_ms:.6} effective_median_tflops={median_tflops:.6} temporary_bytes={} implementation_id=cublaslt:algo={}:tile={}:stages={}:split_k={}:reduction={}:swizzle={}:custom={} numerical_flags=0x{:x} cc={}.{} runtime_version={} cublaslt_version={} explicit_stream=true python_free=true",
+        "rustinfer-cuda-gemm case={} m={} n={} k={} gemm_reduction_policy={} latency_scope=ffi_execute_sync latency_median_ms={median_ms:.6} latency_p95_ms={p95_ms:.6} effective_median_tflops={median_tflops:.6} temporary_bytes={} implementation_id=cublaslt:algo={}:tile={}:stages={}:split_k={}:reduction={}:swizzle={}:custom={} numerical_flags=0x{:x} cc={}.{} runtime_version={} cublaslt_version={} explicit_stream=true python_free=true",
         case.label,
         case.m,
         case.n,
         case.k,
+        reduction_policy.id(),
         metadata.workspace_bytes(),
         metadata.algorithm_id(),
         metadata.tile_id(),
@@ -457,7 +470,7 @@ fn run_case(
     if let Some(workspace) = workspace {
         workspace.close()?;
     }
-    Ok(())
+    Ok(metadata)
 }
 
 #[test]
@@ -470,7 +483,7 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
     let mut upload_staging = context.allocate_pinned_host_buffer(UPLOAD_STAGING_BYTES)?;
 
     for (case_index, &case) in CASES.iter().enumerate() {
-        run_case(
+        let _ = run_case(
             &context,
             &mut stream,
             &mut upload_staging,
@@ -478,10 +491,11 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
             case,
             u64::try_from(case_index)?,
             STANDARD_MAX_WORKSPACE_BYTES,
+            CudaGemmReductionPolicy::AllowOutputTypeSplitKV1,
         )?;
     }
     for (case_index, &case) in QWEN_CASES.iter().enumerate() {
-        run_case(
+        let _ = run_case(
             &context,
             &mut stream,
             &mut upload_staging,
@@ -494,8 +508,40 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
                     .ok_or("case index overflow")?,
             )?,
             QWEN_MAX_WORKSPACE_BYTES,
+            CudaGemmReductionPolicy::StrictNoSplitV1,
         )?;
     }
+
+    let reviewed_shape = CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "q-o-m17")
+        .ok_or("reviewed policy A/B shape is missing")?;
+    let allowed = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_shape,
+        10_001,
+        STANDARD_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::AllowOutputTypeSplitKV1,
+    )?;
+    let strict = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_shape,
+        10_001,
+        STANDARD_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::StrictNoSplitV1,
+    )?;
+    assert!(
+        allowed.split_k() > 1 && allowed.reduction_scheme() == 4,
+        "reviewed SmolLM2 M=17 shape must exercise OUTPUT_TYPE split-K on the pinned GPU"
+    );
+    assert!(strict.split_k() <= 1 && strict.reduction_scheme() == 0);
 
     upload_staging.close()?;
     stream.close()?;
