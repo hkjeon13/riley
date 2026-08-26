@@ -2,6 +2,7 @@
 #include "fixed37_reduction.cuh"
 
 #include <cuda_bf16.h>
+#include <math_constants.h>
 
 #include <cmath>
 #include <cstddef>
