@@ -94,6 +94,13 @@ for that stage boundary. A GPU release lane must additionally start the final
 image with NVIDIA Container Runtime, validate its injected `libcuda.so.1`, and
 run the Python-free real-model API/generation suite.
 
+Ubuntu 22.04 supplies Python 3.10 in the build stage. The builder installs its
+distribution-provided `tomli` package and runs every TOML-reading release
+helper through `run_release_python.py`, which exposes that parser under the
+Python 3.11 `tomllib` name. Python and the compatibility package remain
+confined to the discarded build stage and are absent from the final runtime
+image.
+
 ## Supported model and serving scope
 
 The source config parser and canonical dense-decoder runtime recognize exactly

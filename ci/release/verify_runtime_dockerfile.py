@@ -15,6 +15,29 @@ PINNED_RUNTIME = (
     "sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd"
 )
 PINNED_RUSTUP_TOOLCHAIN = "1.85.0-x86_64-unknown-linux-gnu"
+BUILDER_PACKAGE_INSTALL = (
+    "RUN apt-get update && apt-get install -y --no-install-recommends "
+    "build-essential ca-certificates cmake pkg-config python3 python3-tomli "
+    "&& rm -rf /var/lib/apt/lists/*"
+)
+BUILDER_PREFLIGHT = (
+    "RUN python3 ci/release/run_release_python.py "
+    "ci/release/check_release_preflight.py "
+    '--source-revision "${RUSTINFER_SOURCE_REVISION}" '
+    '--source-date-epoch "${SOURCE_DATE_EPOCH}"'
+)
+BUILDER_BUNDLE = (
+    "RUN mkdir -p /release && python3 ci/release/run_release_python.py "
+    "ci/release/build_release_bundle.py --binary target/release/rustinfer "
+    "--output /release/rustinfer.tar.gz "
+    '--source-revision "${RUSTINFER_SOURCE_REVISION}" '
+    '--source-date-epoch "${SOURCE_DATE_EPOCH}" '
+    "&& python3 ci/release/run_release_python.py "
+    "ci/release/verify_release_bundle.py /release/rustinfer.tar.gz "
+    "&& mkdir -p /runtime-root && tar --extract --gzip "
+    "--file /release/rustinfer.tar.gz --strip-components=1 "
+    "--directory /runtime-root"
+)
 
 
 def _instructions(contents: str) -> list[str]:
@@ -51,6 +74,30 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
         raise ReleaseContractError(
             "release builder must select the reviewed exact rustup toolchain"
         )
+    if builder.count(BUILDER_PACKAGE_INSTALL) != 1:
+        raise ReleaseContractError(
+            "release builder must use the exact reviewed Python 3.10 package install"
+        )
+    required_helper_instructions = {BUILDER_PREFLIGHT, BUILDER_BUNDLE}
+    if not required_helper_instructions <= set(builder):
+        raise ReleaseContractError(
+            "release builder must execute release helpers through the exact "
+            "compatibility wrapper commands"
+        )
+    builder_text = "\n".join(builder)
+    for helper in (
+        "check_release_preflight.py",
+        "build_release_bundle.py",
+        "verify_release_bundle.py",
+    ):
+        marker = f"python3 ci/release/run_release_python.py ci/release/{helper}"
+        if (
+            builder_text.count(f"ci/release/{helper}") != 1
+            or builder_text.count(marker) != 1
+        ):
+            raise ReleaseContractError(
+                f"release builder must invoke {helper} once through the compatibility wrapper"
+            )
     if any("RUSTUP_TOOLCHAIN" in line for line in runtime):
         raise ReleaseContractError(
             "final runtime must not inherit the builder rustup toolchain environment"

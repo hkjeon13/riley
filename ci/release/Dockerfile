@@ -16,6 +16,7 @@ RUN apt-get update \
         cmake \
         pkg-config \
         python3 \
+        python3-tomli \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-toolchain /usr/local/cargo /usr/local/cargo
@@ -34,17 +35,18 @@ WORKDIR /workspace
 COPY . .
 
 # Licensing and immutable provenance fail before the expensive CUDA build.
-RUN python3 ci/release/check_release_preflight.py \
+RUN python3 ci/release/run_release_python.py ci/release/check_release_preflight.py \
         --source-revision "${RUSTINFER_SOURCE_REVISION}" \
         --source-date-epoch "${SOURCE_DATE_EPOCH}"
 RUN cargo build --locked --release --features cuda,server
 RUN mkdir -p /release \
-    && python3 ci/release/build_release_bundle.py \
+    && python3 ci/release/run_release_python.py ci/release/build_release_bundle.py \
         --binary target/release/rustinfer \
         --output /release/rustinfer.tar.gz \
         --source-revision "${RUSTINFER_SOURCE_REVISION}" \
         --source-date-epoch "${SOURCE_DATE_EPOCH}" \
-    && python3 ci/release/verify_release_bundle.py /release/rustinfer.tar.gz \
+    && python3 ci/release/run_release_python.py \
+        ci/release/verify_release_bundle.py /release/rustinfer.tar.gz \
     && mkdir -p /runtime-root \
     && tar --extract --gzip --file /release/rustinfer.tar.gz \
         --strip-components=1 --directory /runtime-root

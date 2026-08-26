@@ -749,6 +749,51 @@ class RuntimeDockerfileTests(unittest.TestCase):
     def test_runtime_dockerfile_contract(self) -> None:
         verify_dockerfile()
 
+    def test_builder_requires_python_310_toml_compatibility(self) -> None:
+        contents = (REPOSITORY_ROOT / "ci/release/Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            changed = Path(temporary) / "Dockerfile"
+            changed_contents = contents.replace("        python3-tomli \\\n", "", 1)
+            changed_contents = changed_contents.replace(
+                "FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04@",
+                "RUN echo python3-tomli\n\n"
+                "FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04@",
+                1,
+            )
+            changed.write_text(
+                changed_contents,
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ReleaseContractError, "package install"):
+                verify_dockerfile(changed)
+
+    def test_builder_release_helpers_require_compatibility_wrapper(self) -> None:
+        contents = (REPOSITORY_ROOT / "ci/release/Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        changed_contents = contents.replace(
+            "python3 ci/release/run_release_python.py "
+            "ci/release/check_release_preflight.py",
+            "python3 ci/release/check_release_preflight.py",
+            1,
+        )
+        changed_contents = changed_contents.replace(
+            "FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04@",
+            "RUN echo python3 ci/release/run_release_python.py "
+            "ci/release/check_release_preflight.py\n\n"
+            "FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04@",
+            1,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            changed = Path(temporary) / "Dockerfile"
+            changed.write_text(changed_contents, encoding="utf-8")
+            with self.assertRaisesRegex(
+                ReleaseContractError, "compatibility wrapper"
+            ):
+                verify_dockerfile(changed)
+
 
 if __name__ == "__main__":
     unittest.main()
