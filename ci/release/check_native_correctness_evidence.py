@@ -39,7 +39,10 @@ if str(REFERENCE_ROOT) not in sys.path:
 from rustinfer_reference import calibration  # noqa: E402
 from rustinfer_reference import oracle_calibration  # noqa: E402
 from rustinfer_reference.constants import RUNTIME_DEPENDENCY_CLASS  # noqa: E402
-from release_common import ReleaseContractError, validate_binary  # noqa: E402
+from release_common import (  # noqa: E402
+    ReleaseContractError,
+    validate_calibration_binary,
+)
 
 
 SCHEMA_VERSION = "rustinfer.native-correctness-raw-evidence.v1"
@@ -81,6 +84,32 @@ CANDIDATE_BINARY_MARKERS = (
     b"--sidecar",
     b"--reduction-variant",
     calibration.CALIBRATION_GATE_ID.encode("ascii"),
+)
+REQUIRED_VARIANTS = (
+    "canonical-v1",
+    "fixed-contiguous-37-balanced-v1",
+)
+
+
+@dataclass(frozen=True)
+class OracleTrustAnchors:
+    """Reviewed raw oracle identities plus legacy-report provenance metadata."""
+
+    source_revision: str
+    fp32_manifest_sha256: str
+    fp32_sidecar_sha256: str
+    bf16_manifest_sha256: str
+    bf16_sidecar_sha256: str
+    historical_report_sha256: str
+
+
+PRODUCTION_ORACLE_TRUST_ANCHORS = OracleTrustAnchors(
+    source_revision="2d22ca061f601389fad7f45708497daad14d9297",
+    fp32_manifest_sha256="5def01c42a0bc54a06b3936638dcd0ddba8c2c68d58b1a022d5c683af0454f27",
+    fp32_sidecar_sha256="95fac531e9a08b5f8c184441078829ce2c4bea2a286525035b95205a4bca891a",
+    bf16_manifest_sha256="40ad7ae1734b02b0c5533ba7bbaba48f6a5629b0c4b66a3f39178ceb5ca2592f",
+    bf16_sidecar_sha256="598bf7255c5aab1ff6701784992b22e55ee4d85e4247dd8fe2cafa49f1a49b66",
+    historical_report_sha256="1fd064d780868ed76202b9adbd773f2ef76cc54a35551a92145f882d779871ea",
 )
 
 
@@ -164,6 +193,193 @@ def _sha256_file(path: Path, label: str, maximum: int) -> str:
     except OSError as error:
         _fail(label, f"cannot hash {path}: {error}")
     return digest.hexdigest()
+
+
+def _validate_oracle_trust_anchors(anchors: OracleTrustAnchors) -> None:
+    if not isinstance(anchors, OracleTrustAnchors):
+        _fail("oracle_trust_anchors", "must be an OracleTrustAnchors binding")
+    if (
+        not isinstance(anchors.source_revision, str)
+        or REVISION_RE.fullmatch(anchors.source_revision) is None
+    ):
+        _fail("oracle_trust_anchors.source_revision", "must be a lowercase Git revision")
+    for field in (
+        "fp32_manifest_sha256",
+        "fp32_sidecar_sha256",
+        "bf16_manifest_sha256",
+        "bf16_sidecar_sha256",
+        "historical_report_sha256",
+    ):
+        value = getattr(anchors, field)
+        if not isinstance(value, str) or SHA256_RE.fullmatch(value) is None:
+            _fail(f"oracle_trust_anchors.{field}", "must be a lowercase SHA-256")
+
+
+def _bind_reviewed_oracle(
+    *,
+    anchors: OracleTrustAnchors,
+    source_revision: str,
+    fp32_manifest: Path,
+    fp32_sidecar: Path,
+    bf16_manifest: Path,
+    bf16_sidecar: Path,
+) -> None:
+    """Bind immutable raw tensors; the legacy report hash is provenance only.
+
+    ``oracle-report.json`` is intentionally absent here.  Portable metric
+    implementations produce different report bytes from the historical Torch
+    reduction.  The report is accepted only when the exact raw-sidecar replay
+    later in :func:`replay_raw_evidence` reconstructs the same document.
+    """
+
+    _validate_oracle_trust_anchors(anchors)
+    if source_revision != anchors.source_revision:
+        _fail(
+            "oracle_source_revision",
+            "differs from the reviewed production oracle revision",
+        )
+    artifacts = (
+        (
+            "fp32-manifest.json",
+            fp32_manifest,
+            anchors.fp32_manifest_sha256,
+            MAX_JSON_BYTES,
+        ),
+        (
+            "fp32-sidecar.safetensors",
+            fp32_sidecar,
+            anchors.fp32_sidecar_sha256,
+            MAX_SAFETENSORS_BYTES,
+        ),
+        (
+            "bf16-manifest.json",
+            bf16_manifest,
+            anchors.bf16_manifest_sha256,
+            MAX_JSON_BYTES,
+        ),
+        (
+            "bf16-sidecar.safetensors",
+            bf16_sidecar,
+            anchors.bf16_sidecar_sha256,
+            MAX_SAFETENSORS_BYTES,
+        ),
+    )
+    for label, path, expected, maximum in artifacts:
+        if _sha256_file(path, label, maximum) != expected:
+            _fail(label, "SHA-256 differs from the reviewed production oracle")
+
+
+def _require_passing_native_e0_report(report: Mapping[str, object]) -> None:
+    """Require the complete promotion result, not merely a replay-valid report."""
+
+    if report.get("status") != "pass":
+        _fail("correctness-report.json.status", "must be pass for evidence packaging")
+    summary = report.get("summary")
+    if not isinstance(summary, dict):
+        _fail("correctness-report.json.summary", "must be an object")
+    expected_summary: tuple[tuple[str, object], ...] = (
+        ("case_count", 31),
+        ("candidate_variant_count", 2),
+        ("failure_count", 0),
+        ("numeric_pass", True),
+        ("semantic_pass", True),
+    )
+    for field, expected in expected_summary:
+        value = summary.get(field)
+        if isinstance(expected, int) and not isinstance(expected, bool):
+            matches = type(value) is int and value == expected
+        else:
+            matches = value is expected
+        if not matches:
+            _fail(
+                f"correctness-report.json.summary.{field}",
+                f"must be {expected!r}",
+            )
+    variants = summary.get("variants")
+    if not isinstance(variants, dict) or set(variants) != set(REQUIRED_VARIANTS):
+        _fail(
+            "correctness-report.json.summary.variants",
+            "must contain exactly both reviewed reduction variants",
+        )
+    expected_variant_summary: tuple[tuple[str, object], ...] = (
+        ("case_count", 31),
+        ("failure_count", 0),
+        ("numeric_pass", True),
+        ("semantic_pass", True),
+        ("pass", True),
+    )
+    for variant_name in REQUIRED_VARIANTS:
+        variant = variants[variant_name]
+        if not isinstance(variant, dict):
+            _fail(
+                f"correctness-report.json.summary.variants.{variant_name}",
+                "must be an object",
+            )
+        for field, expected in expected_variant_summary:
+            value = variant.get(field)
+            if isinstance(expected, int) and not isinstance(expected, bool):
+                matches = type(value) is int and value == expected
+            else:
+                matches = value is expected
+            if not matches:
+                _fail(
+                    f"correctness-report.json.summary.variants.{variant_name}.{field}",
+                    f"must be {expected!r}",
+                )
+        aggregate = variant.get("aggregate_numeric")
+        if not isinstance(aggregate, dict) or set(aggregate) != set(calibration.TENSOR_NAMES):
+            _fail(
+                f"correctness-report.json.summary.variants.{variant_name}.aggregate_numeric",
+                "must contain the complete reviewed tensor set",
+            )
+        for tensor_name in calibration.TENSOR_NAMES:
+            tensor = aggregate[tensor_name]
+            if not isinstance(tensor, dict) or tensor.get("pass") is not True:
+                _fail(
+                    "correctness-report.json.summary.variants."
+                    f"{variant_name}.aggregate_numeric.{tensor_name}.pass",
+                    "must be true",
+                )
+    cases = report.get("cases")
+    if not isinstance(cases, list) or len(cases) != 31:
+        _fail("correctness-report.json.cases", "must contain exactly 31 cases")
+    prompt_ids: set[str] = set()
+    for case_index, case in enumerate(cases):
+        case_path = f"correctness-report.json.cases[{case_index}]"
+        if not isinstance(case, dict):
+            _fail(case_path, "must be an object")
+        prompt_id = case.get("prompt_id")
+        if not isinstance(prompt_id, str) or not prompt_id or prompt_id in prompt_ids:
+            _fail(f"{case_path}.prompt_id", "must be non-empty and unique")
+        prompt_ids.add(prompt_id)
+        if case.get("pass") is not True:
+            _fail(f"{case_path}.pass", "must be true")
+        case_variants = case.get("variants")
+        if not isinstance(case_variants, dict) or set(case_variants) != set(
+            REQUIRED_VARIANTS
+        ):
+            _fail(
+                f"{case_path}.variants",
+                "must contain exactly both reviewed reduction variants",
+            )
+        for variant_name in REQUIRED_VARIANTS:
+            variant = case_variants[variant_name]
+            variant_path = f"{case_path}.variants.{variant_name}"
+            if not isinstance(variant, dict) or variant.get("pass") is not True:
+                _fail(f"{variant_path}.pass", "must be true")
+            semantic = variant.get("semantic")
+            if not isinstance(semantic, dict) or semantic.get("pass") is not True:
+                _fail(f"{variant_path}.semantic.pass", "must be true")
+            numeric = variant.get("numeric")
+            if not isinstance(numeric, dict) or set(numeric) != set(calibration.TENSOR_NAMES):
+                _fail(f"{variant_path}.numeric", "must contain the complete tensor set")
+            for tensor_name in calibration.TENSOR_NAMES:
+                tensor = numeric[tensor_name]
+                if not isinstance(tensor, dict) or tensor.get("pass") is not True:
+                    _fail(
+                        f"{variant_path}.numeric.{tensor_name}.pass",
+                        "must be true",
+                    )
 
 
 def _safe_sibling(value: object, label: str) -> str:
@@ -514,6 +730,26 @@ class _MathVector:
     def double(self) -> "_MathVector":
         return self
 
+    def detach(self) -> "_MathVector":
+        return self
+
+    def cpu(self) -> "_MathVector":
+        return self
+
+    def float(self) -> "_MathVector":
+        return self
+
+    def contiguous(self) -> "_MathVector":
+        return self
+
+    def reshape(self, size: int) -> "_MathVector":
+        if size != -1:
+            raise ValueError("math vector only supports flatten")
+        return self
+
+    def tolist(self) -> list[float | bool]:
+        return list(self._values)
+
 
 class _PureTensor:
     def __init__(
@@ -812,7 +1048,7 @@ def _validate_candidate_binary(
 ) -> str:
     raw = _read_file(path, "candidate-executable", MAX_SAFETENSORS_BYTES)
     try:
-        validate_binary(raw)
+        validate_calibration_binary(raw)
     except ReleaseContractError as error:
         _fail("candidate-executable", f"invalid Linux x86_64 native ELF: {error}")
     missing = [
@@ -854,6 +1090,7 @@ def replay_raw_evidence(
     source_archive: Path | None = None,
     correctness_report: Path | None = None,
     candidate_executable: Path | None = None,
+    oracle_trust_anchors: OracleTrustAnchors = PRODUCTION_ORACLE_TRUST_ANCHORS,
 ) -> NativeReplayResult:
     """Replay raw tensors and optionally bind independent candidate artifacts."""
 
@@ -900,6 +1137,14 @@ def replay_raw_evidence(
                 _fail("bundle.json.candidate_source_revision", "source archive marker differs")
             if observed_oracle_revision != oracle_revision:
                 _fail("bundle.json.oracle_source_revision", "source archive marker differs")
+            _bind_reviewed_oracle(
+                anchors=oracle_trust_anchors,
+                source_revision=oracle_revision,
+                fp32_manifest=files["fp32-manifest.json"],
+                fp32_sidecar=files["fp32-sidecar.safetensors"],
+                bf16_manifest=files["bf16-manifest.json"],
+                bf16_sidecar=files["bf16-sidecar.safetensors"],
+            )
 
             fp32, fp32_path = _stage_manifest(
                 temp / "fp32",
@@ -1028,6 +1273,7 @@ def build_raw_evidence(
     candidate_manifest: Path,
     correctness_report: Path,
     output: Path,
+    oracle_trust_anchors: OracleTrustAnchors = PRODUCTION_ORACLE_TRUST_ANCHORS,
 ) -> NativeReplayResult:
     """Validate inputs, write a deterministic closed archive, then replay it."""
 
@@ -1047,6 +1293,18 @@ def build_raw_evidence(
     oracle_revision = _archive_revision(oracle_source_archive, "oracle_source_archive")
     if candidate_document["provenance"]["git_revision"] != candidate_revision:
         _fail("candidate_manifest", "revision differs from candidate source archive")
+    _bind_reviewed_oracle(
+        anchors=oracle_trust_anchors,
+        source_revision=oracle_revision,
+        fp32_manifest=fp32_manifest,
+        fp32_sidecar=fp32_sidecar,
+        bf16_manifest=bf16_manifest,
+        bf16_sidecar=bf16_sidecar,
+    )
+    correctness_document, _ = _json_bytes(
+        correctness_report, "correctness-report.json"
+    )
+    _require_passing_native_e0_report(correctness_document)
     bundle = _canonical_json_bytes(
         {
             "schema_version": SCHEMA_VERSION,
@@ -1077,6 +1335,7 @@ def build_raw_evidence(
             source_archive=candidate_source_archive,
             correctness_report=correctness_report,
             candidate_executable=executable,
+            oracle_trust_anchors=oracle_trust_anchors,
         )
     except BaseException:
         with contextlib.suppress(OSError):

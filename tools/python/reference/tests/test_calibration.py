@@ -134,6 +134,9 @@ class MiniVector:
             raise AssertionError("mini tensor only supports flatten")
         return self
 
+    def tolist(self):
+        return list(self.values)
+
     def numel(self) -> int:
         return len(self.values)
 
@@ -660,15 +663,78 @@ class CalibrationTests(unittest.TestCase):
                     sidecar_loader=fixture.loader,
                 )
 
-    def test_chunked_tensor_metrics_match_scalar_definition(self) -> None:
-        reference = [0.0, 0.5, -2.0, 4.0, -0.25]
-        candidate = [0.1, 0.4, -2.5, 3.0, -0.5]
+    def test_sequence_and_tensor_metric_loaders_are_exactly_equal(self) -> None:
+        reference = [0.0, 0.5, -2.0, 4.0, -0.25, 16_777_217.0]
+        candidate = [0.1, 0.4, -2.5, 3.0, -0.5, 16_777_216.0]
         expected = recompute_numeric_metrics(reference, candidate)
         actual = recompute_numeric_metrics_from_tensors(
-            MiniVector(reference), MiniVector(candidate), chunk_elements=2
+            MiniVector(reference), MiniVector(candidate)
         )
-        for key in expected:
-            self.assertAlmostEqual(actual[key], expected[key], places=14, msg=key)
+        self.assertEqual(actual, expected)
+
+    def test_metrics_round_inputs_and_element_errors_to_f32(self) -> None:
+        metrics = recompute_numeric_metrics([1.0], [-(2.0**-24)])
+        self.assertEqual(
+            metrics,
+            {
+                "max_abs": 1.0,
+                "mean_abs": 1.0,
+                "max_relative": 1.0,
+                "mean_relative": 1.0,
+                "cosine_similarity": -1.0,
+            },
+        )
+        input_rounded = recompute_numeric_metrics(
+            [16_777_216.0], [16_777_217.0]
+        )
+        self.assertEqual(input_rounded["max_abs"], 0.0)
+        relative_rounded = recompute_numeric_metrics([3.0], [4.0])
+        self.assertEqual(relative_rounded["max_relative"], 0.3333333432674408)
+        f32_division = recompute_numeric_metrics([1.0000001192092896], [1.0])
+        self.assertEqual(
+            f32_division["max_relative"], 1.1920927533992653e-07
+        )
+        self.assertNotEqual(
+            f32_division["max_relative"], 1.1920927533992823e-07
+        )
+
+    def test_fixed_metric_chunk_boundary_includes_short_final_chunk(self) -> None:
+        count = 262_145
+        reference = [1.0] * count
+        candidate = list(reference)
+        candidate[262_143] = 2.0
+        candidate[262_144] = 3.0
+        expected = recompute_numeric_metrics(reference, candidate)
+        actual = recompute_numeric_metrics_from_tensors(
+            MiniVector(reference), MiniVector(candidate)
+        )
+        self.assertEqual(actual, expected)
+        self.assertEqual(expected["max_abs"], 2.0)
+        self.assertEqual(expected["mean_abs"], 3.0 / count)
+        self.assertEqual(expected["max_relative"], 2.0)
+        self.assertEqual(expected["mean_relative"], 3.0 / count)
+
+    def test_metrics_reject_nonfinite_values_and_f32_overflow(self) -> None:
+        maximum_f32 = 3.4028234663852886e38
+        invalid_pairs = (
+            ([math.nan], [0.0], "non-finite"),
+            ([math.inf], [0.0], "non-finite"),
+            ([3.5e38], [0.0], "finite float32 range"),
+            ([maximum_f32], [-maximum_f32], "finite float32 range"),
+        )
+        for reference, candidate, message in invalid_pairs:
+            with self.subTest(
+                reference=reference, candidate=candidate, loader="sequence"
+            ):
+                with self.assertRaisesRegex(CalibrationError, message):
+                    recompute_numeric_metrics(reference, candidate)
+            with self.subTest(
+                reference=reference, candidate=candidate, loader="tensor"
+            ):
+                with self.assertRaisesRegex(CalibrationError, message):
+                    recompute_numeric_metrics_from_tensors(
+                        MiniVector(reference), MiniVector(candidate)
+                    )
 
     def test_manifest_rejects_self_consistent_but_noncanonical_tokenizer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

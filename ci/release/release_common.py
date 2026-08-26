@@ -54,6 +54,13 @@ ALLOWED_NATIVE_DEPENDENCIES = REQUIRED_CUDA_DEPENDENCIES | {
     "libpthread.so.0",
     "librt.so.1",
 }
+CALIBRATION_NVML_DEPENDENCY = "libnvidia-ml.so.1"
+REQUIRED_CALIBRATION_DEPENDENCIES = REQUIRED_CUDA_DEPENDENCIES | {
+    CALIBRATION_NVML_DEPENDENCY,
+}
+ALLOWED_CALIBRATION_DEPENDENCIES = ALLOWED_NATIVE_DEPENDENCIES | {
+    CALIBRATION_NVML_DEPENDENCY,
+}
 FORBIDDEN_RUNTIME_TERMS = (
     "libpython",
     "pytorch",
@@ -348,6 +355,43 @@ def validate_binary(binary: bytes) -> list[str]:
     if any(dynamic_paths):
         raise ReleaseContractError("CLI binary must not contain DT_RPATH or DT_RUNPATH")
     native_manifest_bytes(dependencies)
+    return dependencies
+
+
+def validate_calibration_binary(binary: bytes) -> list[str]:
+    """Validate the development-only native calibration executable.
+
+    The production server ABI deliberately excludes NVML.  The calibration
+    producer is a distinct role and must link the reviewed NVML soname so it
+    can bind the captured hardware state into its evidence manifest.
+    """
+
+    if NVCC_TEMPORARY_SYMBOL_RE.search(binary) is not None:
+        raise ReleaseContractError(
+            "calibration binary contains a nondeterministic nvcc temporary symbol name"
+        )
+    dependencies, dynamic_paths = inspect_elf_dynamic(binary)
+    if any(dynamic_paths):
+        raise ReleaseContractError(
+            "calibration binary must not contain DT_RPATH or DT_RUNPATH"
+        )
+    unknown = set(dependencies) - ALLOWED_CALIBRATION_DEPENDENCIES
+    if unknown:
+        raise ReleaseContractError(
+            "calibration binary contains unreviewed libraries: "
+            + ", ".join(sorted(unknown))
+        )
+    missing = REQUIRED_CALIBRATION_DEPENDENCIES - set(dependencies)
+    if missing:
+        raise ReleaseContractError(
+            "calibration binary is missing reviewed CUDA/NVML libraries: "
+            + ", ".join(sorted(missing))
+        )
+    lowered = "\n".join(dependencies).casefold()
+    if any(term in lowered for term in FORBIDDEN_RUNTIME_TERMS):
+        raise ReleaseContractError(
+            "calibration binary dependencies contain a forbidden runtime term"
+        )
     return dependencies
 
 

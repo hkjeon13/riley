@@ -13,8 +13,9 @@ import json
 import math
 import os
 import re
+import struct
 import subprocess
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -72,6 +73,8 @@ NATIVE_BUILD_ARGV = (
     "--bin",
     NATIVE_EXECUTABLE_FILENAME,
 )
+_NUMERIC_METRIC_CHUNK_ELEMENTS = 262_144
+_F32_STRUCT = struct.Struct("<f")
 
 HF_ORACLE_REDUCTION_VARIANT: dict[str, object] = {
     "variant_id": "hf-eager-default-v1",
@@ -441,22 +444,89 @@ def recompute_numeric_metrics(
 ) -> dict[str, float]:
     if len(fp32_values) != len(candidate_values) or not fp32_values:
         raise CalibrationError("numeric tensors must have equal non-zero lengths")
-    absolute: list[float] = []
-    relative: list[float] = []
+    chunks = (
+        (
+            fp32_values[start : start + _NUMERIC_METRIC_CHUNK_ELEMENTS],
+            candidate_values[start : start + _NUMERIC_METRIC_CHUNK_ELEMENTS],
+        )
+        for start in range(0, len(fp32_values), _NUMERIC_METRIC_CHUNK_ELEMENTS)
+    )
+    return _recompute_numeric_metrics_from_chunks(chunks, len(fp32_values))
+
+
+def _finite_f32(value: object, operation: str) -> float:
+    try:
+        converted = float(value)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise CalibrationError(
+            f"numeric tensor {operation} is not a float32 value"
+        ) from error
+    if not math.isfinite(converted):
+        raise CalibrationError("numeric tensor contains a non-finite value")
+    try:
+        rounded = _F32_STRUCT.unpack(_F32_STRUCT.pack(converted))[0]
+    except (OverflowError, struct.error) as error:
+        raise CalibrationError(
+            f"numeric tensor {operation} exceeds the finite float32 range"
+        ) from error
+    if not math.isfinite(rounded):
+        raise CalibrationError(
+            f"numeric tensor {operation} exceeds the finite float32 range"
+        )
+    return rounded
+
+
+def _recompute_numeric_metrics_from_chunks(
+    chunks: Iterable[tuple[Sequence[object], Sequence[object]]], expected_count: int
+) -> dict[str, float]:
+    """Apply the portable F32 metric arithmetic to fixed-size value chunks."""
+
+    maximum_absolute = 0.0
+    maximum_relative = 0.0
+    absolute_sums: list[float] = []
+    relative_sums: list[float] = []
     products: list[float] = []
     reference_squares: list[float] = []
     candidate_squares: list[float] = []
-    for reference_raw, candidate_raw in zip(fp32_values, candidate_values, strict=True):
-        reference = float(reference_raw)
-        candidate = float(candidate_raw)
-        if not math.isfinite(reference) or not math.isfinite(candidate):
-            raise CalibrationError("numeric tensor contains a non-finite value")
-        difference = abs(reference - candidate)
-        absolute.append(difference)
-        relative.append(difference / max(abs(reference), 1.0))
-        products.append(reference * candidate)
-        reference_squares.append(reference * reference)
-        candidate_squares.append(candidate * candidate)
+    observed_count = 0
+    for reference_raw, candidate_raw in chunks:
+        if len(reference_raw) != len(candidate_raw) or not reference_raw:
+            raise CalibrationError("numeric tensors must have equal non-zero lengths")
+        reference = [_finite_f32(value, "value") for value in reference_raw]
+        candidate = [_finite_f32(value, "value") for value in candidate_raw]
+        absolute: list[float] = []
+        relative: list[float] = []
+        for reference_value, candidate_value in zip(
+            reference, candidate, strict=True
+        ):
+            difference = abs(
+                _finite_f32(reference_value - candidate_value, "difference")
+            )
+            absolute.append(difference)
+            relative.append(
+                _finite_f32(
+                    difference / max(abs(reference_value), 1.0),
+                    "relative difference",
+                )
+            )
+        maximum_absolute = max(maximum_absolute, max(absolute))
+        maximum_relative = max(maximum_relative, max(relative))
+        absolute_sums.append(math.fsum(absolute))
+        relative_sums.append(math.fsum(relative))
+        products.append(
+            math.fsum(
+                reference_value * candidate_value
+                for reference_value, candidate_value in zip(
+                    reference, candidate, strict=True
+                )
+            )
+        )
+        reference_squares.append(math.fsum(value * value for value in reference))
+        candidate_squares.append(math.fsum(value * value for value in candidate))
+        observed_count += len(reference)
+    if observed_count != expected_count or observed_count <= 0:
+        raise CalibrationError("numeric tensors must have equal non-zero lengths")
+
     reference_norm = math.sqrt(math.fsum(reference_squares))
     candidate_norm = math.sqrt(math.fsum(candidate_squares))
     if reference_norm == 0.0 and candidate_norm == 0.0:
@@ -467,10 +537,10 @@ def recompute_numeric_metrics(
         cosine = math.fsum(products) / (reference_norm * candidate_norm)
         cosine = max(-1.0, min(1.0, cosine))
     return {
-        "max_abs": max(absolute),
-        "mean_abs": math.fsum(absolute) / len(absolute),
-        "max_relative": max(relative),
-        "mean_relative": math.fsum(relative) / len(relative),
+        "max_abs": maximum_absolute,
+        "mean_abs": math.fsum(absolute_sums) / observed_count,
+        "max_relative": maximum_relative,
+        "mean_relative": math.fsum(relative_sums) / observed_count,
         "cosine_similarity": cosine,
     }
 
@@ -497,23 +567,15 @@ def _flat_float_tensor(value: object) -> object:
 def recompute_numeric_metrics_from_tensors(
     reference_tensor: object,
     candidate_tensor: object,
-    *,
-    chunk_elements: int = 262_144,
 ) -> dict[str, float]:
     """Recompute metrics from raw tensors with bounded temporary memory.
 
     Safetensors yields real ``torch.Tensor`` objects.  The full 8,064-token
     hidden capture is deliberately not converted to millions of Python float
-    objects: FP32 chunks are reduced in FP64 and only scalar partials leave the
-    tensor runtime.  Tiny deterministic test doubles use the list fallback.
+    objects. Both tensor and sequence loaders use the same fixed-size chunks,
+    F32 element arithmetic, and binary64 ``math.fsum`` reductions.
     """
 
-    if (
-        isinstance(chunk_elements, bool)
-        or not isinstance(chunk_elements, int)
-        or chunk_elements <= 0
-    ):
-        raise CalibrationError("numeric comparison chunk must be positive")
     try:
         reference = _flat_float_tensor(reference_tensor)
         candidate = _flat_float_tensor(candidate_tensor)
@@ -526,58 +588,22 @@ def recompute_numeric_metrics_from_tensors(
     if reference_count != candidate_count or reference_count <= 0:
         raise CalibrationError("numeric tensors must have equal non-zero lengths")
 
-    maximum_absolute = 0.0
-    maximum_relative = 0.0
-    absolute_sums: list[float] = []
-    relative_sums: list[float] = []
-    products: list[float] = []
-    reference_squares: list[float] = []
-    candidate_squares: list[float] = []
     try:
-        for start in range(0, reference_count, chunk_elements):
-            stop = min(start + chunk_elements, reference_count)
-            reference_chunk = reference[start:stop]
-            candidate_chunk = candidate[start:stop]
-            if not bool(reference_chunk.isfinite().all().item()) or not bool(
-                candidate_chunk.isfinite().all().item()
-            ):
-                raise CalibrationError("numeric tensor contains a non-finite value")
-            difference = (reference_chunk - candidate_chunk).abs()
-            relative = difference / reference_chunk.abs().clamp_min(1.0)
-            maximum_absolute = max(maximum_absolute, float(difference.max().item()))
-            maximum_relative = max(maximum_relative, float(relative.max().item()))
-            absolute_sums.append(float(difference.double().sum().item()))
-            relative_sums.append(float(relative.double().sum().item()))
-            reference_double = reference_chunk.double()
-            candidate_double = candidate_chunk.double()
-            products.append(float((reference_double * candidate_double).sum().item()))
-            reference_squares.append(
-                float((reference_double * reference_double).sum().item())
+        chunks = (
+            (
+                tensor_values(reference[start:stop]),
+                tensor_values(candidate[start:stop]),
             )
-            candidate_squares.append(
-                float((candidate_double * candidate_double).sum().item())
+            for start in range(0, reference_count, _NUMERIC_METRIC_CHUNK_ELEMENTS)
+            for stop in (
+                min(start + _NUMERIC_METRIC_CHUNK_ELEMENTS, reference_count),
             )
+        )
+        return _recompute_numeric_metrics_from_chunks(chunks, reference_count)
     except CalibrationError:
         raise
     except Exception as error:
         raise CalibrationError(f"cannot reduce calibration tensors: {error}") from error
-
-    reference_norm = math.sqrt(math.fsum(reference_squares))
-    candidate_norm = math.sqrt(math.fsum(candidate_squares))
-    if reference_norm == 0.0 and candidate_norm == 0.0:
-        cosine = 1.0
-    elif reference_norm == 0.0 or candidate_norm == 0.0:
-        cosine = 0.0
-    else:
-        cosine = math.fsum(products) / (reference_norm * candidate_norm)
-        cosine = max(-1.0, min(1.0, cosine))
-    return {
-        "max_abs": maximum_absolute,
-        "mean_abs": math.fsum(absolute_sums) / reference_count,
-        "max_relative": maximum_relative,
-        "mean_relative": math.fsum(relative_sums) / reference_count,
-        "cosine_similarity": cosine,
-    }
 
 
 def metrics_pass(metrics: Mapping[str, float], thresholds: Mapping[str, float]) -> bool:

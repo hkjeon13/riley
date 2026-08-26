@@ -945,6 +945,19 @@ class CandidateFixture:
                     raise AssertionError(f"optimizer replay {field} has the wrong bytes")
             return optimization_replay
 
+        real_native_replay = (
+            release_candidate_module.native_correctness_evidence.replay_raw_evidence
+        )
+
+        def replay_native_correctness(
+            raw_evidence: Path, **arguments: object
+        ) -> object:
+            return real_native_replay(
+                raw_evidence,
+                oracle_trust_anchors=_NATIVE_TEMPLATE.oracle_trust_anchors,
+                **arguments,
+            )
+
         with mock.patch.object(
             reliability_soak,
             "replay_raw_evidence_archive",
@@ -957,6 +970,10 @@ class CandidateFixture:
             optimization_evidence,
             "replay_raw_evidence",
             side_effect=replay_optimization,
+        ), mock.patch.object(
+            release_candidate_module.native_correctness_evidence,
+            "replay_raw_evidence",
+            side_effect=replay_native_correctness,
         ), mock.patch.object(
             python_free_e2e,
             "load_raw_evidence_archive",
