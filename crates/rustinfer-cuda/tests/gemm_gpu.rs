@@ -330,6 +330,7 @@ fn effective_tflops(case: GemmCase, latency_ms: f64) -> f64 {
     floating_point_operations / (latency_ms * 1.0e9)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_case(
     context: &CudaContext,
     stream: &mut CudaStream,
@@ -593,6 +594,57 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
         "reviewed SmolLM2 M=1024 shape must preserve INPLACE split-K on the pinned GPU"
     );
     assert!(output_only.split_k() <= 1 && output_only.reduction_scheme() == 0);
+
+    let reviewed_down_shape = CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "down-m4096")
+        .ok_or("reviewed down-projection policy A/B shape is missing")?;
+    let down_preserved = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_down_shape,
+        10_003,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    )?;
+    let down_strict = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_down_shape,
+        10_003,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::StrictNoSplitV1,
+    )?;
+    assert!(
+        down_preserved.split_k() > 1 && down_preserved.reduction_scheme() == 1,
+        "reviewed SmolLM2 M=4096 down projection must preserve INPLACE split-K on the pinned GPU"
+    );
+    assert!(down_strict.split_k() <= 1 && down_strict.reduction_scheme() == 0);
+
+    let strict_gate_up_shape = CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "gate-up-m17")
+        .ok_or("strict gate/up policy shape is missing")?;
+    let strict_gate_up = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        strict_gate_up_shape,
+        10_004,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::StrictNoSplitV1,
+    )?;
+    assert!(
+        strict_gate_up.split_k() <= 1 && strict_gate_up.reduction_scheme() == 0,
+        "reviewed SmolLM2 gate/up plan must remain strict on the pinned GPU"
+    );
 
     upload_staging.close()?;
     stream.close()?;

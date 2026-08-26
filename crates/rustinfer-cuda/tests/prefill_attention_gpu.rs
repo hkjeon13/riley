@@ -523,7 +523,8 @@ fn assert_zero_score_prefix_samples(
                     }
                     let expected = round_bf16(accumulator);
                     let unstaged_expected = round_bf16(prefix[prefix_index] / denominator);
-                    witnessed_probability_staging |= expected != unstaged_expected;
+                    witnessed_probability_staging |=
+                        expected.to_bits() != unstaged_expected.to_bits();
                     let index = q_index(sequence, query_heads, batch, token, query_head, depth);
                     assert!(actual[index].is_finite(), "output[{index}] is not finite");
                     assert_eq!(

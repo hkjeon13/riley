@@ -269,13 +269,23 @@ fn json_u32_array(value: &Value, field: &'static str) -> TestResult<Vec<u32>> {
     Ok(output)
 }
 
+fn lowercase_hex(bytes: &[u8]) -> String {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut output = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        output.push(char::from(DIGITS[usize::from(byte >> 4)]));
+        output.push(char::from(DIGITS[usize::from(byte & 0x0f)]));
+    }
+    output
+}
+
 fn parse_fixed37_batch_golden_fixture() -> TestResult<Fixed37BatchGoldenFixture> {
     assert!(
         std::env::var_os("RUSTINFER_GROWING_PREFIX_PROMPT_ID").is_none(),
         "the release gate forbids prompt-filtered golden execution"
     );
     let fixture_bytes = fs::read(golden_fixture_path())?;
-    let fixture_sha256 = format!("{:x}", Sha256::digest(&fixture_bytes));
+    let fixture_sha256 = lowercase_hex(&Sha256::digest(&fixture_bytes));
     assert_eq!(fixture_sha256, EXPECTED_GOLDEN_FIXTURE_SHA256);
     let document: Value = serde_json::from_slice(&fixture_bytes)?;
     assert_eq!(document["schema_version"], "1.0.0");
@@ -305,7 +315,7 @@ fn parse_fixed37_batch_golden_fixture() -> TestResult<Fixed37BatchGoldenFixture>
 
     let mut token_hasher = Sha256::new();
     let mut total_generated_steps = 0_usize;
-    let mut cases_by_prompt_length = BTreeMap::new();
+    let mut cases_by_prompt_length: BTreeMap<usize, Vec<Fixed37BatchGoldenCase>> = BTreeMap::new();
     for (index, case) in cases.iter().enumerate() {
         let prompt_id = case["prompt_id"]
             .as_str()
@@ -349,7 +359,7 @@ fn parse_fixed37_batch_golden_fixture() -> TestResult<Fixed37BatchGoldenFixture>
             });
     }
     assert_eq!(total_generated_steps, EXPECTED_GOLDEN_STEPS);
-    let generated_token_ids_sha256 = format!("{:x}", token_hasher.finalize());
+    let generated_token_ids_sha256 = lowercase_hex(&token_hasher.finalize());
     assert_eq!(generated_token_ids_sha256, EXPECTED_GOLDEN_TOKEN_IDS_SHA256);
     Ok(Fixed37BatchGoldenFixture {
         cases_by_prompt_length,
