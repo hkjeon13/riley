@@ -472,6 +472,11 @@ fn fixed37_materialized_two_pass_local_and_cpu_oracle_agree() -> TestResult {
     key.close()?;
     query.close()?;
     staging.close()?;
+    drop(local37);
+    drop(local_max);
+    drop(two_pass);
+    drop(materialized);
+    stream.close()?;
     close_context(context)
 }
 
@@ -543,6 +548,7 @@ fn fixed37_two_pass_short_sequences_reserve_both_partial_arrays() -> TestResult 
     }
 
     staging.close()?;
+    stream.close()?;
     close_context(context)
 }
 
@@ -629,6 +635,7 @@ fn fixed37_qk_and_av_order_witnesses_survive_bf16_rounding() -> TestResult {
     key.close()?;
     query.close()?;
     staging.close()?;
+    stream.close()?;
     close_context(context)
 }
 
@@ -698,6 +705,7 @@ fn fixed37_softmax_special_rows_are_complete_qnan_rows() -> TestResult {
     probabilities.close()?;
     scores.close()?;
     staging.close()?;
+    stream.close()?;
     close_context(context)
 }
 
@@ -793,5 +801,7 @@ fn fixed37_s8192_bound_and_softmax_order_witness() -> TestResult {
     key.close()?;
     query.close()?;
     staging.close()?;
+    drop(prepared);
+    stream.close()?;
     close_context(context)
 }
