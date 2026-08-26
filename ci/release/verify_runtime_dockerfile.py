@@ -38,6 +38,15 @@ BUILDER_BUNDLE = (
     "--file /release/rustinfer.tar.gz --strip-components=1 "
     "--directory /runtime-root"
 )
+RUNTIME_BASE_PYTHON_ARTIFACT_REMOVAL = (
+    "RUN rm /usr/share/apport/package-hooks/source_shadow.py "
+    "/usr/share/gcc/python/libstdcxx/__init__.py "
+    "/usr/share/gcc/python/libstdcxx/v6/__init__.py "
+    "/usr/share/gcc/python/libstdcxx/v6/printers.py "
+    "/usr/share/gcc/python/libstdcxx/v6/xmethods.py "
+    "/usr/share/gdb/auto-load/usr/lib/x86_64-linux-gnu/"
+    "libstdc++.so.6.0.30-gdb.py"
+)
 
 
 def _instructions(contents: str) -> list[str]:
@@ -107,6 +116,10 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
     copy_lines = [line for line in runtime if line.upper().startswith("COPY ")]
     if copy_lines != ["COPY --from=builder /runtime-root/ /opt/rustinfer/"]:
         raise ReleaseContractError("runtime stage may copy only the verified builder output")
+    if runtime.count(RUNTIME_BASE_PYTHON_ARTIFACT_REMOVAL) != 1:
+        raise ReleaseContractError(
+            "runtime stage must remove the exact reviewed Python hooks from the pinned base"
+        )
     if any(
         line.upper().startswith("RUN ") and re.search(r"\b(apt|apt-get|apk|dnf|yum)\b", line)
         for line in runtime

@@ -101,6 +101,11 @@ Python 3.11 `tomllib` name. Python and the compatibility package remain
 confined to the discarded build stage and are absent from the final runtime
 image.
 
+The pinned NVIDIA runtime base has no Python interpreter, but it includes six
+Python source hooks for GDB/libstdc++ pretty-printing and Ubuntu apport. The
+final stage removes that exact reviewed inventory and then fails unless the
+effective runtime filesystem contains no Python-family artifact at all.
+
 ## Supported model and serving scope
 
 The source config parser and canonical dense-decoder runtime recognize exactly

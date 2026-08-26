@@ -794,6 +794,27 @@ class RuntimeDockerfileTests(unittest.TestCase):
             ):
                 verify_dockerfile(changed)
 
+    def test_runtime_removes_actual_pinned_base_python_hooks(self) -> None:
+        contents = (REPOSITORY_ROOT / "ci/release/Dockerfile").read_text(
+            encoding="utf-8"
+        )
+        changed_contents = contents.replace(
+            "        /usr/share/apport/package-hooks/source_shadow.py \\\n",
+            "        /usr/share/apport/package-hooks/not-the-base-hook.py \\\n",
+            1,
+        )
+        changed_contents = changed_contents.replace(
+            "# The final image receives only verified bundle contents.",
+            "RUN echo /usr/share/apport/package-hooks/source_shadow.py\n\n"
+            "# The final image receives only verified bundle contents.",
+            1,
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            changed = Path(temporary) / "Dockerfile"
+            changed.write_text(changed_contents, encoding="utf-8")
+            with self.assertRaisesRegex(ReleaseContractError, "Python hooks"):
+                verify_dockerfile(changed)
+
 
 if __name__ == "__main__":
     unittest.main()

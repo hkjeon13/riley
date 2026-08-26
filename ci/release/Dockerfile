@@ -61,6 +61,17 @@ ENV PATH=/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
+# The pinned NVIDIA base carries six debugger/apport Python source hooks even
+# though it has no Python interpreter. Remove that exact reviewed inventory so
+# the effective runtime filesystem remains Python-artifact-free.
+RUN rm \
+        /usr/share/apport/package-hooks/source_shadow.py \
+        /usr/share/gcc/python/libstdcxx/__init__.py \
+        /usr/share/gcc/python/libstdcxx/v6/__init__.py \
+        /usr/share/gcc/python/libstdcxx/v6/printers.py \
+        /usr/share/gcc/python/libstdcxx/v6/xmethods.py \
+        /usr/share/gdb/auto-load/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.30-gdb.py
+
 # The final image receives only verified bundle contents. It has neither the
 # source/build toolchain nor Python-family executables.
 RUN test -x /opt/rustinfer/bin/rustinfer \
