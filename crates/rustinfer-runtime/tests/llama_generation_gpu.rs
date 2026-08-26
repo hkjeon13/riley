@@ -29,6 +29,7 @@ const BF16_BYTES: usize = 2;
 const EXPECTED_VOCABULARY_SIZE: usize = 49_152;
 const EXPECTED_GOLDEN_CASES: usize = 31;
 const EXPECTED_GOLDEN_OUTPUT_CAPACITY: usize = 16;
+const FIXED37_DIAGNOSTIC_GENERATION_CAPACITY: usize = 32;
 const STOCHASTIC_OUTPUT_CAPACITY: usize = 8;
 const PINNED_PROMPT: [u32; 7] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 
@@ -73,6 +74,7 @@ struct Fixed37DiagnosticCase {
 
 #[derive(Debug)]
 struct Fixed37SemanticMismatch {
+    kind: &'static str,
     prompt_id: String,
     prompt_length: usize,
     step: usize,
@@ -616,7 +618,7 @@ fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResu
             &context,
             &mut stream,
             prompt_length,
-            fixture.max_new_tokens,
+            FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
             PreparedLlamaDecodeConfig::default().with_reduction_profile(profile),
         )?;
         for case in &mut cases {
@@ -630,7 +632,7 @@ fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResu
                     top_p: None,
                     repetition_penalty: 1.0,
                 },
-                fixture.max_new_tokens,
+                FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
                 fixture.eos_token_ids.clone(),
             );
             let mut state = new_state(&model, request)?;
@@ -641,6 +643,7 @@ fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResu
                 |_| Ok::<(), Infallible>(()),
             )?;
             case.cache_on_token_ids = state.generated_token_ids().to_vec();
+            case.cache_on_token_ids.truncate(fixture.max_new_tokens);
         }
         generation.close()?;
         assert!(context.allocation_stats()?.is_zero());
@@ -697,6 +700,7 @@ winner_margin={} status={}",
                 );
                 if cache_on_token_id != Some(cache_off_token_id) {
                     mismatch = Some(Fixed37SemanticMismatch {
+                        kind: "cache-on-off-token",
                         prompt_id: case.golden.prompt_id.clone(),
                         prompt_length,
                         step,
@@ -723,6 +727,7 @@ winner_margin={} status={}",
                     .len()
                     .min(case.cache_off_token_ids.len());
                 mismatch = Some(Fixed37SemanticMismatch {
+                    kind: "cache-on-off-length",
                     prompt_id: case.golden.prompt_id,
                     prompt_length,
                     step,
@@ -746,6 +751,7 @@ winner_margin={} status={}",
                             .min(case.golden.cache_on_token_ids.len())
                     });
                 mismatch = Some(Fixed37SemanticMismatch {
+                    kind: "cache-on-golden",
                     prompt_id: case.golden.prompt_id,
                     prompt_length,
                     step,
@@ -765,9 +771,10 @@ winner_margin={} status={}",
     close_context(context)?;
     if let Some(mismatch) = mismatch {
         return Err(format!(
-            "fixed37 semantic mismatch: prompt_id={} prompt_length={} step={} \
+            "fixed37 semantic mismatch: kind={} prompt_id={} prompt_length={} step={} \
 cache_on_token_id={:?} cache_off_token_id={:?} golden_token_id={:?} \
 winning_logit={} runner_up_logit={} winner_margin={}",
+            mismatch.kind,
             mismatch.prompt_id,
             mismatch.prompt_length,
             mismatch.step,
@@ -790,9 +797,11 @@ winning_logit={} runner_up_logit={} winner_margin={}",
     assert_eq!(completed_cases, selected_cases);
     println!(
         "pr16-fixed37-growing-prefix-summary schema_version=1 profile={} \
-cases={completed_cases} exact_window={} cache_on_off_exact=true golden_exact=true \
+cases={completed_cases} prepared_generation_capacity={} exact_window={} \
+cache_on_off_exact=true golden_exact=true \
 cuda_allocation_zero_after_close=true status=passed",
         profile.id(),
+        FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
         fixture.max_new_tokens,
     );
     Ok(())
