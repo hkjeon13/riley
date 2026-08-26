@@ -805,6 +805,7 @@ fn paged_corrupt_device_metadata_returns_qnan_without_out_of_bounds_access() -> 
     key_pool.close()?;
     query.close()?;
     assert_eq!(context.allocation_stats()?, baseline);
+    drop(prepared);
     staging.close()?;
     stream.close()?;
     close_context(context)
