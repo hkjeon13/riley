@@ -136,6 +136,35 @@ fn close_context(context: CudaContext) -> TestResult {
     Ok(())
 }
 
+fn finish_with_test_cleanup<T, const N: usize>(
+    operation: TestResult<T>,
+    cleanup: [TestResult; N],
+) -> TestResult<T> {
+    let cleanup_errors = cleanup
+        .into_iter()
+        .filter_map(|result| result.err().map(|error| error.to_string()))
+        .collect::<Vec<_>>();
+    match (operation, cleanup_errors.is_empty()) {
+        (Ok(value), true) => Ok(value),
+        (Ok(_), false) => Err(format!("cleanup failed: {}", cleanup_errors.join("; ")).into()),
+        (Err(error), true) => Err(error),
+        (Err(error), false) => Err(format!(
+            "{error}; cleanup also failed: {}",
+            cleanup_errors.join("; ")
+        )
+        .into()),
+    }
+}
+
+fn require_zero_cuda_allocations(context: &CudaContext, owner: &str) -> TestResult {
+    let stats = context.allocation_stats()?;
+    if stats.is_zero() {
+        Ok(())
+    } else {
+        Err(format!("CUDA allocations remain live after closing {owner}: {stats:?}").into())
+    }
+}
+
 fn json_u32_array(value: &Value, field: &'static str) -> TestResult<Vec<u32>> {
     let values = value.as_array().ok_or(field)?;
     let mut output = Vec::with_capacity(values.len());
@@ -594,181 +623,194 @@ fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResu
     let mut completed_cases = 0_usize;
     let mut mismatch = None;
 
-    'prompt_lengths: for (prompt_length, cases) in fixture.cases_by_prompt_length {
-        let mut cases = cases
-            .into_iter()
-            .filter(|case| {
-                prompt_filter
-                    .as_deref()
-                    .is_none_or(|expected| case.prompt_id == expected)
-            })
-            .map(|golden| Fixed37DiagnosticCase {
-                golden,
-                cache_on_token_ids: Vec::new(),
-                cache_off_token_ids: Vec::new(),
-            })
-            .collect::<Vec<_>>();
-        if cases.is_empty() {
-            continue;
-        }
-        selected_cases += cases.len();
-
-        let mut generation = PreparedLlamaGeneration::prepare(
-            &model,
-            &context,
-            &mut stream,
-            prompt_length,
-            FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
-            PreparedLlamaDecodeConfig::default().with_reduction_profile(profile),
-        )?;
-        for case in &mut cases {
-            let request = generation_request(
-                format!("pr16-fixed37-growing-prefix-{}", case.golden.prompt_id).into_bytes(),
-                0,
-                case.golden.prompt_token_ids.clone(),
-                SamplingParams {
-                    temperature: 0.0,
-                    top_k: None,
-                    top_p: None,
-                    repetition_penalty: 1.0,
-                },
-                FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
-                fixture.eos_token_ids.clone(),
-            );
-            let mut state = new_state(&model, request)?;
-            generation.generate(
-                &mut state,
-                &mut stream,
-                || false,
-                |_| Ok::<(), Infallible>(()),
-            )?;
-            case.cache_on_token_ids = state.generated_token_ids().to_vec();
-            case.cache_on_token_ids.truncate(fixture.max_new_tokens);
-        }
-        generation.close()?;
-        assert!(context.allocation_stats()?.is_zero());
-
-        for step in 0..fixture.max_new_tokens {
-            let active = cases
-                .iter()
-                .enumerate()
-                .filter(|(_, case)| {
-                    case.cache_off_token_ids.len() == step
-                        && case.cache_off_token_ids.last() != Some(&eos_token_id)
+    let diagnostic_operation = (|| -> TestResult {
+        'prompt_lengths: for (prompt_length, cases) in fixture.cases_by_prompt_length {
+            let mut cases = cases
+                .into_iter()
+                .filter(|case| {
+                    prompt_filter
+                        .as_deref()
+                        .is_none_or(|expected| case.prompt_id == expected)
                 })
-                .map(|(index, _)| index)
+                .map(|golden| Fixed37DiagnosticCase {
+                    golden,
+                    cache_on_token_ids: Vec::new(),
+                    cache_off_token_ids: Vec::new(),
+                })
                 .collect::<Vec<_>>();
-            if active.is_empty() {
-                break;
+            if cases.is_empty() {
+                continue;
             }
-            let sequence_length = prompt_length
-                .checked_add(step)
-                .ok_or("fixed37 diagnostic sequence length overflow")?;
-            let mut forward = PreparedLlamaForward::prepare(
+            selected_cases += cases.len();
+
+            let mut generation = PreparedLlamaGeneration::prepare(
                 &model,
                 &context,
                 &mut stream,
-                sequence_length,
-                PreparedLlamaForwardConfig::default().with_reduction_profile(profile),
+                prompt_length,
+                FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
+                PreparedLlamaDecodeConfig::default().with_reduction_profile(profile),
             )?;
-            let mut logits = vec![0_u8; EXPECTED_VOCABULARY_SIZE * BF16_BYTES];
-            for index in active {
-                let case = &mut cases[index];
-                let mut prefix = Vec::with_capacity(sequence_length);
-                prefix.extend_from_slice(&case.golden.prompt_token_ids);
-                prefix.extend_from_slice(&case.cache_off_token_ids);
-                forward.forward(&prefix, &mut stream)?;
-                forward.download_last_logits(&mut logits, &mut stream)?;
-                let (cache_off_token_id, winning_logit, runner_up_logit) =
-                    ranked_top_1_bf16(&logits)?;
-                let cache_on_token_id = case.cache_on_token_ids.get(step).copied();
-                let golden_token_id = case.golden.cache_on_token_ids.get(step).copied();
-                case.cache_off_token_ids.push(cache_off_token_id);
-                println!(
-                    "pr16-fixed37-growing-prefix-step schema_version=1 prompt_id={} \
+            let generation_operation = (|| -> TestResult {
+                for case in &mut cases {
+                    let request = generation_request(
+                        format!("pr16-fixed37-growing-prefix-{}", case.golden.prompt_id)
+                            .into_bytes(),
+                        0,
+                        case.golden.prompt_token_ids.clone(),
+                        SamplingParams {
+                            temperature: 0.0,
+                            top_k: None,
+                            top_p: None,
+                            repetition_penalty: 1.0,
+                        },
+                        FIXED37_DIAGNOSTIC_GENERATION_CAPACITY,
+                        fixture.eos_token_ids.clone(),
+                    );
+                    let mut state = new_state(&model, request)?;
+                    generation.generate(
+                        &mut state,
+                        &mut stream,
+                        || false,
+                        |_| Ok::<(), Infallible>(()),
+                    )?;
+                    case.cache_on_token_ids = state.generated_token_ids().to_vec();
+                    case.cache_on_token_ids.truncate(fixture.max_new_tokens);
+                }
+                Ok(())
+            })();
+            let generation_close = generation.close().map_err(|error| error.into());
+            let generation_zero = require_zero_cuda_allocations(&context, "fixed37 generation");
+            finish_with_test_cleanup(generation_operation, [generation_close, generation_zero])?;
+
+            for step in 0..fixture.max_new_tokens {
+                let active = cases
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, case)| {
+                        case.cache_off_token_ids.len() == step
+                            && case.cache_off_token_ids.last() != Some(&eos_token_id)
+                    })
+                    .map(|(index, _)| index)
+                    .collect::<Vec<_>>();
+                if active.is_empty() {
+                    break;
+                }
+                let sequence_length = prompt_length
+                    .checked_add(step)
+                    .ok_or("fixed37 diagnostic sequence length overflow")?;
+                let mut forward = PreparedLlamaForward::prepare(
+                    &model,
+                    &context,
+                    &mut stream,
+                    sequence_length,
+                    PreparedLlamaForwardConfig::default().with_reduction_profile(profile),
+                )?;
+                let mut logits = vec![0_u8; EXPECTED_VOCABULARY_SIZE * BF16_BYTES];
+                let forward_operation = (|| -> TestResult {
+                    for index in active {
+                        let case = &mut cases[index];
+                        let mut prefix = Vec::with_capacity(sequence_length);
+                        prefix.extend_from_slice(&case.golden.prompt_token_ids);
+                        prefix.extend_from_slice(&case.cache_off_token_ids);
+                        forward.forward(&prefix, &mut stream)?;
+                        forward.download_last_logits(&mut logits, &mut stream)?;
+                        let (cache_off_token_id, winning_logit, runner_up_logit) =
+                            ranked_top_1_bf16(&logits)?;
+                        let cache_on_token_id = case.cache_on_token_ids.get(step).copied();
+                        let golden_token_id = case.golden.cache_on_token_ids.get(step).copied();
+                        case.cache_off_token_ids.push(cache_off_token_id);
+                        println!(
+                            "pr16-fixed37-growing-prefix-step schema_version=1 prompt_id={} \
 prompt_length={prompt_length} step={step} cache_on_token_id={cache_on_token_id:?} \
 cache_off_token_id={cache_off_token_id} golden_token_id={golden_token_id:?} \
 winning_logit={winning_logit} runner_up_logit={runner_up_logit} \
 winner_margin={} status={}",
-                    case.golden.prompt_id,
-                    winning_logit - runner_up_logit,
-                    if cache_on_token_id == Some(cache_off_token_id) {
-                        "matched"
-                    } else {
-                        "mismatched"
-                    },
-                );
-                if cache_on_token_id != Some(cache_off_token_id) {
-                    mismatch = Some(Fixed37SemanticMismatch {
-                        kind: "cache-on-off-token",
-                        prompt_id: case.golden.prompt_id.clone(),
-                        prompt_length,
-                        step,
-                        cache_on_token_id,
-                        cache_off_token_id: Some(cache_off_token_id),
-                        golden_token_id,
-                        winning_logit,
-                        runner_up_logit,
-                    });
-                    break;
+                            case.golden.prompt_id,
+                            winning_logit - runner_up_logit,
+                            if cache_on_token_id == Some(cache_off_token_id) {
+                                "matched"
+                            } else {
+                                "mismatched"
+                            },
+                        );
+                        if cache_on_token_id != Some(cache_off_token_id) {
+                            mismatch = Some(Fixed37SemanticMismatch {
+                                kind: "cache-on-off-token",
+                                prompt_id: case.golden.prompt_id.clone(),
+                                prompt_length,
+                                step,
+                                cache_on_token_id,
+                                cache_off_token_id: Some(cache_off_token_id),
+                                golden_token_id,
+                                winning_logit,
+                                runner_up_logit,
+                            });
+                            break;
+                        }
+                    }
+                    Ok(())
+                })();
+                let forward_close = forward.close().map_err(|error| error.into());
+                let forward_zero = require_zero_cuda_allocations(&context, "fixed37 forward");
+                finish_with_test_cleanup(forward_operation, [forward_close, forward_zero])?;
+                if mismatch.is_some() {
+                    break 'prompt_lengths;
                 }
             }
-            forward.close()?;
-            assert!(context.allocation_stats()?.is_zero());
-            if mismatch.is_some() {
-                break 'prompt_lengths;
-            }
-        }
 
-        for case in cases {
-            if case.cache_on_token_ids != case.cache_off_token_ids {
-                let step = case
-                    .cache_on_token_ids
-                    .len()
-                    .min(case.cache_off_token_ids.len());
-                mismatch = Some(Fixed37SemanticMismatch {
-                    kind: "cache-on-off-length",
-                    prompt_id: case.golden.prompt_id,
-                    prompt_length,
-                    step,
-                    cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
-                    cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
-                    golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
-                    winning_logit: 0.0,
-                    runner_up_logit: 0.0,
-                });
-                break 'prompt_lengths;
-            }
-            if case.cache_on_token_ids != case.golden.cache_on_token_ids {
-                let step = case
-                    .cache_on_token_ids
-                    .iter()
-                    .zip(&case.golden.cache_on_token_ids)
-                    .position(|(actual, golden)| actual != golden)
-                    .unwrap_or_else(|| {
-                        case.cache_on_token_ids
-                            .len()
-                            .min(case.golden.cache_on_token_ids.len())
+            for case in cases {
+                if case.cache_on_token_ids != case.cache_off_token_ids {
+                    let step = case
+                        .cache_on_token_ids
+                        .len()
+                        .min(case.cache_off_token_ids.len());
+                    mismatch = Some(Fixed37SemanticMismatch {
+                        kind: "cache-on-off-length",
+                        prompt_id: case.golden.prompt_id,
+                        prompt_length,
+                        step,
+                        cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
+                        cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
+                        golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
+                        winning_logit: 0.0,
+                        runner_up_logit: 0.0,
                     });
-                mismatch = Some(Fixed37SemanticMismatch {
-                    kind: "cache-on-golden",
-                    prompt_id: case.golden.prompt_id,
-                    prompt_length,
-                    step,
-                    cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
-                    cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
-                    golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
-                    winning_logit: 0.0,
-                    runner_up_logit: 0.0,
-                });
-                break 'prompt_lengths;
+                    break 'prompt_lengths;
+                }
+                if case.cache_on_token_ids != case.golden.cache_on_token_ids {
+                    let step = case
+                        .cache_on_token_ids
+                        .iter()
+                        .zip(&case.golden.cache_on_token_ids)
+                        .position(|(actual, golden)| actual != golden)
+                        .unwrap_or_else(|| {
+                            case.cache_on_token_ids
+                                .len()
+                                .min(case.golden.cache_on_token_ids.len())
+                        });
+                    mismatch = Some(Fixed37SemanticMismatch {
+                        kind: "cache-on-golden",
+                        prompt_id: case.golden.prompt_id,
+                        prompt_length,
+                        step,
+                        cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
+                        cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
+                        golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
+                        winning_logit: 0.0,
+                        runner_up_logit: 0.0,
+                    });
+                    break 'prompt_lengths;
+                }
+                completed_cases += 1;
             }
-            completed_cases += 1;
         }
-    }
+        Ok(())
+    })();
 
-    stream.close()?;
-    close_context(context)?;
+    let stream_close = stream.close().map_err(|error| error.into());
+    let context_close = close_context(context);
+    finish_with_test_cleanup(diagnostic_operation, [stream_close, context_close])?;
     if let Some(mismatch) = mismatch {
         return Err(format!(
             "fixed37 semantic mismatch: kind={} prompt_id={} prompt_length={} step={} \
