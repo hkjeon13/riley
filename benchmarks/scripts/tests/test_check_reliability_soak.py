@@ -67,8 +67,6 @@ class SoakFixture:
         self.run_directory = root / "run"
         self.run_directory.mkdir()
         self.golden = digest("golden completion")
-        self.manifest = self._manifest()
-        self.events: list[dict[str, object]] = []
         self.source = {
             "git_commit": "a" * 40,
             "git_dirty": False,
@@ -79,9 +77,61 @@ class SoakFixture:
             "model_id": "fixture/model",
             "model_revision": "f" * 40,
         }
+        self.config_sha256 = digest("config")
+        self.weights_sha256 = digest("weights")
+        self.tokenizer_aggregate_sha256 = digest("tokenizer aggregate")
+        self.tokenizer_json_sha256 = digest("tokenizer json")
+        self.native_correctness_report = self._native_correctness_report()
+        self.native_correctness_report_path = root / "native-correctness-report.json"
+        self.native_correctness_report_path.write_text(
+            json.dumps(self.native_correctness_report, sort_keys=True) + "\n"
+        )
+        self.native_correctness_report_sha256 = hashlib.sha256(
+            self.native_correctness_report_path.read_bytes()
+        ).hexdigest()
+        self.correctness_golden = self._correctness_golden()
+        self.correctness_golden_path = root / "correctness-golden.json"
+        self.correctness_golden_path.write_text(
+            json.dumps(self.correctness_golden, sort_keys=True) + "\n"
+        )
+        self.manifest = self._manifest()
+        self.events: list[dict[str, object]] = []
         self.binding = checker._canonical_sha256(self.source)
         self._build_events()
         self.write()
+
+    def _native_correctness_report(self) -> dict[str, object]:
+        return {
+            "schema_version": "1.0.0",
+            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "status": "pass",
+            "bindings": {
+                "candidate_git_revision": self.source["git_commit"],
+                "candidate_git_status_sha256": hashlib.sha256(b"").hexdigest(),
+                "model_id": self.source["model_id"],
+                "model_revision": self.source["model_revision"],
+                "config_sha256": self.config_sha256,
+                "weights_sha256": self.weights_sha256,
+                "tokenizer_sha256": self.tokenizer_aggregate_sha256,
+            },
+        }
+
+    def _correctness_golden(self) -> dict[str, object]:
+        return {
+            "schema_version": "rustinfer.python-free-release-e2e-golden.v1",
+            "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "correctness_report_sha256": self.native_correctness_report_sha256,
+            "source_revision": self.source["git_commit"],
+            "model_id": self.source["model_id"],
+            "model_revision": self.source["model_revision"],
+            "config_sha256": self.config_sha256,
+            "weights_sha256": self.weights_sha256,
+            "tokenizer_aggregate_sha256": self.tokenizer_aggregate_sha256,
+            "tokenizer_json_sha256": self.tokenizer_json_sha256,
+            "prompt": "fixture prompt",
+            "max_tokens": 8,
+            "expected_greedy_text_sha256": self.golden,
+        }
 
     def _manifest(self) -> dict[str, object]:
         scenarios = []
@@ -121,10 +171,21 @@ class SoakFixture:
                 "minimum_cancellations": 1, "minimum_disconnects": 1,
                 "minimum_overloads": 1, "graceful_shutdown_deadline_ms": 30000,
             },
-            "requests": {"short": {}, "long": {}, "near_kv": {}, "invalid": {}},
+            "requests": {
+                "short": {
+                    "model": self.source["model_id"],
+                    "prompt": "fixture prompt",
+                    "max_tokens": 8,
+                    "temperature": 0.0,
+                },
+                "long": {},
+                "near_kv": {},
+                "invalid": {},
+            },
             "golden": {
                 "request_profile": "short", "digest_domain": "completion-text-utf8",
-                "generated_sha256": self.golden, "provenance_sha256": digest("oracle report"),
+                "generated_sha256": self.golden,
+                "provenance_sha256": self.native_correctness_report_sha256,
             },
             "scenarios": scenarios,
         }
@@ -197,6 +258,12 @@ class SoakFixture:
             event["sequence"] = index
             event["monotonic_ns"] = index * 1_000_000_000
 
+    def trusted_arguments(self) -> dict[str, Path]:
+        return {
+            "correctness_golden": self.correctness_golden_path,
+            "native_correctness_report": self.native_correctness_report_path,
+        }
+
 
 class ReliabilitySoakCheckerTests(unittest.TestCase):
     def evaluate(self, mutate=None):  # type: ignore[no-untyped-def]
@@ -213,13 +280,89 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
             fixture_contract,
         ):
-            return checker.evaluate(fixture.manifest_path, fixture.run_directory)
+            return checker.evaluate(
+                fixture.manifest_path,
+                fixture.run_directory,
+                **fixture.trusted_arguments(),
+            )
 
     def test_short_complete_fixture_passes(self) -> None:
         report = self.evaluate()
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
+        self.assertEqual(
+            report["schema_version"],
+            "rustinfer.reliability-soak-report.v2",
+        )
         self.assertEqual(len(report["scenario_summaries"]), 10)
+        self.assertEqual(
+            report["bindings"]["trusted_correctness"]["generated_text_sha256"],
+            digest("golden completion"),
+        )
+
+    def test_trusted_correctness_inputs_are_mandatory(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        raw_evidence = Path(directory.name) / "soak.evidence.tar"
+        fixture_contract = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            fixture_contract,
+        ):
+            report = checker.evaluate(fixture.manifest_path, fixture.run_directory)
+            with self.assertRaisesRegex(checker.InputError, "--correctness-golden"):
+                checker.package_raw_evidence(
+                    fixture.manifest_path,
+                    fixture.run_directory,
+                    raw_evidence,
+                )
+            self.assertFalse(raw_evidence.exists())
+            checker.package_raw_evidence(
+                fixture.manifest_path,
+                fixture.run_directory,
+                raw_evidence,
+                **fixture.trusted_arguments(),
+            )
+            replay = checker.replay_raw_evidence_archive(raw_evidence)
+        self.assertFalse(report["passed"])
+        self.assertIn("--correctness-golden", report["errors"][0])
+        self.assertFalse(replay["report"]["passed"])
+        self.assertIn("--correctness-golden", replay["report"]["errors"][0])
+
+    def test_internally_consistent_generated_hash_cannot_self_authorize(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            substituted = digest("self-authorized completion")
+            fixture.manifest["golden"]["generated_sha256"] = substituted
+            for event in fixture.events:
+                if event["kind"] == "request" and event["outcome"] == "success":
+                    event["generated_sha256"] = substituted
+                elif event["kind"] == "restart":
+                    event["before_generated_sha256"] = substituted
+                    event["after_generated_sha256"] = substituted
+
+        report = self.evaluate(mutate)
+        self.assertEqual(report["status"], "error")
+        self.assertIn("trusted E2E correctness golden", report["errors"][0])
+
+    def test_provenance_must_hash_submitted_native_report(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            fixture.manifest["golden"]["provenance_sha256"] = digest(
+                "self-authorized report"
+            )
+
+        report = self.evaluate(mutate)
+        self.assertEqual(report["status"], "error")
+        self.assertIn("submitted native correctness report", report["errors"][0])
+
+    def test_golden_request_identity_is_cross_bound(self) -> None:
+        def mutate(fixture: SoakFixture) -> None:
+            fixture.manifest["requests"]["short"]["prompt"] = "different prompt"
+
+        report = self.evaluate(mutate)
+        self.assertEqual(report["status"], "error")
+        self.assertIn("trusted E2E correctness golden", report["errors"][0])
 
     def test_missing_required_scenario_end_fails(self) -> None:
         report = self.evaluate(lambda fixture: fixture.events.pop(next(i for i, event in enumerate(fixture.events) if event["kind"] == "scenario_end")))
@@ -314,7 +457,11 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
             reviewed_digest,
         ):
-            report = checker.evaluate(fixture.manifest_path, fixture.run_directory)
+            report = checker.evaluate(
+                fixture.manifest_path,
+                fixture.run_directory,
+                **fixture.trusted_arguments(),
+            )
         self.assertEqual(report["status"], "error")
         self.assertIn("reviewed PR16 soak contract", report["errors"][0])
 
@@ -393,12 +540,22 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
             reviewed_digest,
         ):
-            expected = checker.evaluate(fixture.manifest_path, fixture.run_directory)
+            expected = checker.evaluate(
+                fixture.manifest_path,
+                fixture.run_directory,
+                **fixture.trusted_arguments(),
+            )
             first_replay = checker.package_raw_evidence(
-                fixture.manifest_path, fixture.run_directory, first
+                fixture.manifest_path,
+                fixture.run_directory,
+                first,
+                **fixture.trusted_arguments(),
             )
             checker.package_raw_evidence(
-                fixture.manifest_path, fixture.run_directory, second
+                fixture.manifest_path,
+                fixture.run_directory,
+                second,
+                **fixture.trusted_arguments(),
             )
         self.assertEqual(first.read_bytes(), second.read_bytes())
         self.assertEqual(first_replay["report"], expected)
@@ -425,13 +582,19 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             reviewed_digest,
         ):
             checker.package_raw_evidence(
-                fixture.manifest_path, fixture.run_directory, original
+                fixture.manifest_path,
+                fixture.run_directory,
+                original,
+                **fixture.trusted_arguments(),
             )
             payloads = read_raw_tar(original)
             payloads["events.jsonl"] += b"\n"
             write_raw_tar(tampered, payloads)
             with self.assertRaisesRegex(checker.InputError, "SHA256SUMS"):
-                checker.replay_raw_evidence_archive(tampered)
+                checker.replay_raw_evidence_archive(
+                    tampered,
+                    **fixture.trusted_arguments(),
+                )
 
     def test_raw_replay_rejects_extra_member(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -446,13 +609,19 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             reviewed_digest,
         ):
             checker.package_raw_evidence(
-                fixture.manifest_path, fixture.run_directory, original
+                fixture.manifest_path,
+                fixture.run_directory,
+                original,
+                **fixture.trusted_arguments(),
             )
             payloads = read_raw_tar(original)
             payloads["self-asserted-report.json"] = b'{"passed":true}\n'
             write_raw_tar(expanded, payloads)
             with self.assertRaisesRegex(checker.InputError, "exact ordered inventory"):
-                checker.replay_raw_evidence_archive(expanded)
+                checker.replay_raw_evidence_archive(
+                    expanded,
+                    **fixture.trusted_arguments(),
+                )
 
     def test_raw_packager_is_create_only(self) -> None:
         directory = tempfile.TemporaryDirectory()
@@ -468,7 +637,10 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         ):
             with self.assertRaises(FileExistsError):
                 checker.package_raw_evidence(
-                    fixture.manifest_path, fixture.run_directory, output
+                    fixture.manifest_path,
+                    fixture.run_directory,
+                    output,
+                    **fixture.trusted_arguments(),
                 )
         self.assertEqual(output.read_bytes(), b"owner data")
 
@@ -487,7 +659,10 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(checker.InputError, "non-passing"):
                 checker.package_raw_evidence(
-                    fixture.manifest_path, fixture.run_directory, output
+                    fixture.manifest_path,
+                    fixture.run_directory,
+                    output,
+                    **fixture.trusted_arguments(),
                 )
         self.assertFalse(output.exists())
 

@@ -1,18 +1,93 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/reliability-soak-report-v1.schema.json",
+  "$id": "https://rustinfer.dev/schemas/reliability-soak-report-v2.schema.json",
   "title": "rustinfer reliability soak checker report",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"],
   "properties": {
-    "schema_version": {"const": "rustinfer.reliability-soak-report.v1"},
+    "schema_version": {"const": "rustinfer.reliability-soak-report.v2"},
     "status": {"enum": ["passed", "failed", "error"]},
     "passed": {"type": "boolean"},
-    "bindings": {"type": ["object", "null"]},
+    "bindings": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/bindings"}
+      ]
+    },
     "scenario_summaries": {"type": "array"},
     "observations": {"type": "object"},
     "checks": {"type": "array"},
     "errors": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "trustedCorrectness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "correctness_gate_id",
+        "e2e_correctness_golden_sha256",
+        "generated_text_sha256",
+        "native_correctness_report_sha256"
+      ],
+      "properties": {
+        "correctness_gate_id": {"const": "smollm2-fp32-bf16-native-e0-v2"},
+        "e2e_correctness_golden_sha256": {"$ref": "#/$defs/sha256"},
+        "generated_text_sha256": {"$ref": "#/$defs/sha256"},
+        "native_correctness_report_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "git_commit",
+        "git_dirty",
+        "source_archive_sha256",
+        "binary_sha256",
+        "image_sha256",
+        "model_sha256",
+        "model_id",
+        "model_revision"
+      ],
+      "properties": {
+        "git_commit": {"$ref": "#/$defs/gitRevision"},
+        "git_dirty": {"const": false},
+        "source_archive_sha256": {"$ref": "#/$defs/sha256"},
+        "binary_sha256": {"$ref": "#/$defs/sha256"},
+        "image_sha256": {"$ref": "#/$defs/sha256"},
+        "model_sha256": {"$ref": "#/$defs/sha256"},
+        "model_id": {"type": "string", "minLength": 1},
+        "model_revision": {"type": "string", "minLength": 1}
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "reviewed_manifest_template_canonical_sha256",
+        "manifest_sha256",
+        "binding_sha256",
+        "trusted_correctness",
+        "source"
+      ],
+      "properties": {
+        "contract_id": {"type": "string", "minLength": 1},
+        "reviewed_manifest_template_canonical_sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "trusted_correctness": {"$ref": "#/$defs/trustedCorrectness"},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    }
   }
 }

@@ -324,10 +324,15 @@ The remaining cross-bindings are:
   `candidate-1.json` through `candidate-5.json`; the final gate revalidates the
   closed native profile schema and all source/model/environment/workload/raw
   hashes, then recomputes the R7 metrics, baseline ratios, and thresholds;
-- `rustinfer.reliability-soak-report.v1`: must be `passed`, have no errors and
+- `rustinfer.reliability-soak-report.v2`: must be `passed`, have no errors and
   only passing checks, and bind the same clean revision, archive, release
   binary, runtime image, model ID/revision, and canonical model-tree digest as
-  the Python-free E2E raw evidence. The report must also bind the canonical
+  the Python-free E2E raw evidence. Its closed `bindings.trusted_correctness`
+  object must bind the submitted E2E correctness-golden bytes, that golden's
+  approved generated-text SHA, and the submitted native E0 report bytes. The
+  raw manifest's two golden fields must equal the derived generated-text and
+  native-report hashes; caller-supplied digest claims are not trusted. The
+  report must also bind the canonical
   reviewed `pr16-release-soak-v1` template, retain the exact 10-scenario/150-check
   inventory, show every scenario ran for its reviewed duration with samples
   spanning that interval, and retain the reviewed cancellation/disconnect/
@@ -336,8 +341,10 @@ The remaining cross-bindings are:
   exactly canonical `manifest.json`, `run.json`, `events.jsonl`, and internal
   `SHA256SUMS` members. The final gate safely materializes those known members,
   rejects any noncanonical tar bytes or checksum/inventory drift, reruns the
-  soak checker from that run directory, and requires the recomputed report to
-  equal the submitted report exactly. Thus raw event sequencing, final
+  soak checker from that run directory with the already snapshotted E2E golden
+  and native correctness report, and requires the recomputed report to equal
+  the submitted report exactly. Legacy v1 reports or replay without either
+  trusted artifact fail closed. Thus raw event sequencing, final
   allocation/KV quiescence, restart, and rollback golden parity are evidence,
   not self-asserted report fields.
 

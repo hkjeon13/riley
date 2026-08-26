@@ -12,11 +12,18 @@ digests are all-zero placeholders.  Before a release run, copy it outside the
 checkout and replace:
 
 - `golden.generated_sha256` with the SHA-256 of the exact UTF-8 completion text
-  approved by the correctness gate for the `short` request;
-- `golden.provenance_sha256` with the SHA-256 of that immutable correctness
-  report.
+  from the independently reviewed Python-free E2E correctness golden for the
+  exact `short` request; and
+- `golden.provenance_sha256` with the byte SHA-256 of the submitted passing
+  native E0 correctness report.
 
-The checker and runner reject the placeholder. The checker also pins the
+The checker and runner reject the placeholder. Every standalone check,
+package, and raw replay also requires both trusted files. The checker derives
+both hashes rather than accepting caller-supplied digest strings, requires the
+E2E golden to hash the same native report, and cross-binds source, model,
+prompt, max-token, and greedy-generation identity. A manifest and event stream
+rewritten around an arbitrary completion therefore cannot self-authorize. The
+checker also pins the
 canonical checked-in contract after normalizing only those two golden fields;
 changing a request, threshold, duration, scenario, or target cannot define an
 easier release lane. The exact materialized manifest SHA-256 is recorded in
@@ -112,11 +119,15 @@ ci/run_release_soak.sh
 python3 benchmarks/scripts/check_reliability_soak.py \
   --manifest /var/tmp/rustinfer-soak-manifest.json \
   --run-directory /var/tmp/rustinfer-soak-run001 \
+  --correctness-golden /evidence/python-free-e2e-golden.json \
+  --native-correctness-report /evidence/native-correctness-report.json \
   --report /var/tmp/rustinfer-soak-run001.report.json
 
 python3 benchmarks/scripts/package_reliability_soak_evidence.py \
   --manifest /var/tmp/rustinfer-soak-manifest.json \
   --run-directory /var/tmp/rustinfer-soak-run001 \
+  --correctness-golden /evidence/python-free-e2e-golden.json \
+  --native-correctness-report /evidence/native-correctness-report.json \
   --output /var/tmp/rustinfer-soak-run001.evidence.tar
 ```
 
@@ -128,7 +139,9 @@ payloads. The loader rejects additional files, links, special members,
 noncanonical metadata or tar encoding, checksum drift, and oversized inputs.
 It then reconstructs the existing run-directory contract and recomputes the
 report; the final release-candidate gate requires that result to equal the
-separately submitted report exactly.
+separately submitted report exactly. Report v2 records the trusted E2E golden,
+generated-text, and native-report hashes in `bindings.trusted_correctness`.
+Legacy v1 reports and replay calls without both trusted artifacts fail closed.
 
 The checker runs outside the production dependency boundary and uses only the
 Python standard library.  It fails closed on malformed/duplicate JSON,

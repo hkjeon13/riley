@@ -73,7 +73,7 @@ MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v2"
 ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
 REPORT_VERSION = "rustinfer.release-candidate-report.v2"
 PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
-SOAK_VERSION = "rustinfer.reliability-soak-report.v1"
+SOAK_VERSION = "rustinfer.reliability-soak-report.v2"
 CORRECTNESS_VERSION = "1.0.0"
 CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
 OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
@@ -1126,10 +1126,19 @@ def _validate_soak(
     image_sha256: str,
     model: dict[str, Any],
     raw_evidence_path: Path,
+    correctness_golden_path: Path,
+    correctness_golden_sha256: str,
+    generated_text_sha256: str,
+    native_correctness_report_path: Path,
+    native_correctness_report_sha256: str,
 ) -> None:
     try:
-        replay = reliability_soak.replay_raw_evidence_archive(raw_evidence_path)
-    except reliability_soak.InputError as error:
+        replay = reliability_soak.replay_raw_evidence_archive(
+            raw_evidence_path,
+            correctness_golden=correctness_golden_path,
+            native_correctness_report=native_correctness_report_path,
+        )
+    except (reliability_soak.InputError, OSError) as error:
         _fail(f"{path}.raw_evidence", str(error))
     replayed_report = replay["report"]
     if _canonical_json_bytes(replayed_report) != _canonical_json_bytes(report):
@@ -1150,6 +1159,7 @@ def _validate_soak(
             "reviewed_manifest_template_canonical_sha256",
             "manifest_sha256",
             "binding_sha256",
+            "trusted_correctness",
             "source",
         },
         f"{path}.bindings",
@@ -1166,6 +1176,27 @@ def _validate_soak(
         )
     _sha256(bindings["manifest_sha256"], f"{path}.bindings.manifest_sha256")
     _sha256(bindings["binding_sha256"], f"{path}.bindings.binding_sha256")
+    trusted_correctness = _exact(
+        bindings["trusted_correctness"],
+        {
+            "correctness_gate_id",
+            "e2e_correctness_golden_sha256",
+            "generated_text_sha256",
+            "native_correctness_report_sha256",
+        },
+        f"{path}.bindings.trusted_correctness",
+    )
+    expected_trusted_correctness = {
+        "correctness_gate_id": CORRECTNESS_GATE,
+        "e2e_correctness_golden_sha256": correctness_golden_sha256,
+        "generated_text_sha256": generated_text_sha256,
+        "native_correctness_report_sha256": native_correctness_report_sha256,
+    }
+    if trusted_correctness != expected_trusted_correctness:
+        _fail(
+            f"{path}.bindings.trusted_correctness",
+            "does not match the submitted E2E golden and native correctness report",
+        )
     source = _exact(
         bindings["source"],
         {
@@ -1763,6 +1794,17 @@ def evaluate(
                     f"manifest.evidence.{gate_name}.correctness_golden.sha256",
                     "differs from the trusted expected correctness golden SHA-256",
                 )
+            correctness_golden_document, _ = _load_json(
+                correctness_golden_path,
+                f"{gate_name} correctness golden",
+            )
+            trusted_generated_text_sha256 = _sha256(
+                correctness_golden_document.get("expected_greedy_text_sha256"),
+                (
+                    f"manifest.evidence.{gate_name}.correctness_golden"
+                    ".expected_greedy_text_sha256"
+                ),
+            )
             gate_report, _ = _load_json(report_path, f"{gate_name} report")
             loaded[gate_name] = (gate_report, report_sha)
             raw_hashes[gate_name] = raw_sha
@@ -2082,6 +2124,11 @@ def evaluate(
             image_sha256=image_sha256,
             model=python_free_model,
             raw_evidence_path=raw_paths["reliability_soak"],
+            correctness_golden_path=correctness_golden_path,
+            correctness_golden_sha256=trusted_correctness_golden_sha256,
+            generated_text_sha256=trusted_generated_text_sha256,
+            native_correctness_report_path=native_report_path,
+            native_correctness_report_sha256=native_correctness_sha256,
         )
         evidence_hashes = {name: digest for name, (_, digest) in loaded.items()}
         evidence_hashes.update({f"{name}_raw": digest for name, digest in raw_hashes.items()})

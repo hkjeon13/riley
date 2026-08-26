@@ -23,7 +23,10 @@ from typing import Any, Mapping, NoReturn, Sequence
 MANIFEST_VERSION = "rustinfer.reliability-soak-manifest.v1"
 RUN_VERSION = "rustinfer.reliability-soak-run.v1"
 EVENT_VERSION = "rustinfer.reliability-soak-event.v1"
-REPORT_VERSION = "rustinfer.reliability-soak-report.v1"
+REPORT_VERSION = "rustinfer.reliability-soak-report.v2"
+E2E_GOLDEN_VERSION = "rustinfer.python-free-release-e2e-golden.v1"
+NATIVE_CORRECTNESS_VERSION = "1.0.0"
+NATIVE_CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
 REQUIRED_KINDS = {
     "steady",
     "burst-idle",
@@ -48,6 +51,8 @@ RAW_MEMBER_MAX_BYTES = {
     "SHA256SUMS": 1024,
 }
 MAX_RAW_ARCHIVE_BYTES = sum(RAW_MEMBER_MAX_BYTES.values()) + 64 * 1024
+MAX_CORRECTNESS_GOLDEN_BYTES = 64 * 1024
+MAX_NATIVE_CORRECTNESS_REPORT_BYTES = 16 * 1024 * 1024
 REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256 = (
     "bbe76150fdc64bb8274f79adb7d500031ccb67f49769de76c56d6c90066e422a"
 )
@@ -190,6 +195,35 @@ def _regular_file(path: Path, label: str, maximum_bytes: int) -> tuple[Any, os.s
         handle.close()
         _fail(label, f"must be between 1 and {maximum_bytes} bytes")
     return handle, metadata
+
+
+def _load_regular_json(
+    path: Path, label: str, maximum_bytes: int
+) -> tuple[dict[str, Any], str]:
+    handle, metadata = _regular_file(path, label, maximum_bytes)
+    try:
+        raw = handle.read(metadata.st_size + 1)
+        after = os.fstat(handle.fileno())
+    except OSError as error:
+        _fail(label, f"cannot read strict UTF-8 JSON: {error}")
+    finally:
+        handle.close()
+    if len(raw) != metadata.st_size:
+        _fail(label, "file changed or was truncated while being read")
+    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(metadata, field) != getattr(after, field) for field in stable_fields):
+        _fail(label, "file changed while being read")
+    try:
+        value = json.loads(
+            raw.decode("utf-8"),
+            object_pairs_hook=_pairs,
+            parse_constant=_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+        _fail(label, f"cannot read strict UTF-8 JSON: {error}")
+    if not isinstance(value, dict):
+        _fail(label, "root must be an object")
+    return value, hashlib.sha256(raw).hexdigest()
 
 
 def _stream_sha256(handle: Any) -> str:
@@ -385,6 +419,202 @@ def _validate_run(value: dict[str, Any], path: str, manifest_sha: str) -> dict[s
     return run
 
 
+def _validate_trusted_correctness(
+    manifest: dict[str, Any],
+    run: dict[str, Any],
+    correctness_golden_path: Path | str | None,
+    native_correctness_report_path: Path | str | None,
+) -> dict[str, str]:
+    if correctness_golden_path is None:
+        _fail(
+            "--correctness-golden",
+            "the independently reviewed E2E correctness golden is required",
+        )
+    if native_correctness_report_path is None:
+        _fail(
+            "--native-correctness-report",
+            "the passing native E0 correctness report is required",
+        )
+
+    correctness_golden, correctness_golden_sha256 = _load_regular_json(
+        Path(correctness_golden_path),
+        "correctness golden",
+        MAX_CORRECTNESS_GOLDEN_BYTES,
+    )
+    native_correctness, native_correctness_report_sha256 = _load_regular_json(
+        Path(native_correctness_report_path),
+        "native correctness report",
+        MAX_NATIVE_CORRECTNESS_REPORT_BYTES,
+    )
+
+    golden = _exact(
+        correctness_golden,
+        {
+            "schema_version",
+            "correctness_gate_id",
+            "correctness_report_sha256",
+            "source_revision",
+            "model_id",
+            "model_revision",
+            "config_sha256",
+            "weights_sha256",
+            "tokenizer_aggregate_sha256",
+            "tokenizer_json_sha256",
+            "prompt",
+            "max_tokens",
+            "expected_greedy_text_sha256",
+        },
+        "correctness golden",
+    )
+    if golden["schema_version"] != E2E_GOLDEN_VERSION:
+        _fail(
+            "correctness golden.schema_version",
+            f"must be {E2E_GOLDEN_VERSION}",
+        )
+    if golden["correctness_gate_id"] != NATIVE_CORRECTNESS_GATE:
+        _fail(
+            "correctness golden.correctness_gate_id",
+            f"must be {NATIVE_CORRECTNESS_GATE}",
+        )
+    for key in (
+        "correctness_report_sha256",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_aggregate_sha256",
+        "tokenizer_json_sha256",
+        "expected_greedy_text_sha256",
+    ):
+        _string(golden[key], f"correctness golden.{key}", SHA256_RE)
+    _string(golden["source_revision"], "correctness golden.source_revision", GIT_RE)
+    _string(golden["model_id"], "correctness golden.model_id")
+    _string(golden["model_revision"], "correctness golden.model_revision")
+    prompt = _string(golden["prompt"], "correctness golden.prompt")
+    if len(prompt.encode("utf-8")) > 16 * 1024 or "\n" in prompt or "\r" in prompt:
+        _fail("correctness golden.prompt", "must be a bounded single line")
+    max_tokens = _integer(golden["max_tokens"], "correctness golden.max_tokens", 2)
+    if max_tokens > 1024:
+        _fail("correctness golden.max_tokens", "must be <= 1024")
+
+    if native_correctness.get("schema_version") != NATIVE_CORRECTNESS_VERSION:
+        _fail(
+            "native correctness report.schema_version",
+            f"must be {NATIVE_CORRECTNESS_VERSION}",
+        )
+    if native_correctness.get("gate_id") != NATIVE_CORRECTNESS_GATE:
+        _fail(
+            "native correctness report.gate_id",
+            f"must be {NATIVE_CORRECTNESS_GATE}",
+        )
+    if native_correctness.get("status") != "pass":
+        _fail("native correctness report.status", "must be pass")
+    native_bindings = _object(
+        native_correctness.get("bindings"), "native correctness report.bindings"
+    )
+    required_native_bindings = {
+        "candidate_git_revision",
+        "candidate_git_status_sha256",
+        "model_id",
+        "model_revision",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_sha256",
+    }
+    missing_native_bindings = required_native_bindings - set(native_bindings)
+    if missing_native_bindings:
+        _fail(
+            "native correctness report.bindings",
+            f"missing fields: {sorted(missing_native_bindings)}",
+        )
+    if native_bindings["candidate_git_status_sha256"] != hashlib.sha256(b"").hexdigest():
+        _fail(
+            "native correctness report.bindings.candidate_git_status_sha256",
+            "candidate tree was not clean",
+        )
+
+    manifest_golden = _object(manifest["golden"], "manifest.golden")
+    if manifest_golden["generated_sha256"] != golden["expected_greedy_text_sha256"]:
+        _fail(
+            "manifest.golden.generated_sha256",
+            "does not match the trusted E2E correctness golden",
+        )
+    if manifest_golden["provenance_sha256"] != native_correctness_report_sha256:
+        _fail(
+            "manifest.golden.provenance_sha256",
+            "does not hash the submitted native correctness report",
+        )
+    if golden["correctness_report_sha256"] != native_correctness_report_sha256:
+        _fail(
+            "correctness golden.correctness_report_sha256",
+            "does not hash the submitted native correctness report",
+        )
+
+    run_source = _object(run["source"], "run.json.source")
+    source_cross_bindings = {
+        "source_revision": (
+            golden["source_revision"],
+            run_source["git_commit"],
+            "git_commit",
+        ),
+        "model_id": (golden["model_id"], run_source["model_id"], "model_id"),
+        "model_revision": (
+            golden["model_revision"],
+            run_source["model_revision"],
+            "model_revision",
+        ),
+    }
+    for field, (trusted_value, run_value, run_field) in source_cross_bindings.items():
+        if trusted_value != run_value:
+            _fail(
+                f"correctness golden.{field}",
+                f"does not match run.json.source.{run_field}",
+            )
+
+    native_cross_bindings = {
+        "candidate_git_revision": golden["source_revision"],
+        "model_id": golden["model_id"],
+        "model_revision": golden["model_revision"],
+        "config_sha256": golden["config_sha256"],
+        "weights_sha256": golden["weights_sha256"],
+        "tokenizer_sha256": golden["tokenizer_aggregate_sha256"],
+    }
+    for field, expected in native_cross_bindings.items():
+        if native_bindings[field] != expected:
+            _fail(
+                f"native correctness report.bindings.{field}",
+                "does not match the trusted E2E correctness golden",
+            )
+
+    golden_profile = manifest_golden["request_profile"]
+    request = _object(
+        _object(manifest["requests"], "manifest.requests").get(golden_profile),
+        f"manifest.requests.{golden_profile}",
+    )
+    request_cross_bindings = {
+        "model": golden["model_id"],
+        "prompt": prompt,
+        "max_tokens": max_tokens,
+    }
+    for field, expected in request_cross_bindings.items():
+        if request.get(field) != expected:
+            _fail(
+                f"manifest.requests.{golden_profile}.{field}",
+                "does not match the trusted E2E correctness golden",
+            )
+    temperature = request.get("temperature")
+    if isinstance(temperature, bool) or temperature not in {0, 0.0}:
+        _fail(
+            f"manifest.requests.{golden_profile}.temperature",
+            "must select greedy generation for the trusted golden",
+        )
+
+    return {
+        "correctness_gate_id": NATIVE_CORRECTNESS_GATE,
+        "e2e_correctness_golden_sha256": correctness_golden_sha256,
+        "generated_text_sha256": golden["expected_greedy_text_sha256"],
+        "native_correctness_report_sha256": native_correctness_report_sha256,
+    }
+
+
 def _validate_sample(event: dict[str, Any], path: str) -> None:
     process = _exact(event["process"], {"pid", "rss_bytes", "hwm_bytes", "fd_count", "thread_count", "children"}, f"{path}.process")
     _integer(process["pid"], f"{path}.process.pid", 0 if event["scenario_id"] is None else 1)
@@ -503,7 +733,13 @@ def _check(name: str, passed: bool, observed: Any, threshold: Any) -> dict[str, 
     return {"name": name, "passed": passed, "observed": observed, "threshold": threshold}
 
 
-def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, Any]:
+def evaluate(
+    manifest_path: Path | str,
+    run_directory: Path | str,
+    *,
+    correctness_golden: Path | str | None = None,
+    native_correctness_report: Path | str | None = None,
+) -> dict[str, Any]:
     report: dict[str, Any] = {
         "schema_version": REPORT_VERSION, "status": "error", "passed": False,
         "bindings": None, "scenario_summaries": [], "observations": {}, "checks": [], "errors": [],
@@ -517,6 +753,12 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
             _fail("run.json.target.kind", "does not match manifest target kind")
         if run["target"]["image_id"] != f"sha256:{run['source']['image_sha256']}":
             _fail("run.json.target.image_id", "does not match bound image SHA-256")
+        trusted_correctness = _validate_trusted_correctness(
+            manifest,
+            run,
+            correctness_golden,
+            native_correctness_report,
+        )
         rows = _load_jsonl(directory / "events.jsonl")
         scenarios = {scenario["id"]: scenario for scenario in manifest["scenarios"]}
         _validate_events(rows, run["binding_sha256"], set(scenarios))
@@ -706,6 +948,7 @@ def evaluate(manifest_path: Path | str, run_directory: Path | str) -> dict[str, 
                 ),
                 "manifest_sha256": run["manifest_sha256"],
                 "binding_sha256": run["binding_sha256"],
+                "trusted_correctness": trusted_correctness,
                 "source": run["source"],
             },
             "observations": {"event_count": len(rows), "outcome_counts": dict(sorted(outcome_counts.items())), "service_counter_maxima": dict(sorted(metric_counter_maxima.items())), "final": final_values},
@@ -862,13 +1105,23 @@ def _materialize_raw_evidence_archive(path: Path, destination: Path) -> dict[str
     }
 
 
-def replay_raw_evidence_archive(path: Path | str) -> dict[str, Any]:
+def replay_raw_evidence_archive(
+    path: Path | str,
+    *,
+    correctness_golden: Path | str | None = None,
+    native_correctness_report: Path | str | None = None,
+) -> dict[str, Any]:
     """Rebuild a soak report only from a canonical raw evidence archive."""
 
     with tempfile.TemporaryDirectory(prefix="rustinfer-soak-replay-") as temporary:
         directory = Path(temporary)
         bindings = _materialize_raw_evidence_archive(Path(path), directory)
-        report = evaluate(directory / "manifest.json", directory)
+        report = evaluate(
+            directory / "manifest.json",
+            directory,
+            correctness_golden=correctness_golden,
+            native_correctness_report=native_correctness_report,
+        )
         return {"report": report, **bindings}
 
 
@@ -876,10 +1129,18 @@ def package_raw_evidence(
     manifest_path: Path | str,
     run_directory: Path | str,
     output: Path | str,
+    *,
+    correctness_golden: Path | str | None = None,
+    native_correctness_report: Path | str | None = None,
 ) -> dict[str, Any]:
     """Create and self-replay the canonical raw soak evidence archive."""
 
-    report = evaluate(manifest_path, run_directory)
+    report = evaluate(
+        manifest_path,
+        run_directory,
+        correctness_golden=correctness_golden,
+        native_correctness_report=native_correctness_report,
+    )
     if report["passed"] is not True:
         detail = "; ".join(report["errors"]) or report["status"]
         _fail("soak run", f"cannot package non-passing evidence: {detail}")
@@ -889,7 +1150,11 @@ def package_raw_evidence(
         _raw_payload_paths(manifest_path, run_directory),
     )
     try:
-        replay = replay_raw_evidence_archive(output_path)
+        replay = replay_raw_evidence_archive(
+            output_path,
+            correctness_golden=correctness_golden,
+            native_correctness_report=native_correctness_report,
+        )
         if _canonical_json_bytes(replay["report"]) != _canonical_json_bytes(report):
             _fail("raw evidence archive", "self-replayed report differs from source run")
         return replay
@@ -905,13 +1170,20 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--run-directory", required=True, type=Path)
+    parser.add_argument("--correctness-golden", required=True, type=Path)
+    parser.add_argument("--native-correctness-report", required=True, type=Path)
     parser.add_argument("--report", type=Path, help="create without overwriting")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
-    report = evaluate(args.manifest, args.run_directory)
+    report = evaluate(
+        args.manifest,
+        args.run_directory,
+        correctness_golden=args.correctness_golden,
+        native_correctness_report=args.native_correctness_report,
+    )
     encoded = json.dumps(report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     if args.report is not None:
         try:

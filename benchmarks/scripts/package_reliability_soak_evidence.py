@@ -16,6 +16,8 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--run-directory", required=True, type=Path)
+    parser.add_argument("--correctness-golden", required=True, type=Path)
+    parser.add_argument("--native-correctness-report", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     return parser
 
@@ -23,7 +25,13 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        package_raw_evidence(args.manifest, args.run_directory, args.output)
+        package_raw_evidence(
+            args.manifest,
+            args.run_directory,
+            args.output,
+            correctness_golden=args.correctness_golden,
+            native_correctness_report=args.native_correctness_report,
+        )
     except (InputError, FileExistsError, OSError, tarfile.TarError) as error:
         print(f"cannot package reliability soak evidence: {error}", file=os.sys.stderr)
         return 2

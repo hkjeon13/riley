@@ -618,7 +618,7 @@ class CandidateFixture:
                 }
             )
         self.documents["soak"] = {
-            "schema_version": "rustinfer.reliability-soak-report.v1",
+            "schema_version": "rustinfer.reliability-soak-report.v2",
             "status": "passed",
             "passed": True,
             "bindings": {
@@ -628,6 +628,16 @@ class CandidateFixture:
                 ),
                 "manifest_sha256": digest(b"soak manifest"),
                 "binding_sha256": digest(b"soak binding"),
+                "trusted_correctness": {
+                    "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+                    "e2e_correctness_golden_sha256": (
+                        self.correctness_golden_sha256
+                    ),
+                    "generated_text_sha256": json.loads(
+                        self.paths["correctness_golden"].read_text(encoding="utf-8")
+                    )["expected_greedy_text_sha256"],
+                    "native_correctness_report_sha256": native_correctness_sha,
+                },
                 "source": {
                     "git_commit": self.revision,
                     "git_dirty": False,
@@ -958,10 +968,33 @@ class CandidateFixture:
                 **arguments,
             )
 
+        def replay_soak(
+            raw_evidence: Path, **arguments: object
+        ) -> dict[str, object]:
+            if digest(raw_evidence.read_bytes()) != digest(
+                self.paths["soak_raw"].read_bytes()
+            ):
+                raise AssertionError("soak replay received the wrong raw evidence")
+            expected_paths = {
+                "correctness_golden": self.paths["correctness_golden"],
+                "native_correctness_report": self.paths["native_correctness"],
+            }
+            if set(arguments) != set(expected_paths):
+                raise AssertionError(
+                    f"soak replay arguments differ: {sorted(arguments)}"
+                )
+            for field, expected_path in expected_paths.items():
+                actual_path = arguments[field]
+                if not isinstance(actual_path, Path) or digest(
+                    actual_path.read_bytes()
+                ) != digest(expected_path.read_bytes()):
+                    raise AssertionError(f"soak replay {field} has the wrong bytes")
+            return soak_replay
+
         with mock.patch.object(
             reliability_soak,
             "replay_raw_evidence_archive",
-            return_value=soak_replay,
+            side_effect=replay_soak,
         ), mock.patch.object(
             reproducible_build_evidence,
             "check_reproducible_build",
@@ -1582,6 +1615,33 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate(soak_replay={"report": replayed})
         self.assertFalse(report["passed"])
         self.assertIn("differs from the raw-replayed report", report["errors"][0])
+
+    def test_soak_golden_cannot_self_authorize(self) -> None:
+        self.fixture.documents["soak"]["bindings"]["trusted_correctness"][
+            "generated_text_sha256"
+        ] = digest(b"self-authorized completion")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("submitted E2E golden", report["errors"][0])
+
+    def test_soak_provenance_must_bind_native_report(self) -> None:
+        self.fixture.documents["soak"]["bindings"]["trusted_correctness"][
+            "native_correctness_report_sha256"
+        ] = digest(b"self-authorized native report")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("native correctness report", report["errors"][0])
+
+    def test_legacy_soak_report_fails_closed(self) -> None:
+        self.fixture.documents["soak"]["schema_version"] = (
+            "rustinfer.reliability-soak-report.v1"
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("reliability soak did not pass", report["errors"][0])
 
     def test_soak_model_tree_must_match_python_free_e2e(self) -> None:
         self.fixture.documents["soak"]["bindings"]["source"][
