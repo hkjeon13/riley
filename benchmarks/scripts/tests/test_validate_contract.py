@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -27,6 +28,18 @@ class ContractValidatorTests(unittest.TestCase):
             (REPOSITORY_ROOT / "benchmarks/schemas/prompt.schema.json").read_text(
                 encoding="utf-8"
             )
+        )
+        cls.correctness_report_schema = json.loads(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/schemas/correctness-report.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        cls.native_e0_approval_schema = json.loads(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/schemas/native-e0-approval.schema.json"
+            ).read_text(encoding="utf-8")
         )
         calibration_schema = json.loads(
             (
@@ -358,6 +371,516 @@ version = "0.27.1"
         result["correctness_report_sha256"] = "5" * 64
         contract.validate_instance(result, self.result_schema)
 
+    def test_native_e0_approval_schema_is_closed_and_index_starts_empty(self) -> None:
+        index = json.loads(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/correctness/evidence/native-e0-approvals.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(index["schema_version"], "rustinfer.native-e0-approvals.v1")
+        self.assertEqual(index["approvals"], [])
+        contract.validate_instance(index, self.native_e0_approval_schema)
+        changed = copy.deepcopy(index)
+        changed["unreviewed"] = True
+        with self.assertRaisesRegex(contract.ContractError, "unexpected properties"):
+            contract.validate_instance(changed, self.native_e0_approval_schema)
+
+    def test_successful_e0_result_requires_exact_approval_and_candidate(self) -> None:
+        gate_id = "smollm2-fp32-bf16-native-e0-v2"
+        report_sha256 = "5" * 64
+        revision = "a" * 40
+        approval = {
+            "gate_id": gate_id,
+            "correctness_report": {
+                "path": "benchmarks/correctness/evidence/native-report.json",
+                "sha256": report_sha256,
+                "size_bytes": 1,
+            },
+            "candidate": {
+                "git_revision": revision,
+                "git_status_sha256": contract.EMPTY_GIT_STATUS_SHA256,
+            },
+        }
+        approvals = {(gate_id, report_sha256): approval}
+        row = self._successful_result()
+        row.update(
+            semantic_class="E0",
+            correctness_gate_id=gate_id,
+            correctness_report_sha256=report_sha256,
+        )
+        row["provenance"] = {"git_revision": revision, "git_dirty": False}
+        contract.validate_native_e0_result_approval(row, approvals, "result")
+
+        matrix_path = REPOSITORY_ROOT / "benchmarks/matrix.yaml"
+        prompts_path = REPOSITORY_ROOT / "benchmarks/prompts.jsonl"
+        lane_path = REPOSITORY_ROOT / "benchmarks/lanes/rustinfer-native.json"
+        matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
+        lane = json.loads(lane_path.read_text(encoding="utf-8"))
+        row.update(
+            matrix_sha256=contract._sha256(matrix_path),
+            prompts_sha256=contract._sha256(prompts_path),
+            lane_manifest_sha256=contract._sha256(lane_path),
+            environment_id=contract.PRIMARY_ENVIRONMENT_ID,
+            implementation_id=lane["implementation_id"],
+            reference_implementation=lane["reference_implementation"],
+            runtime_dependency_class=lane["runtime_dependency_class"],
+            engine_revision=lane["engine"]["revision"],
+        )
+        row["environment"].update(
+            gpu_model=contract.GPU_MODEL,
+            compute_capability=contract.COMPUTE_CAPABILITY,
+            gpu_count=1,
+            cpu_model="Intel Core i7-13700K",
+            ram_bytes=contract.PRIMARY_RAM_BYTES,
+            os="Ubuntu 22.04 test",
+            nvidia_driver_version=contract.PRIMARY_DRIVER_VERSION,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            result_path = Path(directory) / "raw.jsonl"
+            result_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+            self.assertEqual(
+                contract.validate_result_file(
+                    result_path,
+                    self.result_schema,
+                    matrix,
+                    matrix_path,
+                    prompts_path,
+                    {lane["lane_id"]: lane_path},
+                    {lane["implementation_id"]: lane},
+                    approvals,
+                ),
+                1,
+            )
+
+        changed = copy.deepcopy(row)
+        changed["correctness_report_sha256"] = "6" * 64
+        with self.assertRaisesRegex(contract.ContractError, "not approved"):
+            contract.validate_native_e0_result_approval(changed, approvals, "result")
+        changed = copy.deepcopy(row)
+        changed["provenance"]["git_revision"] = "b" * 40
+        with self.assertRaisesRegex(contract.ContractError, "git_revision"):
+            contract.validate_native_e0_result_approval(changed, approvals, "result")
+        changed = copy.deepcopy(row)
+        changed["provenance"]["git_dirty"] = True
+        with self.assertRaisesRegex(contract.ContractError, "git_dirty"):
+            contract.validate_native_e0_result_approval(changed, approvals, "result")
+
+    def test_native_e0_approval_loads_only_committed_passing_report(self) -> None:
+        gate_source = (
+            REPOSITORY_ROOT
+            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+        )
+        prompts_source = REPOSITORY_ROOT / "benchmarks/prompts.jsonl"
+        with tempfile.TemporaryDirectory() as directory:
+            temporary_root = Path(directory).resolve()
+            root = temporary_root / "source"
+            root.mkdir()
+            source_bytes = {
+                "benchmarks/matrix.yaml": b"test matrix bytes\n",
+                "benchmarks/prompts.jsonl": prompts_source.read_bytes(),
+                (
+                    "benchmarks/correctness/"
+                    "smollm2-fp32-bf16-native-e0-v2.json"
+                ): gate_source.read_bytes(),
+                "benchmarks/environment.md": b"test environment bytes\n",
+                "benchmarks/lanes/hf-transformers.json": b"hf lane bytes\n",
+                "benchmarks/lanes/rustinfer-native.json": b"native lane bytes\n",
+                "benchmarks/schemas/native-e0-approval.schema.json": (
+                    REPOSITORY_ROOT
+                    / "benchmarks/schemas/native-e0-approval.schema.json"
+                ).read_bytes(),
+                "benchmarks/schemas/correctness-report.schema.json": (
+                    REPOSITORY_ROOT
+                    / "benchmarks/schemas/correctness-report.schema.json"
+                ).read_bytes(),
+                "tools/python/reference/uv.lock": b"oracle lock bytes\n",
+                "Cargo.lock": b"candidate lock bytes\n",
+            }
+            for relative, content in source_bytes.items():
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(content)
+            self._git(root, "init", "-q")
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-q", "-m", "candidate")
+            candidate_revision = self._git(root, "rev-parse", "HEAD").strip()
+
+            gate_path = (
+                root
+                / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+            )
+            gate = json.loads(gate_path.read_text(encoding="utf-8"))
+            report = self._approved_passing_correctness_report(
+                root=root,
+                gate=gate,
+                candidate_revision=candidate_revision,
+            )
+            report_path = (
+                root
+                / "benchmarks/correctness/evidence/native-e0-correctness-report.json"
+            )
+            report_path.parent.mkdir(parents=True, exist_ok=True)
+            report_path.write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            report_bytes = report_path.read_bytes()
+            approval = self._native_e0_approval_for_report(
+                report=report,
+                report_path=report_path.relative_to(root).as_posix(),
+                report_sha256=contract._sha256(report_path),
+                report_size_bytes=len(report_bytes),
+                candidate_revision=candidate_revision,
+                replay_tool_revision=candidate_revision,
+            )
+            contract.validate_instance(
+                {
+                    "schema_version": "rustinfer.native-e0-approvals.v1",
+                    "approvals": [approval],
+                },
+                self.native_e0_approval_schema,
+            )
+            changed_approval = copy.deepcopy(approval)
+            changed_approval["portable_metric_contract_id"] = "torch-metrics"
+            with self.assertRaisesRegex(contract.ContractError, "must equal"):
+                contract.validate_instance(
+                    {
+                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "approvals": [changed_approval],
+                    },
+                    self.native_e0_approval_schema,
+                )
+            changed_approval = copy.deepcopy(approval)
+            changed_approval["raw_evidence"]["schema_version"] = "unreviewed"
+            with self.assertRaisesRegex(contract.ContractError, "must equal"):
+                contract.validate_instance(
+                    {
+                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "approvals": [changed_approval],
+                    },
+                    self.native_e0_approval_schema,
+                )
+            historical = copy.deepcopy(approval)
+            historical["historical_torch_report_provenance"] = {
+                "uri": (
+                    "benchmarks/correctness/evidence/"
+                    "smollm2-fp32-bf16-native-e0-v2-passing-oracle-report.json"
+                ),
+                "size_bytes": contract.HISTORICAL_TORCH_ORACLE_REPORT_SIZE_BYTES,
+                "sha256": contract.HISTORICAL_TORCH_ORACLE_REPORT_SHA256,
+                "schema_version": "1.0.0",
+                "source_revision": contract.PRODUCTION_ORACLE_GIT_REVISION,
+                "runtime_dependency_class": "python-reference",
+            }
+            contract.validate_instance(
+                {
+                    "schema_version": "rustinfer.native-e0-approvals.v1",
+                    "approvals": [historical],
+                },
+                self.native_e0_approval_schema,
+            )
+            historical["historical_torch_report_provenance"]["unreviewed"] = True
+            with self.assertRaisesRegex(contract.ContractError, "unexpected properties"):
+                contract.validate_instance(
+                    {
+                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "approvals": [historical],
+                    },
+                    self.native_e0_approval_schema,
+                )
+            index_path = root / contract.NATIVE_E0_APPROVAL_INDEX_PATH
+            index_path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "approvals": [approval],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            self._git(root, "add", ".")
+            self._git(root, "commit", "-q", "-m", "approve evidence")
+
+            approvals = contract.load_native_e0_approvals(
+                root,
+                self.native_e0_approval_schema,
+                self.correctness_report_schema,
+                root / "benchmarks/matrix.yaml",
+                root / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+            self.assertEqual(
+                set(approvals),
+                {(gate["gate_id"], approval["correctness_report"]["sha256"])},
+            )
+
+            index_bytes = index_path.read_bytes()
+            changed_index = json.loads(index_bytes)
+            changed_index["approvals"][0]["raw_evidence"]["sha256"] = "7" * 64
+            index_path.write_text(
+                json.dumps(changed_index, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(contract.ContractError, "committed in HEAD"):
+                contract.load_native_e0_approvals(
+                    root,
+                    self.native_e0_approval_schema,
+                    self.correctness_report_schema,
+                    root / "benchmarks/matrix.yaml",
+                    root / "benchmarks/prompts.jsonl",
+                    gate,
+                    gate_path,
+                )
+            index_path.write_bytes(index_bytes)
+
+            shallow = temporary_root / "shallow"
+            subprocess.run(
+                [
+                    "git",
+                    "clone",
+                    "-q",
+                    "--depth",
+                    "1",
+                    root.as_uri(),
+                    str(shallow),
+                ],
+                check=True,
+                capture_output=True,
+            )
+            self.assertNotEqual(
+                subprocess.run(
+                    ["git", "cat-file", "-e", f"{candidate_revision}^{{commit}}"],
+                    cwd=shallow,
+                    check=False,
+                    capture_output=True,
+                ).returncode,
+                0,
+            )
+            shallow_gate_path = (
+                shallow
+                / "benchmarks/correctness/"
+                "smollm2-fp32-bf16-native-e0-v2.json"
+            )
+            shallow_gate = json.loads(
+                shallow_gate_path.read_text(encoding="utf-8")
+            )
+            shallow_approvals = contract.load_native_e0_approvals(
+                shallow,
+                self.native_e0_approval_schema,
+                self.correctness_report_schema,
+                shallow / "benchmarks/matrix.yaml",
+                shallow / "benchmarks/prompts.jsonl",
+                shallow_gate,
+                shallow_gate_path,
+            )
+            self.assertEqual(set(shallow_approvals), set(approvals))
+            auto_loaded = contract._load_native_e0_approvals_for_result(
+                {
+                    "correctness_gate": {
+                        "path": (
+                            "benchmarks/correctness/"
+                            "smollm2-fp32-bf16-native-e0-v2.json"
+                        )
+                    }
+                },
+                shallow / "benchmarks/matrix.yaml",
+                shallow / "benchmarks/prompts.jsonl",
+            )
+            self.assertEqual(set(auto_loaded), set(approvals))
+
+            report_path.write_bytes(report_bytes + b"\n")
+            with self.assertRaisesRegex(contract.ContractError, "committed in HEAD"):
+                contract.load_native_e0_approvals(
+                    root,
+                    self.native_e0_approval_schema,
+                    self.correctness_report_schema,
+                    root / "benchmarks/matrix.yaml",
+                    root / "benchmarks/prompts.jsonl",
+                    gate,
+                    gate_path,
+                )
+
+    def test_native_e0_passing_report_checks_are_fail_closed(self) -> None:
+        gate_path = (
+            REPOSITORY_ROOT
+            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+        )
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        revision = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=REPOSITORY_ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        report = self._approved_passing_correctness_report(
+            root=REPOSITORY_ROOT,
+            gate=gate,
+            candidate_revision=revision,
+        )
+        contract._validate_passing_native_e0_report(
+            report,
+            Path("approved-report.json"),
+            gate,
+            REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+        )
+        approval = self._native_e0_approval_for_report(
+            report=report,
+            report_path="benchmarks/correctness/evidence/approved-report.json",
+            report_sha256="0" * 64,
+            report_size_bytes=1,
+            candidate_revision=revision,
+            replay_tool_revision=revision,
+        )
+        contract._validate_native_e0_report_bindings(
+            REPOSITORY_ROOT,
+            report,
+            Path("approved-report.json"),
+            approval,
+            REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+            REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+            gate,
+            gate_path,
+        )
+
+        mutations = {
+            "status": lambda value: value.update(status="fail"),
+            "case_count": lambda value: value["summary"].update(case_count=30),
+            "variant_count": lambda value: value["summary"].update(
+                candidate_variant_count=1
+            ),
+            "failure_count": lambda value: value["summary"].update(
+                failure_count=1
+            ),
+            "numeric_pass": lambda value: value["summary"].update(
+                numeric_pass=False
+            ),
+            "semantic_pass": lambda value: value["summary"].update(
+                semantic_pass=False
+            ),
+            "case_pass": lambda value: value["cases"][0].update({"pass": False}),
+            "numeric_record": lambda value: value["cases"][0]["variants"][
+                "canonical-v1"
+            ]["numeric"]["final_logits"].update({"pass": False}),
+            "semantic_record": lambda value: value["cases"][0]["variants"][
+                "canonical-v1"
+            ]["semantic"].update(cache_on_exact=False),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(report)
+                mutate(changed)
+                with self.assertRaises(contract.ContractError):
+                    contract._validate_passing_native_e0_report(
+                        changed,
+                        Path("approved-report.json"),
+                        gate,
+                        REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                    )
+
+        changed = copy.deepcopy(report)
+        changed["bindings"]["matrix_sha256"] = "f" * 64
+        with self.assertRaisesRegex(contract.ContractError, "matrix_sha256"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                changed,
+                Path("approved-report.json"),
+                approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed = copy.deepcopy(report)
+        changed["bindings"]["candidate_git_status_sha256"] = "f" * 64
+        with self.assertRaisesRegex(contract.ContractError, "git_status_sha256"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                changed,
+                Path("approved-report.json"),
+                approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed_approval = copy.deepcopy(approval)
+        changed_approval["candidate"]["executable_sha256"] = "f" * 64
+        with self.assertRaisesRegex(contract.ContractError, "executable_sha256"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                report,
+                Path("approved-report.json"),
+                changed_approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed_approval = copy.deepcopy(approval)
+        changed_approval["oracle"]["fp32_manifest_sha256"] = "f" * 64
+        with self.assertRaisesRegex(contract.ContractError, "approval.oracle"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                report,
+                Path("approved-report.json"),
+                changed_approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed_approval = copy.deepcopy(approval)
+        changed_approval["correctness_report"]["failure_count"] = 1
+        with self.assertRaisesRegex(contract.ContractError, "failure_count"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                report,
+                Path("approved-report.json"),
+                changed_approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed_approval = copy.deepcopy(approval)
+        changed_approval["raw_evidence"]["correctness_report_sha256"] = "f" * 64
+        with self.assertRaisesRegex(contract.ContractError, "raw_evidence"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                report,
+                Path("approved-report.json"),
+                changed_approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
+        changed_approval = copy.deepcopy(approval)
+        changed_approval["replay_tool_revision"] = "unreviewed"
+        with self.assertRaisesRegex(contract.ContractError, "replay_tool_revision"):
+            contract._validate_native_e0_report_bindings(
+                REPOSITORY_ROOT,
+                report,
+                Path("approved-report.json"),
+                changed_approval,
+                REPOSITORY_ROOT / "benchmarks/matrix.yaml",
+                REPOSITORY_ROOT / "benchmarks/prompts.jsonl",
+                gate,
+                gate_path,
+            )
+
     def test_contract_only_e0_rejects_schema_valid_forged_pass_report(self) -> None:
         matrix_path = REPOSITORY_ROOT / "benchmarks/matrix.yaml"
         prompts_path = REPOSITORY_ROOT / "benchmarks/prompts.jsonl"
@@ -398,9 +921,7 @@ version = "0.27.1"
             )
             raw_path = result_dir / "raw.jsonl"
             raw_path.write_text(json.dumps(result) + "\n", encoding="utf-8")
-            with self.assertRaisesRegex(
-                contract.ContractError, "contract-only.*raw evidence replay"
-            ):
+            with self.assertRaisesRegex(contract.ContractError, "not approved"):
                 contract.validate_result_file(
                     raw_path,
                     self.result_schema,
@@ -410,6 +931,152 @@ version = "0.27.1"
                     {},
                     {},
                 )
+
+    @staticmethod
+    def _git(root: Path, *arguments: str) -> str:
+        command = [
+            "git",
+            "-c",
+            "user.name=rustinfer tests",
+            "-c",
+            "user.email=rustinfer-tests@example.invalid",
+            *arguments,
+        ]
+        return subprocess.run(
+            command,
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+
+    def _approved_passing_correctness_report(
+        self,
+        *,
+        root: Path,
+        gate: dict[str, object],
+        candidate_revision: str,
+    ) -> dict[str, object]:
+        matrix_path = root / "benchmarks/matrix.yaml"
+        prompts_path = root / "benchmarks/prompts.jsonl"
+        gate_path = (
+            root
+            / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+        )
+        report = self._forged_passing_correctness_report(
+            gate=gate,
+            matrix_sha256=contract._sha256(matrix_path),
+            prompts_sha256=contract._sha256(prompts_path),
+            gate_sha256=contract._sha256(gate_path),
+        )
+        prompt_ids = [
+            json.loads(line)["prompt_id"]
+            for line in prompts_path.read_text(encoding="utf-8").splitlines()
+        ]
+        for case, prompt_id in zip(report["cases"], prompt_ids, strict=True):
+            case["prompt_id"] = prompt_id
+        bindings = report["bindings"]
+        bindings.update(
+            environment_sha256=contract._sha256(
+                root / "benchmarks/environment.md"
+            ),
+            candidate_git_revision=candidate_revision,
+            candidate_git_status_sha256=contract.EMPTY_GIT_STATUS_SHA256,
+            oracle_git_revision=contract.PRODUCTION_ORACLE_GIT_REVISION,
+        )
+        report["inputs"].update(
+            fp32_manifest_sha256=contract.PRODUCTION_ORACLE_HASHES[
+                "fp32_manifest_sha256"
+            ],
+            fp32_sidecar_sha256=contract.PRODUCTION_ORACLE_HASHES[
+                "fp32_sidecar_sha256"
+            ],
+            bf16_manifest_sha256=contract.PRODUCTION_ORACLE_HASHES[
+                "bf16_manifest_sha256"
+            ],
+            bf16_sidecar_sha256=contract.PRODUCTION_ORACLE_HASHES[
+                "bf16_sidecar_sha256"
+            ],
+        )
+        bindings["dependency_locks"] = {
+            "fp32": contract._sha256(root / "tools/python/reference/uv.lock"),
+            "bf16": contract._sha256(root / "tools/python/reference/uv.lock"),
+            "candidate": contract._sha256(root / "Cargo.lock"),
+        }
+        bindings["lane_manifests"] = {
+            "fp32": contract._sha256(
+                root / "benchmarks/lanes/hf-transformers.json"
+            ),
+            "bf16": contract._sha256(
+                root / "benchmarks/lanes/hf-transformers.json"
+            ),
+            "candidate": contract._sha256(
+                root / "benchmarks/lanes/rustinfer-native.json"
+            ),
+        }
+        return report
+
+    @staticmethod
+    def _native_e0_approval_for_report(
+        *,
+        report: dict[str, object],
+        report_path: str,
+        report_sha256: str,
+        report_size_bytes: int,
+        candidate_revision: str,
+        replay_tool_revision: str,
+    ) -> dict[str, object]:
+        summary = report["summary"]
+        bindings = report["bindings"]
+        inputs = report["inputs"]
+        return {
+            "gate_id": report["gate_id"],
+            "correctness_report": {
+                "path": report_path,
+                "sha256": report_sha256,
+                "size_bytes": report_size_bytes,
+                "schema_version": report["schema_version"],
+                "status": report["status"],
+                "case_count": summary["case_count"],
+                "candidate_variant_count": summary["candidate_variant_count"],
+                "failure_count": summary["failure_count"],
+                "numeric_pass": summary["numeric_pass"],
+                "semantic_pass": summary["semantic_pass"],
+            },
+            "raw_evidence": {
+                "uri": "server-4096:/evidence/native-correctness-evidence.tar",
+                "size_bytes": 1,
+                "sha256": "9" * 64,
+                "schema_version": (
+                    contract.NATIVE_CORRECTNESS_RAW_EVIDENCE_SCHEMA_VERSION
+                ),
+                "candidate_source_revision": candidate_revision,
+                "candidate_source_archive_sha256": "8" * 64,
+                "oracle_source_revision": bindings["oracle_git_revision"],
+                "correctness_report_sha256": report_sha256,
+                "candidate_executable_sha256": bindings[
+                    "candidate_executable_sha256"
+                ],
+            },
+            "candidate": {
+                "git_revision": candidate_revision,
+                "git_status_sha256": contract.EMPTY_GIT_STATUS_SHA256,
+                "executable_sha256": bindings["candidate_executable_sha256"],
+            },
+            "oracle": {
+                "git_revision": bindings["oracle_git_revision"],
+                "fp32_manifest_sha256": inputs["fp32_manifest_sha256"],
+                "fp32_sidecar_sha256": inputs["fp32_sidecar_sha256"],
+                "bf16_manifest_sha256": inputs["bf16_manifest_sha256"],
+                "bf16_sidecar_sha256": inputs["bf16_sidecar_sha256"],
+                "calibration_report_sha256": inputs[
+                    "oracle_calibration_report_sha256"
+                ],
+            },
+            "replay_tool_revision": replay_tool_revision,
+            "portable_metric_contract_id": contract.PORTABLE_F32_METRIC_CONTRACT_ID,
+            "historical_torch_report_provenance": None,
+        }
 
     @staticmethod
     def _forged_passing_correctness_report(

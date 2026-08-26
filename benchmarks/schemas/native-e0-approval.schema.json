@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/native-e0-approval.schema.json",
+  "title": "rustinfer native E0 correctness approvals",
+  "description": "A closed, version-controlled allowlist of exact correctness report bytes approved by raw evidence replay.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "approvals"],
+  "properties": {
+    "schema_version": {
+      "const": "rustinfer.native-e0-approvals.v1"
+    },
+    "approvals": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/approval"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "correctness_report",
+        "raw_evidence",
+        "candidate",
+        "oracle",
+        "replay_tool_revision",
+        "portable_metric_contract_id",
+        "historical_torch_report_provenance"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*$"
+        },
+        "correctness_report": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256",
+            "size_bytes",
+            "schema_version",
+            "status",
+            "case_count",
+            "candidate_variant_count",
+            "failure_count",
+            "numeric_pass",
+            "semantic_pass"
+          ],
+          "properties": {
+            "path": {
+              "type": "string",
+              "pattern": "^benchmarks/correctness/evidence/[a-z0-9][a-z0-9._-]*\\.json$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            },
+            "schema_version": {
+              "const": "1.0.0"
+            },
+            "status": {
+              "const": "pass"
+            },
+            "case_count": {
+              "const": 31
+            },
+            "candidate_variant_count": {
+              "const": 2
+            },
+            "failure_count": {
+              "const": 0
+            },
+            "numeric_pass": {
+              "const": true
+            },
+            "semantic_pass": {
+              "const": true
+            }
+          }
+        },
+        "raw_evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "uri",
+            "size_bytes",
+            "sha256",
+            "schema_version",
+            "candidate_source_revision",
+            "candidate_source_archive_sha256",
+            "oracle_source_revision",
+            "correctness_report_sha256",
+            "candidate_executable_sha256"
+          ],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\r\\n]+\\.tar$"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 17179869184
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "schema_version": {
+              "const": "rustinfer.native-correctness-raw-evidence.v1"
+            },
+            "candidate_source_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "candidate_source_archive_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "oracle_source_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "correctness_report_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "candidate_executable_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "candidate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "git_revision",
+            "git_status_sha256",
+            "executable_sha256"
+          ],
+          "properties": {
+            "git_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "git_status_sha256": {
+              "const": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "executable_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "git_revision",
+            "fp32_manifest_sha256",
+            "fp32_sidecar_sha256",
+            "bf16_manifest_sha256",
+            "bf16_sidecar_sha256",
+            "calibration_report_sha256"
+          ],
+          "properties": {
+            "git_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "fp32_manifest_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "fp32_sidecar_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "bf16_manifest_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "bf16_sidecar_sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "calibration_report_sha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "replay_tool_revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40,64}$"
+        },
+        "portable_metric_contract_id": {
+          "const": "portable-f32-metrics-v1"
+        },
+        "historical_torch_report_provenance": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": [
+            "uri",
+            "size_bytes",
+            "sha256",
+            "schema_version",
+            "source_revision",
+            "runtime_dependency_class"
+          ],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\r\\n]+\\.json$"
+            },
+            "size_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 67108864
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "schema_version": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "^[^\\r\\n]+$"
+            },
+            "source_revision": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40,64}$"
+            },
+            "runtime_dependency_class": {
+              "const": "python-reference"
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -79,6 +79,48 @@ REFERENCE_FIXTURE_SOURCE_PATHS = {
     "hf_backend": "tools/python/reference/rustinfer_reference/hf_backend.py",
     "cli": "tools/python/reference/rustinfer_reference/cli.py",
 }
+NATIVE_E0_APPROVAL_INDEX_PATH = (
+    "benchmarks/correctness/evidence/native-e0-approvals.json"
+)
+NATIVE_E0_APPROVAL_SCHEMA_PATH = "benchmarks/schemas/native-e0-approval.schema.json"
+CORRECTNESS_REPORT_SCHEMA_PATH = "benchmarks/schemas/correctness-report.schema.json"
+NATIVE_E0_VARIANT_IDS = (
+    "canonical-v1",
+    "fixed-contiguous-37-balanced-v1",
+)
+NATIVE_E0_TENSOR_NAMES = (
+    "first_layer_hidden",
+    "final_logits",
+    "final_log_probs",
+)
+EMPTY_GIT_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
+NATIVE_CORRECTNESS_RAW_EVIDENCE_SCHEMA_VERSION = (
+    "rustinfer.native-correctness-raw-evidence.v1"
+)
+PORTABLE_F32_METRIC_CONTRACT_ID = "portable-f32-metrics-v1"
+PRODUCTION_ORACLE_GIT_REVISION = "2d22ca061f601389fad7f45708497daad14d9297"
+PRODUCTION_ORACLE_HASHES = {
+    "fp32_manifest_sha256": (
+        "5def01c42a0bc54a06b3936638dcd0ddba8c2c68d58b1a022d5c683af0454f27"
+    ),
+    "fp32_sidecar_sha256": (
+        "95fac531e9a08b5f8c184441078829ce2c4bea2a286525035b95205a4bca891a"
+    ),
+    "bf16_manifest_sha256": (
+        "40ad7ae1734b02b0c5533ba7bbaba48f6a5629b0c4b66a3f39178ceb5ca2592f"
+    ),
+    "bf16_sidecar_sha256": (
+        "598bf7255c5aab1ff6701784992b22e55ee4d85e4247dd8fe2cafa49f1a49b66"
+    ),
+}
+HISTORICAL_TORCH_ORACLE_REPORT_SHA256 = (
+    "1fd064d780868ed76202b9adbd773f2ef76cc54a35551a92145f882d779871ea"
+)
+HISTORICAL_TORCH_ORACLE_REPORT_SIZE_BYTES = 48_801
+HISTORICAL_TORCH_ORACLE_REPORT_PATH = (
+    "benchmarks/correctness/evidence/"
+    "smollm2-fp32-bf16-native-e0-v2-passing-oracle-report.json"
+)
 
 
 class ContractError(ValueError):
@@ -124,6 +166,518 @@ def _sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _committed_head_bytes(root: Path, relative: str, path: str) -> bytes:
+    """Read exact bytes for a repository path from the current HEAD tree."""
+
+    try:
+        return subprocess.run(
+            ["git", "cat-file", "blob", f"HEAD:{relative}"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        _error(path, f"must be a file committed in the current HEAD: {exc}")
+
+
+def _validate_native_e0_report_bindings(
+    root: Path,
+    report: dict[str, Any],
+    report_path: Path,
+    approval: dict[str, Any],
+    matrix_path: Path,
+    prompts_path: Path,
+    correctness_gate: dict[str, Any],
+    correctness_gate_path: Path,
+) -> None:
+    """Bind one approved report to the current contract and its clean candidate."""
+
+    path = str(report_path)
+    _expect(report["gate_id"], approval["gate_id"], f"{path}.gate_id")
+    _expect(
+        report["gate_id"],
+        correctness_gate["gate_id"],
+        f"{path}.gate_id",
+    )
+    report_ref = approval["correctness_report"]
+    summary = report["summary"]
+    for field, actual in (
+        ("schema_version", report["schema_version"]),
+        ("status", report["status"]),
+        ("case_count", summary["case_count"]),
+        ("candidate_variant_count", summary["candidate_variant_count"]),
+        ("failure_count", summary["failure_count"]),
+        ("numeric_pass", summary["numeric_pass"]),
+        ("semantic_pass", summary["semantic_pass"]),
+    ):
+        _expect(actual, report_ref[field], f"{path}.approval.correctness_report.{field}")
+
+    bindings = report["bindings"]
+    model = correctness_gate["model"]
+    for field, expected in (
+        ("model_id", model["id"]),
+        ("model_revision", model["revision"]),
+        ("config_sha256", model["config_sha256"]),
+        ("weights_sha256", model["weights_sha256"]),
+        ("tokenizer_sha256", model["tokenizer_sha256"]),
+        ("matrix_sha256", _sha256(matrix_path)),
+        ("prompts_sha256", _sha256(prompts_path)),
+        ("gate_manifest_sha256", _sha256(correctness_gate_path)),
+        (
+            "environment_sha256",
+            _sha256(root / "benchmarks/environment.md"),
+        ),
+    ):
+        _expect(bindings[field], expected, f"{path}.bindings.{field}")
+
+    _expect(
+        bindings["dependency_locks"],
+        {
+            "fp32": _sha256(root / "tools/python/reference/uv.lock"),
+            "bf16": _sha256(root / "tools/python/reference/uv.lock"),
+            "candidate": _sha256(root / "Cargo.lock"),
+        },
+        f"{path}.bindings.dependency_locks",
+    )
+    _expect(
+        bindings["lane_manifests"],
+        {
+            "fp32": _sha256(root / "benchmarks/lanes/hf-transformers.json"),
+            "bf16": _sha256(root / "benchmarks/lanes/hf-transformers.json"),
+            "candidate": _sha256(root / "benchmarks/lanes/rustinfer-native.json"),
+        },
+        f"{path}.bindings.lane_manifests",
+    )
+
+    expected_gate_contract = {
+        "thresholds": {
+            tensor_name: correctness_gate["numeric"]["tensors"][tensor_name][
+                "thresholds"
+            ]
+            for tensor_name in NATIVE_E0_TENSOR_NAMES
+        },
+        "oracle_reduction_variant": correctness_gate["reduction_variants"][
+            "oracle"
+        ],
+        "required_candidate_reduction_variants": correctness_gate[
+            "reduction_variants"
+        ]["required_candidate"],
+        "cross_cache_exact_window": correctness_gate["semantic"][
+            "cross_cache_exact_window"
+        ],
+        "top_k_comparison": correctness_gate["semantic"]["top_k"]["comparison"],
+        "top_1_comparison": correctness_gate["semantic"]["top_1_comparison"],
+        "threshold_activation_evidence": (
+            "replayed-passing-full-31-hf-oracle-calibration-report-v2"
+        ),
+    }
+    _expect(report["gate_contract"], expected_gate_contract, f"{path}.gate_contract")
+
+    candidate = approval["candidate"]
+    _expect(
+        candidate["git_status_sha256"],
+        EMPTY_GIT_STATUS_SHA256,
+        f"{path}.approval.candidate.git_status_sha256",
+    )
+    _expect(
+        bindings["candidate_git_revision"],
+        candidate["git_revision"],
+        f"{path}.bindings.candidate_git_revision",
+    )
+    _expect(
+        bindings["candidate_git_status_sha256"],
+        candidate["git_status_sha256"],
+        f"{path}.bindings.candidate_git_status_sha256",
+    )
+    _expect(
+        bindings["candidate_executable_sha256"],
+        candidate["executable_sha256"],
+        f"{path}.bindings.candidate_executable_sha256",
+    )
+
+    oracle = approval["oracle"]
+    _expect(
+        oracle["git_revision"],
+        PRODUCTION_ORACLE_GIT_REVISION,
+        f"{path}.approval.oracle.git_revision",
+    )
+    _expect(
+        {
+            field: oracle[field]
+            for field in PRODUCTION_ORACLE_HASHES
+        },
+        PRODUCTION_ORACLE_HASHES,
+        f"{path}.approval.oracle",
+    )
+    _expect(
+        bindings["oracle_git_revision"],
+        oracle["git_revision"],
+        f"{path}.bindings.oracle_git_revision",
+    )
+    for approval_field, report_field in (
+        ("fp32_manifest_sha256", "fp32_manifest_sha256"),
+        ("fp32_sidecar_sha256", "fp32_sidecar_sha256"),
+        ("bf16_manifest_sha256", "bf16_manifest_sha256"),
+        ("bf16_sidecar_sha256", "bf16_sidecar_sha256"),
+        ("calibration_report_sha256", "oracle_calibration_report_sha256"),
+    ):
+        _expect(
+            report["inputs"][report_field],
+            oracle[approval_field],
+            f"{path}.inputs.{report_field}",
+        )
+
+    raw_evidence = approval["raw_evidence"]
+    _expect(
+        raw_evidence["schema_version"],
+        NATIVE_CORRECTNESS_RAW_EVIDENCE_SCHEMA_VERSION,
+        f"{path}.approval.raw_evidence.schema_version",
+    )
+    for field, expected in (
+        ("candidate_source_revision", candidate["git_revision"]),
+        ("oracle_source_revision", oracle["git_revision"]),
+        ("correctness_report_sha256", report_ref["sha256"]),
+        ("candidate_executable_sha256", candidate["executable_sha256"]),
+    ):
+        _expect(
+            raw_evidence[field],
+            expected,
+            f"{path}.approval.raw_evidence.{field}",
+        )
+    _expect(
+        approval["portable_metric_contract_id"],
+        PORTABLE_F32_METRIC_CONTRACT_ID,
+        f"{path}.approval.portable_metric_contract_id",
+    )
+    # The raw tar is intentionally external and too large for this contract
+    # validator to fetch. Its exact URI/size/SHA and the replay checkout
+    # revision are therefore version-controlled trust anchors. The embedded
+    # replay result identities above bind those external bytes back to the
+    # committed report, executable, candidate, and reviewed oracle.
+    replay_tool_revision = approval["replay_tool_revision"]
+    if (
+        not isinstance(replay_tool_revision, str)
+        or re.fullmatch(r"[0-9a-f]{40,64}", replay_tool_revision) is None
+    ):
+        _error(f"{path}.approval.replay_tool_revision", "must be a Git revision")
+    historical = approval["historical_torch_report_provenance"]
+    if historical is not None:
+        _expect(
+            historical["uri"],
+            HISTORICAL_TORCH_ORACLE_REPORT_PATH,
+            f"{path}.approval.historical_torch_report_provenance.uri",
+        )
+        _expect(
+            historical["source_revision"],
+            PRODUCTION_ORACLE_GIT_REVISION,
+            f"{path}.approval.historical_torch_report_provenance.source_revision",
+        )
+        _expect(
+            historical["sha256"],
+            HISTORICAL_TORCH_ORACLE_REPORT_SHA256,
+            f"{path}.approval.historical_torch_report_provenance.sha256",
+        )
+        _expect(
+            historical["size_bytes"],
+            HISTORICAL_TORCH_ORACLE_REPORT_SIZE_BYTES,
+            f"{path}.approval.historical_torch_report_provenance.size_bytes",
+        )
+        _expect(
+            historical["schema_version"],
+            "1.0.0",
+            f"{path}.approval.historical_torch_report_provenance.schema_version",
+        )
+        historical_path = root / HISTORICAL_TORCH_ORACLE_REPORT_PATH
+        _expect(
+            historical_path.stat().st_size,
+            historical["size_bytes"],
+            f"{path}.approval.historical_torch_report_provenance.size_bytes",
+        )
+        _expect(
+            _sha256(historical_path),
+            historical["sha256"],
+            f"{path}.approval.historical_torch_report_provenance.sha256",
+        )
+
+
+def _numeric_record_passes(record: dict[str, Any], thresholds: dict[str, Any]) -> bool:
+    metrics = record["metrics"]
+    return record["pass"] is True and all(
+        (
+            metrics["max_abs"] <= thresholds["max_abs_max"],
+            metrics["mean_abs"] <= thresholds["mean_abs_max"],
+            metrics["max_relative"] <= thresholds["max_relative_max"],
+            metrics["mean_relative"] <= thresholds["mean_relative_max"],
+            metrics["cosine_similarity"] >= thresholds["cosine_min"],
+        )
+    )
+
+
+def _validate_passing_native_e0_report(
+    report: dict[str, Any],
+    report_path: Path,
+    correctness_gate: dict[str, Any],
+    prompts_path: Path,
+) -> None:
+    """Require every declared native E0 numeric and semantic observation to pass."""
+
+    path = str(report_path)
+    _expect(report["status"], "pass", f"{path}.status")
+    _expect(
+        correctness_gate["corpus"]["expected_prompt_count"],
+        31,
+        f"{path}.gate.corpus.expected_prompt_count",
+    )
+    required_variants = tuple(
+        item["variant_id"]
+        for item in correctness_gate["reduction_variants"]["required_candidate"]
+    )
+    _expect(required_variants, NATIVE_E0_VARIANT_IDS, f"{path}.gate.variants")
+
+    summary = report["summary"]
+    for field, expected in (
+        ("case_count", 31),
+        ("candidate_variant_count", 2),
+        ("failure_count", 0),
+        ("numeric_pass", True),
+        ("semantic_pass", True),
+    ):
+        _expect(summary[field], expected, f"{path}.summary.{field}")
+    _expect(
+        set(summary["variants"]),
+        set(required_variants),
+        f"{path}.summary.variants",
+    )
+
+    thresholds = {
+        tensor_name: correctness_gate["numeric"]["tensors"][tensor_name][
+            "thresholds"
+        ]
+        for tensor_name in NATIVE_E0_TENSOR_NAMES
+    }
+    for variant_id in required_variants:
+        variant_path = f"{path}.summary.variants.{variant_id}"
+        variant = summary["variants"][variant_id]
+        for field, expected in (
+            ("case_count", 31),
+            ("failure_count", 0),
+            ("numeric_pass", True),
+            ("semantic_pass", True),
+            ("pass", True),
+        ):
+            _expect(variant[field], expected, f"{variant_path}.{field}")
+        for tensor_name in NATIVE_E0_TENSOR_NAMES:
+            if not _numeric_record_passes(
+                variant["aggregate_numeric"][tensor_name], thresholds[tensor_name]
+            ):
+                _error(
+                    f"{variant_path}.aggregate_numeric.{tensor_name}",
+                    "must be a passing in-threshold numeric record",
+                )
+
+    prompt_ids = []
+    for line_number, prompt in _iter_jsonl(prompts_path):
+        if not isinstance(prompt, dict) or not isinstance(prompt.get("prompt_id"), str):
+            _error(f"{prompts_path}:{line_number}", "prompt_id must be a string")
+        prompt_ids.append(prompt["prompt_id"])
+    _expect(len(prompt_ids), 31, f"{path}.current_prompts")
+    _expect(
+        [case["prompt_id"] for case in report["cases"]],
+        prompt_ids,
+        f"{path}.cases.prompt_ids",
+    )
+
+    semantic_pass_fields = (
+        "cache_on_exact",
+        "cache_off_exact",
+        "top_1_exact",
+        "top_k_set_exact",
+        "cross_cache_exact_window_match",
+        "pass",
+    )
+    for case_index, case in enumerate(report["cases"]):
+        case_path = f"{path}.cases[{case_index}]"
+        _expect(case["pass"], True, f"{case_path}.pass")
+        _expect(set(case["variants"]), set(required_variants), f"{case_path}.variants")
+        for variant_id in required_variants:
+            variant_path = f"{case_path}.variants.{variant_id}"
+            variant = case["variants"][variant_id]
+            _expect(variant["pass"], True, f"{variant_path}.pass")
+            for tensor_name in NATIVE_E0_TENSOR_NAMES:
+                if not _numeric_record_passes(
+                    variant["numeric"][tensor_name], thresholds[tensor_name]
+                ):
+                    _error(
+                        f"{variant_path}.numeric.{tensor_name}",
+                        "must be a passing in-threshold numeric record",
+                    )
+            for field in semantic_pass_fields:
+                _expect(
+                    variant["semantic"][field],
+                    True,
+                    f"{variant_path}.semantic.{field}",
+                )
+
+
+def load_native_e0_approvals(
+    root: Path,
+    approval_schema: dict[str, Any],
+    correctness_report_schema: dict[str, Any],
+    matrix_path: Path,
+    prompts_path: Path,
+    correctness_gate: dict[str, Any],
+    correctness_gate_path: Path,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Load and fully validate the exact native E0 approval allowlist."""
+
+    root = root.resolve()
+    index_path = root / NATIVE_E0_APPROVAL_INDEX_PATH
+    index = _read_json(index_path)
+    try:
+        validate_instance(index, approval_schema)
+    except ContractError as exc:
+        _error(str(index_path), str(exc))
+    if index["approvals"]:
+        index_bytes = index_path.read_bytes()
+        committed_index_bytes = _committed_head_bytes(
+            root,
+            NATIVE_E0_APPROVAL_INDEX_PATH,
+            str(index_path),
+        )
+        if index_bytes != committed_index_bytes:
+            _error(
+                str(index_path),
+                "non-empty approval index bytes must match the file committed in HEAD",
+            )
+
+    approvals: dict[tuple[str, str], dict[str, Any]] = {}
+    evidence_root = (root / "benchmarks/correctness/evidence").resolve()
+    for index_number, approval in enumerate(index["approvals"]):
+        approval_path = f"{index_path}.approvals[{index_number}]"
+        report_ref = approval["correctness_report"]
+        relative = Path(report_ref["path"])
+        report_path = (root / relative).resolve()
+        if relative.is_absolute() or report_path.parent != evidence_root:
+            _error(
+                f"{approval_path}.correctness_report.path",
+                "must name a direct repository evidence file",
+            )
+        try:
+            report_bytes = report_path.read_bytes()
+        except OSError as exc:
+            _error(f"{approval_path}.correctness_report.path", str(exc))
+        committed_bytes = _committed_head_bytes(
+            root,
+            relative.as_posix(),
+            f"{approval_path}.correctness_report.path",
+        )
+        if report_bytes != committed_bytes:
+            _error(
+                f"{approval_path}.correctness_report.path",
+                "working-tree bytes differ from the file committed in HEAD",
+            )
+        _expect(
+            len(report_bytes),
+            report_ref["size_bytes"],
+            f"{approval_path}.correctness_report.size_bytes",
+        )
+        report_sha256 = hashlib.sha256(report_bytes).hexdigest()
+        _expect(
+            report_sha256,
+            report_ref["sha256"],
+            f"{approval_path}.correctness_report.sha256",
+        )
+
+        report = _read_json(report_path)
+        try:
+            validate_instance(report, correctness_report_schema)
+        except ContractError as exc:
+            _error(str(report_path), str(exc))
+        _validate_native_e0_report_bindings(
+            root,
+            report,
+            report_path,
+            approval,
+            matrix_path,
+            prompts_path,
+            correctness_gate,
+            correctness_gate_path,
+        )
+        _validate_passing_native_e0_report(
+            report,
+            report_path,
+            correctness_gate,
+            prompts_path,
+        )
+
+        key = (approval["gate_id"], report_sha256)
+        if key in approvals:
+            _error(approval_path, "duplicates an approved gate/report hash pair")
+        approvals[key] = approval
+    return approvals
+
+
+def _load_native_e0_approvals_for_result(
+    matrix: dict[str, Any],
+    matrix_path: Path,
+    prompts_path: Path | None,
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Load canonical approvals for standalone shared-result validator callers."""
+
+    matrix_path = matrix_path.resolve()
+    if matrix_path.name != "matrix.yaml" or matrix_path.parent.name != "benchmarks":
+        _error(str(matrix_path), "E0 approval loading requires canonical matrix.yaml")
+    if prompts_path is None:
+        _error(str(matrix_path), "E0 approval loading requires the prompt corpus")
+    root = matrix_path.parents[1]
+    approval_schema_path = root / NATIVE_E0_APPROVAL_SCHEMA_PATH
+    report_schema_path = root / CORRECTNESS_REPORT_SCHEMA_PATH
+    approval_schema = _read_json(approval_schema_path)
+    report_schema = _read_json(report_schema_path)
+    for schema, schema_path in (
+        (approval_schema, approval_schema_path),
+        (report_schema, report_schema_path),
+    ):
+        _expect(schema.get("$schema"), SCHEMA_DIALECT, f"{schema_path}.$schema")
+        _walk_schema_strictness(schema, str(schema_path))
+    gate_path = (root / matrix["correctness_gate"]["path"]).resolve()
+    if root not in gate_path.parents:
+        _error(str(gate_path), "correctness gate escapes repository")
+    gate = _read_json(gate_path)
+    return load_native_e0_approvals(
+        root,
+        approval_schema,
+        report_schema,
+        matrix_path,
+        prompts_path.resolve(),
+        gate,
+        gate_path,
+    )
+
+
+def validate_native_e0_result_approval(
+    row: dict[str, Any],
+    approvals: dict[tuple[str, str], dict[str, Any]],
+    path: str,
+) -> None:
+    """Require one successful E0 row to match an exact approved report tuple."""
+
+    key = (row["correctness_gate_id"], row["correctness_report_sha256"])
+    approval = approvals.get(key)
+    if approval is None:
+        _error(
+            path,
+            "successful E0 result is not approved: the exact correctness gate/report "
+            "hash pair requires a committed raw-evidence replay approval",
+        )
+    _expect(
+        row["provenance"]["git_revision"],
+        approval["candidate"]["git_revision"],
+        f"{path}.provenance.git_revision",
+    )
+    _expect(row["provenance"]["git_dirty"], False, f"{path}.provenance.git_dirty")
 
 
 def validate_threshold_calibration_evidence(
@@ -1382,6 +1936,7 @@ def validate_result_file(
     prompts_path: Path | None,
     lane_paths: dict[str, Path],
     lanes_by_implementation: dict[str, dict[str, Any]],
+    native_e0_approvals: dict[tuple[str, str], dict[str, Any]] | None = None,
 ) -> int:
     count = 0
     expected_matrix_hash = _sha256(matrix_path)
@@ -1426,12 +1981,18 @@ def validate_result_file(
                 expected_gate_id,
                 f"{row_path}.correctness_gate_id",
             )
-            _error(
+            approvals = native_e0_approvals
+            if approvals is None:
+                approvals = _load_native_e0_approvals_for_result(
+                    matrix,
+                    matrix_path,
+                    prompts_path,
+                )
+                native_e0_approvals = approvals
+            validate_native_e0_result_approval(
+                row,
+                approvals,
                 row_path,
-                "PR 01 native lane is contract-only: successful E0 results are "
-                "fail-closed until the complete oracle/candidate manifest, sidecar, "
-                "and executable bundle is approved by raw evidence replay with "
-                "rustinfer-reference calibrate-validate-report",
             )
         else:
             _expect(
@@ -1614,6 +2175,8 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
     prompt_schema_path = root / "benchmarks/schemas/prompt.schema.json"
     fixture_schema_path = root / "benchmarks/schemas/reference-fixture.schema.json"
     correctness_gate_schema_path = root / "benchmarks/schemas/correctness-gate.schema.json"
+    correctness_report_schema_path = root / CORRECTNESS_REPORT_SCHEMA_PATH
+    native_e0_approval_schema_path = root / NATIVE_E0_APPROVAL_SCHEMA_PATH
     prompts_path = root / "benchmarks/prompts.jsonl"
     fixture_path = root / "benchmarks/reference/smollm2-135m-bf16.json"
 
@@ -1636,6 +2199,26 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
         f"{correctness_gate_schema_path}.$schema",
     )
     _walk_schema_strictness(correctness_gate_schema, str(correctness_gate_schema_path))
+    correctness_report_schema = _read_json(correctness_report_schema_path)
+    _expect(
+        correctness_report_schema.get("$schema"),
+        SCHEMA_DIALECT,
+        f"{correctness_report_schema_path}.$schema",
+    )
+    _walk_schema_strictness(
+        correctness_report_schema,
+        str(correctness_report_schema_path),
+    )
+    native_e0_approval_schema = _read_json(native_e0_approval_schema_path)
+    _expect(
+        native_e0_approval_schema.get("$schema"),
+        SCHEMA_DIALECT,
+        f"{native_e0_approval_schema_path}.$schema",
+    )
+    _walk_schema_strictness(
+        native_e0_approval_schema,
+        str(native_e0_approval_schema_path),
+    )
     correctness_gate_path = root / matrix["correctness_gate"]["path"]
     correctness_gate = _read_json(correctness_gate_path)
     validate_instance(correctness_gate, correctness_gate_schema)
@@ -1657,6 +2240,15 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
     )
     validate_threshold_calibration_evidence(
         root,
+        correctness_gate,
+        correctness_gate_path,
+    )
+    native_e0_approvals = load_native_e0_approvals(
+        root,
+        native_e0_approval_schema,
+        correctness_report_schema,
+        matrix_path,
+        prompts_path,
         correctness_gate,
         correctness_gate_path,
     )
@@ -1701,6 +2293,7 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
             prompts_path if prompts_path.is_file() else None,
             lane_paths,
             lanes_by_implementation,
+            native_e0_approvals,
         )
     return {
         "lanes": len(lane_paths),
