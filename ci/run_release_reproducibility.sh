@@ -145,7 +145,11 @@ run_one() {
     local post_inspect_path="${output_dir}/container-inspect-${lower_id}-post.json"
     local container_id
     local run_status
-    mkdir "${run_dir}"
+    # The container deliberately runs as UID 0 with every capability dropped.
+    # In particular it has no DAC override for this host-owned bind mount, so
+    # expose only this per-build directory while the container is alive.  The
+    # output root itself remains private to the invoking host user.
+    install -d -m 0777 "${run_dir}"
     : > "${inspect_path}"
 
     container_id=$(docker create \
@@ -192,6 +196,7 @@ run_one() {
     docker inspect "${container_id}" > "${post_inspect_path}"
     docker container rm --volumes "${container_id}" >/dev/null
     active_container=""
+    chmod 0755 "${run_dir}"
     if ((run_status != 0)); then
         echo "reproducibility build ${build_id} failed with status ${run_status}" >&2
         return "${run_status}"

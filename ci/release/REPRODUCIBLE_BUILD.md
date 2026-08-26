@@ -86,6 +86,14 @@ daemon inspect receipts and the bytes it packages. It selects the byte-identical
 A artifacts as `final/` and then runs the independent checker over A, B, and
 final.
 
+Because each container runs as root with `--cap-drop ALL`, it cannot use a DAC
+override to write a host-owned `0755` bind directory. The runner therefore
+opens only the fresh per-build evidence directory to mode `0777` inside the
+already private output root immediately before `docker create`, then restores
+that directory to `0755` immediately after removing the container and its
+workspace volume. The source archive and daemon receipts remain read-only
+mounts, and no broader output or source directory is made writable.
+
 ## Evidence contract
 
 Each `repro-build-{a,b}.tar` is an uncompressed USTAR archive with one closed

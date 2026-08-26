@@ -1084,6 +1084,21 @@ class ReproducibilityRunnerStaticTests(unittest.TestCase):
         )
         self.assertNotIn("--gpus", contents)
 
+    def test_capabilityless_evidence_bind_has_bounded_permission_handoff(self) -> None:
+        repository = Path(__file__).resolve().parents[2]
+        contents = (repository / "ci/run_release_reproducibility.sh").read_text(
+            encoding="utf-8"
+        )
+        open_marker = 'install -d -m 0777 "${run_dir}"'
+        create_marker = "container_id=$(docker create"
+        remove_marker = 'docker container rm --volumes "${container_id}"'
+        close_marker = 'chmod 0755 "${run_dir}"'
+        self.assertIn(open_marker, contents)
+        self.assertIn(close_marker, contents)
+        self.assertLess(contents.index(open_marker), contents.index(create_marker))
+        self.assertLess(contents.index(remove_marker), contents.index(close_marker))
+        self.assertIn("--cap-drop ALL", contents)
+
     def test_container_build_command_is_locked_and_offline(self) -> None:
         contents = Path(__file__).with_name("run_reproducible_build_once.sh").read_text(
             encoding="utf-8"
