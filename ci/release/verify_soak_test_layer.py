@@ -17,7 +17,7 @@ DOCKERFILE = Path(__file__).with_name("ReliabilitySoak.Dockerfile")
 RUNNER = ROOT / "ci/run_remote_release_soak.sh"
 DRIVER = ROOT / "ci/run_release_soak.sh"
 EXPECTED_REMOTE_RUNNER_SHA256 = (
-    "18a01e91117d27af2a0164263cd1782a570e9a392115296eacfd48f744cc2960"
+    "c329733c37ab370bd04d1959ab7bd46e74cb89fb042a38638a23f24cfab64268"
 )
 EXPECTED_RELEASE_DRIVER_SHA256 = (
     "c1080c1939f199bf3e8d5dc1503d9149a5dbf9ddf15279ffc5f6bc37623f688b"
