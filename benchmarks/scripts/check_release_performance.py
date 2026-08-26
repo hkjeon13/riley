@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import ctypes
 import hashlib
 import importlib.util
@@ -17,6 +18,7 @@ import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -35,8 +37,21 @@ _NATIVE_SPEC.loader.exec_module(native_profile)
 BASELINE_SCHEMA = "rustinfer.release-performance-baseline.v1"
 CANDIDATE_SCHEMA = "rustinfer.release-performance-candidate.v1"
 REPORT_SCHEMA = "rustinfer.release-performance-report.v1"
-BASELINE_SHA256 = "38ac9581c68ef1b229849529574755326f21d94a0b6787bc1e9f69c2cb9f6209"
+BASELINE_SHA256 = "fb80fd829ac3a7ff9097d046413c0b2dc3c12053597ec562c8d964737eae9bf5"
+PR15_REQUEST_IDENTITY_SHA256 = (
+    "e6a99a749c41a8227574c96a1d23f8b7d877d6e75b0df4d99154db1b1921a2e6"
+)
 CORRECTNESS_GATE_ID = "pr15-iteration-command-batch-exact-v1"
+FIXED37_PRODUCTION_BATCH_GATE_ID = "pr16-fixed37-production-batch-e0-v1"
+FIXED37_GOLDEN_FIXTURE_SHA256 = (
+    "87333a1859be45a2f8e7563d898dde5e64256ccc03ca4da3cab90def07dd3c95"
+)
+FIXED37_GOLDEN_TOKEN_IDS_SHA256 = (
+    "9e38488c0d41dae4a28e7e262baf772f2c643e9f8a9c57941a9e47aaec77ac5c"
+)
+FIXED37_CACHED_GROWING_COSINE_MIN = 0.997_903_530_549_539_3
+FIXED37_CACHED_GROWING_MAX_ABS_MAX = 5.852_936_458_587_647
+FIXED37_CACHED_GROWING_MEAN_ABS_MAX = 1.151_280_319_263_363
 OPTIMIZATION_GOLDEN_TOKEN_IDS = [
     4052,
     2025,
@@ -62,9 +77,288 @@ CANDIDATE_ID_RE = re.compile(
     r"^rustinfer-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
     r"(?:0|[1-9][0-9]*))-rc([1-9][0-9]*)$"
 )
+RUNNER_MANIFEST_SCHEMA = "rustinfer.release-performance-runner-manifest.v3"
+RUNNER_EXECUTION_SCHEMA = "rustinfer.release-performance-execution-receipt.v1"
+RUNNER_SUPERVISOR_LABEL = "org.rustinfer.release-performance-supervisor"
+RUNNER_ZERO_TIME = "0001-01-01T00:00:00Z"
+RUNNER_CONTAINER_COMMAND = (
+    "test -z \"$(/usr/bin/find /workspace -mindepth 1 -print -quit)\"; "
+    "/usr/bin/tar --extract --file /input/source.tar --directory /workspace; "
+    "cd /workspace; exec /bin/bash "
+    "ci/release/run_release_performance_once.sh"
+)
+RUNNER_CONTAINER_ENTRYPOINT = ["/bin/bash"]
+RUNNER_CONTAINER_CMD = ["-ceu", RUNNER_CONTAINER_COMMAND]
+RUNNER_FIXED_PREFLIGHT = {
+    "environment_id": "rtx4090-ubuntu22-driver580-v1",
+    "os_id": "ubuntu",
+    "os_version_id": "22.04",
+    "kernel_release": "6.8.0-138-generic",
+    "machine": "x86_64",
+    "cpu_model": "Intel Core i7-13700K",
+    "physical_cpu_cores": "16",
+    "logical_cpu_threads": "24",
+    "ram_bytes": "67185598464",
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "compute_capability": "8.9",
+    "memory_total_mib": "24564",
+    "driver_version": "580.173.02",
+    "persistence_mode": "Disabled",
+    "power_limit_w": "450.00",
+    "graphics_clock_mhz": "[N/A]",
+    "memory_clock_mhz": "[N/A]",
+    "cpu_governor": "powersave",
+    "cpu_governor_policy_count": "24",
+    "clock_synchronized": "yes",
+    "staging_minimum_bytes": "21474836480",
+}
+RUNNER_PREFLIGHT_FIELDS = frozenset(
+    {
+        *RUNNER_FIXED_PREFLIGHT,
+        "git_revision",
+        "memory_used_mib",
+        "temperature_c",
+        "staging_available_bytes",
+    }
+)
+RUNNER_GPU_ROW = (
+    "NVIDIA GeForce RTX 4090",
+    "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "00000000:01:00.0",
+    "24564",
+    "580.173.02",
+    "8.9",
+)
+RUNNER_PROXY_ENV = {
+    name: ""
+    for name in (
+        "ALL_PROXY",
+        "FTP_PROXY",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "all_proxy",
+        "ftp_proxy",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+    )
+}
+RUNNER_REVIEWED_TOOLS = {
+    "mawk": {
+        "path": "/usr/bin/mawk",
+        "sha256": "dc157030a32367742480403025a6f731275b07d039238d167ade535e6f3eb98e",
+    },
+    "basename": {
+        "path": "/usr/bin/basename",
+        "sha256": "3c19cca8e2630f570580104778cc1e3398811c4c57e3252f0727ce411ab0ad22",
+    },
+    "bash": {
+        "path": "/usr/bin/bash",
+        "sha256": "59474588a312b6b6e73e5a42a59bf71e62b55416b6c9d5e4a6e1c630c2a9ecd4",
+    },
+    "cat": {
+        "path": "/bin/cat",
+        "sha256": "210ffa7daedb3ef6e9230d391e9a10043699ba81080ebf40c6de70ed77e278ba",
+    },
+    "chmod": {
+        "path": "/usr/bin/chmod",
+        "sha256": "e624a2e918718e570f989dd05b219278c9fa7ae3b3ab8830302b2d98e0c7dca8",
+    },
+    "cmp": {
+        "path": "/usr/bin/cmp",
+        "sha256": "b355472d3c90ea94d11ebb8b750e6946ccd348edc6fca4aefc1235c3994ef791",
+    },
+    "cp": {
+        "path": "/usr/bin/cp",
+        "sha256": "8da5881bb59f65673bc22b3a09b0d663b19bc0e785cf986b05d41b8222449ec2",
+    },
+    "dirname": {
+        "path": "/usr/bin/dirname",
+        "sha256": "674a6c35e9ece6a6ac62e6442e3c65f391f8a1a8d1537bdd4b2203423ec16e94",
+    },
+    "df": {
+        "path": "/usr/bin/df",
+        "sha256": "b06fe81669b9383abed94bb5cae1cb7a63c6e02801b1b7dd1c08d7d2c8987e86",
+    },
+    "docker": {
+        "path": "/usr/bin/docker",
+        "sha256": "29be5f37ee7fcb32bed170244a7d94f2eb94d272912e0bbe9328374e2eb4b7f6",
+    },
+    "env": {
+        "path": "/usr/bin/env",
+        "sha256": "85036540673319c6c2f54233fd2b9e45a8a71246b51cc96c4e6ab8ee6c419eb0",
+    },
+    "find": {
+        "path": "/usr/bin/find",
+        "sha256": "791b89c8bffb8101fd7d4d212b80af66a2332834b05a42721104eb47e8fa2eb1",
+    },
+    "git": {
+        "path": "/usr/bin/git",
+        "sha256": "587ef21868c948b883993e23209b86a72a6ddc06aab1545c697ffc31075acd4a",
+    },
+    "grep": {
+        "path": "/usr/bin/grep",
+        "sha256": "73abb4280520053564fd4917286909ba3b054598b32c9cdfaf1d733e0202cc96",
+    },
+    "head": {
+        "path": "/usr/bin/head",
+        "sha256": "9e457645cdcfd74ee0a9688b25b7b017d8d393233a0c0bdf3bef3c57a1238ce2",
+    },
+    "hostname": {
+        "path": "/usr/bin/hostname",
+        "sha256": "d254481d352a5a2b55848a4aeac6002ad594d4ab605e7f1fd49a25683b33559e",
+    },
+    "install": {
+        "path": "/usr/bin/install",
+        "sha256": "519a00d199d07da6028ec5a9800d92c562934582a2ea1793b2cbc378a85c1439",
+    },
+    "mkdir": {
+        "path": "/usr/bin/mkdir",
+        "sha256": "bd2f081ac37d653181332bd27f35a6041dbf215a7957f65838a9cbec9e64928b",
+    },
+    "nvidia-smi": {
+        "path": "/usr/bin/nvidia-smi",
+        "sha256": "22964713c1701fb62b4dd10b26b0dd25d174e100af5bda20c65e0b0fcc32b3be",
+    },
+    "python3": {
+        "path": "/usr/bin/python3.10",
+        "sha256": "7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86",
+    },
+    "sed": {
+        "path": "/usr/bin/sed",
+        "sha256": "42e2ce00721556ff9d371778fc36adcbb7c1697f65c3f996c6c9b28206dba565",
+    },
+    "sha256sum": {
+        "path": "/usr/bin/sha256sum",
+        "sha256": "7645c8e76d75515ccb75c9086bdcf0d4071f2985f380f249253ead7d7c6810b3",
+    },
+    "sleep": {
+        "path": "/usr/bin/sleep",
+        "sha256": "b9aec374a2b2a175a182f615291ad408820b7fb8c663a184e37fa3492d3f8eff",
+    },
+    "sort": {
+        "path": "/usr/bin/sort",
+        "sha256": "0fc26ce295e8e549635da2129e389f63685745b3be7c1737db6251a296f1cd78",
+    },
+    "stat": {
+        "path": "/usr/bin/stat",
+        "sha256": "9b571b54bd2f17f5fbb841e1886c2d364f5138a02533f4ac3dbfbdaf4dddbea3",
+    },
+    "tail": {
+        "path": "/usr/bin/tail",
+        "sha256": "d686c3513b6ecbcc6ac826383bd4b8b0f00aa6500d8d3d5e593687a3dee8fce0",
+    },
+    "timedatectl": {
+        "path": "/usr/bin/timedatectl",
+        "sha256": "a1d1298afc514e7143d1a7a4c0039ce1256871faf33fe356fd9063dd283df5d9",
+    },
+    "tr": {
+        "path": "/usr/bin/tr",
+        "sha256": "24f53bbf7e48b1be3b71f20cf29963a44dbf084aafe5301f0ed1425b91d1c60c",
+    },
+    "uname": {
+        "path": "/usr/bin/uname",
+        "sha256": "37df0311d0e24169abfd166bc6018d40b87306f7ff64d9eec256c8331ac26347",
+    },
+    "wc": {
+        "path": "/usr/bin/wc",
+        "sha256": "504463c7a12780b7439321be6e67f43ab61a3ff429cbf916c0722d19f98692a8",
+    },
+    "tar": {
+        "path": "/usr/bin/tar",
+        "sha256": "fd0d62eed19efd3e115aa1be44160f89d777cd1e6d6d8eb0ce7c8bdc879f59e2",
+    },
+}
+RUNNER_REQUIRED_TOOLS = frozenset(RUNNER_REVIEWED_TOOLS)
+RUNNER_FORBIDDEN_ENV_NAMES = frozenset(
+    {
+        "BASH_ENV",
+        "BASHOPTS",
+        "CDPATH",
+        "DOCKER_CERT_PATH",
+        "DOCKER_CONFIG",
+        "DOCKER_CONTEXT",
+        "DOCKER_HOST",
+        "DOCKER_TLS_VERIFY",
+        "ENV",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_CEILING_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_PARAMETERS",
+        "GIT_CONFIG_SYSTEM",
+        "GIT_DIR",
+        "GIT_EXEC_PATH",
+        "GIT_INDEX_FILE",
+        "GIT_NAMESPACE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_REPLACE_REF_BASE",
+        "GIT_SHALLOW_FILE",
+        "GIT_SSH",
+        "GIT_SSH_COMMAND",
+        "GIT_WORK_TREE",
+        "LD_AUDIT",
+        "LD_PRELOAD",
+        "POSIXLY_CORRECT",
+        "PYTHONHOME",
+        "PYTHONINSPECT",
+        "PYTHONPATH",
+        "PYTHONSTARTUP",
+        "PYTHONWARNINGS",
+        "SHELLOPTS",
+        "TAR_OPTIONS",
+    }
+)
+RUNNER_GPU_MONITOR_HEADER = (
+    "capture_id",
+    "container_id",
+    "stage",
+    "sample_index",
+    "power_limit_w",
+    "graphics_clock_mhz",
+    "memory_clock_mhz",
+    "temperature_c",
+    "memory_used_mib",
+    "compute_processes",
+)
+RUNNER_RECEIPT_FILES = tuple(
+    sorted(
+        {
+            "runner-manifest.json",
+            "gpu.csv",
+            "optimizer-image-inspect-before.json",
+            "optimizer-image-inspect-after.json",
+            "SHA256SUMS",
+            *{
+                f"run-{index}/{name}"
+                for index in range(1, 6)
+                for name in (
+                    "preflight.txt",
+                    "gpu-monitor.csv",
+                    "container-inspect-before.json",
+                    "container-inspect-after.json",
+                    "candidate.json",
+                    "execution-receipt.json",
+                )
+            },
+        }
+    )
+)
 RAW_EVIDENCE_FILES = tuple(f"candidate-{index}.json" for index in range(1, 6))
+_RUNNER_RECEIPT_MAXIMUMS = {
+    name: (
+        native_profile.MAX_EVIDENCE_BYTES
+        if name.endswith("/candidate.json")
+        else 16 * 1024 * 1024
+        if "inspect" in name
+        else 256 * 1024
+    )
+    for name in RUNNER_RECEIPT_FILES
+}
 MAX_RAW_EVIDENCE_ARCHIVE_BYTES = (
-    len(RAW_EVIDENCE_FILES) * native_profile.MAX_EVIDENCE_BYTES + 64 * 1024
+    sum(_RUNNER_RECEIPT_MAXIMUMS.values()) + 2 * 1024 * 1024
 )
 PACKAGE_CANDIDATE_NAME = "release-performance-candidate.json"
 PACKAGE_REPORT_NAME = "release-performance-report.json"
@@ -109,7 +403,7 @@ def _reject_nonfinite(value: str) -> None:
 
 def _load_json_bytes(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
     try:
-        raw = path.read_bytes()
+        raw = _read_bounded_regular(path, label, native_profile.MAX_EVIDENCE_BYTES)
     except OSError as error:
         raise InputError(f"cannot read {label} {path}: {error}") from error
     try:
@@ -179,8 +473,25 @@ def _number(value: Any, path: str, *, positive: bool = False) -> float:
     return result
 
 
+def _exact_json_value(value: Any, expected: Any) -> bool:
+    """Compare decoded JSON without Python's bool/int equality aliasing."""
+
+    if type(value) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return set(value) == set(expected) and all(
+            _exact_json_value(value[name], expected[name]) for name in expected
+        )
+    if isinstance(expected, list):
+        return len(value) == len(expected) and all(
+            _exact_json_value(actual, wanted)
+            for actual, wanted in zip(value, expected, strict=True)
+        )
+    return value == expected
+
+
 def _literal(value: Any, expected: Any, path: str) -> None:
-    if value != expected:
+    if not _exact_json_value(value, expected):
         raise InputError(f"{path}: expected {expected!r}, got {value!r}")
 
 
@@ -189,14 +500,40 @@ def _digest_bytes(raw: bytes) -> str:
 
 
 def _digest_file(path: Path, label: str) -> str:
-    digest = hashlib.sha256()
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = -1
     try:
-        with path.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
+        path_metadata = path.lstat()
+        descriptor = os.open(path, flags)
+        before = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or before.st_dev != path_metadata.st_dev
+            or before.st_ino != path_metadata.st_ino
+            or before.st_size <= 0
+            or before.st_size > 4 * 1024**3
+        ):
+            raise InputError(f"{label}: must be one stable bounded regular file")
+        digest = hashlib.sha256()
+        byte_count = 0
+        while chunk := os.read(descriptor, 1024 * 1024):
+            digest.update(chunk)
+            byte_count += len(chunk)
+        after = os.fstat(descriptor)
+        stable = ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+        if byte_count != before.st_size or any(
+            getattr(before, field) != getattr(after, field) for field in stable
+        ):
+            raise InputError(f"{label}: changed while it was hashed")
+        return digest.hexdigest()
+    except InputError:
+        raise
     except OSError as error:
         raise InputError(f"cannot hash {label} {path}: {error}") from error
-    return digest.hexdigest()
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def _rename_noreplace(source: Path, target: Path) -> None:
@@ -582,6 +919,7 @@ def _validate_baseline(document: Mapping[str, Any], raw: bytes) -> dict[str, Any
             "source_archive_sha256",
             "profile_binary_sha256",
             "profile_image_sha256",
+            "request_identity_sha256",
             "correctness_gate_id",
             "correctness_report_sha256",
             "semantic_class",
@@ -593,10 +931,16 @@ def _validate_baseline(document: Mapping[str, Any], raw: bytes) -> dict[str, Any
         "source_archive_sha256",
         "profile_binary_sha256",
         "profile_image_sha256",
+        "request_identity_sha256",
         "correctness_report_sha256",
     ]:
         _sha256(binding[field], f"baseline.measurement_binding.{field}")
     _literal(binding["semantic_class"], "E0", "baseline.semantic_class")
+    _literal(
+        binding["request_identity_sha256"],
+        PR15_REQUEST_IDENTITY_SHA256,
+        "baseline.measurement_binding.request_identity_sha256",
+    )
     thresholds = _closed_object(
         row["thresholds"],
         "baseline.thresholds",
@@ -618,6 +962,7 @@ def _validate_baseline(document: Mapping[str, Any], raw: bytes) -> dict[str, Any
     return {
         "sha256": actual_digest,
         "baseline_id": _string(row["baseline_id"], "baseline.baseline_id"),
+        "request_identity_sha256": binding["request_identity_sha256"],
         "model": _validate_model(row["model"], "baseline.model"),
         "environment": _validate_environment(
             row["environment"], "baseline.environment"
@@ -903,8 +1248,8 @@ def _validate_optimization_correctness(
         raise InputError("correctness_report.implementations: exact E0 pair mismatch")
 
     tests = row["tests"]
-    if not isinstance(tests, list) or len(tests) != 5:
-        raise InputError("correctness_report.tests: expected exactly five checks")
+    if not isinstance(tests, list) or len(tests) != 6:
+        raise InputError("correctness_report.tests: expected exactly six checks")
     tests_by_id: dict[str, Mapping[str, Any]] = {}
     for index, value in enumerate(tests):
         test = _closed_object(
@@ -922,6 +1267,7 @@ def _validate_optimization_correctness(
         "command-batch-lifecycle",
         "command-batch-resource-ledger",
         "smollm2-multi-step-greedy-exact",
+        "fixed37-production-batch-e0",
     }
     if set(tests_by_id) != expected_ids:
         raise InputError("correctness_report.tests: exact check inventory mismatch")
@@ -1034,6 +1380,105 @@ def _validate_optimization_correctness(
             16,
             f"correctness_report.tests.smollm2-multi-step-greedy-exact.{field}",
         )
+
+    fixed37 = _closed_object(
+        tests_by_id["fixed37-production-batch-e0"],
+        "correctness_report.tests.fixed37-production-batch-e0",
+        {
+            "id",
+            "result",
+            "gate_id",
+            "fixture_sha256",
+            "generated_token_ids_sha256",
+            "cases",
+            "compared_steps",
+            "exact_window",
+            "fixed_profile",
+            "canonical_profile",
+            "residual_rmsnorm",
+            "execution_completion",
+            "fixed_prefill_raw_logit_mismatches",
+            "fixed_cached_growing_token_id_mismatches",
+            "fixed_cached_growing_cosine_min",
+            "fixed_cached_growing_max_abs_max",
+            "fixed_cached_growing_mean_abs_max",
+            "fixed_cached_growing_worst_cosine",
+            "fixed_cached_growing_worst_max_abs",
+            "fixed_cached_growing_worst_mean_abs",
+            "fixed_cached_growing_threshold_violations",
+            "fixed_golden_token_id_mismatches",
+            "canonical_golden_token_id_mismatches",
+            "cuda_live_allocation_delta",
+            "owner_close_live_allocation_count",
+            "compile_command_id",
+            "execute_command_id",
+            "compile_log_sha256",
+            "test_binary_sha256",
+            "log_sha256",
+        },
+    )
+    expected_fixed37 = {
+        "id": "fixed37-production-batch-e0",
+        "result": "passed",
+        "gate_id": FIXED37_PRODUCTION_BATCH_GATE_ID,
+        "fixture_sha256": FIXED37_GOLDEN_FIXTURE_SHA256,
+        "generated_token_ids_sha256": FIXED37_GOLDEN_TOKEN_IDS_SHA256,
+        "cases": 31,
+        "compared_steps": 481,
+        "exact_window": 16,
+        "fixed_profile": "fixed-contiguous-37-balanced-v1",
+        "canonical_profile": "canonical-v1",
+        "residual_rmsnorm": "separate",
+        "execution_completion": "iteration-batch",
+        "fixed_prefill_raw_logit_mismatches": 0,
+        "fixed_cached_growing_token_id_mismatches": 0,
+        "fixed_cached_growing_cosine_min": FIXED37_CACHED_GROWING_COSINE_MIN,
+        "fixed_cached_growing_max_abs_max": FIXED37_CACHED_GROWING_MAX_ABS_MAX,
+        "fixed_cached_growing_mean_abs_max": FIXED37_CACHED_GROWING_MEAN_ABS_MAX,
+        "fixed_cached_growing_threshold_violations": 0,
+        "fixed_golden_token_id_mismatches": 0,
+        "canonical_golden_token_id_mismatches": 0,
+        "cuda_live_allocation_delta": 0,
+        "owner_close_live_allocation_count": 0,
+        "compile_command_id": "compile-fixed37-production-batch-e0",
+        "execute_command_id": "fixed37-production-batch-e0",
+    }
+    for field, expected in expected_fixed37.items():
+        _literal(
+            fixed37[field],
+            expected,
+            f"correctness_report.tests.fixed37-production-batch-e0.{field}",
+        )
+    for field in (
+        "compile_log_sha256",
+        "test_binary_sha256",
+        "log_sha256",
+    ):
+        _sha256(
+            fixed37[field],
+            f"correctness_report.tests.fixed37-production-batch-e0.{field}",
+        )
+    fixed37_worst_cosine = _number(
+        fixed37["fixed_cached_growing_worst_cosine"],
+        "correctness_report.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_cosine",
+    )
+    fixed37_worst_max_abs = _number(
+        fixed37["fixed_cached_growing_worst_max_abs"],
+        "correctness_report.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_max_abs",
+    )
+    fixed37_worst_mean_abs = _number(
+        fixed37["fixed_cached_growing_worst_mean_abs"],
+        "correctness_report.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_mean_abs",
+    )
+    if (
+        fixed37_worst_cosine < FIXED37_CACHED_GROWING_COSINE_MIN
+        or fixed37_worst_max_abs > FIXED37_CACHED_GROWING_MAX_ABS_MAX
+        or fixed37_worst_mean_abs > FIXED37_CACHED_GROWING_MEAN_ABS_MAX
+    ):
+        raise InputError(
+            "correctness_report.tests.fixed37-production-batch-e0: "
+            "cached/growing metrics exceed the immutable E0 bounds"
+        )
     _literal(
         parity["generated_token_ids"],
         OPTIMIZATION_GOLDEN_TOKEN_IDS,
@@ -1133,7 +1578,7 @@ def derive_raw_run_payloads(
         workload = native_profile._require_equal(
             [run["workload"] for run in runs], "release candidate raw workload"
         )
-        native_profile._require_equal(
+        request_identity = native_profile._require_equal(
             [native_profile._request_identity(run) for run in runs],
             "release candidate raw request identities",
         )
@@ -1216,7 +1661,19 @@ def derive_raw_run_payloads(
             }
             for _, _, run, actual_digest in loaded
         ],
+        "request_identity_sha256": native_profile._sha256_json(request_identity),
     }
+
+
+def _require_request_identity_sha256(
+    derived: Mapping[str, Any], expected: str, path: str
+) -> None:
+    actual = derived.get("request_identity_sha256")
+    if actual != expected:
+        raise ComparabilityError(
+            f"{path}: canonical native request identity differs from the reviewed PR15 baseline: "
+            f"{actual} != {expected}"
+        )
 
 
 def validate_raw_run_payloads(
@@ -1295,46 +1752,1001 @@ def _read_raw_run_paths(
     payloads: list[tuple[str, bytes]] = []
     for value in paths:
         path = Path(value)
-        try:
-            before = path.lstat()
-            if not stat.S_ISREG(before.st_mode):
-                raise InputError(
-                    f"{path}: raw native profile run must be a regular file"
-                )
-            if before.st_size <= 0:
-                raise InputError(f"{path}: raw native profile run must not be empty")
-            if before.st_size > native_profile.MAX_EVIDENCE_BYTES:
-                raise InputError(
-                    f"{path}: exceeds the raw native profile evidence bound"
-                )
-            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-            flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(path, flags)
-            try:
-                after = os.fstat(descriptor)
-                if (
-                    not stat.S_ISREG(after.st_mode)
-                    or before.st_dev != after.st_dev
-                    or before.st_ino != after.st_ino
-                    or before.st_size != after.st_size
-                ):
-                    raise InputError(
-                        f"{path}: raw native profile run changed while it was opened"
-                    )
-                with os.fdopen(descriptor, "rb", closefd=False) as handle:
-                    raw = handle.read(native_profile.MAX_EVIDENCE_BYTES + 1)
-                if len(raw) != after.st_size:
-                    raise InputError(
-                        f"{path}: raw native profile run changed while it was read"
-                    )
-            finally:
-                os.close(descriptor)
-            payloads.append((str(path), raw))
-        except InputError:
-            raise
-        except OSError as error:
-            raise InputError(f"cannot read raw native profile run {path}: {error}") from error
+        raw = _read_bounded_regular(
+            path,
+            f"raw native profile run {path}",
+            native_profile.MAX_EVIDENCE_BYTES,
+        )
+        payloads.append((str(path), raw))
     return payloads
+
+
+def _strict_json_payload(raw: bytes, label: str) -> Any:
+    try:
+        return json.loads(
+            raw,
+            object_pairs_hook=_pairs_no_duplicates,
+            parse_constant=_reject_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+        raise InputError(f"{label}: invalid strict UTF-8 JSON: {error}") from error
+
+
+def _read_bounded_regular(path: Path, label: str, maximum: int) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(path, flags)
+        raw, _digest, _metadata = _stable_fd_snapshot(descriptor, label, maximum)
+        return raw
+    except InputError:
+        raise
+    except OSError as error:
+        raise InputError(f"{label}: cannot open stable snapshot: {error}") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _runner_sha256s(payloads: Mapping[str, bytes]) -> bytes:
+    return "".join(
+        f"{_digest_bytes(payloads[name])}  {name}\n"
+        for name in RUNNER_RECEIPT_FILES
+        if name != "SHA256SUMS"
+    ).encode("ascii")
+
+
+def _runner_forbidden_environment(names: Sequence[str]) -> list[str]:
+    return sorted(
+        name
+        for name in names
+        if name in RUNNER_FORBIDDEN_ENV_NAMES or name.startswith("BASH_FUNC_")
+    )
+
+
+def _runner_environment(value: Any, path: str) -> dict[str, str]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise InputError(f"{path}: must be an array of NAME=value strings")
+    result: dict[str, str] = {}
+    for item in value:
+        name, separator, setting = item.partition("=")
+        if not separator or not name or name in result:
+            raise InputError(f"{path}: malformed or duplicate environment variable")
+        result[name] = setting
+    forbidden = _runner_forbidden_environment(list(result))
+    if forbidden:
+        raise InputError(f"{path}: forbidden environment variables: {forbidden}")
+    return result
+
+
+def _runner_image(raw: bytes, label: str, expected_id: str) -> dict[str, Any]:
+    document = _strict_json_payload(raw, label)
+    if not isinstance(document, list) or len(document) != 1:
+        raise InputError(f"{label}: must contain exactly one image object")
+    image = document[0]
+    if not isinstance(image, dict):
+        raise InputError(f"{label}[0]: must be an object")
+    if image.get("Id") != expected_id:
+        raise InputError(f"{label}.Id: does not equal the trusted image ID")
+    if image.get("Os") != "linux" or image.get("Architecture") != "amd64":
+        raise InputError(f"{label}: image platform must be linux/amd64")
+    config = image.get("Config")
+    if not isinstance(config, dict) or config.get("WorkingDir") != "/workspace":
+        raise InputError(f"{label}.Config: reviewed /workspace image config required")
+    environment = _runner_environment(config.get("Env"), f"{label}.Config.Env")
+    if environment.get("CUDA_VERSION") != "12.8.1":
+        raise InputError(f"{label}.Config.Env: CUDA_VERSION must equal 12.8.1")
+    labels = config.get("Labels")
+    if not isinstance(labels, dict) or not all(
+        isinstance(name, str) and name and isinstance(value, str)
+        for name, value in labels.items()
+    ):
+        raise InputError(f"{label}.Config.Labels: exact string map required")
+    return {"environment": environment, "labels": dict(labels)}
+
+
+def _runner_preflight(raw: bytes, label: str, revision: str) -> dict[str, str]:
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        raise InputError(f"{label}: must be strict UTF-8") from error
+    values: dict[str, str] = {}
+    for line_number, line in enumerate(lines, 1):
+        key, separator, value = line.partition("=")
+        if not separator or not key or key in values:
+            raise InputError(f"{label}:{line_number}: malformed or duplicate key")
+        values[key] = value
+    if set(values) != RUNNER_PREFLIGHT_FIELDS:
+        raise InputError(f"{label}: exact reviewed field inventory required")
+    for name, expected in RUNNER_FIXED_PREFLIGHT.items():
+        if values[name] != expected:
+            raise InputError(f"{label}.{name}: expected {expected!r}")
+    if values["git_revision"] != revision:
+        raise InputError(f"{label}.git_revision: candidate revision mismatch")
+    for name, maximum in (("memory_used_mib", 256), ("temperature_c", 50)):
+        value = values[name]
+        if re.fullmatch(r"0|[1-9][0-9]*", value) is None or int(value) > maximum:
+            raise InputError(f"{label}.{name}: outside the reviewed bound")
+    available = values["staging_available_bytes"]
+    if re.fullmatch(r"0|[1-9][0-9]*", available) is None:
+        raise InputError(f"{label}.staging_available_bytes: invalid integer")
+    if int(available) < int(RUNNER_FIXED_PREFLIGHT["staging_minimum_bytes"]):
+        raise InputError(f"{label}.staging_available_bytes: below reviewed minimum")
+    return values
+
+
+_RUNNER_TIMESTAMP_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.([0-9]{1,9}))?Z$"
+)
+
+
+def _runner_capture_id(supervisor_token: str, pair_index: int) -> str:
+    return hashlib.sha256(
+        f"{supervisor_token}:{pair_index}\n".encode("ascii")
+    ).hexdigest()
+
+
+def _runner_run_id(revision: str, capture_id: str, pair_index: int) -> str:
+    return (
+        f"pr16-iteration-batch-{revision[:12]}-{capture_id}-pair{pair_index}"
+    )
+
+
+def _runner_timestamp_ns(value: Any, path: str) -> int:
+    text = _string(value, path)
+    match = _RUNNER_TIMESTAMP_RE.fullmatch(text)
+    if match is None or text == RUNNER_ZERO_TIME:
+        raise InputError(f"{path}: non-zero RFC3339 UTC timestamp required")
+    try:
+        whole = datetime.strptime(match.group(1), "%Y-%m-%dT%H:%M:%S").replace(
+            tzinfo=timezone.utc
+        )
+    except ValueError as error:
+        raise InputError(f"{path}: invalid RFC3339 UTC timestamp") from error
+    fraction = (match.group(2) or "").ljust(9, "0")
+    return int(whole.timestamp()) * 1_000_000_000 + int(fraction or "0")
+
+
+def _runner_execution(value: Any, label: str) -> dict[str, Any]:
+    row = _closed_object(
+        value,
+        label,
+        {
+            "schema_version",
+            "pair_index",
+            "capture_id",
+            "container_id",
+            "run_id",
+            "candidate_recorded_at_utc",
+            "docker",
+            "sha256",
+        },
+    )
+    _literal(row["schema_version"], RUNNER_EXECUTION_SCHEMA, f"{label}.schema_version")
+    pair_index = _integer(row["pair_index"], f"{label}.pair_index", 1)
+    if pair_index > 5:
+        raise InputError(f"{label}.pair_index: must be in 1..5")
+    capture_id = _sha256(row["capture_id"], f"{label}.capture_id")
+    container_id = _string(row["container_id"], f"{label}.container_id")
+    if SHA256_RE.fullmatch(container_id) is None:
+        raise InputError(f"{label}.container_id: lowercase 64-character ID required")
+    _string(row["run_id"], f"{label}.run_id")
+    _runner_timestamp_ns(
+        row["candidate_recorded_at_utc"], f"{label}.candidate_recorded_at_utc"
+    )
+    docker = _closed_object(
+        row["docker"],
+        f"{label}.docker",
+        {
+            "created_at_utc",
+            "started_at_utc",
+            "finished_at_utc",
+            "exit_code",
+            "oom_killed",
+        },
+    )
+    for name in ("created_at_utc", "started_at_utc", "finished_at_utc"):
+        _runner_timestamp_ns(docker[name], f"{label}.docker.{name}")
+    _literal(docker["exit_code"], 0, f"{label}.docker.exit_code")
+    _literal(docker["oom_killed"], False, f"{label}.docker.oom_killed")
+    digests = _closed_object(
+        row["sha256"],
+        f"{label}.sha256",
+        {
+            "preflight",
+            "candidate",
+            "gpu_monitor",
+            "container_inspect_before",
+            "container_inspect_after",
+        },
+    )
+    for name, digest in digests.items():
+        _sha256(digest, f"{label}.sha256.{name}")
+    return dict(row)
+
+
+def _runner_execution_payload(raw: bytes, label: str) -> dict[str, Any]:
+    return _runner_execution(_strict_json_payload(raw, label), label)
+
+
+def _validate_runner_execution_timeline(
+    execution: Mapping[str, Any], *, label: str
+) -> None:
+    docker = execution["docker"]
+    created = _runner_timestamp_ns(docker["created_at_utc"], f"{label}.docker.created_at_utc")
+    started = _runner_timestamp_ns(docker["started_at_utc"], f"{label}.docker.started_at_utc")
+    recorded = _runner_timestamp_ns(
+        execution["candidate_recorded_at_utc"],
+        f"{label}.candidate_recorded_at_utc",
+    )
+    finished = _runner_timestamp_ns(docker["finished_at_utc"], f"{label}.docker.finished_at_utc")
+    if not created <= started <= recorded <= finished:
+        raise InputError(
+            f"{label}: require Created <= StartedAt <= candidate recorded_at <= FinishedAt"
+        )
+
+
+def _runner_manifest(
+    raw: bytes,
+    *,
+    image_environment: Mapping[str, str],
+    image_labels: Mapping[str, str],
+) -> dict[str, Any]:
+    document = _strict_json_payload(raw, "runner-manifest.json")
+    root = _closed_object(
+        document,
+        "runner-manifest",
+        {"schema_version", "candidate", "runner", "container", "executions"},
+    )
+    _literal(
+        root["schema_version"], RUNNER_MANIFEST_SCHEMA, "runner-manifest.schema_version"
+    )
+    candidate = _closed_object(
+        root["candidate"],
+        "runner-manifest.candidate",
+        {
+            "source_revision",
+            "source_archive_sha256",
+            "profile_binary_sha256",
+            "model_tree_sha256",
+            "optimizer_correctness_report_sha256",
+            "optimizer_image_id",
+        },
+    )
+    revision = _string(candidate["source_revision"], "runner-manifest.candidate.source_revision")
+    if GIT_RE.fullmatch(revision) is None or len(revision) != 40:
+        raise InputError("runner-manifest.candidate.source_revision: expected 40-character Git SHA")
+    for name in (
+        "source_archive_sha256",
+        "profile_binary_sha256",
+        "model_tree_sha256",
+        "optimizer_correctness_report_sha256",
+    ):
+        _sha256(candidate[name], f"runner-manifest.candidate.{name}")
+    image_id = _string(candidate["optimizer_image_id"], "runner-manifest.candidate.optimizer_image_id")
+    if not image_id.startswith("sha256:"):
+        raise InputError("runner-manifest.candidate.optimizer_image_id: expected sha256 digest")
+    _sha256(image_id.removeprefix("sha256:"), "runner-manifest.candidate.optimizer_image_id")
+
+    runner = _closed_object(
+        root["runner"],
+        "runner-manifest.runner",
+        {"revision", "host_script_sha256", "inner_script_sha256", "tools"},
+    )
+    _literal(runner["revision"], revision, "runner-manifest.runner.revision")
+    repository = Path(__file__).resolve().parents[2]
+    script_bindings = {
+        "host_script_sha256": repository / "ci" / "run_remote_release_performance.sh",
+        "inner_script_sha256": repository / "ci" / "release" / "run_release_performance_once.sh",
+    }
+    for name, path in script_bindings.items():
+        declared = _sha256(runner[name], f"runner-manifest.runner.{name}")
+        actual = _digest_bytes(
+            _read_bounded_regular(path, f"reviewed {name}", 2 * 1024 * 1024)
+        )
+        if declared != actual:
+            raise InputError(f"runner-manifest.runner.{name}: does not match reviewed source")
+    tools = runner["tools"]
+    if not isinstance(tools, dict) or set(tools) != RUNNER_REQUIRED_TOOLS:
+        raise InputError("runner-manifest.runner.tools: exact trusted tool inventory required")
+    for name in sorted(tools):
+        tool = _closed_object(
+            tools[name], f"runner-manifest.runner.tools.{name}", {"path", "sha256"}
+        )
+        expected_tool = RUNNER_REVIEWED_TOOLS[name]
+        _literal(
+            tool["path"],
+            expected_tool["path"],
+            f"runner-manifest.runner.tools.{name}.path",
+        )
+        _literal(
+            tool["sha256"],
+            expected_tool["sha256"],
+            f"runner-manifest.runner.tools.{name}.sha256",
+        )
+
+    container = _closed_object(
+        root["container"],
+        "runner-manifest.container",
+        {
+            "entrypoint",
+            "cmd",
+            "environment",
+            "read_only_mount_sources",
+            "evidence_mount_sources",
+            "workspace_volume_names",
+            "supervisor_label",
+            "labels",
+        },
+    )
+    _literal(container["entrypoint"], RUNNER_CONTAINER_ENTRYPOINT, "runner-manifest.container.entrypoint")
+    _literal(container["cmd"], RUNNER_CONTAINER_CMD, "runner-manifest.container.cmd")
+    supervisor_label = _closed_object(
+        container["supervisor_label"],
+        "runner-manifest.container.supervisor_label",
+        {"name", "value"},
+    )
+    _literal(
+        supervisor_label["name"],
+        RUNNER_SUPERVISOR_LABEL,
+        "runner-manifest.container.supervisor_label.name",
+    )
+    supervisor_token = _sha256(
+        supervisor_label["value"],
+        "runner-manifest.container.supervisor_label.value",
+    )
+    labels = container["labels"]
+    if not isinstance(labels, dict) or not all(
+        isinstance(name, str) and name and isinstance(value, str)
+        for name, value in labels.items()
+    ):
+        raise InputError("runner-manifest.container.labels: exact string map required")
+    expected_labels = {
+        **image_labels,
+        RUNNER_SUPERVISOR_LABEL: supervisor_token,
+    }
+    if not _exact_json_value(labels, expected_labels):
+        raise InputError(
+            "runner-manifest.container.labels: must equal image labels plus the exact supervisor label"
+        )
+    environment = container["environment"]
+    if not isinstance(environment, dict) or not all(
+        isinstance(name, str) and isinstance(value, str)
+        for name, value in environment.items()
+    ):
+        raise InputError("runner-manifest.container.environment: must be a string map")
+    fixed_overrides = {
+        "RUSTINFER_PERF_SOURCE_REVISION": revision,
+        "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": candidate["source_archive_sha256"],
+        "RUSTINFER_PERF_PROFILE_BINARY_SHA256": candidate["profile_binary_sha256"],
+        "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": candidate["optimizer_correctness_report_sha256"],
+        "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": image_id.removeprefix("sha256:"),
+        "RUSTINFER_PERF_MODEL_TREE_SHA256": candidate["model_tree_sha256"],
+        "RUSTINFER_PERF_PAIR_INDEX": "{pair_index}",
+        "RUSTINFER_PERF_CAPTURE_ID": "{capture_id}",
+        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+        **RUNNER_PROXY_ENV,
+    }
+    expected_environment = {**image_environment, **fixed_overrides}
+    if not _exact_json_value(environment, expected_environment):
+        raise InputError("runner-manifest.container.environment: not image base env plus exact overrides")
+    forbidden = _runner_forbidden_environment(list(environment))
+    if forbidden:
+        raise InputError(
+            "runner-manifest.container.environment: forbidden control-plane "
+            f"overrides: {forbidden}"
+        )
+    read_only_sources = container["read_only_mount_sources"]
+    expected_destinations = {
+        "/input/source.tar",
+        "/input/rustinfer-profile",
+        "/input/optimizer-correctness-report.json",
+        "/model",
+    }
+    if not isinstance(read_only_sources, dict) or set(read_only_sources) != expected_destinations:
+        raise InputError("runner-manifest.container.read_only_mount_sources: exact inventory required")
+    if not all(isinstance(value, str) and value.startswith("/") for value in read_only_sources.values()):
+        raise InputError("runner-manifest.container.read_only_mount_sources: absolute sources required")
+    evidence_sources = container["evidence_mount_sources"]
+    volume_names = container["workspace_volume_names"]
+    for value, label in (
+        (evidence_sources, "evidence_mount_sources"),
+        (volume_names, "workspace_volume_names"),
+    ):
+        if not isinstance(value, list) or len(value) != 5 or not all(
+            isinstance(item, str) and item for item in value
+        ) or len(set(value)) != 5:
+            raise InputError(f"runner-manifest.container.{label}: five distinct values required")
+    if not all(value.startswith("/") for value in evidence_sources):
+        raise InputError("runner-manifest.container.evidence_mount_sources: absolute sources required")
+    executions = root["executions"]
+    if not isinstance(executions, list) or len(executions) != 5:
+        raise InputError("runner-manifest.executions: exactly five receipts required")
+    parsed_executions = [
+        _runner_execution(value, f"runner-manifest.executions[{index - 1}]")
+        for index, value in enumerate(executions, 1)
+    ]
+    if [value["pair_index"] for value in parsed_executions] != list(range(1, 6)):
+        raise InputError("runner-manifest.executions: canonical pair order 1..5 required")
+    for pair_index, execution in enumerate(parsed_executions, 1):
+        expected_capture_id = _runner_capture_id(supervisor_token, pair_index)
+        _literal(
+            execution["capture_id"],
+            expected_capture_id,
+            f"runner-manifest.executions[{pair_index - 1}].capture_id",
+        )
+        _literal(
+            execution["run_id"],
+            _runner_run_id(revision, expected_capture_id, pair_index),
+            f"runner-manifest.executions[{pair_index - 1}].run_id",
+        )
+    if len({value["container_id"] for value in parsed_executions}) != 5:
+        raise InputError("runner-manifest.executions: five distinct container IDs required")
+    return dict(document)
+
+
+def _runner_container_document(raw: bytes, label: str) -> Mapping[str, Any]:
+    document = _strict_json_payload(raw, label)
+    if not isinstance(document, list) or len(document) != 1 or not isinstance(document[0], dict):
+        raise InputError(f"{label}: must contain exactly one container object")
+    return document[0]
+
+
+def _runner_gpu_monitor(
+    raw: bytes,
+    label: str,
+    *,
+    expected_capture_id: str | None = None,
+    expected_container_id: str | None = None,
+) -> dict[str, Any]:
+    try:
+        text = raw.decode("utf-8", errors="strict")
+        rows = list(csv.reader(io.StringIO(text, newline="")))
+    except (UnicodeDecodeError, csv.Error) as error:
+        raise InputError(f"{label}: invalid strict UTF-8 CSV: {error}") from error
+    if not rows or tuple(rows[0]) != RUNNER_GPU_MONITOR_HEADER:
+        raise InputError(f"{label}: exact monitor header required")
+    samples = rows[1:]
+    if len(samples) < 3:
+        raise InputError(f"{label}: pre-start, running, and post-exit samples required")
+    stages = [row[2] if len(row) > 2 else "" for row in samples]
+    if stages[0] != "pre_start" or stages[-1] != "post_exit" or any(
+        stage != "running" for stage in stages[1:-1]
+    ):
+        raise InputError(f"{label}: exact pre_start/running+/post_exit order required")
+    observed_container_process = False
+    for index, row in enumerate(samples):
+        path = f"{label}:sample[{index}]"
+        if len(row) != len(RUNNER_GPU_MONITOR_HEADER):
+            raise InputError(f"{path}: exact column count required")
+        (
+            capture_id,
+            container_id,
+            _stage,
+            sample_index,
+            power_limit,
+            graphics_clock,
+            memory_clock,
+            temperature,
+            memory_used,
+            processes,
+        ) = row
+        if SHA256_RE.fullmatch(capture_id) is None:
+            raise InputError(f"{path}.capture_id: lowercase SHA-256 required")
+        if SHA256_RE.fullmatch(container_id) is None:
+            raise InputError(f"{path}.container_id: lowercase container ID required")
+        if expected_capture_id is not None and capture_id != expected_capture_id:
+            raise InputError(f"{path}.capture_id: execution receipt mismatch")
+        if expected_container_id is not None and container_id != expected_container_id:
+            raise InputError(f"{path}.container_id: execution receipt mismatch")
+        if sample_index != str(index):
+            raise InputError(f"{path}.sample_index: must be the canonical sequence")
+        if (
+            power_limit != RUNNER_FIXED_PREFLIGHT["power_limit_w"]
+            or graphics_clock != RUNNER_FIXED_PREFLIGHT["graphics_clock_mhz"]
+            or memory_clock != RUNNER_FIXED_PREFLIGHT["memory_clock_mhz"]
+        ):
+            raise InputError(f"{path}: power/application-clock lane drifted")
+        for name, value, maximum in (
+            ("temperature_c", temperature, 95),
+            ("memory_used_mib", memory_used, int(RUNNER_FIXED_PREFLIGHT["memory_total_mib"])),
+        ):
+            if re.fullmatch(r"0|[1-9][0-9]*", value) is None or int(value) > maximum:
+                raise InputError(f"{path}.{name}: invalid or outside reviewed bound")
+        if index in (0, len(samples) - 1):
+            if processes != "none" or int(memory_used) > 256:
+                raise InputError(f"{path}: boundary sample must prove an idle GPU")
+        elif processes != "none":
+            process_rows = processes.split(";")
+            if not all(re.fullmatch(r"container:[1-9][0-9]*", value) for value in process_rows):
+                raise InputError(f"{path}.compute_processes: foreign process receipt")
+            observed_container_process = True
+    if not observed_container_process:
+        raise InputError(f"{label}: no designated-container CUDA process was observed")
+    return {
+        "sample_count": len(samples),
+        "observed_container_process": True,
+        "capture_id": samples[0][0],
+        "container_id": samples[0][1],
+    }
+
+
+def _validate_runner_container(
+    container: Mapping[str, Any],
+    *,
+    label: str,
+    pair_index: int,
+    manifest: Mapping[str, Any],
+    after: bool,
+) -> dict[str, Any]:
+    candidate = manifest["candidate"]
+    contract = manifest["container"]
+    image_id = candidate["optimizer_image_id"]
+    container_id = container.get("Id")
+    if not isinstance(container_id, str) or re.fullmatch(r"[0-9a-f]{64}", container_id) is None:
+        raise InputError(f"{label}.Id: expected lowercase 64-character ID")
+    if container.get("Image") != image_id:
+        raise InputError(f"{label}.Image: optimizer image mismatch")
+    if container.get("Path") != RUNNER_CONTAINER_ENTRYPOINT[0] or container.get(
+        "Args"
+    ) != RUNNER_CONTAINER_CMD:
+        raise InputError(f"{label}.Path/Args: exact resolved process required")
+    config = container.get("Config")
+    if not isinstance(config, dict):
+        raise InputError(f"{label}.Config: must be an object")
+    required_config = {
+        "Image": image_id,
+        "User": "0:0",
+        "WorkingDir": "/workspace",
+        "Entrypoint": RUNNER_CONTAINER_ENTRYPOINT,
+        "Cmd": RUNNER_CONTAINER_CMD,
+        "Healthcheck": {"Test": ["NONE"]},
+    }
+    for name, expected in required_config.items():
+        if name not in config or not _exact_json_value(config[name], expected):
+            raise InputError(f"{label}.Config.{name}: exact runner value required")
+    expected_labels = contract["labels"]
+    if not _exact_json_value(config.get("Labels"), expected_labels):
+        raise InputError(
+            f"{label}.Config.Labels: exact image-plus-supervisor labels required"
+        )
+    expected_environment = dict(contract["environment"])
+    expected_environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
+    expected_environment["RUSTINFER_PERF_CAPTURE_ID"] = manifest["executions"][
+        pair_index - 1
+    ]["capture_id"]
+    if _runner_environment(config.get("Env"), f"{label}.Config.Env") != expected_environment:
+        raise InputError(f"{label}.Config.Env: exact full environment required")
+
+    host = container.get("HostConfig")
+    if not isinstance(host, dict):
+        raise InputError(f"{label}.HostConfig: must be an object")
+    exact_host = {
+        "NetworkMode": "none",
+        "ReadonlyRootfs": True,
+        "AutoRemove": False,
+        "CapDrop": ["ALL"],
+        "CapAdd": None,
+        "SecurityOpt": ["no-new-privileges:true"],
+        "PidsLimit": 512,
+        "Privileged": False,
+        "RestartPolicy": {"Name": "no", "MaximumRetryCount": 0},
+        "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=2147483648"},
+        "PidMode": "",
+        "IpcMode": "private",
+        "UTSMode": "",
+        "UsernsMode": "",
+        "CgroupnsMode": "private",
+        "Runtime": "runc",
+        "CpuShares": 0,
+        "Memory": 0,
+        "NanoCpus": 0,
+        "CpuPeriod": 0,
+        "CpuQuota": 0,
+        "CpusetCpus": "",
+        "CpusetMems": "",
+        "MemoryReservation": 0,
+        "MemorySwap": 0,
+        "Devices": [],
+        "DeviceCgroupRules": None,
+    }
+    for name, expected in exact_host.items():
+        if name not in host or not _exact_json_value(host[name], expected):
+            raise InputError(f"{label}.HostConfig.{name}: exact isolated runner value required")
+    requests = host.get("DeviceRequests")
+    if not isinstance(requests, list) or len(requests) != 1 or not isinstance(requests[0], dict):
+        raise InputError(f"{label}.HostConfig.DeviceRequests: one GPU request required")
+    request = requests[0]
+    if (
+        not _exact_json_value(request.get("Driver"), "")
+        or not _exact_json_value(request.get("Count"), 0)
+        or not _exact_json_value(request.get("DeviceIDs"), [RUNNER_GPU_ROW[1]])
+        or not _exact_json_value(request.get("Capabilities"), [["gpu"]])
+        or not _exact_json_value(request.get("Options"), {})
+    ):
+        raise InputError(f"{label}.HostConfig.DeviceRequests: designated GPU UUID only")
+    networks = container.get("NetworkSettings")
+    attached = networks.get("Networks") if isinstance(networks, dict) else None
+    if not isinstance(attached, dict) or not set(attached) <= {"none"}:
+        raise InputError(f"{label}.NetworkSettings.Networks: isolated none network only")
+    isolated = attached.get("none")
+    if isolated is not None:
+        if not isinstance(isolated, dict) or any(
+            isolated.get(name) not in ("", None)
+            for name in ("Gateway", "IPAddress", "GlobalIPv6Address", "MacAddress")
+        ):
+            raise InputError(
+                f"{label}.NetworkSettings.Networks.none: addressless receipt required"
+            )
+
+    mounts = container.get("Mounts")
+    if not isinstance(mounts, list):
+        raise InputError(f"{label}.Mounts: must be an array")
+    by_destination: dict[str, Mapping[str, Any]] = {}
+    for mount in mounts:
+        if not isinstance(mount, dict) or not isinstance(mount.get("Destination"), str):
+            raise InputError(f"{label}.Mounts: malformed mount")
+        destination = mount["Destination"]
+        if destination in by_destination:
+            raise InputError(f"{label}.Mounts: duplicate destination")
+        by_destination[destination] = mount
+    allowed = {*contract["read_only_mount_sources"], "/evidence", "/workspace", "/tmp"}
+    if set(by_destination) not in (allowed - {"/tmp"}, allowed):
+        raise InputError(f"{label}.Mounts: exact reviewed destination inventory required")
+    for destination, source in contract["read_only_mount_sources"].items():
+        mount = by_destination[destination]
+        if (
+            mount.get("Type") != "bind"
+            or mount.get("Source") != source
+            or mount.get("RW") is not False
+            or mount.get("Mode") != ""
+            or mount.get("Propagation") != "rprivate"
+        ):
+            raise InputError(f"{label}.Mounts[{destination}]: exact read-only bind required")
+    evidence = by_destination["/evidence"]
+    if (
+        evidence.get("Type") != "bind"
+        or evidence.get("Source") != contract["evidence_mount_sources"][pair_index - 1]
+        or evidence.get("RW") is not True
+        or evidence.get("Mode") != ""
+        or evidence.get("Propagation") != "rprivate"
+    ):
+        raise InputError(f"{label}.Mounts[/evidence]: run-specific writable bind required")
+    workspace = by_destination["/workspace"]
+    if (
+        workspace.get("Type") != "volume"
+        or workspace.get("Source") != contract["workspace_volume_names"][pair_index - 1]
+        or workspace.get("RW") is not True
+    ):
+        raise InputError(f"{label}.Mounts[/workspace]: named fresh writable volume required")
+    if "/tmp" in by_destination:
+        temporary = by_destination["/tmp"]
+        if temporary.get("Type") != "tmpfs" or temporary.get("RW") is not True:
+            raise InputError(f"{label}.Mounts[/tmp]: reviewed tmpfs required")
+
+    state = container.get("State")
+    if not isinstance(state, dict):
+        raise InputError(f"{label}.State: must be an object")
+    created_at = container.get("Created")
+    _runner_timestamp_ns(created_at, f"{label}.Created")
+    if not after:
+        expected_state = {
+            "Status": "created",
+            "Running": False,
+            "Paused": False,
+            "Restarting": False,
+            "OOMKilled": False,
+            "Dead": False,
+            "Pid": 0,
+            "ExitCode": 0,
+            "Error": "",
+            "StartedAt": RUNNER_ZERO_TIME,
+            "FinishedAt": RUNNER_ZERO_TIME,
+        }
+        for name, expected in expected_state.items():
+            if name not in state or not _exact_json_value(state[name], expected):
+                raise InputError(f"{label}.State.{name}: pristine created receipt required")
+        started_at = RUNNER_ZERO_TIME
+        finished_at = RUNNER_ZERO_TIME
+    else:
+        expected_state = {
+            "Status": "exited",
+            "Running": False,
+            "Paused": False,
+            "Restarting": False,
+            "OOMKilled": False,
+            "Dead": False,
+            "ExitCode": 0,
+            "Error": "",
+        }
+        for name, expected in expected_state.items():
+            if name not in state or not _exact_json_value(state[name], expected):
+                raise InputError(f"{label}.State.{name}: clean exit-zero receipt required")
+        started_at = state.get("StartedAt")
+        finished_at = state.get("FinishedAt")
+        _runner_timestamp_ns(started_at, f"{label}.State.StartedAt")
+        _runner_timestamp_ns(finished_at, f"{label}.State.FinishedAt")
+        if not (
+            _runner_timestamp_ns(created_at, f"{label}.Created")
+            <= _runner_timestamp_ns(started_at, f"{label}.State.StartedAt")
+            <= _runner_timestamp_ns(finished_at, f"{label}.State.FinishedAt")
+        ):
+            raise InputError(f"{label}.State: Created/StartedAt/FinishedAt order invalid")
+    if not _exact_json_value(container.get("RestartCount"), 0):
+        raise InputError(f"{label}.RestartCount: must remain zero")
+    return {
+        "container_id": container_id,
+        "workspace_volume_name": workspace["Source"],
+        "created_at_utc": created_at,
+        "started_at_utc": started_at,
+        "finished_at_utc": finished_at,
+        "exit_code": state.get("ExitCode"),
+        "oom_killed": state.get("OOMKilled"),
+    }
+
+
+def validate_runner_receipt_payloads(
+    payloads: Sequence[tuple[str, bytes]],
+) -> dict[str, Any]:
+    """Replay a complete closed v3 runner receipt inventory."""
+
+    if [name for name, _raw in payloads] != list(RUNNER_RECEIPT_FILES):
+        raise InputError(f"runner receipts: exact ordered inventory required: {list(RUNNER_RECEIPT_FILES)}")
+    by_name = dict(payloads)
+    if by_name["SHA256SUMS"] != _runner_sha256s(by_name):
+        raise InputError("runner receipts: SHA256SUMS does not exactly bind every receipt")
+    try:
+        gpu_line = by_name["gpu.csv"].decode("utf-8", errors="strict").strip("\n")
+    except UnicodeDecodeError as error:
+        raise InputError("gpu.csv: must be strict UTF-8") from error
+    gpu_values = tuple(value.strip() for value in gpu_line.split(","))
+    if gpu_values != RUNNER_GPU_ROW or by_name["gpu.csv"].count(b"\n") != 1:
+        raise InputError("gpu.csv: exact designated server-4096 GPU row required")
+
+    manifest_document = _strict_json_payload(by_name["runner-manifest.json"], "runner-manifest.json")
+    if not isinstance(manifest_document, dict) or not isinstance(manifest_document.get("candidate"), dict):
+        raise InputError("runner-manifest.json: malformed candidate binding")
+    image_id = manifest_document["candidate"].get("optimizer_image_id")
+    if not isinstance(image_id, str):
+        raise InputError("runner-manifest.json: missing optimizer image ID")
+    before_image = _runner_image(
+        by_name["optimizer-image-inspect-before.json"],
+        "optimizer-image-inspect-before.json",
+        image_id,
+    )
+    after_image = _runner_image(
+        by_name["optimizer-image-inspect-after.json"],
+        "optimizer-image-inspect-after.json",
+        image_id,
+    )
+    if (
+        by_name["optimizer-image-inspect-before.json"]
+        != by_name["optimizer-image-inspect-after.json"]
+    ):
+        raise InputError("optimizer image inspect: before/after receipts differ")
+    if before_image != after_image:
+        raise InputError("optimizer image inspect: image environment or labels changed across run")
+    manifest = _runner_manifest(
+        by_name["runner-manifest.json"],
+        image_environment=before_image["environment"],
+        image_labels=before_image["labels"],
+    )
+    revision = manifest["candidate"]["source_revision"]
+    candidate_payloads: list[tuple[str, bytes]] = []
+    container_ids: list[str] = []
+    volume_names: list[str] = []
+    gpu_monitors: list[dict[str, Any]] = []
+    executions: list[dict[str, Any]] = []
+    for pair_index in range(1, 6):
+        prefix = f"run-{pair_index}"
+        preflight_raw = by_name[f"{prefix}/preflight.txt"]
+        monitor_raw = by_name[f"{prefix}/gpu-monitor.csv"]
+        before_raw = by_name[f"{prefix}/container-inspect-before.json"]
+        after_raw = by_name[f"{prefix}/container-inspect-after.json"]
+        candidate_raw = by_name[f"{prefix}/candidate.json"]
+        execution = _runner_execution_payload(
+            by_name[f"{prefix}/execution-receipt.json"],
+            f"{prefix}/execution-receipt.json",
+        )
+        if not _exact_json_value(
+            execution, manifest["executions"][pair_index - 1]
+        ):
+            raise InputError(f"{prefix}: execution receipt differs from runner manifest")
+        expected_hashes = {
+            "preflight": _digest_bytes(preflight_raw),
+            "candidate": _digest_bytes(candidate_raw),
+            "gpu_monitor": _digest_bytes(monitor_raw),
+            "container_inspect_before": _digest_bytes(before_raw),
+            "container_inspect_after": _digest_bytes(after_raw),
+        }
+        if execution["sha256"] != expected_hashes:
+            raise InputError(f"{prefix}: execution receipt SHA-256 cross-binding mismatch")
+        _runner_preflight(preflight_raw, f"{prefix}/preflight.txt", revision)
+        before = _runner_container_document(
+            before_raw,
+            f"{prefix}/container-inspect-before.json",
+        )
+        after = _runner_container_document(
+            after_raw,
+            f"{prefix}/container-inspect-after.json",
+        )
+        before_facts = _validate_runner_container(
+            before,
+            label=f"{prefix}/container-inspect-before.json",
+            pair_index=pair_index,
+            manifest=manifest,
+            after=False,
+        )
+        after_facts = _validate_runner_container(
+            after,
+            label=f"{prefix}/container-inspect-after.json",
+            pair_index=pair_index,
+            manifest=manifest,
+            after=True,
+        )
+        if (
+            before_facts["container_id"] != after_facts["container_id"]
+            or before_facts["workspace_volume_name"]
+            != after_facts["workspace_volume_name"]
+            or before_facts["created_at_utc"] != after_facts["created_at_utc"]
+        ):
+            raise InputError(f"{prefix}: before/after container identity changed")
+        container_id = before_facts["container_id"]
+        if execution["container_id"] != container_id:
+            raise InputError(f"{prefix}: execution receipt container ID mismatch")
+        monitor = _runner_gpu_monitor(
+            monitor_raw,
+            f"{prefix}/gpu-monitor.csv",
+            expected_capture_id=execution["capture_id"],
+            expected_container_id=container_id,
+        )
+        gpu_monitors.append(monitor)
+        try:
+            candidate_document = json.loads(
+                candidate_raw,
+                object_pairs_hook=_pairs_no_duplicates,
+                parse_constant=_reject_nonfinite,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+            raise InputError(f"{prefix}/candidate.json: invalid strict JSON: {error}") from error
+        if not isinstance(candidate_document, dict):
+            raise InputError(f"{prefix}/candidate.json: object required")
+        expected_run_id = _runner_run_id(
+            revision, execution["capture_id"], pair_index
+        )
+        if (
+            candidate_document.get("pair_index") != pair_index
+            or candidate_document.get("run_id") != expected_run_id
+            or candidate_document.get("run_id") != execution["run_id"]
+            or candidate_document.get("recorded_at_utc")
+            != execution["candidate_recorded_at_utc"]
+        ):
+            raise InputError(f"{prefix}: raw candidate identity differs from execution receipt")
+        expected_docker = {
+            "created_at_utc": after_facts["created_at_utc"],
+            "started_at_utc": after_facts["started_at_utc"],
+            "finished_at_utc": after_facts["finished_at_utc"],
+            "exit_code": after_facts["exit_code"],
+            "oom_killed": after_facts["oom_killed"],
+        }
+        if not _exact_json_value(execution["docker"], expected_docker):
+            raise InputError(f"{prefix}: Docker timeline differs from execution receipt")
+        _validate_runner_execution_timeline(
+            execution, label=f"{prefix}/execution-receipt.json"
+        )
+        container_ids.append(container_id)
+        volume_names.append(before_facts["workspace_volume_name"])
+        candidate_payloads.append((f"candidate-{pair_index}.json", candidate_raw))
+        executions.append(execution)
+    if len(set(container_ids)) != 5:
+        raise InputError("runner receipts: exactly five distinct container IDs required")
+    if len(set(volume_names)) != 5:
+        raise InputError("runner receipts: exactly five distinct workspace volumes required")
+    for previous, current in zip(executions, executions[1:], strict=False):
+        if _runner_timestamp_ns(
+            previous["docker"]["finished_at_utc"], "previous FinishedAt"
+        ) > _runner_timestamp_ns(
+            current["docker"]["created_at_utc"], "next Created"
+        ):
+            raise InputError("runner receipts: sequential pair timelines overlap")
+    derived = derive_raw_run_payloads(candidate_payloads)
+    source = derived["source"]
+    candidate_binding = manifest["candidate"]
+    expected_source = {
+        "git_commit": candidate_binding["source_revision"],
+        "git_dirty": False,
+        "executable_sha256": candidate_binding["profile_binary_sha256"],
+        "implementation_id": "native-iteration-command-batch",
+        "runtime_flag": {"name": "execution_completion", "value": "iteration-batch"},
+        "semantic_class": "E0",
+        "correctness_gate_id": CORRECTNESS_GATE_ID,
+        "correctness_report_sha256": candidate_binding["optimizer_correctness_report_sha256"],
+    }
+    if source != expected_source:
+        raise InputError("runner receipts: raw source does not match runner manifest")
+    if derived["runs"][0]["environment"]["software"]["container_image_sha256"] != image_id.removeprefix("sha256:"):
+        raise InputError("runner receipts: raw profile image does not match inspected image")
+    if derived["run_summary"] != {
+        "independent_runs": 5,
+        "warmups_per_run": 5,
+        "measured_iterations_per_run": 30,
+        "failure_count": 0,
+        "dropped_trace_records": 0,
+    }:
+        raise InputError("runner receipts: exact 5 x (5 warmups + 30 measured) derivation required")
+    return {
+        "manifest": manifest,
+        "payloads": derived["payloads"],
+        "derived": derived,
+        "container_ids": container_ids,
+        "workspace_volume_names": volume_names,
+        "gpu_monitors": gpu_monitors,
+        "executions": executions,
+    }
+
+
+def load_runner_receipt_root(path: Path | str) -> dict[str, Any]:
+    """Open every required runner receipt once, without following links."""
+
+    root = Path(path)
+    root_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    root_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    root_descriptor = -1
+    try:
+        path_metadata = root.lstat()
+        root_descriptor = os.open(root, root_flags)
+        metadata = os.fstat(root_descriptor)
+    except OSError as error:
+        raise InputError(f"runner receipt root: cannot inspect {root}: {error}") from error
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or path_metadata.st_dev != metadata.st_dev
+        or path_metadata.st_ino != metadata.st_ino
+    ):
+        os.close(root_descriptor)
+        root_descriptor = -1
+        raise InputError("runner receipt root: must be a real directory")
+    try:
+        payloads: list[tuple[str, bytes]] = []
+        directory_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+        directory_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        file_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+        file_flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        for name in RUNNER_RECEIPT_FILES:
+            parts = name.split("/")
+            parent_descriptor = os.dup(root_descriptor)
+            descriptor = -1
+            try:
+                for component in parts[:-1]:
+                    child = os.open(component, directory_flags, dir_fd=parent_descriptor)
+                    os.close(parent_descriptor)
+                    parent_descriptor = child
+                descriptor = os.open(parts[-1], file_flags, dir_fd=parent_descriptor)
+                raw, _digest, _file_metadata = _stable_fd_snapshot(
+                    descriptor,
+                    f"runner receipt {name}",
+                    _RUNNER_RECEIPT_MAXIMUMS[name],
+                )
+                payloads.append((name, raw))
+            except InputError:
+                raise
+            except OSError as error:
+                raise InputError(f"runner receipt {name}: cannot open: {error}") from error
+            finally:
+                if descriptor >= 0:
+                    os.close(descriptor)
+                os.close(parent_descriptor)
+        after = os.fstat(root_descriptor)
+        stable = ("st_dev", "st_ino", "st_mode", "st_mtime_ns", "st_ctime_ns")
+        if any(getattr(metadata, field) != getattr(after, field) for field in stable):
+            raise InputError("runner receipt root: changed while receipts were opened")
+        result = validate_runner_receipt_payloads(payloads)
+        result["archive_payloads"] = payloads
+        return result
+    finally:
+        if root_descriptor >= 0:
+            os.close(root_descriptor)
 
 
 def _canonical_tar_info(name: str, size: int) -> tarfile.TarInfo:
@@ -1368,16 +2780,19 @@ def _canonical_raw_archive_bytes(
 
 
 def write_raw_evidence_archive(
-    output: Path | str, payloads: Sequence[tuple[str, bytes]]
+    output: Path | str,
+    payloads: Sequence[tuple[str, bytes]],
+    *,
+    runner_receipt_root: Path | str,
 ) -> str:
-    """Create and atomically publish the canonical five-run USTAR archive."""
+    """Create the canonical v3 USTAR after replaying all runner receipts."""
 
-    canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
-    if tuple(name for name, _ in canonical_payloads) != RAW_EVIDENCE_FILES:
-        raise InputError(
-            "raw evidence: exact candidate-1.json through candidate-5.json "
-            "inventory required"
-        )
+    canonical_candidates = derive_raw_run_payloads(payloads)["payloads"]
+    receipt = load_runner_receipt_root(runner_receipt_root)
+    receipt_candidates = receipt["payloads"]
+    if canonical_candidates != receipt_candidates:
+        raise InputError("raw evidence: --run payloads differ from runner receipts")
+    canonical_payloads = receipt["archive_payloads"]
     output_path = Path(output)
     if not output_path.name:
         raise InputError("raw performance evidence output must name a new file")
@@ -1446,15 +2861,15 @@ def _snapshot_raw_evidence_archive(path: Path) -> tuple[bytes, str]:
 
 def _load_raw_evidence_archive_snapshot(
     path: Path,
-) -> tuple[list[tuple[str, bytes]], str]:
+) -> tuple[list[tuple[str, bytes]], str, dict[str, Any]]:
     archive_raw, archive_digest = _snapshot_raw_evidence_archive(path)
     label = "raw performance evidence archive"
     try:
         with tarfile.open(fileobj=io.BytesIO(archive_raw), mode="r:") as archive:
             members = archive.getmembers()
-            if [member.name for member in members] != list(RAW_EVIDENCE_FILES):
+            if [member.name for member in members] != list(RUNNER_RECEIPT_FILES):
                 raise InputError(
-                    f"{label}: exact ordered inventory required: {list(RAW_EVIDENCE_FILES)}"
+                    f"{label}: exact ordered inventory required: {list(RUNNER_RECEIPT_FILES)}"
                 )
             payloads: list[tuple[str, bytes]] = []
             for member in members:
@@ -1472,15 +2887,12 @@ def _load_raw_evidence_archive_snapshot(
                     or member.mtime != 0
                 ):
                     raise InputError(f"{label}: non-canonical metadata for {name}")
-                if (
-                    member.size <= 0
-                    or member.size > native_profile.MAX_EVIDENCE_BYTES
-                ):
+                if member.size <= 0 or member.size > _RUNNER_RECEIPT_MAXIMUMS[name]:
                     raise InputError(f"{label}: invalid size for {name}")
                 source = archive.extractfile(member)
                 if source is None:
                     raise InputError(f"{label}: cannot read {name}")
-                raw = source.read(native_profile.MAX_EVIDENCE_BYTES + 1)
+                raw = source.read(_RUNNER_RECEIPT_MAXIMUMS[name] + 1)
                 if len(raw) != member.size:
                     raise InputError(f"{label}: truncated or oversized member {name}")
                 payloads.append((name, raw))
@@ -1491,31 +2903,32 @@ def _load_raw_evidence_archive_snapshot(
             f"{label}: cannot read deterministic uncompressed USTAR: {error}"
         ) from error
 
-    canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
-    if archive_raw != _canonical_raw_archive_bytes(canonical_payloads):
+    validation = validate_runner_receipt_payloads(payloads)
+    if archive_raw != _canonical_raw_archive_bytes(payloads):
         raise InputError(
             f"{label}: bytes are not the canonical deterministic USTAR encoding"
         )
-    return payloads, archive_digest
+    return validation["payloads"], archive_digest, validation["manifest"]
 
 
 def load_raw_evidence_archive(
     path: Path | str,
 ) -> list[tuple[str, bytes]]:
-    """Load only a byte-exact canonical uncompressed five-run USTAR archive."""
+    """Replay v3 receipts and return only the five candidate payloads."""
 
-    payloads, _digest = _load_raw_evidence_archive_snapshot(Path(path))
+    payloads, _digest, _manifest = _load_raw_evidence_archive_snapshot(Path(path))
     return payloads
 
 
 def replay_raw_evidence_archive(path: Path | str) -> dict[str, Any]:
     """Replay raw field derivation from a canonical performance archive."""
 
-    payloads, archive_digest = _load_raw_evidence_archive_snapshot(Path(path))
+    payloads, archive_digest, manifest = _load_raw_evidence_archive_snapshot(Path(path))
     return {
         "archive_sha256": archive_digest,
         "derived": derive_raw_run_payloads(payloads),
         "payloads": payloads,
+        "runner_manifest": manifest,
     }
 
 
@@ -1532,6 +2945,7 @@ def evaluate(
     profile_image_id: str,
     release_image_id: str,
     run_paths: Sequence[Path | str],
+    runner_receipt_root: Path | str,
 ) -> dict[str, Any]:
     """Evaluate already-produced CPU-readable release evidence."""
 
@@ -1557,6 +2971,15 @@ def evaluate(
         release_image_digest = release_image_id.removeprefix("sha256:")
         _sha256(profile_image_digest, "--profile-image-id")
         _sha256(release_image_digest, "--release-image-id")
+        receipt = load_runner_receipt_root(runner_receipt_root)
+        _require_request_identity_sha256(
+            receipt["derived"],
+            baseline["request_identity_sha256"],
+            "runner receipts.request_identity_sha256",
+        )
+        supplied_payloads = derive_raw_run_payloads(_read_raw_run_paths(run_paths))["payloads"]
+        if supplied_payloads != receipt["payloads"]:
+            raise InputError("--run payloads differ from --runner-receipt-root")
         actual = {
             "source_archive_sha256": _digest_file(
                 Path(source_archive), "source archive"
@@ -1578,6 +3001,21 @@ def evaluate(
                 raise InputError(
                     f"candidate.source.{field}: bound digest does not match artifact"
                 )
+        receipt_candidate = receipt["manifest"]["candidate"]
+        receipt_bindings = {
+            "source_revision": candidate["source"]["git_commit"],
+            "source_archive_sha256": actual["source_archive_sha256"],
+            "profile_binary_sha256": actual["profile_binary_sha256"],
+            "optimizer_correctness_report_sha256": actual[
+                "correctness_report_sha256"
+            ],
+            "optimizer_image_id": profile_image_id,
+        }
+        for field, expected in receipt_bindings.items():
+            if receipt_candidate[field] != expected:
+                raise InputError(
+                    f"runner-manifest.candidate.{field}: does not match submitted artifact"
+                )
         weights_digest = _digest_file(Path(weights), "model weights")
         tokenizer_digest = _digest_file(Path(tokenizer), "tokenizer")
         if candidate["model"]["weights_sha256"] != weights_digest:
@@ -1591,8 +3029,16 @@ def evaluate(
             Path(correctness_report), "optimization correctness report"
         )
         _validate_optimization_correctness(correctness_doc, candidate)
+        optimizer_model_tree = correctness_doc["model"]["manifest_sha256"]
+        if receipt_candidate["model_tree_sha256"] != optimizer_model_tree:
+            raise InputError(
+                "runner-manifest.candidate.model_tree_sha256: does not match "
+                "the submitted optimizer correctness model manifest"
+            )
 
-        _runs, raw_summary, raw_metrics = _load_raw_runs(run_paths, candidate)
+        _runs, raw_summary, raw_metrics = validate_raw_run_payloads(
+            receipt["payloads"], candidate
+        )
 
         summary = raw_summary
         workload = baseline["workload"]
@@ -1695,6 +3141,11 @@ def _build_candidate_from_payloads(
     )
     baseline = _validate_baseline(baseline_document, baseline_raw)
     derived = derive_raw_run_payloads(payloads)
+    _require_request_identity_sha256(
+        derived,
+        baseline["request_identity_sha256"],
+        "candidate runs.request_identity_sha256",
+    )
     raw_source = derived["source"]
     candidate = {
         "schema_version": CANDIDATE_SCHEMA,
@@ -1785,6 +3236,7 @@ def _evaluate_payload_snapshot(
     correctness_report: Path | str,
     profile_image_id: str,
     release_image_id: str,
+    runner_receipt_root: Path | str,
 ) -> dict[str, Any]:
     canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
     with tempfile.TemporaryDirectory(
@@ -1809,6 +3261,7 @@ def _evaluate_payload_snapshot(
             profile_image_id=profile_image_id,
             release_image_id=release_image_id,
             run_paths=run_paths,
+            runner_receipt_root=runner_receipt_root,
         )
 
 
@@ -1827,6 +3280,7 @@ def package_release_performance_evidence(
     profile_image_id: str,
     release_image_id: str,
     run_paths: Sequence[Path | str],
+    runner_receipt_root: Path | str,
 ) -> dict[str, Any]:
     """Create a checked three-file performance evidence directory.
 
@@ -1849,9 +3303,12 @@ def package_release_performance_evidence(
     if not stat.S_ISDIR(parent_metadata.st_mode):
         raise InputError(f"output parent is not a directory: {parent}")
 
+    receipt = load_runner_receipt_root(runner_receipt_root)
     input_payloads = _read_raw_run_paths(run_paths)
     derived = derive_raw_run_payloads(input_payloads)
     canonical_payloads = derived["payloads"]
+    if canonical_payloads != receipt["payloads"]:
+        raise InputError("--run payloads differ from --runner-receipt-root")
     candidate = _build_candidate_from_payloads(
         baseline_path,
         candidate_id=candidate_id,
@@ -1881,7 +3338,9 @@ def package_release_performance_evidence(
         )
         raw_evidence_path = staging / PACKAGE_RAW_EVIDENCE_NAME
         raw_evidence_sha256 = write_raw_evidence_archive(
-            raw_evidence_path, canonical_payloads
+            raw_evidence_path,
+            canonical_payloads,
+            runner_receipt_root=runner_receipt_root,
         )
         raw_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
         raw_flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
@@ -1903,6 +3362,7 @@ def package_release_performance_evidence(
             correctness_report=correctness_report,
             profile_image_id=profile_image_id,
             release_image_id=release_image_id,
+            runner_receipt_root=runner_receipt_root,
         )
         if source_report["status"] not in {"passed", "failed"}:
             detail = "; ".join(source_report["errors"]) or source_report["status"]
@@ -1934,6 +3394,7 @@ def package_release_performance_evidence(
             correctness_report=correctness_report,
             profile_image_id=profile_image_id,
             release_image_id=release_image_id,
+            runner_receipt_root=runner_receipt_root,
         )
         if _json_document_bytes(replayed_report) != _json_document_bytes(
             source_report
@@ -2033,6 +3494,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-image-id", required=True)
     parser.add_argument("--release-image-id", required=True)
     parser.add_argument("--run", required=True, nargs=5, type=Path)
+    parser.add_argument("--runner-receipt-root", required=True, type=Path)
     parser.add_argument("--report", type=Path)
     return parser
 
@@ -2051,6 +3513,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         profile_image_id=args.profile_image_id,
         release_image_id=args.release_image_id,
         run_paths=args.run,
+        runner_receipt_root=args.runner_receipt_root,
     )
     encoded = json.dumps(
         report, sort_keys=True, indent=2, ensure_ascii=False, allow_nan=False

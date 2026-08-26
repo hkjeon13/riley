@@ -30,6 +30,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile-image-id", required=True)
     parser.add_argument("--release-image-id", required=True)
     parser.add_argument("--run", required=True, nargs=5, type=Path)
+    parser.add_argument("--runner-receipt-root", required=True, type=Path)
     parser.add_argument("--output-directory", required=True, type=Path)
     return parser
 
@@ -51,6 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             profile_image_id=args.profile_image_id,
             release_image_id=args.release_image_id,
             run_paths=args.run,
+            runner_receipt_root=args.runner_receipt_root,
         )
     except (
         ComparabilityError,

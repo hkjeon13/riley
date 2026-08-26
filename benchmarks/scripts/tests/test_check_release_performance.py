@@ -7,6 +7,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import stat
 import sys
 import tarfile
@@ -43,6 +44,19 @@ packager = importlib.util.module_from_spec(PACKAGE_SPEC)
 sys.modules[PACKAGE_SPEC.name] = packager
 PACKAGE_SPEC.loader.exec_module(packager)
 
+FIXTURE_REQUEST_IDENTITY_SHA256 = (
+    "9b01fb16a80a6be223fe574f64def29a257a27f51b7d754586b86f8153391262"
+)
+_ORIGINAL_REQUIRE_REQUEST_IDENTITY = checker._require_request_identity_sha256
+
+
+def _require_fixture_request_identity(
+    derived: object, _expected: str, path: str
+) -> None:
+    _ORIGINAL_REQUIRE_REQUEST_IDENTITY(
+        derived, FIXTURE_REQUEST_IDENTITY_SHA256, path
+    )
+
 
 def digest(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
@@ -63,6 +77,7 @@ class ReleaseFixture:
         self.digests = {name: digest(name) for name in self.paths}
         self.profile_image_digest = digest("profile image")
         self.release_image_digest = digest("release image")
+        self.supervisor_token = digest("release performance supervisor token")
 
         raw_root = root / "raw"
         raw_root.mkdir()
@@ -131,6 +146,22 @@ class ReleaseFixture:
             run["aggregate"]["throughput_output_tokens_per_second"] = (
                 140.0 / run_factor
             )
+            pair_index = run_index + 1
+            capture_id = checker._runner_capture_id(
+                self.supervisor_token, pair_index
+            )
+            run["run_id"] = checker._runner_run_id(
+                "a" * 40, capture_id, pair_index
+            )
+            run["recorded_at_utc"] = (
+                f"2026-08-26T12:00:{run_index * 10 + 2:02d}.000000000Z"
+            )
+
+        self.fixture_request_identity_sha256 = checker.native_profile._sha256_json(
+            checker.native_profile._request_identity(self.profile_fixture.candidate[0])
+        )
+        if self.fixture_request_identity_sha256 != FIXTURE_REQUEST_IDENTITY_SHA256:
+            raise AssertionError("native profile fixture request identity drifted")
 
         self.candidate = {
             "schema_version": "rustinfer.release-performance-candidate.v1",
@@ -253,6 +284,38 @@ class ReleaseFixture:
                     "cuda_live_allocation_delta": 0,
                     "owner_close_live_allocation_count": 0,
                 },
+                {
+                    "id": "fixed37-production-batch-e0",
+                    "result": "passed",
+                    "gate_id": checker.FIXED37_PRODUCTION_BATCH_GATE_ID,
+                    "fixture_sha256": checker.FIXED37_GOLDEN_FIXTURE_SHA256,
+                    "generated_token_ids_sha256": checker.FIXED37_GOLDEN_TOKEN_IDS_SHA256,
+                    "cases": 31,
+                    "compared_steps": 481,
+                    "exact_window": 16,
+                    "fixed_profile": "fixed-contiguous-37-balanced-v1",
+                    "canonical_profile": "canonical-v1",
+                    "residual_rmsnorm": "separate",
+                    "execution_completion": "iteration-batch",
+                    "fixed_prefill_raw_logit_mismatches": 0,
+                    "fixed_cached_growing_token_id_mismatches": 0,
+                    "fixed_cached_growing_cosine_min": checker.FIXED37_CACHED_GROWING_COSINE_MIN,
+                    "fixed_cached_growing_max_abs_max": checker.FIXED37_CACHED_GROWING_MAX_ABS_MAX,
+                    "fixed_cached_growing_mean_abs_max": checker.FIXED37_CACHED_GROWING_MEAN_ABS_MAX,
+                    "fixed_cached_growing_worst_cosine": 0.999,
+                    "fixed_cached_growing_worst_max_abs": 1.0,
+                    "fixed_cached_growing_worst_mean_abs": 0.25,
+                    "fixed_cached_growing_threshold_violations": 0,
+                    "fixed_golden_token_id_mismatches": 0,
+                    "canonical_golden_token_id_mismatches": 0,
+                    "cuda_live_allocation_delta": 0,
+                    "owner_close_live_allocation_count": 0,
+                    "compile_command_id": "compile-fixed37-production-batch-e0",
+                    "execute_command_id": "fixed37-production-batch-e0",
+                    "compile_log_sha256": digest("fixed37 compile log"),
+                    "test_binary_sha256": digest("fixed37 test binary"),
+                    "log_sha256": digest("fixed37 exact log"),
+                },
             ],
         }
 
@@ -307,11 +370,346 @@ class ReleaseFixture:
             ),
         }
         self.write()
+        self.write_runner_receipts()
+
+    def write_runner_receipts(self) -> None:
+        self.runner_receipt_root = self.root / "runner-receipts"
+        self.runner_receipt_root.mkdir(exist_ok=True)
+        revision = self.profile_fixture.candidate[0]["source"]["git_commit"]
+        image_id = f"sha256:{self.profile_image_digest}"
+        image_environment = {"CUDA_VERSION": "12.8.1"}
+        image_labels = {
+            "maintainer": "NVIDIA CORPORATION <cudatools@nvidia.com>",
+            "org.opencontainers.image.ref.name": "ubuntu",
+            "org.opencontainers.image.version": "22.04",
+        }
+        overrides = {
+            "RUSTINFER_PERF_SOURCE_REVISION": revision,
+            "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": self.digests["source_archive"],
+            "RUSTINFER_PERF_PROFILE_BINARY_SHA256": self.digests["profile_binary"],
+            "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": self.digests["correctness_report"],
+            "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": self.profile_image_digest,
+            "RUSTINFER_PERF_MODEL_TREE_SHA256": digest("model manifest"),
+            "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+            **checker.RUNNER_PROXY_ENV,
+        }
+        read_only_sources = {
+            "/input/source.tar": str(self.paths["source_archive"].resolve()),
+            "/input/rustinfer-profile": str(self.paths["profile_binary"].resolve()),
+            "/input/optimizer-correctness-report.json": str(
+                self.paths["correctness_report"].resolve()
+            ),
+            "/model": str((self.root / "model").resolve()),
+        }
+        evidence_sources = [f"/evidence/run-{index}" for index in range(1, 6)]
+        volume_names = [f"fixture-volume-{index}" for index in range(1, 6)]
+        repository = checker.Path(checker.__file__).resolve().parents[2]
+        tools = copy.deepcopy(checker.RUNNER_REVIEWED_TOOLS)
+        manifest_environment = {**image_environment, **overrides}
+        manifest_environment["RUSTINFER_PERF_PAIR_INDEX"] = "{pair_index}"
+        manifest_environment["RUSTINFER_PERF_CAPTURE_ID"] = "{capture_id}"
+        manifest = {
+            "schema_version": checker.RUNNER_MANIFEST_SCHEMA,
+            "candidate": {
+                "source_revision": revision,
+                "source_archive_sha256": self.digests["source_archive"],
+                "profile_binary_sha256": self.digests["profile_binary"],
+                "model_tree_sha256": digest("model manifest"),
+                "optimizer_correctness_report_sha256": self.digests[
+                    "correctness_report"
+                ],
+                "optimizer_image_id": image_id,
+            },
+            "runner": {
+                "revision": revision,
+                "host_script_sha256": hashlib.sha256(
+                    (repository / "ci/run_remote_release_performance.sh").read_bytes()
+                ).hexdigest(),
+                "inner_script_sha256": hashlib.sha256(
+                    (repository / "ci/release/run_release_performance_once.sh").read_bytes()
+                ).hexdigest(),
+                "tools": tools,
+            },
+            "container": {
+                "entrypoint": checker.RUNNER_CONTAINER_ENTRYPOINT,
+                "cmd": checker.RUNNER_CONTAINER_CMD,
+                "environment": manifest_environment,
+                "read_only_mount_sources": read_only_sources,
+                "evidence_mount_sources": evidence_sources,
+                "workspace_volume_names": volume_names,
+                "supervisor_label": {
+                    "name": checker.RUNNER_SUPERVISOR_LABEL,
+                    "value": self.supervisor_token,
+                },
+                "labels": {
+                    **image_labels,
+                    checker.RUNNER_SUPERVISOR_LABEL: self.supervisor_token,
+                },
+            },
+            "executions": [],
+        }
+        image_inspect = [
+            {
+                "Id": image_id,
+                "Os": "linux",
+                "Architecture": "amd64",
+                "Config": {
+                    "Env": ["CUDA_VERSION=12.8.1"],
+                    "WorkingDir": "/workspace",
+                    "Labels": image_labels,
+                },
+            }
+        ]
+        documents: dict[str, bytes] = {
+            "gpu.csv": (", ".join(checker.RUNNER_GPU_ROW) + "\n").encode("utf-8"),
+            "optimizer-image-inspect-before.json": checker._json_document_bytes(
+                {"image": image_inspect}
+            ),
+            "optimizer-image-inspect-after.json": checker._json_document_bytes(
+                {"image": image_inspect}
+            ),
+        }
+        # Docker inspect is an array; avoid making the general JSON helper accept arrays.
+        image_raw = (json.dumps(image_inspect, sort_keys=True, indent=2) + "\n").encode()
+        documents["optimizer-image-inspect-before.json"] = image_raw
+        documents["optimizer-image-inspect-after.json"] = image_raw
+        preflight = {
+            **checker.RUNNER_FIXED_PREFLIGHT,
+            "git_revision": revision,
+            "memory_used_mib": "0",
+            "temperature_c": "35",
+            "staging_available_bytes": str(30 * 1024**3),
+        }
+        preflight_raw = "".join(
+            f"{name}={value}\n" for name, value in preflight.items()
+        ).encode()
+        for pair_index, raw_path in enumerate(self.raw_paths, 1):
+            prefix = f"run-{pair_index}"
+            capture_id = checker._runner_capture_id(
+                self.supervisor_token, pair_index
+            )
+            environment = {**image_environment, **overrides}
+            environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
+            environment["RUSTINFER_PERF_CAPTURE_ID"] = capture_id
+            mounts = [
+                {
+                    "Type": "bind",
+                    "Source": source,
+                    "Destination": destination,
+                    "RW": False,
+                    "Mode": "",
+                    "Propagation": "rprivate",
+                }
+                for destination, source in read_only_sources.items()
+            ]
+            mounts.extend(
+                [
+                    {
+                        "Type": "bind",
+                        "Source": evidence_sources[pair_index - 1],
+                        "Destination": "/evidence",
+                        "RW": True,
+                        "Mode": "",
+                        "Propagation": "rprivate",
+                    },
+                    {
+                        "Type": "volume",
+                        "Source": volume_names[pair_index - 1],
+                        "Destination": "/workspace",
+                        "RW": True,
+                    },
+                ]
+            )
+            base = {
+                "Id": format(pair_index, "x") * 64,
+                "Image": image_id,
+                "Path": checker.RUNNER_CONTAINER_ENTRYPOINT[0],
+                "Args": checker.RUNNER_CONTAINER_CMD,
+                "RestartCount": 0,
+                "Created": f"2026-08-26T12:00:{(pair_index - 1) * 10:02d}.000000000Z",
+                "Config": {
+                    "Image": image_id,
+                    "User": "0:0",
+                    "WorkingDir": "/workspace",
+                    "Entrypoint": checker.RUNNER_CONTAINER_ENTRYPOINT,
+                    "Cmd": checker.RUNNER_CONTAINER_CMD,
+                    "Healthcheck": {"Test": ["NONE"]},
+                    "Labels": {
+                        **image_labels,
+                        checker.RUNNER_SUPERVISOR_LABEL: self.supervisor_token,
+                    },
+                    "Env": [f"{name}={value}" for name, value in environment.items()],
+                },
+                "HostConfig": {
+                    "NetworkMode": "none",
+                    "ReadonlyRootfs": True,
+                    "AutoRemove": False,
+                    "CapDrop": ["ALL"],
+                    "CapAdd": None,
+                    "SecurityOpt": ["no-new-privileges:true"],
+                    "PidsLimit": 512,
+                    "Privileged": False,
+                    "RestartPolicy": {"Name": "no", "MaximumRetryCount": 0},
+                    "Tmpfs": {"/tmp": "rw,nosuid,nodev,noexec,size=2147483648"},
+                    "PidMode": "",
+                    "IpcMode": "private",
+                    "UTSMode": "",
+                    "UsernsMode": "",
+                    "CgroupnsMode": "private",
+                    "Runtime": "runc",
+                    "CpuShares": 0,
+                    "Memory": 0,
+                    "NanoCpus": 0,
+                    "CpuPeriod": 0,
+                    "CpuQuota": 0,
+                    "CpusetCpus": "",
+                    "CpusetMems": "",
+                    "MemoryReservation": 0,
+                    "MemorySwap": 0,
+                    "Devices": [],
+                    "DeviceCgroupRules": None,
+                    "DeviceRequests": [
+                        {
+                            "Driver": "",
+                            "Count": 0,
+                            "DeviceIDs": [checker.RUNNER_GPU_ROW[1]],
+                            "Capabilities": [["gpu"]],
+                            "Options": {},
+                        }
+                    ],
+                },
+                "NetworkSettings": {"Networks": {}},
+                "Mounts": mounts,
+            }
+            before = copy.deepcopy(base)
+            before["State"] = {
+                "Status": "created",
+                "Running": False,
+                "Paused": False,
+                "Restarting": False,
+                "OOMKilled": False,
+                "Dead": False,
+                "Pid": 0,
+                "ExitCode": 0,
+                "Error": "",
+                "StartedAt": checker.RUNNER_ZERO_TIME,
+                "FinishedAt": checker.RUNNER_ZERO_TIME,
+            }
+            after = copy.deepcopy(base)
+            after["State"] = {
+                "Status": "exited",
+                "Running": False,
+                "Paused": False,
+                "Restarting": False,
+                "OOMKilled": False,
+                "Dead": False,
+                "ExitCode": 0,
+                "Error": "",
+                "StartedAt": f"2026-08-26T12:00:{(pair_index - 1) * 10 + 1:02d}.000000000Z",
+                "FinishedAt": f"2026-08-26T12:00:{(pair_index - 1) * 10 + 3:02d}.000000000Z",
+            }
+            documents[f"{prefix}/preflight.txt"] = preflight_raw
+            documents[f"{prefix}/gpu-monitor.csv"] = (
+                ",".join(checker.RUNNER_GPU_MONITOR_HEADER)
+                + f"\n{capture_id},{base['Id']},pre_start,0,450.00,[N/A],[N/A],35,0,none"
+                + f"\n{capture_id},{base['Id']},running,1,450.00,[N/A],[N/A],55,1024,container:{1000 + pair_index}"
+                + f"\n{capture_id},{base['Id']},post_exit,2,450.00,[N/A],[N/A],40,0,none\n"
+            ).encode()
+            documents[f"{prefix}/container-inspect-before.json"] = (
+                json.dumps([before], sort_keys=True, indent=2) + "\n"
+            ).encode()
+            documents[f"{prefix}/container-inspect-after.json"] = (
+                json.dumps([after], sort_keys=True, indent=2) + "\n"
+            ).encode()
+            documents[f"{prefix}/candidate.json"] = raw_path.read_bytes()
+            run = self.profile_fixture.candidate[pair_index - 1]
+            execution = {
+                "schema_version": checker.RUNNER_EXECUTION_SCHEMA,
+                "pair_index": pair_index,
+                "capture_id": capture_id,
+                "container_id": base["Id"],
+                "run_id": run["run_id"],
+                "candidate_recorded_at_utc": run["recorded_at_utc"],
+                "docker": {
+                    "created_at_utc": base["Created"],
+                    "started_at_utc": after["State"]["StartedAt"],
+                    "finished_at_utc": after["State"]["FinishedAt"],
+                    "exit_code": 0,
+                    "oom_killed": False,
+                },
+                "sha256": {
+                    "preflight": hashlib.sha256(preflight_raw).hexdigest(),
+                    "candidate": hashlib.sha256(
+                        documents[f"{prefix}/candidate.json"]
+                    ).hexdigest(),
+                    "gpu_monitor": hashlib.sha256(
+                        documents[f"{prefix}/gpu-monitor.csv"]
+                    ).hexdigest(),
+                    "container_inspect_before": hashlib.sha256(
+                        documents[f"{prefix}/container-inspect-before.json"]
+                    ).hexdigest(),
+                    "container_inspect_after": hashlib.sha256(
+                        documents[f"{prefix}/container-inspect-after.json"]
+                    ).hexdigest(),
+                },
+            }
+            manifest["executions"].append(execution)
+            documents[f"{prefix}/execution-receipt.json"] = (
+                checker._json_document_bytes(execution)
+            )
+        documents["runner-manifest.json"] = checker._json_document_bytes(manifest)
+        documents["SHA256SUMS"] = checker._runner_sha256s(documents)
+        for name in checker.RUNNER_RECEIPT_FILES:
+            path = self.runner_receipt_root.joinpath(*name.split("/"))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(documents[name])
 
     def write(self) -> None:
         self.candidate_path.write_text(
             json.dumps(self.candidate, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
+        )
+
+    def replace_runner_receipt(self, name: str, raw: bytes) -> None:
+        """Replace one fixture receipt and rebuild the external checksum index."""
+        path = self.runner_receipt_root.joinpath(*name.split("/"))
+        path.write_bytes(raw)
+        match = re.fullmatch(
+            r"run-([1-5])/(preflight\.txt|candidate\.json|gpu-monitor\.csv|"
+            r"container-inspect-before\.json|container-inspect-after\.json|"
+            r"execution-receipt\.json)",
+            name,
+        )
+        if match is not None:
+            pair_index = int(match.group(1))
+            leaf = match.group(2)
+            execution_path = self.runner_receipt_root / f"run-{pair_index}" / "execution-receipt.json"
+            if leaf == "execution-receipt.json":
+                execution = json.loads(raw)
+            else:
+                execution = json.loads(execution_path.read_text(encoding="utf-8"))
+                digest_field = {
+                    "preflight.txt": "preflight",
+                    "candidate.json": "candidate",
+                    "gpu-monitor.csv": "gpu_monitor",
+                    "container-inspect-before.json": "container_inspect_before",
+                    "container-inspect-after.json": "container_inspect_after",
+                }[leaf]
+                execution["sha256"][digest_field] = hashlib.sha256(raw).hexdigest()
+                execution_path.write_bytes(checker._json_document_bytes(execution))
+            manifest_path = self.runner_receipt_root / "runner-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["executions"][pair_index - 1] = execution
+            manifest_path.write_bytes(checker._json_document_bytes(manifest))
+        payloads = {
+            receipt_name: self.runner_receipt_root.joinpath(
+                *receipt_name.split("/")
+            ).read_bytes()
+            for receipt_name in checker.RUNNER_RECEIPT_FILES
+            if receipt_name != "SHA256SUMS"
+        }
+        (self.runner_receipt_root / "SHA256SUMS").write_bytes(
+            checker._runner_sha256s(payloads)
         )
 
     def digest_for(self, path: Path, _label: str) -> str:
@@ -329,7 +727,22 @@ class ReleaseFixture:
             return hashlib.sha256(path.read_bytes()).hexdigest()
 
     def evaluate(self, *, baseline: Path = BASELINE) -> dict[str, object]:
-        with mock.patch.object(checker, "_digest_file", side_effect=self.digest_for):
+        original_identity_check = checker._require_request_identity_sha256
+
+        def require_fixture_identity(
+            derived: object, _expected: str, path: str
+        ) -> None:
+            original_identity_check(
+                derived, self.fixture_request_identity_sha256, path
+            )
+
+        with mock.patch.object(
+            checker, "_digest_file", side_effect=self.digest_for
+        ), mock.patch.object(
+            checker,
+            "_require_request_identity_sha256",
+            side_effect=require_fixture_identity,
+        ):
             return checker.evaluate(
                 baseline,
                 self.candidate_path,
@@ -342,14 +755,47 @@ class ReleaseFixture:
                 profile_image_id=f"sha256:{self.profile_image_digest}",
                 release_image_id=f"sha256:{self.release_image_digest}",
                 run_paths=self.raw_paths,
+                runner_receipt_root=self.runner_receipt_root,
             )
 
 
 class ReleasePerformanceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.identity_patch = mock.patch.object(
+            checker,
+            "_require_request_identity_sha256",
+            side_effect=_require_fixture_request_identity,
+        )
+        self.identity_patch.start()
+        self.addCleanup(self.identity_patch.stop)
+
     def test_reviewed_baseline_digest_is_pinned(self) -> None:
         self.assertEqual(
             hashlib.sha256(BASELINE.read_bytes()).hexdigest(), checker.BASELINE_SHA256
         )
+        baseline = json.loads(BASELINE.read_text(encoding="utf-8"))
+        self.assertEqual(
+            baseline["measurement_binding"]["request_identity_sha256"],
+            checker.PR15_REQUEST_IDENTITY_SHA256,
+        )
+        self.assertEqual(
+            checker.PR15_REQUEST_IDENTITY_SHA256,
+            "e6a99a749c41a8227574c96a1d23f8b7d877d6e75b0df4d99154db1b1921a2e6",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            derived = checker.derive_raw_run_payloads(
+                [(path.name, path.read_bytes()) for path in fixture.raw_paths]
+            )
+            with self.assertRaisesRegex(
+                checker.ComparabilityError,
+                "canonical native request identity differs",
+            ):
+                _ORIGINAL_REQUIRE_REQUEST_IDENTITY(
+                    derived,
+                    checker.PR15_REQUEST_IDENTITY_SHA256,
+                    "candidate runs.request_identity_sha256",
+                )
         with tempfile.TemporaryDirectory() as directory:
             fixture = ReleaseFixture(Path(directory))
             changed = Path(directory) / "baseline.json"
@@ -401,7 +847,7 @@ class ReleasePerformanceTests(unittest.TestCase):
             fixture.raw_paths[0].write_bytes(fixture.raw_paths[0].read_bytes() + b" ")
             report = fixture.evaluate()
             self.assertEqual(report["status"], "error")
-            self.assertIn("raw run binding", report["errors"][0])
+            self.assertIn("runner-receipt-root", report["errors"][0])
 
     def test_model_or_environment_drift_is_incomparable(self) -> None:
         for field, value in [("model", "other/model"), ("environment", "8.0")]:
@@ -447,13 +893,282 @@ class ReleasePerformanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             fixture = ReleaseFixture(Path(directory))
             correctness = fixture.optimization_correctness_report()
-            correctness["tests"][-1]["generated_token_ids"][-1] += 1
+            parity = next(
+                row
+                for row in correctness["tests"]
+                if row["id"] == "smollm2-multi-step-greedy-exact"
+            )
+            parity["generated_token_ids"][-1] += 1
             fixture.paths["correctness_report"].write_text(
                 json.dumps(correctness), encoding="utf-8"
             )
             report = fixture.evaluate()
             self.assertEqual(report["status"], "error")
             self.assertIn("generated_token_ids", report["errors"][0])
+
+    def test_fixed37_production_batch_correctness_gate_is_closed(self) -> None:
+        for mutation, expected_error in (
+            ("omit", "expected exactly six checks"),
+            ("fixture", "fixture_sha256"),
+            ("mismatch", "fixed_prefill_raw_logit_mismatches"),
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                fixture = ReleaseFixture(Path(directory))
+                correctness = fixture.optimization_correctness_report()
+                fixed37 = next(
+                    row
+                    for row in correctness["tests"]
+                    if row["id"] == "fixed37-production-batch-e0"
+                )
+                if mutation == "omit":
+                    correctness["tests"].remove(fixed37)
+                elif mutation == "fixture":
+                    fixed37["fixture_sha256"] = "0" * 64
+                else:
+                    fixed37["fixed_prefill_raw_logit_mismatches"] = 1
+                fixture.paths["correctness_report"].write_text(
+                    json.dumps(correctness), encoding="utf-8"
+                )
+                report = fixture.evaluate()
+                self.assertEqual(report["status"], "error")
+                self.assertIn(expected_error, report["errors"][0])
+
+    def test_runner_tool_inventory_cannot_self_authorize_an_alternate_binary(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            manifest_path = fixture.runner_receipt_root / "runner-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["runner"]["tools"]["bash"] = {
+                "path": "/usr/bin/true",
+                "sha256": hashlib.sha256(b"self-authorized fixture").hexdigest(),
+            }
+            fixture.replace_runner_receipt(
+                "runner-manifest.json", checker._json_document_bytes(manifest)
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("runner-manifest.runner.tools.bash.path", report["errors"][0])
+
+    def test_runner_receipt_requires_real_docker_normalized_security_fields(self) -> None:
+        for field, value in (
+            ("SecurityOpt", ["no-new-privileges"]),
+            ("Tmpfs", {"/tmp": "rw,nosuid,nodev,noexec,size=2g"}),
+            ("CapAdd", []),
+            ("CapAdd", ["NET_ADMIN"]),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                fixture = ReleaseFixture(Path(directory))
+                name = "run-1/container-inspect-before.json"
+                path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+                document = json.loads(path.read_text(encoding="utf-8"))
+                document[0]["HostConfig"][field] = value
+                fixture.replace_runner_receipt(
+                    name,
+                    (json.dumps(document, sort_keys=True, indent=2) + "\n").encode(),
+                )
+                report = fixture.evaluate()
+                self.assertEqual(report["status"], "error")
+                self.assertIn(f"HostConfig.{field}", report["errors"][0])
+
+        mutations = (
+            (
+                "HostConfig.CapAdd",
+                lambda row: row[0]["HostConfig"].pop("CapAdd"),
+            ),
+            (
+                "Config.Labels",
+                lambda row: row[0]["Config"]["Labels"].__setitem__(
+                    "unreviewed", "label"
+                ),
+            ),
+            (
+                "HostConfig.DeviceRequests",
+                lambda row: row[0]["HostConfig"]["DeviceRequests"][0].__setitem__(
+                    "Driver", "nvidia"
+                ),
+            ),
+            (
+                "HostConfig.DeviceRequests",
+                lambda row: row[0]["HostConfig"]["DeviceRequests"][0].__setitem__(
+                    "Count", False
+                ),
+            ),
+            (
+                "HostConfig.DeviceRequests",
+                lambda row: row[0]["HostConfig"]["DeviceRequests"][0].__setitem__(
+                    "Options", {"capabilities": "all"}
+                ),
+            ),
+        )
+        for expected, mutate in mutations:
+            with self.subTest(field=expected), tempfile.TemporaryDirectory() as directory:
+                fixture = ReleaseFixture(Path(directory))
+                name = "run-1/container-inspect-before.json"
+                path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+                document = json.loads(path.read_text(encoding="utf-8"))
+                mutate(document)
+                fixture.replace_runner_receipt(
+                    name,
+                    (json.dumps(document, sort_keys=True, indent=2) + "\n").encode(),
+                )
+                report = fixture.evaluate()
+                self.assertEqual(report["status"], "error")
+                self.assertIn(expected, report["errors"][0])
+
+    def test_execution_receipt_rejects_same_revision_splices_and_time_rewrite(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            name = "run-1/candidate.json"
+            path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+            candidate = json.loads(path.read_text(encoding="utf-8"))
+            candidate["run_id"] = checker._runner_run_id(
+                "a" * 40, "f" * 64, 1
+            )
+            fixture.replace_runner_receipt(
+                name, checker._json_document_bytes(candidate)
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("raw candidate identity", report["errors"][0])
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            name = "run-2/gpu-monitor.csv"
+            path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+            old_capture = checker._runner_capture_id(fixture.supervisor_token, 2)
+            fixture.replace_runner_receipt(
+                name,
+                path.read_bytes().replace(old_capture.encode(), b"f" * 64),
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("capture_id", report["errors"][0])
+
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            inspect_name = "run-1/container-inspect-after.json"
+            inspect_path = fixture.runner_receipt_root.joinpath(
+                *inspect_name.split("/")
+            )
+            after = json.loads(inspect_path.read_text(encoding="utf-8"))
+            rewritten_start = "2026-08-26T12:00:02.500000000Z"
+            after[0]["State"]["StartedAt"] = rewritten_start
+            fixture.replace_runner_receipt(
+                inspect_name,
+                (json.dumps(after, sort_keys=True, indent=2) + "\n").encode(),
+            )
+            execution_name = "run-1/execution-receipt.json"
+            execution_path = fixture.runner_receipt_root.joinpath(
+                *execution_name.split("/")
+            )
+            execution = json.loads(execution_path.read_text(encoding="utf-8"))
+            execution["docker"]["started_at_utc"] = rewritten_start
+            fixture.replace_runner_receipt(
+                execution_name, checker._json_document_bytes(execution)
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("candidate recorded_at", report["errors"][0])
+
+    def test_runner_environment_rejects_loader_git_and_imported_bash_controls(self) -> None:
+        for name in (
+            "LD_AUDIT",
+            "GIT_EXEC_PATH",
+            "GIT_CONFIG_PARAMETERS",
+            "BASH_FUNC_injected%%",
+        ):
+            with self.subTest(name=name):
+                with self.assertRaisesRegex(checker.InputError, "forbidden"):
+                    checker._runner_environment(
+                        ["CUDA_VERSION=12.8.1", f"{name}=injected"],
+                        "fixture environment",
+                    )
+
+    def test_runner_model_tree_must_match_submitted_optimizer_report(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            alternate = "9" * 64
+            manifest_path = fixture.runner_receipt_root / "runner-manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["candidate"]["model_tree_sha256"] = alternate
+            manifest["container"]["environment"][
+                "RUSTINFER_PERF_MODEL_TREE_SHA256"
+            ] = alternate
+            fixture.replace_runner_receipt(
+                "runner-manifest.json", checker._json_document_bytes(manifest)
+            )
+            for pair_index in range(1, 6):
+                for stage in ("before", "after"):
+                    name = f"run-{pair_index}/container-inspect-{stage}.json"
+                    path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+                    document = json.loads(path.read_text(encoding="utf-8"))
+                    environment = document[0]["Config"]["Env"]
+                    environment[:] = [
+                        (
+                            f"RUSTINFER_PERF_MODEL_TREE_SHA256={alternate}"
+                            if value.startswith("RUSTINFER_PERF_MODEL_TREE_SHA256=")
+                            else value
+                        )
+                        for value in environment
+                    ]
+                    fixture.replace_runner_receipt(
+                        name,
+                        (json.dumps(document, sort_keys=True, indent=2) + "\n").encode(),
+                    )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn(
+                "submitted optimizer correctness model manifest", report["errors"][0]
+            )
+
+    def test_runner_monitor_self_rehash_cannot_hide_foreign_cuda_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            name = "run-2/gpu-monitor.csv"
+            path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+            fixture.replace_runner_receipt(
+                name,
+                path.read_bytes().replace(b"container:1002", b"foreign:1002"),
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("foreign process receipt", report["errors"][0])
+
+    def test_runner_bind_mode_and_propagation_are_exact_receipt_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = ReleaseFixture(Path(directory))
+            name = "run-1/container-inspect-before.json"
+            path = fixture.runner_receipt_root.joinpath(*name.split("/"))
+            document = json.loads(path.read_text(encoding="utf-8"))
+            model_mount = next(
+                mount
+                for mount in document[0]["Mounts"]
+                if mount["Destination"] == "/model"
+            )
+            model_mount["Mode"] = "ro"
+            model_mount["Propagation"] = "shared"
+            fixture.replace_runner_receipt(
+                name,
+                (json.dumps(document, sort_keys=True, indent=2) + "\n").encode(),
+            )
+            report = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("exact read-only bind", report["errors"][0])
+
+    def test_raw_run_reader_rejects_symlink_and_fifo_without_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "candidate-1.json"
+            target.write_bytes(b"{}")
+            symlink = root / "candidate-link.json"
+            symlink.symlink_to(target)
+            with self.assertRaisesRegex(checker.InputError, "stable snapshot"):
+                checker._read_raw_run_paths([symlink])
+
+            fifo = root / "candidate.fifo"
+            os.mkfifo(fifo)
+            with self.assertRaisesRegex(checker.InputError, "regular file"):
+                checker._read_raw_run_paths([fifo])
 
     def test_cli_refuses_to_overwrite_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -472,6 +1187,7 @@ class ReleasePerformanceTests(unittest.TestCase):
                 "--profile-image-id", f"sha256:{fixture.profile_image_digest}",
                 "--release-image-id", f"sha256:{fixture.release_image_digest}",
                 "--run", *(str(path) for path in fixture.raw_paths),
+                "--runner-receipt-root", str(fixture.runner_receipt_root),
                 "--report", str(report_path),
             ]
             stderr = io.StringIO()
@@ -484,6 +1200,15 @@ class ReleasePerformanceTests(unittest.TestCase):
 
 
 class ReleasePerformancePackagingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.identity_patch = mock.patch.object(
+            checker,
+            "_require_request_identity_sha256",
+            side_effect=_require_fixture_request_identity,
+        )
+        self.identity_patch.start()
+        self.addCleanup(self.identity_patch.stop)
+
     def package(
         self,
         fixture: ReleaseFixture,
@@ -508,6 +1233,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 profile_image_id=f"sha256:{fixture.profile_image_digest}",
                 release_image_id=f"sha256:{fixture.release_image_digest}",
                 run_paths=fixture.raw_paths,
+                runner_receipt_root=fixture.runner_receipt_root,
             )
 
     @staticmethod
@@ -530,6 +1256,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             "--profile-image-id", f"sha256:{fixture.profile_image_digest}",
             "--release-image-id", f"sha256:{fixture.release_image_digest}",
             "--run", *(str(path) for path in fixture.raw_paths),
+            "--runner-receipt-root", str(fixture.runner_receipt_root),
             "--output-directory", str(output),
         ]
 
@@ -566,8 +1293,12 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             ]
             first = root / "first.tar"
             second = root / "second.tar"
-            first_sha = checker.write_raw_evidence_archive(first, payloads)
-            second_sha = checker.write_raw_evidence_archive(second, payloads)
+            first_sha = checker.write_raw_evidence_archive(
+                first, payloads, runner_receipt_root=fixture.runner_receipt_root
+            )
+            second_sha = checker.write_raw_evidence_archive(
+                second, payloads, runner_receipt_root=fixture.runner_receipt_root
+            )
             self.assertEqual(first.read_bytes(), second.read_bytes())
             self.assertEqual(stat.S_IMODE(first.stat().st_mode), 0o644)
             self.assertEqual(stat.S_IMODE(second.stat().st_mode), 0o644)
@@ -576,8 +1307,20 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             with tarfile.open(first, "r:") as archive:
                 members = archive.getmembers()
                 self.assertEqual(
+                    checker.RUNNER_MANIFEST_SCHEMA,
+                    "rustinfer.release-performance-runner-manifest.v3",
+                )
+                self.assertEqual(
+                    [
+                        name
+                        for name in checker.RUNNER_RECEIPT_FILES
+                        if name.endswith("/execution-receipt.json")
+                    ],
+                    [f"run-{index}/execution-receipt.json" for index in range(1, 6)],
+                )
+                self.assertEqual(
                     [member.name for member in members],
-                    list(checker.RAW_EVIDENCE_FILES),
+                    list(checker.RUNNER_RECEIPT_FILES),
                 )
                 for member in members:
                     self.assertEqual(member.mode, 0o644)
@@ -591,6 +1334,44 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             self.assertEqual(
                 replay["derived"]["raw_runs"], fixture.candidate["raw_runs"]
             )
+            self.assertEqual(
+                replay["runner_manifest"]["candidate"]["model_tree_sha256"],
+                digest("model manifest"),
+            )
+            self.assertEqual(
+                replay["runner_manifest"]["runner"]["tools"],
+                checker.RUNNER_REVIEWED_TOOLS,
+            )
+
+    def test_v3_receipts_reject_missing_legacy_and_self_rehashed_drift(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = ReleaseFixture(root)
+            missing = fixture.runner_receipt_root / "run-1/preflight.txt"
+            saved = missing.read_bytes()
+            missing.unlink()
+            with self.assertRaisesRegex(checker.InputError, "run-1/preflight"):
+                checker.load_runner_receipt_root(fixture.runner_receipt_root)
+            missing.write_bytes(saved)
+
+            fixture.replace_runner_receipt(
+                "run-1/preflight.txt",
+                saved.replace(b"power_limit_w=450.00", b"power_limit_w=451.00"),
+            )
+            with self.assertRaisesRegex(checker.InputError, "power_limit_w"):
+                checker.load_runner_receipt_root(fixture.runner_receipt_root)
+
+            legacy = root / "legacy-five-json.tar"
+            candidates = checker.derive_raw_run_payloads(
+                [(str(path), path.read_bytes()) for path in fixture.raw_paths]
+            )["payloads"]
+            with tarfile.open(legacy, "w:", format=tarfile.USTAR_FORMAT) as archive:
+                for name, raw in candidates:
+                    archive.addfile(
+                        checker._canonical_tar_info(name, len(raw)), io.BytesIO(raw)
+                    )
+            with self.assertRaisesRegex(checker.InputError, "exact ordered inventory"):
+                checker.load_raw_evidence_archive(legacy)
 
     def test_raw_archive_rejects_noncanonical_metadata_compression_and_tail(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -599,12 +1380,15 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             payloads = checker.derive_raw_run_payloads(
                 [(str(path), path.read_bytes()) for path in fixture.raw_paths]
             )["payloads"]
+            archive_payloads = checker.load_runner_receipt_root(
+                fixture.runner_receipt_root
+            )["archive_payloads"]
 
             wrong_mode = root / "wrong-mode.tar"
             with tarfile.open(
                 wrong_mode, "w:", format=tarfile.USTAR_FORMAT
             ) as archive:
-                for index, (name, raw) in enumerate(payloads):
+                for index, (name, raw) in enumerate(archive_payloads):
                     info = checker._canonical_tar_info(name, len(raw))
                     if index == 0:
                         info.mode = 0o600
@@ -616,7 +1400,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             with tarfile.open(
                 compressed, "w:gz", format=tarfile.USTAR_FORMAT
             ) as archive:
-                for name, raw in payloads:
+                for name, raw in archive_payloads:
                     archive.addfile(
                         checker._canonical_tar_info(name, len(raw)),
                         io.BytesIO(raw),
@@ -625,7 +1409,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker.load_raw_evidence_archive(compressed)
 
             tailed = root / "tailed.tar"
-            checker.write_raw_evidence_archive(tailed, payloads)
+            checker.write_raw_evidence_archive(
+                tailed, payloads, runner_receipt_root=fixture.runner_receipt_root
+            )
             tailed.write_bytes(tailed.read_bytes() + b"unexpected trailing bytes")
             with self.assertRaisesRegex(checker.InputError, "canonical deterministic"):
                 checker.load_raw_evidence_archive(tailed)
@@ -640,7 +1426,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 (str(path), path.read_bytes()) for path in fixture.raw_paths
             ]
             with self.assertRaises(FileExistsError):
-                checker.write_raw_evidence_archive(output, payloads)
+                checker.write_raw_evidence_archive(
+                    output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                )
             self.assertEqual(output.read_bytes(), b"owner data")
 
     def test_raw_archive_writer_loses_publish_race_without_unlinking_owner(self) -> None:
@@ -661,7 +1449,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker, "_rename_noreplace", side_effect=competing_publish
             ):
                 with self.assertRaises(FileExistsError):
-                    checker.write_raw_evidence_archive(output, payloads)
+                    checker.write_raw_evidence_archive(
+                        output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                    )
             self.assertEqual(output.read_bytes(), b"owner data created by the winner")
             residues = list(root.glob(f".{output.name}.staging-*"))
             self.assertEqual(len(residues), 1)
@@ -693,7 +1483,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker, "_fsync_directory", side_effect=replace_after_publish
             ):
                 with self.assertRaisesRegex(checker.InputError, "held inode"):
-                    checker.write_raw_evidence_archive(output, payloads)
+                    checker.write_raw_evidence_archive(
+                        output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                    )
             self.assertEqual(output.read_bytes(), b"owner replacement")
             self.assertTrue(displaced.is_file())
             self.assertEqual(list(root.glob(f".{output.name}.staging-*")), [])
@@ -717,7 +1509,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker, "_rename_noreplace", side_effect=tamper_after_publish
             ):
                 with self.assertRaisesRegex(checker.InputError, "digest changed"):
-                    checker.write_raw_evidence_archive(output, payloads)
+                    checker.write_raw_evidence_archive(
+                        output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                    )
             self.assertEqual(output.read_bytes(), b"same inode replacement bytes")
 
     def test_raw_archive_writer_preserves_complete_publish_on_parent_fsync_failure(self) -> None:
@@ -739,7 +1533,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker, "_fsync_directory", side_effect=fail_after_publish
             ):
                 with self.assertRaisesRegex(OSError, "parent fsync failure"):
-                    checker.write_raw_evidence_archive(output, payloads)
+                    checker.write_raw_evidence_archive(
+                        output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                    )
             replay = checker.replay_raw_evidence_archive(output)
             self.assertEqual(
                 replay["derived"]["raw_runs"], fixture.candidate["raw_runs"]
@@ -754,7 +1550,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             payloads = [
                 (str(path), path.read_bytes()) for path in fixture.raw_paths
             ]
-            expected_sha = checker.write_raw_evidence_archive(archive, payloads)
+            expected_sha = checker.write_raw_evidence_archive(
+                archive, payloads, runner_receipt_root=fixture.runner_receipt_root
+            )
             stable_snapshot = checker._stable_fd_snapshot
             replaced = False
 
@@ -799,7 +1597,9 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 side_effect=write_partial_then_fail,
             ):
                 with self.assertRaisesRegex(OSError, "injected archive write failure"):
-                    checker.write_raw_evidence_archive(output, payloads)
+                    checker.write_raw_evidence_archive(
+                        output, payloads, runner_receipt_root=fixture.runner_receipt_root
+                    )
             self.assertFalse(output.exists())
             residues = list(root.glob(f".{output.name}.staging-*"))
             self.assertEqual(len(residues), 1)

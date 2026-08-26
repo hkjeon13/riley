@@ -64,6 +64,10 @@ case "$1" in
 esac
 """
 
+MAWK = r"""#!/usr/bin/env sh
+exec /usr/bin/awk "$@"
+"""
+
 
 class PreflightTests(unittest.TestCase):
     def _program(self, root: Path, name: str, source: str) -> Path:
@@ -94,6 +98,17 @@ class PreflightTests(unittest.TestCase):
         self._program(tools, "df", DF)
         self._program(tools, "git", GIT)
         self._program(tools, "uname", UNAME)
+        self._program(tools, "mawk", MAWK)
+        preflight = root / "preflight-under-test.sh"
+        preflight_source = PREFLIGHT.read_text(encoding="utf-8")
+        for name in ("nvidia-smi", "timedatectl", "df", "git", "uname", "mawk"):
+            reviewed_path = f"/usr/bin/{name}"
+            self.assertIn(reviewed_path, preflight_source)
+            preflight_source = preflight_source.replace(
+                reviewed_path, str(tools / name)
+            )
+        preflight.write_text(preflight_source, encoding="utf-8")
+        preflight.chmod(0o755)
         staging = root / "staging"
         staging.mkdir()
         host_root = root / "host"
@@ -141,7 +156,7 @@ class PreflightTests(unittest.TestCase):
             }
         )
         return subprocess.run(
-            ["/bin/bash", str(PREFLIGHT)],
+            ["/bin/bash", str(preflight)],
             cwd=REPOSITORY_ROOT,
             env=environment,
             text=True,

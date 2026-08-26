@@ -29,18 +29,18 @@ os_release_path="${host_root}/etc/os-release"
 cpuinfo_path="${host_root}/proc/cpuinfo"
 meminfo_path="${host_root}/proc/meminfo"
 
-if ! command -v nvidia-smi >/dev/null 2>&1; then
+if [[ ! -x /usr/bin/nvidia-smi || -L /usr/bin/nvidia-smi ]]; then
   echo "preflight: nvidia-smi is required" >&2
   exit 2
 fi
 
-gpu_count="$(nvidia-smi --list-gpus | wc -l | tr -d '[:space:]')"
+gpu_count="$(/usr/bin/nvidia-smi --list-gpus | /usr/bin/wc -l | /usr/bin/tr -d '[:space:]')"
 if [[ "${gpu_count}" != "1" ]]; then
   echo "preflight: expected exactly one visible GPU, found ${gpu_count:-unknown}" >&2
   exit 2
 fi
 
-gpu_row="$(nvidia-smi \
+gpu_row="$(/usr/bin/nvidia-smi \
   --query-gpu=name,compute_cap,memory.total,memory.used,driver_version,persistence_mode,temperature.gpu,power.limit,clocks.applications.graphics,clocks.applications.memory \
   --format=csv,noheader,nounits)"
 
@@ -57,23 +57,23 @@ if [[ ! -r "${os_release_path}" || ! -r "${cpuinfo_path}" || ! -r "${meminfo_pat
   echo "preflight: canonical host identity files are not readable" >&2
   exit 2
 fi
-os_id="$(sed -n 's/^ID=//p' "${os_release_path}" | tr -d '"' | head -n 1)"
-os_version_id="$(sed -n 's/^VERSION_ID=//p' "${os_release_path}" | tr -d '"' | head -n 1)"
-kernel_release="$(uname -r)"
-machine="$(uname -m)"
-cpu_model_raw="$(awk -F: '/^model name[[:space:]]*:/ { sub(/^[[:space:]]+/, "", $2); print $2; exit }' "${cpuinfo_path}")"
+os_id="$(/usr/bin/sed -n 's/^ID=//p' "${os_release_path}" | /usr/bin/tr -d '"' | /usr/bin/head -n 1)"
+os_version_id="$(/usr/bin/sed -n 's/^VERSION_ID=//p' "${os_release_path}" | /usr/bin/tr -d '"' | /usr/bin/head -n 1)"
+kernel_release="$(/usr/bin/uname -r)"
+machine="$(/usr/bin/uname -m)"
+cpu_model_raw="$(/usr/bin/mawk -F: '/^model name[[:space:]]*:/ { sub(/^[[:space:]]+/, "", $2); print $2; exit }' "${cpuinfo_path}")"
 if [[ "${cpu_model_raw}" != *"i7-13700K"* ]]; then
   echo "preflight: expected CPU containing i7-13700K, found ${cpu_model_raw:-unknown}" >&2
   exit 2
 fi
 cpu_model="${expected_cpu_model}"
-physical_cpu_cores="$(awk -F: '
+physical_cpu_cores="$(/usr/bin/mawk -F: '
   /^physical id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); package=$2 }
   /^core id[[:space:]]*:/ { gsub(/[[:space:]]/, "", $2); seen[package ":" $2]=1 }
   END { for (key in seen) count++; print count+0 }
 ' "${cpuinfo_path}")"
-logical_cpu_threads="$(awk -F: '/^processor[[:space:]]*:/ { count++ } END { print count+0 }' "${cpuinfo_path}")"
-mem_total_kib="$(awk '$1 == "MemTotal:" { print $2; exit }' "${meminfo_path}")"
+logical_cpu_threads="$(/usr/bin/mawk -F: '/^processor[[:space:]]*:/ { count++ } END { print count+0 }' "${cpuinfo_path}")"
+mem_total_kib="$(/usr/bin/mawk '$1 == "MemTotal:" { print $2; exit }' "${meminfo_path}")"
 if [[ ! "${mem_total_kib}" =~ ^[0-9]+$ ]]; then
   echo "preflight: cannot parse MemTotal from /proc/meminfo" >&2
   exit 2
@@ -143,7 +143,7 @@ if (( temperature_c > max_start_temperature_c )); then
   exit 2
 fi
 
-if ! compute_processes="$(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null)"; then
+if ! compute_processes="$(/usr/bin/nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits 2>/dev/null)"; then
   echo "preflight: failed to query active CUDA compute processes" >&2
   exit 2
 fi
@@ -153,9 +153,9 @@ if [[ -n "${compute_processes//[[:space:]]/}" ]]; then
   exit 2
 fi
 
-if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  git_revision="$(git rev-parse HEAD)"
-  if [[ -n "$(git status --porcelain=v1 --untracked-files=normal -- . ':(exclude)benchmarks/results')" ]]; then
+if /usr/bin/git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git_revision="$(/usr/bin/git rev-parse HEAD)"
+  if [[ -n "$(/usr/bin/git status --porcelain=v1 --untracked-files=normal -- . ':(exclude)benchmarks/results')" ]]; then
     echo "preflight: benchmark requires a clean Git revision" >&2
     exit 2
   fi
@@ -185,11 +185,11 @@ if [[ "${cpu_governor_policy_count}" != "${expected_cpu_governor_policy_count}" 
   exit 2
 fi
 
-if ! command -v timedatectl >/dev/null 2>&1; then
+if [[ ! -x /usr/bin/timedatectl || -L /usr/bin/timedatectl ]]; then
   echo "preflight: timedatectl is required to verify clock synchronization" >&2
   exit 2
 fi
-if ! clock_synchronized="$(timedatectl show -p NTPSynchronized --value 2>/dev/null)"; then
+if ! clock_synchronized="$(/usr/bin/timedatectl show -p NTPSynchronized --value 2>/dev/null)"; then
   echo "preflight: timedatectl could not determine clock synchronization" >&2
   exit 2
 fi
@@ -202,7 +202,7 @@ if [[ -z "${staging_output_root}" || ! -d "${staging_output_root}" ]]; then
   echo "preflight: RUSTINFER_PREFLIGHT_OUTPUT_ROOT must name the existing staging directory" >&2
   exit 2
 fi
-staging_available_kib="$(df -Pk -- "${staging_output_root}" | awk 'NR == 2 { print $4 }')"
+staging_available_kib="$(/usr/bin/df -Pk -- "${staging_output_root}" | /usr/bin/mawk 'NR == 2 { print $4 }')"
 if [[ ! "${staging_available_kib}" =~ ^[0-9]+$ ]]; then
   echo "preflight: could not determine staging filesystem available bytes" >&2
   exit 2
