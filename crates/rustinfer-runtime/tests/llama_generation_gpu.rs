@@ -15,7 +15,8 @@ use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::generation::{FinishReason, GenerationRequest, GenerationState};
 use rustinfer_runtime::llama::{
     GenerationModelStage, GenerationTokenTiming, LlamaDecodePhase, LlamaGenerationEvent,
-    LlamaGenerationFailure, LlamaGenerationTimingSummary, PreparedLlamaDecodeConfig,
+    LlamaGenerationFailure, LlamaGenerationTimingSummary, LlamaReductionProfile,
+    PreparedLlamaDecodeConfig, PreparedLlamaForward, PreparedLlamaForwardConfig,
     PreparedLlamaGeneration,
 };
 use rustinfer_runtime::rng::PHILOX4X32_10_ALGORITHM_ID;
@@ -49,6 +50,7 @@ impl GoldenFinish {
 #[derive(Debug)]
 struct GoldenCase {
     index: usize,
+    prompt_id: String,
     prompt_token_ids: Vec<u32>,
     cache_on_token_ids: Vec<u32>,
     cache_off_token_ids: Vec<u32>,
@@ -60,6 +62,25 @@ struct GoldenFixture {
     cases_by_prompt_length: BTreeMap<usize, Vec<GoldenCase>>,
     eos_token_ids: Vec<u32>,
     max_new_tokens: usize,
+}
+
+#[derive(Debug)]
+struct Fixed37DiagnosticCase {
+    golden: GoldenCase,
+    cache_on_token_ids: Vec<u32>,
+    cache_off_token_ids: Vec<u32>,
+}
+
+#[derive(Debug)]
+struct Fixed37SemanticMismatch {
+    prompt_id: String,
+    prompt_length: usize,
+    step: usize,
+    cache_on_token_id: Option<u32>,
+    cache_off_token_id: Option<u32>,
+    golden_token_id: Option<u32>,
+    winning_logit: f32,
+    runner_up_logit: f32,
 }
 
 #[derive(Debug, Default)]
@@ -123,6 +144,29 @@ fn json_u32_array(value: &Value, field: &'static str) -> TestResult<Vec<u32>> {
     Ok(output)
 }
 
+fn ranked_top_1_bf16(bytes: &[u8]) -> TestResult<(u32, f32, f32)> {
+    if bytes.len() != EXPECTED_VOCABULARY_SIZE * BF16_BYTES {
+        return Err(format!("unexpected BF16 logits byte length {}", bytes.len()).into());
+    }
+    let mut winner = None;
+    let mut runner_up = None;
+    for (token_id, bytes) in bytes.chunks_exact(BF16_BYTES).enumerate() {
+        let value = f32::from_bits(u32::from(u16::from_le_bytes([bytes[0], bytes[1]])) << 16);
+        if !value.is_finite() {
+            return Err(format!("non-finite BF16 logit at token {token_id}").into());
+        }
+        if winner.is_none_or(|(_, winning)| value > winning) {
+            runner_up = winner;
+            winner = Some((token_id, value));
+        } else if runner_up.is_none_or(|(_, runner_up)| value > runner_up) {
+            runner_up = Some((token_id, value));
+        }
+    }
+    let (winner, winning_logit) = winner.ok_or("empty BF16 logits")?;
+    let (_, runner_up_logit) = runner_up.ok_or("BF16 logits lack a runner-up")?;
+    Ok((u32::try_from(winner)?, winning_logit, runner_up_logit))
+}
+
 fn parse_golden_fixture() -> TestResult<GoldenFixture> {
     let document: Value = serde_json::from_slice(&fs::read(golden_fixture_path())?)?;
     assert_eq!(document["schema_version"], "1.0.0");
@@ -161,6 +205,10 @@ fn parse_golden_fixture() -> TestResult<GoldenFixture> {
 
     let mut cases_by_prompt_length: BTreeMap<usize, Vec<GoldenCase>> = BTreeMap::new();
     for (index, case) in cases.iter().enumerate() {
+        let prompt_id = case["prompt_id"]
+            .as_str()
+            .ok_or("cases[].prompt_id must be a string")?
+            .to_owned();
         let prompt_token_ids = json_u32_array(
             &case["input"]["token_ids"],
             "cases[].input.token_ids must be a U32 array",
@@ -209,6 +257,7 @@ fn parse_golden_fixture() -> TestResult<GoldenFixture> {
             .or_default()
             .push(GoldenCase {
                 index,
+                prompt_id,
                 prompt_token_ids,
                 cache_on_token_ids,
                 cache_off_token_ids,
@@ -519,6 +568,234 @@ cuda_allocation_zero_after_close=true status=passed",
     );
     stream.close()?;
     close_context(context)
+}
+
+#[test]
+#[ignore = "remote-only fixed37 growing-prefix parity on server-4096"]
+fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResult {
+    let fixture = parse_golden_fixture()?;
+    let prompt_filter = std::env::var("RUSTINFER_GROWING_PREFIX_PROMPT_ID").ok();
+    let checkpoint = checkpoint_path();
+    let model = LoadedModel::load(&checkpoint, LoadLimits::default())?;
+    assert_eq!(
+        model.spec().embedding().vocabulary_size(),
+        EXPECTED_VOCABULARY_SIZE
+    );
+    assert_eq!(model.spec().special_tokens().eos(), fixture.eos_token_ids);
+    let eos_token_id = *fixture
+        .eos_token_ids
+        .first()
+        .ok_or("the fixed37 diagnostic requires one EOS token")?;
+    let profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
+    let (context, mut stream) = first_context()?;
+    let mut selected_cases = 0_usize;
+    let mut completed_cases = 0_usize;
+    let mut mismatch = None;
+
+    'prompt_lengths: for (prompt_length, cases) in fixture.cases_by_prompt_length {
+        let mut cases = cases
+            .into_iter()
+            .filter(|case| {
+                prompt_filter
+                    .as_deref()
+                    .is_none_or(|expected| case.prompt_id == expected)
+            })
+            .map(|golden| Fixed37DiagnosticCase {
+                golden,
+                cache_on_token_ids: Vec::new(),
+                cache_off_token_ids: Vec::new(),
+            })
+            .collect::<Vec<_>>();
+        if cases.is_empty() {
+            continue;
+        }
+        selected_cases += cases.len();
+
+        let mut generation = PreparedLlamaGeneration::prepare(
+            &model,
+            &context,
+            &mut stream,
+            prompt_length,
+            fixture.max_new_tokens,
+            PreparedLlamaDecodeConfig::default().with_reduction_profile(profile),
+        )?;
+        for case in &mut cases {
+            let request = generation_request(
+                format!("pr16-fixed37-growing-prefix-{}", case.golden.prompt_id).into_bytes(),
+                0,
+                case.golden.prompt_token_ids.clone(),
+                SamplingParams {
+                    temperature: 0.0,
+                    top_k: None,
+                    top_p: None,
+                    repetition_penalty: 1.0,
+                },
+                fixture.max_new_tokens,
+                fixture.eos_token_ids.clone(),
+            );
+            let mut state = new_state(&model, request)?;
+            generation.generate(
+                &mut state,
+                &mut stream,
+                || false,
+                |_| Ok::<(), Infallible>(()),
+            )?;
+            case.cache_on_token_ids = state.generated_token_ids().to_vec();
+        }
+        generation.close()?;
+        assert!(context.allocation_stats()?.is_zero());
+
+        for step in 0..fixture.max_new_tokens {
+            let active = cases
+                .iter()
+                .enumerate()
+                .filter(|(_, case)| {
+                    case.cache_off_token_ids.len() == step
+                        && case.cache_off_token_ids.last() != Some(&eos_token_id)
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+            if active.is_empty() {
+                break;
+            }
+            let sequence_length = prompt_length
+                .checked_add(step)
+                .ok_or("fixed37 diagnostic sequence length overflow")?;
+            let mut forward = PreparedLlamaForward::prepare(
+                &model,
+                &context,
+                &mut stream,
+                sequence_length,
+                PreparedLlamaForwardConfig::default().with_reduction_profile(profile),
+            )?;
+            let mut logits = vec![0_u8; EXPECTED_VOCABULARY_SIZE * BF16_BYTES];
+            for index in active {
+                let case = &mut cases[index];
+                let mut prefix = Vec::with_capacity(sequence_length);
+                prefix.extend_from_slice(&case.golden.prompt_token_ids);
+                prefix.extend_from_slice(&case.cache_off_token_ids);
+                forward.forward(&prefix, &mut stream)?;
+                forward.download_last_logits(&mut logits, &mut stream)?;
+                let (cache_off_token_id, winning_logit, runner_up_logit) =
+                    ranked_top_1_bf16(&logits)?;
+                let cache_on_token_id = case.cache_on_token_ids.get(step).copied();
+                let golden_token_id = case.golden.cache_on_token_ids.get(step).copied();
+                case.cache_off_token_ids.push(cache_off_token_id);
+                println!(
+                    "pr16-fixed37-growing-prefix-step schema_version=1 prompt_id={} \
+prompt_length={prompt_length} step={step} cache_on_token_id={cache_on_token_id:?} \
+cache_off_token_id={cache_off_token_id} golden_token_id={golden_token_id:?} \
+winning_logit={winning_logit} runner_up_logit={runner_up_logit} \
+winner_margin={} status={}",
+                    case.golden.prompt_id,
+                    winning_logit - runner_up_logit,
+                    if cache_on_token_id == Some(cache_off_token_id) {
+                        "matched"
+                    } else {
+                        "mismatched"
+                    },
+                );
+                if cache_on_token_id != Some(cache_off_token_id) {
+                    mismatch = Some(Fixed37SemanticMismatch {
+                        prompt_id: case.golden.prompt_id.clone(),
+                        prompt_length,
+                        step,
+                        cache_on_token_id,
+                        cache_off_token_id: Some(cache_off_token_id),
+                        golden_token_id,
+                        winning_logit,
+                        runner_up_logit,
+                    });
+                    break;
+                }
+            }
+            forward.close()?;
+            assert!(context.allocation_stats()?.is_zero());
+            if mismatch.is_some() {
+                break 'prompt_lengths;
+            }
+        }
+
+        for case in cases {
+            if case.cache_on_token_ids != case.cache_off_token_ids {
+                let step = case
+                    .cache_on_token_ids
+                    .len()
+                    .min(case.cache_off_token_ids.len());
+                mismatch = Some(Fixed37SemanticMismatch {
+                    prompt_id: case.golden.prompt_id,
+                    prompt_length,
+                    step,
+                    cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
+                    cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
+                    golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
+                    winning_logit: 0.0,
+                    runner_up_logit: 0.0,
+                });
+                break 'prompt_lengths;
+            }
+            if case.cache_on_token_ids != case.golden.cache_on_token_ids {
+                let step = case
+                    .cache_on_token_ids
+                    .iter()
+                    .zip(&case.golden.cache_on_token_ids)
+                    .position(|(actual, golden)| actual != golden)
+                    .unwrap_or_else(|| {
+                        case.cache_on_token_ids
+                            .len()
+                            .min(case.golden.cache_on_token_ids.len())
+                    });
+                mismatch = Some(Fixed37SemanticMismatch {
+                    prompt_id: case.golden.prompt_id,
+                    prompt_length,
+                    step,
+                    cache_on_token_id: case.cache_on_token_ids.get(step).copied(),
+                    cache_off_token_id: case.cache_off_token_ids.get(step).copied(),
+                    golden_token_id: case.golden.cache_on_token_ids.get(step).copied(),
+                    winning_logit: 0.0,
+                    runner_up_logit: 0.0,
+                });
+                break 'prompt_lengths;
+            }
+            completed_cases += 1;
+        }
+    }
+
+    stream.close()?;
+    close_context(context)?;
+    if let Some(mismatch) = mismatch {
+        return Err(format!(
+            "fixed37 semantic mismatch: prompt_id={} prompt_length={} step={} \
+cache_on_token_id={:?} cache_off_token_id={:?} golden_token_id={:?} \
+winning_logit={} runner_up_logit={} winner_margin={}",
+            mismatch.prompt_id,
+            mismatch.prompt_length,
+            mismatch.step,
+            mismatch.cache_on_token_id,
+            mismatch.cache_off_token_id,
+            mismatch.golden_token_id,
+            mismatch.winning_logit,
+            mismatch.runner_up_logit,
+            mismatch.winning_logit - mismatch.runner_up_logit,
+        )
+        .into());
+    }
+    if selected_cases == 0 {
+        return Err(format!(
+            "RUSTINFER_GROWING_PREFIX_PROMPT_ID did not match a fixture case: {:?}",
+            prompt_filter
+        )
+        .into());
+    }
+    assert_eq!(completed_cases, selected_cases);
+    println!(
+        "pr16-fixed37-growing-prefix-summary schema_version=1 profile={} \
+cases={completed_cases} exact_window={} cache_on_off_exact=true golden_exact=true \
+cuda_allocation_zero_after_close=true status=passed",
+        profile.id(),
+        fixture.max_new_tokens,
+    );
+    Ok(())
 }
 
 #[test]
