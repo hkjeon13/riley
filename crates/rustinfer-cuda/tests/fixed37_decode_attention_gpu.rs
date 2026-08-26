@@ -4,9 +4,10 @@ use std::error::Error;
 
 use rustinfer_cuda::{
     AttentionReductionProfile, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
-    CudaDeviceBuffer, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
-    DecodeAttentionBackendAvailability, DecodeAttentionParams, DecodeAttentionPreference,
-    DecodeAttentionRequest, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
+    CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
+    DecodeAttentionBackend, DecodeAttentionBackendAvailability, DecodeAttentionNoWorkspaceParams,
+    DecodeAttentionParams, DecodeAttentionPreference, DecodeAttentionRequest,
+    PagedDecodeAttentionNoWorkspaceParams, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PreparedDecodeAttention,
     PreparedPagedDecodeAttention,
 };
@@ -209,6 +210,7 @@ fn run_contiguous(
     head_size: usize,
     scale: f32,
     workspace_sentinel: Option<f32>,
+    preference: DecodeAttentionPreference,
 ) -> TestResult<ExecutionBits> {
     let baseline = context.allocation_stats()?;
     let query = upload(context, stream, staging, &encode_bf16(query))?;
@@ -223,14 +225,21 @@ fn run_contiguous(
             u64::try_from(head_size)?,
             scale,
         ),
-        DecodeAttentionPreference::Reference,
+        preference,
         FIXED37,
         DecodeAttentionBackendAvailability::linked(),
     )?;
+    if preference == DecodeAttentionPreference::Optimized {
+        assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+        assert_eq!(prepared.workspace_bytes(), 0);
+    }
     let mut output =
         context.allocate_device_buffer(u64::try_from(query_head_count * head_size * 2)?)?;
-    let mut workspace = if let Some(sentinel) = workspace_sentinel {
-        upload(
+    let mut workspace = if prepared.workspace_bytes() == 0 {
+        assert!(workspace_sentinel.is_none());
+        None
+    } else if let Some(sentinel) = workspace_sentinel {
+        Some(upload(
             context,
             stream,
             staging,
@@ -238,42 +247,62 @@ fn run_contiguous(
                 sentinel;
                 usize::try_from(prepared.workspace_bytes() / 2)?
             ]),
-        )?
+        )?)
     } else {
-        context.allocate_device_buffer(prepared.workspace_bytes())?
+        Some(context.allocate_device_buffer(prepared.workspace_bytes())?)
     };
     let active = context.allocation_stats()?;
     let mut observed = None;
     for _ in 0..3 {
         let output_len = output.byte_len();
-        let workspace_len = workspace.byte_len();
-        prepared.execute(
-            u64::try_from(token_count)?,
-            &mut DecodeAttentionParams {
-                query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
-                key_cache: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
-                value_cache: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
-                output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
-                workspace: CudaBufferSpanMut::new(
-                    &mut workspace,
-                    CudaDType::BF16,
-                    0,
-                    workspace_len,
-                )?,
-            },
-            stream,
-        )?;
+        if prepared.backend() == DecodeAttentionBackend::Fixed37TwoPass {
+            prepared.execute_without_workspace(
+                u64::try_from(token_count)?,
+                &mut DecodeAttentionNoWorkspaceParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_cache: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+                    value_cache: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                },
+                stream,
+            )?;
+        } else {
+            let workspace = workspace.as_mut().ok_or("missing materialized workspace")?;
+            let workspace_len = workspace.byte_len();
+            prepared.execute(
+                u64::try_from(token_count)?,
+                &mut DecodeAttentionParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_cache: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+                    value_cache: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                    workspace: CudaBufferSpanMut::new(
+                        workspace,
+                        CudaDType::BF16,
+                        0,
+                        workspace_len,
+                    )?,
+                },
+                stream,
+            )?;
+        }
         assert_eq!(context.allocation_stats()?, active);
         let current = ExecutionBits {
             output: download_bits(context, stream, &mut output)?,
-            probabilities: download_bits(context, stream, &mut workspace)?,
+            probabilities: if let Some(workspace) = workspace.as_mut() {
+                download_bits(context, stream, workspace)?
+            } else {
+                Vec::new()
+            },
         };
         if let Some(previous) = &observed {
             assert_eq!(current, *previous, "fixed37 contiguous repeatability");
         }
         observed = Some(current);
     }
-    workspace.close()?;
+    if let Some(mut workspace) = workspace {
+        workspace.close()?;
+    }
     output.close()?;
     value.close()?;
     key.close()?;
@@ -305,6 +334,7 @@ fn run_paged(
     key_value_head_count: usize,
     head_size: usize,
     scale: f32,
+    preference: DecodeAttentionPreference,
 ) -> TestResult<ExecutionBits> {
     let baseline = context.allocation_stats()?;
     let logical_block_count = token_count.div_ceil(16);
@@ -358,54 +388,111 @@ fn run_paged(
             u64::try_from(head_size)?,
             scale,
         ),
-        DecodeAttentionPreference::Reference,
+        preference,
         FIXED37,
         DecodeAttentionBackendAvailability::linked(),
     )?;
+    if preference == DecodeAttentionPreference::Optimized {
+        assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+        assert_eq!(prepared.workspace_bytes(), 0);
+    }
     let mut output =
         context.allocate_device_buffer(u64::try_from(query_head_count * head_size * 2)?)?;
-    let mut workspace = context.allocate_device_buffer(prepared.workspace_bytes())?;
+    let mut workspace = if prepared.workspace_bytes() == 0 {
+        None
+    } else {
+        Some(context.allocate_device_buffer(prepared.workspace_bytes())?)
+    };
     let active = context.allocation_stats()?;
     let mut observed = None;
     for _ in 0..3 {
         let output_len = output.byte_len();
-        let workspace_len = workspace.byte_len();
-        prepared.execute(
-            &mut PagedDecodeAttentionParams {
-                query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
-                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
-                value_pool: CudaBufferSpan::new(
-                    &value_pool,
-                    CudaDType::BF16,
-                    0,
-                    value_pool.byte_len(),
-                )?,
-                workspace: CudaBufferSpanMut::new(
-                    &mut workspace,
-                    CudaDType::BF16,
-                    0,
-                    workspace_len,
-                )?,
-                output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
-                block_table: PagedKvBlockTableV1::new(
-                    host_table,
-                    CudaBufferSpan::new(&device_ids, CudaDType::U32, 0, device_ids.byte_len())?,
-                    CudaBufferSpan::new(&device_valid, CudaDType::U16, 0, device_valid.byte_len())?,
-                )?,
-            },
-            stream,
-        )?;
+        if prepared.backend() == DecodeAttentionBackend::Fixed37TwoPass {
+            prepared.execute_without_workspace(
+                &mut PagedDecodeAttentionNoWorkspaceParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_pool: CudaBufferSpan::new(
+                        &key_pool,
+                        CudaDType::BF16,
+                        0,
+                        key_pool.byte_len(),
+                    )?,
+                    value_pool: CudaBufferSpan::new(
+                        &value_pool,
+                        CudaDType::BF16,
+                        0,
+                        value_pool.byte_len(),
+                    )?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                    block_table: PagedKvBlockTableV1::new(
+                        host_table,
+                        CudaBufferSpan::new(&device_ids, CudaDType::U32, 0, device_ids.byte_len())?,
+                        CudaBufferSpan::new(
+                            &device_valid,
+                            CudaDType::U16,
+                            0,
+                            device_valid.byte_len(),
+                        )?,
+                    )?,
+                },
+                stream,
+            )?;
+        } else {
+            let workspace = workspace.as_mut().ok_or("missing materialized workspace")?;
+            let workspace_len = workspace.byte_len();
+            prepared.execute(
+                &mut PagedDecodeAttentionParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_pool: CudaBufferSpan::new(
+                        &key_pool,
+                        CudaDType::BF16,
+                        0,
+                        key_pool.byte_len(),
+                    )?,
+                    value_pool: CudaBufferSpan::new(
+                        &value_pool,
+                        CudaDType::BF16,
+                        0,
+                        value_pool.byte_len(),
+                    )?,
+                    workspace: CudaBufferSpanMut::new(
+                        workspace,
+                        CudaDType::BF16,
+                        0,
+                        workspace_len,
+                    )?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                    block_table: PagedKvBlockTableV1::new(
+                        host_table,
+                        CudaBufferSpan::new(&device_ids, CudaDType::U32, 0, device_ids.byte_len())?,
+                        CudaBufferSpan::new(
+                            &device_valid,
+                            CudaDType::U16,
+                            0,
+                            device_valid.byte_len(),
+                        )?,
+                    )?,
+                },
+                stream,
+            )?;
+        }
         assert_eq!(context.allocation_stats()?, active);
         let current = ExecutionBits {
             output: download_bits(context, stream, &mut output)?,
-            probabilities: download_bits(context, stream, &mut workspace)?,
+            probabilities: if let Some(workspace) = workspace.as_mut() {
+                download_bits(context, stream, workspace)?
+            } else {
+                Vec::new()
+            },
         };
         if let Some(previous) = &observed {
             assert_eq!(current, *previous, "fixed37 paged repeatability");
         }
         observed = Some(current);
     }
-    workspace.close()?;
+    if let Some(mut workspace) = workspace {
+        workspace.close()?;
+    }
     output.close()?;
     device_valid.close()?;
     device_ids.close()?;
@@ -414,6 +501,104 @@ fn run_paged(
     query.close()?;
     assert_eq!(context.allocation_stats()?, baseline);
     observed.ok_or_else(|| "missing paged execution".into())
+}
+
+#[test]
+#[ignore = "requires remote CUDA GPU"]
+fn two_pass_contiguous_and_shuffled_paged_are_exact_at_boundaries_and_t8192() -> TestResult {
+    let (context, mut stream) = first_context()?;
+    let mut staging = context.allocate_pinned_host_buffer(4 << 20)?;
+    let query_head_count = 2;
+    let key_value_head_count = 1;
+    let head_size = 64;
+    for token_count in [1, 36, 37, 38, 8192] {
+        let query: Vec<f32> = (0..query_head_count * head_size)
+            .map(|index| {
+                (f32::from(u8::try_from((index * 11 + 3) % 29).unwrap_or(0)) - 14.0) / 32.0
+            })
+            .collect();
+        let cache_elements = key_value_head_count * token_count * head_size;
+        let key: Vec<f32> = (0..cache_elements)
+            .map(|index| (f32::from(u8::try_from((index * 5 + 7) % 31).unwrap_or(0)) - 15.0) / 32.0)
+            .collect();
+        let value: Vec<f32> = (0..cache_elements)
+            .map(|index| {
+                (f32::from(u8::try_from((index * 13 + 9) % 37).unwrap_or(0)) - 18.0) / 32.0
+            })
+            .collect();
+        let expected = cpu_fixed37_decode(
+            &query,
+            &key,
+            &value,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            0.125,
+        );
+        let contiguous = run_contiguous(
+            &context,
+            &mut stream,
+            &mut staging,
+            &query,
+            &key,
+            &value,
+            token_count,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            0.125,
+            None,
+            DecodeAttentionPreference::Optimized,
+        )?;
+        let paged = run_paged(
+            &context,
+            &mut stream,
+            &mut staging,
+            &query,
+            &key,
+            &value,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            0.125,
+            DecodeAttentionPreference::Optimized,
+        )?;
+        let materialized = run_contiguous(
+            &context,
+            &mut stream,
+            &mut staging,
+            &query,
+            &key,
+            &value,
+            token_count,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            0.125,
+            None,
+            DecodeAttentionPreference::Reference,
+        )?;
+        assert!(contiguous.probabilities.is_empty());
+        assert_eq!(contiguous, paged, "page16 must be address translation only");
+        assert_eq!(
+            contiguous.output, materialized.output,
+            "two-pass must byte-match fixed37 materialized at T={token_count}"
+        );
+        for (index, (&actual, &expected)) in contiguous.output.iter().zip(&expected).enumerate() {
+            let difference = (bf16_to_f32(actual) - bf16_to_f32(expected)).abs();
+            assert!(
+                difference <= 0.03125,
+                "two-pass oracle mismatch at T={token_count}, index={index}: {difference}"
+            );
+        }
+    }
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
 }
 
 #[test]
@@ -462,6 +647,7 @@ fn contiguous_and_shuffled_paged_match_fixed37_oracle_at_chunk_and_page_boundari
             head_size,
             0.125,
             None,
+            DecodeAttentionPreference::Reference,
         )?;
         let paged = run_paged(
             &context,
@@ -475,6 +661,7 @@ fn contiguous_and_shuffled_paged_match_fixed37_oracle_at_chunk_and_page_boundari
             key_value_head_count,
             head_size,
             0.125,
+            DecodeAttentionPreference::Reference,
         )?;
         assert_eq!(contiguous, paged, "page16 must be address translation only");
         for (index, (&actual, &expected)) in contiguous.output.iter().zip(&expected).enumerate() {
@@ -517,6 +704,7 @@ fn qk_and_av_order_witnesses_pin_staged_bf16_fixed37_results() -> TestResult {
         74,
         1.0,
         None,
+        DecodeAttentionPreference::Reference,
     )?;
     let qk_paged = run_paged(
         &context,
@@ -530,6 +718,7 @@ fn qk_and_av_order_witnesses_pin_staged_bf16_fixed37_results() -> TestResult {
         1,
         74,
         1.0,
+        DecodeAttentionPreference::Reference,
     )?;
     assert_eq!(qk_paged, qk, "paged QK must keep the logical D reduction");
     assert_eq!(qk.output, vec![f32_to_bf16_bits(1.0); 74]);
@@ -564,6 +753,7 @@ fn qk_and_av_order_witnesses_pin_staged_bf16_fixed37_results() -> TestResult {
         1,
         1.0,
         None,
+        DecodeAttentionPreference::Reference,
     )?;
     let av_paged = run_paged(
         &context,
@@ -577,6 +767,7 @@ fn qk_and_av_order_witnesses_pin_staged_bf16_fixed37_results() -> TestResult {
         1,
         1,
         1.0,
+        DecodeAttentionPreference::Reference,
     )?;
     assert_eq!(av_paged, av, "paged AV must keep token-zero chunk anchors");
     let probability = round_bf16(1.0 / 74.0);
@@ -596,6 +787,200 @@ fn qk_and_av_order_witnesses_pin_staged_bf16_fixed37_results() -> TestResult {
         "AV witness must distinguish reduction order"
     );
     assert_eq!(av.output, vec![fixed_bits]);
+
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires remote CUDA GPU"]
+fn two_pass_d64_order_witnesses_and_special_values_are_pinned() -> TestResult {
+    let (context, mut stream) = first_context()?;
+    let mut staging = context.allocate_pinned_host_buffer(1 << 20)?;
+    let head_size = 64;
+
+    let query = vec![1.0_f32; head_size];
+    let mut key = vec![0.0_f32; 2 * head_size];
+    key[0] = 16_777_216.0;
+    key[1..head_size - 1].fill(1.0);
+    key[head_size - 1] = -16_777_216.0;
+    let mut value = vec![0.0_f32; 2 * head_size];
+    value[..head_size].fill(1.0);
+    let flat = query
+        .iter()
+        .zip(&key[..head_size])
+        .fold(0.0_f32, |sum, (&left, &right)| left.mul_add(right, sum));
+    let fixed = fixed37_dot(&query, &key[..head_size]);
+    assert_eq!(flat.to_bits(), 0.0_f32.to_bits());
+    assert_ne!(fixed.to_bits(), flat.to_bits());
+    let qk = run_contiguous(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        2,
+        2,
+        1,
+        1,
+        head_size,
+        1.0,
+        None,
+        DecodeAttentionPreference::Optimized,
+    )?;
+    let qk_paged = run_paged(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        2,
+        1,
+        1,
+        head_size,
+        1.0,
+        DecodeAttentionPreference::Optimized,
+    )?;
+    let qk_materialized = run_contiguous(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        2,
+        2,
+        1,
+        1,
+        head_size,
+        1.0,
+        None,
+        DecodeAttentionPreference::Reference,
+    )?;
+    assert_eq!(qk, qk_paged);
+    assert_eq!(qk.output, qk_materialized.output);
+    assert_ne!(qk.output[0], f32_to_bf16_bits(0.5));
+
+    let token_count = 74;
+    let query = vec![0.0_f32; head_size];
+    let key = vec![0.0_f32; token_count * head_size];
+    let mut token_values = vec![1.0_f32; token_count];
+    token_values[0] = 16_777_216.0;
+    token_values[token_count - 1] = -16_777_216.0;
+    let value: Vec<f32> = token_values
+        .iter()
+        .flat_map(|&token_value| std::iter::repeat_n(token_value, head_size))
+        .collect();
+    let probability = round_bf16(1.0 / f32::from(u16::try_from(token_count)?));
+    let fixed_av = f32_to_bf16_bits(fixed37_dot(&vec![probability; token_count], &token_values));
+    let flat_av = f32_to_bf16_bits(
+        token_values
+            .iter()
+            .fold(0.0_f32, |sum, &item| probability.mul_add(item, sum)),
+    );
+    assert_ne!(fixed_av, flat_av);
+    let av = run_contiguous(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        token_count,
+        token_count,
+        1,
+        1,
+        head_size,
+        1.0,
+        None,
+        DecodeAttentionPreference::Optimized,
+    )?;
+    let av_paged = run_paged(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        token_count,
+        1,
+        1,
+        head_size,
+        1.0,
+        DecodeAttentionPreference::Optimized,
+    )?;
+    let av_materialized = run_contiguous(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        token_count,
+        token_count,
+        1,
+        1,
+        head_size,
+        1.0,
+        None,
+        DecodeAttentionPreference::Reference,
+    )?;
+    assert_eq!(av, av_paged);
+    assert_eq!(av.output, av_materialized.output);
+    assert_eq!(av.output, vec![fixed_av; head_size]);
+
+    for (query_scalar, key_scalar) in [
+        (f32::NAN, 1.0_f32),
+        (f32::INFINITY, 1.0),
+        (f32::INFINITY, -1.0),
+    ] {
+        let mut query = vec![0.0_f32; head_size];
+        query[0] = query_scalar;
+        let mut key = vec![0.0_f32; head_size];
+        key[0] = key_scalar;
+        let special = run_contiguous(
+            &context,
+            &mut stream,
+            &mut staging,
+            &query,
+            &key,
+            &vec![2.0; head_size],
+            1,
+            1,
+            1,
+            1,
+            head_size,
+            1.0,
+            None,
+            DecodeAttentionPreference::Optimized,
+        )?;
+        assert_eq!(special.output, vec![0x7fff; head_size]);
+    }
+
+    let mut query = vec![0.0_f32; head_size];
+    query[0] = 1.0;
+    let mut key = vec![0.0_f32; 2 * head_size];
+    key[head_size] = f32::NEG_INFINITY;
+    let mut value = vec![2.0_f32; 2 * head_size];
+    value[head_size..].fill(f32::INFINITY);
+    let zero_times_infinity = run_paged(
+        &context,
+        &mut stream,
+        &mut staging,
+        &query,
+        &key,
+        &value,
+        2,
+        1,
+        1,
+        head_size,
+        1.0,
+        DecodeAttentionPreference::Optimized,
+    )?;
+    assert_eq!(zero_times_infinity.output, vec![0x7fff; head_size]);
 
     staging.close()?;
     stream.close()?;
@@ -636,6 +1021,7 @@ fn contiguous_materialized_workspace_preserves_capacity_tail() -> TestResult {
         head_size,
         1.0,
         Some(sentinel),
+        DecodeAttentionPreference::Reference,
     )?;
     assert_eq!(
         execution.output,
@@ -684,6 +1070,7 @@ fn special_rows_and_zero_probability_times_infinity_are_canonical_qnan() -> Test
             1,
             1.0,
             None,
+            DecodeAttentionPreference::Reference,
         )?;
         assert_eq!(execution.probabilities, vec![0x7fff]);
         assert_eq!(execution.output, vec![0x7fff]);
@@ -703,6 +1090,7 @@ fn special_rows_and_zero_probability_times_infinity_are_canonical_qnan() -> Test
         1,
         1.0,
         None,
+        DecodeAttentionPreference::Reference,
     )?;
     assert_eq!(
         zero_times_infinity.probabilities,
@@ -797,6 +1185,224 @@ fn paged_corrupt_device_metadata_returns_qnan_without_out_of_bounds_access() -> 
         );
         output.close()?;
         workspace.close()?;
+        device_valid.close()?;
+        device_ids.close()?;
+    }
+
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
+    assert_eq!(context.allocation_stats()?, baseline);
+    drop(prepared);
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires remote CUDA GPU"]
+fn two_pass_paged_corrupt_metadata_is_full_qnan_without_workspace() -> TestResult {
+    let (context, mut stream) = first_context()?;
+    let mut staging = context.allocate_pinned_host_buffer(1 << 16)?;
+    let baseline = context.allocation_stats()?;
+    let host_ids = [0_u32];
+    let host_valid = [1_u16];
+    let host_table = PagedKvBlockTableHostV1::new(&host_ids, &host_valid, 1, 1)?;
+    let query = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[1.0; 64]),
+    )?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[1.0; 16 * 64]),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[2.0; 16 * 64]),
+    )?;
+    let prepared = PreparedPagedDecodeAttention::select_with_reduction_profile(
+        &context,
+        PagedDecodeAttentionRequest::new(1, 1, 1, 1, 64, 1.0),
+        DecodeAttentionPreference::Optimized,
+        FIXED37,
+        DecodeAttentionBackendAvailability::linked(),
+    )?;
+    assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+    assert_eq!(prepared.workspace_bytes(), 0);
+
+    let valid_device_ids = upload(&context, &mut stream, &mut staging, &encode_u32(&host_ids))?;
+    let valid_device_tokens = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&host_valid),
+    )?;
+    let mut compatibility_workspace =
+        upload(&context, &mut stream, &mut staging, &encode_bf16(&[9.0]))?;
+    let mut compatibility_output = context.allocate_device_buffer(64 * 2)?;
+    let compatibility_workspace_len = compatibility_workspace.byte_len();
+    let compatibility_output_len = compatibility_output.byte_len();
+    let compatibility_active = context.allocation_stats()?;
+    prepared.execute(
+        &mut PagedDecodeAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            workspace: CudaBufferSpanMut::new(
+                &mut compatibility_workspace,
+                CudaDType::BF16,
+                0,
+                compatibility_workspace_len,
+            )?,
+            output: CudaBufferSpanMut::new(
+                &mut compatibility_output,
+                CudaDType::BF16,
+                0,
+                compatibility_output_len,
+            )?,
+            block_table: PagedKvBlockTableV1::new(
+                host_table,
+                CudaBufferSpan::new(
+                    &valid_device_ids,
+                    CudaDType::U32,
+                    0,
+                    valid_device_ids.byte_len(),
+                )?,
+                CudaBufferSpan::new(
+                    &valid_device_tokens,
+                    CudaDType::U16,
+                    0,
+                    valid_device_tokens.byte_len(),
+                )?,
+            )?,
+        },
+        &mut stream,
+    )?;
+    assert_eq!(context.allocation_stats()?, compatibility_active);
+    assert_eq!(
+        download_bits(&context, &mut stream, &mut compatibility_workspace)?,
+        vec![f32_to_bf16_bits(9.0)],
+        "legacy two-pass execute must not touch its compatibility workspace"
+    );
+    assert_eq!(
+        download_bits(&context, &mut stream, &mut compatibility_output)?,
+        vec![f32_to_bf16_bits(2.0); 64]
+    );
+
+    let materialized = PreparedPagedDecodeAttention::select_with_reduction_profile(
+        &context,
+        PagedDecodeAttentionRequest::new(1, 1, 1, 1, 64, 1.0),
+        DecodeAttentionPreference::Reference,
+        FIXED37,
+        DecodeAttentionBackendAvailability::linked(),
+    )?;
+    let error = materialized
+        .execute_without_workspace(
+            &mut PagedDecodeAttentionNoWorkspaceParams {
+                query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+                value_pool: CudaBufferSpan::new(
+                    &value_pool,
+                    CudaDType::BF16,
+                    0,
+                    value_pool.byte_len(),
+                )?,
+                output: CudaBufferSpanMut::new(
+                    &mut compatibility_output,
+                    CudaDType::BF16,
+                    0,
+                    compatibility_output_len,
+                )?,
+                block_table: PagedKvBlockTableV1::new(
+                    host_table,
+                    CudaBufferSpan::new(
+                        &valid_device_ids,
+                        CudaDType::U32,
+                        0,
+                        valid_device_ids.byte_len(),
+                    )?,
+                    CudaBufferSpan::new(
+                        &valid_device_tokens,
+                        CudaDType::U16,
+                        0,
+                        valid_device_tokens.byte_len(),
+                    )?,
+                )?,
+            },
+            &mut stream,
+        )
+        .expect_err("no-workspace execution must reject a materialized plan before launch");
+    assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
+    drop(materialized);
+    compatibility_output.close()?;
+    compatibility_workspace.close()?;
+    valid_device_tokens.close()?;
+    valid_device_ids.close()?;
+
+    for (actual_ids, actual_valid) in [([1_u32], [1_u16]), ([0], [0])] {
+        let device_ids = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&actual_ids),
+        )?;
+        let device_valid = upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u16(&actual_valid),
+        )?;
+        let mut output = context.allocate_device_buffer(64 * 2)?;
+        let output_len = output.byte_len();
+        let active = context.allocation_stats()?;
+        for _ in 0..3 {
+            prepared.execute_without_workspace(
+                &mut PagedDecodeAttentionNoWorkspaceParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_pool: CudaBufferSpan::new(
+                        &key_pool,
+                        CudaDType::BF16,
+                        0,
+                        key_pool.byte_len(),
+                    )?,
+                    value_pool: CudaBufferSpan::new(
+                        &value_pool,
+                        CudaDType::BF16,
+                        0,
+                        value_pool.byte_len(),
+                    )?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                    block_table: PagedKvBlockTableV1::new(
+                        host_table,
+                        CudaBufferSpan::new(&device_ids, CudaDType::U32, 0, device_ids.byte_len())?,
+                        CudaBufferSpan::new(
+                            &device_valid,
+                            CudaDType::U16,
+                            0,
+                            device_valid.byte_len(),
+                        )?,
+                    )?,
+                },
+                &mut stream,
+            )?;
+            assert_eq!(context.allocation_stats()?, active);
+            assert_eq!(
+                download_bits(&context, &mut stream, &mut output)?,
+                vec![0x7fff; 64]
+            );
+        }
+        output.close()?;
         device_valid.close()?;
         device_ids.close()?;
     }

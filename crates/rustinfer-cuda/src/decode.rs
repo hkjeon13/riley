@@ -20,6 +20,7 @@ use crate::ffi;
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const ONLINE_HEAD_SIZE: u64 = 64;
+const FIXED37_MAX_TWO_PASS_TOKENS: u64 = 8192;
 const DEFAULT_TOKENS_PER_PARTITION: u64 = 128;
 const MINIMUM_HARDWARE_COMPUTE_CAPABILITY: (u32, u32) = (8, 0);
 const MAXIMUM_GRID_X: u64 = i32::MAX as u64;
@@ -34,6 +35,10 @@ const FIXED37_REFERENCE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.fixed37.materialized-gqa-decode.bf16";
 const FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.fixed37.paged-materialized-gqa-decode.bf16.block16";
+const FIXED37_TWO_PASS_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.fixed37.two-pass-gqa-decode.bf16.d64.t8192";
+const FIXED37_PAGED_TWO_PASS_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.fixed37.paged-two-pass-gqa-decode.bf16.d64.t8192.block16";
 const IMPLEMENTATION_VERSION: &str = "1";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
@@ -565,6 +570,9 @@ pub enum DecodeAttentionBackend {
     /// Materializes staged BF16 scores and uses fixed-contiguous-37-balanced-v1
     /// for every D/T reduction.
     Fixed37Materialized,
+    /// Recomputes scores twice and keeps only per-row F32 scratch in shared
+    /// memory; supported for `D=64` and logical `T<=8192`.
+    Fixed37TwoPass,
 }
 
 /// Why cold selection chose its backend.
@@ -581,6 +589,8 @@ pub enum DecodeAttentionSelectionReason {
     UnsupportedHeadSizeFallback,
     /// The fixed partition/grid contract cannot represent the request.
     UnsupportedLaunchGeometryFallback,
+    /// The fixed37 no-HBM backend supports at most logical `T=8192`.
+    UnsupportedSequenceLengthFallback,
 }
 
 /// Merge order for packed partial states.
@@ -602,10 +612,12 @@ const fn reduction_order_code(order: DecodePartialReductionOrder) -> u32 {
 
 /// Which native decode implementations may participate in cold selection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct DecodeAttentionBackendAvailability {
     reference: bool,
     chunked_online: bool,
     fixed37_materialized: bool,
+    fixed37_two_pass: bool,
 }
 
 impl DecodeAttentionBackendAvailability {
@@ -616,6 +628,7 @@ impl DecodeAttentionBackendAvailability {
             reference,
             chunked_online,
             fixed37_materialized: false,
+            fixed37_two_pass: false,
         }
     }
 
@@ -626,11 +639,19 @@ impl DecodeAttentionBackendAvailability {
         self
     }
 
+    /// Adds both independently linked fixed37 decode siblings.
+    #[must_use]
+    pub const fn with_fixed37(mut self, materialized: bool, two_pass: bool) -> Self {
+        self.fixed37_materialized = materialized;
+        self.fixed37_two_pass = two_pass;
+        self
+    }
+
     /// Native backends linked by the current feature set.
     #[must_use]
     pub const fn linked() -> Self {
         Self::new(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
-            .with_fixed37_materialized(cfg!(feature = "cuda"))
+            .with_fixed37(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
     }
 
     /// Whether the materialized reference is linked.
@@ -649,6 +670,12 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn fixed37_materialized(self) -> bool {
         self.fixed37_materialized
+    }
+
+    /// Whether the fixed37 no-HBM contiguous/paged sibling is linked.
+    #[must_use]
+    pub const fn fixed37_two_pass(self) -> bool {
+        self.fixed37_two_pass
     }
 }
 
@@ -931,6 +958,30 @@ const FIXED37_PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAtte
     maximum_reduction_elements: Some(FIXED37_MAX_REDUCTION_ELEMENTS),
 };
 
+const FIXED37_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: FIXED37_TWO_PASS_IMPLEMENTATION_ID,
+    head_size: Some(ONLINE_HEAD_SIZE),
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: false,
+    partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
+    reduction_version: Some(FIXED37_REDUCTION_VERSION),
+    reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
+    maximum_reduction_elements: Some(FIXED37_MAX_TWO_PASS_TOKENS),
+};
+
+const FIXED37_PAGED_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: FIXED37_PAGED_TWO_PASS_IMPLEMENTATION_ID,
+    head_size: Some(ONLINE_HEAD_SIZE),
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: false,
+    partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
+    reduction_version: Some(FIXED37_REDUCTION_VERSION),
+    reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
+    maximum_reduction_elements: Some(FIXED37_MAX_TWO_PASS_TOKENS),
+};
+
 /// Immutable selection, workspace, and provenance evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DecodeAttentionSelectionTrace {
@@ -948,6 +999,7 @@ pub struct DecodeAttentionSelectionTrace {
     partial_state_capacity: u64,
     tokens_per_partition: u64,
     reduction_profile: AttentionReductionProfile,
+    dynamic_shared_memory_bytes: u64,
 }
 
 impl DecodeAttentionSelectionTrace {
@@ -1007,6 +1059,12 @@ impl DecodeAttentionSelectionTrace {
     #[must_use]
     pub const fn reduction_profile(self) -> AttentionReductionProfile {
         self.reduction_profile
+    }
+
+    /// Maximum dynamic shared-memory bytes launched by this prepared backend.
+    #[must_use]
+    pub const fn dynamic_shared_memory_bytes(self) -> u64 {
+        self.dynamic_shared_memory_bytes
     }
 }
 
@@ -1111,9 +1169,25 @@ pub struct DecodeAttentionParams<'a> {
     pub value_cache: CudaBufferSpan<'a>,
     /// BF16 output `[QH,D]`.
     pub output: CudaBufferSpanMut<'a>,
-    /// Reference capacity `QH*M*2` (active BF16 layout `[QH,T]`) or packed F32
-    /// online states, according to [`PreparedDecodeAttention::workspace_dtype`].
+    /// Reference BF16 scores or canonical packed F32 states.
+    ///
+    /// The fixed37 two-pass backend ignores this compatibility field. New
+    /// callers that do not already own a workspace can use
+    /// [`PreparedDecodeAttention::execute_without_workspace`].
     pub workspace: CudaBufferSpanMut<'a>,
+}
+
+/// Device views used by fixed37 two-pass decode without an HBM workspace.
+#[derive(Debug)]
+pub struct DecodeAttentionNoWorkspaceParams<'a> {
+    /// BF16 query `[QH,D]` at the current position.
+    pub query: CudaBufferSpan<'a>,
+    /// BF16 head-major key cache `[KVH,M,D]`.
+    pub key_cache: CudaBufferSpan<'a>,
+    /// BF16 head-major value cache `[KVH,M,D]`.
+    pub value_cache: CudaBufferSpan<'a>,
+    /// BF16 output `[QH,D]`.
+    pub output: CudaBufferSpanMut<'a>,
 }
 
 /// One immutable backend selection bound to its CUDA context owner.
@@ -1163,9 +1237,9 @@ impl PreparedDecodeAttention {
 
     /// Cold-selects one backend without crossing reduction profiles.
     ///
-    /// Both fixed-profile preferences currently select the fixed materialized
-    /// backend; optimized records a cold unavailable-optimized fallback. A
-    /// canonical backend is never substituted for a fixed request.
+    /// Fixed `Reference` selects materialized execution. Fixed `Optimized`
+    /// prefers no-HBM D64/T8192 two-pass execution and may fall back only to
+    /// fixed37 materialized execution. A canonical backend is never used.
     ///
     /// # Errors
     ///
@@ -1305,27 +1379,55 @@ impl PreparedDecodeAttention {
             request.maximum_sequence_length,
             request.head_size,
         )?;
-        if !availability.fixed37_materialized {
-            return Err(not_supported(
-                "select_decode_attention",
-                "the fixed37 materialized decode backend is unavailable; canonical fallback is forbidden",
-            ));
-        }
-        let reason = match preference {
+        match preference {
             DecodeAttentionPreference::Reference => {
-                DecodeAttentionSelectionReason::ExplicitReference
+                if !availability.fixed37_materialized {
+                    return Err(not_supported(
+                        "select_decode_attention",
+                        "the fixed37 materialized decode backend is unavailable; canonical fallback is forbidden",
+                    ));
+                }
+                prepare_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::Fixed37Materialized,
+                    DecodeAttentionSelectionReason::ExplicitReference,
+                )
             }
             DecodeAttentionPreference::Optimized => {
-                DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+                let two_pass_reason = if !availability.fixed37_two_pass {
+                    DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+                } else if request.head_size != ONLINE_HEAD_SIZE {
+                    DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
+                } else if request.maximum_sequence_length > FIXED37_MAX_TWO_PASS_TOKENS {
+                    DecodeAttentionSelectionReason::UnsupportedSequenceLengthFallback
+                } else {
+                    return prepare_selection(
+                        context,
+                        compute_capability,
+                        request,
+                        DecodeAttentionBackend::Fixed37TwoPass,
+                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch,
+                    );
+                };
+                if !availability.fixed37_materialized {
+                    return Err(not_supported(
+                        "select_decode_attention",
+                        format!(
+                            "fixed37 two-pass was rejected ({two_pass_reason:?}), fixed37 materialized is unavailable, and canonical fallback is forbidden"
+                        ),
+                    ));
+                }
+                prepare_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::Fixed37Materialized,
+                    two_pass_reason,
+                )
             }
-        };
-        prepare_selection(
-            context,
-            compute_capability,
-            request,
-            DecodeAttentionBackend::Fixed37Materialized,
-            reason,
-        )
+        }
     }
 
     #[must_use]
@@ -1375,6 +1477,7 @@ impl PreparedDecodeAttention {
     ///
     /// Returns for logical-length, dtype, capacity, ownership, native launch,
     /// or synchronization failure.
+    #[allow(clippy::too_many_lines)]
     pub fn execute(
         &self,
         logical_token_count: u64,
@@ -1426,6 +1529,21 @@ impl PreparedDecodeAttention {
                     &mut stream.native,
                 )
             }
+            DecodeAttentionBackend::Fixed37TwoPass => {
+                ffi::fixed37_decode_attention_two_pass_execute(
+                    params.query.raw(),
+                    params.key_cache.raw(),
+                    params.value_cache.raw(),
+                    params.output.raw(),
+                    self.request.maximum_sequence_length,
+                    logical_token_count,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.request.scale,
+                    &mut stream.native,
+                )
+            }
             DecodeAttentionBackend::ChunkedOnline => ffi::decode_attention_execute(
                 params.query.raw(),
                 params.key_cache.raw(),
@@ -1450,6 +1568,62 @@ impl PreparedDecodeAttention {
             Err(CudaError::unavailable(OPERATION))
         }
     }
+
+    /// Executes the fixed37 two-pass backend without an HBM workspace.
+    ///
+    /// This method fails closed before launch unless this prepared plan's
+    /// backend is exactly [`DecodeAttentionBackend::Fixed37TwoPass`]. No
+    /// allocation or backend fallback occurs here.
+    ///
+    /// # Errors
+    ///
+    /// Returns for a non-two-pass plan, logical-length, dtype, capacity,
+    /// ownership, native launch, or synchronization failure.
+    pub fn execute_without_workspace(
+        &self,
+        logical_token_count: u64,
+        params: &mut DecodeAttentionNoWorkspaceParams<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "fixed37_two_pass_decode_attention";
+        if self.backend != DecodeAttentionBackend::Fixed37TwoPass {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "the prepared decode backend is not fixed37 two-pass",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        require_nonzero(OPERATION, "logical_token_count", logical_token_count)?;
+        if logical_token_count > self.request.maximum_sequence_length {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                "logical_token_count exceeds the prepared cache capacity",
+            ));
+        }
+        validate_no_workspace_execute_params(self, params, stream)?;
+
+        #[cfg(feature = "cuda")]
+        {
+            ffi::fixed37_decode_attention_two_pass_execute(
+                params.query.raw(),
+                params.key_cache.raw(),
+                params.value_cache.raw(),
+                params.output.raw(),
+                self.request.maximum_sequence_length,
+                logical_token_count,
+                self.request.query_head_count,
+                self.request.key_value_head_count,
+                self.request.head_size,
+                self.request.scale,
+                &mut stream.native,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = params;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
 }
 
 /// Device views used by one paged decode execution.
@@ -1461,8 +1635,26 @@ pub struct PagedDecodeAttentionParams<'a> {
     pub key_pool: CudaBufferSpan<'a>,
     /// BF16 value pool `[physical_block,KVH,16,D]`.
     pub value_pool: CudaBufferSpan<'a>,
-    /// BF16 reference scores or F32 packed states, selected during prepare.
+    /// BF16 reference scores or F32 packed states.
+    ///
+    /// The fixed37 two-pass backend ignores this compatibility field. New
+    /// callers can use [`PreparedPagedDecodeAttention::execute_without_workspace`].
     pub workspace: CudaBufferSpanMut<'a>,
+    /// BF16 output `[QH,D]`.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Exact logical-to-physical address translation.
+    pub block_table: PagedKvBlockTableV1<'a>,
+}
+
+/// Device views used by fixed37 paged two-pass decode without an HBM workspace.
+#[derive(Debug)]
+pub struct PagedDecodeAttentionNoWorkspaceParams<'a> {
+    /// BF16 query `[QH,D]`.
+    pub query: CudaBufferSpan<'a>,
+    /// BF16 key pool `[physical_block,KVH,16,D]`.
+    pub key_pool: CudaBufferSpan<'a>,
+    /// BF16 value pool `[physical_block,KVH,16,D]`.
+    pub value_pool: CudaBufferSpan<'a>,
     /// BF16 output `[QH,D]`.
     pub output: CudaBufferSpanMut<'a>,
     /// Exact logical-to-physical address translation.
@@ -1516,8 +1708,8 @@ impl PreparedPagedDecodeAttention {
 
     /// Cold-selects one paged backend without crossing reduction profiles.
     ///
-    /// The fixed profile currently uses only the fixed37 materialized sibling;
-    /// requesting `Optimized` records a cold fallback within that profile.
+    /// Fixed `Optimized` prefers no-HBM D64/T8192 two-pass execution and may
+    /// fall back only to the fixed37 materialized paged sibling.
     ///
     /// # Errors
     ///
@@ -1656,27 +1848,55 @@ impl PreparedPagedDecodeAttention {
             request.maximum_sequence_length,
             request.head_size,
         )?;
-        if !availability.fixed37_materialized {
-            return Err(not_supported(
-                "select_paged_decode_attention",
-                "the fixed37 materialized paged decode backend is unavailable; canonical fallback is forbidden",
-            ));
-        }
-        let reason = match preference {
+        match preference {
             DecodeAttentionPreference::Reference => {
-                DecodeAttentionSelectionReason::ExplicitReference
+                if !availability.fixed37_materialized {
+                    return Err(not_supported(
+                        "select_paged_decode_attention",
+                        "the fixed37 materialized paged decode backend is unavailable; canonical fallback is forbidden",
+                    ));
+                }
+                prepare_paged_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::Fixed37Materialized,
+                    DecodeAttentionSelectionReason::ExplicitReference,
+                )
             }
             DecodeAttentionPreference::Optimized => {
-                DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+                let two_pass_reason = if !availability.fixed37_two_pass {
+                    DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+                } else if request.head_size != ONLINE_HEAD_SIZE {
+                    DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
+                } else if request.maximum_sequence_length > FIXED37_MAX_TWO_PASS_TOKENS {
+                    DecodeAttentionSelectionReason::UnsupportedSequenceLengthFallback
+                } else {
+                    return prepare_paged_selection(
+                        context,
+                        compute_capability,
+                        request,
+                        DecodeAttentionBackend::Fixed37TwoPass,
+                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch,
+                    );
+                };
+                if !availability.fixed37_materialized {
+                    return Err(not_supported(
+                        "select_paged_decode_attention",
+                        format!(
+                            "fixed37 two-pass was rejected ({two_pass_reason:?}), fixed37 materialized is unavailable, and canonical fallback is forbidden"
+                        ),
+                    ));
+                }
+                prepare_paged_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    DecodeAttentionBackend::Fixed37Materialized,
+                    two_pass_reason,
+                )
             }
-        };
-        prepare_paged_selection(
-            context,
-            compute_capability,
-            request,
-            DecodeAttentionBackend::Fixed37Materialized,
-            reason,
-        )
+        }
     }
 
     #[must_use]
@@ -1731,6 +1951,7 @@ impl PreparedPagedDecodeAttention {
     ///
     /// Returns before launch for malformed table metadata, incompatible
     /// pool geometry, dtype/capacity/context violations, or native failure.
+    #[allow(clippy::too_many_lines)]
     pub fn execute(
         &self,
         params: &mut PagedDecodeAttentionParams<'_>,
@@ -1797,6 +2018,26 @@ impl PreparedPagedDecodeAttention {
                     &mut stream.native,
                 )
             }
+            DecodeAttentionBackend::Fixed37TwoPass => {
+                ffi::fixed37_paged_decode_attention_two_pass_execute(
+                    params.query.raw(),
+                    params.key_pool.raw(),
+                    params.value_pool.raw(),
+                    params.output.raw(),
+                    params.block_table.device_block_ids.raw(),
+                    params.block_table.device_valid_tokens.raw(),
+                    host.format_version(),
+                    host.logical_token_count(),
+                    host.block_count(),
+                    host.physical_block_count(),
+                    PAGED_KV_BLOCK_SIZE_ABI,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.request.scale,
+                    &mut stream.native,
+                )
+            }
             DecodeAttentionBackend::ChunkedOnline => ffi::paged_decode_attention_execute(
                 params.query.raw(),
                 params.key_pool.raw(),
@@ -1818,6 +2059,71 @@ impl PreparedPagedDecodeAttention {
                 reduction_order_code(DecodePartialReductionOrder::LogicalAscending),
                 &mut stream.native,
             ),
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = params;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Executes fixed37 paged two-pass decode without an HBM workspace.
+    ///
+    /// This method fails closed before launch unless this prepared plan's
+    /// backend is exactly [`DecodeAttentionBackend::Fixed37TwoPass`].
+    ///
+    /// # Errors
+    ///
+    /// Returns for a non-two-pass plan, malformed table metadata, incompatible
+    /// pool geometry, dtype/capacity/context violations, or native failure.
+    pub fn execute_without_workspace(
+        &self,
+        params: &mut PagedDecodeAttentionNoWorkspaceParams<'_>,
+        stream: &mut CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "fixed37_two_pass_paged_decode_attention";
+        if self.backend != DecodeAttentionBackend::Fixed37TwoPass {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "the prepared paged decode backend is not fixed37 two-pass",
+            ));
+        }
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        let host = params.block_table.host();
+        if host.logical_token_count() > self.request.maximum_sequence_length {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                "block table logical length exceeds the prepared sequence capacity",
+            ));
+        }
+        if host.physical_block_count() != self.request.physical_block_count {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                "block table physical pool size differs from the prepared request",
+            ));
+        }
+        validate_paged_no_workspace_execute_params(self, params, stream)?;
+
+        #[cfg(feature = "cuda")]
+        {
+            ffi::fixed37_paged_decode_attention_two_pass_execute(
+                params.query.raw(),
+                params.key_pool.raw(),
+                params.value_pool.raw(),
+                params.output.raw(),
+                params.block_table.device_block_ids.raw(),
+                params.block_table.device_valid_tokens.raw(),
+                host.format_version(),
+                host.logical_token_count(),
+                host.block_count(),
+                host.physical_block_count(),
+                PAGED_KV_BLOCK_SIZE_ABI,
+                self.request.query_head_count,
+                self.request.key_value_head_count,
+                self.request.head_size,
+                self.request.scale,
+                &mut stream.native,
+            )
         }
         #[cfg(not(feature = "cuda"))]
         {
@@ -2209,6 +2515,7 @@ impl fmt::Display for DecodePartialStateError {
 
 impl error::Error for DecodePartialStateError {}
 
+#[allow(clippy::too_many_lines)]
 fn prepare_paged_selection(
     context: &CudaContext,
     compute_capability: (u32, u32),
@@ -2260,6 +2567,14 @@ fn prepare_paged_selection(
                 0,
             )
         }
+        DecodeAttentionBackend::Fixed37TwoPass => (
+            FIXED37_PAGED_TWO_PASS_CAPABILITY,
+            CudaDType::BF16,
+            0,
+            0,
+            0,
+            0,
+        ),
         DecodeAttentionBackend::ChunkedOnline => {
             let capacity = paged_block_count(request.maximum_sequence_length)?;
             let layout = DecodePartialStateLayout::new(
@@ -2298,9 +2613,22 @@ fn prepare_paged_selection(
             tokens_per_partition: match backend {
                 DecodeAttentionBackend::MaterializedReference
                 | DecodeAttentionBackend::ChunkedOnline => PAGED_KV_BLOCK_SIZE,
-                DecodeAttentionBackend::Fixed37Materialized => 0,
+                DecodeAttentionBackend::Fixed37Materialized
+                | DecodeAttentionBackend::Fixed37TwoPass => 0,
             },
             reduction_profile: capability.reduction_profile,
+            dynamic_shared_memory_bytes: match backend {
+                DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
+                    "select_paged_decode_attention",
+                    request.maximum_sequence_length.max(request.head_size),
+                )?,
+                DecodeAttentionBackend::Fixed37TwoPass => fixed37_two_pass_shared_bytes(
+                    "select_paged_decode_attention",
+                    request.maximum_sequence_length,
+                    request.head_size,
+                )?,
+                _ => 0,
+            },
         },
     })
 }
@@ -2363,12 +2691,17 @@ fn validate_paged_execute_params(
     ] {
         require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
     }
-    require_dtype(
-        OPERATION,
-        "workspace",
-        params.workspace.dtype(),
-        prepared.workspace_dtype(),
-    )?;
+    let workspace = if prepared.backend == DecodeAttentionBackend::Fixed37TwoPass {
+        None
+    } else {
+        require_dtype(
+            OPERATION,
+            "workspace",
+            params.workspace.dtype(),
+            prepared.workspace_dtype(),
+        )?;
+        Some(&params.workspace)
+    };
     let query_bytes = checked_bytes(
         OPERATION,
         &[
@@ -2388,11 +2721,78 @@ fn validate_paged_execute_params(
         ("key_pool", params.key_pool.byte_len(), pool_bytes),
         ("value_pool", params.value_pool.byte_len(), pool_bytes),
         ("output", params.output.byte_len(), query_bytes),
-        (
+    ] {
+        require_capacity(OPERATION, name, actual, required)?;
+    }
+    if let Some(workspace) = workspace {
+        require_capacity(
+            OPERATION,
             "workspace",
-            params.workspace.byte_len(),
+            workspace.byte_len(),
             prepared.workspace_bytes(),
-        ),
+        )?;
+        validate_resources(
+            OPERATION,
+            stream,
+            &[
+                params.query.buffer(),
+                params.key_pool.buffer(),
+                params.value_pool.buffer(),
+                workspace.buffer(),
+                params.output.buffer(),
+                params.block_table.device_block_ids.buffer(),
+                params.block_table.device_valid_tokens.buffer(),
+            ],
+        )
+    } else {
+        validate_resources(
+            OPERATION,
+            stream,
+            &[
+                params.query.buffer(),
+                params.key_pool.buffer(),
+                params.value_pool.buffer(),
+                params.output.buffer(),
+                params.block_table.device_block_ids.buffer(),
+                params.block_table.device_valid_tokens.buffer(),
+            ],
+        )
+    }
+}
+
+fn validate_paged_no_workspace_execute_params(
+    prepared: &PreparedPagedDecodeAttention,
+    params: &PagedDecodeAttentionNoWorkspaceParams<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_two_pass_paged_decode_attention";
+    for (name, dtype) in [
+        ("query", params.query.dtype()),
+        ("key_pool", params.key_pool.dtype()),
+        ("value_pool", params.value_pool.dtype()),
+        ("output", params.output.dtype()),
+    ] {
+        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+    }
+    let query_bytes = checked_bytes(
+        OPERATION,
+        &[
+            prepared.request.query_head_count,
+            prepared.request.head_size,
+            BF16_BYTES,
+        ],
+    )?;
+    let pool_bytes = paged_pool_bytes(
+        OPERATION,
+        prepared.request.physical_block_count,
+        prepared.request.key_value_head_count,
+        prepared.request.head_size,
+    )?;
+    for (name, actual, required) in [
+        ("query", params.query.byte_len(), query_bytes),
+        ("key_pool", params.key_pool.byte_len(), pool_bytes),
+        ("value_pool", params.value_pool.byte_len(), pool_bytes),
+        ("output", params.output.byte_len(), query_bytes),
     ] {
         require_capacity(OPERATION, name, actual, required)?;
     }
@@ -2403,7 +2803,6 @@ fn validate_paged_execute_params(
             params.query.buffer(),
             params.key_pool.buffer(),
             params.value_pool.buffer(),
-            params.workspace.buffer(),
             params.output.buffer(),
             params.block_table.device_block_ids.buffer(),
             params.block_table.device_valid_tokens.buffer(),
@@ -2635,6 +3034,9 @@ fn prepare_selection(
                 0,
             )
         }
+        DecodeAttentionBackend::Fixed37TwoPass => {
+            (FIXED37_TWO_PASS_CAPABILITY, CudaDType::BF16, 0, 0, 0, 0, 0)
+        }
         DecodeAttentionBackend::ChunkedOnline => {
             let capacity = partition_count(
                 request.maximum_sequence_length,
@@ -2676,8 +3078,56 @@ fn prepare_selection(
             partial_state_capacity,
             tokens_per_partition,
             reduction_profile: capability.reduction_profile,
+            dynamic_shared_memory_bytes: match backend {
+                DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
+                    "select_decode_attention",
+                    request.maximum_sequence_length.max(request.head_size),
+                )?,
+                DecodeAttentionBackend::Fixed37TwoPass => fixed37_two_pass_shared_bytes(
+                    "select_decode_attention",
+                    request.maximum_sequence_length,
+                    request.head_size,
+                )?,
+                _ => 0,
+            },
         },
     })
+}
+
+fn fixed37_two_pass_shared_bytes(
+    operation: &'static str,
+    token_count: u64,
+    head_size: u64,
+) -> CudaResult<u64> {
+    let token_chunks = fixed37_chunk_count(operation, token_count)?;
+    let depth_chunks = fixed37_chunk_count(operation, head_size)?;
+    let partial_capacity = token_chunks.max(2).max(depth_chunks);
+    let score_bytes = token_count.checked_mul(F32_BYTES).ok_or_else(|| {
+        CudaError::out_of_range(operation, "two-pass score scratch arithmetic overflow")
+    })?;
+    let partial_bytes = partial_capacity.checked_mul(2 * F32_BYTES).ok_or_else(|| {
+        CudaError::out_of_range(operation, "two-pass partial scratch arithmetic overflow")
+    })?;
+    score_bytes.checked_add(partial_bytes).ok_or_else(|| {
+        CudaError::out_of_range(operation, "two-pass shared-memory arithmetic overflow")
+    })
+}
+
+fn fixed37_reduction_shared_bytes(operation: &'static str, element_count: u64) -> CudaResult<u64> {
+    fixed37_chunk_count(operation, element_count)?
+        .checked_mul(2 * F32_BYTES)
+        .ok_or_else(|| {
+            CudaError::out_of_range(operation, "fixed37 shared-memory arithmetic overflow")
+        })
+}
+
+fn fixed37_chunk_count(operation: &'static str, elements: u64) -> CudaResult<u64> {
+    elements
+        .checked_add(u64::from(FIXED37_CHUNK_ELEMENTS) - 1)
+        .map(|rounded| rounded / u64::from(FIXED37_CHUNK_ELEMENTS))
+        .ok_or_else(|| {
+            CudaError::out_of_range(operation, "fixed37 chunk-count arithmetic overflow")
+        })
 }
 
 fn validate_request(request: DecodeAttentionRequest) -> CudaResult<()> {
@@ -2762,12 +3212,17 @@ fn validate_execute_params(
     ] {
         require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
     }
-    require_dtype(
-        OPERATION,
-        "workspace",
-        params.workspace.dtype(),
-        prepared.workspace_dtype(),
-    )?;
+    let workspace = if prepared.backend == DecodeAttentionBackend::Fixed37TwoPass {
+        None
+    } else {
+        require_dtype(
+            OPERATION,
+            "workspace",
+            params.workspace.dtype(),
+            prepared.workspace_dtype(),
+        )?;
+        Some(&params.workspace)
+    };
     let query_bytes = checked_bytes(
         OPERATION,
         &[
@@ -2799,12 +3254,83 @@ fn validate_execute_params(
         cache_bytes,
     )?;
     require_capacity(OPERATION, "output", params.output.byte_len(), query_bytes)?;
+    if let Some(workspace) = workspace {
+        require_capacity(
+            OPERATION,
+            "workspace",
+            workspace.byte_len(),
+            prepared.workspace_bytes(),
+        )?;
+        validate_resources(
+            OPERATION,
+            stream,
+            &[
+                params.query.buffer(),
+                params.key_cache.buffer(),
+                params.value_cache.buffer(),
+                params.output.buffer(),
+                workspace.buffer(),
+            ],
+        )
+    } else {
+        validate_resources(
+            OPERATION,
+            stream,
+            &[
+                params.query.buffer(),
+                params.key_cache.buffer(),
+                params.value_cache.buffer(),
+                params.output.buffer(),
+            ],
+        )
+    }
+}
+
+fn validate_no_workspace_execute_params(
+    prepared: &PreparedDecodeAttention,
+    params: &DecodeAttentionNoWorkspaceParams<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_two_pass_decode_attention";
+    for (name, dtype) in [
+        ("query", params.query.dtype()),
+        ("key_cache", params.key_cache.dtype()),
+        ("value_cache", params.value_cache.dtype()),
+        ("output", params.output.dtype()),
+    ] {
+        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
+    }
+    let query_bytes = checked_bytes(
+        OPERATION,
+        &[
+            prepared.request.query_head_count,
+            prepared.request.head_size,
+            BF16_BYTES,
+        ],
+    )?;
+    let cache_bytes = checked_bytes(
+        OPERATION,
+        &[
+            prepared.request.key_value_head_count,
+            prepared.request.maximum_sequence_length,
+            prepared.request.head_size,
+            BF16_BYTES,
+        ],
+    )?;
+    require_capacity(OPERATION, "query", params.query.byte_len(), query_bytes)?;
     require_capacity(
         OPERATION,
-        "workspace",
-        params.workspace.byte_len(),
-        prepared.workspace_bytes(),
+        "key_cache",
+        params.key_cache.byte_len(),
+        cache_bytes,
     )?;
+    require_capacity(
+        OPERATION,
+        "value_cache",
+        params.value_cache.byte_len(),
+        cache_bytes,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len(), query_bytes)?;
     validate_resources(
         OPERATION,
         stream,
@@ -2813,7 +3339,6 @@ fn validate_execute_params(
             params.key_cache.buffer(),
             params.value_cache.buffer(),
             params.output.buffer(),
-            params.workspace.buffer(),
         ],
     )
 }
@@ -3087,6 +3612,149 @@ mod tests {
         );
         assert_eq!(fallback.workspace_bytes(), 4096 * 9 * 2);
         assert_eq!(fallback.workspace_dtype(), CudaDType::BF16);
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn fixed37_two_pass_selection_is_no_hbm_and_falls_back_only_inside_profile() {
+        let context = test_context();
+        let availability =
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37(true, true);
+        let request = DecodeAttentionRequest::new(8192, 9, 3, 64, 0.125);
+        let prepared = PreparedDecodeAttention::select_with_reduction_profile(
+            &context,
+            request,
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+        assert_eq!(prepared.workspace_bytes(), 0);
+        assert_eq!(prepared.selection_trace().materialized_score_bytes(), 0);
+        assert_eq!(prepared.selection_trace().partial_state_bytes(), 0);
+        assert_eq!(
+            prepared.selection_trace().dynamic_shared_memory_bytes(),
+            34_544
+        );
+        assert_eq!(prepared.workspace_dtype(), CudaDType::BF16);
+        assert!(!prepared.capability().materializes_scores());
+        assert!(!prepared.capability().supports_partial_state_merge());
+        assert_eq!(prepared.capability().head_size(), Some(64));
+        assert_eq!(
+            prepared.capability().maximum_reduction_elements(),
+            Some(8192)
+        );
+        assert_eq!(
+            prepared.capability().implementation_id(),
+            FIXED37_TWO_PASS_IMPLEMENTATION_ID
+        );
+        assert_eq!(
+            prepared.selection_trace().reason(),
+            DecodeAttentionSelectionReason::OptimizedCapabilityMatch
+        );
+
+        let explicit = PreparedDecodeAttention::select_with_reduction_profile(
+            &context,
+            request,
+            DecodeAttentionPreference::Reference,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(
+            explicit.backend(),
+            DecodeAttentionBackend::Fixed37Materialized
+        );
+
+        for (request, reason) in [
+            (
+                DecodeAttentionRequest::new(8192, 9, 3, 65, 0.125),
+                DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback,
+            ),
+            (
+                DecodeAttentionRequest::new(8193, 9, 3, 64, 0.125),
+                DecodeAttentionSelectionReason::UnsupportedSequenceLengthFallback,
+            ),
+        ] {
+            let fallback = PreparedDecodeAttention::select_with_reduction_profile(
+                &context,
+                request,
+                DecodeAttentionPreference::Optimized,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap();
+            assert_eq!(
+                fallback.backend(),
+                DecodeAttentionBackend::Fixed37Materialized
+            );
+            assert_eq!(fallback.selection_trace().reason(), reason);
+            assert!(fallback.workspace_bytes() > 0);
+        }
+
+        let error = PreparedDecodeAttention::select_with_reduction_profile(
+            &context,
+            DecodeAttentionRequest::new(8193, 9, 3, 64, 0.125),
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37(false, true),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+        assert!(error.message().contains("canonical fallback is forbidden"));
+
+        for (tokens, expected) in [(1, 20), (36, 160), (37, 164), (38, 168), (8192, 34_544)] {
+            assert_eq!(
+                fixed37_two_pass_shared_bytes("test", tokens, 64).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn fixed37_paged_two_pass_pins_page_translation_only_capability() {
+        let context = test_context();
+        let availability =
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37(true, true);
+        let prepared = PreparedPagedDecodeAttention::select_with_reduction_profile(
+            &context,
+            PagedDecodeAttentionRequest::new(8192, 512, 9, 3, 64, 0.125),
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+        assert_eq!(prepared.workspace_bytes(), 0);
+        assert_eq!(prepared.tokens_per_partition(), 0);
+        assert_eq!(
+            prepared.selection_trace().dynamic_shared_memory_bytes(),
+            34_544
+        );
+        assert_eq!(
+            prepared.capability().implementation_id(),
+            FIXED37_PAGED_TWO_PASS_IMPLEMENTATION_ID
+        );
+        assert!(!prepared.capability().materializes_scores());
+
+        let fallback = PreparedPagedDecodeAttention::select_with_reduction_profile(
+            &context,
+            PagedDecodeAttentionRequest::new(8193, 513, 9, 3, 64, 0.125),
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(
+            fallback.backend(),
+            DecodeAttentionBackend::Fixed37Materialized
+        );
+        assert_eq!(
+            fallback.selection_trace().reason(),
+            DecodeAttentionSelectionReason::UnsupportedSequenceLengthFallback
+        );
     }
 
     #[test]

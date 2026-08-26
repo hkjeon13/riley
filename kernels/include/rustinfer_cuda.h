@@ -1192,6 +1192,16 @@ RustInferCudaStatus rustinfer_cuda_fixed37_decode_attention_reference_execute(
     const RustInferCudaDecodeAttentionReferenceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Fixed37 no-HBM two-score-pass decode for D=64 and logical T<=8192. The
+// reference descriptor is reused additively, but score_workspace is ignored
+// completely and may be a zero/null placeholder. Shared memory holds F32
+// exp[T] plus two fixed37 partial arrays; its exact launch size is
+// 4*T + 8*max(max(ceil(T/37),2),ceil(D/37)). Numerical staging, reduction
+// order, and special-value behavior match the fixed37 materialized sibling.
+RustInferCudaStatus rustinfer_cuda_fixed37_decode_attention_two_pass_execute(
+    const RustInferCudaDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
     const RustInferCudaDecodeAttentionParams* params,
     RustInferCudaStream* stream,
@@ -1214,6 +1224,14 @@ RustInferCudaStatus rustinfer_cuda_paged_decode_attention_reference_execute(
 // or physical-block boundaries and numbering.
 RustInferCudaStatus
 rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
+    const RustInferCudaPagedDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Paged fixed37 no-HBM two-pass decode has the same D64/T8192 and ignored
+// score_workspace contract as its contiguous sibling. Page16 is address
+// translation only; fixed37 token chunks remain anchored at logical token 0.
+RustInferCudaStatus
+rustinfer_cuda_fixed37_paged_decode_attention_two_pass_execute(
     const RustInferCudaPagedDecodeAttentionReferenceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;

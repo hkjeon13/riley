@@ -1207,6 +1207,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_fixed37_decode_attention_two_pass_execute(
+        params: *const RawDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_decode_attention_execute(
         params: *const RawDecodeAttentionParams,
         stream: *mut RawStream,
@@ -1228,6 +1233,11 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
+        params: *const RawPagedDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_paged_decode_attention_two_pass_execute(
         params: *const RawPagedDecodeAttentionReferenceParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
@@ -2742,6 +2752,17 @@ pub(super) fn kv_cache_write_execute(
     })
 }
 
+const fn unused_bf16_span() -> RawBufferSpan {
+    RawBufferSpan {
+        struct_size: BUFFER_SPAN_SIZE,
+        dtype: DTYPE_BF16,
+        buffer: ptr::null_mut(),
+        byte_offset: 0,
+        byte_len: 0,
+        reserved: [0; 2],
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) fn decode_attention_reference_execute(
     query: RawBufferSpan,
@@ -2825,6 +2846,50 @@ pub(super) fn fixed37_decode_attention_reference_execute(
             // remain live through synchronous fixed37 native completion.
             unsafe {
                 rustinfer_cuda_fixed37_decode_attention_reference_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_decode_attention_two_pass_execute(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionReferenceParams {
+        struct_size: DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        score_workspace: unused_bf16_span(),
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA two-pass decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: native deliberately ignores score_workspace and keeps
+            // every real borrowed resource live through synchronous completion.
+            unsafe {
+                rustinfer_cuda_fixed37_decode_attention_two_pass_execute(&params, stream, error)
             }
         },
     )
@@ -3096,6 +3161,64 @@ pub(super) fn fixed37_paged_decode_attention_reference_execute(
             // borrowed resource remain live through synchronous completion.
             unsafe {
                 rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
+                    &params, stream, error,
+                )
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_paged_decode_attention_two_pass_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPagedDecodeAttentionReferenceParams {
+        struct_size: PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        score_workspace: unused_bf16_span(),
+        output,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA two-pass paged decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: native ignores the zero workspace placeholder; the page
+            // table and all real data buffers remain borrowed synchronously.
+            unsafe {
+                rustinfer_cuda_fixed37_paged_decode_attention_two_pass_execute(
                     &params, stream, error,
                 )
             }

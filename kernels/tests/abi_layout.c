@@ -434,6 +434,10 @@ static RustInferCudaStatus (*const fixed37_decode_attention_reference_symbol)(
     const RustInferCudaDecodeAttentionReferenceParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) =
     rustinfer_cuda_fixed37_decode_attention_reference_execute;
+static RustInferCudaStatus (*const fixed37_decode_attention_two_pass_symbol)(
+    const RustInferCudaDecodeAttentionReferenceParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_decode_attention_two_pass_execute;
 static RustInferCudaStatus (*const decode_attention_symbol)(
     const RustInferCudaDecodeAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_decode_attention_execute;
@@ -453,6 +457,11 @@ static RustInferCudaStatus (*const
     const RustInferCudaPagedDecodeAttentionReferenceParams*,
     RustInferCudaStream*, RustInferCudaErrorInfo*) =
     rustinfer_cuda_fixed37_paged_decode_attention_reference_execute;
+static RustInferCudaStatus (*const
+                                fixed37_paged_decode_attention_two_pass_symbol)(
+    const RustInferCudaPagedDecodeAttentionReferenceParams*,
+    RustInferCudaStream*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_paged_decode_attention_two_pass_execute;
 static RustInferCudaStatus (*const paged_decode_attention_symbol)(
     const RustInferCudaPagedDecodeAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_paged_decode_attention_execute;
@@ -519,11 +528,13 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&kv_cache_write_symbol,
     (const void*)&decode_attention_reference_symbol,
     (const void*)&fixed37_decode_attention_reference_symbol,
+    (const void*)&fixed37_decode_attention_two_pass_symbol,
     (const void*)&decode_attention_symbol,
     (const void*)&decode_partial_state_reduce_symbol,
     (const void*)&paged_kv_cache_write_symbol,
     (const void*)&paged_decode_attention_reference_symbol,
     (const void*)&fixed37_paged_decode_attention_reference_symbol,
+    (const void*)&fixed37_paged_decode_attention_two_pass_symbol,
     (const void*)&paged_decode_attention_symbol,
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
