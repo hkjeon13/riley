@@ -679,7 +679,7 @@ fn pinned_smollm2_fixed37_growing_prefix_matches_cached_generation() -> TestResu
                 }
                 Ok(())
             })();
-            let generation_close = generation.close().map_err(|error| error.into());
+            let generation_close: TestResult = generation.close().map_err(Into::into);
             let generation_zero = require_zero_cuda_allocations(&context, "fixed37 generation");
             finish_with_test_cleanup(generation_operation, [generation_close, generation_zero])?;
 
@@ -751,7 +751,7 @@ winner_margin={} status={}",
                     }
                     Ok(())
                 })();
-                let forward_close = forward.close().map_err(|error| error.into());
+                let forward_close: TestResult = forward.close().map_err(Into::into);
                 let forward_zero = require_zero_cuda_allocations(&context, "fixed37 forward");
                 finish_with_test_cleanup(forward_operation, [forward_close, forward_zero])?;
                 if mismatch.is_some() {
@@ -808,7 +808,7 @@ winner_margin={} status={}",
         Ok(())
     })();
 
-    let stream_close = stream.close().map_err(|error| error.into());
+    let stream_close: TestResult = stream.close().map_err(Into::into);
     let context_close = close_context(context);
     finish_with_test_cleanup(diagnostic_operation, [stream_close, context_close])?;
     if let Some(mismatch) = mismatch {
@@ -831,8 +831,7 @@ winning_logit={} runner_up_logit={} winner_margin={}",
     }
     if selected_cases == 0 {
         return Err(format!(
-            "RUSTINFER_GROWING_PREFIX_PROMPT_ID did not match a fixture case: {:?}",
-            prompt_filter
+            "RUSTINFER_GROWING_PREFIX_PROMPT_ID did not match a fixture case: {prompt_filter:?}"
         )
         .into());
     }

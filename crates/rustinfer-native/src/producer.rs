@@ -160,6 +160,21 @@ struct SemanticPath {
     stop_reason: &'static str,
 }
 
+struct CacheOffStep {
+    variant: ReductionVariant,
+    profile: LlamaReductionProfile,
+    base_length: usize,
+    generated_count: usize,
+    active: Vec<usize>,
+}
+
+#[derive(Clone, Copy)]
+struct CacheOffPosition {
+    variant: ReductionVariant,
+    sequence_length: usize,
+    generated_count: usize,
+}
+
 struct OutputTransaction {
     created: Vec<PathBuf>,
     committed: bool,
@@ -938,25 +953,59 @@ fn capture_cache_off_variant(
             if active.is_empty() {
                 break;
             }
-            let sequence_length = base_length
-                .checked_add(generated_count)
-                .ok_or_else(|| NativeCalibrationError::new("cache-off length overflow"))?;
-            let active_count = active.len();
-            eprintln!(
-                "rustinfer-native-calibration event=start variant={} phase=cache-off-step \
-base_length={base_length} sequence_length={sequence_length} step={generated_count} \
-active_cases={active_count}",
-                variant.id()
-            );
-            let config = PreparedLlamaForwardConfig::default().with_reduction_profile(profile);
-            let mut forward = PreparedLlamaForward::prepare(
+            capture_cache_off_step(
                 model,
                 context,
                 stream,
-                sequence_length,
-                config,
-            )
-            .map_err(|error| {
+                cases,
+                CacheOffStep {
+                    variant,
+                    profile,
+                    base_length,
+                    generated_count,
+                    active,
+                },
+                &mut logits,
+            )?;
+        }
+    }
+    finalize_cache_off_paths(cases, variant)
+}
+
+fn capture_cache_off_step(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    cases: &mut [CaseState],
+    step: CacheOffStep,
+    logits: &mut [u8],
+) -> ProducerResult<()> {
+    let CacheOffStep {
+        variant,
+        profile,
+        base_length,
+        generated_count,
+        active,
+    } = step;
+    let sequence_length = base_length
+        .checked_add(generated_count)
+        .ok_or_else(|| NativeCalibrationError::new("cache-off length overflow"))?;
+    let position = CacheOffPosition {
+        variant,
+        sequence_length,
+        generated_count,
+    };
+    let active_count = active.len();
+    eprintln!(
+        "rustinfer-native-calibration event=start variant={} phase=cache-off-step \
+base_length={base_length} sequence_length={sequence_length} step={generated_count} \
+active_cases={active_count}",
+        variant.id()
+    );
+    let config = PreparedLlamaForwardConfig::default().with_reduction_profile(profile);
+    let mut forward =
+        PreparedLlamaForward::prepare(model, context, stream, sequence_length, config).map_err(
+            |error| {
                 NativeCalibrationError::context(
                     error,
                     &format!(
@@ -965,90 +1014,106 @@ sequence_length={sequence_length} step={generated_count}",
                         variant.id()
                     ),
                 )
-            })?;
-            let operation = (|| {
-                for index in active {
-                    let prompt_id = &cases[index].prompt.prompt_id;
-                    let generated = &cases[index]
-                        .variants
-                        .get(variant.id())
-                        .and_then(|state| state.cache_off.as_ref())
-                        .ok_or_else(|| NativeCalibrationError::new("cache-off state is absent"))?
-                        .generated_token_ids;
-                    let mut prefix = Vec::new();
-                    prefix
-                        .try_reserve_exact(sequence_length)
-                        .map_err(|_| NativeCalibrationError::new("prefix allocation failed"))?;
-                    prefix.extend_from_slice(&cases[index].input_token_ids);
-                    prefix.extend_from_slice(generated);
-                    forward
-                        .forward(&prefix, stream)
-                        .and_then(|()| forward.download_last_logits(&mut logits, stream))
-                        .map_err(|error| {
-                            NativeCalibrationError::context(
-                                error,
-                                &format!(
-                                    "execute cache-off forward prompt_id={prompt_id} \
-variant={} sequence_length={sequence_length} step={generated_count}",
-                                    variant.id()
-                                ),
-                            )
-                        })?;
-                    let (next, _) = ranked_top_k_bf16(&logits).map_err(|error| {
-                        NativeCalibrationError::context(
-                            error,
-                            &format!(
-                                "rank cache-off logits prompt_id={prompt_id} variant={} \
+            },
+        )?;
+    let operation = (|| {
+        for index in active {
+            capture_cache_off_case(&mut forward, stream, cases, index, position, logits)?;
+        }
+        Ok(())
+    })();
+    let close = forward.close().map_err(|error| {
+        NativeCalibrationError::context(
+            error,
+            &format!(
+                "close growing-prefix forward variant={} base_length={base_length} \
 sequence_length={sequence_length} step={generated_count}",
-                                variant.id()
-                            ),
-                        )
-                    })?;
-                    let cache_on_token_ids = &cases[index]
-                        .variants
-                        .get(variant.id())
-                        .and_then(|state| state.cache_on.as_ref())
-                        .ok_or_else(|| NativeCalibrationError::new("cache-on state is absent"))?
-                        .generated_token_ids;
-                    require_cache_off_exact_token(
-                        prompt_id,
-                        variant,
-                        generated_count,
-                        cache_on_token_ids,
-                        next,
-                    )?;
-                    let path = cases[index]
-                        .variants
-                        .get_mut(variant.id())
-                        .and_then(|state| state.cache_off.as_mut())
-                        .ok_or_else(|| NativeCalibrationError::new("cache-off state is absent"))?;
-                    path.generated_token_ids.push(next);
-                    if next == EOS_TOKEN_ID {
-                        path.stop_reason = "eos";
-                    }
-                }
-                Ok(())
-            })();
-            let close = forward.close().map_err(|error| {
-                NativeCalibrationError::context(
-                    error,
-                    &format!(
-                        "close growing-prefix forward variant={} base_length={base_length} \
-sequence_length={sequence_length} step={generated_count}",
-                        variant.id()
-                    ),
-                )
-            });
-            finish_with_cleanup(operation, [close])?;
-            eprintln!(
-                "rustinfer-native-calibration event=complete variant={} phase=cache-off-step \
+                variant.id()
+            ),
+        )
+    });
+    finish_with_cleanup(operation, [close])?;
+    eprintln!(
+        "rustinfer-native-calibration event=complete variant={} phase=cache-off-step \
 base_length={base_length} sequence_length={sequence_length} step={generated_count} \
 active_cases={active_count}",
+        variant.id()
+    );
+    Ok(())
+}
+
+fn capture_cache_off_case(
+    forward: &mut PreparedLlamaForward,
+    stream: &mut CudaStream,
+    cases: &mut [CaseState],
+    index: usize,
+    position: CacheOffPosition,
+    logits: &mut [u8],
+) -> ProducerResult<()> {
+    let CacheOffPosition {
+        variant,
+        sequence_length,
+        generated_count,
+    } = position;
+    let prompt_id = &cases[index].prompt.prompt_id;
+    let generated = &cases[index]
+        .variants
+        .get(variant.id())
+        .and_then(|state| state.cache_off.as_ref())
+        .ok_or_else(|| NativeCalibrationError::new("cache-off state is absent"))?
+        .generated_token_ids;
+    let mut prefix = Vec::new();
+    prefix
+        .try_reserve_exact(sequence_length)
+        .map_err(|_| NativeCalibrationError::new("prefix allocation failed"))?;
+    prefix.extend_from_slice(&cases[index].input_token_ids);
+    prefix.extend_from_slice(generated);
+    forward
+        .forward(&prefix, stream)
+        .and_then(|()| forward.download_last_logits(logits, stream))
+        .map_err(|error| {
+            NativeCalibrationError::context(
+                error,
+                &format!(
+                    "execute cache-off forward prompt_id={prompt_id} variant={} \
+sequence_length={sequence_length} step={generated_count}",
+                    variant.id()
+                ),
+            )
+        })?;
+    let (next, _) = ranked_top_k_bf16(logits).map_err(|error| {
+        NativeCalibrationError::context(
+            error,
+            &format!(
+                "rank cache-off logits prompt_id={prompt_id} variant={} \
+sequence_length={sequence_length} step={generated_count}",
                 variant.id()
-            );
-        }
+            ),
+        )
+    })?;
+    let cache_on_token_ids = &cases[index]
+        .variants
+        .get(variant.id())
+        .and_then(|state| state.cache_on.as_ref())
+        .ok_or_else(|| NativeCalibrationError::new("cache-on state is absent"))?
+        .generated_token_ids;
+    require_cache_off_exact_token(
+        prompt_id,
+        variant,
+        generated_count,
+        cache_on_token_ids,
+        next,
+    )?;
+    let path = cases[index]
+        .variants
+        .get_mut(variant.id())
+        .and_then(|state| state.cache_off.as_mut())
+        .ok_or_else(|| NativeCalibrationError::new("cache-off state is absent"))?;
+    path.generated_token_ids.push(next);
+    if next == EOS_TOKEN_ID {
+        path.stop_reason = "eos";
     }
-    finalize_cache_off_paths(cases, variant)
+    Ok(())
 }
 
 fn initialize_cache_off_paths(
