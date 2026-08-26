@@ -93,6 +93,11 @@ already private output root immediately before `docker create`, then restores
 that directory to `0755` immediately after removing the container and its
 workspace volume. The source archive and daemon receipts remain read-only
 mounts, and no broader output or source directory is made writable.
+The checker accepts Docker's two equivalent raw `HostConfig.Mounts` encodings
+for writable requests: an explicit `"ReadOnly": false` or omission of that
+default-valued field. It still requires the resolved daemon `Mounts` receipt to
+show exactly one writable host bind at `/evidence`; the only other writable
+mount is the reviewed fresh anonymous local volume at `/workspace`.
 
 ## Evidence contract
 

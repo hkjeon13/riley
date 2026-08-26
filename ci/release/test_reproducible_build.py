@@ -869,6 +869,47 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ReleaseContractError, "anonymous volume"):
             self.check(changed, self.package("B"))
 
+    def test_writable_mount_requests_accept_omitted_docker_defaults(self) -> None:
+        for build_id in ("A", "B"):
+            for suffix, document in (
+                ("", container_inspect(build_id)),
+                ("-post", post_container_inspect(build_id)),
+            ):
+                for mount in document[0]["HostConfig"]["Mounts"]:
+                    if mount["Target"] in ("/evidence", "/workspace"):
+                        del mount["ReadOnly"]
+                path = self.logs / (
+                    f"container-inspect-{build_id.lower()}{suffix}.json"
+                )
+                path.write_bytes(canonical_json_bytes(document))
+
+        self.check(self.package("A"), self.package("B"))
+
+    def test_writable_mount_request_rejects_explicit_null_readonly(self) -> None:
+        evidence_a = self.package("A")
+        changed = self.root / "null-readonly-inspect.tar"
+
+        def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
+            root = "rustinfer-repro-build-a"
+            name = f"{root}/logs/container-inspect.json"
+            member, contents = entries[name]
+            assert contents is not None
+            document = json.loads(contents)
+            evidence = next(
+                mount
+                for mount in document[0]["HostConfig"]["Mounts"]
+                if mount["Target"] == "/evidence"
+            )
+            evidence["ReadOnly"] = None
+            replacement = canonical_json_bytes(document)
+            member.size = len(replacement)
+            entries[name] = (member, replacement)
+            update_checksum(entries, root, "logs/container-inspect.json", replacement)
+
+        rewrite_evidence(evidence_a, changed, mutate)
+        with self.assertRaisesRegex(ReleaseContractError, "sole writable host bind"):
+            self.check(changed, self.package("B"))
+
     def test_workspace_rejects_custom_shared_volume_driver(self) -> None:
         evidence_a = self.package("A")
         changed = self.root / "custom-workspace-driver-inspect.tar"

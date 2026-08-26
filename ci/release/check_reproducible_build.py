@@ -787,12 +787,15 @@ def _validate_container_inspect(
         if not isinstance(source, str) or not source.startswith("/"):
             _fail(f"Docker HostConfig input source is not absolute: {target}")
     configured_evidence = configured_by_target["/evidence"]
-    if configured_evidence.get("Type") != "bind" or configured_evidence.get("ReadOnly") is not False:
+    if (
+        configured_evidence.get("Type") != "bind"
+        or configured_evidence.get("ReadOnly", False) is not False
+    ):
         _fail("Docker HostConfig evidence mount is not the sole writable host bind")
     configured_workspace = configured_by_target["/workspace"]
     if (
         configured_workspace.get("Type") != "volume"
-        or configured_workspace.get("ReadOnly") is not False
+        or configured_workspace.get("ReadOnly", False) is not False
         or configured_workspace.get("Source") not in (None, "")
     ):
         _fail("Docker HostConfig workspace request is not an anonymous volume")
