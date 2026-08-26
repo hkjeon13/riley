@@ -529,8 +529,25 @@ def _validate_logs(evidence: Evidence, build_image_id: str) -> None:
             raise ReleaseContractError(f"{label} log is not UTF-8") from error
         if "Compiling rustinfer-server" not in cargo_text:
             _fail(f"{label} log does not contain the rustinfer-server compilation")
-        if re.search(r"Finished [`']release[`'] profile \[optimized\]", cargo_text) is None:
-            _fail(f"{label} log does not contain a completed optimized release profile")
+        release_completions = re.findall(
+            r"^[ \t]*Finished [`']release[`'] profile [^\r\n]*$",
+            cargo_text,
+            re.MULTILINE,
+        )
+        pinned_completion = re.compile(
+            r"^    Finished `release` profile \[optimized \+ debuginfo\] "
+            r"target\(s\) in "
+            r"(?:[0-9]\.[0-9]{2}s|[1-5][0-9]\.[0-9]{2}s|"
+            r"[1-9][0-9]*m [0-5][0-9]s)$"
+        )
+        if (
+            len(release_completions) != 1
+            or pinned_completion.fullmatch(release_completions[0]) is None
+        ):
+            _fail(
+                f"{label} log must contain exactly one pinned optimized + "
+                "debuginfo release-profile completion"
+            )
         lowered = cargo_text.casefold()
         if any(
             marker in lowered

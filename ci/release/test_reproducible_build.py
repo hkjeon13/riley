@@ -52,11 +52,11 @@ TOOLCHAIN_LOG = (
 )
 CARGO_LOG = (
     b"   Compiling rustinfer-server v0.1.0 (/workspace/crates/rustinfer-server)\n"
-    b"    Finished `release` profile [optimized] target(s) in 1.23s\n"
+    b"    Finished `release` profile [optimized + debuginfo] target(s) in 1.23s\n"
 )
 PROFILE_CARGO_LOG = (
     b"   Compiling rustinfer-server v0.1.0 (/workspace/crates/rustinfer-server)\n"
-    b"    Finished `release` profile [optimized] target(s) in 0.42s\n"
+    b"    Finished `release` profile [optimized + debuginfo] target(s) in 0.42s\n"
 )
 
 
@@ -488,6 +488,40 @@ class ReproducibleBuildGateTests(unittest.TestCase):
             canonical_json_bytes(report),
             canonical_json_bytes(json.loads(canonical_json_bytes(report))),
         )
+
+    def test_release_build_log_requires_pinned_line_table_debuginfo(self) -> None:
+        no_debuginfo = CARGO_LOG.replace(
+            b"[optimized + debuginfo]", b"[optimized]"
+        )
+        (self.logs / "cargo-build.log").write_bytes(no_debuginfo)
+        with self.assertRaisesRegex(
+            ReleaseContractError, r"optimized \+ debuginfo"
+        ):
+            self.check(self.package("A"), self.package("B"))
+
+    def test_release_build_log_rejects_conflicting_completion_markers(self) -> None:
+        conflicting = CARGO_LOG + (
+            b"    Finished `release` profile [optimized] target(s) in 0.01s\n"
+        )
+        (self.logs / "cargo-build.log").write_bytes(conflicting)
+        with self.assertRaisesRegex(
+            ReleaseContractError, "exactly one pinned optimized"
+        ):
+            self.check(self.package("A"), self.package("B"))
+
+    def test_release_build_log_accepts_pinned_minute_duration(self) -> None:
+        minute_duration = CARGO_LOG.replace(b"1.23s", b"1m 14s")
+        (self.logs / "cargo-build.log").write_bytes(minute_duration)
+        report = self.check(self.package("A"), self.package("B"))
+        self.assertEqual(report["status"], "passed")
+
+    def test_release_build_log_rejects_noncanonical_seconds(self) -> None:
+        leading_zero = CARGO_LOG.replace(b"1.23s", b"01.23s")
+        (self.logs / "cargo-build.log").write_bytes(leading_zero)
+        with self.assertRaisesRegex(
+            ReleaseContractError, "exactly one pinned optimized"
+        ):
+            self.check(self.package("A"), self.package("B"))
 
     def test_git_archive_file_then_same_prefix_directory_order_is_accepted(self) -> None:
         _validate_source_archive(self.source_archive, REVISION, EPOCH)

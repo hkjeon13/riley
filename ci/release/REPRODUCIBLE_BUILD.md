@@ -86,6 +86,15 @@ daemon inspect receipts and the bytes it packages. It selects the byte-identical
 A artifacts as `final/` and then runs the independent checker over A, B, and
 final.
 
+Both Cargo build logs must contain Cargo 1.85's exact successful release
+profile marker,
+``Finished `release` profile [optimized + debuginfo] target(s) in ...``. The
+`debuginfo` suffix is required because the reviewed workspace profile retains
+line tables; accepting the no-debug `[optimized]` marker would no longer bind
+the evidence to that release profile. The duration accepts both pinned Cargo
+1.85 forms: two-decimal seconds below one minute, or `Xm YYs` for longer
+builds.
+
 Because each container runs as root with `--cap-drop ALL`, it cannot use a DAC
 override to write a host-owned `0755` bind directory. The runner therefore
 opens only the fresh per-build evidence directory to mode `0777` inside the
