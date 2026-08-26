@@ -35,7 +35,12 @@ from check_cuda_fault_evidence import (  # noqa: E402
     validate,
 )
 from release_common import MIT_LICENSE_BYTES  # noqa: E402
-from test_release import DEPENDENCIES, EPOCH, fixture_elf  # noqa: E402
+from test_release import (  # noqa: E402
+    DEPENDENCIES,
+    EPOCH,
+    fixture_elf,
+    install_reviewed_server_defaults_source,
+)
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
@@ -84,6 +89,7 @@ class Fixture:
             encoding="utf-8",
         )
         (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+        install_reviewed_server_defaults_source(repository)
         build_bundle(
             binary_path=self.release_binary,
             output=self.release_bundle,

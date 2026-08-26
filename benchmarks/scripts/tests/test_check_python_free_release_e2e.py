@@ -6,6 +6,8 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
+import shlex
 import struct
 import sys
 import tarfile
@@ -21,8 +23,17 @@ PACKAGER = REPOSITORY_ROOT / "ci/release/package_python_free_e2e_evidence.py"
 RELEASE_DIR = REPOSITORY_ROOT / "ci/release"
 sys.path.insert(0, str(RELEASE_DIR))
 from build_release_bundle import build_bundle  # noqa: E402
-from release_common import MIT_LICENSE_BYTES, native_manifest_bytes  # noqa: E402
-from test_release import DEPENDENCIES, EPOCH, fixture_elf  # noqa: E402
+from release_common import (  # noqa: E402
+    MIT_LICENSE_BYTES,
+    SERVER_DEFAULTS_SOURCE_PATH,
+    native_manifest_bytes,
+)
+from test_release import (  # noqa: E402
+    DEPENDENCIES,
+    EPOCH,
+    fixture_elf,
+    install_reviewed_server_defaults_source,
+)
 
 SPEC = importlib.util.spec_from_file_location("check_python_free_release_e2e", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
@@ -189,6 +200,7 @@ class E2EFixture:
             encoding="utf-8",
         )
         (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+        install_reviewed_server_defaults_source(repository)
         build_bundle(
             binary_path=self.release_binary,
             output=self.release_bundle,
@@ -291,7 +303,7 @@ class E2EFixture:
         }
         value = [{
             "Id": container_id, "Image": self.image_id, "Path": "/opt/rustinfer/bin/rustinfer",
-            "Args": ["serve", "--model", "/models/checkpoint", "--model-id", self.model_id, "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024", "--execution-completion", "iteration-batch", "--residual-rmsnorm", "separate"],
+            "Args": ["serve", "--model", "/models/checkpoint", "--model-id", self.model_id, "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024"],
             "Created": f"2026-08-26T12:0{ordinal}:00Z", "Config": {"Image": self.image_id},
             "HostConfig": {"NetworkMode": "none", "ReadonlyRootfs": True, "DeviceRequests": [{"Driver": "nvidia", "Capabilities": [["gpu"]]}]},
             "State": state, "Mounts": [{"Destination": "/models/checkpoint", "RW": False}, {"Destination": "/evidence", "RW": True}],
@@ -634,6 +646,62 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
         ):
             self.assertIn(required, source)
         self.assertNotIn("--network host", source)
+
+    def test_remote_driver_and_checker_share_exact_default_serve_arguments(self) -> None:
+        source = DRIVER.read_text(encoding="utf-8")
+        match = re.search(r"(?ms)^launch_container\(\) \{\n(?P<body>.*?)^\}", source)
+        self.assertIsNotNone(match)
+        body = match.group("body")
+        marker = '"$RUSTINFER_E2E_IMAGE_ID" \\\n'
+        self.assertIn(marker, body)
+        command = body.split(marker, 1)[1].replace("\\\n", " ")
+        command = command.replace('"$model_id"', shlex.quote(checker.MODEL_ID))
+        command = command.replace('"$RUSTINFER_E2E_BIND"', "127.0.0.1:8080")
+        runner_args = shlex.split(command)
+        literal_default_args = [
+            "serve", "--model", "/models/checkpoint", "--model-id", checker.MODEL_ID,
+            "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024",
+        ]
+        checker_args = checker.expected_container_args(checker.MODEL_ID)
+        self.assertEqual(checker_args, literal_default_args)
+        self.assertEqual(runner_args, checker_args)
+        self.assertEqual(
+            checker.STABLE_OPTIMIZATION_DEFAULTS,
+            checker.release_common.STABLE_OPTIMIZATION_DEFAULTS,
+        )
+        defaults_source = (
+            REPOSITORY_ROOT / checker.release_common.SERVER_DEFAULTS_SOURCE_PATH
+        ).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(defaults_source).hexdigest(),
+            checker.release_common.SERVER_DEFAULTS_SOURCE_SHA256,
+        )
+        for flag in checker.OPTIMIZATION_SELECTION_FLAGS:
+            self.assertNotIn(flag, body)
+            self.assertNotIn(flag, runner_args)
+            self.assertNotIn(flag, checker_args)
+
+    def test_checker_rejects_explicit_optimization_selection_arguments(self) -> None:
+        values = {
+            "--execution-completion": "iteration-batch",
+            "--residual-rmsnorm": "separate",
+            "--reduction-profile": "canonical-v1",
+        }
+        self.assertEqual(set(values), set(checker.OPTIMIZATION_SELECTION_FLAGS))
+        for flag, value in values.items():
+            with self.subTest(flag=flag), tempfile.TemporaryDirectory() as directory:
+                fixture = E2EFixture(Path(directory))
+                payloads = read_raw_tar(fixture.raw_archive)
+                snapshot = json.loads(payloads["container-first-pre.json"])
+                snapshot[0]["Args"].extend([flag, value])
+                payloads["container-first-pre.json"] = json_bytes(snapshot)
+                refresh_checksums(payloads)
+                write_raw_tar(fixture.raw_archive, payloads)
+                report, diagnostic = fixture.replay(
+                    checker.load_raw_evidence_archive(fixture.raw_archive)
+                )
+                self.assertEqual(report["status"], "error")
+                self.assertIn("arguments mismatch", diagnostic)
 
 
 if __name__ == "__main__":

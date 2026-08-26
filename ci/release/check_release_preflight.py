@@ -14,6 +14,7 @@ from release_common import (
     release_manifest,
     validate_license,
     validate_license_metadata,
+    validate_server_defaults_source,
 )
 
 
@@ -38,6 +39,7 @@ def check_preflight(repository_root: Path, source_revision: str, source_date_epo
         raise ReleaseContractError("root LICENSE must be a regular file, not a link or device")
     validate_license(license_path.read_bytes())
     validate_license_metadata(repository_root)
+    validate_server_defaults_source(repository_root)
     version = read_workspace_version(repository_root)
     release_manifest(version, source_revision, source_date_epoch)
 

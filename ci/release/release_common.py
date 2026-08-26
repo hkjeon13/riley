@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import stat
 import struct
 import tomllib
 from pathlib import Path
@@ -17,6 +18,15 @@ CUDA_TOOLKIT = "12.8.1"
 CUDA_ARCHITECTURES = ["89"]
 ARCHIVE_SUFFIX = "linux-x86_64-cuda12.8"
 MIT_LICENSE_EXPRESSION = "MIT"
+SERVER_DEFAULTS_SOURCE_PATH = Path("crates/rustinfer-server/src/main.rs")
+SERVER_DEFAULTS_SOURCE_SHA256 = (
+    "32389b697e360da6b7b7c21ff2b5b4bd8b4064370812f73287cc284b3c436c1b"
+)
+STABLE_OPTIMIZATION_DEFAULTS = {
+    "execution_completion": "iteration-batch",
+    "residual_rmsnorm": "separate",
+    "reduction_profile": "canonical-v1",
+}
 MIT_LICENSE_BYTES = b"""MIT License
 
 Copyright (c) 2026 rustinfer contributors
@@ -94,6 +104,27 @@ def sha256_bytes(contents: bytes) -> str:
     return hashlib.sha256(contents).hexdigest()
 
 
+def validate_server_defaults_source(repository_root: Path) -> None:
+    """Bind release metadata to the exact Rust CLI default resolver source."""
+    path = repository_root / SERVER_DEFAULTS_SOURCE_PATH
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise ReleaseContractError(
+            f"release default source is missing: {SERVER_DEFAULTS_SOURCE_PATH}"
+        ) from error
+    if not stat.S_ISREG(metadata.st_mode):
+        raise ReleaseContractError(
+            f"release default source must be a regular file: {SERVER_DEFAULTS_SOURCE_PATH}"
+        )
+    actual = sha256_bytes(path.read_bytes())
+    if actual != SERVER_DEFAULTS_SOURCE_SHA256:
+        raise ReleaseContractError(
+            "Rust serve defaults changed without a reviewed release-contract update: "
+            f"{actual} != {SERVER_DEFAULTS_SOURCE_SHA256}"
+        )
+
+
 def release_root(version: str) -> str:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version):
         raise ReleaseContractError(f"invalid semantic release version: {version!r}")
@@ -122,6 +153,78 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "enabled": ["cuda", "server"],
             "disabled": ["bench", "experimental"],
             "production_binary": "bin/rustinfer",
+            "semantic_paths": [
+                {
+                    "feature_id": "iteration-command-batch",
+                    "semantic_class": "E0",
+                    "selector": {
+                        "flag": "--execution-completion",
+                        "value": "iteration-batch",
+                    },
+                    "default_enabled": True,
+                    "release_qualified": True,
+                    "availability": "supported",
+                    "exact_fallback": {
+                        "flag": "--execution-completion",
+                        "value": "per-operation",
+                    },
+                    "approval_gates": ["pr15-iteration-command-batch-exact-v1"],
+                    "prior_evidence_gates": [],
+                    "release_evidence": ["optimization-correctness"],
+                },
+                {
+                    "feature_id": "fused-residual-rmsnorm",
+                    "semantic_class": "E0",
+                    "selector": {
+                        "flag": "--residual-rmsnorm",
+                        "value": "fused",
+                    },
+                    "default_enabled": False,
+                    "release_qualified": False,
+                    "availability": "unsupported in the first release candidate",
+                    "exact_fallback": {
+                        "flag": "--residual-rmsnorm",
+                        "value": "separate",
+                    },
+                    "approval_gates": [],
+                    "prior_evidence_gates": [
+                        "pr15-fused-residual-rmsnorm-exact-v1"
+                    ],
+                    "release_evidence": [],
+                },
+                {
+                    "feature_id": "fixed-contiguous-37-balanced-reductions",
+                    "semantic_class": "E0",
+                    "selector": {
+                        "flag": "--reduction-profile",
+                        "value": "fixed-contiguous-37-balanced-v1",
+                    },
+                    "default_enabled": False,
+                    "release_qualified": True,
+                    "availability": "supported opt-in E0 path",
+                    "exact_fallback": {
+                        "flag": "--reduction-profile",
+                        "value": "canonical-v1",
+                    },
+                    "approval_gates": [
+                        "smollm2-fp32-bf16-native-e0-v2",
+                        "pr16-fixed37-production-batch-e0-v1",
+                    ],
+                    "prior_evidence_gates": [],
+                    "release_evidence": [
+                        "native-correctness",
+                        "optimization-correctness",
+                    ],
+                },
+            ],
+            "approximation_policy": {
+                "included_semantic_classes": ["reference", "E0"],
+                "excluded_semantic_classes": ["E1", "A1", "M1"],
+                "approximation_enabled_by_default": False,
+                "error_budget": None,
+                "quality_budget": None,
+                "exact_fallback_required": True,
+            },
         },
         "defaults": {
             "bind": "127.0.0.1:8080",
@@ -130,8 +233,11 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "max_waiting_requests": 64,
             "batch_token_budget": 512,
             "prefill_chunk_tokens": 512,
-            "execution_completion": "iteration-batch",
-            "residual_rmsnorm": "separate",
+            **STABLE_OPTIMIZATION_DEFAULTS,
+            "source_contract": {
+                "path": str(SERVER_DEFAULTS_SOURCE_PATH),
+                "sha256": SERVER_DEFAULTS_SOURCE_SHA256,
+            },
             "max_weight_bytes": 2_147_483_648,
         },
         "support": {
@@ -139,11 +245,124 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "architecture": "x86_64",
             "cuda_toolkit": CUDA_TOOLKIT,
             "cuda_architectures": CUDA_ARCHITECTURES,
+            "gpu_topology": "single CUDA device",
+            "source_families": [
+                {
+                    "model_type": "llama",
+                    "architecture": "LlamaForCausalLM",
+                    "scope": "dense causal text decoder",
+                    "artifact_profile": "SmolLM2-compatible ByteLevel BPE tokenizer",
+                },
+                {
+                    "model_type": "qwen2",
+                    "architecture": "Qwen2ForCausalLM",
+                    "scope": "dense Qwen2 causal text decoder",
+                    "artifact_profile": (
+                        "Qwen2.5-compatible only for the pinned NFC/Split/ByteLevel "
+                        "BPE and no-tools tokenizer_config profile"
+                    ),
+                },
+            ],
             "checkpoint_format": "safetensors",
+            "checkpoint_layouts": [
+                "model.safetensors",
+                "model.safetensors.index.json with declared shards",
+            ],
+            "checkpoint_parser_dtypes": ["BF16", "FP16"],
+            "cuda_execution_dtypes": ["BF16"],
+            "cuda_execution_head_dimension": 64,
+            "checkpoint_provenance": (
+                "required rustinfer-checkpoint.json with immutable revision, "
+                "exact file inventory, byte lengths, and SHA-256 digests"
+            ),
+            "model_config_constraints": [
+                "strict config.json with duplicate and unknown fields rejected",
+                "model_type must match one declared source family; architectures may be absent, empty, or exactly that family's declared architecture",
+                "hidden_act must be silu; execution requires a dense gated MLP without bias",
+                "num_attention_heads * head_dim must equal hidden_size and num_key_value_heads must divide num_attention_heads; the parser requires an even head_dim and production CUDA serving requires head_dim exactly 64",
+                "standard non-interleaved full RoPE only; rope_scaling must be absent or null and partial_rotary_factor must be absent or 1.0",
+                "rms_norm_eps and rope_theta must be finite and positive",
+                "Llama sliding_window must be absent; Qwen use_sliding_window must be absent or false",
+                "torch_dtype may be bfloat16/bf16 or float16/fp16 at the parser boundary; CUDA execution requires BF16",
+            ],
             "python_runtime": False,
             "network_model_download": False,
             "model_delivery": "operator-mounted local checkpoint",
         },
+        "unsupported": {
+            "model_architectures": [
+                "model_type values other than llama and qwen2",
+                "mixture-of-experts",
+                "multimodal and vision-language",
+                "Qwen3 and Qwen-VL",
+                "encoder-only and encoder-decoder",
+            ],
+            "checkpoint_and_loading": [
+                "quantized weights",
+                "PyTorch pickle/bin and GGUF weights",
+                "checkpoint transforms",
+                "remote model code",
+                "network model download",
+            ],
+            "execution": [
+                "FP16 CUDA execution",
+                "CUDA serving with head_dim values other than 64",
+                "fused residual RMSNorm (the selector remains for development compatibility but is not candidate-qualified)",
+                "CPU inference",
+                "multi-GPU, tensor-parallel, pipeline-parallel, and distributed execution",
+            ],
+            "serving": [
+                "OpenAI chat-completions, embeddings, and responses endpoints",
+                "HTTP/2",
+                "TLS termination",
+                "built-in authentication",
+            ],
+            "runtime_fallbacks": [
+                "Python",
+                "PyTorch",
+                "Transformers",
+                "Triton",
+            ],
+        },
+        "validation": {
+            "pr16_release_qualification_lane": {
+                "model_id": "HuggingFaceTB/SmolLM2-135M",
+                "model_revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+                "model_type": "llama",
+                "architecture": "LlamaForCausalLM",
+                "dtype": "BF16",
+                "gpu_count": 1,
+                "cuda_architecture": "89",
+                "evidence_role": (
+                    "required PR16 release qualification; broader source-family "
+                    "support is not release-lane qualification"
+                ),
+            },
+            "prior_pr12_qwen_compatibility_evidence": {
+                "model_id": "Qwen/Qwen2.5-0.5B-Instruct",
+                "model_revision": "7ae557604adf67be50417f59c2c2f167def9a775",
+                "model_type": "qwen2",
+                "architecture": "Qwen2ForCausalLM",
+                "dtype": "BF16",
+                "gpu_count": 1,
+                "cuda_architecture": "89",
+                "evidence_role": (
+                    "prior PR12 compatibility evidence only; not PR16 release "
+                    "qualification"
+                ),
+            },
+        },
+        "known_limitations": [
+            "The release build and PR16 qualification matrix cover Linux x86_64, CUDA 12.8.1, one GPU, and sm_89 only.",
+            "PR16 release qualification is pinned to SmolLM2-135M BF16; source-family support does not claim that every conforming Llama or Qwen2 checkpoint was release-qualified.",
+            "Dense Qwen2.5 evidence is the prior pinned PR12 Qwen2.5-0.5B-Instruct run, not the PR16 release lane.",
+            "FP16 is accepted by the strict config and safetensors parsers, but production CUDA execution is BF16-only.",
+            "The config parser accepts bounded even head dimensions, but the production continuous-batch CUDA serving executor supports head_dim 64 only.",
+            "Fused residual RMSNorm retains prior PR15 E0 evidence but is disabled by default and unsupported in this candidate because no current-revision fused parity report is bound to the final release gate.",
+            "Models must be local checksummed safetensors and are read into resident memory within the configured maximum weight-byte bound.",
+            "Serving exposes a strict, close-delimited HTTP/1.1 completions surface; chat-completions and other OpenAI endpoints are not implemented.",
+            "The first stable release candidate has no preceding stable rustinfer bundle; PR16 evidence validates conservative E0 flag restart within the current checksummed bundle, while binary rollback requires a preceding stable bundle to exist.",
+        ],
         "configuration": {
             "required": ["serve", "--model PATH"],
             "optional": [
@@ -174,10 +393,18 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
                 "--execution-completion per-operation",
                 "--reduction-profile canonical-v1",
             ],
+            "validated_scope": (
+                "restart the current checksummed bundle with all conservative E0 "
+                "safe flags to isolate an optimization regression"
+            ),
+            "previous_release_scope": (
+                "restart a preceding checksummed stable rustinfer bundle only when "
+                "one exists; unavailable for the first stable release candidate"
+            ),
             "procedure": [
                 "drain or cancel active requests and stop the current server",
-                "restart the preceding checksummed release bundle",
-                "use the safe flags when isolating an optimization regression",
+                "restart the current checksummed bundle with every safe flag when isolating an optimization regression",
+                "when a preceding stable checksummed rustinfer bundle exists and binary rollback is required, restart that bundle with the same model and configuration",
                 "verify /v1/models before restoring traffic",
             ],
         },

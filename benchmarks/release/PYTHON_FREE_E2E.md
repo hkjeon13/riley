@@ -84,6 +84,17 @@ approved golden; fixed-seed sampling repeatability across two clean starts
 cancellation and reclamation; and graceful SIGTERM shutdown with all final KV,
 device, and pinned allocation gauges at zero.
 
+The real `serve` invocation intentionally omits `--execution-completion`,
+`--residual-rmsnorm`, and `--reduction-profile`. This gate therefore exercises
+the production binary's stable optimization defaults rather than restating
+their current values on the command line. The checker requires the archived
+Docker `Args` array to match that exact default-path invocation and rejects
+evidence containing any of those three selectors.
+The embedded release manifest must name the same three stable defaults and the
+reviewed SHA-256 of `crates/rustinfer-server/src/main.rs`; release preflight
+fails if that resolver source drifts. This closes the default-path gate over
+the Rust implementation rather than only the launcher/checker argument lists.
+
 It also records the runtime process inventory, reviewed native dependency
 manifest, dynamic-loader resolution, absence of Python-family executables and
 artifacts, and absence of Python-family processes. The checker parses the
@@ -114,3 +125,12 @@ extension.
 Local validation is limited to `bash -n` and standard-library unit tests. Do
 not run this driver on a developer machine or without the reviewed remote GPU
 lane and append-only evidence destination.
+
+Before the final golden is materialized, the development-only independent HF
+review follows [`ci/release/HF_GOLDEN_ORACLE_RECEIPTS.md`](../../ci/release/HF_GOLDEN_ORACLE_RECEIPTS.md).
+It requires two fresh remote-GPU BF16 eager processes and exact parity across
+their four cache-on/cache-off paths. Those receipts and their create-only
+approval stay outside the closed E2E, soak, and final-candidate evidence roots.
+They approve only the expected completion tokens/text; the final golden is
+created later and only after it can bind the clean final `REV` and the exact
+passing final native E0 correctness-report SHA-256.

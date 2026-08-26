@@ -22,6 +22,7 @@ from release_common import (
     validate_binary,
     validate_license,
     validate_license_metadata,
+    validate_server_defaults_source,
 )
 
 
@@ -124,6 +125,7 @@ def build_bundle(
     license_contents = _regular_file(repository_root / "LICENSE", "root LICENSE")
     validate_license(license_contents)
     validate_license_metadata(repository_root)
+    validate_server_defaults_source(repository_root)
     binary_contents = _regular_file(binary_path, "release CLI binary")
     if not os.access(binary_path, os.X_OK):
         raise ReleaseContractError("release CLI binary is not executable")

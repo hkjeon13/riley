@@ -105,6 +105,11 @@ TOKENIZER_FILES_SHA256 = {
     "tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
     "vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79",
 }
+OPTIMIZATION_SELECTION_FLAGS = (
+    "--execution-completion",
+    "--residual-rmsnorm",
+    "--reduction-profile",
+)
 
 _RELEASE_DIR = Path(__file__).resolve().parents[2] / "ci/release"
 _COMMON_SPEC = importlib.util.spec_from_file_location("python_free_e2e_release_common", _RELEASE_DIR / "release_common.py")
@@ -113,6 +118,13 @@ if _COMMON_SPEC is None or _COMMON_SPEC.loader is None:  # pragma: no cover
 release_common = importlib.util.module_from_spec(_COMMON_SPEC)
 sys.modules[_COMMON_SPEC.name] = release_common
 _COMMON_SPEC.loader.exec_module(release_common)
+STABLE_OPTIMIZATION_DEFAULTS = {
+    "execution_completion": "iteration-batch",
+    "residual_rmsnorm": "separate",
+    "reduction_profile": "canonical-v1",
+}
+if release_common.STABLE_OPTIMIZATION_DEFAULTS != STABLE_OPTIMIZATION_DEFAULTS:
+    raise RuntimeError("Python-free E2E defaults differ from the release contract")
 _VERIFY_SPEC = importlib.util.spec_from_file_location("python_free_e2e_release_verify", _RELEASE_DIR / "verify_release_bundle.py")
 if _VERIFY_SPEC is None or _VERIFY_SPEC.loader is None:  # pragma: no cover
     raise RuntimeError("cannot load release bundle verifier")
@@ -122,6 +134,14 @@ _VERIFY_SPEC.loader.exec_module(release_verify)
 
 class EvidenceError(ValueError):
     """Raw evidence or one of its immutable bindings is invalid."""
+
+
+def expected_container_args(model_id: str) -> list[str]:
+    """Return the exact stable-default production serve invocation."""
+    return [
+        "serve", "--model", "/models/checkpoint", "--model-id", model_id,
+        "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024",
+    ]
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -500,6 +520,23 @@ def _verify_bundle(bundle: Path, binary_sha256: str, revision: str) -> None:
     artifact = manifest.get("artifact")
     if not isinstance(artifact, dict) or artifact.get("source_revision") != revision:
         _fail("--release-bundle", "embedded source revision differs from candidate")
+    defaults = manifest.get("defaults")
+    if not isinstance(defaults, dict) or {
+        key: defaults.get(key) for key in STABLE_OPTIMIZATION_DEFAULTS
+    } != STABLE_OPTIMIZATION_DEFAULTS:
+        _fail(
+            "--release-bundle",
+            "embedded stable optimization defaults differ from the E2E default path",
+        )
+    expected_source_contract = {
+        "path": str(release_common.SERVER_DEFAULTS_SOURCE_PATH),
+        "sha256": release_common.SERVER_DEFAULTS_SOURCE_SHA256,
+    }
+    if defaults.get("source_contract") != expected_source_contract:
+        _fail(
+            "--release-bundle",
+            "embedded defaults are not bound to the reviewed Rust resolver source",
+        )
 
 
 def _validate_golden(document: Mapping[str, Any]) -> dict[str, Any]:
@@ -946,11 +983,7 @@ def _validate_image_inspect(raw: bytes, image_id: str) -> None:
 
 def _container_snapshot(raw: bytes, label: str, *, container_id: str, image_id: str, model_id: str, running: bool) -> dict[str, Any]:
     row = _docker_record(raw, label)
-    expected_args = [
-        "serve", "--model", "/models/checkpoint", "--model-id", model_id,
-        "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024",
-        "--execution-completion", "iteration-batch", "--residual-rmsnorm", "separate",
-    ]
+    expected_args = expected_container_args(model_id)
     if row.get("Id") != container_id or row.get("Image") != image_id or row.get("Path") != "/opt/rustinfer/bin/rustinfer" or row.get("Args") != expected_args:
         _fail(label, "container identity/image/executable arguments mismatch")
     config = row.get("Config")

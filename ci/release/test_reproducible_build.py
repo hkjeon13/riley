@@ -32,7 +32,10 @@ from release_common import (  # noqa: E402
     ReleaseContractError,
     canonical_json_bytes,
 )
-from test_release import fixture_elf  # noqa: E402
+from test_release import (  # noqa: E402
+    fixture_elf,
+    install_reviewed_server_defaults_source,
+)
 from write_reproducible_build_completion import (  # noqa: E402
     CompletionReceiptError,
     write_completion_receipt,
@@ -325,6 +328,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
             encoding="utf-8",
         )
         (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+        install_reviewed_server_defaults_source(self.repository)
         self.source_archive = self.root / "source.tar"
         write_source_archive(self.source_archive)
         global SOURCE_SHA_PLACEHOLDER
