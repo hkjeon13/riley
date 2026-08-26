@@ -30,6 +30,7 @@ const MAXIMUM_ONLINE_GRID_BATCH: u64 = 65_535;
 const MAXIMUM_ONLINE_GRID_HEADS: u64 = 65_535;
 const MAXIMUM_ONLINE_SEQUENCE_TILES: u64 = i32::MAX as u64;
 const IMPLEMENTATION_VERSION: &str = "1";
+const ONLINE_IMPLEMENTATION_VERSION: &str = "2";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
     env!("RUSTINFER_CUDA_COMPILED_ARCHITECTURES"),
@@ -85,7 +86,7 @@ pub enum AttentionMask {
 pub enum AttentionPreference {
     /// Require the staged-BF16 native materialized reference.
     Reference,
-    /// Prefer the online native backend and fall back during cold selection.
+    /// Prefer the no-HBM two-score-pass native backend and fall back cold.
     Optimized,
 }
 
@@ -94,7 +95,7 @@ pub enum AttentionPreference {
 pub enum AttentionBackend {
     /// Four-stage QK, mask, softmax, and AV with a caller score workspace.
     MaterializedReference,
-    /// Fused online-softmax CUDA attention without an HBM score matrix.
+    /// Online F32 normalizer plus BF16-probability AV without an HBM score matrix.
     Online,
     /// Materialized fixed37 QK, softmax, and AV with canonical score staging.
     Fixed37Materialized,
@@ -283,7 +284,8 @@ impl AttentionCapability {
         self.cuda_graph_capture
     }
 
-    /// Whether softmax is accumulated online without revisiting global scores.
+    /// Whether maximum/denominator are accumulated online without materialized
+    /// scores. The backend may recompute QK to stage normalized probabilities.
     #[must_use]
     pub const fn uses_online_reduction(self) -> bool {
         self.online_reduction
@@ -1317,7 +1319,7 @@ const REFERENCE_CAPABILITY: AttentionCapability = AttentionCapability {
 
 const ONLINE_CAPABILITY: AttentionCapability = AttentionCapability {
     implementation_id: ONLINE_IMPLEMENTATION_ID,
-    implementation_version: IMPLEMENTATION_VERSION,
+    implementation_version: ONLINE_IMPLEMENTATION_VERSION,
     native_dependency: NATIVE_DEPENDENCY,
     mode: AttentionMode::Prefill,
     layout: AttentionLayout::DenseBshd,
@@ -1957,6 +1959,10 @@ mod tests {
         assert_eq!(prepared.workspace_bytes(), 0);
         let trace = prepared.selection_trace();
         assert_eq!(
+            trace.implementation_version(),
+            ONLINE_IMPLEMENTATION_VERSION
+        );
+        assert_eq!(
             trace.reason(),
             AttentionSelectionReason::OptimizedCapabilityMatch
         );
@@ -1978,6 +1984,10 @@ mod tests {
                 .contains(CUDA_COMPILED_ARCHITECTURES)
         );
         let capability = prepared.capability();
+        assert_eq!(
+            capability.implementation_version(),
+            ONLINE_IMPLEMENTATION_VERSION
+        );
         assert_eq!(capability.input_dtype(), CudaDType::BF16);
         assert_eq!(capability.accumulator_dtype(), CudaDType::F32);
         assert_eq!(capability.output_dtype(), CudaDType::BF16);

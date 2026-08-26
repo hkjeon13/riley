@@ -444,16 +444,21 @@ typedef struct RustInferCudaAvGqaParams {
 // Allocation-free online-softmax GQA prefill over dense contiguous BF16
 // tensors. Query and output use [batch_count, token_count, query_head_count,
 // head_size]; key and value use [batch_count, token_count,
-// key_value_head_count, head_size]. The initial implementation supports
+// key_value_head_count, head_size]. The current implementation supports
 // head_size=64 and maps each query head to
 // q_head / (query_head_count / key_value_head_count).
 //
 // CAUSAL requires local_window_size=0. CAUSAL_LOCAL admits the current token
 // plus at most local_window_size-1 preceding tokens; a zero local window masks
 // every key and produces an all-zero BF16 row from the empty online state. The
-// implementation keeps the online maximum, denominator, and value numerator
-// in F32 and writes BF16 output. It requires no workspace and never
-// materializes a [S,S] score matrix in HBM.
+// first score pass keeps the online maximum and denominator in F32. A second
+// score pass rounds each normalized probability to BF16, then performs AV as a
+// logical-key-order F32 FMA fold and writes BF16 output. It requires no
+// workspace and never materializes a [S,S] score or probability matrix in HBM.
+// NaN scores poison their row; +Inf maxima receive equal staged weight; and an
+// all-negative-infinity or fully masked row remains all-zero. A zero staged
+// probability does not multiply its value, preserving zero-weight handling for
+// infinite values.
 typedef struct RustInferCudaPrefillAttentionParams {
   uint32_t struct_size;
   uint32_t reserved0;

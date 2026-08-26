@@ -122,6 +122,57 @@ fn key_is_visible(mask: AttentionMask, query: usize, key: usize) -> bool {
     }
 }
 
+fn round_bf16(value: f32) -> f32 {
+    bf16_to_f32(f32_to_bf16_bits(value))
+}
+
+fn update_online_normalizer(score: f32, maximum: &mut f32, denominator: &mut f32) {
+    if score.is_nan() || (*maximum).is_nan() {
+        *maximum = f32::NAN;
+        *denominator = f32::NAN;
+        return;
+    }
+    if score == f32::INFINITY {
+        if *maximum == f32::INFINITY {
+            *denominator += 1.0;
+        } else {
+            *maximum = f32::INFINITY;
+            *denominator = 1.0;
+        }
+        return;
+    }
+    if *maximum == f32::INFINITY || score == f32::NEG_INFINITY {
+        return;
+    }
+
+    let next_maximum = (*maximum).max(score);
+    let alpha = if *denominator == 0.0 {
+        0.0
+    } else {
+        (*maximum - next_maximum).exp()
+    };
+    let beta = (score - next_maximum).exp();
+    *denominator = alpha.mul_add(*denominator, beta);
+    *maximum = next_maximum;
+}
+
+fn staged_probability(score: f32, maximum: f32, denominator: f32) -> f32 {
+    let probability = if score.is_nan() || maximum.is_nan() || denominator.is_nan() {
+        f32::NAN
+    } else if maximum == f32::INFINITY {
+        if score == f32::INFINITY {
+            denominator.recip()
+        } else {
+            0.0
+        }
+    } else if denominator > 0.0 {
+        (score - maximum).exp() / denominator
+    } else {
+        0.0
+    };
+    round_bf16(probability)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn cpu_attention(
     query: &[f32],
@@ -141,55 +192,63 @@ fn cpu_attention(
                 let key_value_head = query_head / group_size;
                 let mut scores = Vec::with_capacity(query_token + 1);
                 let mut maximum = f32::NEG_INFINITY;
+                let mut denominator = 0.0_f32;
                 for key_token in 0..sequence {
                     if !key_is_visible(mask, query_token, key_token) {
                         continue;
                     }
-                    let mut score = 0.0_f32;
-                    for depth in 0..D {
-                        score = query
-                            [q_index(sequence, query_heads, batch, query_token, query_head, depth)]
-                        .mul_add(
-                            key[kv_index(
-                                sequence,
-                                key_value_heads,
-                                batch,
-                                key_token,
-                                key_value_head,
-                                depth,
-                            )],
-                            score,
+                    let query_base =
+                        q_index(sequence, query_heads, batch, query_token, query_head, 0);
+                    let key_base = kv_index(
+                        sequence,
+                        key_value_heads,
+                        batch,
+                        key_token,
+                        key_value_head,
+                        0,
+                    );
+                    let mut lanes = [0.0_f32; 32];
+                    for (lane, lane_sum) in lanes.iter_mut().enumerate() {
+                        *lane_sum = query[query_base + lane].mul_add(
+                            key[key_base + lane],
+                            query[query_base + lane + 32] * key[key_base + lane + 32],
                         );
                     }
-                    score *= SCALE;
-                    maximum = maximum.max(score);
+                    for offset in [16, 8, 4, 2, 1] {
+                        let previous = lanes;
+                        for (lane_sum, other) in
+                            lanes[..32 - offset].iter_mut().zip(&previous[offset..])
+                        {
+                            *lane_sum += *other;
+                        }
+                    }
+                    let score = round_bf16(round_bf16(lanes[0]) * SCALE);
+                    update_online_normalizer(score, &mut maximum, &mut denominator);
                     scores.push((key_token, score));
                 }
                 if scores.is_empty() {
                     continue;
                 }
-                let normalizer: f32 = scores
-                    .iter()
-                    .map(|(_, score)| (*score - maximum).exp())
-                    .sum();
                 for depth in 0..D {
                     let mut accumulator = 0.0_f32;
                     for &(key_token, score) in &scores {
-                        let probability = (score - maximum).exp() / normalizer;
-                        accumulator = probability.mul_add(
-                            value[kv_index(
-                                sequence,
-                                key_value_heads,
-                                batch,
-                                key_token,
-                                key_value_head,
-                                depth,
-                            )],
-                            accumulator,
-                        );
+                        let probability = staged_probability(score, maximum, denominator);
+                        if probability != 0.0 {
+                            accumulator = probability.mul_add(
+                                value[kv_index(
+                                    sequence,
+                                    key_value_heads,
+                                    batch,
+                                    key_token,
+                                    key_value_head,
+                                    depth,
+                                )],
+                                accumulator,
+                            );
+                        }
                     }
                     output[q_index(sequence, query_heads, batch, query_token, query_head, depth)] =
-                        bf16_to_f32(f32_to_bf16_bits(accumulator));
+                        round_bf16(accumulator);
                 }
             }
         }
@@ -317,6 +376,7 @@ fn assert_zero_score_prefix_samples(
     let sampled_depths = [0, 17, D - 1];
     let group_size = query_heads / key_value_heads;
     let mut prefix = vec![0.0_f32; batch_size * key_value_heads * D];
+    let mut witnessed_probability_staging = false;
     for token in 0..sequence {
         for batch in 0..batch_size {
             for key_value_head in 0..key_value_heads {
@@ -342,19 +402,40 @@ fn assert_zero_score_prefix_samples(
                 let key_value_head = query_head / group_size;
                 for &depth in &sampled_depths {
                     let prefix_index = (batch * key_value_heads + key_value_head) * D + depth;
-                    let expected =
-                        bf16_to_f32(f32_to_bf16_bits(prefix[prefix_index] / denominator));
+                    let probability = round_bf16(denominator.recip());
+                    let mut accumulator = 0.0_f32;
+                    for key_token in 0..=token {
+                        accumulator = probability.mul_add(
+                            value[kv_index(
+                                sequence,
+                                key_value_heads,
+                                batch,
+                                key_token,
+                                key_value_head,
+                                depth,
+                            )],
+                            accumulator,
+                        );
+                    }
+                    let expected = round_bf16(accumulator);
+                    let unstaged_expected = round_bf16(prefix[prefix_index] / denominator);
+                    witnessed_probability_staging |= expected != unstaged_expected;
                     let index = q_index(sequence, query_heads, batch, token, query_head, depth);
                     assert!(actual[index].is_finite(), "output[{index}] is not finite");
-                    assert!(
-                        (actual[index] - expected).abs() <= 0.015_625,
-                        "B={batch_size} S={sequence} QH={query_heads} KVH={key_value_heads} output[{index}] expected {expected}, got {}",
-                        actual[index]
+                    assert_eq!(
+                        actual[index].to_bits(),
+                        expected.to_bits(),
+                        "B={batch_size} S={sequence} QH={query_heads} KVH={key_value_heads} output[{index}] must consume staged BF16 probabilities; expected {expected}, got {}",
+                        actual[index],
                     );
                 }
             }
         }
     }
+    assert!(
+        witnessed_probability_staging,
+        "zero-score fixture must distinguish staged BF16 probabilities from normalize-after-AV"
+    );
 }
 
 fn run_zero_score_analytic_case(
@@ -742,7 +823,7 @@ fn prepared_prefill_rejects_a_different_context_owner_before_launch() -> TestRes
 
 #[test]
 #[ignore = "requires the remote CUDA GPU on server-4096"]
-fn target_long_prefill_shapes_match_linear_prefix_oracle() -> TestResult {
+fn target_long_prefill_shapes_match_staged_probability_prefix_oracle() -> TestResult {
     let (context, mut stream) = first_context()?;
     let mut staging = context.allocate_pinned_host_buffer(1 << 20)?;
     for &(batch, sequence, query_heads, key_value_heads) in &[

@@ -29,13 +29,10 @@ __device__ __forceinline__ float warp_sum(float value) {
 }
 
 __device__ __forceinline__ void update_online_state(
-    float score, float* maximum, float* denominator, float* alpha,
-    float* beta) {
+    float score, float* maximum, float* denominator) {
   if (isnan(score) || isnan(*maximum)) {
     *maximum = CUDART_NAN_F;
     *denominator = CUDART_NAN_F;
-    *alpha = CUDART_NAN_F;
-    *beta = CUDART_NAN_F;
     return;
   }
 
@@ -44,44 +41,25 @@ __device__ __forceinline__ void update_online_state(
       isinf(*maximum) && *maximum > 0.0F;
   if (score_is_positive_infinity) {
     if (maximum_is_positive_infinity) {
-      *alpha = 1.0F;
-      *beta = 1.0F;
       *denominator += 1.0F;
     } else {
       *maximum = CUDART_INF_F;
       *denominator = 1.0F;
-      *alpha = 0.0F;
-      *beta = 1.0F;
     }
     return;
   }
   if (maximum_is_positive_infinity ||
       (isinf(score) && score < 0.0F)) {
-    *alpha = 1.0F;
-    *beta = 0.0F;
     return;
   }
 
   const float next_maximum = fmaxf(*maximum, score);
-  *alpha = *denominator == 0.0F
-               ? 0.0F
-               : expf(*maximum - next_maximum);
-  *beta = expf(score - next_maximum);
-  *denominator = fmaf(*alpha, *denominator, *beta);
+  const float alpha = *denominator == 0.0F
+                          ? 0.0F
+                          : expf(*maximum - next_maximum);
+  const float beta = expf(score - next_maximum);
+  *denominator = fmaf(alpha, *denominator, beta);
   *maximum = next_maximum;
-}
-
-__device__ __forceinline__ float update_numerator(float numerator,
-                                                   float value, float alpha,
-                                                   float beta) {
-  // Avoid 0*Inf producing NaN for entries whose online weight is exactly zero.
-  if (beta == 0.0F) {
-    return alpha * numerator;
-  }
-  if (alpha == 0.0F) {
-    return beta * value;
-  }
-  return fmaf(beta, value, alpha * numerator);
 }
 
 __device__ __forceinline__ float stage_bf16_scaled_score(float dot_product,
@@ -92,6 +70,38 @@ __device__ __forceinline__ float stage_bf16_scaled_score(float dot_product,
   const __nv_bfloat16 staged_dot = __float2bfloat16_rn(dot_product);
   return __bfloat162float(
       __float2bfloat16_rn(__bfloat162float(staged_dot) * scale));
+}
+
+__device__ __forceinline__ float staged_warp_tree_score(
+    float query_low, float query_high, float key_low, float key_high,
+    float scale) {
+  float score = fmaf(query_low, key_low, query_high * key_high);
+  score = warp_sum(score);
+  return stage_bf16_scaled_score(
+      __shfl_sync(kFullWarpMask, score, 0), scale);
+}
+
+__device__ __forceinline__ float stage_bf16_probability(
+    float score, float maximum, float denominator) {
+  float probability = 0.0F;
+  if (isnan(score) || isnan(maximum) || isnan(denominator)) {
+    probability = CUDART_NAN_F;
+  } else if (isinf(maximum) && maximum > 0.0F) {
+    // Preserve the online state's equal weighting of every +Inf maximum.
+    probability = isinf(score) && score > 0.0F
+                      ? 1.0F / denominator
+                      : 0.0F;
+  } else if (denominator > 0.0F) {
+    probability = expf(score - maximum) / denominator;
+  }
+  return __bfloat162float(__float2bfloat16_rn(probability));
+}
+
+__device__ __forceinline__ float accumulate_staged_probability(
+    float accumulator, float probability, float value) {
+  // Preserve the prior online path's zero-weight handling for infinite values.
+  return probability == 0.0F ? accumulator
+                             : fmaf(probability, value, accumulator);
 }
 
 __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
@@ -128,8 +138,6 @@ __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
 
   float maximum = -CUDART_INF_F;
   float denominator = 0.0F;
-  float numerator_low = 0.0F;
-  float numerator_high = 0.0F;
 
   const uint64_t active_query_count =
       token_count - query_tile_start < kWarpsPerBlock
@@ -138,6 +146,66 @@ __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
   const uint64_t maximum_query =
       query_tile_start + active_query_count - 1;
 
+  // Pass one preserves the existing warp-tree QK staging and F32 online
+  // maximum/denominator recurrence; values are deliberately not consumed.
+  for (uint64_t key_tile_start = 0; key_tile_start <= maximum_query;
+       key_tile_start += kKeyTileSize) {
+    const uint64_t remaining_keys = token_count - key_tile_start;
+    const uint64_t key_tile_count =
+        remaining_keys < kKeyTileSize ? remaining_keys : kKeyTileSize;
+    const uint64_t tile_elements = key_tile_count * kHeadSize;
+    for (uint64_t tile_index = threadIdx.x; tile_index < tile_elements;
+         tile_index += kThreadsPerBlock) {
+      const uint64_t key_offset = tile_index / kHeadSize;
+      const uint64_t depth = tile_index % kHeadSize;
+      const uint64_t key_token = key_tile_start + key_offset;
+      const uint64_t key_value_index =
+          ((batch * token_count + key_token) * key_value_head_count +
+           key_value_head) *
+              kHeadSize +
+          depth;
+      key_tile[tile_index] = key[key_value_index];
+    }
+    __syncthreads();
+
+    if (active && (!causal_local || local_window_size != 0)) {
+      const uint64_t minimum_key =
+          causal_local && query_token + 1 > local_window_size
+              ? query_token + 1 - local_window_size
+              : 0;
+      const uint64_t tile_end = key_tile_start + key_tile_count;
+      const uint64_t key_begin =
+          key_tile_start > minimum_key ? key_tile_start : minimum_key;
+      const uint64_t causal_end = query_token + 1;
+      const uint64_t key_end = tile_end < causal_end ? tile_end : causal_end;
+
+      for (uint64_t key_token = key_begin; key_token < key_end;
+           ++key_token) {
+        const uint64_t tile_base =
+            (key_token - key_tile_start) * kHeadSize;
+        const float key_low =
+            __bfloat162float(key_tile[tile_base + lane]);
+        const float key_high =
+            __bfloat162float(key_tile[tile_base + lane + kWarpSize]);
+        const float score = staged_warp_tree_score(
+            query_low, query_high, key_low, key_high, scale);
+
+        if (lane == 0) {
+          update_online_state(score, &maximum, &denominator);
+        }
+      }
+    }
+    __syncthreads();
+  }
+
+  maximum = __shfl_sync(kFullWarpMask, maximum, 0);
+  denominator = __shfl_sync(kFullWarpMask, denominator, 0);
+  float accumulator_low = 0.0F;
+  float accumulator_high = 0.0F;
+
+  // Recompute staged scores after the final online normalizer is known. Each
+  // normalized probability is narrowed to BF16 before logical key-order AV,
+  // without writing an HBM score/probability matrix.
   for (uint64_t key_tile_start = 0; key_tile_start <= maximum_query;
        key_tile_start += kKeyTileSize) {
     const uint64_t remaining_keys = token_count - key_tile_start;
@@ -178,51 +246,37 @@ __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
             __bfloat162float(key_tile[tile_base + lane]);
         const float key_high =
             __bfloat162float(key_tile[tile_base + lane + kWarpSize]);
-        float score = fmaf(query_low, key_low, query_high * key_high);
-        score = warp_sum(score);
-        score = stage_bf16_scaled_score(
-            __shfl_sync(kFullWarpMask, score, 0), scale);
+        const float score = staged_warp_tree_score(
+            query_low, query_high, key_low, key_high, scale);
 
-        float alpha = 0.0F;
-        float beta = 0.0F;
+        float probability = 0.0F;
         if (lane == 0) {
-          update_online_state(score, &maximum, &denominator, &alpha, &beta);
+          probability =
+              stage_bf16_probability(score, maximum, denominator);
         }
-        alpha = __shfl_sync(kFullWarpMask, alpha, 0);
-        beta = __shfl_sync(kFullWarpMask, beta, 0);
-
+        probability = __shfl_sync(kFullWarpMask, probability, 0);
         const float value_low =
             __bfloat162float(value_tile[tile_base + lane]);
         const float value_high =
             __bfloat162float(value_tile[tile_base + lane + kWarpSize]);
-        numerator_low =
-            update_numerator(numerator_low, value_low, alpha, beta);
-        numerator_high =
-            update_numerator(numerator_high, value_high, alpha, beta);
+        accumulator_low = accumulate_staged_probability(
+            accumulator_low, probability, value_low);
+        accumulator_high = accumulate_staged_probability(
+            accumulator_high, probability, value_high);
       }
     }
     __syncthreads();
   }
 
   if (active) {
-    float inverse_denominator = 0.0F;
-    if (lane == 0) {
-      inverse_denominator = isnan(denominator)
-                                ? CUDART_NAN_F
-                                : (denominator > 0.0F
-                                       ? 1.0F / denominator
-                                       : 0.0F);
-    }
-    inverse_denominator =
-        __shfl_sync(kFullWarpMask, inverse_denominator, 0);
     const uint64_t output_base =
         ((batch * token_count + query_token) * query_head_count +
          query_head) *
         kHeadSize;
     output[output_base + lane] =
-        __float2bfloat16_rn(numerator_low * inverse_denominator);
+        __float2bfloat16_rn(accumulator_low);
     output[output_base + lane + kWarpSize] =
-        __float2bfloat16_rn(numerator_high * inverse_denominator);
+        __float2bfloat16_rn(accumulator_high);
   }
 }
 
