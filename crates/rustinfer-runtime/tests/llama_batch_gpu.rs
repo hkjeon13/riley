@@ -11,7 +11,9 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use rustinfer_cuda::{CudaAllocationStats, CudaContext, CudaRuntime, CudaStream};
+use rustinfer_cuda::{
+    AttentionReductionProfile, CudaAllocationStats, CudaContext, CudaRuntime, CudaStream,
+};
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
     ExecutionCompletionImplementation, LlamaBatchBlockTable, LlamaBatchMetadataConfig,
@@ -304,6 +306,7 @@ fn greedy_execution_trace(
     model: &LoadedModel,
     residual_norm: ResidualNormImplementation,
     execution_completion: ExecutionCompletionImplementation,
+    ragged_attention_reduction_profile: AttentionReductionProfile,
     decode_steps: usize,
 ) -> TestResult<GreedyExecutionTrace> {
     let maximum_length = TOKENS_A
@@ -327,7 +330,8 @@ fn greedy_execution_trace(
         ExecutionCompletionImplementation::IterationBatch => {
             config.with_iteration_batch_completion()
         }
-    };
+    }
+    .with_ragged_attention_reduction_profile(ragged_attention_reduction_profile);
     let mut batch = PreparedLlamaBatchExecutor::prepare(model, &context, &mut stream, config)?;
     let (prompt_ids, prompt_valid) = block_table(TOKENS_A.len(), 0)?;
     let prompt_rows = [row(
@@ -374,7 +378,7 @@ fn greedy_execution_trace(
         assert_eq!(
             current,
             stable,
-            "{residual_norm:?}/{execution_completion:?} allocation changed after committed decode step {}",
+            "{residual_norm:?}/{execution_completion:?}/{ragged_attention_reduction_profile:?} allocation changed after committed decode step {}",
             step + 1,
         );
         trace.cuda_live_allocation_delta = live_allocation_delta(stable, current);
@@ -385,7 +389,7 @@ fn greedy_execution_trace(
     trace.owner_close_live_allocation_count = live_allocation_count(after_owner_close);
     assert!(
         after_owner_close.is_zero(),
-        "{residual_norm:?}/{execution_completion:?} executor close leaked CUDA allocations"
+        "{residual_norm:?}/{execution_completion:?}/{ragged_attention_reduction_profile:?} executor close leaked CUDA allocations"
     );
     stream.close()?;
     close_context(context)?;
@@ -433,12 +437,14 @@ fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResul
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
+        AttentionReductionProfile::CanonicalV1,
         DECODE_STEPS,
     )?;
     let fused = greedy_execution_trace(
         &model,
         ResidualNormImplementation::Fused,
         ExecutionCompletionImplementation::PerOperation,
+        AttentionReductionProfile::CanonicalV1,
         DECODE_STEPS,
     )?;
 
@@ -485,12 +491,14 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
+        AttentionReductionProfile::CanonicalV1,
         DECODE_STEPS,
     )?;
     let iteration_batch = greedy_execution_trace(
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::IterationBatch,
+        AttentionReductionProfile::CanonicalV1,
         DECODE_STEPS,
     )?;
 
@@ -544,6 +552,66 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         "pr15-execution-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
 committed_iterations={} raw_logit_mismatches={raw_logit_mismatches} \
 token_id_mismatches={token_id_mismatches} \
+cuda_live_allocation_delta={} owner_close_live_allocation_count={} \
+generated_token_ids={:?} status=passed",
+        iteration_batch.logits_by_iteration.len() - 1,
+        iteration_batch.cuda_live_allocation_delta,
+        iteration_batch.owner_close_live_allocation_count,
+        iteration_batch.generated_token_ids,
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn fixed37_ragged_attention_completion_modes_match_multi_step_greedy_exactly() -> TestResult {
+    const DECODE_STEPS: usize = 16;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
+    let per_operation = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::PerOperation,
+        AttentionReductionProfile::FixedContiguous37BalancedV1,
+        DECODE_STEPS,
+    )?;
+    let iteration_batch = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::IterationBatch,
+        AttentionReductionProfile::FixedContiguous37BalancedV1,
+        DECODE_STEPS,
+    )?;
+
+    assert_eq!(
+        iteration_batch.generated_token_ids, per_operation.generated_token_ids,
+        "fixed37 completion modes generated different token IDs"
+    );
+    assert_eq!(
+        iteration_batch.logits_by_iteration.len(),
+        per_operation.logits_by_iteration.len()
+    );
+    for (iteration, (batched_logits, per_operation_logits)) in iteration_batch
+        .logits_by_iteration
+        .iter()
+        .zip(&per_operation.logits_by_iteration)
+        .enumerate()
+    {
+        assert_exact_bytes(
+            &format!("fixed37 execution-completion iteration {iteration}"),
+            batched_logits,
+            per_operation_logits,
+        );
+        assert_eq!(
+            top1(batched_logits),
+            top1(per_operation_logits),
+            "fixed37 iteration {iteration} top-1 differs"
+        );
+    }
+    assert_eq!(iteration_batch.cuda_live_allocation_delta, 0);
+    assert_eq!(iteration_batch.owner_close_live_allocation_count, 0);
+    println!(
+        "pr16-fixed37-ragged-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
+committed_iterations={} raw_logit_mismatches=0 token_id_mismatches=0 \
 cuda_live_allocation_delta={} owner_close_live_allocation_count={} \
 generated_token_ids={:?} status=passed",
         iteration_batch.logits_by_iteration.len() - 1,

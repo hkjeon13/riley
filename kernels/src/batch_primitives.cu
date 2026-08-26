@@ -1,4 +1,5 @@
 #include "ffi_internal.hpp"
+#include "fixed37_reduction.cuh"
 
 #include <cuda_bf16.h>
 #include <math_constants.h>
@@ -28,6 +29,16 @@ constexpr size_t kMaximumBatchBuffers = 9;
 constexpr uint32_t kWarpSize = 32;
 constexpr uint32_t kFullWarpMask = 0xffffffffU;
 constexpr uint64_t kAttentionHeadSize = 64;
+constexpr uint64_t kFixed37RaggedMaximumTokenCount = 8192;
+constexpr uint64_t kFixed37RaggedDepthPartialCount =
+    rustinfer_cuda_fixed37::chunk_count(kAttentionHeadSize);
+constexpr uint64_t kFixed37RaggedMaximumTokenPartialCount =
+    rustinfer_cuda_fixed37::chunk_count(
+        kFixed37RaggedMaximumTokenCount);
+constexpr uint64_t kFixed37RaggedMaximumSharedBytes =
+    (kFixed37RaggedMaximumTokenCount +
+     2 * kFixed37RaggedMaximumTokenPartialCount) *
+    sizeof(float);
 constexpr uint64_t kMaximumGridX = 2147483647;
 constexpr uint64_t kMaximumGridYOrZ = 65535;
 
@@ -71,8 +82,67 @@ static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams,
               "ragged paged attention output-row offset changed");
 static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams, scale) == 552,
               "ragged paged attention scale offset changed");
+static_assert(sizeof(RustInferCudaFixed37RaggedPagedAttentionParams) == 600,
+              "fixed37 ragged paged attention ABI size changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, struct_size) == 0,
+    "fixed37 ragged paged attention struct-size offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved0) == 4,
+    "fixed37 ragged paged attention reserved0 offset changed");
+static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, query) ==
+                  8,
+              "fixed37 ragged paged attention query offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, key_pool) == 56,
+    "fixed37 ragged paged attention key-pool offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, value_pool) == 104,
+    "fixed37 ragged paged attention value-pool offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, output) == 152,
+    "fixed37 ragged paged attention output offset changed");
+static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, batch) ==
+                  200,
+              "fixed37 ragged paged attention batch offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+             query_head_count) == 520,
+    "fixed37 ragged paged attention QH offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+             key_value_head_count) == 528,
+    "fixed37 ragged paged attention KVH offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, head_size) == 536,
+    "fixed37 ragged paged attention head-size offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+             output_row_count) == 544,
+    "fixed37 ragged paged attention output-row offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+             maximum_logical_token_count) == 552,
+    "fixed37 ragged paged attention maximum-T offset changed");
+static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, scale) ==
+                  560,
+              "fixed37 ragged paged attention scale offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved1) == 564,
+    "fixed37 ragged paged attention reserved1 offset changed");
+static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved) == 568,
+    "fixed37 ragged paged attention reserved tail changed");
 static_assert(kAttentionHeadSize == 2 * kWarpSize,
               "ragged attention lane ownership changed");
+static_assert(kFixed37RaggedDepthPartialCount == 2,
+              "fixed37 ragged D64 partial shape changed");
+static_assert(kFixed37RaggedMaximumTokenPartialCount == 222,
+              "fixed37 ragged T8192 partial shape changed");
+static_assert(kFixed37RaggedMaximumSharedBytes == 34544,
+              "fixed37 ragged maximum shared-memory shape changed");
+static_assert(kFixed37RaggedMaximumSharedBytes <= 48 * 1024,
+              "fixed37 ragged shared memory exceeds the base CUDA limit");
 
 struct ResolvedSpan {
   RustInferCudaDeviceBuffer* buffer;
@@ -133,6 +203,44 @@ bool checked_product4(uint64_t first, uint64_t second, uint64_t third,
   uint64_t partial = 0;
   return checked_product3(first, second, third, &partial) &&
          checked_multiply(partial, fourth, output);
+}
+
+RustInferCudaStatus fixed37_ragged_shared_bytes(
+    uint64_t maximum_logical_token_count, uint64_t* token_partial_count,
+    uint64_t* shared_bytes, RustInferCudaErrorInfo* error,
+    const char* operation) noexcept {
+  if (token_partial_count == nullptr || shared_bytes == nullptr) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          operation,
+                          "internal fixed37 ragged shared-memory output is null");
+  }
+  const uint64_t chunks =
+      rustinfer_cuda_fixed37::chunk_count(maximum_logical_token_count);
+  if (chunks == 0 ||
+      chunks > rustinfer_cuda_fixed37::kMaximumChunkCount) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "fixed37 ragged maximum T exceeds the chunk-partial capacity");
+  }
+  const uint64_t partial_capacity =
+      chunks < kFixed37RaggedDepthPartialCount
+          ? kFixed37RaggedDepthPartialCount
+          : chunks;
+  uint64_t value_bytes = 0;
+  uint64_t reduction_bytes = 0;
+  if (!checked_multiply(maximum_logical_token_count, sizeof(float),
+                        &value_bytes) ||
+      !checked_multiply(partial_capacity, 2 * sizeof(float),
+                        &reduction_bytes) ||
+      !checked_add(value_bytes, reduction_bytes, shared_bytes)) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "fixed37 ragged shared-memory size overflows uint64_t");
+  }
+  *token_partial_count = chunks;
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
 bool reserved_is_zero(const uint64_t* reserved, size_t count) noexcept {
@@ -908,6 +1016,225 @@ __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
       __float2bfloat16_rn(output_high);
 }
 
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_ragged_paged_attention_two_pass_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
+    DeviceBatch batch, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t maximum_logical_token_count,
+    float scale, uint64_t maximum_token_partial_count) {
+  extern __shared__ float shared_values[];
+  __shared__ uint32_t has_nan;
+  __shared__ uint64_t logical_token_count_shared;
+  float* values = shared_values;
+  float* first = values + maximum_logical_token_count;
+  const uint64_t partial_capacity =
+      maximum_token_partial_count < kFixed37RaggedDepthPartialCount
+          ? kFixed37RaggedDepthPartialCount
+          : maximum_token_partial_count;
+  float* second = first + partial_capacity;
+
+  const uint64_t row = blockIdx.x;
+  const uint64_t query_head = blockIdx.y;
+  const uint64_t output_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+  if (row >= batch.active_row_count) {
+    const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
+    for (uint64_t depth = threadIdx.x; depth < kAttentionHeadSize;
+         depth += blockDim.x) {
+      output[output_base + depth] = zero;
+    }
+    return;
+  }
+
+  if (threadIdx.x == 0) {
+    const uint64_t logical_position = batch.row_positions[row];
+    logical_token_count_shared =
+        logical_position < maximum_logical_token_count
+            ? logical_position + 1
+            : 0;
+    has_nan = 0;
+  }
+  __syncthreads();
+  const uint64_t logical_token_count = logical_token_count_shared;
+  if (logical_token_count == 0) {
+    const __nv_bfloat16 nan = __float2bfloat16_rn(CUDART_NAN_F);
+    for (uint64_t depth = threadIdx.x; depth < kAttentionHeadSize;
+         depth += blockDim.x) {
+      output[output_base + depth] = nan;
+    }
+    return;
+  }
+
+  const uint64_t token_partial_count =
+      rustinfer_cuda_fixed37::chunk_count(logical_token_count);
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t query_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+
+  // Pass one recomputes D64 QK in two logical-depth chunks. Every chunk is an
+  // ascending fmaf left fold, followed by the fixed adjacent balanced merge;
+  // the score is rounded raw-BF16 then scaled-BF16 before token reduction.
+  float chunk_maximum = -CUDART_INF_F;
+  for (uint64_t token = 0; token < logical_token_count; ++token) {
+    uint64_t key_base = 0;
+    const bool valid = resolve_row_cache_base(
+        batch, row, token, key_value_head, key_value_head_count,
+        kAttentionHeadSize, &key_base);
+    for (uint64_t chunk = threadIdx.x;
+         chunk < kFixed37RaggedDepthPartialCount; chunk += blockDim.x) {
+      const uint64_t begin =
+          chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > kAttentionHeadSize) {
+        end = kAttentionHeadSize;
+      }
+      float accumulator = valid ? 0.0F : CUDART_NAN_F;
+      if (valid) {
+        for (uint64_t depth = begin; depth < end; ++depth) {
+          accumulator = fmaf(
+              __bfloat162float(query[query_base + depth]),
+              __bfloat162float(key_pool[key_base + depth]), accumulator);
+        }
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float dot = rustinfer_cuda_fixed37::balanced_sum(
+        first, second, kFixed37RaggedDepthPartialCount);
+    if (threadIdx.x == 0) {
+      const float score = staged_attention_score(dot, scale);
+      if (isnan(score)) {
+        has_nan = 1;
+      }
+      if (token % rustinfer_cuda_fixed37::kChunkElements == 0) {
+        chunk_maximum = -CUDART_INF_F;
+      }
+      chunk_maximum = fmaxf(chunk_maximum, score);
+      if (token % rustinfer_cuda_fixed37::kChunkElements ==
+              rustinfer_cuda_fixed37::kChunkElements - 1 ||
+          token + 1 == logical_token_count) {
+        values[token / rustinfer_cuda_fixed37::kChunkElements] =
+            chunk_maximum;
+      }
+    }
+    __syncthreads();
+  }
+
+  for (uint64_t chunk = threadIdx.x; chunk < token_partial_count;
+       chunk += blockDim.x) {
+    first[chunk] = values[chunk];
+  }
+  __syncthreads();
+  const float maximum = rustinfer_cuda_fixed37::balanced_max(
+      first, second, token_partial_count);
+  if (has_nan != 0 || !isfinite(maximum)) {
+    const __nv_bfloat16 nan = __float2bfloat16_rn(CUDART_NAN_F);
+    for (uint64_t depth = threadIdx.x; depth < kAttentionHeadSize;
+         depth += blockDim.x) {
+      output[output_base + depth] = nan;
+    }
+    return;
+  }
+  __syncthreads();
+
+  // Pass two recomputes QK, materializes only exp(T) in shared memory, and
+  // narrows each probability to BF16 before logical-token-zero-anchored AV.
+  for (uint64_t token = 0; token < logical_token_count; ++token) {
+    uint64_t key_base = 0;
+    const bool valid = resolve_row_cache_base(
+        batch, row, token, key_value_head, key_value_head_count,
+        kAttentionHeadSize, &key_base);
+    for (uint64_t chunk = threadIdx.x;
+         chunk < kFixed37RaggedDepthPartialCount; chunk += blockDim.x) {
+      const uint64_t begin =
+          chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > kAttentionHeadSize) {
+        end = kAttentionHeadSize;
+      }
+      float accumulator = valid ? 0.0F : CUDART_NAN_F;
+      if (valid) {
+        for (uint64_t depth = begin; depth < end; ++depth) {
+          accumulator = fmaf(
+              __bfloat162float(query[query_base + depth]),
+              __bfloat162float(key_pool[key_base + depth]), accumulator);
+        }
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float dot = rustinfer_cuda_fixed37::balanced_sum(
+        first, second, kFixed37RaggedDepthPartialCount);
+    if (threadIdx.x == 0) {
+      values[token] = expf(__fsub_rn(staged_attention_score(dot, scale),
+                                    maximum));
+    }
+    __syncthreads();
+  }
+
+  for (uint64_t chunk = threadIdx.x; chunk < token_partial_count;
+       chunk += blockDim.x) {
+    const uint64_t begin =
+        chunk * rustinfer_cuda_fixed37::kChunkElements;
+    uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+    if (end > logical_token_count) {
+      end = logical_token_count;
+    }
+    float sum = 0.0F;
+    for (uint64_t token = begin; token < end; ++token) {
+      sum = __fadd_rn(sum, values[token]);
+    }
+    first[chunk] = sum;
+  }
+  __syncthreads();
+  const float denominator = rustinfer_cuda_fixed37::balanced_sum(
+      first, second, token_partial_count);
+  for (uint64_t token = threadIdx.x; token < logical_token_count;
+       token += blockDim.x) {
+    const __nv_bfloat16 probability =
+        __float2bfloat16_rn(values[token] / denominator);
+    values[token] = __bfloat162float(probability);
+  }
+  __syncthreads();
+
+  for (uint64_t depth = 0; depth < kAttentionHeadSize; ++depth) {
+    for (uint64_t chunk = threadIdx.x; chunk < token_partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin =
+          chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > logical_token_count) {
+        end = logical_token_count;
+      }
+      float accumulator = 0.0F;
+      for (uint64_t token = begin; token < end; ++token) {
+        uint64_t value_base = 0;
+        if (!resolve_row_cache_base(
+                batch, row, token, key_value_head, key_value_head_count,
+                kAttentionHeadSize, &value_base)) {
+          accumulator = CUDART_NAN_F;
+          break;
+        }
+        // Deliberately unconditional: the fixed37 contract preserves IEEE
+        // 0*Inf -> qNaN instead of short-circuiting zero probabilities.
+        accumulator = fmaf(
+            values[token],
+            __bfloat162float(value_pool[value_base + depth]), accumulator);
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float result = rustinfer_cuda_fixed37::balanced_sum(
+        first, second, token_partial_count);
+    if (threadIdx.x == 0) {
+      output[output_base + depth] = __float2bfloat16_rn(result);
+    }
+    __syncthreads();
+  }
+}
+
 }  // namespace
 
 extern "C" RustInferCudaStatus rustinfer_cuda_indexed_rope_execute(
@@ -1548,6 +1875,213 @@ rustinfer_cuda_ragged_paged_attention_execute(
         reinterpret_cast<__nv_bfloat16*>(output.data),
         device_batch(params->batch, batch), params->query_head_count,
         params->key_value_head_count, params->scale);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus
+rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute(
+    const RustInferCudaFixed37RaggedPagedAttentionParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute fixed37 two-pass ragged causal paged attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaFixed37RaggedPagedAttentionParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RustInferCudaStatus status =
+      validate_packed_batch(params->batch, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (params->query_head_count == 0 ||
+      params->key_value_head_count == 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "attention head counts must be greater than zero");
+  }
+  if (params->head_size != kAttentionHeadSize) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "fixed37 ragged paged attention supports head_size=64 only");
+  }
+  if (params->query_head_count % params->key_value_head_count != 0) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "key_value_head_count must divide query_head_count");
+  }
+  if (params->maximum_logical_token_count == 0) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "maximum_logical_token_count must be greater than zero");
+  }
+  if (params->maximum_logical_token_count >
+      kFixed37RaggedMaximumTokenCount) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "fixed37 ragged paged attention supports maximum logical T<=8192 only");
+  }
+  if (!std::isfinite(params->scale) || params->scale <= 0.0F) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "attention scale must be finite and greater than zero");
+  }
+  if (params->output_row_count < params->batch.active_row_count) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "output_row_count is smaller than active_row_count");
+  }
+  if (params->output_row_count > kMaximumGridX ||
+      params->query_head_count > kMaximumGridYOrZ) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "fixed37 ragged attention launch dimensions exceed the CUDA grid contract");
+  }
+
+  uint64_t maximum_token_partial_count = 0;
+  uint64_t shared_bytes = 0;
+  status = fixed37_ragged_shared_bytes(
+      params->maximum_logical_token_count, &maximum_token_partial_count,
+      &shared_bytes, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  uint64_t query_elements = 0;
+  uint64_t output_elements = 0;
+  uint64_t pool_elements = 0;
+  if (!checked_product3(params->batch.active_row_count,
+                        params->query_head_count, params->head_size,
+                        &query_elements) ||
+      !checked_product3(params->output_row_count, params->query_head_count,
+                        params->head_size, &output_elements) ||
+      !checked_product4(params->batch.physical_block_count,
+                        params->key_value_head_count,
+                        RUSTINFER_CUDA_PAGED_KV_BLOCK_SIZE, params->head_size,
+                        &pool_elements)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "fixed37 ragged attention tensor shape overflows uint64_t");
+  }
+  uint64_t query_bytes = 0;
+  uint64_t output_bytes = 0;
+  uint64_t pool_bytes = 0;
+  status = typed_bytes(query_elements, RUSTINFER_CUDA_DTYPE_BF16,
+                       &query_bytes, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(output_elements, RUSTINFER_CUDA_DTYPE_BF16,
+                         &output_bytes, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(pool_elements, RUSTINFER_CUDA_DTYPE_BF16,
+                         &pool_bytes, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan output{};
+  ResolvedBatch batch{};
+  status = resolve_span(params->query, RUSTINFER_CUDA_DTYPE_BF16,
+                        query_bytes, &query, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RUSTINFER_CUDA_DTYPE_BF16,
+                          pool_bytes, &key_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RUSTINFER_CUDA_DTYPE_BF16,
+                          pool_bytes, &value_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->output, RUSTINFER_CUDA_DTYPE_BF16,
+                          output_bytes, &output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_packed_batch(params->batch, &batch, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  status = reject_overlap(output, query, false, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, key_pool, false, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, value_pool, false, error, kOperation);
+  }
+  const ResolvedSpan metadata[] = {
+      batch.sequence_block_offsets, batch.block_ids, batch.valid_tokens,
+      batch.row_sequence_slots, batch.row_positions};
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(output, metadata[index], false, error,
+                            kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  const ResolvedSpan spans[] = {
+      query, key_pool, value_pool, output, batch.sequence_block_offsets,
+      batch.block_ids, batch.valid_tokens, batch.row_sequence_slots,
+      batch.row_positions};
+  status = validate_contexts(stream, spans, 9, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  for (size_t index = 0; index < 9; ++index) {
+    if (!uses.add(spans[index].buffer)) {
+      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                            kOperation, "batch buffer set overflow");
+    }
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    const dim3 grid(static_cast<uint32_t>(params->output_row_count),
+                    static_cast<uint32_t>(params->query_head_count), 1);
+    fixed37_ragged_paged_attention_two_pass_kernel<<<
+        grid, rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(shared_bytes), stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(query.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        device_batch(params->batch, batch), params->query_head_count,
+        params->key_value_head_count,
+        params->maximum_logical_token_count, params->scale,
+        maximum_token_partial_count);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,

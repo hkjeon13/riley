@@ -298,6 +298,53 @@ _Static_assert(offsetof(RustInferCudaRaggedPagedAttentionParams, scale) == 552,
 _Static_assert(
     offsetof(RustInferCudaRaggedPagedAttentionParams, reserved) == 560,
     "ragged paged attention reserved tail changed");
+_Static_assert(sizeof(RustInferCudaFixed37RaggedPagedAttentionParams) == 600,
+               "fixed37 ragged paged attention ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, struct_size) == 0,
+    "fixed37 ragged paged attention struct-size offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved0) == 4,
+    "fixed37 ragged paged attention reserved0 offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, query) == 8,
+    "fixed37 ragged paged attention query offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, key_pool) == 56,
+    "fixed37 ragged paged attention key-pool offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, value_pool) == 104,
+    "fixed37 ragged paged attention value-pool offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, output) == 152,
+    "fixed37 ragged paged attention output offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, batch) == 200,
+    "fixed37 ragged paged attention batch offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+                        query_head_count) == 520,
+               "fixed37 ragged paged attention QH offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+                        key_value_head_count) == 528,
+               "fixed37 ragged paged attention KVH offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, head_size) == 536,
+    "fixed37 ragged paged attention head-size offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+                        output_row_count) == 544,
+               "fixed37 ragged paged attention output-row offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37RaggedPagedAttentionParams,
+                        maximum_logical_token_count) == 552,
+               "fixed37 ragged paged attention maximum-T offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, scale) == 560,
+    "fixed37 ragged paged attention scale offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved1) == 564,
+    "fixed37 ragged paged attention reserved1 offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37RaggedPagedAttentionParams, reserved) == 568,
+    "fixed37 ragged paged attention reserved tail changed");
 _Static_assert(RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR == 10 &&
                    RUSTINFER_CUDA_STATUS_NOT_SUPPORTED == 11,
                "GEMM status discriminants changed");
@@ -473,6 +520,11 @@ static RustInferCudaStatus (*const ragged_paged_attention_symbol)(
     const RustInferCudaRaggedPagedAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) =
     rustinfer_cuda_ragged_paged_attention_execute;
+static RustInferCudaStatus (*const
+                                fixed37_ragged_paged_attention_two_pass_symbol)(
+    const RustInferCudaFixed37RaggedPagedAttentionParams*,
+    RustInferCudaStream*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute;
 static RustInferCudaStatus (*const gemm_plan_create_symbol)(
     RustInferCudaContext*, const RustInferCudaGemmConfig*,
     RustInferCudaGemmPlan**,
@@ -538,6 +590,7 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&paged_decode_attention_symbol,
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
+    (const void*)&fixed37_ragged_paged_attention_two_pass_symbol,
     (const void*)&gemm_plan_create_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,

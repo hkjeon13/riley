@@ -699,6 +699,33 @@ typedef struct RustInferCudaRaggedPagedAttentionParams {
   uint64_t reserved[4];
 } RustInferCudaRaggedPagedAttentionParams;
 
+// No-HBM fixed37 two-pass form of ragged paged attention. Tensor and packed
+// batch layouts match RustInferCudaRaggedPagedAttentionParams, while
+// head_size is exactly 64 and every active row has logical T=row_position+1
+// in [1,maximum_logical_token_count], with maximum_logical_token_count in
+// [1,8192]. The maximum sizes one exact dynamic-shared-memory allocation;
+// scores and probabilities are never materialized in global memory. Invalid
+// device metadata, including a row T above the declared maximum, produces a
+// full qNaN row/head without an out-of-bounds access. Padding output rows are
+// overwritten with storage-exact zero.
+typedef struct RustInferCudaFixed37RaggedPagedAttentionParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan query;
+  RustInferCudaBufferSpan key_pool;
+  RustInferCudaBufferSpan value_pool;
+  RustInferCudaBufferSpan output;
+  RustInferCudaPackedBatchV1 batch;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t output_row_count;
+  uint64_t maximum_logical_token_count;
+  float scale;
+  uint32_t reserved1;
+  uint64_t reserved[4];
+} RustInferCudaFixed37RaggedPagedAttentionParams;
+
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_N 0u
 #define RUSTINFER_CUDA_GEMM_TRANSPOSE_T 1u
 #define RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR 1u
@@ -1240,15 +1267,24 @@ RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
-// Packed-batch calls are allocation-free, exclusively borrow every distinct
-// opaque buffer and the explicit stream, and synchronize that stream before
-// returning. Writable spans may not overlap any other touched span.
+// Packed-batch calls are allocation-free and exclusively borrow every distinct
+// opaque buffer and the explicit stream. Outside a stream command batch they
+// synchronize before returning; inside one, all registered resources remain
+// retained until command-batch finish. Writable spans may not overlap any
+// other touched span.
 RustInferCudaStatus rustinfer_cuda_ragged_paged_kv_cache_write_execute(
     const RustInferCudaRaggedPagedKvCacheWriteParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_ragged_paged_attention_execute(
     const RustInferCudaRaggedPagedAttentionParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// D64/T8192 no-HBM fixed37 execution follows the packed-call lifetime above:
+// an active command batch retains all nine real buffers until batch finish.
+RustInferCudaStatus
+rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute(
+    const RustInferCudaFixed37RaggedPagedAttentionParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

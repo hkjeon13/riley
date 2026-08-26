@@ -3,11 +3,15 @@
 use std::error::Error;
 
 use rustinfer_cuda::{
-    CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaErrorKind,
-    CudaPinnedHostBuffer, CudaRuntime, CudaStream, IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE,
-    PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
-    RopeParams, RowGatherParams, indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write,
-    rope, row_gather,
+    AttentionReductionProfile, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
+    CudaDeviceBuffer, CudaErrorKind, CudaPinnedHostBuffer, CudaRuntime, CudaStream,
+    DecodeAttentionBackend, DecodeAttentionBackendAvailability, DecodeAttentionPreference,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE,
+    PackedBatchHostV1, PackedBatchV1, PagedDecodeAttentionNoWorkspaceParams,
+    PagedDecodeAttentionRequest, PagedKvBlockTableHostV1, PagedKvBlockTableV1,
+    PreparedPagedDecodeAttention, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
+    RopeParams, RowGatherParams, fixed37_ragged_paged_attention, indexed_rope,
+    ragged_paged_attention, ragged_paged_kv_cache_write, rope, row_gather,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -15,6 +19,7 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const D: usize = 64;
 const BLOCK: usize = 16;
 const SCALE: f32 = 0.125;
+const FIXED37: AttentionReductionProfile = AttentionReductionProfile::FixedContiguous37BalancedV1;
 
 fn first_context() -> TestResult<Option<(CudaContext, CudaStream)>> {
     let runtime = match CudaRuntime::initialize() {
@@ -1068,6 +1073,792 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
     key_pool.close()?;
     query.close()?;
     staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn fixed37_ragged_boundaries_match_two_pass_paged_siblings_byte_exact() -> TestResult {
+    let Some((context, mut stream)) = first_context()? else {
+        return Ok(());
+    };
+    let mut staging = context.allocate_pinned_host_buffer(1 << 20)?;
+
+    let maximum_tokens = usize::try_from(FIXED37_RAGGED_MAX_LOGICAL_TOKENS)?;
+    let logical_block_count = maximum_tokens.div_ceil(BLOCK);
+    let physical_block_count = logical_block_count;
+    let sequence_block_offsets = [0_u32, u32::try_from(logical_block_count)?];
+    let block_ids: Vec<u32> = (0..logical_block_count)
+        .map(|logical| u32::try_from(logical_block_count - 1 - logical))
+        .collect::<Result<_, _>>()?;
+    let valid_tokens = vec![u16::try_from(BLOCK)?; logical_block_count];
+    let row_positions = [37_u32, 0, 8_191, 35, 36];
+    let row_sequence_slots = [0_u32; 5];
+    let logical_lengths: Vec<usize> = row_positions
+        .iter()
+        .map(|&position| usize::try_from(position).map(|position| position + 1))
+        .collect::<Result<_, _>>()?;
+    assert_eq!(logical_lengths, [38, 1, 8_192, 36, 37]);
+    let output_row_count = 8_usize;
+    let query_head_count = 2_usize;
+    let key_value_head_count = 1_usize;
+    let host = PackedBatchHostV1::new(
+        &sequence_block_offsets,
+        &block_ids,
+        &valid_tokens,
+        &row_sequence_slots,
+        &row_positions,
+        u64::try_from(physical_block_count)?,
+    )?;
+
+    let query_values: Vec<f32> = (0..row_positions.len() * query_head_count * D)
+        .map(|index| (f32::from(u8::try_from((index * 29 + 7) % 101).unwrap_or(0)) - 50.0) / 64.0)
+        .collect();
+    let pool_elements = physical_block_count * key_value_head_count * BLOCK * D;
+    let mut key_values = vec![f32::NAN; pool_elements];
+    let mut value_values = vec![f32::NAN; pool_elements];
+    for token in 0..maximum_tokens {
+        for depth in 0..D {
+            let cache = row_cache_index(
+                0,
+                token,
+                0,
+                depth,
+                key_value_head_count,
+                &sequence_block_offsets,
+                &block_ids,
+            );
+            key_values[cache] =
+                (f32::from(u8::try_from((token * 17 + depth * 11 + 3) % 127).unwrap_or(0)) - 63.0)
+                    / 64.0;
+            value_values[cache] =
+                (f32::from(u8::try_from((token * 13 + depth * 7 + 5) % 113).unwrap_or(0)) - 56.0)
+                    / 32.0;
+        }
+    }
+
+    let query = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&query_values),
+    )?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&key_values),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&value_values),
+    )?;
+    let offsets_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
+    let block_ids_device = upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?;
+    let valid_tokens_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
+
+    let sibling_block_ids: Vec<Vec<u32>> = logical_lengths
+        .iter()
+        .map(|&logical_tokens| block_ids[..logical_tokens.div_ceil(BLOCK)].to_vec())
+        .collect();
+    let sibling_valid_tokens: Vec<Vec<u16>> = logical_lengths
+        .iter()
+        .map(|&logical_tokens| {
+            let mut valid =
+                vec![u16::try_from(BLOCK).unwrap_or(16); logical_tokens.div_ceil(BLOCK)];
+            if let Some(last) = valid.last_mut() {
+                *last = u16::try_from((logical_tokens - 1) % BLOCK + 1).unwrap_or(16);
+            }
+            valid
+        })
+        .collect();
+    let mut sibling_id_devices = Vec::with_capacity(row_positions.len());
+    let mut sibling_valid_devices = Vec::with_capacity(row_positions.len());
+    for row in 0..row_positions.len() {
+        sibling_id_devices.push(upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u32(&sibling_block_ids[row]),
+        )?);
+        sibling_valid_devices.push(upload(
+            &context,
+            &mut stream,
+            &mut staging,
+            &encode_u16(&sibling_valid_tokens[row]),
+        )?);
+    }
+
+    let row_bytes = query_head_count * D * 2;
+    let fixed_output_sentinel = encode_bf16(&vec![-97.0; output_row_count * query_head_count * D]);
+    let mut fixed_output = upload(&context, &mut stream, &mut staging, &fixed_output_sentinel)?;
+    let mut sibling_output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&vec![-71.0; row_positions.len() * query_head_count * D]),
+    )?;
+    let prepared = PreparedPagedDecodeAttention::select_with_reduction_profile(
+        &context,
+        PagedDecodeAttentionRequest::new(
+            u64::try_from(maximum_tokens)?,
+            u64::try_from(physical_block_count)?,
+            u64::try_from(query_head_count)?,
+            u64::try_from(key_value_head_count)?,
+            u64::try_from(D)?,
+            SCALE,
+        ),
+        DecodeAttentionPreference::Optimized,
+        FIXED37,
+        DecodeAttentionBackendAvailability::linked(),
+    )?;
+    assert_eq!(prepared.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+    assert_eq!(prepared.workspace_bytes(), 0);
+    let active = context.allocation_stats()?;
+
+    for _ in 0..3 {
+        let fixed_output_len = fixed_output.byte_len();
+        fixed37_ragged_paged_attention(
+            &mut RaggedPagedAttentionParams {
+                query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+                value_pool: CudaBufferSpan::new(
+                    &value_pool,
+                    CudaDType::BF16,
+                    0,
+                    value_pool.byte_len(),
+                )?,
+                output: CudaBufferSpanMut::new(
+                    &mut fixed_output,
+                    CudaDType::BF16,
+                    0,
+                    fixed_output_len,
+                )?,
+                batch: bind_batch(
+                    host,
+                    &offsets_device,
+                    &block_ids_device,
+                    &valid_tokens_device,
+                    &row_slots_device,
+                    &row_positions_device,
+                )?,
+                query_head_count: u64::try_from(query_head_count)?,
+                key_value_head_count: u64::try_from(key_value_head_count)?,
+                head_size: u64::try_from(D)?,
+                output_row_count: u64::try_from(output_row_count)?,
+                scale: SCALE,
+            },
+            &mut stream,
+        )?;
+        assert_eq!(context.allocation_stats()?, active);
+    }
+
+    for row in 0..row_positions.len() {
+        let host_table = PagedKvBlockTableHostV1::new(
+            &sibling_block_ids[row],
+            &sibling_valid_tokens[row],
+            u64::try_from(logical_lengths[row])?,
+            u64::try_from(physical_block_count)?,
+        )?;
+        prepared.execute_without_workspace(
+            &mut PagedDecodeAttentionNoWorkspaceParams {
+                query: CudaBufferSpan::new(
+                    &query,
+                    CudaDType::BF16,
+                    u64::try_from(row * row_bytes)?,
+                    u64::try_from(row_bytes)?,
+                )?,
+                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+                value_pool: CudaBufferSpan::new(
+                    &value_pool,
+                    CudaDType::BF16,
+                    0,
+                    value_pool.byte_len(),
+                )?,
+                output: CudaBufferSpanMut::new(
+                    &mut sibling_output,
+                    CudaDType::BF16,
+                    u64::try_from(row * row_bytes)?,
+                    u64::try_from(row_bytes)?,
+                )?,
+                block_table: PagedKvBlockTableV1::new(
+                    host_table,
+                    CudaBufferSpan::new(
+                        &sibling_id_devices[row],
+                        CudaDType::U32,
+                        0,
+                        sibling_id_devices[row].byte_len(),
+                    )?,
+                    CudaBufferSpan::new(
+                        &sibling_valid_devices[row],
+                        CudaDType::U16,
+                        0,
+                        sibling_valid_devices[row].byte_len(),
+                    )?,
+                )?,
+            },
+            &mut stream,
+        )?;
+        assert_eq!(context.allocation_stats()?, active);
+    }
+
+    let fixed_bytes = download(&context, &mut stream, &mut fixed_output)?;
+    let sibling_bytes = download(&context, &mut stream, &mut sibling_output)?;
+    let active_bytes = row_positions.len() * row_bytes;
+    assert_eq!(
+        &fixed_bytes[..active_bytes],
+        sibling_bytes.as_slice(),
+        "fixed37 ragged rows T=1/36/37/38/8192 must byte-match their paged two-pass siblings"
+    );
+    assert!(
+        fixed_bytes[active_bytes..].iter().all(|&byte| byte == 0),
+        "every BF16 lane in ragged rows [T,M) must be storage-exact +0"
+    );
+    assert_eq!(context.allocation_stats()?, active);
+
+    drop(prepared);
+    sibling_output.close()?;
+    fixed_output.close()?;
+    for buffer in sibling_valid_devices {
+        buffer.close()?;
+    }
+    for buffer in sibling_id_devices {
+        buffer.close()?;
+    }
+    row_positions_device.close()?;
+    row_slots_device.close()?;
+    valid_tokens_device.close()?;
+    block_ids_device.close()?;
+    offsets_device.close()?;
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn fixed37_ragged_special_scores_and_zero_times_infinity_are_full_qnan() -> TestResult {
+    let Some((context, mut stream)) = first_context()? else {
+        return Ok(());
+    };
+    let mut staging = context.allocate_pinned_host_buffer(1 << 16)?;
+    let sequence_block_offsets = [0_u32, 1, 2, 3, 4];
+    let block_ids = [3_u32, 1, 0, 2];
+    let valid_tokens = [1_u16, 1, 1, 2];
+    let row_sequence_slots = [2_u32, 0, 3, 1];
+    let row_positions = [0_u32, 0, 1, 0];
+    let physical_block_count = 4_usize;
+    let output_row_count = 5_usize;
+    let host = PackedBatchHostV1::new(
+        &sequence_block_offsets,
+        &block_ids,
+        &valid_tokens,
+        &row_sequence_slots,
+        &row_positions,
+        u64::try_from(physical_block_count)?,
+    )?;
+
+    let mut query_values = vec![0.0_f32; row_positions.len() * D];
+    query_values[0] = 1.0;
+    query_values[D] = f32::NAN;
+    query_values[2 * D] = 1.0;
+    query_values[3 * D] = 1.0;
+    let pool_elements = physical_block_count * BLOCK * D;
+    let mut key_values = vec![0.0_f32; pool_elements];
+    let mut value_values = vec![1.0_f32; pool_elements];
+
+    let plus_infinity = row_cache_index(1, 0, 0, 0, 1, &sequence_block_offsets, &block_ids);
+    key_values[plus_infinity] = f32::INFINITY;
+    let all_negative_infinity = row_cache_index(2, 0, 0, 0, 1, &sequence_block_offsets, &block_ids);
+    key_values[all_negative_infinity] = f32::NEG_INFINITY;
+    for depth in 0..D {
+        let finite_value = row_cache_index(3, 0, 0, depth, 1, &sequence_block_offsets, &block_ids);
+        value_values[finite_value] = 2.0;
+        let zero_probability_infinity =
+            row_cache_index(3, 1, 0, depth, 1, &sequence_block_offsets, &block_ids);
+        value_values[zero_probability_infinity] = f32::INFINITY;
+    }
+    let negative_infinity_score =
+        row_cache_index(3, 1, 0, 0, 1, &sequence_block_offsets, &block_ids);
+    key_values[negative_infinity_score] = f32::NEG_INFINITY;
+
+    let query = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&query_values),
+    )?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&key_values),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&value_values),
+    )?;
+    let offsets_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
+    let block_ids_device = upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?;
+    let valid_tokens_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
+    let mut output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&vec![-101.0; output_row_count * D]),
+    )?;
+    let active = context.allocation_stats()?;
+    let output_len = output.byte_len();
+    fixed37_ragged_paged_attention(
+        &mut RaggedPagedAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+            batch: bind_batch(
+                host,
+                &offsets_device,
+                &block_ids_device,
+                &valid_tokens_device,
+                &row_slots_device,
+                &row_positions_device,
+            )?,
+            query_head_count: 1,
+            key_value_head_count: 1,
+            head_size: u64::try_from(D)?,
+            output_row_count: u64::try_from(output_row_count)?,
+            scale: 1.0,
+        },
+        &mut stream,
+    )?;
+    assert_eq!(context.allocation_stats()?, active);
+
+    let actual = download(&context, &mut stream, &mut output)?;
+    let active_bytes = row_positions.len() * D * 2;
+    let qnan_lane = 0x7fff_u16.to_ne_bytes();
+    assert!(
+        actual[..active_bytes]
+            .chunks_exact(2)
+            .all(|lane| lane == qnan_lane),
+        "NaN, +Inf, all -Inf, and 0*Inf witnesses must each produce a full canonical qNaN row"
+    );
+    assert!(actual[active_bytes..].iter().all(|&byte| byte == 0));
+
+    output.close()?;
+    row_positions_device.close()?;
+    row_slots_device.close()?;
+    valid_tokens_device.close()?;
+    block_ids_device.close()?;
+    offsets_device.close()?;
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn fixed37_ragged_corrupt_device_metadata_is_full_qnan_without_oob() -> TestResult {
+    let Some((context, mut stream)) = first_context()? else {
+        return Ok(());
+    };
+    let mut staging = context.allocate_pinned_host_buffer(1 << 16)?;
+    let sequence_block_offsets = [0_u32, 1];
+    let host_block_ids = [0_u32];
+    let corrupt_block_ids = [1_u32];
+    let valid_tokens = [1_u16];
+    let row_sequence_slots = [0_u32];
+    let row_positions = [0_u32];
+    let oversized_device_row_positions = [1_u32];
+    let host = PackedBatchHostV1::new(
+        &sequence_block_offsets,
+        &host_block_ids,
+        &valid_tokens,
+        &row_sequence_slots,
+        &row_positions,
+        1,
+    )?;
+    let query = upload(&context, &mut stream, &mut staging, &encode_bf16(&[1.0; D]))?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[1.0; BLOCK * D]),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[2.0; BLOCK * D]),
+    )?;
+    let offsets_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
+    let valid_block_ids_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&host_block_ids),
+    )?;
+    let corrupt_block_ids_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&corrupt_block_ids),
+    )?;
+    let valid_tokens_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let valid_row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
+    let oversized_row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&oversized_device_row_positions),
+    )?;
+    let output_row_count = 2_usize;
+    let output_sentinel = encode_bf16(&vec![-83.0; output_row_count * D]);
+    let mut output = upload(&context, &mut stream, &mut staging, &output_sentinel)?;
+    let active = context.allocation_stats()?;
+
+    for (case, block_ids_device, row_positions_device) in [
+        (
+            "out-of-pool block ID",
+            &corrupt_block_ids_device,
+            &valid_row_positions_device,
+        ),
+        (
+            "device row T exceeds host maximum T",
+            &valid_block_ids_device,
+            &oversized_row_positions_device,
+        ),
+    ] {
+        output.upload_from_slice(0, &output_sentinel, &mut staging, &mut stream)?;
+        for _ in 0..3 {
+            let output_len = output.byte_len();
+            fixed37_ragged_paged_attention(
+                &mut RaggedPagedAttentionParams {
+                    query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                    key_pool: CudaBufferSpan::new(
+                        &key_pool,
+                        CudaDType::BF16,
+                        0,
+                        key_pool.byte_len(),
+                    )?,
+                    value_pool: CudaBufferSpan::new(
+                        &value_pool,
+                        CudaDType::BF16,
+                        0,
+                        value_pool.byte_len(),
+                    )?,
+                    output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                    batch: bind_batch(
+                        host,
+                        &offsets_device,
+                        block_ids_device,
+                        &valid_tokens_device,
+                        &row_slots_device,
+                        row_positions_device,
+                    )?,
+                    query_head_count: 1,
+                    key_value_head_count: 1,
+                    head_size: u64::try_from(D)?,
+                    output_row_count: u64::try_from(output_row_count)?,
+                    scale: SCALE,
+                },
+                &mut stream,
+            )?;
+            assert_eq!(context.allocation_stats()?, active);
+        }
+
+        let actual = download(&context, &mut stream, &mut output)?;
+        let active_bytes = D * 2;
+        let qnan_lane = 0x7fff_u16.to_ne_bytes();
+        assert!(
+            actual[..active_bytes]
+                .chunks_exact(2)
+                .all(|lane| lane == qnan_lane),
+            "corrupt metadata case {case} must produce a full canonical qNaN row"
+        );
+        assert!(
+            actual[active_bytes..].iter().all(|&byte| byte == 0),
+            "corrupt metadata case {case} must not disturb exact-zero tail rows"
+        );
+        assert_eq!(context.allocation_stats()?, active);
+    }
+
+    output.close()?;
+    oversized_row_positions_device.close()?;
+    valid_row_positions_device.close()?;
+    row_slots_device.close()?;
+    valid_tokens_device.close()?;
+    corrupt_block_ids_device.close()?;
+    valid_block_ids_device.close()?;
+    offsets_device.close()?;
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn fixed37_ragged_command_batch_retains_resources_until_finish() -> TestResult {
+    let Some((context, mut stream)) = first_context()? else {
+        return Ok(());
+    };
+    let mut other_stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(1 << 16)?;
+    let sequence_block_offsets = [0_u32, 1];
+    let block_ids = [0_u32];
+    let valid_tokens = [1_u16];
+    let row_sequence_slots = [0_u32];
+    let row_positions = [0_u32];
+    let host = PackedBatchHostV1::new(
+        &sequence_block_offsets,
+        &block_ids,
+        &valid_tokens,
+        &row_sequence_slots,
+        &row_positions,
+        1,
+    )?;
+    let query = upload(&context, &mut stream, &mut staging, &encode_bf16(&[1.0; D]))?;
+    let key_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[1.0; BLOCK * D]),
+    )?;
+    let value_pool = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[2.0; BLOCK * D]),
+    )?;
+    let offsets_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&sequence_block_offsets),
+    )?;
+    let block_ids_device = upload(&context, &mut stream, &mut staging, &encode_u32(&block_ids))?;
+    let valid_tokens_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u16(&valid_tokens),
+    )?;
+    let row_slots_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_sequence_slots),
+    )?;
+    let row_positions_device = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_u32(&row_positions),
+    )?;
+    let mut output = upload(
+        &context,
+        &mut stream,
+        &mut staging,
+        &encode_bf16(&[-59.0; D]),
+    )?;
+    let active = context.allocation_stats()?;
+
+    let mut command_batch = stream.begin_command_batch()?;
+    {
+        let mut commands = command_batch.commands();
+        let output_len = output.byte_len();
+        fixed37_ragged_paged_attention(
+            &mut RaggedPagedAttentionParams {
+                query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+                key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+                value_pool: CudaBufferSpan::new(
+                    &value_pool,
+                    CudaDType::BF16,
+                    0,
+                    value_pool.byte_len(),
+                )?,
+                output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+                batch: bind_batch(
+                    host,
+                    &offsets_device,
+                    &block_ids_device,
+                    &valid_tokens_device,
+                    &row_slots_device,
+                    &row_positions_device,
+                )?,
+                query_head_count: 1,
+                key_value_head_count: 1,
+                head_size: u64::try_from(D)?,
+                output_row_count: 1,
+                scale: SCALE,
+            },
+            &mut commands,
+        )?;
+    }
+
+    let output_len = output.byte_len();
+    let error = fixed37_ragged_paged_attention(
+        &mut RaggedPagedAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+            batch: bind_batch(
+                host,
+                &offsets_device,
+                &block_ids_device,
+                &valid_tokens_device,
+                &row_slots_device,
+                &row_positions_device,
+            )?,
+            query_head_count: 1,
+            key_value_head_count: 1,
+            head_size: u64::try_from(D)?,
+            output_row_count: 1,
+            scale: SCALE,
+        },
+        &mut other_stream,
+    )
+    .expect_err("another stream must not reuse a resource retained by an unfinished batch");
+    assert_eq!(error.kind(), CudaErrorKind::InvalidState);
+    assert_eq!(context.allocation_stats()?, active);
+
+    command_batch.finish()?;
+    let output_len = output.byte_len();
+    fixed37_ragged_paged_attention(
+        &mut RaggedPagedAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
+            value_pool: CudaBufferSpan::new(
+                &value_pool,
+                CudaDType::BF16,
+                0,
+                value_pool.byte_len(),
+            )?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, output_len)?,
+            batch: bind_batch(
+                host,
+                &offsets_device,
+                &block_ids_device,
+                &valid_tokens_device,
+                &row_slots_device,
+                &row_positions_device,
+            )?,
+            query_head_count: 1,
+            key_value_head_count: 1,
+            head_size: u64::try_from(D)?,
+            output_row_count: 1,
+            scale: SCALE,
+        },
+        &mut other_stream,
+    )?;
+    assert_eq!(context.allocation_stats()?, active);
+    assert_eq!(
+        download(&context, &mut other_stream, &mut output)?,
+        encode_bf16(&[2.0; D]),
+        "finish must release the ledger for immediate successful reuse"
+    );
+    assert_eq!(context.allocation_stats()?, active);
+
+    output.close()?;
+    row_positions_device.close()?;
+    row_slots_device.close()?;
+    valid_tokens_device.close()?;
+    block_ids_device.close()?;
+    offsets_device.close()?;
+    value_pool.close()?;
+    key_pool.close()?;
+    query.close()?;
+    staging.close()?;
+    other_stream.close()?;
     stream.close()?;
     close_context(context)
 }

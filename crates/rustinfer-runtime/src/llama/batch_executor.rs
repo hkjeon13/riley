@@ -13,12 +13,13 @@ use std::fmt;
 use std::mem;
 
 use rustinfer_cuda::{
-    CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
-    CudaExecutionStream, CudaStream, EmbeddingParams, GatedMultiplyParams, IndexedRopeParams,
-    PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
-    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams,
-    embedding, gated_multiply, indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write,
-    residual_add, residual_rms_norm, rms_norm, row_gather, silu,
+    AttentionReductionProfile, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
+    CudaDeviceBuffer, CudaError, CudaExecutionStream, CudaStream, EmbeddingParams,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
+    PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
+    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, embedding,
+    fixed37_ragged_paged_attention, gated_multiply, indexed_rope, ragged_paged_attention,
+    ragged_paged_kv_cache_write, residual_add, residual_rms_norm, rms_norm, row_gather, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -264,6 +265,7 @@ pub enum ExecutionCompletionImplementation {
 pub struct PreparedLlamaBatchExecutorConfig {
     metadata: LlamaBatchMetadataConfig,
     forward: PreparedLlamaForwardConfig,
+    ragged_attention_reduction_profile: AttentionReductionProfile,
     residual_norm: ResidualNormImplementation,
     execution_completion: ExecutionCompletionImplementation,
 }
@@ -277,6 +279,7 @@ impl PreparedLlamaBatchExecutorConfig {
         Self {
             metadata,
             forward,
+            ragged_attention_reduction_profile: AttentionReductionProfile::CanonicalV1,
             residual_norm: ResidualNormImplementation::Separate,
             execution_completion: ExecutionCompletionImplementation::PerOperation,
         }
@@ -290,6 +293,39 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
+    }
+
+    /// Selects the reduction profile used by ragged paged attention.
+    #[must_use]
+    pub const fn with_ragged_attention_reduction_profile(
+        mut self,
+        profile: AttentionReductionProfile,
+    ) -> Self {
+        self.ragged_attention_reduction_profile = profile;
+        self
+    }
+
+    /// Selects the existing canonical ragged online-softmax implementation.
+    #[must_use]
+    pub const fn with_canonical_ragged_attention(mut self) -> Self {
+        self.ragged_attention_reduction_profile = AttentionReductionProfile::CanonicalV1;
+        self
+    }
+
+    /// Selects fixed37 no-HBM two-pass ragged attention.
+    ///
+    /// Execution rejects logical prefixes above 8192 during host preflight,
+    /// before device metadata upload or paged-KV mutation.
+    #[must_use]
+    pub const fn with_fixed37_ragged_attention(mut self) -> Self {
+        self.ragged_attention_reduction_profile =
+            AttentionReductionProfile::FixedContiguous37BalancedV1;
+        self
+    }
+
+    #[must_use]
+    pub const fn ragged_attention_reduction_profile(self) -> AttentionReductionProfile {
+        self.ragged_attention_reduction_profile
     }
 
     /// Selects the exact fused attention residual/post-norm implementation.
@@ -962,6 +998,7 @@ pub(super) const fn normalize_prepared_config(
     PreparedLlamaBatchExecutorConfig {
         metadata: config.metadata,
         forward: config.forward.with_optimized_attention(),
+        ragged_attention_reduction_profile: config.ragged_attention_reduction_profile,
         residual_norm: config.residual_norm,
         execution_completion: config.execution_completion,
     }
@@ -1113,6 +1150,7 @@ fn execute_packed(
             execute_fixed_graph(
                 forward,
                 config.residual_norm,
+                config.ragged_attention_reduction_profile,
                 layout,
                 key_cache,
                 value_cache,
@@ -1207,6 +1245,7 @@ fn execute_packed(
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     forward: &mut PreparedLlamaForward,
     residual_norm_implementation: ResidualNormImplementation,
+    attention_reduction_profile: AttentionReductionProfile,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
     value_cache: &mut CudaDeviceBuffer,
@@ -1509,8 +1548,15 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 output_row_count: dense_rows,
                 scale: 1.0 / (head_size as f32).sqrt(),
             };
-            ragged_paged_attention(&mut params, stream)
-                .map_err(|source| batch_cuda(attention_site, source))?;
+            match attention_reduction_profile {
+                AttentionReductionProfile::CanonicalV1 => {
+                    ragged_paged_attention(&mut params, stream)
+                }
+                AttentionReductionProfile::FixedContiguous37BalancedV1 => {
+                    fixed37_ragged_paged_attention(&mut params, stream)
+                }
+            }
+            .map_err(|source| batch_cuda(attention_site, source))?;
         }
 
         let output_site = ExecutionSite::layer(layer_index, LlamaOp::OutputProjection);
@@ -1801,6 +1847,16 @@ fn validate_for_execution(
         .iter()
         .zip(packed.position_ids())
     {
+        if config.ragged_attention_reduction_profile
+            == AttentionReductionProfile::FixedContiguous37BalancedV1
+            && u64::from(position) >= FIXED37_RAGGED_MAX_LOGICAL_TOKENS
+        {
+            return Err(LlamaBatchExecutorError::PositionOutOfRange {
+                row: usize::try_from(row).unwrap_or(usize::MAX),
+                position,
+                maximum: usize::try_from(FIXED37_RAGGED_MAX_LOGICAL_TOKENS).unwrap_or(usize::MAX),
+            });
+        }
         if u64::from(position) >= maximum_position_count {
             return Err(LlamaBatchExecutorError::PositionOutOfRange {
                 row: usize::try_from(row).unwrap_or(usize::MAX),
@@ -2195,3 +2251,56 @@ fn checked_product_u64(
 
 const _: () = assert!(KV_BLOCK_SIZE == 16);
 const _: () = assert!(SUPPORTED_HEAD_DIMENSION == 64);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::llama::batch::{
+        LlamaBatchBlockTable, LlamaBatchRowKind, PreparedLlamaBatchMetadata,
+    };
+    use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
+
+    #[test]
+    fn fixed37_profile_rejects_t8193_in_host_preflight() {
+        const LOGICAL_TOKENS: usize = 8_193;
+        let block_count = LOGICAL_TOKENS.div_ceil(KV_BLOCK_SIZE);
+        let physical_block_ids: Vec<u32> =
+            (0..u32::try_from(block_count).expect("block count")).collect();
+        let mut valid_tokens = vec![u16::try_from(KV_BLOCK_SIZE).expect("block size"); block_count];
+        *valid_tokens.last_mut().expect("last block") = 1;
+        let token = [1_u32];
+        let rows = [LlamaBatchRow::new(
+            1,
+            LlamaBatchRowKind::Decode,
+            &token,
+            u32::try_from(LOGICAL_TOKENS).expect("logical token count"),
+            LlamaBatchBlockTable::new(
+                BLOCK_TABLE_V1_VERSION,
+                &physical_block_ids,
+                &valid_tokens,
+                u32::try_from(LOGICAL_TOKENS).expect("logical token count"),
+            ),
+            Some(0),
+        )];
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, block_count, 1, block_count)
+            .expect("valid metadata bounds");
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(metadata).expect("prepare metadata");
+        let packed = prepared.pack(&rows).expect("pack T=8193 decode row");
+        let fixed37 =
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default())
+                .with_fixed37_ragged_attention();
+
+        assert!(matches!(
+            validate_for_execution(packed, 2, 16_384, fixed37),
+            Err(LlamaBatchExecutorError::PositionOutOfRange {
+                position: 8_192,
+                maximum: 8_192,
+                ..
+            })
+        ));
+
+        let packed = prepared.pack(&rows).expect("repack after preflight error");
+        validate_for_execution(packed, 2, 16_384, fixed37.with_canonical_ragged_attention())
+            .expect("canonical ragged attention retains its existing model bound");
+    }
+}

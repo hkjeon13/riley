@@ -23,9 +23,10 @@ pub use attention::{
     qk_gqa, scale_causal_mask_in_place,
 };
 pub use batch::{
-    IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE, PACKED_BATCH_VERSION, PackedBatchHostV1,
-    PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, RowGatherParams,
-    indexed_rope, ragged_paged_attention, ragged_paged_kv_cache_write, row_gather,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE,
+    PACKED_BATCH_VERSION, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
+    RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention, indexed_rope,
+    ragged_paged_attention, ragged_paged_kv_cache_write, row_gather,
 };
 pub use decode::{
     DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,

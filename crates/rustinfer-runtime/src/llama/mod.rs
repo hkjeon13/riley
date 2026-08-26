@@ -57,7 +57,9 @@ pub use generation::{
 };
 
 #[cfg(feature = "cuda")]
-pub use rustinfer_cuda::{AttentionBackend, AttentionPreference, AttentionSelectionTrace};
+pub use rustinfer_cuda::{
+    AttentionBackend, AttentionPreference, AttentionReductionProfile, AttentionSelectionTrace,
+};
 
 #[cfg(any(feature = "cuda", test))]
 pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
@@ -71,7 +73,7 @@ mod source_contract_tests {
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
-    use rustinfer_cuda::AttentionPreference;
+    use rustinfer_cuda::{AttentionPreference, AttentionReductionProfile};
 
     #[test]
     fn optimized_attention_is_default_and_reference_is_explicit() {
@@ -144,6 +146,46 @@ mod source_contract_tests {
         assert_eq!(
             normalized.forward().attention_preference(),
             AttentionPreference::Optimized
+        );
+    }
+
+    #[test]
+    fn batch_ragged_attention_profile_is_explicit_reversible_and_preserved() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid bounds");
+        let defaults =
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
+        assert_eq!(
+            defaults.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+        assert_eq!(
+            defaults
+                .with_fixed37_ragged_attention()
+                .ragged_attention_reduction_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            defaults
+                .with_fixed37_ragged_attention()
+                .with_canonical_ragged_attention()
+                .ragged_attention_reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+
+        let normalized = normalize_prepared_config(
+            defaults
+                .with_ragged_attention_reduction_profile(
+                    AttentionReductionProfile::FixedContiguous37BalancedV1,
+                )
+                .with_iteration_batch_completion(),
+        );
+        assert_eq!(
+            normalized.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            normalized.execution_completion_implementation(),
+            ExecutionCompletionImplementation::IterationBatch
         );
     }
 

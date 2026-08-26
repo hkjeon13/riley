@@ -12,6 +12,9 @@ pub const PACKED_BATCH_VERSION: u32 = 1;
 /// Fixed token capacity of every physical paged-KV block.
 pub const PACKED_BATCH_BLOCK_SIZE: u64 = 16;
 
+/// Largest inclusive logical prefix accepted by fixed37 ragged attention.
+pub const FIXED37_RAGGED_MAX_LOGICAL_TOKENS: u64 = 8_192;
+
 const BF16_BYTES: u64 = 2;
 const ATTENTION_HEAD_SIZE: u64 = 64;
 
@@ -647,7 +650,9 @@ pub struct RaggedPagedAttentionParams<'a> {
 /// Executes D64 GQA ragged paged attention and zero-fills inactive output rows.
 ///
 /// Each active row attends through its own logical position, inclusive. The
-/// native operation performs no allocation and synchronizes before returning.
+/// native operation performs no allocation. Direct-stream execution
+/// synchronizes before returning; command-batch execution retains every
+/// registered resource until [`crate::CudaCommandBatch::finish`].
 ///
 /// # Errors
 ///
@@ -661,88 +666,7 @@ pub fn ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
 ) -> CudaResult<()> {
     const OPERATION: &str = "ragged_paged_attention";
     let stream = execution_stream_mut(stream);
-    require_nonzero(OPERATION, "query_head_count", params.query_head_count)?;
-    require_nonzero(
-        OPERATION,
-        "key_value_head_count",
-        params.key_value_head_count,
-    )?;
-    if params.head_size != ATTENTION_HEAD_SIZE {
-        return Err(CudaError::invalid_argument(
-            OPERATION,
-            "ragged paged attention requires head_size=64",
-        ));
-    }
-    if params.query_head_count % params.key_value_head_count != 0 {
-        return Err(CudaError::invalid_argument(
-            OPERATION,
-            "key_value_head_count must divide query_head_count",
-        ));
-    }
-    if !params.scale.is_finite() || params.scale <= 0.0 {
-        return Err(CudaError::invalid_argument(
-            OPERATION,
-            "scale must be finite and greater than zero",
-        ));
-    }
-    let host = params.batch.host();
-    if params.output_row_count < host.active_row_count() {
-        return Err(CudaError::out_of_range(
-            OPERATION,
-            "output_row_count must be at least active_row_count",
-        ));
-    }
-    for (name, dtype) in [
-        ("query", params.query.dtype()),
-        ("key_pool", params.key_pool.dtype()),
-        ("value_pool", params.value_pool.dtype()),
-        ("output", params.output.dtype()),
-    ] {
-        require_dtype(OPERATION, name, dtype, CudaDType::BF16)?;
-    }
-    let query_bytes = checked_bytes(
-        OPERATION,
-        &[
-            host.active_row_count(),
-            params.query_head_count,
-            ATTENTION_HEAD_SIZE,
-            BF16_BYTES,
-        ],
-    )?;
-    let output_bytes = checked_bytes(
-        OPERATION,
-        &[
-            params.output_row_count,
-            params.query_head_count,
-            ATTENTION_HEAD_SIZE,
-            BF16_BYTES,
-        ],
-    )?;
-    let pool_bytes = paged_pool_bytes(
-        OPERATION,
-        host.physical_block_count(),
-        params.key_value_head_count,
-        ATTENTION_HEAD_SIZE,
-    )?;
-    for (name, actual, required) in [
-        ("query", params.query.byte_len(), query_bytes),
-        ("key_pool", params.key_pool.byte_len(), pool_bytes),
-        ("value_pool", params.value_pool.byte_len(), pool_bytes),
-        ("output", params.output.byte_len(), output_bytes),
-    ] {
-        require_capacity(OPERATION, name, actual, required)?;
-    }
-    validate_batch_resources(
-        OPERATION,
-        stream,
-        &params.batch,
-        &[
-            params.query.buffer(),
-            params.key_pool.buffer(),
-            params.value_pool.buffer(),
-            params.output.buffer(),
-        ],
-    )?;
+    validate_ragged_paged_attention(OPERATION, params, stream)?;
 
     #[cfg(feature = "cuda")]
     {
@@ -766,6 +690,167 @@ pub fn ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
         let _ = params;
         Err(CudaError::unavailable(OPERATION))
     }
+}
+
+/// Executes fixed37 D64 GQA ragged paged attention without a workspace.
+///
+/// Each active row attends through `position + 1` logical tokens, inclusive,
+/// using the fixed contiguous-37 balanced reduction profile. Rows `[T,M)` are
+/// storage-exact zero. Execution performs no CUDA allocation and has no
+/// fallback to another numerical profile. Direct-stream execution synchronizes
+/// before returning; command-batch execution retains every registered resource
+/// until [`crate::CudaCommandBatch::finish`].
+///
+/// # Errors
+///
+/// Returns before launch unless the ordinary ragged-attention contract holds
+/// and every host-mirrored row has `position + 1 <= 8192`.
+#[allow(clippy::too_many_lines)]
+pub fn fixed37_ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
+    params: &mut RaggedPagedAttentionParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_ragged_paged_attention";
+    let stream = execution_stream_mut(stream);
+    validate_ragged_paged_attention(OPERATION, params, stream)?;
+    let maximum_logical_token_count =
+        validate_fixed37_ragged_logical_tokens(OPERATION, params.batch.host().row_positions())?;
+
+    #[cfg(feature = "cuda")]
+    {
+        let batch = params.batch.raw();
+        ffi::fixed37_ragged_paged_attention_two_pass_execute(
+            params.query.raw(),
+            params.key_pool.raw(),
+            params.value_pool.raw(),
+            params.output.raw(),
+            &batch,
+            params.query_head_count,
+            params.key_value_head_count,
+            params.head_size,
+            params.output_row_count,
+            maximum_logical_token_count,
+            params.scale,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = (params, maximum_logical_token_count);
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+fn validate_ragged_paged_attention(
+    operation: &'static str,
+    params: &RaggedPagedAttentionParams<'_>,
+    stream: &CudaStream,
+) -> CudaResult<()> {
+    require_nonzero(operation, "query_head_count", params.query_head_count)?;
+    require_nonzero(
+        operation,
+        "key_value_head_count",
+        params.key_value_head_count,
+    )?;
+    if params.head_size != ATTENTION_HEAD_SIZE {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "ragged paged attention requires head_size=64",
+        ));
+    }
+    if params.query_head_count % params.key_value_head_count != 0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "key_value_head_count must divide query_head_count",
+        ));
+    }
+    if !params.scale.is_finite() || params.scale <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "scale must be finite and greater than zero",
+        ));
+    }
+    let host = params.batch.host();
+    if params.output_row_count < host.active_row_count() {
+        return Err(CudaError::out_of_range(
+            operation,
+            "output_row_count must be at least active_row_count",
+        ));
+    }
+    for (name, dtype) in [
+        ("query", params.query.dtype()),
+        ("key_pool", params.key_pool.dtype()),
+        ("value_pool", params.value_pool.dtype()),
+        ("output", params.output.dtype()),
+    ] {
+        require_dtype(operation, name, dtype, CudaDType::BF16)?;
+    }
+    let query_bytes = checked_bytes(
+        operation,
+        &[
+            host.active_row_count(),
+            params.query_head_count,
+            ATTENTION_HEAD_SIZE,
+            BF16_BYTES,
+        ],
+    )?;
+    let output_bytes = checked_bytes(
+        operation,
+        &[
+            params.output_row_count,
+            params.query_head_count,
+            ATTENTION_HEAD_SIZE,
+            BF16_BYTES,
+        ],
+    )?;
+    let pool_bytes = paged_pool_bytes(
+        operation,
+        host.physical_block_count(),
+        params.key_value_head_count,
+        ATTENTION_HEAD_SIZE,
+    )?;
+    for (name, actual, required) in [
+        ("query", params.query.byte_len(), query_bytes),
+        ("key_pool", params.key_pool.byte_len(), pool_bytes),
+        ("value_pool", params.value_pool.byte_len(), pool_bytes),
+        ("output", params.output.byte_len(), output_bytes),
+    ] {
+        require_capacity(operation, name, actual, required)?;
+    }
+    validate_batch_resources(
+        operation,
+        stream,
+        &params.batch,
+        &[
+            params.query.buffer(),
+            params.key_pool.buffer(),
+            params.value_pool.buffer(),
+            params.output.buffer(),
+        ],
+    )
+}
+
+fn validate_fixed37_ragged_logical_tokens(
+    operation: &'static str,
+    row_positions: &[u32],
+) -> CudaResult<u64> {
+    let maximum_logical_token_count = row_positions
+        .iter()
+        .map(|&position| u64::from(position) + 1)
+        .max()
+        .ok_or_else(|| {
+            CudaError::invalid_argument(
+                operation,
+                "fixed37 ragged attention requires at least one active row",
+            )
+        })?;
+    if maximum_logical_token_count > FIXED37_RAGGED_MAX_LOGICAL_TOKENS {
+        return Err(CudaError::out_of_range(
+            operation,
+            "fixed37 ragged attention requires every row position + 1 to be at most 8192",
+        ));
+    }
+    Ok(maximum_logical_token_count)
 }
 
 #[derive(Clone, Copy)]
@@ -1214,6 +1299,22 @@ mod tests {
     }
 
     #[test]
+    fn fixed37_ragged_accepts_t8192_and_rejects_t8193() {
+        let maximum = validate_fixed37_ragged_logical_tokens(
+            "fixed37_ragged_paged_attention",
+            &[0, 35, 36, 37, 8_191],
+        )
+        .expect("fixed37 row prefixes through T=8192 must be accepted");
+        assert_eq!(maximum, 8_192);
+
+        let error =
+            validate_fixed37_ragged_logical_tokens("fixed37_ragged_paged_attention", &[8_192])
+                .expect_err("fixed37 row prefix T=8193 must fail before launch");
+        assert_eq!(error.kind(), CudaErrorKind::OutOfRange);
+        assert_eq!(FIXED37_RAGGED_MAX_LOGICAL_TOKENS, 8_192);
+    }
+
+    #[test]
     fn public_batch_constants_and_symbols_match_the_native_header_source() {
         let header = include_str!("../../../kernels/include/rustinfer_cuda.h");
         assert!(header.contains("#define RUSTINFER_CUDA_PACKED_BATCH_VERSION 1u"));
@@ -1228,6 +1329,8 @@ mod tests {
             "rustinfer_cuda_row_gather_execute",
             "rustinfer_cuda_ragged_paged_kv_cache_write_execute",
             "rustinfer_cuda_ragged_paged_attention_execute",
+            "RustInferCudaFixed37RaggedPagedAttentionParams",
+            "rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute",
         ] {
             assert!(header.contains(symbol), "native header is missing {symbol}");
         }
@@ -1243,5 +1346,21 @@ mod tests {
             attention.find("uint64_t head_size;") < attention.find("uint64_t output_row_count;")
         );
         assert!(attention.find("uint64_t output_row_count;") < attention.find("float scale;"));
+        let fixed37_attention = header
+            .split("typedef struct RustInferCudaFixed37RaggedPagedAttentionParams")
+            .nth(1)
+            .and_then(|tail| {
+                tail.split("} RustInferCudaFixed37RaggedPagedAttentionParams;")
+                    .next()
+            })
+            .expect("fixed37 ragged attention declaration");
+        assert!(
+            fixed37_attention.find("uint64_t output_row_count;")
+                < fixed37_attention.find("uint64_t maximum_logical_token_count;")
+        );
+        assert!(
+            fixed37_attention.find("uint64_t maximum_logical_token_count;")
+                < fixed37_attention.find("float scale;")
+        );
     }
 }

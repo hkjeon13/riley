@@ -69,6 +69,7 @@ const PAGED_DECODE_ATTENTION_PARAMS_SIZE: u32 = 488;
 const PACKED_BATCH_V1_SIZE: u32 = 320;
 const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
 const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
+const FIXED37_RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 600;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
 const FIXED37_GEMM_PLAN_INFO_SIZE: u32 = 96;
@@ -732,6 +733,25 @@ struct RawRaggedPagedAttentionParams {
 }
 
 #[repr(C)]
+struct RawFixed37RaggedPagedAttentionParams {
+    struct_size: u32,
+    reserved0: u32,
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: RawPackedBatchV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    maximum_logical_token_count: u64,
+    scale: f32,
+    reserved1: u32,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
 struct RawGemmConfig {
     struct_size: u32,
     flags: u32,
@@ -1254,6 +1274,11 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_ragged_paged_attention_execute(
         params: *const RawRaggedPagedAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute(
+        params: *const RawFixed37RaggedPagedAttentionParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -3392,6 +3417,54 @@ pub(super) fn ragged_paged_attention_execute(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_ragged_paged_attention_two_pass_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: &PackedBatchRawV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    maximum_logical_token_count: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawFixed37RaggedPagedAttentionParams {
+        struct_size: FIXED37_RAGGED_PAGED_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        output,
+        batch: raw_packed_batch_v1(batch),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        output_row_count,
+        maximum_logical_token_count,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA ragged paged attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the safe caller keeps every borrowed tensor and packed
+            // metadata resource live through submission. Native command-batch
+            // mode retains registered resources until batch completion.
+            unsafe {
+                rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute(
+                    &params, stream, error,
+                )
+            }
+        },
+    )
+}
+
 /// Runs the existing staged-BF16 primitives for every dense batch while
 /// reusing one `[QH,S,S]` score/probability workspace.
 #[allow(clippy::too_many_arguments)]
@@ -4121,6 +4194,18 @@ const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, query_head_count
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, output_row_count) == 544);
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, scale) == 552);
 const _: () = assert!(offset_of!(RawRaggedPagedAttentionParams, reserved) == 560);
+const _: () = assert!(size_of::<RawFixed37RaggedPagedAttentionParams>() == 600);
+const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, batch) == 200);
+const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, query_head_count) == 520);
+const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, output_row_count) == 544);
+const _: () = assert!(
+    offset_of!(
+        RawFixed37RaggedPagedAttentionParams,
+        maximum_logical_token_count
+    ) == 552
+);
+const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, scale) == 560);
+const _: () = assert!(offset_of!(RawFixed37RaggedPagedAttentionParams, reserved) == 568);
 const _: () = assert!(size_of::<RawGemmConfig>() == 112);
 const _: () = assert!(offset_of!(RawGemmConfig, m) == 8);
 const _: () = assert!(offset_of!(RawGemmConfig, input_dtype) == 32);
