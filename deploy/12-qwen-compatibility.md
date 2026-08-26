@@ -91,12 +91,19 @@ cuBLASLt deterministic plan을 찾지 못했다. 진단 결과 16 MiB workspace�
 것이 아니라, heuristic이 반환한 split-K 후보를 그대로 비결정적 후보로 버리고
 있었다.
 
-plan selection은 이제 후보 algorithm의 사본을 `split_k=1`,
+PR 12의 plan selection은 후보 algorithm의 사본을 `split_k=1`,
 `reduction_scheme=NONE`으로 정규화하고 `cublasLtMatmulAlgoCheck`로 해당 layout에서
-다시 검증한다. 그 후 재계산된 workspace, 256-byte alignment, numerical flags와
-algorithm metadata를 검사한다. Qwen down-projection의 decode `M=1` 및 prefill
+다시 검증했다. 그 후 재계산된 workspace, 256-byte alignment, numerical flags와
+algorithm metadata를 검사했다. 당시 Qwen down-projection의 decode `M=1` 및 prefill
 `M=30/40/46` shape가 production과 같은 16 MiB cap으로 GPU correctness gate를
-통과했다. 결정성 계약을 완화하거나 workspace 기본값을 늘리지는 않았다.
+통과했다.
+
+PR 16 release 재검증은 cuBLASLt가 직접 반환한 `split_k > 1` /
+`OUTPUT_TYPE` 조합을 pinned 환경의 두 번째 deterministic 형태로 보존한다. `INPLACE`,
+`COMPUTE_TYPE` 또는 그 밖의 조합만 기존 `split_k=1` / `NONE` fallback으로 정규화하고
+`cublasLtMatmulAlgoCheck`를 다시 수행한다. 이 변경으로 Qwen `M=30/40/46`은
+`split_k=9` / `OUTPUT_TYPE`을 선택하므로, 이전 결과를 재해석하지 않고 Qwen
+correctness와 반복 byte-determinism gate를 새 release revision에서 다시 실행한다.
 
 후속 진단에서는 optimized online attention과 staged-BF16 eager oracle 사이의
 허용 가능한 numerical tie가 exact token 비교에 섞여 있음을 분리했다. 이에 따라

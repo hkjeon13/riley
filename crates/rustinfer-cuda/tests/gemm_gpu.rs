@@ -346,8 +346,14 @@ fn run_case(
     assert!(metadata.runtime_version() > 0);
     assert!(metadata.cublaslt_version() > 0);
     assert!(metadata.workspace_bytes() <= config.max_workspace_bytes());
-    assert!(metadata.split_k() <= 1);
-    assert_eq!(metadata.reduction_scheme(), 0);
+    assert!(
+        (metadata.split_k() <= 1 && metadata.reduction_scheme() == 0)
+            || (metadata.split_k() > 1 && metadata.reduction_scheme() == 4),
+        "{} selected an unreviewed split-K/reduction pair ({}, {})",
+        case.label,
+        metadata.split_k(),
+        metadata.reduction_scheme(),
+    );
 
     let input_seed = case_index.wrapping_mul(2).wrapping_add(1);
     let weight_seed = case_index.wrapping_mul(2).wrapping_add(2);

@@ -183,7 +183,11 @@ decoder layer 조립과 fusion은 계속 비범위다.
 - GEMM은 `Y[M,N] = X[M,K] × W[N,K]^T`의 BF16 input/weight/output, FP32 accumulator
   계약을 cuBLASLt row-major adapter로 구현했다. Prepare 단계가 deterministic algorithm,
   workspace와 implementation metadata를 고정하고 Execute 단계는 allocation-free다.
-  split-K는 1 이하, reduction scheme은 none으로 제한한다.
+  PR 16 release 재검증 뒤 reduction configuration은 `(split-K <= 1, NONE)` 또는
+  `(split-K > 1, OUTPUT_TYPE)`의 두 형태만 허용한다. 후자는 out-of-place BF16 partial을
+  caller-owned workspace에 기록한 뒤 고정된 output-type reduction으로 합친다. 이 결정성
+  보장은 pinned GPU/compute capability, CUDA/cuBLASLt 버전, SM 수, explicit stream과
+  workspace 계약에 한정되며 `INPLACE`와 `COMPUTE_TYPE` reduction은 허용하지 않는다.
 - `KernelRegistry`는 runtime `KernelPreference::{Reference, Optimized}`로 exact capability를
   선택한다. Optimized production 선택은 deterministic native implementation만 허용하고
   `ExperimentalTriton`을 기본 선택할 수 없다.

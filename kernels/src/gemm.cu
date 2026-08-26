@@ -302,6 +302,16 @@ bool algorithm_has_supported_alignment(
          is_satisfied(alignment_c) && is_satisfied(alignment_d);
 }
 
+bool deterministic_reduction_configuration(
+    uint32_t split_k, uint32_t scheme) noexcept {
+  if (split_k <= 1) {
+    return scheme ==
+           static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE);
+  }
+  return scheme ==
+         static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE);
+}
+
 bool deterministic_candidate(
     RustInferCudaGemmPlan* plan,
     const cublasLtMatmulHeuristicResult_t& candidate,
@@ -323,9 +333,7 @@ bool deterministic_candidate(
                               &reduction_scheme)) {
     return false;
   }
-  if (split_k <= 1 &&
-      reduction_scheme ==
-          static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE)) {
+  if (deterministic_reduction_configuration(split_k, reduction_scheme)) {
     return true;
   }
 
@@ -478,9 +486,8 @@ RustInferCudaStatus select_deterministic_algorithm(
             &numerical_flags)) {
       continue;
     }
-    if (split_k > 1 ||
-        reduction_scheme !=
-            static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE)) {
+    if (!deterministic_reduction_configuration(split_k,
+                                               reduction_scheme)) {
       continue;
     }
 

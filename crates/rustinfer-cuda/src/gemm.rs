@@ -35,8 +35,16 @@ const NATIVE_CUBLASLT_BACKEND_ID: u32 = 1;
 const NATIVE_FIXED37_BACKEND_ID: u32 = 2;
 #[cfg(feature = "cuda")]
 const DETERMINISTIC_REQUIRED: u32 = 1;
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", test))]
 const REDUCTION_SCHEME_NONE: u32 = 0;
+#[cfg(any(feature = "cuda", test))]
+const REDUCTION_SCHEME_OUTPUT_TYPE: u32 = 4;
+
+#[cfg(any(feature = "cuda", test))]
+const fn is_deterministic_reduction_configuration(split_k: u32, scheme: u32) -> bool {
+    (split_k <= 1 && scheme == REDUCTION_SCHEME_NONE)
+        || (split_k > 1 && scheme == REDUCTION_SCHEME_OUTPUT_TYPE)
+}
 
 /// Exact dense GEMM contract accepted by the PR 06 CUDA adapter.
 ///
@@ -974,7 +982,7 @@ impl CudaGemmAlgorithmMetadata {
                 "native GEMM algorithm is not marked deterministic",
             ));
         }
-        if native.split_k > 1 || native.reduction_scheme != REDUCTION_SCHEME_NONE {
+        if !is_deterministic_reduction_configuration(native.split_k, native.reduction_scheme) {
             return Err(native_metadata_error(format!(
                 "native GEMM algorithm violates the deterministic reduction contract: split_k={}, reduction_scheme={}",
                 native.split_k, native.reduction_scheme
@@ -1083,6 +1091,7 @@ mod tests {
     use super::{
         CudaGemmConfig, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
         FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, checked_bf16_matrix_bytes,
+        is_deterministic_reduction_configuration,
     };
     use crate::{CudaDType, CudaErrorKind};
 
@@ -1117,6 +1126,22 @@ mod tests {
         let overflow = checked_bf16_matrix_bytes(u64::MAX, 2, "test")
             .expect_err("matrix byte arithmetic must be checked");
         assert_eq!(overflow.kind(), CudaErrorKind::OutOfRange);
+    }
+
+    #[test]
+    fn deterministic_cublaslt_reduction_contract_is_an_exact_two_arm_allowlist() {
+        for accepted in [(0, 0), (1, 0), (2, 4), (42, 4)] {
+            assert!(
+                is_deterministic_reduction_configuration(accepted.0, accepted.1),
+                "accepted configuration {accepted:?} was rejected"
+            );
+        }
+        for rejected in [(0, 4), (1, 4), (2, 0), (2, 1), (2, 2), (2, 7)] {
+            assert!(
+                !is_deterministic_reduction_configuration(rejected.0, rejected.1),
+                "unreviewed configuration {rejected:?} was accepted"
+            );
+        }
     }
 
     #[test]
