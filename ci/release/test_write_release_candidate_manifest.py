@@ -19,7 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 import write_release_candidate_manifest as writer  # noqa: E402
 from build_release_bundle import build_bundle  # noqa: E402
 from release_common import MIT_LICENSE_BYTES, canonical_json_bytes  # noqa: E402
-from test_release import EPOCH, fixture_elf  # noqa: E402
+from test_release import (  # noqa: E402
+    EPOCH,
+    fixture_elf,
+    install_reviewed_server_defaults_source,
+)
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
@@ -48,6 +52,7 @@ class WriterFixture:
             encoding="utf-8",
         )
         (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+        install_reviewed_server_defaults_source(self.repository)
 
         self.relative_paths: dict[str, str] = {}
         self.paths: dict[str, Path] = {}
@@ -315,6 +320,26 @@ class ManifestWriterTests(unittest.TestCase):
             "does not equal the writer input",
         ):
             self.fixture.write(output, evaluator=wrong_binding)
+        self.assertFalse(output.exists())
+        self.assert_no_staging_files(output)
+
+    def test_passed_report_cannot_omit_fixed37_production_batch_check(self) -> None:
+        output = self.base / "candidate.json"
+
+        def omit_fixed37(*args: object, **kwargs: str) -> dict[str, Any]:
+            report = self.fixture.passed_report(*args, **kwargs)
+            report["checks"] = [
+                check
+                for check in report["checks"]
+                if check["name"] != "fixed37_production_batch_e0"
+            ]
+            return report
+
+        with self.assertRaisesRegex(
+            writer.ManifestWriterError,
+            "did not pass every closed gate",
+        ):
+            self.fixture.write(output, evaluator=omit_fixed37)
         self.assertFalse(output.exists())
         self.assert_no_staging_files(output)
 

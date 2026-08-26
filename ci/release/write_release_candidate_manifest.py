@@ -148,6 +148,7 @@ FINAL_CHECK_NAMES = (
     "cuda_fault",
     "native_correctness",
     "optimization_correctness",
+    "fixed37_production_batch_e0",
     "performance",
     "reliability_soak",
     "cross_bindings",

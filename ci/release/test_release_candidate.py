@@ -50,7 +50,11 @@ from test_cuda_fault_evidence import (  # noqa: E402
     BUILD_IMAGE_ID as CUDA_BUILD_IMAGE_ID,
     Fixture as CudaEvidenceFixture,
 )
-from test_release import EPOCH, fixture_elf  # noqa: E402
+from test_release import (  # noqa: E402
+    EPOCH,
+    fixture_elf,
+    install_reviewed_server_defaults_source,
+)
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
@@ -69,6 +73,22 @@ assert PROFILE_FIXTURE_SPEC is not None and PROFILE_FIXTURE_SPEC.loader is not N
 profile_fixture_module = importlib.util.module_from_spec(PROFILE_FIXTURE_SPEC)
 sys.modules[PROFILE_FIXTURE_SPEC.name] = profile_fixture_module
 PROFILE_FIXTURE_SPEC.loader.exec_module(profile_fixture_module)
+PERFORMANCE_FIXTURE_SCRIPT = (
+    REPOSITORY_ROOT
+    / "benchmarks/scripts/tests/test_check_release_performance.py"
+)
+PERFORMANCE_FIXTURE_SPEC = importlib.util.spec_from_file_location(
+    "release_candidate_performance_fixture", PERFORMANCE_FIXTURE_SCRIPT
+)
+assert (
+    PERFORMANCE_FIXTURE_SPEC is not None
+    and PERFORMANCE_FIXTURE_SPEC.loader is not None
+)
+performance_fixture_module = importlib.util.module_from_spec(
+    PERFORMANCE_FIXTURE_SPEC
+)
+sys.modules[PERFORMANCE_FIXTURE_SPEC.name] = performance_fixture_module
+PERFORMANCE_FIXTURE_SPEC.loader.exec_module(performance_fixture_module)
 E2E_FIXTURE_SCRIPT = (
     REPOSITORY_ROOT
     / "benchmarks/scripts/tests/test_check_python_free_release_e2e.py"
@@ -102,6 +122,7 @@ class CandidateFixture:
             encoding="utf-8",
         )
         (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+        install_reviewed_server_defaults_source(repository)
         self.paths = {
             "source": root / "source.tar",
             "binary": root / "rustinfer",
@@ -335,6 +356,7 @@ class CandidateFixture:
         profile_image_sha = self.optimization_build_image_id.removeprefix(
             "sha256:"
         )
+        supervisor_token = digest(b"release performance supervisor token")
         for run_index, run in enumerate(fixture.candidate):
             run["source"] = {
                 "git_commit": self.revision,
@@ -394,8 +416,25 @@ class CandidateFixture:
             run["aggregate"]["throughput_output_tokens_per_second"] = (
                 140.0 / run_factor
             )
+            pair_index = run_index + 1
+            capture_id = release_performance._runner_capture_id(
+                supervisor_token, pair_index
+            )
+            run["run_id"] = release_performance._runner_run_id(
+                self.revision, capture_id, pair_index
+            )
+            run["recorded_at_utc"] = (
+                f"2026-08-26T12:00:{run_index * 10 + 2:02d}.000000000Z"
+            )
         fixture.write()
         self.performance_fixture = fixture
+        self.performance_fixture_request_identity_sha256 = (
+            release_performance.native_profile._sha256_json(
+                release_performance.native_profile._request_identity(
+                    fixture.candidate[0]
+                )
+            )
+        )
 
         candidate: dict[str, object] = {
             "candidate_id": "rustinfer-0.1.0-rc1",
@@ -461,12 +500,36 @@ class CandidateFixture:
                 )
             ),
         }
+        receipt_fixture_root = self.root / "performance-runner-receipts-fixture"
+        receipt_fixture_root.mkdir()
+        receipt_fixture = performance_fixture_module.ReleaseFixture(
+            receipt_fixture_root
+        )
+        if receipt_fixture.supervisor_token != supervisor_token:
+            raise AssertionError("performance supervisor fixture token drifted")
+        receipt_fixture.profile_fixture = fixture
+        receipt_fixture.raw_paths = fixture.candidate_paths
+        receipt_fixture.profile_image_digest = profile_image_sha
+        receipt_fixture.digests["source_archive"] = self._binding()[
+            "source_archive_sha256"
+        ]
+        receipt_fixture.digests["profile_binary"] = profile_binary_sha
+        receipt_fixture.digests["correctness_report"] = optimization_sha
+        receipt_fixture.paths["source_archive"] = self.paths["source"]
+        receipt_fixture.paths["profile_binary"] = self.paths["profile_binary"]
+        receipt_fixture.paths["correctness_report"] = self.paths[
+            "optimization_correctness"
+        ]
+        receipt_fixture.write_runner_receipts()
+        self.performance_receipt_fixture = receipt_fixture
+        self.performance_runner_receipt_root = receipt_fixture.runner_receipt_root
         release_performance.write_raw_evidence_archive(
             self.paths["performance_raw"],
             [
                 (f"candidate-{index}.json", raw_path.read_bytes())
                 for index, raw_path in enumerate(fixture.candidate_paths, 1)
             ],
+            runner_receipt_root=self.performance_runner_receipt_root,
         )
         ratios = {
             metric: candidate["metrics"][metric] / baseline["metrics"][metric]
@@ -586,6 +649,38 @@ class CandidateFixture:
                     "owner_close_live_allocation_count": 0,
                     "log_sha256": log_hashes["smollm2-multi-step-greedy-exact"],
                 },
+                {
+                    "id": "fixed37-production-batch-e0",
+                    "result": "passed",
+                    "gate_id": "pr16-fixed37-production-batch-e0-v1",
+                    "fixture_sha256": optimization_evidence.EXPECTED_FIXED37_FIXTURE_SHA256,
+                    "generated_token_ids_sha256": optimization_evidence.EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+                    "cases": 31,
+                    "compared_steps": 481,
+                    "exact_window": 16,
+                    "fixed_profile": "fixed-contiguous-37-balanced-v1",
+                    "canonical_profile": "canonical-v1",
+                    "residual_rmsnorm": "separate",
+                    "execution_completion": "iteration-batch",
+                    "fixed_prefill_raw_logit_mismatches": 0,
+                    "fixed_cached_growing_token_id_mismatches": 0,
+                    "fixed_cached_growing_cosine_min": optimization_evidence.FIXED37_CACHED_GROWING_COSINE_MIN,
+                    "fixed_cached_growing_max_abs_max": optimization_evidence.FIXED37_CACHED_GROWING_MAX_ABS_MAX,
+                    "fixed_cached_growing_mean_abs_max": optimization_evidence.FIXED37_CACHED_GROWING_MEAN_ABS_MAX,
+                    "fixed_cached_growing_worst_cosine": 0.999,
+                    "fixed_cached_growing_worst_max_abs": 1.0,
+                    "fixed_cached_growing_worst_mean_abs": 0.25,
+                    "fixed_cached_growing_threshold_violations": 0,
+                    "fixed_golden_token_id_mismatches": 0,
+                    "canonical_golden_token_id_mismatches": 0,
+                    "cuda_live_allocation_delta": 0,
+                    "owner_close_live_allocation_count": 0,
+                    "compile_command_id": "compile-fixed37-production-batch-e0",
+                    "execute_command_id": "fixed37-production-batch-e0",
+                    "compile_log_sha256": digest(b"fixed37 fresh compile log"),
+                    "test_binary_sha256": digest(b"fixed37 fresh test executable"),
+                    "log_sha256": log_hashes["fixed37-production-batch-e0"],
+                },
             ],
         }
         optimization_sha = digest(
@@ -617,6 +712,33 @@ class CandidateFixture:
                     "vram_slope_bytes_per_hour": 0.0,
                 }
             )
+        self.soak_runtime_provenance = {
+            "host_gpu_sha256": digest(b"soak host GPU receipt"),
+            "launcher_receipt_sha256": digest(b"soak launcher receipt"),
+            "release_image_inspect_sha256": digest(
+                b"soak release image inspect"
+            ),
+            "test_layer_image_inspect_sha256": digest(
+                b"soak test-layer image inspect"
+            ),
+            "container_inspect_pre_sha256": digest(
+                b"soak container inspect pre"
+            ),
+            "container_inspect_post_sha256": digest(
+                b"soak container inspect post"
+            ),
+            "release_runtime_closure_sha256": digest(
+                b"soak release runtime closure"
+            ),
+            "run_json_sha256": digest(b"soak raw run"),
+            "events_jsonl_sha256": digest(b"soak raw events"),
+            "hostname": reliability_soak.DESIGNATED_HOSTNAME,
+            "gpu_uuid": reliability_soak.DESIGNATED_GPU["gpu_uuid"],
+            "release_image_id": f"sha256:{self.image_sha}",
+            "test_layer_image_id": "sha256:" + digest(b"soak test layer"),
+            "container_id": digest(b"soak container"),
+            "container_name": f"rustinfer-soak-{self.revision[:12]}-20260826T000000Z",
+        }
         self.documents["soak"] = {
             "schema_version": "rustinfer.reliability-soak-report.v2",
             "status": "passed",
@@ -638,6 +760,9 @@ class CandidateFixture:
                     )["expected_greedy_text_sha256"],
                     "native_correctness_report_sha256": native_correctness_sha,
                 },
+                "runtime_provenance": copy.deepcopy(
+                    self.soak_runtime_provenance
+                ),
                 "source": {
                     "git_commit": self.revision,
                     "git_dirty": False,
@@ -663,6 +788,13 @@ class CandidateFixture:
                     "overloads": 20,
                 },
                 "final": {
+                    "process_pid": 0,
+                    "process_rss_bytes": 0,
+                    "process_hwm_bytes": 0,
+                    "process_fd_count": 0,
+                    "process_thread_count": 0,
+                    "process_children": [],
+                    "gpu_vram_bytes": 0,
                     "active_requests": 0,
                     "waiting_requests": 0,
                     "kv_allocated_blocks": 0,
@@ -828,8 +960,53 @@ class CandidateFixture:
             "build_image_sha256": self.optimization_build_image_id.removeprefix(
                 "sha256:"
             ),
-            "log_sha256": {},
-            "test_binary_sha256": {},
+            "log_sha256": {
+                "fixed37-production-batch-e0": next(
+                    row["log_sha256"]
+                    for row in self.trusted_optimization_report["tests"]
+                    if row["id"] == "fixed37-production-batch-e0"
+                )
+            },
+            "test_binary_sha256": {
+                "fixed37-production-batch-gpu-test": next(
+                    row["test_binary_sha256"]
+                    for row in self.trusted_optimization_report["tests"]
+                    if row["id"] == "fixed37-production-batch-e0"
+                )
+            },
+        }
+
+    def soak_replay(self) -> dict[str, object]:
+        return {
+            "report": copy.deepcopy(self.documents["soak"]),
+            "archive_sha256": digest(self.paths["soak_raw"].read_bytes()),
+            "events.jsonl_sha256": self.soak_runtime_provenance[
+                "events_jsonl_sha256"
+            ],
+            "manifest.json_sha256": digest(b"soak raw manifest"),
+            "run.json_sha256": self.soak_runtime_provenance["run_json_sha256"],
+            **{
+                f"{filename}_sha256": self.soak_runtime_provenance[field]
+                for field, filename in {
+                    "host_gpu_sha256": "host-gpu.csv",
+                    "launcher_receipt_sha256": "launcher-receipt.json",
+                    "release_image_inspect_sha256": (
+                        "release-image-inspect.json"
+                    ),
+                    "test_layer_image_inspect_sha256": (
+                        "test-layer-image-inspect.json"
+                    ),
+                    "container_inspect_pre_sha256": (
+                        "container-inspect-pre.json"
+                    ),
+                    "container_inspect_post_sha256": (
+                        "container-inspect-post.json"
+                    ),
+                    "release_runtime_closure_sha256": (
+                        "release-runtime-closure.tsv"
+                    ),
+                }.items()
+            },
         }
 
     def evaluate(
@@ -843,7 +1020,7 @@ class CandidateFixture:
         **anchor_overrides: str,
     ) -> dict[str, object]:
         if soak_replay is None:
-            soak_replay = {"report": copy.deepcopy(self.documents["soak"])}
+            soak_replay = self.soak_replay()
         if reproducibility_replay is None:
             reproducibility_replay = self.reproducibility_replay()
         if optimization_replay is None:
@@ -991,6 +1168,19 @@ class CandidateFixture:
                     raise AssertionError(f"soak replay {field} has the wrong bytes")
             return soak_replay
 
+        original_identity_check = (
+            release_candidate_module.release_performance._require_request_identity_sha256
+        )
+
+        def require_fixture_request_identity(
+            derived: object, _expected: str, path: str
+        ) -> None:
+            original_identity_check(
+                derived,
+                self.performance_fixture_request_identity_sha256,
+                path,
+            )
+
         with mock.patch.object(
             reliability_soak,
             "replay_raw_evidence_archive",
@@ -1015,6 +1205,10 @@ class CandidateFixture:
             python_free_e2e,
             "validate_bound_raw_archive",
             side_effect=replay_python_free,
+        ), mock.patch.object(
+            release_candidate_module.release_performance,
+            "_require_request_identity_sha256",
+            side_effect=require_fixture_request_identity,
         ):
             return evaluate(
                 manifest_path or self.manifest_path,
@@ -1092,6 +1286,32 @@ class ReleaseCandidateTests(unittest.TestCase):
                 "reproducible_build_native_manifest_raw",
             },
         )
+        self.assertIn(
+            "fixed37_production_batch_e0",
+            {check["name"] for check in report["checks"] if check["passed"]},
+        )
+
+    def test_fixed37_production_batch_gate_omission_fails_final_candidate(self) -> None:
+        tests = self.fixture.documents["optimization_correctness"]["tests"]
+        tests[:] = [
+            row for row in tests if row["id"] != "fixed37-production-batch-e0"
+        ]
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("exact optimizer test inventory", report["errors"][0])
+
+    def test_fixed37_production_batch_gate_id_is_closed(self) -> None:
+        fixed37 = next(
+            row
+            for row in self.fixture.documents["optimization_correctness"]["tests"]
+            if row["id"] == "fixed37-production-batch-e0"
+        )
+        fixed37["gate_id"] = "pr16-fixed37-unreviewed"
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("gate_id", report["errors"][0])
 
     def test_cli_exposes_only_role_specific_build_image_anchors(self) -> None:
         destinations = {
@@ -1271,6 +1491,67 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertIn("profile_binary_sha256", report["errors"][0])
 
+    def test_performance_runner_model_tree_must_match_final_optimizer_report(self) -> None:
+        alternate = digest(b"alternate self-asserted performance model tree")
+        receipt_fixture = self.fixture.performance_receipt_fixture
+        manifest_path = receipt_fixture.runner_receipt_root / "runner-manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["candidate"]["model_tree_sha256"] = alternate
+        manifest["container"]["environment"][
+            "RUSTINFER_PERF_MODEL_TREE_SHA256"
+        ] = alternate
+        receipt_fixture.replace_runner_receipt(
+            "runner-manifest.json",
+            release_performance._json_document_bytes(manifest),
+        )
+        for pair_index in range(1, 6):
+            for stage in ("before", "after"):
+                name = f"run-{pair_index}/container-inspect-{stage}.json"
+                path = receipt_fixture.runner_receipt_root.joinpath(*name.split("/"))
+                document = json.loads(path.read_text(encoding="utf-8"))
+                environment = document[0]["Config"]["Env"]
+                environment[:] = [
+                    (
+                        f"RUSTINFER_PERF_MODEL_TREE_SHA256={alternate}"
+                        if value.startswith("RUSTINFER_PERF_MODEL_TREE_SHA256=")
+                        else value
+                    )
+                    for value in environment
+                ]
+                receipt_fixture.replace_runner_receipt(
+                    name,
+                    (json.dumps(document, sort_keys=True, indent=2) + "\n").encode(),
+                )
+        self.fixture.paths["performance_raw"].unlink()
+        release_performance.write_raw_evidence_archive(
+            self.fixture.paths["performance_raw"],
+            [
+                (f"candidate-{index}.json", raw_path.read_bytes())
+                for index, raw_path in enumerate(
+                    self.fixture.performance_fixture.candidate_paths, 1
+                )
+            ],
+            runner_receipt_root=receipt_fixture.runner_receipt_root,
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("submitted optimizer model manifest", report["errors"][0])
+
+    def test_performance_replayed_archive_digest_must_match_final_artifact(self) -> None:
+        replay = release_performance.replay_raw_evidence_archive(
+            self.fixture.paths["performance_raw"]
+        )
+        replay["archive_sha256"] = digest(b"substituted replay archive")
+        with mock.patch.object(
+            release_candidate_module.release_performance,
+            "replay_raw_evidence_archive",
+            return_value=replay,
+        ):
+            report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("raw replay digest", report["errors"][0])
+
     def test_performance_metrics_are_recomputed_from_raw_runs(self) -> None:
         self.fixture.documents["performance"]["candidate"]["metrics"][
             "ttft_p95_ms"
@@ -1295,12 +1576,12 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertIn("exact ordered inventory", report["errors"][0])
 
     def test_performance_raw_archive_must_be_canonical_ustar(self) -> None:
-        files = {
-            f"candidate-{index}.json": path.read_bytes()
-            for index, path in enumerate(
-                self.fixture.performance_fixture.candidate_paths, 1
-            )
-        }
+        with tarfile.open(self.fixture.paths["performance_raw"], "r:") as archive:
+            files = {}
+            for member in archive.getmembers():
+                source = archive.extractfile(member)
+                assert source is not None
+                files[member.name] = source.read()
         self.fixture.paths["performance_raw"].unlink()
         self.fixture._write_tar(self.fixture.paths["performance_raw"], files)
         self.fixture.refresh_manifest()
@@ -1616,6 +1897,54 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertFalse(report["passed"])
         self.assertIn("differs from the raw-replayed report", report["errors"][0])
 
+    def test_soak_final_process_gpu_observations_are_closed_and_quiescent(self) -> None:
+        final = self.fixture.documents["soak"]["observations"]["final"]
+        numeric_fields = (
+            "process_pid",
+            "process_rss_bytes",
+            "process_hwm_bytes",
+            "process_fd_count",
+            "process_thread_count",
+            "gpu_vram_bytes",
+        )
+        for field in numeric_fields:
+            with self.subTest(field=field):
+                final[field] = 1
+                self.fixture.refresh_manifest()
+                report = self.fixture.evaluate()
+                self.assertFalse(report["passed"])
+                self.assertIn(field, report["errors"][0])
+                final[field] = 0
+
+        final["process_children"] = [1234]
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("process_children", report["errors"][0])
+        final["process_children"] = []
+
+        final.pop("process_pid")
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("closed object mismatch", report["errors"][0])
+
+    def test_soak_replay_binding_inventory_is_closed(self) -> None:
+        report = self.fixture.evaluate(
+            soak_replay={"report": copy.deepcopy(self.fixture.documents["soak"])}
+        )
+        self.assertFalse(report["passed"])
+        self.assertIn("non-canonical binding inventory", report["errors"][0])
+
+    def test_soak_replay_archive_must_match_snapshotted_raw_artifact(self) -> None:
+        replay = self.fixture.soak_replay()
+        replay["archive_sha256"] = digest(b"substituted raw soak archive")
+        report = self.fixture.evaluate(soak_replay=replay)
+        self.assertFalse(report["passed"])
+        self.assertIn(
+            "snapshotted manifest raw-evidence artifact", report["errors"][0]
+        )
+
     def test_soak_golden_cannot_self_authorize(self) -> None:
         self.fixture.documents["soak"]["bindings"]["trusted_correctness"][
             "generated_text_sha256"
@@ -1633,6 +1962,61 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("native correctness report", report["errors"][0])
+
+    def test_soak_runtime_receipt_hashes_must_match_raw_replay(self) -> None:
+        for field, filename in (
+            ("container_inspect_post_sha256", "container-inspect-post.json"),
+            ("release_runtime_closure_sha256", "release-runtime-closure.tsv"),
+        ):
+            with self.subTest(field=field):
+                root = Path(self.temporary.name) / field
+                root.mkdir()
+                fixture = CandidateFixture(root)
+                fixture.documents["soak"]["bindings"]["runtime_provenance"][
+                    field
+                ] = digest(f"substituted {filename}".encode())
+                fixture.refresh_manifest()
+                report = fixture.evaluate()
+                self.assertFalse(report["passed"])
+                self.assertIn(f"replayed {filename}", report["errors"][0])
+
+    def test_soak_runtime_run_and_event_hashes_must_match_raw_replay(self) -> None:
+        for field, filename in (
+            ("run_json_sha256", "run.json"),
+            ("events_jsonl_sha256", "events.jsonl"),
+        ):
+            with self.subTest(field=field):
+                root = Path(self.temporary.name) / field
+                root.mkdir()
+                fixture = CandidateFixture(root)
+                fixture.documents["soak"]["bindings"]["runtime_provenance"][
+                    field
+                ] = digest(f"substituted {filename}".encode())
+                fixture.refresh_manifest()
+                report = fixture.evaluate()
+                self.assertFalse(report["passed"])
+                self.assertIn(f"replayed {filename}", report["errors"][0])
+
+    def test_soak_runtime_provenance_is_closed_and_image_bound(self) -> None:
+        runtime = self.fixture.documents["soak"]["bindings"][
+            "runtime_provenance"
+        ]
+        runtime["self_asserted"] = True
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("closed object mismatch", report["errors"][0])
+
+        second_root = Path(self.temporary.name) / "runtime-image"
+        second_root.mkdir()
+        second_fixture = CandidateFixture(second_root)
+        second_fixture.documents["soak"]["bindings"]["runtime_provenance"][
+            "release_image_id"
+        ] = "sha256:" + digest(b"substituted release image")
+        second_fixture.refresh_manifest()
+        report = second_fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("candidate release image", report["errors"][0])
 
     def test_legacy_soak_report_fails_closed(self) -> None:
         self.fixture.documents["soak"]["schema_version"] = (

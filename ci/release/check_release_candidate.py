@@ -129,13 +129,16 @@ CUDA_FAULT_CHECKS = {
     "production_fault_symbols_absent",
 }
 OPTIMIZATION_LOGS = optimization_evidence.LOG_FILES
+FIXED37_PRODUCTION_BATCH_GATE = (
+    optimization_evidence.FIXED37_PRODUCTION_BATCH_GATE_ID
+)
 EXPECTED_OPTIMIZATION_TOKENS = [
     4052, 2025, 284, 965, 6497, 288, 1492, 418,
     260, 16438, 30, 198, 198, 504, 16438, 314,
 ]
 SOAK_CONTRACT_ID = "pr16-release-soak-v1"
 SOAK_TEMPLATE_CANONICAL_SHA256 = (
-    "bbe76150fdc64bb8274f79adb7d500031ccb67f49769de76c56d6c90066e422a"
+    "ef8d50d07aba2e7b8c0c3f3f157bf242452ac62be9dc22080baff8023278e0f3"
 )
 SOAK_SCENARIOS = {
     "steady": ("steady", 14_400),
@@ -807,13 +810,39 @@ def _optimization_test(
     return _sha256(row["log_sha256"], f"{path}.log_sha256")
 
 
-def _performance_raw_payloads(path: Path) -> list[tuple[str, bytes]]:
+def _performance_raw_replay(
+    path: Path,
+) -> tuple[list[tuple[str, bytes]], dict[str, Any], str]:
     evidence_path = "performance.raw_evidence"
     try:
-        payloads = release_performance.load_raw_evidence_archive(path)
+        replay = release_performance.replay_raw_evidence_archive(path)
     except (release_performance.InputError, OSError) as error:
         _fail(evidence_path, str(error))
-    return [(f"{evidence_path}:{name}", raw) for name, raw in payloads]
+    if not isinstance(replay, dict):
+        _fail(evidence_path, "raw replay must return an object")
+    payloads = replay.get("payloads")
+    runner_manifest = replay.get("runner_manifest")
+    archive_sha256 = replay.get("archive_sha256")
+    if (
+        not isinstance(payloads, list)
+        or not all(
+            isinstance(item, tuple)
+            and len(item) == 2
+            and isinstance(item[0], str)
+            and isinstance(item[1], bytes)
+            for item in payloads
+        )
+        or not isinstance(runner_manifest, dict)
+    ):
+        _fail(evidence_path, "raw replay returned malformed payload/manifest bindings")
+    archive_sha256 = _sha256(
+        archive_sha256, f"{evidence_path}.archive_sha256"
+    )
+    return (
+        [(f"{evidence_path}:{name}", raw) for name, raw in payloads],
+        runner_manifest,
+        archive_sha256,
+    )
 
 
 def _reviewed_performance_baseline() -> dict[str, Any]:
@@ -927,6 +956,42 @@ def _validate_optimization_correctness(
         by_id[test_id] = test
     if set(by_id) != set(OPTIMIZATION_LOGS):
         _fail(f"{path}.tests", f"test id set mismatch: {sorted(by_id)}")
+    fixed37_row = by_id["fixed37-production-batch-e0"]
+    fixed37_compile_log_sha256 = _sha256(
+        fixed37_row.get("compile_log_sha256"),
+        f"{path}.tests.fixed37-production-batch-e0.compile_log_sha256",
+    )
+    fixed37_test_binary_sha256 = _sha256(
+        fixed37_row.get("test_binary_sha256"),
+        f"{path}.tests.fixed37-production-batch-e0.test_binary_sha256",
+    )
+    fixed37_worst_cosine = _finite_number(
+        fixed37_row.get("fixed_cached_growing_worst_cosine"),
+        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_cosine",
+        minimum=0.0,
+    )
+    fixed37_worst_max_abs = _finite_number(
+        fixed37_row.get("fixed_cached_growing_worst_max_abs"),
+        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_max_abs",
+        minimum=0.0,
+    )
+    fixed37_worst_mean_abs = _finite_number(
+        fixed37_row.get("fixed_cached_growing_worst_mean_abs"),
+        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_mean_abs",
+        minimum=0.0,
+    )
+    if (
+        fixed37_worst_cosine
+        < optimization_evidence.FIXED37_CACHED_GROWING_COSINE_MIN
+        or fixed37_worst_max_abs
+        > optimization_evidence.FIXED37_CACHED_GROWING_MAX_ABS_MAX
+        or fixed37_worst_mean_abs
+        > optimization_evidence.FIXED37_CACHED_GROWING_MEAN_ABS_MAX
+    ):
+        _fail(
+            f"{path}.tests.fixed37-production-batch-e0",
+            "cached/growing metrics exceed the immutable E0 bounds",
+        )
     _ = {
         "cuda-compile-only": _optimization_test(
             by_id["cuda-compile-only"], f"{path}.tests.cuda-compile-only",
@@ -968,6 +1033,50 @@ def _validate_optimization_correctness(
                 "owner_close_live_allocation_count": 0,
             },
         ),
+        "fixed37-production-batch-e0": _optimization_test(
+            fixed37_row,
+            f"{path}.tests.fixed37-production-batch-e0",
+            "fixed37-production-batch-e0",
+            {
+                "gate_id": FIXED37_PRODUCTION_BATCH_GATE,
+                "fixture_sha256": (
+                    optimization_evidence.EXPECTED_FIXED37_FIXTURE_SHA256
+                ),
+                "generated_token_ids_sha256": (
+                    optimization_evidence.EXPECTED_FIXED37_TOKEN_IDS_SHA256
+                ),
+                "cases": 31,
+                "compared_steps": 481,
+                "exact_window": 16,
+                "fixed_profile": "fixed-contiguous-37-balanced-v1",
+                "canonical_profile": "canonical-v1",
+                "residual_rmsnorm": "separate",
+                "execution_completion": "iteration-batch",
+                "fixed_prefill_raw_logit_mismatches": 0,
+                "fixed_cached_growing_token_id_mismatches": 0,
+                "fixed_cached_growing_cosine_min": (
+                    optimization_evidence.FIXED37_CACHED_GROWING_COSINE_MIN
+                ),
+                "fixed_cached_growing_max_abs_max": (
+                    optimization_evidence.FIXED37_CACHED_GROWING_MAX_ABS_MAX
+                ),
+                "fixed_cached_growing_mean_abs_max": (
+                    optimization_evidence.FIXED37_CACHED_GROWING_MEAN_ABS_MAX
+                ),
+                "fixed_cached_growing_worst_cosine": fixed37_worst_cosine,
+                "fixed_cached_growing_worst_max_abs": fixed37_worst_max_abs,
+                "fixed_cached_growing_worst_mean_abs": fixed37_worst_mean_abs,
+                "fixed_cached_growing_threshold_violations": 0,
+                "fixed_golden_token_id_mismatches": 0,
+                "canonical_golden_token_id_mismatches": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
+                "compile_command_id": "compile-fixed37-production-batch-e0",
+                "execute_command_id": "fixed37-production-batch-e0",
+                "compile_log_sha256": fixed37_compile_log_sha256,
+                "test_binary_sha256": fixed37_test_binary_sha256,
+            },
+        ),
     }
     return profile_image_sha256
 
@@ -983,8 +1092,10 @@ def _validate_performance(
     optimization_sha256: str,
     optimization_gate_id: str,
     optimization_profile_image_sha256: str,
+    optimization_correctness: dict[str, Any],
     profile_binary_sha256: str,
     raw_evidence_path: Path,
+    raw_evidence_sha256: str,
     candidate_id: str,
 ) -> None:
     row = _exact(
@@ -1067,7 +1178,68 @@ def _validate_performance(
                 "differs from the reviewed release lane",
             )
 
-    payloads = _performance_raw_payloads(raw_evidence_path)
+    payloads, runner_manifest, replayed_archive_sha256 = _performance_raw_replay(
+        raw_evidence_path
+    )
+    if replayed_archive_sha256 != raw_evidence_sha256:
+        _fail(
+            f"{path}.raw_evidence.archive_sha256",
+            "raw replay digest does not match the final candidate artifact binding",
+        )
+    try:
+        request_identity = release_performance.derive_raw_run_payloads(payloads)
+        release_performance._require_request_identity_sha256(
+            request_identity,
+            baseline["request_identity_sha256"],
+            f"{path}.raw_evidence.request_identity_sha256",
+        )
+    except (
+        release_performance.InputError,
+        release_performance.ComparabilityError,
+    ) as error:
+        _fail(f"{path}.raw_evidence.request_identity_sha256", str(error))
+    optimization_model = _object(
+        optimization_correctness.get("model"),
+        "optimization_correctness.model",
+    )
+    optimizer_model_tree_sha256 = _sha256(
+        optimization_model.get("manifest_sha256"),
+        "optimization_correctness.model.manifest_sha256",
+    )
+    runner_candidate = _exact(
+        runner_manifest.get("candidate"),
+        {
+            "source_revision",
+            "source_archive_sha256",
+            "profile_binary_sha256",
+            "model_tree_sha256",
+            "optimizer_correctness_report_sha256",
+            "optimizer_image_id",
+        },
+        f"{path}.raw_evidence.runner_manifest.candidate",
+    )
+    expected_runner_candidate = {
+        "source_revision": revision,
+        "source_archive_sha256": archive_sha256,
+        "profile_binary_sha256": profile_binary_sha256,
+        "model_tree_sha256": optimizer_model_tree_sha256,
+        "optimizer_correctness_report_sha256": optimization_sha256,
+        "optimizer_image_id": f"sha256:{optimization_profile_image_sha256}",
+    }
+    if runner_candidate != expected_runner_candidate:
+        _fail(
+            f"{path}.raw_evidence.runner_manifest.candidate",
+            "does not exactly bind the final candidate and submitted optimizer model manifest",
+        )
+    runner = _object(
+        runner_manifest.get("runner"),
+        f"{path}.raw_evidence.runner_manifest.runner",
+    )
+    if runner.get("tools") != release_performance.RUNNER_REVIEWED_TOOLS:
+        _fail(
+            f"{path}.raw_evidence.runner_manifest.runner.tools",
+            "does not equal the reviewed server-4096 tool map",
+        )
     try:
         release_performance.validate_raw_run_payloads(
             payloads, validated_candidate
@@ -1126,6 +1298,7 @@ def _validate_soak(
     image_sha256: str,
     model: dict[str, Any],
     raw_evidence_path: Path,
+    raw_evidence_sha256: str,
     correctness_golden_path: Path,
     correctness_golden_sha256: str,
     generated_text_sha256: str,
@@ -1140,9 +1313,31 @@ def _validate_soak(
         )
     except (reliability_soak.InputError, OSError) as error:
         _fail(f"{path}.raw_evidence", str(error))
+    if not isinstance(replay, dict) or "report" not in replay:
+        _fail(f"{path}.raw_evidence", "raw replay returned no report binding")
     replayed_report = replay["report"]
     if _canonical_json_bytes(replayed_report) != _canonical_json_bytes(report):
         _fail(path, "submitted report differs from the raw-replayed report")
+    expected_replay_keys = {
+        "report",
+        "archive_sha256",
+        *{
+            f"{filename}_sha256"
+            for filename in reliability_soak.RAW_ARCHIVE_PAYLOADS
+        },
+    }
+    if set(replay) != expected_replay_keys:
+        _fail(
+            f"{path}.raw_evidence",
+            "raw replay returned a non-canonical binding inventory",
+        )
+    for field in expected_replay_keys - {"report"}:
+        _sha256(replay[field], f"{path}.raw_evidence.{field}")
+    if replay["archive_sha256"] != raw_evidence_sha256:
+        _fail(
+            f"{path}.raw_evidence.archive_sha256",
+            "does not match the snapshotted manifest raw-evidence artifact",
+        )
     row = _exact(
         report,
         {"schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"},
@@ -1160,6 +1355,7 @@ def _validate_soak(
             "manifest_sha256",
             "binding_sha256",
             "trusted_correctness",
+            "runtime_provenance",
             "source",
         },
         f"{path}.bindings",
@@ -1196,6 +1392,104 @@ def _validate_soak(
         _fail(
             f"{path}.bindings.trusted_correctness",
             "does not match the submitted E2E golden and native correctness report",
+        )
+    runtime_provenance = _exact(
+        bindings["runtime_provenance"],
+        {
+            "host_gpu_sha256",
+            "launcher_receipt_sha256",
+            "release_image_inspect_sha256",
+            "test_layer_image_inspect_sha256",
+            "container_inspect_pre_sha256",
+            "container_inspect_post_sha256",
+            "release_runtime_closure_sha256",
+            "run_json_sha256",
+            "events_jsonl_sha256",
+            "hostname",
+            "gpu_uuid",
+            "release_image_id",
+            "test_layer_image_id",
+            "container_id",
+            "container_name",
+        },
+        f"{path}.bindings.runtime_provenance",
+    )
+    receipt_hashes = {
+        "host_gpu_sha256": "host-gpu.csv",
+        "launcher_receipt_sha256": "launcher-receipt.json",
+        "release_image_inspect_sha256": "release-image-inspect.json",
+        "test_layer_image_inspect_sha256": "test-layer-image-inspect.json",
+        "container_inspect_pre_sha256": "container-inspect-pre.json",
+        "container_inspect_post_sha256": "container-inspect-post.json",
+        "release_runtime_closure_sha256": "release-runtime-closure.tsv",
+    }
+    for field, filename in receipt_hashes.items():
+        receipt_sha256 = _sha256(
+            runtime_provenance[field],
+            f"{path}.bindings.runtime_provenance.{field}",
+        )
+        if replay.get(f"{filename}_sha256") != receipt_sha256:
+            _fail(
+                f"{path}.bindings.runtime_provenance.{field}",
+                f"does not hash replayed {filename}",
+            )
+    raw_stream_hashes = {
+        "run_json_sha256": "run.json",
+        "events_jsonl_sha256": "events.jsonl",
+    }
+    for field, filename in raw_stream_hashes.items():
+        raw_sha256 = _sha256(
+            runtime_provenance[field],
+            f"{path}.bindings.runtime_provenance.{field}",
+        )
+        if replay.get(f"{filename}_sha256") != raw_sha256:
+            _fail(
+                f"{path}.bindings.runtime_provenance.{field}",
+                f"does not hash replayed {filename}",
+            )
+    if runtime_provenance["hostname"] != reliability_soak.DESIGNATED_HOSTNAME:
+        _fail(
+            f"{path}.bindings.runtime_provenance.hostname",
+            "is not the designated soak host",
+        )
+    if runtime_provenance["gpu_uuid"] != reliability_soak.DESIGNATED_GPU["gpu_uuid"]:
+        _fail(
+            f"{path}.bindings.runtime_provenance.gpu_uuid",
+            "is not the designated soak GPU",
+        )
+    release_runtime_image = _image_id(
+        runtime_provenance["release_image_id"],
+        f"{path}.bindings.runtime_provenance.release_image_id",
+    )
+    if release_runtime_image != f"sha256:{image_sha256}":
+        _fail(
+            f"{path}.bindings.runtime_provenance.release_image_id",
+            "does not match the candidate release image",
+        )
+    test_layer_image = _image_id(
+        runtime_provenance["test_layer_image_id"],
+        f"{path}.bindings.runtime_provenance.test_layer_image_id",
+    )
+    if test_layer_image == release_runtime_image:
+        _fail(
+            f"{path}.bindings.runtime_provenance.test_layer_image_id",
+            "must be a distinct inspected derivative image",
+        )
+    _sha256(
+        runtime_provenance["container_id"],
+        f"{path}.bindings.runtime_provenance.container_id",
+    )
+    container_name = _string(
+        runtime_provenance["container_name"],
+        f"{path}.bindings.runtime_provenance.container_name",
+    )
+    if re.fullmatch(
+        rf"rustinfer-soak-{re.escape(revision[:12])}-[0-9]{{8}}T[0-9]{{6}}Z",
+        container_name,
+    ) is None:
+        _fail(
+            f"{path}.bindings.runtime_provenance.container_name",
+            "does not bind the candidate revision prefix and UTC run stamp",
         )
     source = _exact(
         bindings["source"],
@@ -1335,6 +1629,13 @@ def _validate_soak(
     final = _exact(
         observations["final"],
         {
+            "process_pid",
+            "process_rss_bytes",
+            "process_hwm_bytes",
+            "process_fd_count",
+            "process_thread_count",
+            "process_children",
+            "gpu_vram_bytes",
             "active_requests",
             "waiting_requests",
             "kv_allocated_blocks",
@@ -1345,8 +1646,19 @@ def _validate_soak(
         },
         f"{path}.observations.final",
     )
-    if any(value != 0 for value in final.values()):
-        _fail(f"{path}.observations.final", "all final resource values must be zero")
+    if final["process_children"] != []:
+        _fail(
+            f"{path}.observations.final.process_children",
+            "must be an empty array",
+        )
+    for field, value in final.items():
+        if field == "process_children":
+            continue
+        if isinstance(value, bool) or not isinstance(value, int) or value != 0:
+            _fail(
+                f"{path}.observations.final.{field}",
+                "must be integer zero",
+            )
 
 
 def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> str:
@@ -2094,6 +2406,27 @@ def evaluate(
                     f"optimization_correctness.raw_evidence.{field}",
                     "does not match the final candidate binding",
                 )
+        fixed37_report_test = next(
+            test
+            for test in loaded["optimization_correctness"][0]["tests"]
+            if test["id"] == "fixed37-production-batch-e0"
+        )
+        replayed_log_sha256 = optimization_replay.get("log_sha256")
+        replayed_test_binary_sha256 = optimization_replay.get("test_binary_sha256")
+        if (
+            not isinstance(replayed_log_sha256, dict)
+            or replayed_log_sha256.get("fixed37-production-batch-e0")
+            != fixed37_report_test["log_sha256"]
+            or not isinstance(replayed_test_binary_sha256, dict)
+            or replayed_test_binary_sha256.get(
+                "fixed37-production-batch-gpu-test"
+            )
+            != fixed37_report_test["test_binary_sha256"]
+        ):
+            _fail(
+                "optimization_correctness.raw_evidence.fixed37-production-batch-e0",
+                "replayed fixed37 log/test ELF differs from the candidate-qualified gate row",
+            )
         python_free_model = _validate_python_free_e2e_replay(
             loaded["python_free_e2e"][0],
             raw_paths["python_free_e2e"],
@@ -2114,8 +2447,10 @@ def evaluate(
             optimization_sha256=optimization_report_sha,
             optimization_gate_id=OPTIMIZATION_GATE,
             optimization_profile_image_sha256=optimization_profile_image_sha256,
+            optimization_correctness=loaded["optimization_correctness"][0],
             profile_binary_sha256=profile_binary_sha,
             raw_evidence_path=raw_paths["performance"],
+            raw_evidence_sha256=raw_hashes["performance"],
             candidate_id=trusted_candidate_id,
         )
         _validate_soak(
@@ -2124,6 +2459,7 @@ def evaluate(
             image_sha256=image_sha256,
             model=python_free_model,
             raw_evidence_path=raw_paths["reliability_soak"],
+            raw_evidence_sha256=raw_hashes["reliability_soak"],
             correctness_golden_path=correctness_golden_path,
             correctness_golden_sha256=trusted_correctness_golden_sha256,
             generated_text_sha256=trusted_generated_text_sha256,
@@ -2162,6 +2498,7 @@ def evaluate(
                     for name in (
                         "release_bundle", "reproducible_build", "python_free_e2e", "cuda_fault",
                         "native_correctness", "optimization_correctness",
+                        "fixed37_production_batch_e0",
                         "performance", "reliability_soak", "cross_bindings",
                     )
                 ],

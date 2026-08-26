@@ -288,6 +288,26 @@ source-directory rustup sync. The final stage
 asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
 absent. See `docs/release/README.md` for the file layout and runtime contract.
 
+The long reliability lane uses the separately reviewed, Python-free
+`ci/release/ReliabilitySoak.Dockerfile` derivative and the remote-only
+`ci/run_remote_release_soak.sh` launcher. It preserves the release binary and
+production UID while adding only observation utilities. The derived-image
+build also requires the binary's resolved dynamic-loader path/target-byte
+closure to remain exactly unchanged across the no-upgrade package install and
+preserves that closure as replayed evidence. Build-time runtime-injected
+dependencies are retained as canonical `NOT_FOUND/-/-` rows rather than
+dropped; runtime validation separately checks the injected CUDA driver bytes. See
+`ci/release/RELIABILITY_SOAK_TEST_LAYER.md` for immutable image/golden/report
+bindings, namespace isolation, output ownership, and the authorized command.
+
+The five-run performance lane is likewise remote-only and shares the
+server-4096 GPU evidence lock with the soak lane. Its reviewed tool hashes,
+capability-less bind permissions, per-run GPU/process receipts, exact Docker
+contract, v3 manifest plus per-run execution/time/hash receipts, reviewed PR15
+request identity, and GPU-free remote permission probe are documented in
+`ci/release/RELEASE_PERFORMANCE_RUNNER.md`. Local verification is limited to
+the documented CPU/static tests.
+
 Release packaging fixes the reviewed license contract to the exact standard
 MIT text for `Copyright (c) 2026 rustinfer contributors`. Preflight and bundle
 production require `workspace.package.license = "MIT"` and

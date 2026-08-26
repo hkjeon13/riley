@@ -86,7 +86,7 @@ The report path is create-only. Only `status=passed` and `passed=true` exits
 zero. The report schema is `rustinfer.release-candidate-report.v2`. A passed
 report binds the SHA-256 of the exact input manifest, source archive, release
 binary, release bundle, separate native-calibration and profile executables,
-seven gate decisions, all raw/replay artifacts, and the immutable release plus
+ten closed final checks, all raw/replay artifacts, and the immutable release plus
 role-specific build image IDs.
 
 ## Closed candidate manifest
@@ -281,15 +281,18 @@ The two correctness roles must never be collapsed into one hash:
   `pr15-iteration-command-batch-exact-v1`: must be passed E0 evidence for the
   same source/archive, pinned SmolLM2 BF16 artifacts, network-none locked/offline
   CUDA sm89 build, and exact `per-operation` versus `iteration-batch` flags with
-  `residual_rmsnorm=separate`. Its exact five-test inventory and every expected
-  zero-mismatch/CUDA-live-allocation result are checked. Its canonical USTAR
-  contains the submitted report, ordered v2 execution receipt, three executable
-  Linux x86-64 Rust test ELFs, five execution logs, three Cargo JSON build logs,
-  and internal `SHA256SUMS`. The receipt records the three locked/offline
+  `residual_rmsnorm=separate`. Its exact six-test inventory includes the
+  candidate-revision `pr16-fixed37-production-batch-e0-v1` production-batch
+  gate over all 31 immutable golden cases and 481 generated steps; every
+  expected semantic mismatch, threshold violation, and CUDA live-allocation
+  result is zero. Its canonical USTAR contains the submitted report, ordered
+  v3 execution receipt, four executable Linux x86-64 Rust test ELFs, six
+  execution logs, four Cargo JSON build logs, and internal `SHA256SUMS`. The
+  receipt records the four locked/offline
   `--no-run` builds separately from direct execution of the copied
   `/evidence/*-gpu-test` ELFs. Replay verifies nonzero ELF entry points and
   executable `PT_LOAD` segments, unique fresh Cargo compiler-artifact
-  provenance, original/copied subject equality, exact eight-command
+  provenance, original/copied subject equality, exact ten-command
   environment/exit contracts, source/build/model bindings, semantic log
   records, report bytes, and every subject/log digest. Its immutable optimizer
   image ID is independently trusted and need not equal the reproducibility or
@@ -320,10 +323,22 @@ The remaining cross-bindings are:
   equivalence report bytes and gate ID. Its profile image must equal the
   optimizer build image, and its profile executable SHA must equal the
   reproducible/optimizer profile artifact. It must not bind
-  the native 31-case report in the optimizer-report field. Its raw evidence tar must contain only
-  `candidate-1.json` through `candidate-5.json`; the final gate revalidates the
-  closed native profile schema and all source/model/environment/workload/raw
-  hashes, then recomputes the R7 metrics, baseline ratios, and thresholds;
+  the native 31-case report in the optimizer-report field. Its raw evidence is
+  the canonical closed v3 runner-receipt USTAR: exact reviewed tool and
+  runner manifests, GPU/image receipts, and each run's preflight,
+  container-before/container-after, GPU-monitor, candidate document, and
+  canonical execution receipt plus `SHA256SUMS`. Each execution receipt binds
+  its unique capture/container/run identity, candidate recorded time, exact
+  constituent hashes, and Docker Created/StartedAt/FinishedAt/exit/OOM state.
+  The final gate replays that archive, requires the replayed
+  archive digest to equal the manifest artifact hash, and exact-cross-binds
+  the runner source/profile/image/report fields. In particular,
+  `runner-manifest.candidate.model_tree_sha256` must equal
+  `optimization_correctness.model.manifest_sha256`; it cannot be a separate
+  performance-run assertion. The gate then revalidates the closed native
+  profile schema and all source/model/environment/workload/raw hashes, requires
+  the canonical request-identity SHA-256 to equal the reviewed PR15 value, and
+  recomputes the R7 metrics, baseline ratios, and thresholds;
 - `rustinfer.reliability-soak-report.v2`: must be `passed`, have no errors and
   only passing checks, and bind the same clean revision, archive, release
   binary, runtime image, model ID/revision, and canonical model-tree digest as
@@ -331,19 +346,51 @@ The remaining cross-bindings are:
   object must bind the submitted E2E correctness-golden bytes, that golden's
   approved generated-text SHA, and the submitted native E0 report bytes. The
   raw manifest's two golden fields must equal the derived generated-text and
-  native-report hashes; caller-supplied digest claims are not trusted. The
-  report must also bind the canonical
+  native-report hashes; caller-supplied digest claims are not trusted. Its
+  closed `bindings.runtime_provenance` must bind the seven canonical runtime
+  receipt hashes plus the designated host/GPU, release and derivative test
+  image IDs, and exact container ID/name. The report must also bind the canonical
   reviewed `pr16-release-soak-v1` template, retain the exact 10-scenario/150-check
   inventory, show every scenario ran for its reviewed duration with samples
   spanning that interval, and retain the reviewed cancellation/disconnect/
   overload and resource-slope bounds. A shortened or threshold-relaxed soak
-  report cannot be promoted. Its deterministic uncompressed USTAR must contain
-  exactly canonical `manifest.json`, `run.json`, `events.jsonl`, and internal
-  `SHA256SUMS` members. The final gate safely materializes those known members,
+  report cannot be promoted. Request events must cross-bind their manifest
+  profile, compact request-body hash, exact stream flag, client action, curl
+  exit code, response hash/bytes, HTTP status, and outcome: cancel is a
+  non-streaming timeout-28/empty-response abort, while disconnect is a
+  streaming 1,024-byte/write-error-23 abort. Scenario intervals must be
+  non-overlapping and occur in manifest order, including the ordered rollback
+  completion-mode transition. The pinned launch command explicitly keeps
+  `--reduction-profile canonical-v1` and `--residual-rmsnorm separate`; its
+  per-operation arm therefore runs the documented three-flag conservative E0
+  rollback rather than inheriting two defaults. Its deterministic uncompressed USTAR must contain
+  exactly canonical `manifest.json`, `run.json`, `events.jsonl`, the seven
+  `host-gpu.csv`, `launcher-receipt.json`, `release-runtime-closure.tsv`,
+  `release-image-inspect.json`,
+  `test-layer-image-inspect.json`, `container-inspect-pre.json`, and
+  `container-inspect-post.json` runtime receipts, and internal `SHA256SUMS`
+  members. The final gate safely materializes those known members,
   rejects any noncanonical tar bytes or checksum/inventory drift, reruns the
   soak checker from that run directory with the already snapshotted E2E golden
   and native correctness report, and requires the recomputed report to equal
-  the submitted report exactly. Legacy v1 reports or replay without either
+  the submitted report exactly. The replayed archive SHA-256 must also equal the
+  manifest-snapshotted raw artifact SHA-256. It independently checks receipt
+  digests, the launcher-bound exact `run.json`/`events.jsonl` byte hashes, image
+  lineage, labels, production user, the sorted loader/target/SHA closure with
+  explicit `NOT_FOUND/-/-` rows for build-time runtime-injected dependencies,
+  exact environment inheritance
+  with reviewed `PATH`, CUDA library path, NVIDIA visibility/capability values,
+  no curl-home or other shell/loader overrides, no-healthcheck/entrypoint/
+  arguments/working directory, and the closed network/PID/IPC/UTS/user/cgroup
+  namespace, GPU, device, capability, rootfs, tmpfs, sysctl, group, and mount
+  isolation contract. Every bind must have empty `Mode` and `rprivate`
+  propagation.
+  Strict daemon timestamps must prove at least 26,100 seconds of exited-0 runtime,
+  cover the preserved monotonic event span, contain the run's strict timestamp,
+  and finish with PID zero and no OOM or restart. The run ID repeats that timestamp
+  exactly, while the strict container-name stamp must be within five minutes
+  before Docker creation. Legacy three-payload archives, v1 reports, pre-v3 launcher
+  receipts, or replay without either
   trusted artifact fail closed. Thus raw event sequencing, final
   allocation/KV quiescence, restart, and rollback golden parity are evidence,
   not self-asserted report fields.

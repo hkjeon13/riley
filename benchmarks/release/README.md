@@ -9,7 +9,11 @@ the append-only PR15 evidence root. The later CLI-default promotion source is
 recorded separately and is not misrepresented as a performance measurement.
 The metric baseline is the accepted `iteration-batch` candidate arm—not the
 rejected-for-release `per-operation` comparison arm—and preserves the exact
-aggregate values from the append-only PR15 pair report.
+aggregate values from the append-only PR15 pair report. The reviewed baseline
+also pins the canonical `native_profile._request_identity` SHA-256 to
+`e6a99a749c41a8227574c96a1d23f8b7d877d6e75b0df4d99154db1b1921a2e6`;
+matching model/workload summaries with different prompt/generated-token
+identity are incomparable.
 
 The PR16 candidate document uses schema version
 `rustinfer.release-performance-candidate.v1` and is intentionally closed. See
@@ -26,6 +30,18 @@ for the exact shape. It must contain:
   workload binding, status, trace, warmup/iteration count, and token identity;
 - TTFT p95, TPOT p95, E2E median, and median output throughput exactly
   recomputed from those five raw files. Self-asserted aggregates are rejected.
+
+Produce the five candidate raw files with the fail-closed, remote-only runner
+documented in
+[`ci/release/RELEASE_PERFORMANCE_RUNNER.md`](../../ci/release/RELEASE_PERFORMANCE_RUNNER.md).
+It accepts only a clean frozen revision and externally reviewed artifact
+digests, runs five fresh network-disabled GPU containers on `server-4096`, and
+validates the actual host/container facts plus all five Docker inspect receipt
+pairs. The manifest uses the exact reviewed server tool path/digest map, and
+its model-tree digest must equal `model.manifest_sha256` in the submitted
+optimizer correctness report. Local use is limited to its CPU/static contract
+tests; do not run the measurement on a machine without the designated GPU
+lane.
 
 Create the candidate, checked report, and canonical raw archive together. The
 candidate ID must use the final-gate form
@@ -44,7 +60,8 @@ python3 benchmarks/scripts/package_release_performance_evidence.py \
   --correctness-report /evidence/optimization-correctness-report.json \
   --profile-image-id sha256:<measurement-image-digest> \
   --release-image-id sha256:<runtime-image-digest> \
-  --run /evidence/candidate-{1,2,3,4,5}.json \
+  --run /runner-receipts/run-{1,2,3,4,5}/candidate.json \
+  --runner-receipt-root /runner-receipts \
   --output-directory /evidence/release-performance
 ```
 
@@ -53,8 +70,22 @@ path and contains exactly:
 
 - `release-performance-candidate.json`;
 - `release-performance-report.json`;
-- `release-performance-evidence.tar`, a deterministic uncompressed USTAR with
-  only `candidate-1.json` through `candidate-5.json`.
+- `release-performance-evidence.tar`, a deterministic sorted, fixed-metadata
+  uncompressed USTAR containing the closed v3 runner receipt inventory:
+  `runner-manifest.json`, `gpu.csv`, image inspections before/after, each of
+  five distinct runs' preflight/container-before/container-after/GPU-monitor/
+  candidate/execution receipts, and `SHA256SUMS`. Each canonical execution
+  receipt cross-binds a unique capture/container/run identity, the five
+  constituent receipt hashes, and Docker Created/StartedAt/FinishedAt,
+  exit-zero, and OOM-false state.
+
+Packaging reopens the receipt root with no-follow bounded file descriptors,
+checks its checksum manifest, replays the exact Docker command/full
+environment/isolation/GPU/mount/state contract, derives 5 x (5 warmups + 30
+measured iterations), compares the five `--run` bytes, and then replays the
+new archive while preserving the runner manifest for the final RC gate. A
+legacy five-JSON, alternate self-authorized tool map, foreign CUDA process, or
+self-asserted model-tree receipt fails closed.
 
 Exit `0` means the comparable threshold checks passed. Exit `1` means the
 evidence was structurally valid and comparable but at least one threshold
@@ -85,7 +116,8 @@ python3 benchmarks/scripts/check_release_performance.py \
   --correctness-report /evidence/correctness-report.json \
   --profile-image-id sha256:<measurement-image-digest> \
   --release-image-id sha256:<runtime-image-digest> \
-  --run /evidence/candidate-{1,2,3,4,5}.json \
+  --run /runner-receipts/run-{1,2,3,4,5}/candidate.json \
+  --runner-receipt-root /runner-receipts \
   --report /evidence/release-performance-report.json
 ```
 
