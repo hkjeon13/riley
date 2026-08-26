@@ -357,9 +357,17 @@ fn run_online_case(
 }
 
 fn zero_score_values(batch_size: usize, sequence: usize, key_value_heads: usize) -> Vec<f32> {
-    (0..batch_size * sequence * key_value_heads * D)
+    let mut values: Vec<f32> = (0..batch_size * sequence * key_value_heads * D)
         .map(|index| (f32::from(u8::try_from((index * 13 + 7) % 31).unwrap_or(0)) - 15.0) * 0.03125)
-        .collect()
+        .collect();
+    // For three equal scores, BF16(1/3) folded into these values produces a
+    // different BF16 result than rounding their F32 average. Keep that witness
+    // inside every long-shape fixture so the test proves probability staging,
+    // rather than merely agreeing on inputs where both arithmetic paths alias.
+    for (token, value) in [-0.125_f32, -5.375, 1.0625].into_iter().enumerate() {
+        values[kv_index(sequence, key_value_heads, 0, token, 0, 0)] = value;
+    }
+    values
 }
 
 #[allow(clippy::cast_precision_loss)]
@@ -371,7 +379,7 @@ fn assert_zero_score_prefix_samples(
     query_heads: usize,
     key_value_heads: usize,
 ) {
-    let sampled_tokens = [0, sequence / 2, sequence - 1];
+    let sampled_tokens = [0, 2, sequence / 2, sequence - 1];
     let sampled_heads = [0, query_heads / 2, query_heads - 1];
     let sampled_depths = [0, 17, D - 1];
     let group_size = query_heads / key_value_heads;
