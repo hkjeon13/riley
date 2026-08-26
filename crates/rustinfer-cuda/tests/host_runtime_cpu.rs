@@ -113,7 +113,15 @@ fn nvml_probe_is_in_process_and_does_not_change_production_cuda_linkage() {
     for forbidden in ["popen(", "system("] {
         assert!(!native.contains(forbidden));
     }
-    assert!(!release_dependencies.contains("libnvidia-ml"));
+    let (production_policy, calibration_policy) = release_dependencies
+        .split_once("CALIBRATION_NVML_DEPENDENCY")
+        .expect("release policy must separate the calibration NVML role");
+    assert!(!production_policy.contains("libnvidia-ml"));
+    assert!(calibration_policy.contains("\"libnvidia-ml.so.1\""));
+    assert!(
+        calibration_policy
+            .contains("ALLOWED_CALIBRATION_DEPENDENCIES = ALLOWED_NATIVE_DEPENDENCIES")
+    );
 }
 
 #[test]
