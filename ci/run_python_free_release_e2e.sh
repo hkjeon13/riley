@@ -186,7 +186,7 @@ launch_container() {
         "$RUSTINFER_E2E_IMAGE_ID" \
         serve --model /models/checkpoint --model-id "$model_id" --bind "$RUSTINFER_E2E_BIND" \
         --max-output-tokens 1024 --execution-completion iteration-batch \
-        --residual-rmsnorm separate
+        --residual-rmsnorm separate --reduction-profile canonical-v1
 }
 
 container_id=$(launch_container shutdown-metrics.json)

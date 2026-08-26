@@ -11,6 +11,8 @@ mod forward;
 #[cfg(feature = "cuda")]
 mod generation;
 mod plan;
+#[cfg(any(feature = "cuda", test))]
+mod reduction_profile;
 
 pub use batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LLAMA_BATCH_NO_OUTPUT_SLOT, LlamaBatchBlockTable,
@@ -34,6 +36,9 @@ pub use plan::{
     KEY_VALUE_WORKSPACE_BUFFER_COUNT, LlamaDimensions, LlamaExecutionPlan, LlamaLayerPlan,
     LlamaWorkspaceSpec,
 };
+
+#[cfg(any(feature = "cuda", test))]
+pub use reduction_profile::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
 
 #[cfg(feature = "cuda")]
 pub use forward::{
@@ -73,7 +78,27 @@ mod source_contract_tests {
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
+    use super::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
     use rustinfer_cuda::{AttentionPreference, AttentionReductionProfile};
+
+    #[test]
+    fn llama_reduction_profile_has_stable_ids_and_cuda_mapping() {
+        let canonical = LlamaReductionProfile::default();
+        assert_eq!(canonical, LlamaReductionProfile::CanonicalV1);
+        assert_eq!(canonical.id(), "canonical-v1");
+        assert_eq!(
+            canonical.attention_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+
+        let fixed = LlamaReductionProfile::FixedContiguous37BalancedV1;
+        assert_eq!(fixed.id(), "fixed-contiguous-37-balanced-v1");
+        assert_eq!(LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, 8_192);
+        assert_eq!(
+            fixed.attention_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+    }
 
     #[test]
     fn optimized_attention_is_default_and_reference_is_explicit() {

@@ -8,6 +8,12 @@ use std::process::ExitCode;
 mod signal;
 
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
+#[cfg(any(feature = "cuda", test))]
+const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
+#[cfg(feature = "cuda")]
+const _: () = assert!(
+    FIXED37_MAX_SEQUENCE_TOKENS == rustinfer_runtime::llama::LLAMA_FIXED37_MAX_SEQUENCE_TOKENS
+);
 #[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
 const SHUTDOWN_METRICS_ENV: &str = "RUSTINFER_SHUTDOWN_METRICS_PATH";
 
@@ -29,6 +35,7 @@ serve options:
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
+  --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
@@ -55,6 +62,7 @@ struct ServeOptions {
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
+    reduction_profile: ReductionProfileMode,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
 }
@@ -69,6 +77,12 @@ enum ResidualRmsNormMode {
 enum ExecutionCompletionMode {
     PerOperation,
     IterationBatch,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ReductionProfileMode {
+    CanonicalV1,
+    FixedContiguous37BalancedV1,
 }
 
 fn main() -> ExitCode {
@@ -136,6 +150,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
+    let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
 
@@ -231,6 +246,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_execution_completion(next_value(&mut arguments, "--execution-completion")?)?,
                 "--execution-completion",
             )?,
+            "--reduction-profile" => set_once(
+                &mut reduction_profile,
+                parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
+                "--reduction-profile",
+            )?,
             "--max-weight-bytes" => set_once(
                 &mut max_weight_bytes,
                 parse_number(
@@ -274,6 +294,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
+        reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
     }))
@@ -293,6 +314,33 @@ fn parse_execution_completion(value: OsString) -> Result<ExecutionCompletionMode
         "iteration-batch" => Ok(ExecutionCompletionMode::IterationBatch),
         _ => Err("--execution-completion requires per-operation or iteration-batch".to_owned()),
     }
+}
+
+fn parse_reduction_profile(value: OsString) -> Result<ReductionProfileMode, String> {
+    match parse_utf8(value, "--reduction-profile")?.as_str() {
+        "canonical-v1" => Ok(ReductionProfileMode::CanonicalV1),
+        "fixed-contiguous-37-balanced-v1" => Ok(ReductionProfileMode::FixedContiguous37BalancedV1),
+        _ => Err(
+            "--reduction-profile requires canonical-v1 or fixed-contiguous-37-balanced-v1"
+                .to_owned(),
+        ),
+    }
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn validate_reduction_profile_context(
+    profile: ReductionProfileMode,
+    maximum_sequence_tokens: usize,
+) -> Result<(), String> {
+    if profile == ReductionProfileMode::FixedContiguous37BalancedV1
+        && maximum_sequence_tokens > FIXED37_MAX_SEQUENCE_TOKENS
+    {
+        return Err(format!(
+            "--reduction-profile fixed-contiguous-37-balanced-v1 requires an effective \
+--max-sequence-tokens no greater than {FIXED37_MAX_SEQUENCE_TOKENS}"
+        ));
+    }
+    Ok(())
 }
 
 fn ensure_finished(arguments: &mut impl Iterator<Item = OsString>) -> Result<(), String> {
@@ -355,6 +403,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         options.physical_kv_blocks,
         options.residual_rmsnorm,
         options.execution_completion,
+        options.reduction_profile,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
     );
@@ -370,7 +419,8 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
 
     use rustinfer_model::{LoadLimits, LoadedModel};
     use rustinfer_runtime::llama::{
-        LlamaBatchMetadataConfig, PreparedLlamaBatchExecutorConfig, PreparedLlamaForwardConfig,
+        LlamaBatchMetadataConfig, LlamaReductionProfile, PreparedLlamaBatchExecutorConfig,
+        PreparedLlamaForwardConfig,
     };
     use rustinfer_runtime::paged_kv::KV_BLOCK_SIZE;
     use rustinfer_scheduler::{OverloadPolicy, SchedulerConfig};
@@ -421,6 +471,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
             "--max-sequence-tokens must be between 2 and the model bound {model_context}"
         ));
     }
+    validate_reduction_profile_context(options.reduction_profile, max_sequence_tokens)?;
     let default_output_tokens = 1_024_usize.min(max_sequence_tokens - 1);
     let max_output_tokens = options.max_output_tokens.unwrap_or(default_output_tokens);
     if max_output_tokens == 0 || max_output_tokens >= max_sequence_tokens {
@@ -475,6 +526,14 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
     let executor = match options.execution_completion {
         ExecutionCompletionMode::PerOperation => executor.with_per_operation_completion(),
         ExecutionCompletionMode::IterationBatch => executor.with_iteration_batch_completion(),
+    };
+    let executor = match options.reduction_profile {
+        ReductionProfileMode::CanonicalV1 => {
+            executor.with_reduction_profile(LlamaReductionProfile::CanonicalV1)
+        }
+        ReductionProfileMode::FixedContiguous37BalancedV1 => {
+            executor.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+        }
     };
     let model_id = options
         .model_id
@@ -673,9 +732,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, ResidualRmsNormMode,
-        ServeOptions, USAGE, parse_arguments, validate_shutdown_metrics_path,
-        write_shutdown_metrics,
+        CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
+        ReductionProfileMode, ResidualRmsNormMode, ServeOptions, USAGE, parse_arguments,
+        validate_reduction_profile_context, validate_shutdown_metrics_path, write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -691,6 +750,8 @@ mod tests {
         assert_eq!(parse_arguments(args(&["-h"])), Ok(CliCommand::Help));
         assert!(USAGE.contains("--execution-completion MODE"));
         assert!(USAGE.contains("(default: iteration-batch)"));
+        assert!(USAGE.contains("--reduction-profile ID"));
+        assert!(USAGE.contains("(default: canonical-v1)"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -713,6 +774,7 @@ mod tests {
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
+                reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
@@ -750,6 +812,8 @@ mod tests {
             "separate",
             "--execution-completion",
             "iteration-batch",
+            "--reduction-profile",
+            "fixed-contiguous-37-balanced-v1",
             "--max-weight-bytes",
             "4096",
             "--shutdown-on-stdin",
@@ -770,6 +834,7 @@ mod tests {
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
+                reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
             }))
@@ -811,6 +876,32 @@ mod tests {
     }
 
     #[test]
+    fn reduction_profile_values_and_duplicates_fail_closed() {
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--reduction-profile",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--reduction-profile",
+                "canonical-v1",
+                "--reduction-profile",
+                "canonical-v1",
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
     fn fused_residual_norm_requires_explicit_per_operation_completion() {
         assert!(
             parse_arguments(args(&[
@@ -846,10 +937,32 @@ mod tests {
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
+                reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
         );
+    }
+
+    #[test]
+    fn fixed37_profile_rejects_an_advertised_context_above_its_ragged_limit() {
+        validate_reduction_profile_context(
+            ReductionProfileMode::FixedContiguous37BalancedV1,
+            FIXED37_MAX_SEQUENCE_TOKENS,
+        )
+        .expect("the exact fixed37 boundary is supported");
+        assert!(
+            validate_reduction_profile_context(
+                ReductionProfileMode::FixedContiguous37BalancedV1,
+                FIXED37_MAX_SEQUENCE_TOKENS + 1,
+            )
+            .is_err()
+        );
+        validate_reduction_profile_context(
+            ReductionProfileMode::CanonicalV1,
+            FIXED37_MAX_SEQUENCE_TOKENS + 1,
+        )
+        .expect("canonical profile retains the model context bound");
     }
 
     #[cfg(unix)]

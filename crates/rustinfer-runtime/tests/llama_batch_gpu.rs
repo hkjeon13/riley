@@ -17,9 +17,9 @@ use rustinfer_cuda::{
 use rustinfer_model::{LoadLimits, LoadedModel};
 use rustinfer_runtime::llama::{
     ExecutionCompletionImplementation, LlamaBatchBlockTable, LlamaBatchMetadataConfig,
-    LlamaBatchRow, LlamaBatchRowKind, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
-    PreparedLlamaDecode, PreparedLlamaDecodeConfig, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, ResidualNormImplementation,
+    LlamaBatchRow, LlamaBatchRowKind, LlamaReductionProfile, PreparedLlamaBatchExecutor,
+    PreparedLlamaBatchExecutorConfig, PreparedLlamaDecode, PreparedLlamaDecodeConfig,
+    PreparedLlamaForward, PreparedLlamaForwardConfig, ResidualNormImplementation,
 };
 use rustinfer_runtime::paged_kv::{BLOCK_TABLE_V1_VERSION, KV_BLOCK_SIZE};
 
@@ -45,10 +45,71 @@ struct LogitMetrics {
 
 #[derive(Debug)]
 struct GreedyExecutionTrace {
+    reduction_profile: LlamaReductionProfile,
     generated_token_ids: Vec<u32>,
     logits_by_iteration: Vec<Vec<u8>>,
     cuda_live_allocation_delta: i128,
     owner_close_live_allocation_count: u64,
+}
+
+fn prepared_decode_profile_trace(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    config: PreparedLlamaDecodeConfig,
+    decode_steps: usize,
+) -> TestResult<(Vec<u32>, Vec<Vec<u8>>)> {
+    let profile = config.reduction_profile();
+    let maximum_length = TOKENS_A
+        .len()
+        .checked_add(decode_steps)
+        .ok_or("maximum decode length overflow")?;
+    let mut decode = PreparedLlamaDecode::prepare(
+        model,
+        context,
+        stream,
+        TOKENS_A.len(),
+        maximum_length,
+        config,
+    )?;
+    assert_eq!(decode.reduction_profile(), profile);
+    let expected_attention_profile = match profile {
+        LlamaReductionProfile::CanonicalV1 => AttentionReductionProfile::CanonicalV1,
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => {
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        }
+    };
+    assert_eq!(
+        decode
+            .prepared_attention()
+            .selection_trace()
+            .reduction_profile(),
+        expected_attention_profile
+    );
+
+    decode.prefill(&TOKENS_A, stream)?;
+    let mut logits = vec![0_u8; vocabulary_row_bytes(model)?];
+    decode.download_last_logits(&mut logits, stream)?;
+    let stable = context.allocation_stats()?;
+    let mut token_ids = Vec::with_capacity(decode_steps);
+    let mut logits_by_iteration = Vec::with_capacity(decode_steps + 1);
+    logits_by_iteration.push(logits.clone());
+    for step in 0..decode_steps {
+        let token = u32::try_from(top1(&logits))?;
+        token_ids.push(token);
+        decode.decode(token, stream)?;
+        decode.download_last_logits(&mut logits, stream)?;
+        logits_by_iteration.push(logits.clone());
+        assert_eq!(
+            context.allocation_stats()?,
+            stable,
+            "prepared decode allocation changed at step {}",
+            step + 1
+        );
+    }
+    decode.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    Ok((token_ids, logits_by_iteration))
 }
 
 fn live_allocation_count(stats: CudaAllocationStats) -> u64 {
@@ -306,7 +367,8 @@ fn greedy_execution_trace(
     model: &LoadedModel,
     residual_norm: ResidualNormImplementation,
     execution_completion: ExecutionCompletionImplementation,
-    ragged_attention_reduction_profile: AttentionReductionProfile,
+    reduction_profile: LlamaReductionProfile,
+    ragged_attention_reduction_profile: Option<AttentionReductionProfile>,
     decode_steps: usize,
 ) -> TestResult<GreedyExecutionTrace> {
     let maximum_length = TOKENS_A
@@ -331,8 +393,26 @@ fn greedy_execution_trace(
             config.with_iteration_batch_completion()
         }
     }
-    .with_ragged_attention_reduction_profile(ragged_attention_reduction_profile);
+    .with_reduction_profile(reduction_profile);
+    let config = ragged_attention_reduction_profile.map_or(config, |profile| {
+        config.with_ragged_attention_reduction_profile(profile)
+    });
     let mut batch = PreparedLlamaBatchExecutor::prepare(model, &context, &mut stream, config)?;
+    assert_eq!(batch.reduction_profile(), reduction_profile);
+    if ragged_attention_reduction_profile.is_none() {
+        assert!(batch.reduction_profile_is_coherent());
+    }
+    let expected_ragged_profile =
+        ragged_attention_reduction_profile.unwrap_or(match reduction_profile {
+            LlamaReductionProfile::CanonicalV1 => AttentionReductionProfile::CanonicalV1,
+            LlamaReductionProfile::FixedContiguous37BalancedV1 => {
+                AttentionReductionProfile::FixedContiguous37BalancedV1
+            }
+        });
+    assert_eq!(
+        batch.config().ragged_attention_reduction_profile(),
+        expected_ragged_profile
+    );
     let (prompt_ids, prompt_valid) = block_table(TOKENS_A.len(), 0)?;
     let prompt_rows = [row(
         15,
@@ -349,6 +429,7 @@ fn greedy_execution_trace(
     batch.download_logits(&mut logits, &mut stream)?;
     let stable = context.allocation_stats()?;
     let mut trace = GreedyExecutionTrace {
+        reduction_profile,
         generated_token_ids: Vec::with_capacity(decode_steps),
         logits_by_iteration: Vec::with_capacity(decode_steps + 1),
         cuda_live_allocation_delta: 0,
@@ -378,7 +459,7 @@ fn greedy_execution_trace(
         assert_eq!(
             current,
             stable,
-            "{residual_norm:?}/{execution_completion:?}/{ragged_attention_reduction_profile:?} allocation changed after committed decode step {}",
+            "{residual_norm:?}/{execution_completion:?}/{reduction_profile:?}/{ragged_attention_reduction_profile:?} allocation changed after committed decode step {}",
             step + 1,
         );
         trace.cuda_live_allocation_delta = live_allocation_delta(stable, current);
@@ -389,7 +470,7 @@ fn greedy_execution_trace(
     trace.owner_close_live_allocation_count = live_allocation_count(after_owner_close);
     assert!(
         after_owner_close.is_zero(),
-        "{residual_norm:?}/{execution_completion:?}/{ragged_attention_reduction_profile:?} executor close leaked CUDA allocations"
+        "{residual_norm:?}/{execution_completion:?}/{reduction_profile:?}/{ragged_attention_reduction_profile:?} executor close leaked CUDA allocations"
     );
     stream.close()?;
     close_context(context)?;
@@ -437,14 +518,16 @@ fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResul
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
-        AttentionReductionProfile::CanonicalV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
     )?;
     let fused = greedy_execution_trace(
         &model,
         ResidualNormImplementation::Fused,
         ExecutionCompletionImplementation::PerOperation,
-        AttentionReductionProfile::CanonicalV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
     )?;
 
@@ -491,14 +574,16 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
-        AttentionReductionProfile::CanonicalV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
     )?;
     let iteration_batch = greedy_execution_trace(
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::IterationBatch,
-        AttentionReductionProfile::CanonicalV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
     )?;
 
@@ -571,14 +656,16 @@ fn fixed37_ragged_attention_completion_modes_match_multi_step_greedy_exactly() -
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
-        AttentionReductionProfile::FixedContiguous37BalancedV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::FixedContiguous37BalancedV1),
         DECODE_STEPS,
     )?;
     let iteration_batch = greedy_execution_trace(
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::IterationBatch,
-        AttentionReductionProfile::FixedContiguous37BalancedV1,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::FixedContiguous37BalancedV1),
         DECODE_STEPS,
     )?;
 
@@ -620,6 +707,145 @@ generated_token_ids={:?} status=passed",
         iteration_batch.generated_token_ids,
     );
     Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn fixed37_whole_reduction_profile_completion_modes_match_multi_step_greedy_exactly() -> TestResult
+{
+    const DECODE_STEPS: usize = 16;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
+    let profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
+    let per_operation = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::PerOperation,
+        profile,
+        None,
+        DECODE_STEPS,
+    )?;
+    let iteration_batch = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::IterationBatch,
+        profile,
+        None,
+        DECODE_STEPS,
+    )?;
+
+    assert_eq!(per_operation.reduction_profile, profile);
+    assert_eq!(iteration_batch.reduction_profile, profile);
+    assert_eq!(
+        iteration_batch.generated_token_ids, per_operation.generated_token_ids,
+        "whole fixed37 completion modes generated different token IDs"
+    );
+    assert_eq!(
+        iteration_batch.logits_by_iteration.len(),
+        per_operation.logits_by_iteration.len()
+    );
+    for (iteration, (batched_logits, per_operation_logits)) in iteration_batch
+        .logits_by_iteration
+        .iter()
+        .zip(&per_operation.logits_by_iteration)
+        .enumerate()
+    {
+        assert_exact_bytes(
+            &format!("whole fixed37 execution-completion iteration {iteration}"),
+            batched_logits,
+            per_operation_logits,
+        );
+        assert_eq!(
+            top1(batched_logits),
+            top1(per_operation_logits),
+            "whole fixed37 iteration {iteration} top-1 differs"
+        );
+    }
+    assert_eq!(iteration_batch.cuda_live_allocation_delta, 0);
+    assert_eq!(iteration_batch.owner_close_live_allocation_count, 0);
+    println!(
+        "pr16-fixed37-whole-profile-completion-parity schema_version=1 \
+profile={} decode_steps={DECODE_STEPS} committed_iterations={} \
+raw_logit_mismatches=0 token_id_mismatches=0 cuda_live_allocation_delta={} \
+owner_close_live_allocation_count={} generated_token_ids={:?} status=passed",
+        profile.id(),
+        iteration_batch.logits_by_iteration.len() - 1,
+        iteration_batch.cuda_live_allocation_delta,
+        iteration_batch.owner_close_live_allocation_count,
+        iteration_batch.generated_token_ids,
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
+fn fixed37_whole_profile_selects_forward_and_both_decode_cache_paths() -> TestResult {
+    const DECODE_STEPS: usize = 16;
+    let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
+    let profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
+    let attention_profile = AttentionReductionProfile::FixedContiguous37BalancedV1;
+    let (context, mut stream) = first_context()?;
+
+    let mut forward = PreparedLlamaForward::prepare(
+        &model,
+        &context,
+        &mut stream,
+        TOKENS_A.len(),
+        PreparedLlamaForwardConfig::default().with_reduction_profile(profile),
+    )?;
+    assert_eq!(forward.reduction_profile(), profile);
+    assert_eq!(
+        forward.attention_selection().reduction_profile(),
+        attention_profile
+    );
+    forward.forward(&TOKENS_A, &mut stream)?;
+    let mut forward_logits = vec![0_u8; vocabulary_row_bytes(&model)?];
+    forward.download_last_logits(&mut forward_logits, &mut stream)?;
+    forward.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+
+    let contiguous = prepared_decode_profile_trace(
+        &model,
+        &context,
+        &mut stream,
+        PreparedLlamaDecodeConfig::default()
+            .with_reduction_profile(profile)
+            .with_contiguous_kv_cache(),
+        DECODE_STEPS,
+    )?;
+    let paged = prepared_decode_profile_trace(
+        &model,
+        &context,
+        &mut stream,
+        PreparedLlamaDecodeConfig::default()
+            .with_reduction_profile(profile)
+            .with_paged_kv_cache(),
+        DECODE_STEPS,
+    )?;
+
+    assert_eq!(
+        paged.0, contiguous.0,
+        "fixed37 decode cache token IDs differ"
+    );
+    assert_eq!(paged.1.len(), contiguous.1.len());
+    for (iteration, (paged_logits, contiguous_logits)) in
+        paged.1.iter().zip(&contiguous.1).enumerate()
+    {
+        assert_exact_bytes(
+            &format!("fixed37 paged/contiguous decode iteration {iteration}"),
+            paged_logits,
+            contiguous_logits,
+        );
+    }
+    println!(
+        "pr16-fixed37-whole-profile-runtime-selection schema_version=1 profile={} \
+decode_steps={DECODE_STEPS} forward_attention_profile={attention_profile:?} \
+decode_cache_paths=contiguous,paged raw_logit_mismatches=0 token_id_mismatches=0 \
+generated_token_ids={:?} status=passed",
+        profile.id(),
+        paged.0,
+    );
+    stream.close()?;
+    close_context(context)
 }
 
 #[test]

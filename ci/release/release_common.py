@@ -152,17 +152,20 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
                 "--kv-blocks N",
                 "--residual-rmsnorm {fused,separate}",
                 "--execution-completion {per-operation,iteration-batch}",
+                "--reduction-profile {canonical-v1,fixed-contiguous-37-balanced-v1}",
                 "--max-weight-bytes N",
                 "--shutdown-on-stdin",
             ],
             "incompatible": [
-                "--residual-rmsnorm fused with --execution-completion iteration-batch"
+                "--residual-rmsnorm fused with --execution-completion iteration-batch",
+                "--reduction-profile fixed-contiguous-37-balanced-v1 with an effective --max-sequence-tokens greater than 8192",
             ],
         },
         "rollback": {
             "safe_flags": [
                 "--residual-rmsnorm separate",
                 "--execution-completion per-operation",
+                "--reduction-profile canonical-v1",
             ],
             "procedure": [
                 "drain or cancel active requests and stop the current server",

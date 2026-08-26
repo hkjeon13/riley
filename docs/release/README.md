@@ -95,16 +95,22 @@ run the Python-free real-model API/generation suite.
 
 ## Default configuration and rollback
 
-The production defaults recorded in every bundle are iteration-batched
-completion and separate residual RMSNorm. Fused residual RMSNorm remains
-incompatible with iteration-batched completion.
+The production defaults recorded in every bundle are the `canonical-v1`
+reduction profile, iteration-batched completion, and separate residual
+RMSNorm. Fused residual RMSNorm remains incompatible with iteration-batched
+completion. The opt-in `fixed-contiguous-37-balanced-v1` profile requires an
+effective `--max-sequence-tokens` no greater than 8192.
 
 For optimization isolation, drain or cancel active work, stop the process, and
 restart with both conservative flags:
 
 ```text
---execution-completion per-operation --residual-rmsnorm separate
+--reduction-profile canonical-v1 --execution-completion per-operation --residual-rmsnorm separate
 ```
+
+`--reduction-profile canonical-v1` is the numerical-kernel rollback. The
+separate `--execution-completion per-operation` flag isolates command-batch
+completion, so operators can roll back either dimension independently.
 
 For release rollback, restart the preceding checksummed bundle with the same
 model/configuration, verify `/v1/models`, then restore traffic. Rollback never

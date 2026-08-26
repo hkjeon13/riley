@@ -8,7 +8,7 @@ use std::mem;
 
 use rustinfer_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
-    CudaGemmConfig, CudaPinnedHostBuffer, CudaPreparedGemm, CudaStream, DecodeAttentionBackend,
+    CudaGemmConfig, CudaPinnedHostBuffer, CudaStream, DecodeAttentionBackend,
     DecodeAttentionBackendAvailability, DecodeAttentionCapability, DecodeAttentionParams,
     DecodeAttentionPreference, DecodeAttentionRequest, DecodeAttentionSelectionTrace,
     EmbeddingError, EmbeddingParams, GatedMultiplyParams, KvCacheAppendParams, PAGED_KV_BLOCK_SIZE,
@@ -16,7 +16,7 @@ use rustinfer_cuda::{
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
     PreparedDecodeAttention, PreparedPagedDecodeAttention, ResidualAddParams, RmsNormParams,
     RopeParams, SiluParams, embedding, gated_multiply, kv_cache_append, paged_kv_cache_append,
-    residual_add, rms_norm, rope, silu,
+    residual_add, rope, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -27,10 +27,11 @@ use crate::paged_kv::{
 
 use super::forward::{
     LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, execute_gemm, execute_projection_bias, poison_for_cuda_error,
-    poison_for_forward_error, span, span_mut, weight_span,
+    PreparedLlamaForwardConfig, PreparedLlamaGemm, execute_gemm, execute_profile_rms_norm,
+    execute_projection_bias, poison_for_cuda_error, poison_for_forward_error, span, span_mut,
+    weight_span,
 };
-use super::{ExecutionSite, LlamaOp};
+use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
@@ -495,6 +496,25 @@ impl PreparedLlamaDecodeConfig {
         self
     }
 
+    /// Selects one reduction contract for every supported Llama primitive.
+    #[must_use]
+    pub const fn with_reduction_profile(mut self, profile: LlamaReductionProfile) -> Self {
+        self.forward = self.forward.with_reduction_profile(profile);
+        self
+    }
+
+    /// Restores the established canonical reduction contract.
+    #[must_use]
+    pub const fn with_canonical_reductions(self) -> Self {
+        self.with_reduction_profile(LlamaReductionProfile::CanonicalV1)
+    }
+
+    /// Selects contiguous-37 balanced reductions without canonical fallback.
+    #[must_use]
+    pub const fn with_fixed37_reductions(self) -> Self {
+        self.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+    }
+
     /// Selects the PR10 exact paged cache with one block per capacity slice.
     #[must_use]
     pub const fn with_paged_kv_cache(mut self) -> Self {
@@ -524,6 +544,11 @@ impl PreparedLlamaDecodeConfig {
     #[must_use]
     pub const fn decode_attention_preference(self) -> DecodeAttentionPreference {
         self.decode_attention_preference
+    }
+
+    #[must_use]
+    pub const fn reduction_profile(self) -> LlamaReductionProfile {
+        self.forward.reduction_profile()
     }
 
     #[must_use]
@@ -1306,11 +1331,11 @@ impl PrefillKvCacheSink<'_> {
 }
 
 struct DecodeGemmPlans {
-    hidden: CudaPreparedGemm,
-    key_value: CudaPreparedGemm,
-    intermediate: CudaPreparedGemm,
-    down: CudaPreparedGemm,
-    lm_head: CudaPreparedGemm,
+    hidden: PreparedLlamaGemm,
+    key_value: PreparedLlamaGemm,
+    intermediate: PreparedLlamaGemm,
+    down: PreparedLlamaGemm,
+    lm_head: PreparedLlamaGemm,
 }
 
 /// Prepared attention plan matching the selected cache address space.
@@ -1389,11 +1414,11 @@ impl DecodeGemmPlans {
 
     fn maximum_workspace_bytes(&self) -> u64 {
         [
-            self.hidden.algorithm_metadata().workspace_bytes(),
-            self.key_value.algorithm_metadata().workspace_bytes(),
-            self.intermediate.algorithm_metadata().workspace_bytes(),
-            self.down.algorithm_metadata().workspace_bytes(),
-            self.lm_head.algorithm_metadata().workspace_bytes(),
+            self.hidden.workspace_bytes(),
+            self.key_value.workspace_bytes(),
+            self.intermediate.workspace_bytes(),
+            self.down.workspace_bytes(),
+            self.lm_head.workspace_bytes(),
         ]
         .into_iter()
         .max()
@@ -1440,6 +1465,7 @@ impl fmt::Debug for PreparedLlamaDecode {
             .field("maximum_length", &self.maximum_sequence_length)
             .field("cache_layout", &self.cache_layout)
             .field("phase", &self.phase)
+            .field("reduction_profile", &self.reduction_profile())
             .field("attention_backend", &self.attention.backend())
             .field("allocation_report", &self.allocation_report)
             .field("poisoned", &self.is_poisoned())
@@ -1522,10 +1548,11 @@ impl PreparedLlamaDecode {
                     head_size,
                     scale,
                 );
-                let attention = PreparedDecodeAttention::select(
+                let attention = PreparedDecodeAttention::select_with_reduction_profile(
                     context,
                     request,
                     config.decode_attention_preference(),
+                    config.forward().reduction_profile().attention_profile(),
                     DecodeAttentionBackendAvailability::linked(),
                 )
                 .map_err(|source| {
@@ -1563,10 +1590,11 @@ impl PreparedLlamaDecode {
                     head_size,
                     scale,
                 );
-                let attention = PreparedPagedDecodeAttention::select(
+                let attention = PreparedPagedDecodeAttention::select_with_reduction_profile(
                     context,
                     request,
                     config.decode_attention_preference(),
+                    config.forward().reduction_profile().attention_profile(),
                     DecodeAttentionBackendAvailability::linked(),
                 )
                 .map_err(|source| {
@@ -1695,6 +1723,12 @@ impl PreparedLlamaDecode {
     #[must_use]
     pub const fn prepared_attention(&self) -> &PreparedLlamaDecodeAttention {
         &self.attention
+    }
+
+    /// Reduction contract selected for every supported decode primitive.
+    #[must_use]
+    pub const fn reduction_profile(&self) -> LlamaReductionProfile {
+        self.forward.reduction_profile()
     }
 
     #[must_use]
@@ -1892,6 +1926,7 @@ impl PreparedLlamaDecode {
         stream: &mut CudaStream,
     ) -> LlamaDecodeResult<()> {
         let forward = &mut self.forward;
+        let reduction_profile = forward.reduction_profile();
         let plan = &forward.plan;
         let weights = &forward.weights;
         let buffers = &mut forward.buffers;
@@ -2010,7 +2045,7 @@ impl PreparedLlamaDecode {
                     hidden_size: hidden,
                     epsilon: layer.input_norm_epsilon(),
                 };
-                rms_norm(&mut params, stream)
+                execute_profile_rms_norm(reduction_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(input_norm_site, source))?;
             }
 
@@ -2313,7 +2348,7 @@ impl PreparedLlamaDecode {
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                rms_norm(&mut params, stream)
+                execute_profile_rms_norm(reduction_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(post_norm_site, source))?;
             }
 
@@ -2447,7 +2482,7 @@ impl PreparedLlamaDecode {
                 hidden_size: hidden,
                 epsilon: plan.final_norm_epsilon(),
             };
-            rms_norm(&mut params, stream)
+            execute_profile_rms_norm(reduction_profile, &mut params, stream)
                 .map_err(|source| LlamaDecodeError::cuda(final_norm_site, source))?;
         }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
@@ -2711,12 +2746,19 @@ fn prepare_decode_gemms(
         dimensions.vocabulary_size(),
         LlamaDecodeResource::GemmWorkspace,
     )?;
-    let prepare = |m, n, k, site| -> LlamaDecodeResult<CudaPreparedGemm> {
+    let prepare = |m, n, k, site| -> LlamaDecodeResult<PreparedLlamaGemm> {
         let config = CudaGemmConfig::new(m, n, k, workspace_cap)
             .map_err(|source| LlamaDecodeError::cuda(site, source))?;
-        context
-            .prepare_gemm(config)
-            .map_err(|source| LlamaDecodeError::cuda(site, source))
+        match forward.reduction_profile() {
+            LlamaReductionProfile::CanonicalV1 => context
+                .prepare_gemm(config)
+                .map(PreparedLlamaGemm::Canonical)
+                .map_err(|source| LlamaDecodeError::cuda(site, source)),
+            LlamaReductionProfile::FixedContiguous37BalancedV1 => context
+                .prepare_fixed37_gemm(config)
+                .map(PreparedLlamaGemm::Fixed37)
+                .map_err(|source| LlamaDecodeError::cuda(site, source)),
+        }
     };
     Ok(DecodeGemmPlans {
         hidden: prepare(

@@ -19,7 +19,7 @@ use rustinfer_cuda::{
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
     ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, embedding,
     fixed37_ragged_paged_attention, gated_multiply, indexed_rope, ragged_paged_attention,
-    ragged_paged_kv_cache_write, residual_add, residual_rms_norm, rms_norm, row_gather, silu,
+    ragged_paged_kv_cache_write, residual_add, row_gather, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -29,10 +29,11 @@ use super::batch::{
 };
 use super::forward::{
     LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, execute_gemm, execute_projection_bias, poison_for_cuda_error,
+    PreparedLlamaForwardConfig, execute_gemm, execute_profile_residual_rms_norm,
+    execute_profile_rms_norm, execute_projection_bias, poison_for_cuda_error,
     poison_for_forward_error, span, span_mut, weight_span,
 };
-use super::{ExecutionSite, LlamaOp};
+use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout, PagedKvError};
 
 const BF16_BYTES: u64 = 2;
@@ -279,7 +280,7 @@ impl PreparedLlamaBatchExecutorConfig {
         Self {
             metadata,
             forward,
-            ragged_attention_reduction_profile: AttentionReductionProfile::CanonicalV1,
+            ragged_attention_reduction_profile: forward.reduction_profile().attention_profile(),
             residual_norm: ResidualNormImplementation::Separate,
             execution_completion: ExecutionCompletionImplementation::PerOperation,
         }
@@ -293,6 +294,43 @@ impl PreparedLlamaBatchExecutorConfig {
     #[must_use]
     pub const fn forward(self) -> PreparedLlamaForwardConfig {
         self.forward
+    }
+
+    /// Selects one complete reduction implementation without cross-profile fallback.
+    #[must_use]
+    pub const fn with_reduction_profile(mut self, profile: LlamaReductionProfile) -> Self {
+        self.forward = self.forward.with_reduction_profile(profile);
+        self.ragged_attention_reduction_profile = profile.attention_profile();
+        self
+    }
+
+    /// Selects every established canonical reduction implementation.
+    #[must_use]
+    pub const fn with_canonical_reductions(self) -> Self {
+        self.with_reduction_profile(LlamaReductionProfile::CanonicalV1)
+    }
+
+    /// Selects the complete fixed-contiguous-37 balanced reduction profile.
+    #[must_use]
+    pub const fn with_fixed37_reductions(self) -> Self {
+        self.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
+    }
+
+    /// Returns the forward/decode reduction profile used as the whole-profile source.
+    ///
+    /// The compatibility-only ragged attention builders can deliberately make
+    /// that one primitive differ. Call [`Self::reduction_profile_is_coherent`]
+    /// before labeling the executor as a complete whole-profile run.
+    #[must_use]
+    pub const fn reduction_profile(self) -> LlamaReductionProfile {
+        self.forward.reduction_profile()
+    }
+
+    /// Whether ragged attention still matches the whole-profile source.
+    #[must_use]
+    pub fn reduction_profile_is_coherent(self) -> bool {
+        self.ragged_attention_reduction_profile
+            == self.forward.reduction_profile().attention_profile()
     }
 
     /// Selects the reduction profile used by ragged paged attention.
@@ -672,6 +710,21 @@ impl PreparedLlamaBatchExecutor {
     #[must_use]
     pub const fn config(&self) -> PreparedLlamaBatchExecutorConfig {
         self.config
+    }
+
+    /// Returns the forward/decode profile selected at cold preparation.
+    ///
+    /// Use [`Self::reduction_profile_is_coherent`] before treating this value
+    /// as the complete graph profile in logs or evidence.
+    #[must_use]
+    pub const fn reduction_profile(&self) -> LlamaReductionProfile {
+        self.config.reduction_profile()
+    }
+
+    /// Whether every reduction family matches [`Self::reduction_profile`].
+    #[must_use]
+    pub fn reduction_profile_is_coherent(&self) -> bool {
+        self.config.reduction_profile_is_coherent()
     }
 
     /// Vocabulary width of every gathered output row.
@@ -1150,6 +1203,7 @@ fn execute_packed(
             execute_fixed_graph(
                 forward,
                 config.residual_norm,
+                config.reduction_profile(),
                 config.ragged_attention_reduction_profile,
                 layout,
                 key_cache,
@@ -1245,6 +1299,7 @@ fn execute_packed(
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     forward: &mut PreparedLlamaForward,
     residual_norm_implementation: ResidualNormImplementation,
+    reduction_profile: LlamaReductionProfile,
     attention_reduction_profile: AttentionReductionProfile,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -1349,7 +1404,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 hidden_size: hidden,
                 epsilon: layer.input_norm_epsilon(),
             };
-            rms_norm(&mut params, stream).map_err(|source| batch_cuda(input_norm_site, source))?;
+            execute_profile_rms_norm(reduction_profile, &mut params, stream)
+                .map_err(|source| batch_cuda(input_norm_site, source))?;
         }
 
         let query_site = ExecutionSite::layer(layer_index, LlamaOp::QueryProjection);
@@ -1627,7 +1683,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                rms_norm(&mut norm, stream).map_err(|source| batch_cuda(post_norm_site, source))?;
+                execute_profile_rms_norm(reduction_profile, &mut norm, stream)
+                    .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
             ResidualNormImplementation::Fused => {
                 let mut fused = ResidualRmsNormParams {
@@ -1664,7 +1721,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                residual_rms_norm(&mut fused, stream)
+                execute_profile_residual_rms_norm(reduction_profile, &mut fused, stream)
                     .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
         }
@@ -1791,7 +1848,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             hidden_size: hidden,
             epsilon: plan.final_norm_epsilon(),
         };
-        rms_norm(&mut params, stream).map_err(|source| batch_cuda(final_norm_site, source))?;
+        execute_profile_rms_norm(reduction_profile, &mut params, stream)
+            .map_err(|source| batch_cuda(final_norm_site, source))?;
     }
     let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);
     execute_gemm(
@@ -2259,6 +2317,87 @@ mod tests {
         LlamaBatchBlockTable, LlamaBatchRowKind, PreparedLlamaBatchMetadata,
     };
     use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
+
+    #[test]
+    fn whole_reduction_profile_updates_forward_and_ragged_attention_atomically() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid metadata bounds");
+        let canonical =
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
+        assert_eq!(
+            canonical.reduction_profile(),
+            LlamaReductionProfile::CanonicalV1
+        );
+        assert_eq!(
+            canonical.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+        assert!(canonical.reduction_profile_is_coherent());
+
+        let fixed = canonical.with_fixed37_reductions();
+        assert_eq!(
+            fixed.reduction_profile(),
+            LlamaReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            fixed.forward().reduction_profile(),
+            LlamaReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            fixed.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert!(fixed.reduction_profile_is_coherent());
+
+        let narrow_rollback = fixed.with_canonical_ragged_attention();
+        assert_eq!(
+            narrow_rollback.reduction_profile(),
+            LlamaReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            narrow_rollback.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+        assert!(!narrow_rollback.reduction_profile_is_coherent());
+
+        let restored = narrow_rollback.with_canonical_reductions();
+        assert_eq!(
+            restored.reduction_profile(),
+            LlamaReductionProfile::CanonicalV1
+        );
+        assert_eq!(
+            restored.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+        assert!(restored.reduction_profile_is_coherent());
+
+        let normalized = normalize_prepared_config(fixed);
+        assert_eq!(
+            normalized.reduction_profile(),
+            LlamaReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            normalized.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+    }
+
+    #[test]
+    fn new_batch_config_inherits_forward_reduction_profile() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid metadata bounds");
+        let config = PreparedLlamaBatchExecutorConfig::new(
+            metadata,
+            PreparedLlamaForwardConfig::default().with_fixed37_reductions(),
+        );
+
+        assert_eq!(
+            config.reduction_profile(),
+            LlamaReductionProfile::FixedContiguous37BalancedV1
+        );
+        assert_eq!(
+            config.ragged_attention_reduction_profile(),
+            AttentionReductionProfile::FixedContiguous37BalancedV1
+        );
+    }
 
     #[test]
     fn fixed37_profile_rejects_t8193_in_host_preflight() {

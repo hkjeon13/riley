@@ -10,17 +10,19 @@ use rustinfer_cuda::{
     AttentionBackend, AttentionBackendAvailability, AttentionMask, AttentionPreference,
     AttentionSelectionTrace, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
     CudaDeviceBuffer, CudaError, CudaErrorStage, CudaExecutionStream, CudaGemmConfig,
-    CudaPinnedHostBuffer, CudaPreparedGemm, CudaStream, EmbeddingError, EmbeddingParams,
-    GatedMultiplyParams, GemmParams, PrefillAttentionParams, PrefillAttentionRequest,
-    PreparedPrefillAttention, ResidualAddParams, RmsNormParams, RopeParams,
-    RowBiasAddInPlaceParams, SiluParams, embedding, gated_multiply, residual_add, rms_norm, rope,
-    row_bias_add_in_place, silu,
+    CudaPinnedHostBuffer, CudaPreparedFixed37Gemm, CudaPreparedGemm, CudaStream, EmbeddingError,
+    EmbeddingParams, Fixed37GemmParams, GatedMultiplyParams, GemmParams, PrefillAttentionParams,
+    PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams, ResidualRmsNormParams,
+    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, embedding,
+    fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply, residual_add, residual_rms_norm,
+    rms_norm, rope, row_bias_add_in_place, silu,
 };
 use rustinfer_model::LoadedModel;
 
 use super::decode::PrefillKvCacheSink;
 use super::{
-    ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError, PhysicalWeightId,
+    ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError,
+    LlamaReductionProfile, PhysicalWeightId,
 };
 use crate::cuda_weights::{CudaUploadedWeights, CudaWeightUploadError};
 
@@ -276,6 +278,7 @@ impl PreparedLlamaForward {
             weights,
             gemms,
             attention: _,
+            reduction_profile: _,
             buffers,
             io_staging,
             token_bytes: _,
@@ -397,8 +400,77 @@ fn record_close(
     }
 }
 
+/// Prepared GEMM implementation bound to one whole-runtime reduction profile.
+pub(super) enum PreparedLlamaGemm {
+    Canonical(CudaPreparedGemm),
+    Fixed37(CudaPreparedFixed37Gemm),
+}
+
+impl PreparedLlamaGemm {
+    #[must_use]
+    pub(super) const fn config(&self) -> CudaGemmConfig {
+        match self {
+            Self::Canonical(plan) => plan.config(),
+            Self::Fixed37(plan) => plan.config(),
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn workspace_bytes(&self) -> u64 {
+        match self {
+            Self::Canonical(plan) => plan.algorithm_metadata().workspace_bytes(),
+            Self::Fixed37(plan) => plan.metadata().workspace_bytes(),
+        }
+    }
+
+    #[must_use]
+    pub(super) const fn is_poisoned(&self) -> bool {
+        match self {
+            Self::Canonical(plan) => plan.is_poisoned(),
+            Self::Fixed37(plan) => plan.is_poisoned(),
+        }
+    }
+
+    pub(super) fn close(self) -> Result<(), CudaError> {
+        match self {
+            Self::Canonical(plan) => plan.close(),
+            Self::Fixed37(plan) => plan.close(),
+        }
+    }
+
+    fn execute<'a, S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        input: CudaBufferSpan<'a>,
+        weight: CudaBufferSpan<'a>,
+        output: CudaBufferSpanMut<'a>,
+        workspace: Option<CudaBufferSpanMut<'a>>,
+        stream: &mut S,
+    ) -> Result<(), CudaError> {
+        match self {
+            Self::Canonical(plan) => {
+                let mut params = GemmParams {
+                    input,
+                    weight,
+                    output,
+                    workspace,
+                };
+                plan.execute(&mut params, stream)
+            }
+            Self::Fixed37(plan) => {
+                debug_assert!(workspace.is_none());
+                let mut params = Fixed37GemmParams {
+                    input,
+                    weight,
+                    output,
+                };
+                plan.execute(&mut params, stream)
+            }
+        }
+    }
+}
+
 pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
-    plan: &mut CudaPreparedGemm,
+    plan: &mut PreparedLlamaGemm,
     input: &CudaDeviceBuffer,
     weight: CudaBufferSpan<'_>,
     output: &mut CudaDeviceBuffer,
@@ -407,7 +479,7 @@ pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
     site: ExecutionSite,
 ) -> LlamaForwardResult<()> {
     let config = plan.config();
-    let required_workspace = plan.algorithm_metadata().workspace_bytes();
+    let required_workspace = plan.workspace_bytes();
     let workspace = if required_workspace == 0 {
         None
     } else {
@@ -419,14 +491,34 @@ pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
             })?;
         Some(span_mut(buffer, CudaDType::U8, required_workspace, site)?)
     };
-    let mut params = GemmParams {
-        input: span(input, CudaDType::BF16, config.input_bytes(), site)?,
-        weight,
-        output: span_mut(output, CudaDType::BF16, config.output_bytes(), site)?,
-        workspace,
-    };
-    plan.execute(&mut params, stream)
+    let input = span(input, CudaDType::BF16, config.input_bytes(), site)?;
+    let output = span_mut(output, CudaDType::BF16, config.output_bytes(), site)?;
+    plan.execute(input, weight, output, workspace, stream)
         .map_err(|source| LlamaForwardError::cuda(site, source))
+}
+
+pub(super) fn execute_profile_rms_norm<S: CudaExecutionStream + ?Sized>(
+    profile: LlamaReductionProfile,
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> Result<(), CudaError> {
+    match profile {
+        LlamaReductionProfile::CanonicalV1 => rms_norm(params, stream),
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => fixed37_rms_norm(params, stream),
+    }
+}
+
+pub(super) fn execute_profile_residual_rms_norm<S: CudaExecutionStream + ?Sized>(
+    profile: LlamaReductionProfile,
+    params: &mut ResidualRmsNormParams<'_>,
+    stream: &mut S,
+) -> Result<(), CudaError> {
+    match profile {
+        LlamaReductionProfile::CanonicalV1 => residual_rms_norm(params, stream),
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => {
+            fixed37_residual_rms_norm(params, stream)
+        }
+    }
 }
 
 pub(super) fn execute_projection_bias<S: CudaExecutionStream + ?Sized>(
@@ -805,6 +897,7 @@ pub struct PreparedLlamaForwardConfig {
     gemm_workspace_cap_bytes: u64,
     attention_budget_bytes: u64,
     attention_preference: AttentionPreference,
+    reduction_profile: LlamaReductionProfile,
 }
 
 impl PreparedLlamaForwardConfig {
@@ -821,6 +914,7 @@ impl PreparedLlamaForwardConfig {
             gemm_workspace_cap_bytes,
             attention_budget_bytes,
             attention_preference: AttentionPreference::Optimized,
+            reduction_profile: LlamaReductionProfile::CanonicalV1,
         }
     }
 
@@ -837,6 +931,28 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn with_reference_attention(mut self) -> Self {
         self.attention_preference = AttentionPreference::Reference;
+        self
+    }
+
+    /// Selects one whole-runtime reduction contract for GEMM, `RMSNorm`, and
+    /// prefill attention. Preparation never falls back across profiles.
+    #[must_use]
+    pub const fn with_reduction_profile(mut self, profile: LlamaReductionProfile) -> Self {
+        self.reduction_profile = profile;
+        self
+    }
+
+    /// Restores the established canonical reduction contract.
+    #[must_use]
+    pub const fn with_canonical_reductions(mut self) -> Self {
+        self.reduction_profile = LlamaReductionProfile::CanonicalV1;
+        self
+    }
+
+    /// Selects fixed contiguous groups of 37 followed by balanced reductions.
+    #[must_use]
+    pub const fn with_fixed37_reductions(mut self) -> Self {
+        self.reduction_profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
         self
     }
 
@@ -863,6 +979,12 @@ impl PreparedLlamaForwardConfig {
     #[must_use]
     pub const fn attention_preference(self) -> AttentionPreference {
         self.attention_preference
+    }
+
+    /// Whole-runtime reduction contract selected for preparation.
+    #[must_use]
+    pub const fn reduction_profile(self) -> LlamaReductionProfile {
+        self.reduction_profile
     }
 
     fn validate(self) -> LlamaForwardResult<()> {
@@ -937,11 +1059,11 @@ impl PreparedLlamaAllocationReport {
 }
 
 pub(super) struct GemmPlans {
-    pub(super) hidden: CudaPreparedGemm,
-    pub(super) key_value: CudaPreparedGemm,
-    pub(super) intermediate: CudaPreparedGemm,
-    pub(super) down: CudaPreparedGemm,
-    pub(super) lm_head: CudaPreparedGemm,
+    pub(super) hidden: PreparedLlamaGemm,
+    pub(super) key_value: PreparedLlamaGemm,
+    pub(super) intermediate: PreparedLlamaGemm,
+    pub(super) down: PreparedLlamaGemm,
+    pub(super) lm_head: PreparedLlamaGemm,
 }
 
 impl GemmPlans {
@@ -982,6 +1104,7 @@ pub struct PreparedLlamaForward {
     pub(super) weights: CudaUploadedWeights,
     pub(super) gemms: GemmPlans,
     attention: PreparedPrefillAttention,
+    reduction_profile: LlamaReductionProfile,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,
     pub(super) token_bytes: Box<[u8]>,
@@ -997,6 +1120,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .debug_struct("PreparedLlamaForward")
             .field("plan", &self.plan)
             .field("attention_selection", &self.attention.selection_trace())
+            .field("reduction_profile", &self.reduction_profile)
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
             .field("output_ready", &self.output_ready)
@@ -1043,7 +1167,12 @@ impl PreparedLlamaForward {
         .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
         let plan = LlamaExecutionPlan::prepare(model.spec(), &weights, sequence_length)?;
         let workspace = plan.workspace_spec();
-        let attention = prepare_attention(context, &plan, config.attention_preference)?;
+        let attention = prepare_attention(
+            context,
+            &plan,
+            config.attention_preference,
+            config.reduction_profile,
+        )?;
         let attention_workspace_bytes = attention.workspace_bytes();
         if attention_workspace_bytes > config.attention_budget_bytes {
             return Err(LlamaForwardError::AttentionBudgetExceeded {
@@ -1052,13 +1181,18 @@ impl PreparedLlamaForward {
             });
         }
 
-        let gemms = prepare_gemms(context, &plan, config.gemm_workspace_cap_bytes)?;
+        let gemms = prepare_gemms(
+            context,
+            &plan,
+            config.gemm_workspace_cap_bytes,
+            config.reduction_profile,
+        )?;
         let gemm_workspace_bytes = [
-            gemms.hidden.algorithm_metadata().workspace_bytes(),
-            gemms.key_value.algorithm_metadata().workspace_bytes(),
-            gemms.intermediate.algorithm_metadata().workspace_bytes(),
-            gemms.down.algorithm_metadata().workspace_bytes(),
-            gemms.lm_head.algorithm_metadata().workspace_bytes(),
+            gemms.hidden.workspace_bytes(),
+            gemms.key_value.workspace_bytes(),
+            gemms.intermediate.workspace_bytes(),
+            gemms.down.workspace_bytes(),
+            gemms.lm_head.workspace_bytes(),
         ]
         .into_iter()
         .max()
@@ -1104,6 +1238,7 @@ impl PreparedLlamaForward {
             weights,
             gemms,
             attention,
+            reduction_profile: config.reduction_profile,
             buffers,
             io_staging,
             token_bytes,
@@ -1130,6 +1265,12 @@ impl PreparedLlamaForward {
     #[must_use]
     pub fn attention_selection(&self) -> AttentionSelectionTrace {
         self.attention.selection_trace()
+    }
+
+    /// Whole-runtime reduction contract selected during cold preparation.
+    #[must_use]
+    pub const fn reduction_profile(&self) -> LlamaReductionProfile {
+        self.reduction_profile
     }
 
     /// Allocates reusable caller-owned host storage for the canonical PR07
@@ -1471,6 +1612,7 @@ impl PreparedLlamaForward {
         let weights = &self.weights;
         let gemms = &mut self.gemms;
         let attention = &self.attention;
+        let reduction_profile = self.reduction_profile;
         let buffers = &mut self.buffers;
         let io_staging = &mut self.io_staging;
         let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
@@ -1558,7 +1700,7 @@ impl PreparedLlamaForward {
                     hidden_size: hidden,
                     epsilon: layer.input_norm_epsilon(),
                 };
-                rms_norm(&mut params, stream)
+                execute_profile_rms_norm(reduction_profile, &mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(input_norm_site, source))?;
             }
             if layer_index == 0 {
@@ -1916,7 +2058,7 @@ impl PreparedLlamaForward {
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                rms_norm(&mut params, stream)
+                execute_profile_rms_norm(reduction_profile, &mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(post_norm_site, source))?;
             }
             if layer_index == 0 {
@@ -2134,7 +2276,7 @@ impl PreparedLlamaForward {
                 hidden_size: hidden,
                 epsilon: plan.final_norm_epsilon(),
             };
-            rms_norm(&mut params, stream)
+            execute_profile_rms_norm(reduction_profile, &mut params, stream)
                 .map_err(|source| LlamaForwardError::cuda(final_norm_site, source))?;
         }
         capture_trace(
@@ -2184,6 +2326,7 @@ fn prepare_attention(
     context: &CudaContext,
     plan: &LlamaExecutionPlan,
     preference: AttentionPreference,
+    reduction_profile: LlamaReductionProfile,
 ) -> LlamaForwardResult<PreparedPrefillAttention> {
     let site = ExecutionSite::layer(0, LlamaOp::PrefillAttention);
     let dimensions = plan.dimensions();
@@ -2200,10 +2343,11 @@ fn prepare_attention(
         1.0 / (head_size as f32).sqrt(),
         AttentionMask::Causal,
     );
-    PreparedPrefillAttention::select(
+    PreparedPrefillAttention::select_with_reduction_profile(
         context,
         request,
         preference,
+        reduction_profile.attention_profile(),
         AttentionBackendAvailability::linked(),
     )
     .map_err(|source| LlamaForwardError::cuda(site, source))
@@ -2256,10 +2400,11 @@ fn build_allocation_report(
     })
 }
 
-fn prepare_gemms(
+pub(super) fn prepare_gemms(
     context: &CudaContext,
     plan: &LlamaExecutionPlan,
     workspace_cap: u64,
+    reduction_profile: LlamaReductionProfile,
 ) -> LlamaForwardResult<GemmPlans> {
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
     let dimensions = plan.dimensions();
@@ -2274,12 +2419,21 @@ fn prepare_gemms(
     )?;
     let vocabulary = to_u64(dimensions.vocabulary_size(), LlamaForwardResource::Logits)?;
 
-    let prepare = |m, n, k, site| -> LlamaForwardResult<CudaPreparedGemm> {
+    // In the fixed profile these five plans validate both reduction widths
+    // used by the graph: `hidden` (also the RMSNorm axis) and `intermediate`.
+    // Unsupported fixed37 shapes therefore fail here during cold preparation.
+    let prepare = |m, n, k, site| -> LlamaForwardResult<PreparedLlamaGemm> {
         let config = CudaGemmConfig::new(m, n, k, workspace_cap)
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
-        context
-            .prepare_gemm(config)
-            .map_err(|source| LlamaForwardError::cuda(site, source))
+        match reduction_profile {
+            LlamaReductionProfile::CanonicalV1 => context
+                .prepare_gemm(config)
+                .map(PreparedLlamaGemm::Canonical),
+            LlamaReductionProfile::FixedContiguous37BalancedV1 => context
+                .prepare_fixed37_gemm(config)
+                .map(PreparedLlamaGemm::Fixed37),
+        }
+        .map_err(|source| LlamaForwardError::cuda(site, source))
     };
     Ok(GemmPlans {
         hidden: prepare(
