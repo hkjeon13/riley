@@ -1179,6 +1179,19 @@ RustInferCudaStatus rustinfer_cuda_decode_attention_reference_execute(
     const RustInferCudaDecodeAttentionReferenceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Fixed-contiguous-37 materialized decode reuses the reference descriptor and
+// BF16 [QH,T] workspace. Logical D and T are each limited to 151552 elements.
+// QK, softmax maximum/denominator, and AV use ascending 37-element F32 left
+// folds followed by adjacent balanced-tree merges with odd carry. QK rounds to
+// raw BF16, scaling rounds again to BF16, softmax probabilities round to BF16,
+// and AV consumes those rounded probabilities. A row containing NaN, with a
+// +Inf maximum, or containing only -Inf becomes a complete canonical BF16 qNaN
+// row (bits 0x7fff); finite-max -Inf entries have zero probability and 0*Inf in
+// AV becomes canonical BF16 qNaN.
+RustInferCudaStatus rustinfer_cuda_fixed37_decode_attention_reference_execute(
+    const RustInferCudaDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
     const RustInferCudaDecodeAttentionParams* params,
     RustInferCudaStream* stream,
@@ -1192,6 +1205,15 @@ RustInferCudaStatus rustinfer_cuda_paged_kv_cache_write_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 RustInferCudaStatus rustinfer_cuda_paged_decode_attention_reference_execute(
+    const RustInferCudaPagedDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+// Paged fixed37 materialized decode has the same numerical contract as the
+// contiguous fixed37 symbol. Page16 performs address translation only: every T
+// reduction chunk remains anchored at logical token zero, independent of page
+// or physical-block boundaries and numbering.
+RustInferCudaStatus
+rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
     const RustInferCudaPagedDecodeAttentionReferenceParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;

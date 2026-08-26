@@ -6,7 +6,11 @@ use std::sync::Arc;
 
 use crate::CUDA_COMPILED_ARCHITECTURES;
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+use crate::gemm::{
+    FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION,
+};
 use crate::memory::CudaDeviceBuffer;
+use crate::prefill::AttentionReductionProfile;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
 use crate::runtime::{ContextInner, CudaContext, CudaStream, ensure_same_context};
 
@@ -26,6 +30,10 @@ const PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.paged-materialized-gqa-decode.bf16.block16";
 const PAGED_ONLINE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
+const FIXED37_REFERENCE_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.fixed37.materialized-gqa-decode.bf16";
+const FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.fixed37.paged-materialized-gqa-decode.bf16.block16";
 const IMPLEMENTATION_VERSION: &str = "1";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
@@ -554,6 +562,9 @@ pub enum DecodeAttentionBackend {
     MaterializedReference,
     /// Produces and merges packed F32 partial states.
     ChunkedOnline,
+    /// Materializes staged BF16 scores and uses fixed-contiguous-37-balanced-v1
+    /// for every D/T reduction.
+    Fixed37Materialized,
 }
 
 /// Why cold selection chose its backend.
@@ -594,6 +605,7 @@ const fn reduction_order_code(order: DecodePartialReductionOrder) -> u32 {
 pub struct DecodeAttentionBackendAvailability {
     reference: bool,
     chunked_online: bool,
+    fixed37_materialized: bool,
 }
 
 impl DecodeAttentionBackendAvailability {
@@ -603,13 +615,22 @@ impl DecodeAttentionBackendAvailability {
         Self {
             reference,
             chunked_online,
+            fixed37_materialized: false,
         }
+    }
+
+    /// Adds the independently linked fixed37 materialized sibling.
+    #[must_use]
+    pub const fn with_fixed37_materialized(mut self, available: bool) -> Self {
+        self.fixed37_materialized = available;
+        self
     }
 
     /// Native backends linked by the current feature set.
     #[must_use]
     pub const fn linked() -> Self {
         Self::new(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
+            .with_fixed37_materialized(cfg!(feature = "cuda"))
     }
 
     /// Whether the materialized reference is linked.
@@ -622,6 +643,12 @@ impl DecodeAttentionBackendAvailability {
     #[must_use]
     pub const fn chunked_online(self) -> bool {
         self.chunked_online
+    }
+
+    /// Whether the fixed37 materialized contiguous/paged sibling is linked.
+    #[must_use]
+    pub const fn fixed37_materialized(self) -> bool {
+        self.fixed37_materialized
     }
 }
 
@@ -770,6 +797,10 @@ pub struct DecodeAttentionCapability {
     accumulator_dtype: CudaDType,
     materializes_scores: bool,
     partial_state_merge: bool,
+    reduction_profile: AttentionReductionProfile,
+    reduction_version: Option<u32>,
+    reduction_chunk_elements: Option<u64>,
+    maximum_reduction_elements: Option<u64>,
 }
 
 impl DecodeAttentionCapability {
@@ -802,6 +833,30 @@ impl DecodeAttentionCapability {
     pub const fn supports_partial_state_merge(self) -> bool {
         self.partial_state_merge
     }
+
+    /// Reduction order fixed into the backend.
+    #[must_use]
+    pub const fn reduction_profile(self) -> AttentionReductionProfile {
+        self.reduction_profile
+    }
+
+    /// Fixed reduction contract version, or `None` for canonical order.
+    #[must_use]
+    pub const fn reduction_version(self) -> Option<u32> {
+        self.reduction_version
+    }
+
+    /// Elements per fixed reduction chunk, or `None` for canonical order.
+    #[must_use]
+    pub const fn reduction_chunk_elements(self) -> Option<u64> {
+        self.reduction_chunk_elements
+    }
+
+    /// Largest supported logical fixed reduction axis.
+    #[must_use]
+    pub const fn maximum_reduction_elements(self) -> Option<u64> {
+        self.maximum_reduction_elements
+    }
 }
 
 const REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
@@ -810,6 +865,10 @@ const REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabilit
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
 };
 
 const ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
@@ -818,6 +877,10 @@ const ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
 };
 
 const PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
@@ -826,6 +889,10 @@ const PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCap
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
 };
 
 const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
@@ -834,6 +901,34 @@ const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabi
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
+};
+
+const FIXED37_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: FIXED37_REFERENCE_IMPLEMENTATION_ID,
+    head_size: None,
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: true,
+    partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
+    reduction_version: Some(FIXED37_REDUCTION_VERSION),
+    reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
+    maximum_reduction_elements: Some(FIXED37_MAX_REDUCTION_ELEMENTS),
+};
+
+const FIXED37_PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID,
+    head_size: None,
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: true,
+    partial_state_merge: false,
+    reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
+    reduction_version: Some(FIXED37_REDUCTION_VERSION),
+    reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
+    maximum_reduction_elements: Some(FIXED37_MAX_REDUCTION_ELEMENTS),
 };
 
 /// Immutable selection, workspace, and provenance evidence.
@@ -852,6 +947,7 @@ pub struct DecodeAttentionSelectionTrace {
     partial_state_bytes: u64,
     partial_state_capacity: u64,
     tokens_per_partition: u64,
+    reduction_profile: AttentionReductionProfile,
 }
 
 impl DecodeAttentionSelectionTrace {
@@ -906,6 +1002,11 @@ impl DecodeAttentionSelectionTrace {
     #[must_use]
     pub const fn tokens_per_partition(self) -> u64 {
         self.tokens_per_partition
+    }
+    /// Immutable reduction profile selected before execution.
+    #[must_use]
+    pub const fn reduction_profile(self) -> AttentionReductionProfile {
+        self.reduction_profile
     }
 }
 
@@ -1051,15 +1152,43 @@ impl PreparedDecodeAttention {
         preference: DecodeAttentionPreference,
         availability: DecodeAttentionBackendAvailability,
     ) -> CudaResult<Self> {
-        Self::select_for_compute_capability(
+        Self::select_with_reduction_profile(
             context,
-            context.compute_capability(),
             request,
             preference,
+            AttentionReductionProfile::CanonicalV1,
             availability,
         )
     }
 
+    /// Cold-selects one backend without crossing reduction profiles.
+    ///
+    /// Both fixed-profile preferences currently select the fixed materialized
+    /// backend; optimized records a cold unavailable-optimized fallback. A
+    /// canonical backend is never substituted for a fixed request.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the selected profile is unavailable or its D/T axes exceed
+    /// the fixed37 limit, in addition to ordinary request/architecture errors.
+    pub fn select_with_reduction_profile(
+        context: &CudaContext,
+        request: DecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        reduction_profile: AttentionReductionProfile,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        Self::select_for_compute_capability_and_reduction_profile(
+            context,
+            context.compute_capability(),
+            request,
+            preference,
+            reduction_profile,
+            availability,
+        )
+    }
+
+    #[cfg(test)]
     fn select_for_compute_capability(
         context: &CudaContext,
         compute_capability: (u32, u32),
@@ -1067,8 +1196,51 @@ impl PreparedDecodeAttention {
         preference: DecodeAttentionPreference,
         availability: DecodeAttentionBackendAvailability,
     ) -> CudaResult<Self> {
+        Self::select_for_compute_capability_and_reduction_profile(
+            context,
+            compute_capability,
+            request,
+            preference,
+            AttentionReductionProfile::CanonicalV1,
+            availability,
+        )
+    }
+
+    fn select_for_compute_capability_and_reduction_profile(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: DecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        reduction_profile: AttentionReductionProfile,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
         validate_request(request)?;
         require_architecture_support(compute_capability)?;
+        match reduction_profile {
+            AttentionReductionProfile::CanonicalV1 => Self::select_canonical(
+                context,
+                compute_capability,
+                request,
+                preference,
+                availability,
+            ),
+            AttentionReductionProfile::FixedContiguous37BalancedV1 => Self::select_fixed37(
+                context,
+                compute_capability,
+                request,
+                preference,
+                availability,
+            ),
+        }
+    }
+
+    fn select_canonical(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: DecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
         match preference {
             DecodeAttentionPreference::Reference => {
                 if !availability.reference {
@@ -1121,6 +1293,41 @@ impl PreparedDecodeAttention {
         }
     }
 
+    fn select_fixed37(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: DecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        validate_fixed37_request_axes(
+            "select_decode_attention",
+            request.maximum_sequence_length,
+            request.head_size,
+        )?;
+        if !availability.fixed37_materialized {
+            return Err(not_supported(
+                "select_decode_attention",
+                "the fixed37 materialized decode backend is unavailable; canonical fallback is forbidden",
+            ));
+        }
+        let reason = match preference {
+            DecodeAttentionPreference::Reference => {
+                DecodeAttentionSelectionReason::ExplicitReference
+            }
+            DecodeAttentionPreference::Optimized => {
+                DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+            }
+        };
+        prepare_selection(
+            context,
+            compute_capability,
+            request,
+            DecodeAttentionBackend::Fixed37Materialized,
+            reason,
+        )
+    }
+
     #[must_use]
     pub const fn request(&self) -> DecodeAttentionRequest {
         self.request
@@ -1132,6 +1339,11 @@ impl PreparedDecodeAttention {
     #[must_use]
     pub const fn capability(&self) -> DecodeAttentionCapability {
         self.capability
+    }
+    /// Reduction profile fixed into this prepared plan.
+    #[must_use]
+    pub const fn reduction_profile(&self) -> AttentionReductionProfile {
+        self.capability.reduction_profile
     }
     #[must_use]
     pub const fn selection_trace(&self) -> DecodeAttentionSelectionTrace {
@@ -1184,6 +1396,22 @@ impl PreparedDecodeAttention {
         match self.backend {
             DecodeAttentionBackend::MaterializedReference => {
                 ffi::decode_attention_reference_execute(
+                    params.query.raw(),
+                    params.key_cache.raw(),
+                    params.value_cache.raw(),
+                    params.workspace.raw(),
+                    params.output.raw(),
+                    self.request.maximum_sequence_length,
+                    logical_token_count,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.request.scale,
+                    &mut stream.native,
+                )
+            }
+            DecodeAttentionBackend::Fixed37Materialized => {
+                ffi::fixed37_decode_attention_reference_execute(
                     params.query.raw(),
                     params.key_cache.raw(),
                     params.value_cache.raw(),
@@ -1277,15 +1505,42 @@ impl PreparedPagedDecodeAttention {
         preference: DecodeAttentionPreference,
         availability: DecodeAttentionBackendAvailability,
     ) -> CudaResult<Self> {
-        Self::select_for_compute_capability(
+        Self::select_with_reduction_profile(
             context,
-            context.compute_capability(),
             request,
             preference,
+            AttentionReductionProfile::CanonicalV1,
             availability,
         )
     }
 
+    /// Cold-selects one paged backend without crossing reduction profiles.
+    ///
+    /// The fixed profile currently uses only the fixed37 materialized sibling;
+    /// requesting `Optimized` records a cold fallback within that profile.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the selected profile is unavailable or its logical D/T
+    /// axes exceed the fixed37 limit, in addition to ordinary request errors.
+    pub fn select_with_reduction_profile(
+        context: &CudaContext,
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        reduction_profile: AttentionReductionProfile,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        Self::select_for_compute_capability_and_reduction_profile(
+            context,
+            context.compute_capability(),
+            request,
+            preference,
+            reduction_profile,
+            availability,
+        )
+    }
+
+    #[cfg(test)]
     fn select_for_compute_capability(
         context: &CudaContext,
         compute_capability: (u32, u32),
@@ -1293,8 +1548,51 @@ impl PreparedPagedDecodeAttention {
         preference: DecodeAttentionPreference,
         availability: DecodeAttentionBackendAvailability,
     ) -> CudaResult<Self> {
+        Self::select_for_compute_capability_and_reduction_profile(
+            context,
+            compute_capability,
+            request,
+            preference,
+            AttentionReductionProfile::CanonicalV1,
+            availability,
+        )
+    }
+
+    fn select_for_compute_capability_and_reduction_profile(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        reduction_profile: AttentionReductionProfile,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
         validate_paged_request(request)?;
         require_architecture_support(compute_capability)?;
+        match reduction_profile {
+            AttentionReductionProfile::CanonicalV1 => Self::select_canonical(
+                context,
+                compute_capability,
+                request,
+                preference,
+                availability,
+            ),
+            AttentionReductionProfile::FixedContiguous37BalancedV1 => Self::select_fixed37(
+                context,
+                compute_capability,
+                request,
+                preference,
+                availability,
+            ),
+        }
+    }
+
+    fn select_canonical(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
         match preference {
             DecodeAttentionPreference::Reference => {
                 if !availability.reference {
@@ -1346,6 +1644,41 @@ impl PreparedPagedDecodeAttention {
         }
     }
 
+    fn select_fixed37(
+        context: &CudaContext,
+        compute_capability: (u32, u32),
+        request: PagedDecodeAttentionRequest,
+        preference: DecodeAttentionPreference,
+        availability: DecodeAttentionBackendAvailability,
+    ) -> CudaResult<Self> {
+        validate_fixed37_request_axes(
+            "select_paged_decode_attention",
+            request.maximum_sequence_length,
+            request.head_size,
+        )?;
+        if !availability.fixed37_materialized {
+            return Err(not_supported(
+                "select_paged_decode_attention",
+                "the fixed37 materialized paged decode backend is unavailable; canonical fallback is forbidden",
+            ));
+        }
+        let reason = match preference {
+            DecodeAttentionPreference::Reference => {
+                DecodeAttentionSelectionReason::ExplicitReference
+            }
+            DecodeAttentionPreference::Optimized => {
+                DecodeAttentionSelectionReason::OptimizedUnavailableFallback
+            }
+        };
+        prepare_paged_selection(
+            context,
+            compute_capability,
+            request,
+            DecodeAttentionBackend::Fixed37Materialized,
+            reason,
+        )
+    }
+
     #[must_use]
     pub const fn request(&self) -> PagedDecodeAttentionRequest {
         self.request
@@ -1359,6 +1692,12 @@ impl PreparedPagedDecodeAttention {
     #[must_use]
     pub const fn capability(&self) -> DecodeAttentionCapability {
         self.capability
+    }
+
+    /// Reduction profile fixed into this prepared plan.
+    #[must_use]
+    pub const fn reduction_profile(&self) -> AttentionReductionProfile {
+        self.capability.reduction_profile
     }
 
     #[must_use]
@@ -1383,7 +1722,7 @@ impl PreparedPagedDecodeAttention {
 
     #[must_use]
     pub const fn tokens_per_partition(&self) -> u64 {
-        PAGED_KV_BLOCK_SIZE
+        self.trace.tokens_per_partition
     }
 
     /// Executes the cold-selected exact backend without allocating.
@@ -1418,6 +1757,27 @@ impl PreparedPagedDecodeAttention {
         match self.backend {
             DecodeAttentionBackend::MaterializedReference => {
                 ffi::paged_decode_attention_reference_execute(
+                    params.query.raw(),
+                    params.key_pool.raw(),
+                    params.value_pool.raw(),
+                    params.workspace.raw(),
+                    params.output.raw(),
+                    params.block_table.device_block_ids.raw(),
+                    params.block_table.device_valid_tokens.raw(),
+                    host.format_version(),
+                    host.logical_token_count(),
+                    host.block_count(),
+                    host.physical_block_count(),
+                    PAGED_KV_BLOCK_SIZE_ABI,
+                    self.request.query_head_count,
+                    self.request.key_value_head_count,
+                    self.request.head_size,
+                    self.request.scale,
+                    &mut stream.native,
+                )
+            }
+            DecodeAttentionBackend::Fixed37Materialized => {
+                ffi::fixed37_paged_decode_attention_reference_execute(
                     params.query.raw(),
                     params.key_pool.raw(),
                     params.value_pool.raw(),
@@ -1882,6 +2242,24 @@ fn prepare_paged_selection(
                 0,
             )
         }
+        DecodeAttentionBackend::Fixed37Materialized => {
+            let bytes = checked_bytes(
+                "select_paged_decode_attention",
+                &[
+                    request.query_head_count,
+                    request.maximum_sequence_length,
+                    BF16_BYTES,
+                ],
+            )?;
+            (
+                FIXED37_PAGED_REFERENCE_CAPABILITY,
+                CudaDType::BF16,
+                bytes,
+                bytes,
+                0,
+                0,
+            )
+        }
         DecodeAttentionBackend::ChunkedOnline => {
             let capacity = paged_block_count(request.maximum_sequence_length)?;
             let layout = DecodePartialStateLayout::new(
@@ -1917,7 +2295,12 @@ fn prepare_paged_selection(
             materialized_score_bytes,
             partial_state_bytes,
             partial_state_capacity,
-            tokens_per_partition: PAGED_KV_BLOCK_SIZE,
+            tokens_per_partition: match backend {
+                DecodeAttentionBackend::MaterializedReference
+                | DecodeAttentionBackend::ChunkedOnline => PAGED_KV_BLOCK_SIZE,
+                DecodeAttentionBackend::Fixed37Materialized => 0,
+            },
+            reduction_profile: capability.reduction_profile,
         },
     })
 }
@@ -2233,6 +2616,25 @@ fn prepare_selection(
             )?;
             (REFERENCE_CAPABILITY, CudaDType::BF16, bytes, bytes, 0, 0, 0)
         }
+        DecodeAttentionBackend::Fixed37Materialized => {
+            let bytes = checked_bytes(
+                "select_decode_attention",
+                &[
+                    request.query_head_count,
+                    request.maximum_sequence_length,
+                    BF16_BYTES,
+                ],
+            )?;
+            (
+                FIXED37_REFERENCE_CAPABILITY,
+                CudaDType::BF16,
+                bytes,
+                bytes,
+                0,
+                0,
+                0,
+            )
+        }
         DecodeAttentionBackend::ChunkedOnline => {
             let capacity = partition_count(
                 request.maximum_sequence_length,
@@ -2273,6 +2675,7 @@ fn prepare_selection(
             partial_state_bytes,
             partial_state_capacity,
             tokens_per_partition,
+            reduction_profile: capability.reduction_profile,
         },
     })
 }
@@ -2312,6 +2715,27 @@ fn validate_request(request: DecodeAttentionRequest) -> CudaResult<()> {
             BF16_BYTES,
         ],
     )?;
+    Ok(())
+}
+
+fn validate_fixed37_request_axes(
+    operation: &'static str,
+    logical_token_count: u64,
+    head_size: u64,
+) -> CudaResult<()> {
+    for (name, value) in [
+        ("logical token axis", logical_token_count),
+        ("head-size axis", head_size),
+    ] {
+        if value > FIXED37_MAX_REDUCTION_ELEMENTS {
+            return Err(not_supported(
+                operation,
+                format!(
+                    "fixed-contiguous-37-balanced-v1 {name} {value} exceeds the supported maximum {FIXED37_MAX_REDUCTION_ELEMENTS}"
+                ),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -2667,6 +3091,121 @@ mod tests {
 
     #[test]
     #[cfg(not(feature = "cuda"))]
+    #[allow(clippy::too_many_lines)]
+    fn fixed37_contiguous_selection_pins_profile_axes_and_no_canonical_fallback() {
+        let context = test_context();
+        let availability =
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37_materialized(true);
+        let request = DecodeAttentionRequest::new(75, 9, 3, 74, 0.125);
+
+        for (preference, reason) in [
+            (
+                DecodeAttentionPreference::Reference,
+                DecodeAttentionSelectionReason::ExplicitReference,
+            ),
+            (
+                DecodeAttentionPreference::Optimized,
+                DecodeAttentionSelectionReason::OptimizedUnavailableFallback,
+            ),
+        ] {
+            let prepared = PreparedDecodeAttention::select_with_reduction_profile(
+                &context,
+                request,
+                preference,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap();
+            assert_eq!(
+                prepared.backend(),
+                DecodeAttentionBackend::Fixed37Materialized
+            );
+            assert_eq!(
+                prepared.reduction_profile(),
+                AttentionReductionProfile::FixedContiguous37BalancedV1
+            );
+            assert_eq!(
+                prepared.selection_trace().reduction_profile(),
+                prepared.reduction_profile()
+            );
+            assert_eq!(prepared.selection_trace().reason(), reason);
+            assert_eq!(prepared.workspace_dtype(), CudaDType::BF16);
+            assert_eq!(prepared.workspace_bytes(), 9 * 75 * BF16_BYTES);
+            assert_eq!(prepared.tokens_per_partition(), 0);
+            let capability = prepared.capability();
+            assert_eq!(
+                capability.implementation_id(),
+                FIXED37_REFERENCE_IMPLEMENTATION_ID
+            );
+            assert_eq!(
+                capability.reduction_version(),
+                Some(FIXED37_REDUCTION_VERSION)
+            );
+            assert_eq!(capability.reduction_chunk_elements(), Some(37));
+            assert_eq!(capability.maximum_reduction_elements(), Some(151_552));
+        }
+
+        let canonical = PreparedDecodeAttention::select(
+            &context,
+            request,
+            DecodeAttentionPreference::Reference,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(
+            canonical.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(
+            canonical.reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+
+        let error = PreparedDecodeAttention::select_with_reduction_profile(
+            &context,
+            request,
+            DecodeAttentionPreference::Reference,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            DecodeAttentionBackendAvailability::new(true, true),
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+        assert_eq!(error.stage(), CudaErrorStage::Prepare);
+        assert!(error.message().contains("canonical fallback is forbidden"));
+
+        for rejected in [
+            DecodeAttentionRequest::new(FIXED37_MAX_REDUCTION_ELEMENTS + 1, 1, 1, 1, 1.0),
+            DecodeAttentionRequest::new(1, 1, 1, FIXED37_MAX_REDUCTION_ELEMENTS + 1, 1.0),
+        ] {
+            let error = PreparedDecodeAttention::select_with_reduction_profile(
+                &context,
+                rejected,
+                DecodeAttentionPreference::Reference,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap_err();
+            assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+            assert_eq!(error.stage(), CudaErrorStage::Prepare);
+        }
+
+        for accepted in [
+            DecodeAttentionRequest::new(FIXED37_MAX_REDUCTION_ELEMENTS, 1, 1, 1, 1.0),
+            DecodeAttentionRequest::new(1, 1, 1, FIXED37_MAX_REDUCTION_ELEMENTS, 1.0),
+        ] {
+            PreparedDecodeAttention::select_with_reduction_profile(
+                &context,
+                accepted,
+                DecodeAttentionPreference::Reference,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap();
+        }
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
     fn selection_rejects_invalid_requests_and_falls_back_for_non_d64() {
         let context = test_context();
         for request in [
@@ -2898,5 +3437,127 @@ mod tests {
             fallback.selection_trace().reason(),
             DecodeAttentionSelectionReason::UnsupportedHeadSizeFallback
         );
+        assert_eq!(fallback.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    #[allow(clippy::too_many_lines)]
+    fn fixed37_paged_selection_pins_profile_axes_and_page_translation_metadata() {
+        let context = test_context();
+        let availability =
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37_materialized(true);
+        let request = PagedDecodeAttentionRequest::new(75, 8, 9, 3, 74, 0.125);
+
+        let canonical = PreparedPagedDecodeAttention::select(
+            &context,
+            request,
+            DecodeAttentionPreference::Reference,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(
+            canonical.backend(),
+            DecodeAttentionBackend::MaterializedReference
+        );
+        assert_eq!(canonical.tokens_per_partition(), PAGED_KV_BLOCK_SIZE);
+        assert_eq!(
+            canonical.reduction_profile(),
+            AttentionReductionProfile::CanonicalV1
+        );
+
+        for (preference, reason) in [
+            (
+                DecodeAttentionPreference::Reference,
+                DecodeAttentionSelectionReason::ExplicitReference,
+            ),
+            (
+                DecodeAttentionPreference::Optimized,
+                DecodeAttentionSelectionReason::OptimizedUnavailableFallback,
+            ),
+        ] {
+            let prepared = PreparedPagedDecodeAttention::select_with_reduction_profile(
+                &context,
+                request,
+                preference,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap();
+            assert_eq!(
+                prepared.backend(),
+                DecodeAttentionBackend::Fixed37Materialized
+            );
+            assert_eq!(
+                prepared.reduction_profile(),
+                AttentionReductionProfile::FixedContiguous37BalancedV1
+            );
+            assert_eq!(
+                prepared.selection_trace().reduction_profile(),
+                prepared.reduction_profile()
+            );
+            assert_eq!(prepared.selection_trace().reason(), reason);
+            assert_eq!(prepared.workspace_dtype(), CudaDType::BF16);
+            assert_eq!(prepared.workspace_bytes(), 9 * 75 * BF16_BYTES);
+            assert_eq!(prepared.tokens_per_partition(), 0);
+            let capability = prepared.capability();
+            assert_eq!(
+                capability.implementation_id(),
+                FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID
+            );
+            assert_eq!(
+                capability.reduction_version(),
+                Some(FIXED37_REDUCTION_VERSION)
+            );
+            assert_eq!(capability.reduction_chunk_elements(), Some(37));
+            assert_eq!(capability.maximum_reduction_elements(), Some(151_552));
+        }
+
+        let unavailable = PreparedPagedDecodeAttention::select_with_reduction_profile(
+            &context,
+            request,
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            DecodeAttentionBackendAvailability::new(true, true),
+        )
+        .unwrap_err();
+        assert_eq!(unavailable.kind(), CudaErrorKind::NotSupported);
+        assert!(
+            unavailable
+                .message()
+                .contains("canonical fallback is forbidden")
+        );
+
+        for rejected in [
+            PagedDecodeAttentionRequest::new(FIXED37_MAX_REDUCTION_ELEMENTS + 1, 1, 1, 1, 1, 1.0),
+            PagedDecodeAttentionRequest::new(1, 1, 1, 1, FIXED37_MAX_REDUCTION_ELEMENTS + 1, 1.0),
+        ] {
+            assert_eq!(
+                PreparedPagedDecodeAttention::select_with_reduction_profile(
+                    &context,
+                    rejected,
+                    DecodeAttentionPreference::Reference,
+                    AttentionReductionProfile::FixedContiguous37BalancedV1,
+                    availability,
+                )
+                .unwrap_err()
+                .kind(),
+                CudaErrorKind::NotSupported
+            );
+        }
+
+        for accepted in [
+            PagedDecodeAttentionRequest::new(FIXED37_MAX_REDUCTION_ELEMENTS, 1, 1, 1, 1, 1.0),
+            PagedDecodeAttentionRequest::new(1, 1, 1, 1, FIXED37_MAX_REDUCTION_ELEMENTS, 1.0),
+        ] {
+            PreparedPagedDecodeAttention::select_with_reduction_profile(
+                &context,
+                accepted,
+                DecodeAttentionPreference::Reference,
+                AttentionReductionProfile::FixedContiguous37BalancedV1,
+                availability,
+            )
+            .unwrap();
+        }
     }
 }

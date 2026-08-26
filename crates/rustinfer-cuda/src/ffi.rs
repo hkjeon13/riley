@@ -1202,6 +1202,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_fixed37_decode_attention_reference_execute(
+        params: *const RawDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_decode_attention_execute(
         params: *const RawDecodeAttentionParams,
         stream: *mut RawStream,
@@ -1218,6 +1223,11 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_paged_decode_attention_reference_execute(
+        params: *const RawPagedDecodeAttentionReferenceParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
         params: *const RawPagedDecodeAttentionReferenceParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
@@ -2776,6 +2786,51 @@ pub(super) fn decode_attention_reference_execute(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_decode_attention_reference_execute(
+    query: RawBufferSpan,
+    key_cache: RawBufferSpan,
+    value_cache: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    maximum_token_count: u64,
+    logical_token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawDecodeAttentionReferenceParams {
+        struct_size: DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_cache,
+        value_cache,
+        score_workspace,
+        output,
+        maximum_token_count,
+        logical_token_count,
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA materialized decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the reused reference descriptor and every opaque resource
+            // remain live through synchronous fixed37 native completion.
+            unsafe {
+                rustinfer_cuda_fixed37_decode_attention_reference_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn decode_attention_execute(
     query: RawBufferSpan,
     key_cache: RawBufferSpan,
@@ -2984,6 +3039,65 @@ pub(super) fn paged_decode_attention_reference_execute(
             // through synchronous completion.
             unsafe {
                 rustinfer_cuda_paged_decode_attention_reference_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_paged_decode_attention_reference_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    score_workspace: RawBufferSpan,
+    output: RawBufferSpan,
+    block_ids: RawBufferSpan,
+    valid_tokens: RawBufferSpan,
+    format_version: u32,
+    logical_token_count: u64,
+    block_count: u64,
+    physical_block_count: u64,
+    block_size: u32,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawPagedDecodeAttentionReferenceParams {
+        struct_size: PAGED_DECODE_ATTENTION_REFERENCE_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        score_workspace,
+        output,
+        block_table: raw_paged_block_table_v1(
+            block_ids,
+            valid_tokens,
+            format_version,
+            logical_token_count,
+            block_count,
+            physical_block_count,
+            block_size,
+        ),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA materialized paged decode attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the reused reference and page-table descriptors and every
+            // borrowed resource remain live through synchronous completion.
+            unsafe {
+                rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
+                    &params, stream, error,
+                )
             }
         },
     )

@@ -1,4 +1,5 @@
 #include "ffi_internal.hpp"
+#include "fixed37_reduction.cuh"
 
 #include <cuda_bf16.h>
 #include <math_constants.h>
@@ -523,6 +524,28 @@ RustInferCudaStatus validate_decode_dimensions(
   return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
+RustInferCudaStatus validate_fixed37_axis(
+    uint64_t element_count, uint64_t* partial_count,
+    uint64_t* shared_bytes, RustInferCudaErrorInfo* error,
+    const char* operation) noexcept {
+  if (element_count == 0 || partial_count == nullptr ||
+      shared_bytes == nullptr) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+                            "the fixed37 reduction axis must be non-zero");
+  }
+  const uint64_t chunks = rustinfer_cuda_fixed37::chunk_count(element_count);
+  if (chunks == 0 || chunks > rustinfer_cuda_fixed37::kMaximumChunkCount) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "the decode reduction axis exceeds the fixed37 chunk-partial capacity");
+  }
+  *partial_count = chunks;
+  *shared_bytes = rustinfer_cuda_fixed37::shared_bytes(element_count);
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
+}
+
 RustInferCudaStatus validate_reduction_order(
     uint32_t reduction_order, RustInferCudaErrorInfo* error,
     const char* operation) noexcept {
@@ -865,6 +888,276 @@ __global__ void decode_av_reference_kernel(
           __bfloat162float(value_cache[value_index]), accumulator);
     }
     output[index] = __float2bfloat16_rn(accumulator);
+  }
+}
+
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_decode_qk_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_cache,
+    __nv_bfloat16* scores, uint64_t maximum_token_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t score_element_count, uint64_t partial_count) {
+  extern __shared__ float shared_partials[];
+  float* first = shared_partials;
+  float* second = shared_partials + partial_count;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = blockIdx.x; index < score_element_count;
+       index += gridDim.x) {
+    const uint64_t token = index % logical_token_count;
+    const uint64_t query_head = index / logical_token_count;
+    const uint64_t key_value_head = query_head / group_size;
+    const uint64_t query_base = query_head * head_size;
+    const uint64_t key_base =
+        (key_value_head * maximum_token_count + token) * head_size;
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > head_size) {
+        end = head_size;
+      }
+      float accumulator = 0.0F;
+      for (uint64_t depth = begin; depth < end; ++depth) {
+        accumulator = fmaf(__bfloat162float(query[query_base + depth]),
+                           __bfloat162float(key_cache[key_base + depth]),
+                           accumulator);
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float dot =
+        rustinfer_cuda_fixed37::balanced_sum(first, second, partial_count);
+    if (threadIdx.x == 0) {
+      scores[index] = __float2bfloat16_rn(dot);
+    }
+    __syncthreads();
+  }
+}
+
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_paged_decode_qk_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    __nv_bfloat16* scores, uint64_t physical_block_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t score_element_count, uint64_t partial_count) {
+  extern __shared__ float shared_partials[];
+  float* first = shared_partials;
+  float* second = shared_partials + partial_count;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = blockIdx.x; index < score_element_count;
+       index += gridDim.x) {
+    const uint64_t logical_token = index % logical_token_count;
+    const uint64_t query_head = index / logical_token_count;
+    const uint64_t key_value_head = query_head / group_size;
+    uint64_t key_base = 0;
+    const bool valid = paged_cache_base(
+        block_ids, valid_tokens, logical_token, physical_block_count,
+        key_value_head, key_value_head_count, head_size, &key_base);
+    if (!valid) {
+      if (threadIdx.x == 0) {
+        scores[index] = __float2bfloat16_rn(CUDART_NAN_F);
+      }
+      __syncthreads();
+      continue;
+    }
+    const uint64_t query_base = query_head * head_size;
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > head_size) {
+        end = head_size;
+      }
+      float accumulator = 0.0F;
+      for (uint64_t depth = begin; depth < end; ++depth) {
+        accumulator = fmaf(__bfloat162float(query[query_base + depth]),
+                           __bfloat162float(key_pool[key_base + depth]),
+                           accumulator);
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float dot =
+        rustinfer_cuda_fixed37::balanced_sum(first, second, partial_count);
+    if (threadIdx.x == 0) {
+      scores[index] = __float2bfloat16_rn(dot);
+    }
+    __syncthreads();
+  }
+}
+
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_decode_softmax_kernel(
+    __nv_bfloat16* scores, uint64_t logical_token_count,
+    uint64_t query_head_count, uint64_t partial_count) {
+  extern __shared__ float shared_partials[];
+  __shared__ uint32_t has_nan;
+  float* first = shared_partials;
+  float* second = shared_partials + partial_count;
+  for (uint64_t query_head = blockIdx.x; query_head < query_head_count;
+       query_head += gridDim.x) {
+    if (threadIdx.x == 0) {
+      has_nan = 0;
+    }
+    __syncthreads();
+    const uint64_t base = query_head * logical_token_count;
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > logical_token_count) {
+        end = logical_token_count;
+      }
+      float maximum = -CUDART_INF_F;
+      bool local_nan = false;
+      for (uint64_t token = begin; token < end; ++token) {
+        const float score = __bfloat162float(scores[base + token]);
+        local_nan = local_nan || isnan(score);
+        maximum = fmaxf(maximum, score);
+      }
+      if (local_nan) {
+        atomicOr(&has_nan, 1U);
+      }
+      first[chunk] = maximum;
+    }
+    __syncthreads();
+    const float maximum =
+        rustinfer_cuda_fixed37::balanced_max(first, second, partial_count);
+    if (has_nan != 0 || !isfinite(maximum)) {
+      const __nv_bfloat16 nan = __float2bfloat16_rn(CUDART_NAN_F);
+      for (uint64_t token = threadIdx.x; token < logical_token_count;
+           token += blockDim.x) {
+        scores[base + token] = nan;
+      }
+      __syncthreads();
+      continue;
+    }
+    __syncthreads();
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > logical_token_count) {
+        end = logical_token_count;
+      }
+      float sum = 0.0F;
+      for (uint64_t token = begin; token < end; ++token) {
+        sum = __fadd_rn(
+            sum, expf(__fsub_rn(__bfloat162float(scores[base + token]),
+                                maximum)));
+      }
+      first[chunk] = sum;
+    }
+    __syncthreads();
+    const float denominator =
+        rustinfer_cuda_fixed37::balanced_sum(first, second, partial_count);
+    for (uint64_t token = threadIdx.x; token < logical_token_count;
+         token += blockDim.x) {
+      const float numerator =
+          expf(__fsub_rn(__bfloat162float(scores[base + token]), maximum));
+      scores[base + token] =
+          __float2bfloat16_rn(numerator / denominator);
+    }
+    __syncthreads();
+  }
+}
+
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_decode_av_kernel(
+    const __nv_bfloat16* probabilities, const __nv_bfloat16* value_cache,
+    __nv_bfloat16* output, uint64_t maximum_token_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t output_element_count, uint64_t partial_count) {
+  extern __shared__ float shared_partials[];
+  float* first = shared_partials;
+  float* second = shared_partials + partial_count;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = blockIdx.x; index < output_element_count;
+       index += gridDim.x) {
+    const uint64_t depth = index % head_size;
+    const uint64_t query_head = index / head_size;
+    const uint64_t key_value_head = query_head / group_size;
+    const uint64_t probability_base = query_head * logical_token_count;
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > logical_token_count) {
+        end = logical_token_count;
+      }
+      float accumulator = 0.0F;
+      for (uint64_t token = begin; token < end; ++token) {
+        const uint64_t value_index =
+            (key_value_head * maximum_token_count + token) * head_size + depth;
+        accumulator = fmaf(
+            __bfloat162float(probabilities[probability_base + token]),
+            __bfloat162float(value_cache[value_index]), accumulator);
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float result =
+        rustinfer_cuda_fixed37::balanced_sum(first, second, partial_count);
+    if (threadIdx.x == 0) {
+      output[index] = __float2bfloat16_rn(result);
+    }
+    __syncthreads();
+  }
+}
+
+__global__ __launch_bounds__(rustinfer_cuda_fixed37::kThreadsPerBlock)
+void fixed37_paged_decode_av_kernel(
+    const __nv_bfloat16* probabilities, const __nv_bfloat16* value_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    __nv_bfloat16* output, uint64_t physical_block_count,
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t output_element_count, uint64_t partial_count) {
+  extern __shared__ float shared_partials[];
+  float* first = shared_partials;
+  float* second = shared_partials + partial_count;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  for (uint64_t index = blockIdx.x; index < output_element_count;
+       index += gridDim.x) {
+    const uint64_t depth = index % head_size;
+    const uint64_t query_head = index / head_size;
+    const uint64_t key_value_head = query_head / group_size;
+    const uint64_t probability_base = query_head * logical_token_count;
+    for (uint64_t chunk = threadIdx.x; chunk < partial_count;
+         chunk += blockDim.x) {
+      const uint64_t begin = chunk * rustinfer_cuda_fixed37::kChunkElements;
+      uint64_t end = begin + rustinfer_cuda_fixed37::kChunkElements;
+      if (end > logical_token_count) {
+        end = logical_token_count;
+      }
+      float accumulator = 0.0F;
+      for (uint64_t logical_token = begin; logical_token < end;
+           ++logical_token) {
+        uint64_t value_base = 0;
+        if (!paged_cache_base(
+                block_ids, valid_tokens, logical_token, physical_block_count,
+                key_value_head, key_value_head_count, head_size, &value_base)) {
+          accumulator = CUDART_NAN_F;
+          break;
+        }
+        accumulator = fmaf(
+            __bfloat162float(
+                probabilities[probability_base + logical_token]),
+            __bfloat162float(value_pool[value_base + depth]), accumulator);
+      }
+      first[chunk] = accumulator;
+    }
+    __syncthreads();
+    const float result =
+        rustinfer_cuda_fixed37::balanced_sum(first, second, partial_count);
+    if (threadIdx.x == 0) {
+      output[index] = __float2bfloat16_rn(result);
+    }
+    __syncthreads();
   }
 }
 
@@ -1446,6 +1739,158 @@ rustinfer_cuda_decode_attention_reference_execute(
                             error, kOperation);
 }
 
+extern "C" RustInferCudaStatus
+rustinfer_cuda_fixed37_decode_attention_reference_execute(
+    const RustInferCudaDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute fixed37 materialized decode attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaDecodeAttentionReferenceParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+
+  RustInferCudaStatus status = validate_decode_dimensions(
+      params->maximum_token_count, params->logical_token_count,
+      params->query_head_count, params->key_value_head_count,
+      params->head_size, params->scale, error, kOperation);
+  uint64_t depth_partial_count = 0;
+  uint64_t depth_shared_bytes = 0;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_fixed37_axis(params->head_size, &depth_partial_count,
+                                   &depth_shared_bytes, error, kOperation);
+  }
+  uint64_t token_partial_count = 0;
+  uint64_t token_shared_bytes = 0;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_fixed37_axis(
+        params->logical_token_count, &token_partial_count, &token_shared_bytes,
+        error, kOperation);
+  }
+  DecodeByteCounts bytes{};
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = decode_byte_counts(
+        params->maximum_token_count, params->logical_token_count,
+        params->query_head_count, params->key_value_head_count,
+        params->head_size, &bytes, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_cache{};
+  ResolvedSpan value_cache{};
+  ResolvedSpan score_workspace{};
+  ResolvedSpan output{};
+  status = resolve_decode_inputs(
+      params->query, params->key_cache, params->value_cache, params->output,
+      bytes, &query, &key_cache, &value_cache, &output, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->score_workspace,
+                          RUSTINFER_CUDA_DTYPE_BF16, 2, bytes.scores,
+                          &score_workspace, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(score_workspace, query, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(score_workspace, key_cache, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(score_workspace, value_cache, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(score_workspace, output, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query, key_cache, value_cache,
+                                score_workspace, output};
+  status = validate_contexts(stream, spans, 5, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_cache.buffer) ||
+      !uses.add(value_cache.buffer) || !uses.add(score_workspace.buffer) ||
+      !uses.add(output.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  const uint64_t score_elements = bytes.scores / 2;
+  const uint64_t output_elements = bytes.query_output / 2;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    fixed37_decode_qk_kernel<<<
+        rustinfer_cuda_fixed37::block_count(score_elements),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(depth_shared_bytes), stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(query.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_cache.data),
+        reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
+        params->maximum_token_count, params->logical_token_count,
+        params->query_head_count, params->key_value_head_count,
+        params->head_size, score_elements, depth_partial_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
+            params->scale, score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    fixed37_decode_softmax_kernel<<<
+        rustinfer_cuda_fixed37::block_count(params->query_head_count),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(token_shared_bytes), stream->stream>>>(
+        reinterpret_cast<__nv_bfloat16*>(score_workspace.data),
+        params->logical_token_count, params->query_head_count,
+        token_partial_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    fixed37_decode_av_kernel<<<
+        rustinfer_cuda_fixed37::block_count(output_elements),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(token_shared_bytes), stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(score_workspace.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_cache.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        params->maximum_token_count, params->logical_token_count,
+        params->query_head_count, params->key_value_head_count,
+        params->head_size, output_elements, token_partial_count);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
 extern "C" RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
     const RustInferCudaDecodeAttentionParams* params,
     RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
@@ -2014,6 +2459,187 @@ rustinfer_cuda_paged_decode_attention_reference_execute(
             params->block_table.logical_token_count,
             params->query_head_count, params->key_value_head_count,
             params->head_size, output_elements);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus
+rustinfer_cuda_fixed37_paged_decode_attention_reference_execute(
+    const RustInferCudaPagedDecodeAttentionReferenceParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "execute fixed37 materialized paged decode attention";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RustInferCudaPagedDecodeAttentionReferenceParams stable_params =
+      *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || params->reserved1 != 0 ||
+      !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  RustInferCudaStatus status =
+      validate_paged_block_table(params->block_table, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_decode_dimensions(
+        params->block_table.logical_token_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, params->scale, error,
+        kOperation);
+  }
+  uint64_t depth_partial_count = 0;
+  uint64_t depth_shared_bytes = 0;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_fixed37_axis(params->head_size, &depth_partial_count,
+                                   &depth_shared_bytes, error, kOperation);
+  }
+  uint64_t token_partial_count = 0;
+  uint64_t token_shared_bytes = 0;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = validate_fixed37_axis(
+        params->block_table.logical_token_count, &token_partial_count,
+        &token_shared_bytes, error, kOperation);
+  }
+  PagedByteCounts bytes{};
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = paged_byte_counts(
+        params->block_table, params->query_head_count,
+        params->key_value_head_count, params->head_size, &bytes, error,
+        kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan query{};
+  ResolvedSpan key_pool{};
+  ResolvedSpan value_pool{};
+  ResolvedSpan scores{};
+  ResolvedSpan output{};
+  ResolvedSpan block_ids{};
+  ResolvedSpan valid_tokens{};
+  status = resolve_span(params->query, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                        bytes.query_output, &query, error, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->key_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &key_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->value_pool, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.pool, &value_pool, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->score_workspace,
+                          RUSTINFER_CUDA_DTYPE_BF16, 2, bytes.scores, &scores,
+                          error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->output, RUSTINFER_CUDA_DTYPE_BF16, 2,
+                          bytes.query_output, &output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_paged_block_table(params->block_table, bytes, &block_ids,
+                                       &valid_tokens, error, kOperation);
+  }
+  const ResolvedSpan* const inputs[] = {
+      &query, &key_pool, &value_pool, &block_ids, &valid_tokens};
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(scores, *inputs[index], error, kOperation);
+  }
+  for (size_t index = 0;
+       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < 5; ++index) {
+    status = reject_overlap(output, *inputs[index], error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(output, scores, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {query,  key_pool,  value_pool, scores,
+                                output, block_ids, valid_tokens};
+  status = validate_contexts(stream, spans, 7, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ExclusiveUses uses(stream);
+  if (!uses.add(query.buffer) || !uses.add(key_pool.buffer) ||
+      !uses.add(value_pool.buffer) || !uses.add(scores.buffer) ||
+      !uses.add(output.buffer) || !uses.add(block_ids.buffer) ||
+      !uses.add(valid_tokens.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "decode buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = launch_status(error, kOperation);
+  }
+  const uint64_t score_elements = bytes.scores / 2;
+  const uint64_t output_elements = bytes.query_output / 2;
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    fixed37_paged_decode_qk_kernel<<<
+        rustinfer_cuda_fixed37::block_count(score_elements),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(depth_shared_bytes), stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(query.data),
+        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+        reinterpret_cast<const uint32_t*>(block_ids.data),
+        reinterpret_cast<const uint16_t*>(valid_tokens.data),
+        reinterpret_cast<__nv_bfloat16*>(scores.data),
+        params->block_table.physical_block_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, score_elements,
+        depth_partial_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(scores.data), params->scale,
+            score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    fixed37_decode_softmax_kernel<<<
+        rustinfer_cuda_fixed37::block_count(params->query_head_count),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(token_shared_bytes), stream->stream>>>(
+        reinterpret_cast<__nv_bfloat16*>(scores.data),
+        params->block_table.logical_token_count, params->query_head_count,
+        token_partial_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    fixed37_paged_decode_av_kernel<<<
+        rustinfer_cuda_fixed37::block_count(output_elements),
+        rustinfer_cuda_fixed37::kThreadsPerBlock,
+        static_cast<size_t>(token_shared_bytes), stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(scores.data),
+        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+        reinterpret_cast<const uint32_t*>(block_ids.data),
+        reinterpret_cast<const uint16_t*>(valid_tokens.data),
+        reinterpret_cast<__nv_bfloat16*>(output.data),
+        params->block_table.physical_block_count,
+        params->block_table.logical_token_count, params->query_head_count,
+        params->key_value_head_count, params->head_size, output_elements,
+        token_partial_count);
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
