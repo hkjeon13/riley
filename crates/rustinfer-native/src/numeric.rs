@@ -4,28 +4,15 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 
-#[cfg(feature = "cuda")]
-use rustinfer_cuda::{
-    CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDeviceBuffer, CudaError,
-    CudaPinnedHostBuffer, CudaStream, Fixed37LogSoftmaxParams, fixed37_log_softmax,
-};
-
 use crate::contract::{CALIBRATION_TOP_K, CROSS_CACHE_EXACT_WINDOW};
 
 #[derive(Debug)]
 pub(crate) enum NumericError {
     InvalidBf16Length,
     EmptyValues,
-    NonFinite {
-        index: usize,
-    },
-    DestinationLength {
-        expected: usize,
-        actual: usize,
-    },
+    NonFinite { index: usize },
+    DestinationLength { expected: usize, actual: usize },
     ArithmeticOverflow,
-    #[cfg(feature = "cuda")]
-    Cuda(CudaError),
 }
 
 impl fmt::Display for NumericError {
@@ -41,28 +28,11 @@ impl fmt::Display for NumericError {
                 )
             }
             Self::ArithmeticOverflow => formatter.write_str("numeric byte arithmetic overflow"),
-            #[cfg(feature = "cuda")]
-            Self::Cuda(source) => source.fmt(formatter),
         }
     }
 }
 
-impl Error for NumericError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            #[cfg(feature = "cuda")]
-            Self::Cuda(source) => Some(source),
-            _ => None,
-        }
-    }
-}
-
-#[cfg(feature = "cuda")]
-impl From<CudaError> for NumericError {
-    fn from(source: CudaError) -> Self {
-        Self::Cuda(source)
-    }
-}
+impl Error for NumericError {}
 
 pub(crate) fn decode_bf16(bytes: &[u8]) -> Result<Vec<f32>, NumericError> {
     if bytes.len() % 2 != 0 {
@@ -166,102 +136,6 @@ pub(crate) fn first_divergence(left: &[u32], right: &[u32]) -> Option<usize> {
 
 pub(crate) fn exact_window_match(left: &[u32], right: &[u32]) -> bool {
     first_divergence(left, right).is_none_or(|step| step >= CROSS_CACHE_EXACT_WINDOW)
-}
-
-#[cfg(feature = "cuda")]
-pub(crate) struct Fixed37LogSoftmaxWorkspace {
-    logits: CudaDeviceBuffer,
-    output: CudaDeviceBuffer,
-    staging: CudaPinnedHostBuffer,
-    element_count: u64,
-    logits_bytes: u64,
-    output_bytes: u64,
-}
-
-#[cfg(feature = "cuda")]
-impl Fixed37LogSoftmaxWorkspace {
-    pub(crate) fn prepare(
-        context: &CudaContext,
-        element_count: usize,
-    ) -> Result<Self, NumericError> {
-        let element_count =
-            u64::try_from(element_count).map_err(|_| NumericError::ArithmeticOverflow)?;
-        let logits_bytes = element_count
-            .checked_mul(2)
-            .ok_or(NumericError::ArithmeticOverflow)?;
-        let output_bytes = element_count
-            .checked_mul(4)
-            .ok_or(NumericError::ArithmeticOverflow)?;
-        let logits = context.allocate_device_buffer(logits_bytes)?;
-        let output = context.allocate_device_buffer(output_bytes)?;
-        let staging = context.allocate_pinned_host_buffer(output_bytes.max(logits_bytes))?;
-        Ok(Self {
-            logits,
-            output,
-            staging,
-            element_count,
-            logits_bytes,
-            output_bytes,
-        })
-    }
-
-    pub(crate) fn execute(
-        &mut self,
-        logits: &[u8],
-        destination: &mut [u8],
-        stream: &mut CudaStream,
-    ) -> Result<(), NumericError> {
-        if u64::try_from(logits.len()).ok() != Some(self.logits_bytes) {
-            return Err(NumericError::DestinationLength {
-                expected: usize::try_from(self.logits_bytes)
-                    .map_err(|_| NumericError::ArithmeticOverflow)?,
-                actual: logits.len(),
-            });
-        }
-        if u64::try_from(destination.len()).ok() != Some(self.output_bytes) {
-            return Err(NumericError::DestinationLength {
-                expected: usize::try_from(self.output_bytes)
-                    .map_err(|_| NumericError::ArithmeticOverflow)?,
-                actual: destination.len(),
-            });
-        }
-        self.logits
-            .upload_from_slice(0, logits, &mut self.staging, stream)?;
-        {
-            let mut params = Fixed37LogSoftmaxParams {
-                logits: CudaBufferSpan::new(&self.logits, CudaDType::BF16, 0, self.logits_bytes)?,
-                output: CudaBufferSpanMut::new(
-                    &mut self.output,
-                    CudaDType::F32,
-                    0,
-                    self.output_bytes,
-                )?,
-                element_count: self.element_count,
-            };
-            fixed37_log_softmax(&mut params, stream)?;
-        }
-        self.output
-            .download_to_slice(0, destination, &mut self.staging, stream)?;
-        Ok(())
-    }
-
-    pub(crate) fn close(self) -> Result<(), NumericError> {
-        let Self {
-            logits,
-            output,
-            staging,
-            ..
-        } = self;
-        let mut first = None;
-        for result in [logits.close(), output.close(), staging.close()] {
-            if let Err(error) = result {
-                if first.is_none() {
-                    first = Some(error);
-                }
-            }
-        }
-        first.map_or(Ok(()), |error| Err(NumericError::Cuda(error)))
-    }
 }
 
 #[cfg(test)]
