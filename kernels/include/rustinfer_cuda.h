@@ -105,6 +105,7 @@ typedef struct RustInferCudaDeviceBuffer RustInferCudaDeviceBuffer;
 typedef struct RustInferCudaPinnedHostBuffer RustInferCudaPinnedHostBuffer;
 typedef struct RustInferCudaCopy RustInferCudaCopy;
 typedef struct RustInferCudaGemmPlan RustInferCudaGemmPlan;
+typedef struct RustInferCudaFixed37GemmPlan RustInferCudaFixed37GemmPlan;
 
 // Raw C callers must externally synchronize opaque-handle lifetime: no call
 // may begin with a handle while another thread can close that same handle.
@@ -210,6 +211,23 @@ typedef struct RustInferCudaResidualRmsNormParams {
   uint32_t reserved1;
   uint64_t reserved[4];
 } RustInferCudaResidualRmsNormParams;
+
+// Full-vector log-softmax used by the fixed-contiguous-37-balanced-v1
+// calibration profile. Input is BF16 [element_count], output is F32
+// [element_count], and the two spans must not overlap. Any NaN input is
+// propagated as canonical quiet NaN to every output. A +Inf maximum or an
+// all--Inf vector likewise produces all quiet NaNs, matching the literal
+// stable-log-softmax expression. With a finite maximum, individual -Inf
+// inputs produce -Inf outputs. Max reduction uses CUDA fmaxf signed-zero
+// semantics (+0 wins a +/-0 pair).
+typedef struct RustInferCudaFixed37LogSoftmaxParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan logits;
+  RustInferCudaBufferSpan output;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaFixed37LogSoftmaxParams;
 
 // Adds one BF16 [column_count] bias vector to every row of a contiguous BF16
 // [row_count, column_count] matrix in place. Each pair is expanded to F32,
@@ -687,6 +705,11 @@ typedef struct RustInferCudaRaggedPagedAttentionParams {
 #define RUSTINFER_CUDA_GEMM_EPILOGUE_NONE 0u
 #define RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED 1u
 #define RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT 1u
+#define RUSTINFER_CUDA_GEMM_BACKEND_FIXED37 2u
+
+#define RUSTINFER_CUDA_FIXED37_REDUCTION_VERSION 1u
+#define RUSTINFER_CUDA_FIXED37_CHUNK_ELEMENTS 37u
+#define RUSTINFER_CUDA_FIXED37_MAX_CHUNK_COUNT 4096u
 
 // PR 06 deliberately exposes one exact dense GEMM contract. The logical
 // operation is row-major Y[M,N] = X[M,K] * W[N,K]^T with BF16 X/W/Y and F32
@@ -742,6 +765,26 @@ typedef struct RustInferCudaGemmAlgorithmInfo {
   uint64_t k;
   uint64_t reserved[2];
 } RustInferCudaGemmAlgorithmInfo;
+
+// Immutable metadata for the custom fixed-contiguous-37-balanced-v1 GEMM
+// plan. The plan uses no caller workspace. dynamic_shared_memory_bytes is the
+// exact per-block scratch used for two alternating arrays of chunk partials.
+typedef struct RustInferCudaFixed37GemmPlanInfo {
+  uint32_t struct_size;
+  uint32_t backend;
+  uint32_t reduction_version;
+  uint32_t chunk_elements;
+  RustInferCudaDType accumulator_dtype;
+  RustInferCudaDType output_dtype;
+  uint32_t threads_per_block;
+  uint32_t deterministic;
+  uint64_t dynamic_shared_memory_bytes;
+  uint64_t workspace_bytes;
+  uint64_t m;
+  uint64_t n;
+  uint64_t k;
+  uint64_t reserved[3];
+} RustInferCudaFixed37GemmPlanInfo;
 
 #ifdef __cplusplus
 #define RUSTINFER_CUDA_NOEXCEPT noexcept
@@ -973,6 +1016,15 @@ RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
+// Alternate RMSNorm entry point for fixed-contiguous-37-balanced-v1. The
+// storage, alias, exceptional-value, and synchronous-completion contract is
+// identical to rustinfer_cuda_rms_norm_execute; only the sum-of-squares
+// reduction order changes.
+RustInferCudaStatus rustinfer_cuda_fixed37_rms_norm_execute(
+    const RustInferCudaRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
 // Exact output alias with either input is supported. Partial overlap is not.
 RustInferCudaStatus rustinfer_cuda_residual_add_execute(
     const RustInferCudaResidualAddParams* params,
@@ -983,6 +1035,21 @@ RustInferCudaStatus rustinfer_cuda_residual_add_execute(
 // additive ABI-v1 entry point; the standalone functions remain the fallback.
 RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
     const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Fixed-contiguous-37-balanced-v1 sibling of the exact fused residual plus
+// RMSNorm primitive. Residual storage rounding remains unchanged.
+RustInferCudaStatus rustinfer_cuda_fixed37_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Computes F32 log-softmax from BF16 logits with fixed 37-element max and sum
+// chunks followed by the reviewed adjacent balanced tree. element_count must
+// be non-zero and no canonical implementation is selected as a fallback.
+RustInferCudaStatus rustinfer_cuda_fixed37_log_softmax_execute(
+    const RustInferCudaFixed37LogSoftmaxParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
@@ -1143,6 +1210,30 @@ RustInferCudaStatus rustinfer_cuda_gemm_plan_execute(
 // consumed and its context-child lease is released.
 RustInferCudaStatus rustinfer_cuda_gemm_plan_close(
     RustInferCudaGemmPlan** plan,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Prepares the custom fixed-contiguous-37-balanced-v1 implementation for the
+// same logical BF16/F32 GEMM contract as RustInferCudaGemmConfig. The custom
+// plan never selects or falls back to cuBLASLt and requires no caller
+// workspace.
+RustInferCudaStatus rustinfer_cuda_fixed37_gemm_plan_create(
+    RustInferCudaContext* context,
+    const RustInferCudaGemmConfig* config,
+    RustInferCudaFixed37GemmPlan** out_plan,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_fixed37_gemm_plan_info(
+    RustInferCudaFixed37GemmPlan* plan,
+    RustInferCudaFixed37GemmPlanInfo* out_info,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_fixed37_gemm_plan_execute(
+    RustInferCudaFixed37GemmPlan* plan,
+    const RustInferCudaBufferSpan* input,
+    const RustInferCudaBufferSpan* weight,
+    const RustInferCudaBufferSpan* output,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_fixed37_gemm_plan_close(
+    RustInferCudaFixed37GemmPlan** plan,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
 // Diagnostic-only storage keeps generic tensor allocation outside PR 03.

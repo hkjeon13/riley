@@ -20,8 +20,19 @@ use crate::ffi;
 const BF16_BYTES: u64 = 2;
 const GEMM_OFFSET_ALIGNMENT: u64 = 256;
 const MAX_CUBLASLT_DIMENSION: u64 = 2_147_483_647;
+/// Version of the fixed-contiguous-37-balanced reduction contract.
+pub const FIXED37_REDUCTION_VERSION: u32 = 1;
+/// Elements traversed by each ascending local reduction chunk.
+pub const FIXED37_CHUNK_ELEMENTS: u32 = 37;
+/// Maximum number of chunk partials accepted by the additive backend.
+pub const FIXED37_MAX_CHUNK_COUNT: u32 = 4096;
+/// Largest logical reduction axis accepted by the additive backend.
+pub const FIXED37_MAX_REDUCTION_ELEMENTS: u64 =
+    (FIXED37_CHUNK_ELEMENTS as u64) * (FIXED37_MAX_CHUNK_COUNT as u64);
 #[cfg(feature = "cuda")]
 const NATIVE_CUBLASLT_BACKEND_ID: u32 = 1;
+#[cfg(feature = "cuda")]
+const NATIVE_FIXED37_BACKEND_ID: u32 = 2;
 #[cfg(feature = "cuda")]
 const DETERMINISTIC_REQUIRED: u32 = 1;
 #[cfg(feature = "cuda")]
@@ -498,6 +509,7 @@ impl CudaPreparedGemm {
         ensure_same_context(&self.context, &stream.context, OPERATION)?;
 
         validate_span(
+            OPERATION,
             params.input.buffer(),
             params.input.dtype(),
             params.input.byte_offset(),
@@ -507,6 +519,7 @@ impl CudaPreparedGemm {
             "input",
         )?;
         validate_span(
+            OPERATION,
             params.weight.buffer(),
             params.weight.dtype(),
             params.weight.byte_offset(),
@@ -516,6 +529,7 @@ impl CudaPreparedGemm {
             "weight",
         )?;
         validate_span(
+            OPERATION,
             params.output.buffer(),
             params.output.dtype(),
             params.output.byte_offset(),
@@ -528,6 +542,7 @@ impl CudaPreparedGemm {
         let workspace_bytes = self.algorithm.workspace_bytes;
         match params.workspace.as_ref() {
             Some(workspace) => validate_span(
+                OPERATION,
                 workspace.buffer(),
                 workspace.dtype(),
                 workspace.byte_offset(),
@@ -571,6 +586,375 @@ impl CudaPreparedGemm {
         }
         Ok(())
     }
+}
+
+/// Immutable provenance for the custom fixed37 GEMM implementation.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct CudaFixed37GemmMetadata {
+    backend_id: u32,
+    reduction_version: u32,
+    chunk_elements: u32,
+    accumulator_dtype: CudaDType,
+    output_dtype: CudaDType,
+    threads_per_block: u32,
+    deterministic: bool,
+    dynamic_shared_memory_bytes: u64,
+    workspace_bytes: u64,
+    m: u64,
+    n: u64,
+    k: u64,
+}
+
+impl CudaFixed37GemmMetadata {
+    /// Stable native backend identifier for this custom implementation.
+    pub const BACKEND_ID: u32 = 2;
+
+    /// Native backend identifier.
+    #[must_use]
+    pub const fn backend_id(self) -> u32 {
+        self.backend_id
+    }
+
+    /// Fixed reduction contract version.
+    #[must_use]
+    pub const fn reduction_version(self) -> u32 {
+        self.reduction_version
+    }
+
+    /// Logical elements in every full local chunk.
+    #[must_use]
+    pub const fn chunk_elements(self) -> u32 {
+        self.chunk_elements
+    }
+
+    /// Accumulation dtype, always F32.
+    #[must_use]
+    pub const fn accumulator_dtype(self) -> CudaDType {
+        self.accumulator_dtype
+    }
+
+    /// Output dtype, always BF16.
+    #[must_use]
+    pub const fn output_dtype(self) -> CudaDType {
+        self.output_dtype
+    }
+
+    /// CUDA threads in each custom kernel block.
+    #[must_use]
+    pub const fn threads_per_block(self) -> u32 {
+        self.threads_per_block
+    }
+
+    /// Whether execution has a fixed deterministic reduction order.
+    #[must_use]
+    pub const fn deterministic(self) -> bool {
+        self.deterministic
+    }
+
+    /// Exact per-block dynamic shared-memory scratch.
+    #[must_use]
+    pub const fn dynamic_shared_memory_bytes(self) -> u64 {
+        self.dynamic_shared_memory_bytes
+    }
+
+    /// Caller workspace bytes, always zero for the custom backend.
+    #[must_use]
+    pub const fn workspace_bytes(self) -> u64 {
+        self.workspace_bytes
+    }
+
+    /// Prepared `(M, N, K)` dimensions.
+    #[must_use]
+    pub const fn dimensions(self) -> (u64, u64, u64) {
+        (self.m, self.n, self.k)
+    }
+}
+
+/// Borrowed buffers for one synchronous custom fixed37 GEMM execution.
+///
+/// Span sizes exactly match the prepared BF16 matrices, offsets are 256-byte
+/// aligned, and the three allocations must be distinct. The implementation
+/// never accepts a workspace and never falls back to canonical GEMM.
+#[derive(Debug)]
+pub struct Fixed37GemmParams<'a> {
+    /// Row-major BF16 `X[M, K]`.
+    pub input: CudaBufferSpan<'a>,
+    /// Row-major BF16 `W[N, K]` consumed logically transposed.
+    pub weight: CudaBufferSpan<'a>,
+    /// Row-major BF16 `Y[M, N]`.
+    pub output: CudaBufferSpanMut<'a>,
+}
+
+/// Owning custom fixed-contiguous-37-balanced-v1 GEMM plan.
+///
+/// This is deliberately a sibling of [`CudaPreparedGemm`], not a runtime
+/// selector. It owns its additive native plan and performs no cuBLASLt query,
+/// workspace allocation, or canonical fallback.
+pub struct CudaPreparedFixed37Gemm {
+    #[cfg(feature = "cuda")]
+    native: ffi::Fixed37GemmPlanHandle,
+    context: Arc<ContextInner>,
+    config: CudaGemmConfig,
+    metadata: CudaFixed37GemmMetadata,
+    poisoned: bool,
+    _not_sync: PhantomData<Cell<()>>,
+}
+
+impl fmt::Debug for CudaPreparedFixed37Gemm {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CudaPreparedFixed37Gemm")
+            .field("device_ordinal", &self.context.ordinal)
+            .field("config", &self.config)
+            .field("metadata", &self.metadata)
+            .field("poisoned", &self.poisoned)
+            .finish_non_exhaustive()
+    }
+}
+
+impl CudaContext {
+    /// Prepares the additive fixed37 GEMM implementation.
+    ///
+    /// # Errors
+    ///
+    /// Returns not-supported when `K` needs more than 4096 fixed chunks,
+    /// unavailable without CUDA, or a translated native creation/contract
+    /// error. No CUDA kernel or model is run during preparation.
+    pub fn prepare_fixed37_gemm(
+        &self,
+        config: CudaGemmConfig,
+    ) -> CudaResult<CudaPreparedFixed37Gemm> {
+        #[cfg(feature = "cuda")]
+        {
+            if config.k > FIXED37_MAX_REDUCTION_ELEMENTS {
+                return Err(fixed37_not_supported(
+                    "CudaContext::prepare_fixed37_gemm",
+                    format!(
+                        "K={} requires more than {} fixed {}-element chunks",
+                        config.k, FIXED37_MAX_CHUNK_COUNT, FIXED37_CHUNK_ELEMENTS
+                    ),
+                ));
+            }
+            let native = ffi::Fixed37GemmPlanHandle::create(
+                &self.inner.native,
+                config.m,
+                config.n,
+                config.k,
+                config.max_workspace_bytes,
+            )?;
+            let metadata = CudaFixed37GemmMetadata::from_native(config, native.info()?)?;
+            Ok(CudaPreparedFixed37Gemm {
+                native,
+                context: Arc::clone(&self.inner),
+                config,
+                metadata,
+                poisoned: false,
+                _not_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = config;
+            Err(CudaError::unavailable("CudaContext::prepare_fixed37_gemm"))
+        }
+    }
+}
+
+impl CudaPreparedFixed37Gemm {
+    /// Exact logical and storage contract used to prepare this plan.
+    #[must_use]
+    pub const fn config(&self) -> CudaGemmConfig {
+        self.config
+    }
+
+    /// Immutable fixed-reduction implementation metadata.
+    #[must_use]
+    pub const fn metadata(&self) -> CudaFixed37GemmMetadata {
+        self.metadata
+    }
+
+    /// Device ordinal retained by this plan.
+    #[must_use]
+    pub fn device_ordinal(&self) -> u32 {
+        self.context.ordinal
+    }
+
+    /// Whether a prior native execution error disabled safe reuse.
+    #[must_use]
+    pub const fn is_poisoned(&self) -> bool {
+        self.poisoned
+    }
+
+    /// Executes the custom GEMM and synchronizes the explicit stream.
+    ///
+    /// # Errors
+    ///
+    /// Returns before native execution for dtype, size, alignment, context,
+    /// alias, busy-buffer, or poisoned-plan violations. Any native execution
+    /// failure poisons this safe wrapper conservatively.
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
+        &mut self,
+        params: &mut Fixed37GemmParams<'_>,
+        stream: &mut S,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedFixed37Gemm::execute";
+        let stream = execution_stream_mut(stream);
+        if self.poisoned {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the fixed37 GEMM plan was poisoned by a prior native execution failure",
+            ));
+        }
+        self.validate_execution(params, stream)?;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.execute(
+                params.input.raw(),
+                params.weight.raw(),
+                params.output.raw(),
+                &mut stream.native,
+            );
+            if result.is_err() {
+                self.poisoned = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (params, stream);
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Explicitly closes the custom native plan.
+    ///
+    /// # Errors
+    ///
+    /// A poisoned plan cannot be reported as cleanly closed. Drop retains the
+    /// existing fail-closed best-effort native cleanup behavior.
+    pub fn close(self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            let mut this = self;
+            if this.poisoned {
+                return Err(CudaError::invalid_state(
+                    "CudaPreparedFixed37Gemm::close",
+                    "a poisoned fixed37 GEMM plan cannot be reported as cleanly closed",
+                ));
+            }
+            this.native.close()
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("CudaPreparedFixed37Gemm::close"))
+        }
+    }
+
+    fn validate_execution(
+        &self,
+        params: &Fixed37GemmParams<'_>,
+        stream: &CudaStream,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaPreparedFixed37Gemm::execute";
+        ensure_same_context(&self.context, &stream.context, OPERATION)?;
+        validate_span(
+            OPERATION,
+            params.input.buffer(),
+            params.input.dtype(),
+            params.input.byte_offset(),
+            params.input.byte_len(),
+            CudaDType::BF16,
+            self.config.input_bytes,
+            "input",
+        )?;
+        validate_span(
+            OPERATION,
+            params.weight.buffer(),
+            params.weight.dtype(),
+            params.weight.byte_offset(),
+            params.weight.byte_len(),
+            CudaDType::BF16,
+            self.config.weight_bytes,
+            "weight",
+        )?;
+        validate_span(
+            OPERATION,
+            params.output.buffer(),
+            params.output.dtype(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+            CudaDType::BF16,
+            self.config.output_bytes,
+            "output",
+        )?;
+        let buffers = [
+            ("input", params.input.buffer()),
+            ("weight", params.weight.buffer()),
+            ("output", params.output.buffer()),
+        ];
+        for (_, buffer) in buffers {
+            ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
+        }
+        ensure_distinct_buffers(&buffers, OPERATION)
+    }
+}
+
+#[cfg(feature = "cuda")]
+impl CudaFixed37GemmMetadata {
+    fn from_native(
+        config: CudaGemmConfig,
+        native: ffi::NativeFixed37GemmPlanInfo,
+    ) -> CudaResult<Self> {
+        const OPERATION: &str = "CudaContext::prepare_fixed37_gemm";
+        let expected_chunks = config.k.div_ceil(u64::from(FIXED37_CHUNK_ELEMENTS));
+        let expected_shared_bytes = expected_chunks * 2 * 4;
+        if native.backend != NATIVE_FIXED37_BACKEND_ID
+            || native.reduction_version != FIXED37_REDUCTION_VERSION
+            || native.chunk_elements != FIXED37_CHUNK_ELEMENTS
+            || native.accumulator_dtype != ffi::DTYPE_F32
+            || native.output_dtype != ffi::DTYPE_BF16
+            || native.threads_per_block != 256
+            || native.deterministic != DETERMINISTIC_REQUIRED
+            || native.workspace_bytes != 0
+            || native.dynamic_shared_memory_bytes != expected_shared_bytes
+            || (native.m, native.n, native.k) != (config.m, config.n, config.k)
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                OPERATION,
+                format!("native fixed37 metadata violates the prepared contract: {native:?}"),
+            ));
+        }
+        Ok(Self {
+            backend_id: native.backend,
+            reduction_version: native.reduction_version,
+            chunk_elements: native.chunk_elements,
+            accumulator_dtype: CudaDType::F32,
+            output_dtype: CudaDType::BF16,
+            threads_per_block: native.threads_per_block,
+            deterministic: true,
+            dynamic_shared_memory_bytes: native.dynamic_shared_memory_bytes,
+            workspace_bytes: 0,
+            m: native.m,
+            n: native.n,
+            k: native.k,
+        })
+    }
+}
+
+#[cfg(feature = "cuda")]
+fn fixed37_not_supported(operation: &'static str, message: impl Into<String>) -> CudaError {
+    CudaError::new(
+        CudaErrorKind::NotSupported,
+        CudaErrorDomain::Rust,
+        CudaErrorStage::Validation,
+        0,
+        operation,
+        message,
+    )
 }
 
 #[cfg(feature = "cuda")]
@@ -645,6 +1029,7 @@ fn native_metadata_error(message: impl Into<String>) -> CudaError {
 
 #[allow(clippy::too_many_arguments)]
 fn validate_span(
+    operation: &'static str,
     buffer: &CudaDeviceBuffer,
     actual_dtype: CudaDType,
     byte_offset: u64,
@@ -653,26 +1038,25 @@ fn validate_span(
     required_bytes: u64,
     name: &'static str,
 ) -> CudaResult<()> {
-    const OPERATION: &str = "CudaPreparedGemm::execute";
     if actual_dtype != required_dtype {
         return Err(CudaError::invalid_argument(
-            OPERATION,
+            operation,
             format!("{name} dtype must be {required_dtype}, got {actual_dtype}"),
         ));
     }
     if actual_bytes != required_bytes {
         return Err(CudaError::invalid_argument(
-            OPERATION,
+            operation,
             format!("{name} span must contain exactly {required_bytes} bytes, got {actual_bytes}"),
         ));
     }
     if byte_offset % GEMM_OFFSET_ALIGNMENT != 0 {
         return Err(CudaError::invalid_argument(
-            OPERATION,
+            operation,
             format!("{name} byte offset {byte_offset} is not {GEMM_OFFSET_ALIGNMENT}-byte aligned"),
         ));
     }
-    buffer.ensure_idle_for_operation(OPERATION)
+    buffer.ensure_idle_for_operation(operation)
 }
 
 fn ensure_distinct_buffers(
@@ -696,7 +1080,10 @@ fn ensure_distinct_buffers(
 
 #[cfg(test)]
 mod tests {
-    use super::{CudaGemmConfig, checked_bf16_matrix_bytes};
+    use super::{
+        CudaGemmConfig, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
+        FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, checked_bf16_matrix_bytes,
+    };
     use crate::{CudaDType, CudaErrorKind};
 
     #[test]
@@ -730,6 +1117,47 @@ mod tests {
         let overflow = checked_bf16_matrix_bytes(u64::MAX, 2, "test")
             .expect_err("matrix byte arithmetic must be checked");
         assert_eq!(overflow.kind(), CudaErrorKind::OutOfRange);
+    }
+
+    #[test]
+    fn fixed37_constants_and_order_sensitive_witness_are_pinned() {
+        assert_eq!(FIXED37_REDUCTION_VERSION, 1);
+        assert_eq!(FIXED37_CHUNK_ELEMENTS, 37);
+        assert_eq!(FIXED37_MAX_CHUNK_COUNT, 4096);
+        assert_eq!(FIXED37_MAX_REDUCTION_ELEMENTS, 151_552);
+
+        // A flat logical-order fold loses each unit after 2^24, while the
+        // fixed37 local fold first creates a 37.0 chunk partial. The adjacent
+        // merge therefore retains 36.0 after F32 round-to-nearest-even.
+        let mut values = [0.0_f32; 74];
+        values[0] = 16_777_216.0;
+        values[37..].fill(1.0);
+        let canonical_flat = values
+            .iter()
+            .copied()
+            .fold(0.0_f32, |sum, value| sum + value);
+        let mut partials = values
+            .chunks(37)
+            .map(|chunk| {
+                chunk
+                    .iter()
+                    .copied()
+                    .fold(0.0_f32, |sum, value| sum + value)
+            })
+            .collect::<Vec<_>>();
+        while partials.len() > 1 {
+            let mut merged = partials
+                .chunks_exact(2)
+                .map(|pair| pair[0] + pair[1])
+                .collect::<Vec<_>>();
+            if partials.len() % 2 != 0 {
+                merged.push(*partials.last().expect("non-empty partials"));
+            }
+            partials = merged;
+        }
+        assert_eq!(canonical_flat.to_bits(), 16_777_216.0_f32.to_bits());
+        assert_eq!(partials[0].to_bits(), 16_777_252.0_f32.to_bits());
+        assert_ne!(canonical_flat.to_bits(), partials[0].to_bits());
     }
 
     #[cfg(not(feature = "cuda"))]

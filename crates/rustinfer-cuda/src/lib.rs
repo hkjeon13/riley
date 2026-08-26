@@ -38,7 +38,11 @@ pub use decode::{
     decode_partial_states_reduce, kv_cache_append, paged_kv_cache_append,
 };
 pub use error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
-pub use gemm::{CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedGemm, GemmParams};
+pub use gemm::{
+    CudaFixed37GemmMetadata, CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaPreparedFixed37Gemm,
+    CudaPreparedGemm, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
+    FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
+};
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
 };
@@ -52,8 +56,9 @@ pub use prefill::{
 };
 pub use primitives::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
-    GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams,
-    RowBiasAddInPlaceParams, SiluParams, cast, embedding, gated_multiply, residual_add,
+    Fixed37LogSoftmaxParams, GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams,
+    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, cast, embedding,
+    fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply, residual_add,
     residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
 };
 pub use runtime::{

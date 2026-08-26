@@ -201,6 +201,15 @@ static_assert(sizeof(RustInferCudaRmsNormParams) == 208,
               "RustInferCudaRmsNormParams ABI size changed");
 static_assert(offsetof(RustInferCudaRmsNormParams, epsilon) == 168,
               "RMSNorm params ABI epsilon offset changed");
+static_assert(sizeof(RustInferCudaFixed37LogSoftmaxParams) == 152,
+              "RustInferCudaFixed37LogSoftmaxParams ABI size changed");
+static_assert(offsetof(RustInferCudaFixed37LogSoftmaxParams, logits) == 8,
+              "fixed37 log-softmax input layout changed");
+static_assert(offsetof(RustInferCudaFixed37LogSoftmaxParams, output) == 56,
+              "fixed37 log-softmax output layout changed");
+static_assert(
+    offsetof(RustInferCudaFixed37LogSoftmaxParams, element_count) == 104,
+    "fixed37 log-softmax dimension layout changed");
 static_assert(sizeof(RustInferCudaResidualAddParams) == 200,
               "RustInferCudaResidualAddParams ABI size changed");
 static_assert(sizeof(RustInferCudaRowBiasAddInPlaceParams) == 152,
@@ -304,7 +313,11 @@ static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&
                   RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR == 1 &&
                   RUSTINFER_CUDA_GEMM_EPILOGUE_NONE == 0 &&
                   RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED == 1 &&
-                  RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1,
+                  RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1 &&
+                  RUSTINFER_CUDA_GEMM_BACKEND_FIXED37 == 2 &&
+                  RUSTINFER_CUDA_FIXED37_REDUCTION_VERSION == 1 &&
+                  RUSTINFER_CUDA_FIXED37_CHUNK_ELEMENTS == 37 &&
+                  RUSTINFER_CUDA_FIXED37_MAX_CHUNK_COUNT == 4096,
               "GEMM ABI discriminants changed");
 static_assert(offsetof(RustInferCudaGemmConfig, m) == 8,
               "GEMM config dimension layout changed");
@@ -322,6 +335,16 @@ static_assert(
     "GEMM algorithm numerical metadata layout changed");
 static_assert(offsetof(RustInferCudaGemmAlgorithmInfo, m) == 72,
               "GEMM algorithm dimension layout changed");
+static_assert(sizeof(RustInferCudaFixed37GemmPlanInfo) == 96,
+              "RustInferCudaFixed37GemmPlanInfo ABI size changed");
+static_assert(
+    offsetof(RustInferCudaFixed37GemmPlanInfo,
+             dynamic_shared_memory_bytes) == 32,
+    "fixed37 GEMM plan shared-memory layout changed");
+static_assert(offsetof(RustInferCudaFixed37GemmPlanInfo, m) == 48,
+              "fixed37 GEMM plan dimension layout changed");
+static_assert(offsetof(RustInferCudaFixed37GemmPlanInfo, reserved) == 72,
+              "fixed37 GEMM plan tail layout changed");
 
 inline void clear_error(RustInferCudaErrorInfo* error) noexcept {
   if (error == nullptr || error->struct_size < sizeof(*error)) {

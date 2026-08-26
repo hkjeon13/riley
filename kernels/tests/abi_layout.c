@@ -38,6 +38,15 @@ _Static_assert(sizeof(RustInferCudaRmsNormParams) == 208,
                "RMSNorm-params ABI size changed");
 _Static_assert(offsetof(RustInferCudaRmsNormParams, epsilon) == 168,
                "RMSNorm epsilon offset changed");
+_Static_assert(sizeof(RustInferCudaFixed37LogSoftmaxParams) == 152,
+               "fixed37 log-softmax params ABI size changed");
+_Static_assert(offsetof(RustInferCudaFixed37LogSoftmaxParams, logits) == 8,
+               "fixed37 log-softmax logits offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37LogSoftmaxParams, output) == 56,
+               "fixed37 log-softmax output offset changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37LogSoftmaxParams, element_count) == 104,
+    "fixed37 log-softmax dimension offset changed");
 _Static_assert(sizeof(RustInferCudaResidualAddParams) == 200,
                "residual-add params ABI size changed");
 _Static_assert(sizeof(RustInferCudaResidualRmsNormParams) == 304,
@@ -299,7 +308,11 @@ _Static_assert(RUSTINFER_CUDA_GEMM_TRANSPOSE_N == 0 &&
                    RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR == 1 &&
                    RUSTINFER_CUDA_GEMM_EPILOGUE_NONE == 0 &&
                    RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED == 1 &&
-                   RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1,
+                   RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT == 1 &&
+                   RUSTINFER_CUDA_GEMM_BACKEND_FIXED37 == 2 &&
+                   RUSTINFER_CUDA_FIXED37_REDUCTION_VERSION == 1 &&
+                   RUSTINFER_CUDA_FIXED37_CHUNK_ELEMENTS == 37 &&
+                   RUSTINFER_CUDA_FIXED37_MAX_CHUNK_COUNT == 4096,
                "GEMM ABI discriminants changed");
 _Static_assert(sizeof(RustInferCudaGemmConfig) == 112,
                "GEMM config ABI size changed");
@@ -323,6 +336,16 @@ _Static_assert(offsetof(RustInferCudaGemmAlgorithmInfo, m) == 72,
                "GEMM algorithm-info dimension offset changed");
 _Static_assert(offsetof(RustInferCudaGemmAlgorithmInfo, reserved) == 96,
                "GEMM algorithm-info reserved tail changed");
+_Static_assert(sizeof(RustInferCudaFixed37GemmPlanInfo) == 96,
+               "fixed37 GEMM plan-info ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaFixed37GemmPlanInfo,
+             dynamic_shared_memory_bytes) == 32,
+    "fixed37 GEMM plan-info shared-memory offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37GemmPlanInfo, m) == 48,
+               "fixed37 GEMM plan-info dimension offset changed");
+_Static_assert(offsetof(RustInferCudaFixed37GemmPlanInfo, reserved) == 72,
+               "fixed37 GEMM plan-info reserved tail changed");
 
 // Referencing every additive entry point makes incompatible C declarations a
 // compile error without requiring a CUDA device or executing native code.
@@ -332,12 +355,22 @@ static RustInferCudaStatus (*const embedding_symbol)(
 static RustInferCudaStatus (*const rms_norm_symbol)(
     const RustInferCudaRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_rms_norm_execute;
+static RustInferCudaStatus (*const fixed37_rms_norm_symbol)(
+    const RustInferCudaRmsNormParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_rms_norm_execute;
 static RustInferCudaStatus (*const residual_add_symbol)(
     const RustInferCudaResidualAddParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_residual_add_execute;
 static RustInferCudaStatus (*const residual_rms_norm_symbol)(
     const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_residual_rms_norm_execute;
+static RustInferCudaStatus (*const fixed37_residual_rms_norm_symbol)(
+    const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_residual_rms_norm_execute;
+static RustInferCudaStatus (*const fixed37_log_softmax_symbol)(
+    const RustInferCudaFixed37LogSoftmaxParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_log_softmax_execute;
 static RustInferCudaStatus (*const row_bias_add_symbol)(
     const RustInferCudaRowBiasAddInPlaceParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_row_bias_add_in_place_execute;
@@ -423,13 +456,31 @@ static RustInferCudaStatus (*const gemm_plan_execute_symbol)(
 static RustInferCudaStatus (*const gemm_plan_close_symbol)(
     RustInferCudaGemmPlan**,
     RustInferCudaErrorInfo*) = rustinfer_cuda_gemm_plan_close;
+static RustInferCudaStatus (*const fixed37_gemm_plan_create_symbol)(
+    RustInferCudaContext*, const RustInferCudaGemmConfig*,
+    RustInferCudaFixed37GemmPlan**, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_gemm_plan_create;
+static RustInferCudaStatus (*const fixed37_gemm_plan_info_symbol)(
+    RustInferCudaFixed37GemmPlan*, RustInferCudaFixed37GemmPlanInfo*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_gemm_plan_info;
+static RustInferCudaStatus (*const fixed37_gemm_plan_execute_symbol)(
+    RustInferCudaFixed37GemmPlan*, const RustInferCudaBufferSpan*,
+    const RustInferCudaBufferSpan*, const RustInferCudaBufferSpan*,
+    RustInferCudaStream*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_gemm_plan_execute;
+static RustInferCudaStatus (*const fixed37_gemm_plan_close_symbol)(
+    RustInferCudaFixed37GemmPlan**, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_fixed37_gemm_plan_close;
 
 // Keep the otherwise compile-only references observably used under strict
 // warning configurations.
 const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
+    (const void*)&fixed37_rms_norm_symbol,
     (const void*)&residual_add_symbol,
     (const void*)&residual_rms_norm_symbol,
+    (const void*)&fixed37_residual_rms_norm_symbol,
+    (const void*)&fixed37_log_softmax_symbol,
     (const void*)&silu_symbol,
     (const void*)&row_bias_add_symbol,   (const void*)&gated_multiply_symbol,
     (const void*)&rope_symbol,           (const void*)&indexed_rope_symbol,
@@ -451,4 +502,8 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
     (const void*)&gemm_plan_close_symbol,
+    (const void*)&fixed37_gemm_plan_create_symbol,
+    (const void*)&fixed37_gemm_plan_info_symbol,
+    (const void*)&fixed37_gemm_plan_execute_symbol,
+    (const void*)&fixed37_gemm_plan_close_symbol,
 };

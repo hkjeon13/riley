@@ -1,15 +1,13 @@
 use std::error;
 use std::fmt;
 
-use crate::error::{CudaError, CudaResult};
+use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+use crate::gemm::FIXED37_MAX_REDUCTION_ELEMENTS;
 use crate::memory::CudaDeviceBuffer;
 use crate::runtime::{CudaExecutionStream, CudaStream, ensure_same_context, execution_stream_mut};
 
 #[cfg(feature = "cuda")]
 use crate::ffi;
-#[cfg(feature = "cuda")]
-use crate::{CudaErrorDomain, CudaErrorKind, CudaErrorStage};
-
 const EMBEDDING_ERROR_SCRATCH_BYTES: u64 = 32;
 #[cfg(feature = "cuda")]
 const EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE: u32 = 1;
@@ -463,6 +461,76 @@ pub fn rms_norm<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// Executes `RMSNorm` with the fixed-contiguous-37-balanced-v1 sum-of-squares
+/// order.
+///
+/// Storage rounding, exceptional values, aliases, and synchronous completion
+/// are identical to [`rms_norm`]. This additive entry point never selects the
+/// canonical kernel as a fallback.
+///
+/// # Errors
+///
+/// Returns not-supported if `hidden_size` exceeds the fixed partial capacity,
+/// or a descriptor, dtype, shape, launch, or synchronization error.
+pub fn fixed37_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_rms_norm";
+    let stream = execution_stream_mut(stream);
+    require_nonzero(OPERATION, "hidden_size", params.hidden_size)?;
+    validate_fixed37_axis(OPERATION, params.hidden_size)?;
+    if !params.epsilon.is_finite() || params.epsilon <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "epsilon must be finite and greater than zero",
+        ));
+    }
+    require_float(OPERATION, "input", params.input.dtype)?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_rms_norm_execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Inputs for an elementwise residual addition.
 #[derive(Debug)]
 pub struct ResidualAddParams<'a> {
@@ -622,6 +690,161 @@ pub fn residual_rms_norm<S: CudaExecutionStream + ?Sized>(
             params.row_count,
             params.hidden_size,
             params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Executes fused residual add plus `RMSNorm` with the fixed37 reduction.
+///
+/// Residual storage is rounded before its sum-of-squares exactly as in
+/// [`residual_rms_norm`]. Only the reduction order changes.
+///
+/// # Errors
+///
+/// Returns not-supported if `hidden_size` exceeds the fixed partial capacity,
+/// or a descriptor, dtype, shape, overlap, launch, or synchronization error.
+pub fn fixed37_residual_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut ResidualRmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_residual_rms_norm";
+    let stream = execution_stream_mut(stream);
+    require_nonzero(OPERATION, "hidden_size", params.hidden_size)?;
+    validate_fixed37_axis(OPERATION, params.hidden_size)?;
+    if !params.epsilon.is_finite() || params.epsilon <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            OPERATION,
+            "epsilon must be finite and greater than zero",
+        ));
+    }
+    require_float(OPERATION, "left", params.left.dtype)?;
+    for (field, dtype) in [
+        ("right", params.right.dtype),
+        ("weight", params.weight.dtype),
+        ("residual_output", params.residual_output.dtype),
+        ("normalized_output", params.normalized_output.dtype),
+    ] {
+        require_dtype(OPERATION, field, dtype, params.left.dtype)?;
+    }
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.left.dtype,
+    )?;
+    require_capacity(OPERATION, "left", params.left.byte_len, matrix_bytes)?;
+    require_capacity(OPERATION, "right", params.right.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(
+        OPERATION,
+        "residual_output",
+        params.residual_output.byte_len,
+        matrix_bytes,
+    )?;
+    require_capacity(
+        OPERATION,
+        "normalized_output",
+        params.normalized_output.byte_len,
+        matrix_bytes,
+    )?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.left.buffer,
+            params.right.buffer,
+            params.weight.buffer,
+            params.residual_output.buffer,
+            params.normalized_output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_residual_rms_norm_execute(
+            params.left.raw(),
+            params.right.raw(),
+            params.weight.raw(),
+            params.residual_output.raw(),
+            params.normalized_output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// BF16 logits and F32 output for one full-vector fixed37 log-softmax.
+#[derive(Debug)]
+pub struct Fixed37LogSoftmaxParams<'a> {
+    /// BF16 logits `[element_count]`.
+    pub logits: CudaBufferSpan<'a>,
+    /// F32 log probabilities `[element_count]`.
+    pub output: CudaBufferSpanMut<'a>,
+    /// Full logical vocabulary length. This must be non-zero.
+    pub element_count: u64,
+}
+
+/// Computes full-vector log-softmax using fixed37 max and sum reductions.
+///
+/// Any NaN input, any `+Inf` maximum, or an all-`-Inf` vector produces quiet
+/// NaN in every output. With a finite maximum, individual `-Inf` logits map to
+/// `-Inf`. CUDA `fmaxf` signed-zero semantics make `+0` win a `+0`/`-0` max
+/// pair. No canonical kernel is selected as a fallback.
+///
+/// # Errors
+///
+/// Returns not-supported if the vocabulary exceeds the fixed partial
+/// capacity, or a dtype, span, context, launch, or synchronization error.
+pub fn fixed37_log_softmax<S: CudaExecutionStream + ?Sized>(
+    params: &mut Fixed37LogSoftmaxParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "fixed37_log_softmax";
+    let stream = execution_stream_mut(stream);
+    require_nonzero(OPERATION, "element_count", params.element_count)?;
+    validate_fixed37_axis(OPERATION, params.element_count)?;
+    require_dtype(OPERATION, "logits", params.logits.dtype, CudaDType::BF16)?;
+    require_dtype(OPERATION, "output", params.output.dtype, CudaDType::F32)?;
+    require_capacity(
+        OPERATION,
+        "logits",
+        params.logits.byte_len,
+        required_vector_bytes(OPERATION, params.element_count, CudaDType::BF16)?,
+    )?;
+    require_capacity(
+        OPERATION,
+        "output",
+        params.output.byte_len,
+        required_vector_bytes(OPERATION, params.element_count, CudaDType::F32)?,
+    )?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[params.logits.buffer, params.output.buffer],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::fixed37_log_softmax_execute(
+            params.logits.raw(),
+            params.output.raw(),
+            params.element_count,
             &mut stream.native,
         )
     }
@@ -1189,6 +1412,22 @@ fn checked_product3(
     checked_product(operation, checked_product(operation, first, second)?, third)
 }
 
+fn validate_fixed37_axis(operation: &'static str, element_count: u64) -> CudaResult<()> {
+    if element_count > FIXED37_MAX_REDUCTION_ELEMENTS {
+        return Err(CudaError::new(
+            CudaErrorKind::NotSupported,
+            CudaErrorDomain::Rust,
+            CudaErrorStage::Validation,
+            0,
+            operation,
+            format!(
+                "reduction axis {element_count} exceeds the fixed37 limit {FIXED37_MAX_REDUCTION_ELEMENTS}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 fn native_contract_error(operation: &'static str, message: impl Into<String>) -> CudaError {
     CudaError::new(
@@ -1203,7 +1442,9 @@ fn native_contract_error(operation: &'static str, message: impl Into<String>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{CudaDType, checked_product3, required_matrix_bytes, validate_span};
+    use super::{
+        CudaDType, checked_product3, required_matrix_bytes, validate_fixed37_axis, validate_span,
+    };
     use crate::{CudaErrorKind, CudaErrorStage};
 
     #[test]
@@ -1213,6 +1454,15 @@ mod tests {
         assert_eq!(CudaDType::U32.size_bytes(), 4);
         assert_eq!(CudaDType::U16.size_bytes(), 2);
         assert_eq!(CudaDType::U8.size_bytes(), 1);
+    }
+
+    #[test]
+    fn fixed37_axis_limit_fails_as_not_supported() {
+        validate_fixed37_axis("test fixed37 axis", 151_552).expect("maximum axis is supported");
+        let error = validate_fixed37_axis("test fixed37 axis", 151_553)
+            .expect_err("one element above the maximum must fail");
+        assert_eq!(error.kind(), CudaErrorKind::NotSupported);
+        assert_eq!(error.stage(), CudaErrorStage::Validation);
     }
 
     #[test]

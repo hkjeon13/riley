@@ -43,6 +43,7 @@ const BUFFER_SPAN_SIZE: u32 = 48;
 const EMBEDDING_ERROR_REPORT_SIZE: u32 = 32;
 const EMBEDDING_PARAMS_SIZE: u32 = 256;
 const RMS_NORM_PARAMS_SIZE: u32 = 208;
+const FIXED37_LOG_SOFTMAX_PARAMS_SIZE: u32 = 152;
 const RESIDUAL_ADD_PARAMS_SIZE: u32 = 200;
 const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
@@ -70,6 +71,7 @@ const RAGGED_PAGED_KV_CACHE_WRITE_PARAMS_SIZE: u32 = 568;
 const RAGGED_PAGED_ATTENTION_PARAMS_SIZE: u32 = 592;
 const GEMM_CONFIG_SIZE: u32 = 112;
 const GEMM_ALGORITHM_INFO_SIZE: u32 = 112;
+const FIXED37_GEMM_PLAN_INFO_SIZE: u32 = 96;
 
 pub(super) const DTYPE_F32: i32 = 1;
 pub(super) const DTYPE_BF16: i32 = 2;
@@ -275,6 +277,12 @@ struct RawGemmPlan {
     _not_send_sync: PhantomData<*mut ()>,
 }
 
+#[repr(C)]
+struct RawFixed37GemmPlan {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub(super) struct RawBufferSpan {
@@ -334,6 +342,16 @@ struct RawRmsNormParams {
     epsilon: f32,
     reserved1: u32,
     reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawFixed37LogSoftmaxParams {
+    struct_size: u32,
+    reserved0: u32,
+    logits: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
 }
 
 #[repr(C)]
@@ -813,6 +831,45 @@ impl RawGemmAlgorithmInfo {
     }
 }
 
+#[repr(C)]
+struct RawFixed37GemmPlanInfo {
+    struct_size: u32,
+    backend: u32,
+    reduction_version: u32,
+    chunk_elements: u32,
+    accumulator_dtype: i32,
+    output_dtype: i32,
+    threads_per_block: u32,
+    deterministic: u32,
+    dynamic_shared_memory_bytes: u64,
+    workspace_bytes: u64,
+    m: u64,
+    n: u64,
+    k: u64,
+    reserved: [u64; 3],
+}
+
+impl RawFixed37GemmPlanInfo {
+    const fn new() -> Self {
+        Self {
+            struct_size: FIXED37_GEMM_PLAN_INFO_SIZE,
+            backend: 0,
+            reduction_version: 0,
+            chunk_elements: 0,
+            accumulator_dtype: 0,
+            output_dtype: 0,
+            threads_per_block: 0,
+            deterministic: 0,
+            dynamic_shared_memory_bytes: 0,
+            workspace_bytes: 0,
+            m: 0,
+            n: 0,
+            k: 0,
+            reserved: [0; 3],
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct NativeGemmAlgorithmInfo {
     pub(super) backend: u32,
@@ -830,6 +887,22 @@ pub(super) struct NativeGemmAlgorithmInfo {
     pub(super) compute_capability_minor: u32,
     pub(super) runtime_version: i32,
     pub(super) cublaslt_version: i32,
+    pub(super) m: u64,
+    pub(super) n: u64,
+    pub(super) k: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeFixed37GemmPlanInfo {
+    pub(super) backend: u32,
+    pub(super) reduction_version: u32,
+    pub(super) chunk_elements: u32,
+    pub(super) accumulator_dtype: i32,
+    pub(super) output_dtype: i32,
+    pub(super) threads_per_block: u32,
+    pub(super) deterministic: u32,
+    pub(super) dynamic_shared_memory_bytes: u64,
+    pub(super) workspace_bytes: u64,
     pub(super) m: u64,
     pub(super) n: u64,
     pub(super) k: u64,
@@ -1014,6 +1087,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_fixed37_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_residual_add_execute(
         params: *const RawResidualAddParams,
         stream: *mut RawStream,
@@ -1021,6 +1099,16 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_residual_rms_norm_execute(
         params: *const RawResidualRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_residual_rms_norm_execute(
+        params: *const RawResidualRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_log_softmax_execute(
+        params: *const RawFixed37LogSoftmaxParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1150,6 +1238,29 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_gemm_plan_close(plan: *mut *mut RawGemmPlan, error: *mut ErrorInfo) -> i32;
+    fn rustinfer_cuda_fixed37_gemm_plan_create(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        out_plan: *mut *mut RawFixed37GemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_gemm_plan_info(
+        plan: *mut RawFixed37GemmPlan,
+        out_info: *mut RawFixed37GemmPlanInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_gemm_plan_execute(
+        plan: *mut RawFixed37GemmPlan,
+        input: *const RawBufferSpan,
+        weight: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_fixed37_gemm_plan_close(
+        plan: *mut *mut RawFixed37GemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_smoke_buffer_create(
         context: *mut RawContext,
         element_count: u64,
@@ -1941,6 +2052,34 @@ pub(super) fn rms_norm_execute(
     })
 }
 
+pub(super) fn fixed37_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status("execute fixed37 CUDA RMSNorm", stream, |stream, error| {
+        // SAFETY: the descriptor and every borrowed opaque resource remain
+        // live for the synchronously completing native sibling call.
+        unsafe { rustinfer_cuda_fixed37_rms_norm_execute(&params, stream, error) }
+    })
+}
+
 pub(super) fn residual_add_execute(
     left: RawBufferSpan,
     right: RawBufferSpan,
@@ -1997,6 +2136,68 @@ pub(super) fn residual_rms_norm_execute(
             // SAFETY: the descriptor and all exclusively borrowed opaque
             // resources outlive this synchronously completing native call.
             unsafe { rustinfer_cuda_residual_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn fixed37_residual_rms_norm_execute(
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    weight: RawBufferSpan,
+    residual_output: RawBufferSpan,
+    normalized_output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawResidualRmsNormParams {
+        struct_size: RESIDUAL_RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        left,
+        right,
+        weight,
+        residual_output,
+        normalized_output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute fixed37 CUDA fused residual RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and all opaque resources
+            // remain exclusively borrowed through synchronous completion.
+            unsafe { rustinfer_cuda_fixed37_residual_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
+pub(super) fn fixed37_log_softmax_execute(
+    logits: RawBufferSpan,
+    output: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawFixed37LogSoftmaxParams {
+        struct_size: FIXED37_LOG_SOFTMAX_PARAMS_SIZE,
+        reserved0: 0,
+        logits,
+        output,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status(
+        "execute fixed37 CUDA log-softmax",
+        stream,
+        |stream, error| {
+            // SAFETY: the descriptor and disjoint typed spans remain live for
+            // the synchronously completing native operation.
+            unsafe { rustinfer_cuda_fixed37_log_softmax_execute(&params, stream, error) }
         },
     )
 }
@@ -3041,6 +3242,129 @@ impl Drop for GemmPlanHandle {
     }
 }
 
+pub(super) struct Fixed37GemmPlanHandle {
+    pointer: Option<NonNull<RawFixed37GemmPlan>>,
+}
+
+// SAFETY: the opaque plan may move between host threads. Native restores its
+// retained context per call, while the safe wrapper remains !Sync and requires
+// exclusive execution access.
+unsafe impl Send for Fixed37GemmPlanHandle {}
+
+impl Fixed37GemmPlanHandle {
+    pub(super) fn create(
+        context: &ContextHandle,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+    ) -> CudaResult<Self> {
+        let config = RawGemmConfig::new(m, n, k, max_workspace_bytes);
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: native retains the context on success and initializes the
+        // owned output handle or leaves it null on failure.
+        let status = unsafe {
+            rustinfer_cuda_fixed37_gemm_plan_create(
+                context.as_ptr(),
+                &config,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare fixed37 CUDA GEMM plan", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "prepare fixed37 CUDA GEMM plan",
+                "native fixed37 GEMM plan handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawFixed37GemmPlan {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn info(&self) -> CudaResult<NativeFixed37GemmPlanInfo> {
+        let mut info = RawFixed37GemmPlanInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the plan and fixed-size output remain live for the metadata
+        // snapshot; native serializes this query with execution and close.
+        let status =
+            unsafe { rustinfer_cuda_fixed37_gemm_plan_info(self.as_ptr(), &mut info, &mut error) };
+        status_result(status, "query fixed37 CUDA GEMM metadata", &error)?;
+        if info.struct_size != FIXED37_GEMM_PLAN_INFO_SIZE || info.reserved != [0; 3] {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "query fixed37 CUDA GEMM metadata",
+                "native fixed37 GEMM metadata has an incompatible struct_size or reserved tail",
+            ));
+        }
+        Ok(NativeFixed37GemmPlanInfo {
+            backend: info.backend,
+            reduction_version: info.reduction_version,
+            chunk_elements: info.chunk_elements,
+            accumulator_dtype: info.accumulator_dtype,
+            output_dtype: info.output_dtype,
+            threads_per_block: info.threads_per_block,
+            deterministic: info.deterministic,
+            dynamic_shared_memory_bytes: info.dynamic_shared_memory_bytes,
+            workspace_bytes: info.workspace_bytes,
+            m: info.m,
+            n: info.n,
+            k: info.k,
+        })
+    }
+
+    pub(super) fn execute(
+        &mut self,
+        input: RawBufferSpan,
+        weight: RawBufferSpan,
+        output: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe owner keeps the plan, stream, and all disjoint
+        // buffers exclusively borrowed until native synchronization returns.
+        let status = unsafe {
+            rustinfer_cuda_fixed37_gemm_plan_execute(
+                self.as_ptr(),
+                &input,
+                &weight,
+                &output,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "execute fixed37 CUDA GEMM plan", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw is uniquely owned; native consumes and nulls only after
+        // its context-child lease can be released safely.
+        let status = unsafe { rustinfer_cuda_fixed37_gemm_plan_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close fixed37 CUDA GEMM plan", &error)
+    }
+}
+
+impl Drop for Fixed37GemmPlanHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct SmokeHandle {
     pointer: Option<NonNull<RawSmokeBuffer>>,
 }
@@ -3247,6 +3571,10 @@ const _: () = assert!(size_of::<RawEmbeddingParams>() == 256);
 const _: () = assert!(offset_of!(RawEmbeddingParams, out_report) == 200);
 const _: () = assert!(size_of::<RawRmsNormParams>() == 208);
 const _: () = assert!(offset_of!(RawRmsNormParams, epsilon) == 168);
+const _: () = assert!(size_of::<RawFixed37LogSoftmaxParams>() == 152);
+const _: () = assert!(offset_of!(RawFixed37LogSoftmaxParams, logits) == 8);
+const _: () = assert!(offset_of!(RawFixed37LogSoftmaxParams, output) == 56);
+const _: () = assert!(offset_of!(RawFixed37LogSoftmaxParams, element_count) == 104);
 const _: () = assert!(size_of::<RawResidualAddParams>() == 200);
 const _: () = assert!(size_of::<RawResidualRmsNormParams>() == 304);
 const _: () = assert!(offset_of!(RawResidualRmsNormParams, residual_output) == 152);
@@ -3345,3 +3673,7 @@ const _: () = assert!(size_of::<RawGemmAlgorithmInfo>() == 112);
 const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, workspace_bytes) == 40);
 const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, numerical_implementation_flags) == 48);
 const _: () = assert!(offset_of!(RawGemmAlgorithmInfo, m) == 72);
+const _: () = assert!(size_of::<RawFixed37GemmPlanInfo>() == 96);
+const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, dynamic_shared_memory_bytes) == 32);
+const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, m) == 48);
+const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, reserved) == 72);
