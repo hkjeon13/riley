@@ -56,7 +56,6 @@ struct LogitMetrics {
 
 #[derive(Debug)]
 struct GreedyExecutionTrace {
-    reduction_profile: LlamaReductionProfile,
     generated_token_ids: Vec<u32>,
     logits_by_iteration: Vec<Vec<u8>>,
     cuda_live_allocation_delta: i128,
@@ -775,7 +774,6 @@ fn greedy_execution_trace(
     batch.download_logits(&mut logits, &mut stream)?;
     let stable = context.allocation_stats()?;
     let mut trace = GreedyExecutionTrace {
-        reduction_profile,
         generated_token_ids: Vec::with_capacity(decode_steps),
         logits_by_iteration: Vec::with_capacity(decode_steps + 1),
         cuda_live_allocation_delta: 0,
