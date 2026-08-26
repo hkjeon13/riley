@@ -207,7 +207,7 @@
       "required": ["implementation_id", "engine_revision", "runtime_dependency_class", "python_version", "python_executable_sha256", "python_platform_system", "python_platform_machine", "torch_version", "transformers_version", "safetensors_version"],
       "properties": {
         "implementation_id": { "const": "rustinfer-native" },
-        "engine_revision": { "type": "string", "minLength": 1 },
+        "engine_revision": { "const": "rustinfer-native-contract-v2" },
         "runtime_dependency_class": { "const": "native-production" },
         "python_version": { "type": "null" },
         "python_executable_sha256": { "type": "null" },
@@ -232,8 +232,33 @@
             "sha256": { "$ref": "#/$defs/sha256" }
           }
         },
-        "build_argv": { "const": ["cargo", "build", "--locked", "--release", "--bin", "rustinfer-native"] },
-        "capture_argv": { "type": "array", "minItems": 14, "items": { "type": "string", "minLength": 1 } }
+        "build_argv": { "const": ["cargo", "build", "--locked", "--release", "--package", "rustinfer-native", "--no-default-features", "--features", "cuda", "--bin", "rustinfer-native"] },
+        "capture_argv": {
+          "type": "array",
+          "minItems": 18,
+          "maxItems": 18,
+          "prefixItems": [
+            { "const": "rustinfer-native" },
+            { "const": "calibrate" },
+            { "const": "--repository-root" },
+            { "type": "string", "pattern": "^/(?!/)(?!\\.{1,2}(?:/|$))(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\\\u0000]*[^/\\\\\\u0000]$" },
+            { "const": "--model" },
+            { "type": "string", "pattern": "^/(?!/)(?!\\.{1,2}(?:/|$))(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\\\u0000]*[^/\\\\\\u0000]$" },
+            { "const": "--gate-manifest" },
+            { "const": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json" },
+            { "const": "--prompts" },
+            { "const": "benchmarks/prompts.jsonl" },
+            { "const": "--manifest" },
+            { "type": "string", "pattern": "^[^/\\\\\\u0000]+\\.json$" },
+            { "const": "--sidecar" },
+            { "type": "string", "pattern": "^[^/\\\\\\u0000]+\\.safetensors$" },
+            { "const": "--reduction-variant" },
+            { "const": "canonical-v1" },
+            { "const": "--reduction-variant" },
+            { "const": "fixed-contiguous-37-balanced-v1" }
+          ],
+          "items": false
+        }
       }
     },
     "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },

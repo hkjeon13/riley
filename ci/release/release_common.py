@@ -16,6 +16,29 @@ TARGET = "x86_64-unknown-linux-gnu"
 CUDA_TOOLKIT = "12.8.1"
 CUDA_ARCHITECTURES = ["89"]
 ARCHIVE_SUFFIX = "linux-x86_64-cuda12.8"
+MIT_LICENSE_EXPRESSION = "MIT"
+MIT_LICENSE_BYTES = b"""MIT License
+
+Copyright (c) 2026 rustinfer contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
 
 REQUIRED_CUDA_DEPENDENCIES = {
     "libcublasLt.so.12",
@@ -81,6 +104,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
         "artifact": {
             "name": "rustinfer",
             "version": version,
+            "license": MIT_LICENSE_EXPRESSION,
             "target": TARGET,
             "cuda_toolkit": CUDA_TOOLKIT,
             "cuda_architectures": CUDA_ARCHITECTURES,
@@ -325,11 +349,11 @@ def validate_binary(binary: bytes) -> list[str]:
 
 
 def validate_license(contents: bytes) -> None:
-    if len(contents.strip()) < 64:
-        raise ReleaseContractError("root LICENSE is missing or too short for a release")
-    lowered = contents.lower()
-    if any(marker in lowered for marker in (b"choose a license", b"license todo", b"unlicensed")):
-        raise ReleaseContractError("root LICENSE is a placeholder; an owner-approved license is required")
+    if contents != MIT_LICENSE_BYTES:
+        raise ReleaseContractError(
+            "root LICENSE must exactly match the reviewed MIT license bytes for "
+            "Copyright (c) 2026 rustinfer contributors"
+        )
 
 
 def load_json_object(contents: bytes, label: str) -> dict[str, Any]:
@@ -367,27 +391,44 @@ def validate_license_metadata(repository_root: Path) -> str:
     if not isinstance(workspace, dict):
         raise ReleaseContractError("root Cargo.toml has no workspace table")
     package = workspace.get("package")
-    license_expression = package.get("license") if isinstance(package, dict) else None
-    if not isinstance(license_expression, str) or not license_expression.strip():
+    if (
+        not isinstance(package, dict)
+        or package.get("license") != MIT_LICENSE_EXPRESSION
+    ):
         raise ReleaseContractError(
-            "workspace.package.license is required after the owner selects the root LICENSE"
+            'workspace.package.license must exactly equal the reviewed SPDX expression "MIT"'
         )
-    lowered = license_expression.casefold()
-    if any(marker in lowered for marker in ("todo", "choose", "unlicensed")):
-        raise ReleaseContractError("workspace license metadata is a placeholder")
+    if "license-file" in package:
+        raise ReleaseContractError(
+            "workspace.package.license-file is forbidden; release metadata must use "
+            "only the reviewed MIT SPDX expression"
+        )
     members = workspace.get("members")
-    if not isinstance(members, list) or not all(isinstance(member, str) for member in members):
+    if not isinstance(members, list) or not all(
+        isinstance(member, str) for member in members
+    ):
         raise ReleaseContractError("workspace members must be an explicit string list")
     for member in members:
         member_manifest_path = repository_root / member / "Cargo.toml"
         try:
-            member_manifest = tomllib.loads(member_manifest_path.read_text(encoding="utf-8"))
-        except (OSError, tomllib.TOMLDecodeError) as error:
-            raise ReleaseContractError(f"cannot parse {member_manifest_path}: {error}") from error
-        member_package = member_manifest.get("package")
-        member_license = member_package.get("license") if isinstance(member_package, dict) else None
-        if member_license != {"workspace": True}:
-            raise ReleaseContractError(
-                f"{member_manifest_path}: package.license must inherit the owner-selected workspace license"
+            member_manifest = tomllib.loads(
+                member_manifest_path.read_text(encoding="utf-8")
             )
-    return license_expression
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            raise ReleaseContractError(
+                f"cannot parse {member_manifest_path}: {error}"
+            ) from error
+        member_package = member_manifest.get("package")
+        if (
+            not isinstance(member_package, dict)
+            or member_package.get("license") != {"workspace": True}
+        ):
+            raise ReleaseContractError(
+                f"{member_manifest_path}: package.license must be license.workspace = true"
+            )
+        if "license-file" in member_package:
+            raise ReleaseContractError(
+                f"{member_manifest_path}: package.license-file is forbidden; "
+                "inherit only the reviewed MIT SPDX expression"
+            )
+    return MIT_LICENSE_EXPRESSION

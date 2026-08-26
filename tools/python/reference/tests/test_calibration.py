@@ -24,6 +24,7 @@ from rustinfer_reference.calibration import (
     HF_ORACLE_REDUCTION_VARIANT,
     HF_SOURCE_PATHS,
     NATIVE_BUILD_ARGV,
+    NATIVE_ENGINE_REVISION,
     NATIVE_EXECUTABLE_FILENAME,
     NATIVE_SOURCE_PATHS,
     REQUIRED_CANDIDATE_REDUCTION_VARIANTS,
@@ -310,7 +311,7 @@ class CalibrationFixture:
                     "lane_id": "rustinfer-native",
                     "implementation_id": "rustinfer-native",
                     "runtime_dependency_class": "native-production",
-                    "engine": {"revision": "rustinfer-native-contract-v1"},
+                    "engine": {"revision": NATIVE_ENGINE_REVISION},
                 }
             ).encode("utf-8"),
         )
@@ -451,7 +452,7 @@ class CalibrationFixture:
         producer = (
             {
                 "implementation_id": "rustinfer-native",
-                "engine_revision": "rustinfer-native-contract-v1",
+                "engine_revision": NATIVE_ENGINE_REVISION,
                 "runtime_dependency_class": "native-production",
                 "python_version": None,
                 "python_executable_sha256": None,
@@ -520,6 +521,10 @@ class CalibrationFixture:
                 "capture_argv": [
                     NATIVE_EXECUTABLE_FILENAME,
                     "calibrate",
+                    "--repository-root",
+                    "/workspace/rustinfer",
+                    "--model",
+                    "/models/smollm2",
                     "--gate-manifest",
                     HF_SOURCE_PATHS["gate_manifest"],
                     "--prompts",
@@ -696,6 +701,21 @@ class CalibrationTests(unittest.TestCase):
             changed["candidate_execution"]["build_argv"] = ["cargo", "build"]
             with self.assertRaisesRegex(CalibrationError, "build_argv"):
                 validate_calibration_manifest(changed)
+            changed = copy.deepcopy(candidate)
+            changed["candidate_execution"]["capture_argv"].extend(
+                ["--unreviewed-flag", "unreviewed-value"]
+            )
+            with self.assertRaisesRegex(CalibrationError, "exact ordered"):
+                validate_calibration_manifest(changed)
+            for index, invalid in (
+                (5, "models/smollm2"),
+                (11, "candidate\\manifest.json"),
+            ):
+                with self.subTest(invalid_capture_path=invalid):
+                    changed = copy.deepcopy(candidate)
+                    changed["candidate_execution"]["capture_argv"][index] = invalid
+                    with self.assertRaises(CalibrationError):
+                        validate_calibration_manifest(changed)
             (fixture.root / NATIVE_EXECUTABLE_FILENAME).write_bytes(b"tampered\n")
             with self.assertRaisesRegex(CalibrationError, "executable SHA-256"):
                 verify_calibration_artifact(
@@ -704,6 +724,32 @@ class CalibrationTests(unittest.TestCase):
                     repo_root=fixture.root,
                     sidecar_loader=fixture.loader,
                 )
+
+    def test_native_contract_v2_build_and_engine_are_exact(self) -> None:
+        self.assertEqual(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v2")
+        self.assertEqual(
+            NATIVE_BUILD_ARGV,
+            (
+                "cargo",
+                "build",
+                "--locked",
+                "--release",
+                "--package",
+                "rustinfer-native",
+                "--no-default-features",
+                "--features",
+                "cuda",
+                "--bin",
+                "rustinfer-native",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CalibrationFixture(Path(directory))
+            candidate, _ = fixture.make(CANDIDATE_KIND)
+            changed = copy.deepcopy(candidate)
+            changed["producer"]["engine_revision"] = "rustinfer-native-contract-v1"
+            with self.assertRaisesRegex(CalibrationError, "native-production"):
+                validate_calibration_manifest(changed)
 
     def test_offline_fp32_producer_writes_full_corpus_and_refuses_overwrite(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

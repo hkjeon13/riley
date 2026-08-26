@@ -28,6 +28,17 @@ class ContractValidatorTests(unittest.TestCase):
                 encoding="utf-8"
             )
         )
+        calibration_schema = json.loads(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/schemas/correctness-calibration-manifest.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        cls.candidate_execution_schema = {
+            "$schema": calibration_schema["$schema"],
+            "$defs": calibration_schema["$defs"],
+            "$ref": "#/$defs/candidateExecution",
+        }
 
     def test_repository_contract_is_valid(self) -> None:
         counts = contract.validate_contract(REPOSITORY_ROOT)
@@ -205,6 +216,62 @@ version = "0.27.1"
         result["unreviewed_metric"] = 1
         with self.assertRaisesRegex(contract.ContractError, "unexpected properties"):
             contract.validate_instance(result, self.result_schema)
+
+    def test_candidate_capture_schema_enforces_every_ordered_abi_slot(self) -> None:
+        canonical = self._candidate_execution()
+        contract.validate_instance(canonical, self.candidate_execution_schema)
+        mutations = {
+            "relative-repository-root": (3, "workspace/rustinfer"),
+            "empty-first-model-component": (5, "//model"),
+            "first-current-model-component": (5, "/./model"),
+            "first-parent-model-component": (5, "/../model"),
+            "wrong-model-flag": (4, "--unreviewed-model"),
+            "backslash-manifest": (11, "nested\\candidate.json"),
+            "wrong-reduction-order": (15, "fixed-contiguous-37-balanced-v1"),
+        }
+        for label, (index, replacement) in mutations.items():
+            with self.subTest(label=label):
+                changed = copy.deepcopy(canonical)
+                changed["capture_argv"][index] = replacement
+                with self.assertRaisesRegex(contract.ContractError, rf"\[{index}\]"):
+                    contract.validate_instance(
+                        changed, self.candidate_execution_schema
+                    )
+        reordered = copy.deepcopy(canonical)
+        reordered["capture_argv"][4:8] = [
+            "--gate-manifest",
+            "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
+            "--model",
+            "/models/smollm2",
+        ]
+        with self.assertRaisesRegex(contract.ContractError, r"\[4\]"):
+            contract.validate_instance(reordered, self.candidate_execution_schema)
+        extended = copy.deepcopy(canonical)
+        extended["capture_argv"].extend(["--unreviewed", "value"])
+        with self.assertRaisesRegex(contract.ContractError, "at most 18 items"):
+            contract.validate_instance(extended, self.candidate_execution_schema)
+
+    def test_false_items_rejects_values_after_prefix_items(self) -> None:
+        schema = {
+            "$schema": contract.SCHEMA_DIALECT,
+            "type": "array",
+            "prefixItems": [{"const": "reviewed"}],
+            "items": False,
+        }
+        contract.validate_instance(["reviewed"], schema)
+        with self.assertRaisesRegex(contract.ContractError, "prefixItems inventory"):
+            contract.validate_instance(["reviewed", "unreviewed"], schema)
+
+    def test_items_schema_applies_only_after_prefix_items(self) -> None:
+        schema = {
+            "$schema": contract.SCHEMA_DIALECT,
+            "type": "array",
+            "prefixItems": [{"const": "reviewed"}],
+            "items": {"type": "integer"},
+        }
+        contract.validate_instance(["reviewed", 1], schema)
+        with self.assertRaisesRegex(contract.ContractError, r"\[1\].*type"):
+            contract.validate_instance(["reviewed", "unreviewed"], schema)
 
     def test_disabled_approximation_requires_null_error_budget(self) -> None:
         result = self._successful_result()
@@ -484,6 +551,44 @@ version = "0.27.1"
                 },
             },
             "cases": cases,
+        }
+
+    def _candidate_execution(self) -> dict[str, object]:
+        return {
+            "executable": {"path": "rustinfer-native", "sha256": "0" * 64},
+            "build_argv": [
+                "cargo",
+                "build",
+                "--locked",
+                "--release",
+                "--package",
+                "rustinfer-native",
+                "--no-default-features",
+                "--features",
+                "cuda",
+                "--bin",
+                "rustinfer-native",
+            ],
+            "capture_argv": [
+                "rustinfer-native",
+                "calibrate",
+                "--repository-root",
+                "/workspace/rustinfer",
+                "--model",
+                "/models/smollm2",
+                "--gate-manifest",
+                "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
+                "--prompts",
+                "benchmarks/prompts.jsonl",
+                "--manifest",
+                "candidate.json",
+                "--sidecar",
+                "candidate.safetensors",
+                "--reduction-variant",
+                "canonical-v1",
+                "--reduction-variant",
+                "fixed-contiguous-37-balanced-v1",
+            ],
         }
 
     def _successful_result(self) -> dict[str, object]:

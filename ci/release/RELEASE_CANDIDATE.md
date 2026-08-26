@@ -5,13 +5,16 @@ a release tag. It does not build an image, start the server, load a model, use
 CUDA, create a tag, or push anything. It consumes immutable artifacts produced
 by the earlier gates and emits a single source-bound decision.
 
-Run it from a Python 3.11+ POSIX/Linux host with no-follow `openat` support
-after copying the complete evidence set into one read-only directory:
+First assemble the closed manifest from a Python 3.11+ POSIX host after
+copying the complete evidence set into one read-only directory. Artifact
+arguments are normalized paths relative to that directory; the create-only
+output must be in a separate decision directory:
 
 ```sh
-python3 ci/release/check_release_candidate.py \
-  --manifest /evidence/release-candidate.json \
+python3 ci/release/write_release_candidate_manifest.py \
   --evidence-root /evidence \
+  --output /decision/release-candidate.json \
+  --expected-candidate-id rustinfer-X.Y.Z-rcN \
   --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
   --expected-source-archive-sha256 LOWERCASE_SHA256 \
   --expected-release-image-id sha256:LOWERCASE_SHA256 \
@@ -19,16 +22,65 @@ python3 ci/release/check_release_candidate.py \
   --expected-cuda-build-image-id sha256:LOWERCASE_SHA256 \
   --expected-optimization-build-image-id sha256:LOWERCASE_SHA256 \
   --expected-correctness-golden-sha256 LOWERCASE_SHA256 \
-  --report /evidence/release-candidate-report.json
+  --source-archive source.tar \
+  --release-binary rustinfer \
+  --release-bundle rustinfer-X.Y.Z-linux-x86_64-cuda12.8.tar.gz \
+  --python-free-e2e-report python-free-report.json \
+  --python-free-e2e-raw-evidence python-free-evidence.tar \
+  --python-free-e2e-correctness-golden correctness-golden.json \
+  --cuda-fault-report cuda-fault-report.json \
+  --cuda-fault-raw-evidence cuda-fault-evidence.tar \
+  --native-correctness-report native-correctness-report.json \
+  --native-correctness-raw-replay native-correctness-replay.tar \
+  --native-correctness-candidate-executable rustinfer-native \
+  --reproducible-build-a reproducible-build-a.tar \
+  --reproducible-build-b reproducible-build-b.tar \
+  --reproducible-profile-binary rustinfer-profile \
+  --reproducible-native-manifest native-dependencies.txt \
+  --optimization-correctness-report optimization-correctness-report.json \
+  --optimization-correctness-raw-evidence optimization-correctness-evidence.tar \
+  --performance-report release-performance-report.json \
+  --performance-raw-evidence release-performance-evidence.tar \
+  --reliability-soak-report reliability-soak-report.json \
+  --reliability-soak-raw-evidence reliability-soak-evidence.tar
 ```
 
-The seven `--expected-*` values are trusted promotion inputs. Obtain them from
+The writer derives the version, source revision, and `SOURCE_DATE_EPOCH` from
+the verified release bundle; snapshots every artifact without following
+links; invokes this final checker against the exact held manifest file; and
+publishes only the self-checked canonical bytes without replacing an existing
+path. It never discovers a trusted anchor from submitted evidence.
+
+Then run the final report gate with the same eight independently reviewed
+anchors. The checker also requires no-follow `openat` support:
+
+```sh
+python3 ci/release/check_release_candidate.py \
+  --manifest /decision/release-candidate.json \
+  --evidence-root /evidence \
+  --expected-candidate-id rustinfer-X.Y.Z-rcN \
+  --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
+  --expected-source-archive-sha256 LOWERCASE_SHA256 \
+  --expected-release-image-id sha256:LOWERCASE_SHA256 \
+  --expected-reproducible-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-cuda-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-optimization-build-image-id sha256:LOWERCASE_SHA256 \
+  --expected-correctness-golden-sha256 LOWERCASE_SHA256 \
+  --report /decision/release-candidate-report.json
+```
+
+The eight `--expected-*` values are trusted promotion inputs. Obtain them from
 the reviewed commit decision, canonical archive publication, immutable OCI
 image inspections for each distinct role, and the separately reviewed
 correctness golden; never populate them by copying values out of the candidate
 manifest being checked. The reproducibility image may contain the release
 packaging Python tool, while the CUDA-fault and optimizer images are
 Python-free; their IDs are deliberately independent external anchors.
+
+The candidate ID is the intended tag identity, must have the form
+`rustinfer-X.Y.Z-rcN`, and must use the same core `X.Y.Z` version embedded in
+the release bundle. It is also cross-bound to the five-run performance
+candidate.
 
 The report path is create-only. Only `status=passed` and `passed=true` exits
 zero. The report schema is `rustinfer.release-candidate-report.v2`. A passed
@@ -200,7 +252,7 @@ inventory and canonical metadata, replays HTTP/SSE/cancellation semantics and
 container lifecycle transitions, validates the extracted executable ELF,
 recomputes the full model tree/tokenizer/shutdown bindings, and requires the
 replayed attestation object to equal the submitted object exactly. The golden
-artifact SHA must also equal the seventh external promotion input. Model ID,
+artifact SHA must also equal the eighth external promotion input. Model ID,
 revision, canonical full-tree manifest, weights, and `tokenizer.json` are
 cross-bound to optimizer evidence.
 For CUDA fault injection, `build_image_id` names the immutable CUDA toolchain

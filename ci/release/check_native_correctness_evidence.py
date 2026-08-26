@@ -73,6 +73,8 @@ COPY_BLOCK_BYTES = 1024 * 1024
 CANDIDATE_BINARY_MARKERS = (
     b"rustinfer-native",
     b"calibrate",
+    b"--repository-root",
+    b"--model",
     b"--gate-manifest",
     b"--prompts",
     b"--manifest",

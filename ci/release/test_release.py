@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import io
 import struct
 import sys
@@ -16,8 +17,10 @@ from typing import Callable
 sys.path.insert(0, str(Path(__file__).parent))
 
 from build_release_bundle import build_bundle  # noqa: E402
+from check_release_preflight import check_preflight  # noqa: E402
 from release_common import (  # noqa: E402
     ALLOWED_NATIVE_DEPENDENCIES,
+    MIT_LICENSE_BYTES,
     ReleaseContractError,
     validate_binary,
 )
@@ -124,22 +127,68 @@ def rewrite_archive(
                     archive.addfile(member, io.BytesIO(contents) if contents is not None else None)
 
 
+def replace_archive_file(
+    entries: list[tuple[tarfile.TarInfo, bytes | None]],
+    suffix: str,
+    replacement: bytes,
+    *,
+    update_checksum: bool,
+) -> None:
+    root = entries[0][0].name.split("/", 1)[0]
+    relative_path = suffix.removeprefix("/")
+    archive_path = f"{root}/{relative_path}"
+    for index, (member, contents) in enumerate(entries):
+        if member.name == archive_path:
+            if contents is None:
+                raise AssertionError(f"fixture member is not a regular file: {archive_path}")
+            member.size = len(replacement)
+            entries[index] = (member, replacement)
+            break
+    else:
+        raise AssertionError(f"fixture member is missing: {archive_path}")
+
+    if not update_checksum:
+        return
+    checksum_path = f"{root}/SHA256SUMS"
+    for index, (member, contents) in enumerate(entries):
+        if member.name != checksum_path:
+            continue
+        assert contents is not None
+        expected_suffix = f"  {relative_path}"
+        digest = hashlib.sha256(replacement).hexdigest()
+        lines = contents.decode("ascii").splitlines()
+        rewritten = [
+            f"{digest}{expected_suffix}" if line.endswith(expected_suffix) else line
+            for line in lines
+        ]
+        if rewritten == lines:
+            raise AssertionError(f"fixture checksum is missing: {relative_path}")
+        checksum_contents = ("\n".join(rewritten) + "\n").encode("ascii")
+        member.size = len(checksum_contents)
+        entries[index] = (member, checksum_contents)
+        return
+    raise AssertionError("fixture SHA256SUMS is missing")
+
+
 class ReleaseBundleTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
         self.repository = self.root / "repository"
         self.repository.mkdir()
+        member = self.repository / "crates/fixture"
+        member.mkdir(parents=True)
         (self.repository / "Cargo.toml").write_text(
-            '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\n'
-            'license = "LicenseRef-Test-Fixture"\n',
+            '[workspace]\nmembers = ["crates/fixture"]\n'
+            '[workspace.package]\nversion = "0.1.0"\nlicense = "MIT"\n',
             encoding="utf-8",
         )
-        (self.repository / "LICENSE").write_text(
-            "Owner-approved fixture license for release contract unit tests.\n"
-            "Permission is granted only inside this temporary test fixture.\n",
+        (member / "Cargo.toml").write_text(
+            '[package]\nname = "release-license-fixture"\n'
+            'version = "0.1.0"\nlicense.workspace = true\n',
             encoding="utf-8",
         )
+        (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         self.binary = self.root / "rustinfer"
         self.binary.write_bytes(fixture_elf())
         self.binary.chmod(0o755)
@@ -199,6 +248,84 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ReleaseContractError, "workspace.package.license"):
             self.build()
+
+    def test_license_body_and_spdx_must_both_be_canonical_mit(self) -> None:
+        cases = {
+            "non-mit-body": (
+                MIT_LICENSE_BYTES.replace(b"MIT License", b"Other License", 1),
+                "MIT",
+                "reviewed MIT license bytes",
+            ),
+            "non-mit-spdx": (
+                MIT_LICENSE_BYTES,
+                "Apache-2.0",
+                "SPDX expression",
+            ),
+        }
+        for name, (license_contents, expression, error_pattern) in cases.items():
+            with self.subTest(name=name):
+                (self.repository / "LICENSE").write_bytes(license_contents)
+                (self.repository / "Cargo.toml").write_text(
+                    '[workspace]\nmembers = ["crates/fixture"]\n'
+                    '[workspace.package]\nversion = "0.1.0"\n'
+                    f'license = "{expression}"\n',
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(ReleaseContractError, error_pattern):
+                    self.build(f"{name}.tar.gz")
+                (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
+
+    def test_workspace_license_file_is_rejected_by_preflight_and_bundle(self) -> None:
+        root_manifest = self.repository / "Cargo.toml"
+        root_manifest.write_text(
+            root_manifest.read_text(encoding="utf-8").replace(
+                'license = "MIT"\n',
+                'license = "MIT"\nlicense-file = "LICENSE"\n',
+            ),
+            encoding="utf-8",
+        )
+        entrypoints = {
+            "preflight": lambda: check_preflight(self.repository, REVISION, EPOCH),
+            "bundle": lambda: self.build("workspace-license-file.tar.gz"),
+        }
+        for name, entrypoint in entrypoints.items():
+            with self.subTest(entrypoint=name):
+                with self.assertRaisesRegex(ReleaseContractError, "license-file"):
+                    entrypoint()
+
+    def test_member_license_file_is_rejected_by_preflight_and_bundle(self) -> None:
+        member_manifest = self.repository / "crates/fixture/Cargo.toml"
+        member_manifest.write_text(
+            member_manifest.read_text(encoding="utf-8")
+            + 'license-file = "../../LICENSE"\n',
+            encoding="utf-8",
+        )
+        entrypoints = {
+            "preflight": lambda: check_preflight(self.repository, REVISION, EPOCH),
+            "bundle": lambda: self.build("member-license-file.tar.gz"),
+        }
+        for name, entrypoint in entrypoints.items():
+            with self.subTest(entrypoint=name):
+                with self.assertRaisesRegex(ReleaseContractError, "license-file"):
+                    entrypoint()
+
+    def test_every_workspace_member_must_inherit_the_mit_license(self) -> None:
+        member_manifest = self.repository / "crates/fixture/Cargo.toml"
+        for name, declaration in {
+            "missing": "",
+            "direct-expression": 'license = "MIT"\n',
+            "disabled-inheritance": "license.workspace = false\n",
+        }.items():
+            with self.subTest(name=name):
+                member_manifest.write_text(
+                    '[package]\nname = "release-license-fixture"\n'
+                    f'version = "0.1.0"\n{declaration}',
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    ReleaseContractError, "license.workspace = true"
+                ):
+                    self.build(f"member-{name}.tar.gz")
 
     def test_path_traversal_is_rejected(self) -> None:
         valid = self.build("valid.tar.gz")
@@ -267,15 +394,67 @@ class ReleaseBundleTests(unittest.TestCase):
         valid = self.build("valid.tar.gz")
         invalid = self.root / "tampered.tar.gz"
 
+        def tamper_binary(entries: list[tuple[tarfile.TarInfo, bytes | None]]) -> None:
+            binary = next(
+                contents
+                for member, contents in entries
+                if member.name.endswith("/bin/rustinfer")
+            )
+            assert binary is not None
+            replace_archive_file(
+                entries,
+                "bin/rustinfer",
+                binary + b"tampered\n",
+                update_checksum=False,
+            )
+
+        rewrite_archive(valid, invalid, tamper_binary)
+        with self.assertRaisesRegex(ReleaseContractError, "SHA-256 mismatch"):
+            verify_bundle(invalid)
+
+    def test_bundle_rejects_noncanonical_mit_body_with_matching_checksum(self) -> None:
+        valid = self.build("valid.tar.gz")
+        invalid = self.root / "wrong-license-body.tar.gz"
+
         def tamper_license(entries: list[tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            for index, (member, contents) in enumerate(entries):
-                if member.name.endswith("/LICENSE"):
-                    replacement = contents + b"tampered\n"
-                    member.size = len(replacement)
-                    entries[index] = (member, replacement)
+            replacement = MIT_LICENSE_BYTES.replace(
+                b"rustinfer contributors", b"different contributors", 1
+            )
+            replace_archive_file(
+                entries,
+                "LICENSE",
+                replacement,
+                update_checksum=True,
+            )
 
         rewrite_archive(valid, invalid, tamper_license)
-        with self.assertRaisesRegex(ReleaseContractError, "SHA-256 mismatch"):
+        with self.assertRaisesRegex(ReleaseContractError, "reviewed MIT license bytes"):
+            verify_bundle(invalid)
+
+    def test_bundle_rejects_non_mit_spdx_with_matching_checksum(self) -> None:
+        valid = self.build("valid.tar.gz")
+        invalid = self.root / "wrong-license-spdx.tar.gz"
+
+        def tamper_manifest(entries: list[tuple[tarfile.TarInfo, bytes | None]]) -> None:
+            manifest = next(
+                contents
+                for member, contents in entries
+                if member.name.endswith("/manifest/release.json")
+            )
+            assert manifest is not None
+            replacement = manifest.replace(
+                b'"license": "MIT"', b'"license": "Apache-2.0"', 1
+            )
+            self.assertNotEqual(replacement, manifest)
+            replace_archive_file(
+                entries,
+                "manifest/release.json",
+                replacement,
+                update_checksum=True,
+            )
+
+        rewrite_archive(valid, invalid, tamper_manifest)
+        with self.assertRaisesRegex(ReleaseContractError, "canonical contract"):
             verify_bundle(invalid)
 
     def test_native_manifest_must_match_elf(self) -> None:

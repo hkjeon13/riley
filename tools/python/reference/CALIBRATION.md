@@ -137,13 +137,52 @@ report always contains `e0_candidate_evidence=false`.
 
 ## Native candidate contract
 
+Native candidate contract v2 reserves the non-default development workspace
+member `crates/rustinfer-native`. Its default feature set is empty; the future
+producer and native runtime dependencies are selected only by the explicit
+`cuda` feature. PR A contains a feature-off library and strict ABI parser only.
+It deliberately contains no binary target and cannot emit candidate evidence.
+The lane therefore remains `contract-only` until the real fixed-37 backend,
+producer, and raw replay land in later reviewed PRs.
+
+The exact future locked build argv is:
+
+```sh
+cargo build --locked --release --package rustinfer-native \
+  --no-default-features --features cuda --bin rustinfer-native
+```
+
+Adding `--package` is mandatory because `rustinfer-native` is not a root
+default member. Keeping CUDA explicit also preserves the CUDA-free
+`--workspace --no-default-features` CPU gate. An excluded `tools/native`
+package or a server-owned calibration binary would not satisfy the root
+`Cargo.lock`, non-default ownership, and release-artifact boundaries.
+
 A future candidate manifest has runtime dependency class `native-production`,
 uses the `rustinfer-native` lane and `Cargo.lock`, and records a clean candidate
 Git revision independently of the older oracle revision. It must bundle and
 hash the exact `rustinfer-native` executable beside its manifest, echo the
-locked release build argv, and record the native calibration capture argv. The
-capture argv binds the gate, prompt corpus, output manifest and sidecar, plus
-both ordered reduction variants:
+locked release build argv above, and record the native calibration capture
+argv. Its exact ordered contract-v2 shape is:
+
+```sh
+rustinfer-native calibrate \
+  --repository-root /workspace/rustinfer \
+  --model /models/smollm2 \
+  --gate-manifest benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json \
+  --prompts benchmarks/prompts.jsonl \
+  --manifest candidate-manifest.json \
+  --sidecar candidate-sidecar.safetensors \
+  --reduction-variant canonical-v1 \
+  --reduction-variant fixed-contiguous-37-balanced-v1
+```
+
+Repository and model roots are normalized absolute POSIX paths; outputs are
+normalized sibling filenames. Unknown, reordered, duplicated, or positional
+arguments fail closed. The producer must bind the checkpoint it actually loads
+to the manifest's model revision and config/weights/tokenizer hashes. The
+capture argv also binds the gate, prompt corpus, and both ordered reduction
+variants:
 
 - `canonical-v1`, the production-default execution; and
 - `fixed-contiguous-37-balanced-v1`, the alternate execution.

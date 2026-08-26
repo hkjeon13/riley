@@ -34,6 +34,7 @@ from check_cuda_fault_evidence import (  # noqa: E402
     replay_raw_evidence,
     validate,
 )
+from release_common import MIT_LICENSE_BYTES  # noqa: E402
 from test_release import DEPENDENCIES, EPOCH, fixture_elf  # noqa: E402
 
 
@@ -79,14 +80,10 @@ class Fixture:
         repository.mkdir()
         (repository / "Cargo.toml").write_text(
             '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\n'
-            'license = "LicenseRef-Test-Fixture"\n',
+            'license = "MIT"\n',
             encoding="utf-8",
         )
-        (repository / "LICENSE").write_text(
-            "Owner-approved fixture license for release evidence unit tests.\n"
-            "This fixture text is intentionally longer than the release minimum.\n",
-            encoding="utf-8",
-        )
+        (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         build_bundle(
             binary_path=self.release_binary,
             output=self.release_bundle,

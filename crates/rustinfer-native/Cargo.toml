@@ -1,0 +1,23 @@
+[package]
+name = "rustinfer-native"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+description = "Development-only native calibration contract owner for rustinfer"
+
+[features]
+default = []
+cuda = [
+    "dep:rustinfer-model",
+    "dep:rustinfer-runtime",
+    "rustinfer-runtime/cuda",
+]
+
+[dependencies]
+rustinfer-model = { path = "../rustinfer-model", optional = true }
+rustinfer-runtime = { path = "../rustinfer-runtime", optional = true }
+
+[lints]
+workspace = true

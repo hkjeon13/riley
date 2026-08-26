@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail closed when the production workspace or dependency allowlist drifts.
+"""Fail closed when workspace roles or the dependency allowlist drift.
 
 This checker deliberately uses only the Python standard library. Python is a
 CI inspection tool here; it is not invoked by Cargo or shipped with a
@@ -19,7 +19,7 @@ import tomllib
 from typing import Any
 
 
-EXPECTED_CRATES = {
+EXPECTED_PRODUCTION_CRATES = {
     "crates/rustinfer-core": "rustinfer-core",
     "crates/rustinfer-cuda": "rustinfer-cuda",
     "crates/rustinfer-tensor": "rustinfer-tensor",
@@ -27,6 +27,15 @@ EXPECTED_CRATES = {
     "crates/rustinfer-runtime": "rustinfer-runtime",
     "crates/rustinfer-scheduler": "rustinfer-scheduler",
     "crates/rustinfer-server": "rustinfer-server",
+}
+
+EXPECTED_DEVELOPMENT_CRATES = {
+    "crates/rustinfer-native": "rustinfer-native",
+}
+
+EXPECTED_WORKSPACE_CRATES = {
+    **EXPECTED_PRODUCTION_CRATES,
+    **EXPECTED_DEVELOPMENT_CRATES,
 }
 
 EXPECTED_INTERNAL_DEPENDENCIES = {
@@ -47,6 +56,7 @@ EXPECTED_INTERNAL_DEPENDENCIES = {
         "rustinfer-runtime",
         "rustinfer-scheduler",
     },
+    "rustinfer-native": {"rustinfer-model", "rustinfer-runtime"},
 }
 
 EXPECTED_FEATURES = {
@@ -80,6 +90,14 @@ EXPECTED_FEATURES = {
         "experimental": [],
         "server": ["dep:libc", "dep:serde", "dep:serde_json"],
     },
+    "rustinfer-native": {
+        "cuda": [
+            "dep:rustinfer-model",
+            "dep:rustinfer-runtime",
+            "rustinfer-runtime/cuda",
+        ],
+        "default": [],
+    },
 }
 
 EXPECTED_OPTIONAL_DEPENDENCIES = {
@@ -90,6 +108,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "rustinfer-runtime": {"rustinfer-cuda"},
     "rustinfer-scheduler": set(),
     "rustinfer-server": {"libc", "serde", "serde_json"},
+    "rustinfer-native": {"rustinfer-model", "rustinfer-runtime"},
 }
 
 EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
@@ -191,6 +210,28 @@ NVCC_REPRODUCIBLE_OBJECT_BLOCK = "\n".join(
 
 EXPECTED_DEFAULT_MEMBERS = ["crates/rustinfer-server"]
 EXPECTED_EXCLUDES = ["tools/python", "tools/native", "experiments/triton"]
+EXPECTED_LICENSE_TEXT = """MIT License
+
+Copyright (c) 2026 rustinfer contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+"""
 FORBIDDEN_PRODUCTION_FEATURES = {"python", "pytorch", "torch", "transformers", "triton"}
 DEPENDENCY_POLICY_PATH = Path("ci/approved_cargo_dependencies.toml")
 DEPENDENCY_POLICY_KEYS = {
@@ -276,6 +317,13 @@ def validate_native_build_contract(root: Path) -> None:
     validate_native_build_contract_text(contents)
 
 
+def validate_license_text(contents: str) -> None:
+    if contents != EXPECTED_LICENSE_TEXT:
+        raise BoundaryError(
+            "LICENSE must be the reviewed MIT text for rustinfer contributors"
+        )
+
+
 def parse_rust_version(value: object, context: str) -> tuple[int, int, int]:
     if not isinstance(value, str) or not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", value):
         raise BoundaryError(f"{context}: invalid Rust version {value!r}")
@@ -318,7 +366,7 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
         features = dependency["features"]
         if not all(isinstance(value, str) and value for value in (owner, name, version)):
             raise BoundaryError(f"{policy_path}: invalid direct dependency identity")
-        if owner not in EXPECTED_CRATES.values():
+        if owner not in EXPECTED_WORKSPACE_CRATES.values():
             raise BoundaryError(f"{policy_path}: unknown dependency owner {owner!r}")
         if not re.fullmatch(r"\d+\.\d+\.\d+", version):
             raise BoundaryError(f"{policy_path}: {name}: version must be exact x.y.z")
@@ -468,10 +516,11 @@ def validate_root_manifest(root: Path) -> None:
         raise BoundaryError("workspace.resolver must remain 3")
 
     members = workspace.get("members")
-    if members != list(EXPECTED_CRATES):
+    if members != list(EXPECTED_WORKSPACE_CRATES):
         raise BoundaryError(
-            "workspace.members must be the seven ordered production crates; "
-            f"expected {list(EXPECTED_CRATES)!r}, found {members!r}"
+            "workspace.members must be the seven ordered production crates followed "
+            "by the reviewed development crate; "
+            f"expected {list(EXPECTED_WORKSPACE_CRATES)!r}, found {members!r}"
         )
     if workspace.get("default-members") != EXPECTED_DEFAULT_MEMBERS:
         raise BoundaryError(
@@ -489,6 +538,7 @@ def validate_root_manifest(root: Path) -> None:
         "edition": "2024",
         "rust-version": "1.85",
         "publish": False,
+        "license": "MIT",
     }
     for key, expected in expected_package_policy.items():
         if package_policy.get(key) != expected:
@@ -498,11 +548,16 @@ def validate_root_manifest(root: Path) -> None:
             )
     if package_policy.get("publish") is not False:
         raise BoundaryError("workspace.package.publish must remain false")
-    if "license" in package_policy or "license-file" in package_policy:
+    if "license-file" in package_policy:
         raise BoundaryError(
-            "PR 02 does not declare a repository license; do not add license metadata "
-            "without an explicit repository licensing decision"
+            "workspace.package must use the reviewed MIT SPDX expression, not license-file"
         )
+
+    try:
+        license_text = (root / "LICENSE").read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise BoundaryError(f"cannot read repository LICENSE: {error}") from error
+    validate_license_text(license_text)
 
     if workspace.get("lints") != EXPECTED_LINTS:
         raise BoundaryError(
@@ -535,7 +590,7 @@ def validate_root_manifest(root: Path) -> None:
 
 
 def validate_package_manifests(root: Path) -> None:
-    for relative_dir, expected_name in EXPECTED_CRATES.items():
+    for relative_dir, expected_name in EXPECTED_WORKSPACE_CRATES.items():
         manifest_path = root / relative_dir / "Cargo.toml"
         manifest = load_toml(manifest_path)
         package = manifest.get("package", {})
@@ -547,10 +602,13 @@ def validate_package_manifests(root: Path) -> None:
             raise BoundaryError(
                 f"{manifest_path}: publish must inherit workspace publish=false"
             )
-        if "license" in package or "license-file" in package:
+        if package.get("license") != {"workspace": True}:
             raise BoundaryError(
-                f"{manifest_path}: package license metadata requires a repository "
-                "licensing decision"
+                f"{manifest_path}: license must inherit workspace MIT policy"
+            )
+        if "license-file" in package:
+            raise BoundaryError(
+                f"{manifest_path}: package license-file is forbidden; inherit MIT"
             )
         description = package.get("description")
         if not isinstance(description, str) or not description.strip():
@@ -572,7 +630,7 @@ def package_by_name(metadata: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def validate_members(root: Path, metadata: dict[str, Any]) -> dict[str, dict[str, Any]]:
     packages = package_by_name(metadata)
-    expected_names = set(EXPECTED_CRATES.values())
+    expected_names = set(EXPECTED_WORKSPACE_CRATES.values())
     workspace_ids = metadata.get("workspace_members")
     if not isinstance(workspace_ids, list):
         raise BoundaryError("cargo metadata is missing workspace_members")
@@ -590,7 +648,7 @@ def validate_members(root: Path, metadata: dict[str, Any]) -> dict[str, dict[str
             f"found {sorted(member_names)}"
         )
 
-    expected_by_name = {name: path for path, name in EXPECTED_CRATES.items()}
+    expected_by_name = {name: path for path, name in EXPECTED_WORKSPACE_CRATES.items()}
     for package in members:
         name = package["name"]
         manifest_dir = Path(package["manifest_path"]).resolve().parent
@@ -603,9 +661,9 @@ def validate_members(root: Path, metadata: dict[str, Any]) -> dict[str, dict[str
             raise BoundaryError(f"{name}: effective publish policy must be false")
         if package.get("edition") != "2024" or package.get("rust_version") != "1.85":
             raise BoundaryError(f"{name}: effective edition/rust-version policy drifted")
-        if package.get("license") is not None or package.get("license_file") is not None:
+        if package.get("license") != "MIT" or package.get("license_file") is not None:
             raise BoundaryError(
-                f"{name}: effective license metadata requires a repository licensing decision"
+                f"{name}: effective license metadata must be inherited MIT"
             )
 
     default_ids = metadata.get("workspace_default_members")
@@ -622,7 +680,7 @@ def validate_members(root: Path, metadata: dict[str, Any]) -> dict[str, dict[str
 def validate_dependencies(
     root: Path, packages: dict[str, dict[str, Any]], policy: dict[str, Any]
 ) -> None:
-    production_names = set(packages)
+    workspace_names = set(packages)
     graph: dict[str, set[str]] = {}
     approved_direct = {
         (dependency["owner"], dependency["name"]): dependency
@@ -695,7 +753,7 @@ def validate_dependencies(
                 actual_dev.add(key)
                 continue
             dependency_name = dependency.get("name")
-            if dependency_name not in production_names:
+            if dependency_name not in workspace_names:
                 approved = approved_direct.get((name, dependency_name))
                 if approved is None:
                     raise BoundaryError(
@@ -763,7 +821,9 @@ def validate_dependencies(
             dependency_path = Path(dependency_path_raw)
             relative = normalized_relative(dependency_path, root)
             expected_path = next(
-                path for path, candidate in EXPECTED_CRATES.items() if candidate == dependency_name
+                path
+                for path, candidate in EXPECTED_WORKSPACE_CRATES.items()
+                if candidate == dependency_name
             )
             if relative != expected_path:
                 raise BoundaryError(
@@ -801,7 +861,7 @@ def validate_dependencies(
 
     def visit(name: str) -> None:
         if name in visiting:
-            raise BoundaryError(f"production dependency cycle reaches {name}")
+            raise BoundaryError(f"workspace dependency cycle reaches {name}")
         if name in visited:
             return
         visiting.add(name)
@@ -825,7 +885,7 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
                 f"{EXPECTED_FEATURES[name]!r}, found {features!r}"
             )
         forbidden = {feature.lower() for feature in features} & FORBIDDEN_PRODUCTION_FEATURES
-        if forbidden:
+        if name in EXPECTED_PRODUCTION_CRATES.values() and forbidden:
             raise BoundaryError(
                 f"{name}: forbidden production feature(s): {sorted(forbidden)}"
             )
@@ -853,34 +913,45 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
         raise BoundaryError(
             "the rustinfer-profile binary must require exactly `bench` and `cuda`"
         )
-    for name, package in packages.items():
+    for name in EXPECTED_PRODUCTION_CRATES.values():
         if name == "rustinfer-server":
             continue
+        package = packages[name]
         if any("bin" in target.get("kind", []) for target in package.get("targets", [])):
             raise BoundaryError(f"{name}: only rustinfer-server may own a binary")
 
+    native_targets = packages["rustinfer-native"].get("targets", [])
+    if len(native_targets) != 1 or native_targets[0].get("kind") != ["lib"]:
+        raise BoundaryError(
+            "rustinfer-native must remain a feature-off library with no binary in PR A"
+        )
+
 
 def validate_build_scripts(root: Path) -> None:
-    for relative_dir in EXPECTED_CRATES:
+    for relative_dir in EXPECTED_WORKSPACE_CRATES:
         build_script = root / relative_dir / "build.rs"
         if not build_script.exists():
             continue
         source = build_script.read_text(encoding="utf-8")
         if FORBIDDEN_BUILD_COMMAND.search(source):
             raise BoundaryError(
-                f"{build_script}: production build scripts may not invoke Python or Triton"
+                f"{build_script}: reviewed workspace build scripts may not invoke Python or Triton"
             )
 
 
+def validate_runtime_source_text(source: str, source_path: Path | str) -> None:
+    if FORBIDDEN_RUNTIME_PROCESS.search(source):
+        raise BoundaryError(
+            f"{source_path}: native/runtime sources may not launch external processes"
+        )
+
+
 def validate_production_sources(root: Path) -> None:
-    for relative_dir in EXPECTED_CRATES:
+    for relative_dir in EXPECTED_WORKSPACE_CRATES:
         source_root = root / relative_dir / "src"
         for source_path in sorted(source_root.rglob("*.rs")):
             source = source_path.read_text(encoding="utf-8")
-            if FORBIDDEN_RUNTIME_PROCESS.search(source):
-                raise BoundaryError(
-                    f"{source_path}: production sources may not launch external processes"
-                )
+            validate_runtime_source_text(source, source_path)
 
 
 def lock_dependency_name(reference: object, context: str) -> tuple[str, str | None]:
@@ -986,7 +1057,7 @@ def validate_lockfile(
 
 
 def validate_external_metadata(metadata: dict[str, Any], policy: dict[str, Any]) -> None:
-    workspace_names = set(EXPECTED_CRATES.values())
+    workspace_names = set(EXPECTED_WORKSPACE_CRATES.values())
     external_packages = [
         package
         for package in metadata.get("packages", [])
@@ -1073,6 +1144,7 @@ def main() -> int:
 
     print("workspace boundary check passed")
     print("  production crates: 7")
+    print("  development crates: 1 (rustinfer-native, non-default, library-only)")
     print("  excluded tool/research roots: tools/python, tools/native, experiments/triton")
     print(
         "  approved direct third-party Cargo dependencies: "
@@ -1085,8 +1157,8 @@ def main() -> int:
     )
     if args.locked:
         print("  resolved source/checksum/license/MSRV/dependency edges: exact allowlist")
-    print("  production Python/Triton build invocations: 0")
-    print("  production runtime process-launch paths: 0")
+    print("  production/native-development Python/Triton build invocations: 0")
+    print("  production/native-development runtime process-launch paths: 0")
     return 0
 
 

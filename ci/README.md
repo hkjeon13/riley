@@ -27,12 +27,16 @@ The boundary checker requires only Python 3.11 or newer and the standard
 library. Python is used to inspect Cargo metadata in CI; Cargo never invokes it
 and it is not part of a production artifact. The checker fails closed unless:
 
-- the workspace contains exactly the seven production crates;
+- the workspace contains exactly seven production crates plus the non-default,
+  library-only `rustinfer-native` development contract member;
 - `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
 - crate edges and feature ownership match `crates/README.md`;
-- `rustinfer` remains the sole `server` production binary, while the separate
-  native evidence producer requires exactly the non-default `bench,cuda` features;
+- `rustinfer` remains the sole `server` production binary and
+  `rustinfer-profile` requires exactly the non-default `bench,cuda` features;
+  PR A permits no `rustinfer-native` binary target;
 - every crate inherits `publish = false`;
+- every crate inherits the exact workspace `MIT` SPDX expression and the root
+  `LICENSE` remains the reviewed MIT text for `rustinfer contributors`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
   `serde_json`, and `sha2` requirements owned by `rustinfer-model`, the same
   reviewed `sha2` package used directly by `rustinfer-runtime`, and optional
@@ -46,9 +50,10 @@ and it is not part of a production artifact. The checker fails closed unless:
   license expression, MSRV, and dependency edges;
 - no git dependency is present, and every approved package's MSRV is at most
   the workspace Rust 1.85 MSRV; and
-- no production build script invokes Python or Triton; and
-- production crate sources do not launch external processes. The only allowed
-  `std::process` uses are the server's `ExitCode` and evidence-directory PID.
+- no production or `rustinfer-native` build script invokes Python or Triton; and
+- production plus `rustinfer-native` crate sources do not launch external
+  processes. The only allowed `std::process` uses are the server's `ExitCode`
+  and evidence-directory PID.
 
 The approved dependency manifest is a reviewed allowlist, not a discovery
 output. Adding or upgrading a package requires updating its exact resolved
@@ -265,7 +270,7 @@ dependencies, non-canonical metadata, and checksum errors. Runtime dependency
 validation is derived from ELF `DT_NEEDED` entries and an exact allowlist;
 ordinary application strings such as model configuration keys are not treated
 as dependencies. The workspace boundary checker separately rejects external
-process launching from production crate sources.
+process launching from production crates and the native evidence producer.
 
 `ci/release/Dockerfile` separates the CUDA builder from a digest-pinned CUDA
 runtime stage and copies only the verified bundle payload. Its builder also
@@ -274,10 +279,11 @@ source-directory rustup sync. The final stage
 asserts that source, Python/Pip, Rust/CUDA compilers, and build tools are
 absent. See `docs/release/README.md` for the file layout and runtime contract.
 
-Release packaging currently has one deliberate fail-closed blocker: the
-repository has no owner-selected root `LICENSE`. Do not invent one in CI.
-Ordinary build/test lanes remain unaffected, while release preflight cannot
-pass until the owner adds an approved license and aligns Cargo metadata.
+Release packaging fixes the reviewed license contract to the exact standard
+MIT text for `Copyright (c) 2026 rustinfer contributors`. Preflight and bundle
+production require `workspace.package.license = "MIT"` and
+`license.workspace = true` in every member; bundle verification requires the
+same byte-exact `LICENSE` and canonical embedded SPDX field.
 
 ### Independent release build reproducibility
 

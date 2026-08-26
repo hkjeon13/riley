@@ -44,6 +44,7 @@ from check_release_candidate import (  # noqa: E402
     release_performance,
     reproducible_build_evidence,
 )
+from release_common import MIT_LICENSE_BYTES  # noqa: E402
 from test_native_correctness_evidence import NativeFixture as NativeEvidenceFixture  # noqa: E402
 from test_cuda_fault_evidence import (  # noqa: E402
     BUILD_IMAGE_ID as CUDA_BUILD_IMAGE_ID,
@@ -97,14 +98,10 @@ class CandidateFixture:
         repository.mkdir()
         (repository / "Cargo.toml").write_text(
             '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\n'
-            'license = "LicenseRef-Test-Fixture"\n',
+            'license = "MIT"\n',
             encoding="utf-8",
         )
-        (repository / "LICENSE").write_text(
-            "Owner-approved fixture license for release contract tests.\n"
-            "Permission is granted only inside this temporary unit-test fixture.\n",
-            encoding="utf-8",
-        )
+        (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         self.paths = {
             "source": root / "source.tar",
             "binary": root / "rustinfer",
@@ -401,7 +398,7 @@ class CandidateFixture:
         self.performance_fixture = fixture
 
         candidate: dict[str, object] = {
-            "candidate_id": "fixture",
+            "candidate_id": "rustinfer-0.1.0-rc1",
             "recorded_at_utc": "2026-08-26T00:00:00Z",
             "source": {
                 "git_commit": self.revision,
@@ -464,12 +461,12 @@ class CandidateFixture:
                 )
             ),
         }
-        self._write_tar(
+        release_performance.write_raw_evidence_archive(
             self.paths["performance_raw"],
-            {
-                f"candidate-{index}.json": raw_path.read_bytes()
+            [
+                (f"candidate-{index}.json", raw_path.read_bytes())
                 for index, raw_path in enumerate(fixture.candidate_paths, 1)
-            },
+            ],
         )
         ratios = {
             metric: candidate["metrics"][metric] / baseline["metrics"][metric]
@@ -828,6 +825,8 @@ class CandidateFixture:
     def evaluate(
         self,
         *,
+        manifest_path: Path | None = None,
+        manifest_fd: int | None = None,
         soak_replay: dict[str, object] | None = None,
         reproducibility_replay: dict[str, object] | None = None,
         optimization_replay: dict[str, object] | None = None,
@@ -840,6 +839,7 @@ class CandidateFixture:
         if optimization_replay is None:
             optimization_replay = self.optimization_replay()
         anchors = {
+            "expected_candidate_id": "rustinfer-0.1.0-rc1",
             "expected_revision": self.revision,
             "expected_source_archive_sha256": self.trusted_source_sha256,
             "expected_release_image_id": f"sha256:{self.image_sha}",
@@ -966,7 +966,12 @@ class CandidateFixture:
             "validate_bound_raw_archive",
             side_effect=replay_python_free,
         ):
-            return evaluate(self.manifest_path, self.root, **anchors)
+            return evaluate(
+                manifest_path or self.manifest_path,
+                self.root,
+                manifest_fd=manifest_fd,
+                **anchors,
+            )
 
 
 class ReleaseCandidateTests(unittest.TestCase):
@@ -996,6 +1001,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["schema_version"], REPORT_VERSION)
+        self.assertEqual(report["candidate_id"], "rustinfer-0.1.0-rc1")
         self.assertEqual(report["bindings"]["git_revision"], self.fixture.revision)
         self.assertEqual(
             report["bindings"]["build_image_ids"],
@@ -1044,6 +1050,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertNotIn("expected_build_image_id", destinations)
         self.assertTrue(
             {
+                "expected_candidate_id",
                 "expected_reproducible_build_image_id",
                 "expected_cuda_build_image_id",
                 "expected_optimization_build_image_id",
@@ -1134,6 +1141,7 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_trusted_external_anchors_are_required(self) -> None:
         cases = {
+            "expected_candidate_id": "rustinfer-0.1.0-rc2",
             "expected_revision": "f" * 40,
             "expected_source_archive_sha256": "e" * 64,
             "expected_release_image_id": "sha256:" + "d" * 64,
@@ -1147,6 +1155,36 @@ class ReleaseCandidateTests(unittest.TestCase):
                 report = self.fixture.evaluate(**{field: value})
                 self.assertFalse(report["passed"])
                 self.assertIn("trusted expected", report["errors"][0])
+
+    def test_candidate_id_is_a_closed_positive_rc_identity(self) -> None:
+        for candidate_id in (
+            "rustinfer-0.1.0-rc0",
+            "rustinfer-00.1.0-rc1",
+            "rustinfer-0.1.0-rc01",
+            "release-candidate",
+        ):
+            with self.subTest(candidate_id=candidate_id):
+                report = self.fixture.evaluate(expected_candidate_id=candidate_id)
+                self.assertFalse(report["passed"])
+                self.assertIn("rc<positive integer>", report["errors"][0])
+
+    def test_candidate_id_base_must_match_release_bundle_version(self) -> None:
+        self.fixture.manifest["candidate_id"] = "rustinfer-0.2.0-rc1"
+        self.fixture.write_manifest()
+        report = self.fixture.evaluate(
+            expected_candidate_id="rustinfer-0.2.0-rc1"
+        )
+        self.assertFalse(report["passed"])
+        self.assertIn("artifact.version", report["errors"][0])
+
+    def test_performance_candidate_id_must_match_final_candidate(self) -> None:
+        self.fixture.documents["performance"]["candidate"]["candidate_id"] = (
+            "rustinfer-0.1.0-rc2"
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("trusted final candidate ID", report["errors"][0])
 
     def test_optimizer_profile_binary_must_match_reproducible_profile(self) -> None:
         replay = self.fixture.optimization_replay()
@@ -1204,7 +1242,21 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
-        self.assertIn("must contain only", report["errors"][0])
+        self.assertIn("exact ordered inventory", report["errors"][0])
+
+    def test_performance_raw_archive_must_be_canonical_ustar(self) -> None:
+        files = {
+            f"candidate-{index}.json": path.read_bytes()
+            for index, path in enumerate(
+                self.fixture.performance_fixture.candidate_paths, 1
+            )
+        }
+        self.fixture.paths["performance_raw"].unlink()
+        self.fixture._write_tar(self.fixture.paths["performance_raw"], files)
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("non-canonical metadata", report["errors"][0])
 
     def test_native_replay_rejects_self_declared_report_tamper(self) -> None:
         self.fixture.documents["native_correctness"]["cases"][0]["variants"][
@@ -1329,6 +1381,26 @@ class ReleaseCandidateTests(unittest.TestCase):
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
         self.assertIn("symlink", report["errors"][0])
+
+    def test_manifest_fd_must_match_the_checker_path(self) -> None:
+        with self.fixture.manifest_path.open("rb") as manifest_file:
+            report = self.fixture.evaluate(
+                manifest_path=self.fixture.paths["performance"],
+                manifest_fd=manifest_file.fileno(),
+            )
+        self.assertFalse(report["passed"])
+        self.assertIn("manifest path does not name the held FD", report["errors"][0])
+
+    def test_hard_link_artifact_alias_is_rejected(self) -> None:
+        self.fixture.paths["profile_binary"].unlink()
+        os.link(
+            self.fixture.paths["native_executable"],
+            self.fixture.paths["profile_binary"],
+        )
+        self.fixture.refresh_manifest()
+        report = self.fixture.evaluate()
+        self.assertFalse(report["passed"])
+        self.assertIn("hard-link alias", report["errors"][0])
 
     def test_duplicate_json_key_is_rejected(self) -> None:
         raw = self.fixture.manifest_path.read_text(encoding="utf-8")

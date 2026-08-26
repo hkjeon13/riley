@@ -4,12 +4,19 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import hashlib
 import importlib.util
+import io
 import json
 import math
+import os
 import re
+import stat
 import sys
+import tarfile
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -51,6 +58,32 @@ OPTIMIZATION_GOLDEN_TOKEN_IDS = [
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+CANDIDATE_ID_RE = re.compile(
+    r"^rustinfer-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*))-rc([1-9][0-9]*)$"
+)
+RAW_EVIDENCE_FILES = tuple(f"candidate-{index}.json" for index in range(1, 6))
+MAX_RAW_EVIDENCE_ARCHIVE_BYTES = (
+    len(RAW_EVIDENCE_FILES) * native_profile.MAX_EVIDENCE_BYTES + 64 * 1024
+)
+PACKAGE_CANDIDATE_NAME = "release-performance-candidate.json"
+PACKAGE_REPORT_NAME = "release-performance-report.json"
+PACKAGE_RAW_EVIDENCE_NAME = "release-performance-evidence.tar"
+_PACKAGE_STAGING_FILES = frozenset(
+    (PACKAGE_CANDIDATE_NAME, PACKAGE_REPORT_NAME, PACKAGE_RAW_EVIDENCE_NAME)
+)
+_AT_FDCWD = -100
+_LINUX_RENAME_NOREPLACE = 1
+_DARWIN_RENAME_EXCL = 0x00000004
+
+
+@dataclass(frozen=True)
+class _HeldFileBinding:
+    name: str
+    digest: str
+    metadata: os.stat_result
+    maximum: int
+    mode: int
 
 
 class InputError(ValueError):
@@ -113,6 +146,16 @@ def _string(value: Any, path: str) -> str:
     return value
 
 
+def _candidate_id(value: Any, path: str) -> str:
+    candidate_id = _string(value, path)
+    if CANDIDATE_ID_RE.fullmatch(candidate_id) is None:
+        raise InputError(
+            f"{path}: expected "
+            "rustinfer-<major>.<minor>.<patch>-rc<positive integer>"
+        )
+    return candidate_id
+
+
 def _sha256(value: Any, path: str) -> str:
     text = _string(value, path)
     if SHA256_RE.fullmatch(text) is None:
@@ -154,6 +197,258 @@ def _digest_file(path: Path, label: str) -> str:
     except OSError as error:
         raise InputError(f"cannot hash {label} {path}: {error}") from error
     return digest.hexdigest()
+
+
+def _rename_noreplace(source: Path, target: Path) -> None:
+    """Atomically rename without replacing an existing path."""
+
+    source_bytes = os.fsencode(os.path.abspath(source))
+    target_bytes = os.fsencode(os.path.abspath(target))
+    libc = ctypes.CDLL(None, use_errno=True)
+    if sys.platform.startswith("linux"):
+        rename = getattr(libc, "renameat2", None)
+        if rename is None:
+            raise InputError(
+                "atomic no-replace publish requires libc renameat2 on Linux"
+            )
+        rename.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        rename.restype = ctypes.c_int
+        arguments = (
+            _AT_FDCWD,
+            source_bytes,
+            _AT_FDCWD,
+            target_bytes,
+            _LINUX_RENAME_NOREPLACE,
+        )
+    elif sys.platform == "darwin":
+        rename = getattr(libc, "renamex_np", None)
+        if rename is None:
+            raise InputError(
+                "atomic no-replace publish requires renamex_np on macOS"
+            )
+        rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        arguments = (source_bytes, target_bytes, _DARWIN_RENAME_EXCL)
+    else:
+        raise InputError(
+            "atomic no-replace evidence publish is supported only on Linux and macOS"
+        )
+
+    ctypes.set_errno(0)
+    if rename(*arguments) != 0:
+        error_number = ctypes.get_errno()
+        raise OSError(
+            error_number,
+            os.strerror(error_number),
+            os.fspath(target),
+        )
+
+
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _write_all(descriptor: int, raw: bytes) -> None:
+    view = memoryview(raw)
+    while view:
+        written = os.write(descriptor, view)
+        if written <= 0:  # pragma: no cover - defensive kernel contract check
+            raise OSError("short write while creating release evidence")
+        view = view[written:]
+
+
+def _write_new_file(
+    directory_descriptor: int, name: str, raw: bytes, mode: int = 0o644
+) -> int:
+    """Create, sync, and return a held read/write descriptor for a child."""
+
+    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
+    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(name, flags, mode, dir_fd=directory_descriptor)
+    try:
+        _write_all(descriptor, raw)
+        os.fchmod(descriptor, mode)
+        os.fsync(descriptor)
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
+
+
+def _stable_fd_snapshot(
+    descriptor: int, label: str, maximum: int
+) -> tuple[bytes, str, os.stat_result]:
+    before = os.fstat(descriptor)
+    if not stat.S_ISREG(before.st_mode):
+        raise InputError(f"{label}: must be a regular file, not a link or device")
+    if before.st_size <= 0 or before.st_size > maximum:
+        raise InputError(f"{label}: must be between 1 and {maximum} bytes")
+    os.lseek(descriptor, 0, os.SEEK_SET)
+    digest = hashlib.sha256()
+    chunks: list[bytes] = []
+    remaining = maximum + 1
+    while remaining:
+        chunk = os.read(descriptor, min(1024 * 1024, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        digest.update(chunk)
+        remaining -= len(chunk)
+    raw = b"".join(chunks)
+    after = os.fstat(descriptor)
+    stable_fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    if any(getattr(before, field) != getattr(after, field) for field in stable_fields):
+        raise InputError(f"{label}: changed while it was snapshotted")
+    if len(raw) != before.st_size:
+        raise InputError(f"{label}: changed or was truncated while it was read")
+    return raw, digest.hexdigest(), before
+
+
+def _same_inode(path: Path, expected: os.stat_result, *, directory: bool) -> bool:
+    try:
+        current = path.lstat()
+    except FileNotFoundError:
+        return False
+    expected_type = stat.S_ISDIR if directory else stat.S_ISREG
+    return (
+        expected_type(current.st_mode)
+        and current.st_dev == expected.st_dev
+        and current.st_ino == expected.st_ino
+    )
+
+
+def _record_held_file(
+    descriptor: int,
+    name: str,
+    *,
+    maximum: int,
+    mode: int = 0o644,
+) -> _HeldFileBinding:
+    _raw, digest, metadata = _stable_fd_snapshot(
+        descriptor, f"package child {name}", maximum
+    )
+    actual_mode = stat.S_IMODE(metadata.st_mode)
+    if actual_mode != mode:
+        raise InputError(
+            f"package child {name}: expected mode {mode:#o}, got {actual_mode:#o}"
+        )
+    return _HeldFileBinding(
+        name=name,
+        digest=digest,
+        metadata=metadata,
+        maximum=maximum,
+        mode=mode,
+    )
+
+
+def _verify_held_file(
+    descriptor: int, binding: _HeldFileBinding, label: str
+) -> None:
+    _raw, digest, metadata = _stable_fd_snapshot(
+        descriptor, label, binding.maximum
+    )
+    if (
+        metadata.st_dev != binding.metadata.st_dev
+        or metadata.st_ino != binding.metadata.st_ino
+        or metadata.st_size != binding.metadata.st_size
+        or stat.S_IMODE(metadata.st_mode) != binding.mode
+        or digest != binding.digest
+    ):
+        raise InputError(f"{label}: inode, mode, size, or digest changed")
+
+
+def _path_metadata_matches_binding(
+    metadata: os.stat_result, binding: _HeldFileBinding
+) -> bool:
+    return (
+        stat.S_ISREG(metadata.st_mode)
+        and metadata.st_dev == binding.metadata.st_dev
+        and metadata.st_ino == binding.metadata.st_ino
+        and metadata.st_size == binding.metadata.st_size
+        and stat.S_IMODE(metadata.st_mode) == binding.mode
+    )
+
+
+def _verify_bound_file_path(
+    descriptor: int,
+    path: Path,
+    binding: _HeldFileBinding,
+    label: str,
+) -> None:
+    """Cross-check a visible pathname with an immutable held-FD binding."""
+
+    if not _same_inode(path, binding.metadata, directory=False):
+        raise InputError(f"{label}: path no longer names the held inode")
+    _verify_held_file(descriptor, binding, label)
+    if not _same_inode(path, binding.metadata, directory=False):
+        raise InputError(f"{label}: path changed during verification")
+
+
+def _verify_package_children(
+    directory_descriptor: int,
+    directory_metadata: os.stat_result,
+    descriptors: Mapping[str, int],
+    bindings: Mapping[str, _HeldFileBinding],
+    label: str,
+) -> None:
+    current_directory = os.fstat(directory_descriptor)
+    if (
+        not stat.S_ISDIR(current_directory.st_mode)
+        or current_directory.st_dev != directory_metadata.st_dev
+        or current_directory.st_ino != directory_metadata.st_ino
+    ):
+        raise InputError(f"{label}: held directory inode changed")
+    names_before = os.listdir(directory_descriptor)
+    if len(names_before) != len(_PACKAGE_STAGING_FILES) or set(
+        names_before
+    ) != _PACKAGE_STAGING_FILES:
+        raise InputError(
+            f"{label}: exact three-file inventory required, got {sorted(names_before)}"
+        )
+    if set(descriptors) != _PACKAGE_STAGING_FILES or set(bindings) != _PACKAGE_STAGING_FILES:
+        raise InputError(f"{label}: internal held-file inventory is incomplete")
+
+    for name in sorted(_PACKAGE_STAGING_FILES):
+        binding = bindings[name]
+        descriptor = descriptors[name]
+        if binding.name != name:
+            raise InputError(f"{label}:{name}: held binding name mismatch")
+        metadata_before = os.stat(
+            name, dir_fd=directory_descriptor, follow_symlinks=False
+        )
+        if not _path_metadata_matches_binding(metadata_before, binding):
+            raise InputError(f"{label}:{name}: path binding changed")
+        _verify_held_file(descriptor, binding, f"{label}:{name}")
+        metadata_after = os.stat(
+            name, dir_fd=directory_descriptor, follow_symlinks=False
+        )
+        if not _path_metadata_matches_binding(metadata_after, binding):
+            raise InputError(f"{label}:{name}: path changed during verification")
+
+    names_after = os.listdir(directory_descriptor)
+    if len(names_after) != len(_PACKAGE_STAGING_FILES) or set(
+        names_after
+    ) != _PACKAGE_STAGING_FILES:
+        raise InputError(f"{label}: inventory changed during verification")
 
 
 MODEL_FIELDS = {
@@ -354,6 +649,7 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
     )
     _literal(row["schema_version"], CANDIDATE_SCHEMA, "candidate.schema_version")
     _literal(row["status"], "success", "candidate.status")
+    candidate_id = _candidate_id(row["candidate_id"], "candidate.candidate_id")
     recorded = _string(row["recorded_at_utc"], "candidate.recorded_at_utc")
     if UTC_RE.fullmatch(recorded) is None:
         raise InputError("candidate.recorded_at_utc: expected YYYY-MM-DDTHH:MM:SSZ")
@@ -458,7 +754,7 @@ def _validate_candidate(document: Mapping[str, Any]) -> dict[str, Any]:
         "baseline_sha256": _sha256(
             row["baseline_sha256"], "candidate.baseline_sha256"
         ),
-        "candidate_id": _string(row["candidate_id"], "candidate.candidate_id"),
+        "candidate_id": candidate_id,
         "recorded_at_utc": recorded,
         "source": source_result,
         "model": _validate_model(row["model"], "candidate.model"),
@@ -780,18 +1076,27 @@ def _empty_report() -> dict[str, Any]:
     }
 
 
-def validate_raw_run_payloads(
-    payloads: Sequence[tuple[str, bytes]], candidate: Mapping[str, Any]
-) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
-    """Validate five raw candidate runs supplied as immutable byte payloads."""
+def derive_raw_run_payloads(
+    payloads: Sequence[tuple[str, bytes]],
+) -> dict[str, Any]:
+    """Derive candidate fields from five immutable native-profile payloads.
+
+    This is deliberately independent of a self-asserted candidate document so
+    the release evidence producer can construct that document from the raw
+    measurements and the checker can subsequently replay the same derivation.
+    """
 
     if len(payloads) != 5:
         raise InputError(
             f"candidate: expected exactly 5 independent run files, got {len(payloads)}"
         )
-    loaded: list[tuple[str, dict[str, Any], str]] = []
+    loaded: list[tuple[str, bytes, dict[str, Any], str]] = []
     try:
         for label, raw in payloads:
+            if not isinstance(label, str) or not label:
+                raise InputError("candidate: raw run label must be a non-empty string")
+            if not isinstance(raw, bytes):
+                raise InputError(f"{label}: raw native profile payload must be bytes")
             if len(raw) > native_profile.MAX_EVIDENCE_BYTES:
                 raise InputError(
                     f"{label}: exceeds the raw native profile evidence bound"
@@ -811,11 +1116,13 @@ def validate_raw_run_payloads(
                 raise InputError(
                     f"{label}.role: expected 'candidate', got {run['role']!r}"
                 )
-            loaded.append((label, run, _digest_bytes(raw)))
-        if sorted(run["pair_index"] for _, run, _ in loaded) != list(range(1, 6)):
+            loaded.append((label, raw, run, _digest_bytes(raw)))
+        if sorted(run["pair_index"] for _, _, run, _ in loaded) != list(range(1, 6)):
             raise InputError("candidate: pair_index values must be exactly 1..5")
-        loaded.sort(key=lambda row: row[1]["pair_index"])
-        runs = [run for _, run, _ in loaded]
+        if len({run["run_id"] for _, _, run, _ in loaded}) != 5:
+            raise InputError("candidate: raw run_id values must be unique")
+        loaded.sort(key=lambda row: row[2]["pair_index"])
+        runs = [run for _, _, run, _ in loaded]
         source = native_profile._require_equal(
             [run["source"] for run in runs], "release candidate raw source"
         )
@@ -834,42 +1141,6 @@ def validate_raw_run_payloads(
         raise ComparabilityError(str(error)) from error
     except native_profile.InputError as error:
         raise InputError(str(error)) from error
-
-    declared_by_pair = {
-        binding["pair_index"]: binding for binding in candidate["raw_runs"]
-    }
-    for path, run, actual_digest in loaded:
-        pair_index = run["pair_index"]
-        if declared_by_pair.get(pair_index) != {
-            "pair_index": pair_index,
-            "run_id": run["run_id"],
-            "sha256": actual_digest,
-        }:
-            raise InputError(f"{path}: raw run binding does not match file contents")
-
-    candidate_source = candidate["source"]
-    expected_source = {
-        "git_commit": candidate_source["git_commit"],
-        "git_dirty": False,
-        "executable_sha256": candidate_source["profile_binary_sha256"],
-        "semantic_class": "E0",
-        "correctness_gate_id": candidate_source["correctness_gate_id"],
-        "correctness_report_sha256": candidate_source[
-            "correctness_report_sha256"
-        ],
-    }
-    for field, expected in expected_source.items():
-        if source[field] != expected:
-            raise InputError(
-                f"raw source.{field} does not match candidate source binding"
-            )
-    if source["runtime_flag"] != {
-        "name": "execution_completion",
-        "value": "iteration-batch",
-    }:
-        raise ComparabilityError(
-            "raw source.runtime_flag must select execution_completion=iteration-batch"
-        )
 
     raw_model = {
         "model_id": workload["model_id"],
@@ -901,22 +1172,6 @@ def validate_raw_run_payloads(
         "execution_completion": "iteration-batch",
         "residual_rmsnorm": "separate",
     }
-    for name, raw_value in [
-        ("model", raw_model),
-        ("environment", raw_environment),
-        ("workload", raw_workload),
-    ]:
-        if candidate[name] != raw_value:
-            raise ComparabilityError(
-                f"candidate {name} does not match its raw native profile runs"
-            )
-    if environment["software"]["container_image_sha256"] != candidate_source[
-        "profile_image_sha256"
-    ]:
-        raise InputError(
-            "raw environment producer image does not match profile_image_sha256"
-        )
-
     derived_summary = {
         "independent_runs": len(runs),
         "warmups_per_run": workload["warmups"],
@@ -941,6 +1196,86 @@ def validate_raw_run_payloads(
             [native_profile._throughput(run) for run in runs], 0.50
         ),
     }
+    return {
+        "runs": runs,
+        "payloads": [
+            (f"candidate-{run['pair_index']}.json", raw)
+            for _, raw, run, _ in loaded
+        ],
+        "source": source,
+        "model": raw_model,
+        "environment": raw_environment,
+        "workload": raw_workload,
+        "run_summary": derived_summary,
+        "metrics": derived_metrics,
+        "raw_runs": [
+            {
+                "pair_index": run["pair_index"],
+                "run_id": run["run_id"],
+                "sha256": actual_digest,
+            }
+            for _, _, run, actual_digest in loaded
+        ],
+    }
+
+
+def validate_raw_run_payloads(
+    payloads: Sequence[tuple[str, bytes]], candidate: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
+    """Validate five raw candidate runs supplied as immutable byte payloads."""
+
+    derived = derive_raw_run_payloads(payloads)
+    loaded = derived["payloads"]
+    runs = derived["runs"]
+    declared_by_pair = {
+        binding["pair_index"]: binding for binding in candidate["raw_runs"]
+    }
+    for (path, _), run, binding in zip(
+        loaded, runs, derived["raw_runs"], strict=True
+    ):
+        pair_index = run["pair_index"]
+        if declared_by_pair.get(pair_index) != binding:
+            raise InputError(f"{path}: raw run binding does not match file contents")
+
+    candidate_source = candidate["source"]
+    expected_source = {
+        "git_commit": candidate_source["git_commit"],
+        "git_dirty": False,
+        "executable_sha256": candidate_source["profile_binary_sha256"],
+        "semantic_class": "E0",
+        "correctness_gate_id": candidate_source["correctness_gate_id"],
+        "correctness_report_sha256": candidate_source[
+            "correctness_report_sha256"
+        ],
+    }
+    for field, expected in expected_source.items():
+        if derived["source"][field] != expected:
+            raise InputError(
+                f"raw source.{field} does not match candidate source binding"
+            )
+    if derived["source"]["runtime_flag"] != {
+        "name": "execution_completion",
+        "value": "iteration-batch",
+    }:
+        raise ComparabilityError(
+            "raw source.runtime_flag must select execution_completion=iteration-batch"
+        )
+
+    for name in ("model", "environment", "workload"):
+        raw_value = derived[name]
+        if candidate[name] != raw_value:
+            raise ComparabilityError(
+                f"candidate {name} does not match its raw native profile runs"
+            )
+    if derived["runs"][0]["environment"]["software"][
+        "container_image_sha256"
+    ] != candidate_source["profile_image_sha256"]:
+        raise InputError(
+            "raw environment producer image does not match profile_image_sha256"
+        )
+
+    derived_summary = derived["run_summary"]
+    derived_metrics = derived["metrics"]
     if candidate["run_summary"] != derived_summary:
         raise InputError("candidate.run_summary does not equal raw-derived summary")
     if candidate["metrics"] != derived_metrics:
@@ -951,14 +1286,237 @@ def validate_raw_run_payloads(
 def _load_raw_runs(
     paths: Sequence[Path | str], candidate: Mapping[str, Any]
 ) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
+    return validate_raw_run_payloads(_read_raw_run_paths(paths), candidate)
+
+
+def _read_raw_run_paths(
+    paths: Sequence[Path | str],
+) -> list[tuple[str, bytes]]:
     payloads: list[tuple[str, bytes]] = []
     for value in paths:
         path = Path(value)
         try:
-            payloads.append((str(path), path.read_bytes()))
+            before = path.lstat()
+            if not stat.S_ISREG(before.st_mode):
+                raise InputError(
+                    f"{path}: raw native profile run must be a regular file"
+                )
+            if before.st_size <= 0:
+                raise InputError(f"{path}: raw native profile run must not be empty")
+            if before.st_size > native_profile.MAX_EVIDENCE_BYTES:
+                raise InputError(
+                    f"{path}: exceeds the raw native profile evidence bound"
+                )
+            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(path, flags)
+            try:
+                after = os.fstat(descriptor)
+                if (
+                    not stat.S_ISREG(after.st_mode)
+                    or before.st_dev != after.st_dev
+                    or before.st_ino != after.st_ino
+                    or before.st_size != after.st_size
+                ):
+                    raise InputError(
+                        f"{path}: raw native profile run changed while it was opened"
+                    )
+                with os.fdopen(descriptor, "rb", closefd=False) as handle:
+                    raw = handle.read(native_profile.MAX_EVIDENCE_BYTES + 1)
+                if len(raw) != after.st_size:
+                    raise InputError(
+                        f"{path}: raw native profile run changed while it was read"
+                    )
+            finally:
+                os.close(descriptor)
+            payloads.append((str(path), raw))
+        except InputError:
+            raise
         except OSError as error:
             raise InputError(f"cannot read raw native profile run {path}: {error}") from error
-    return validate_raw_run_payloads(payloads, candidate)
+    return payloads
+
+
+def _canonical_tar_info(name: str, size: int) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(name)
+    info.size = size
+    info.mode = 0o644
+    info.uid = 0
+    info.gid = 0
+    info.uname = ""
+    info.gname = ""
+    info.mtime = 0
+    return info
+
+
+def _write_canonical_raw_archive(
+    handle: Any, payloads: Sequence[tuple[str, bytes]]
+) -> None:
+    with tarfile.open(
+        fileobj=handle, mode="w:", format=tarfile.USTAR_FORMAT
+    ) as archive:
+        for name, raw in payloads:
+            archive.addfile(_canonical_tar_info(name, len(raw)), io.BytesIO(raw))
+
+
+def _canonical_raw_archive_bytes(
+    payloads: Sequence[tuple[str, bytes]],
+) -> bytes:
+    buffer = io.BytesIO()
+    _write_canonical_raw_archive(buffer, payloads)
+    return buffer.getvalue()
+
+
+def write_raw_evidence_archive(
+    output: Path | str, payloads: Sequence[tuple[str, bytes]]
+) -> str:
+    """Create and atomically publish the canonical five-run USTAR archive."""
+
+    canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
+    if tuple(name for name, _ in canonical_payloads) != RAW_EVIDENCE_FILES:
+        raise InputError(
+            "raw evidence: exact candidate-1.json through candidate-5.json "
+            "inventory required"
+        )
+    output_path = Path(output)
+    if not output_path.name:
+        raise InputError("raw performance evidence output must name a new file")
+    if os.path.lexists(output_path):
+        raise FileExistsError(f"refusing to overwrite existing output: {output_path}")
+    parent = output_path.parent
+    try:
+        parent_metadata = parent.stat()
+    except OSError as error:
+        raise InputError(f"cannot inspect raw evidence output parent {parent}: {error}") from error
+    if not stat.S_ISDIR(parent_metadata.st_mode):
+        raise InputError(f"raw evidence output parent is not a directory: {parent}")
+
+    descriptor, staging_name = tempfile.mkstemp(
+        prefix=f".{output_path.name}.staging-", dir=parent
+    )
+    staged_archive = Path(staging_name)
+    try:
+        with os.fdopen(os.dup(descriptor), "wb") as handle:
+            _write_canonical_raw_archive(handle, canonical_payloads)
+        os.fchmod(descriptor, 0o644)
+        os.fsync(descriptor)
+        binding = _record_held_file(
+            descriptor,
+            output_path.name,
+            maximum=MAX_RAW_EVIDENCE_ARCHIVE_BYTES,
+        )
+        _verify_bound_file_path(
+            descriptor,
+            staged_archive,
+            binding,
+            "staged raw performance evidence archive before publish",
+        )
+        _rename_noreplace(staged_archive, output_path)
+        _fsync_directory(parent)
+        _verify_bound_file_path(
+            descriptor,
+            output_path,
+            binding,
+            "published raw performance evidence archive",
+        )
+        return binding.digest
+    finally:
+        os.close(descriptor)
+
+
+def _snapshot_raw_evidence_archive(path: Path) -> tuple[bytes, str]:
+    label = "raw performance evidence archive"
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    descriptor = -1
+    try:
+        descriptor = os.open(path, flags)
+        raw, digest, _metadata = _stable_fd_snapshot(
+            descriptor, label, MAX_RAW_EVIDENCE_ARCHIVE_BYTES
+        )
+        return raw, digest
+    except InputError:
+        raise
+    except OSError as error:
+        raise InputError(f"{label}: cannot open stable snapshot: {error}") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _load_raw_evidence_archive_snapshot(
+    path: Path,
+) -> tuple[list[tuple[str, bytes]], str]:
+    archive_raw, archive_digest = _snapshot_raw_evidence_archive(path)
+    label = "raw performance evidence archive"
+    try:
+        with tarfile.open(fileobj=io.BytesIO(archive_raw), mode="r:") as archive:
+            members = archive.getmembers()
+            if [member.name for member in members] != list(RAW_EVIDENCE_FILES):
+                raise InputError(
+                    f"{label}: exact ordered inventory required: {list(RAW_EVIDENCE_FILES)}"
+                )
+            payloads: list[tuple[str, bytes]] = []
+            for member in members:
+                name = member.name
+                if not member.isreg():
+                    raise InputError(f"{label}: member must be a regular file: {name}")
+                if member.pax_headers:
+                    raise InputError(f"{label}: PAX extensions are forbidden: {name}")
+                if (
+                    member.uid != 0
+                    or member.gid != 0
+                    or member.uname != ""
+                    or member.gname != ""
+                    or member.mode != 0o644
+                    or member.mtime != 0
+                ):
+                    raise InputError(f"{label}: non-canonical metadata for {name}")
+                if (
+                    member.size <= 0
+                    or member.size > native_profile.MAX_EVIDENCE_BYTES
+                ):
+                    raise InputError(f"{label}: invalid size for {name}")
+                source = archive.extractfile(member)
+                if source is None:
+                    raise InputError(f"{label}: cannot read {name}")
+                raw = source.read(native_profile.MAX_EVIDENCE_BYTES + 1)
+                if len(raw) != member.size:
+                    raise InputError(f"{label}: truncated or oversized member {name}")
+                payloads.append((name, raw))
+    except InputError:
+        raise
+    except (OSError, tarfile.TarError) as error:
+        raise InputError(
+            f"{label}: cannot read deterministic uncompressed USTAR: {error}"
+        ) from error
+
+    canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
+    if archive_raw != _canonical_raw_archive_bytes(canonical_payloads):
+        raise InputError(
+            f"{label}: bytes are not the canonical deterministic USTAR encoding"
+        )
+    return payloads, archive_digest
+
+
+def load_raw_evidence_archive(
+    path: Path | str,
+) -> list[tuple[str, bytes]]:
+    """Load only a byte-exact canonical uncompressed five-run USTAR archive."""
+
+    payloads, _digest = _load_raw_evidence_archive_snapshot(Path(path))
+    return payloads
+
+
+def replay_raw_evidence_archive(path: Path | str) -> dict[str, Any]:
+    """Replay raw field derivation from a canonical performance archive."""
+
+    payloads, archive_digest = _load_raw_evidence_archive_snapshot(Path(path))
+    return {
+        "archive_sha256": archive_digest,
+        "derived": derive_raw_run_payloads(payloads),
+        "payloads": payloads,
+    }
 
 
 def evaluate(
@@ -1096,6 +1654,370 @@ def evaluate(
     except InputError as error:
         report["errors"] = [str(error)]
     return report
+
+
+def _image_digest(value: str, path: str) -> str:
+    if not isinstance(value, str) or not value.startswith("sha256:"):
+        raise InputError(f"{path}: expected sha256:<lowercase digest>")
+    digest = value.removeprefix("sha256:")
+    _sha256(digest, path)
+    return digest
+
+
+def _json_document_bytes(value: Mapping[str, Any]) -> bytes:
+    return (
+        json.dumps(
+            value,
+            sort_keys=True,
+            indent=2,
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def _build_candidate_from_payloads(
+    baseline_path: Path | str,
+    *,
+    candidate_id: str,
+    recorded_at_utc: str,
+    source_archive: Path | str,
+    profile_binary: Path | str,
+    release_binary: Path | str,
+    correctness_report: Path | str,
+    profile_image_id: str,
+    release_image_id: str,
+    payloads: Sequence[tuple[str, bytes]],
+) -> dict[str, Any]:
+    baseline_document, baseline_raw = _load_json_bytes(
+        Path(baseline_path), "baseline"
+    )
+    baseline = _validate_baseline(baseline_document, baseline_raw)
+    derived = derive_raw_run_payloads(payloads)
+    raw_source = derived["source"]
+    candidate = {
+        "schema_version": CANDIDATE_SCHEMA,
+        "baseline_sha256": baseline["sha256"],
+        "candidate_id": candidate_id,
+        "recorded_at_utc": recorded_at_utc,
+        "status": "success",
+        "source": {
+            "git_commit": raw_source["git_commit"],
+            "git_dirty": raw_source["git_dirty"],
+            "source_archive_sha256": _digest_file(
+                Path(source_archive), "source archive"
+            ),
+            "profile_binary_sha256": _digest_file(
+                Path(profile_binary), "profile binary"
+            ),
+            "release_binary_sha256": _digest_file(
+                Path(release_binary), "release binary"
+            ),
+            "profile_image_sha256": _image_digest(
+                profile_image_id, "--profile-image-id"
+            ),
+            "release_image_sha256": _image_digest(
+                release_image_id, "--release-image-id"
+            ),
+            "semantic_class": raw_source["semantic_class"],
+            "correctness_gate_id": raw_source["correctness_gate_id"],
+            "correctness_report_sha256": _digest_file(
+                Path(correctness_report), "correctness report"
+            ),
+        },
+        "model": derived["model"],
+        "environment": derived["environment"],
+        "workload": derived["workload"],
+        "run_summary": derived["run_summary"],
+        "metrics": derived["metrics"],
+        "raw_runs": derived["raw_runs"],
+    }
+    validated = _validate_candidate(candidate)
+    for field in ("model", "environment", "workload"):
+        if validated[field] != baseline[field]:
+            raise ComparabilityError(
+                f"candidate {field} differs from baseline lane"
+            )
+    validate_raw_run_payloads(payloads, validated)
+    return candidate
+
+
+def build_candidate_document(
+    baseline_path: Path | str,
+    *,
+    candidate_id: str,
+    recorded_at_utc: str,
+    source_archive: Path | str,
+    profile_binary: Path | str,
+    release_binary: Path | str,
+    correctness_report: Path | str,
+    profile_image_id: str,
+    release_image_id: str,
+    run_paths: Sequence[Path | str],
+) -> dict[str, Any]:
+    """Build a closed candidate document from raw run files and artifacts."""
+
+    return _build_candidate_from_payloads(
+        baseline_path,
+        candidate_id=candidate_id,
+        recorded_at_utc=recorded_at_utc,
+        source_archive=source_archive,
+        profile_binary=profile_binary,
+        release_binary=release_binary,
+        correctness_report=correctness_report,
+        profile_image_id=profile_image_id,
+        release_image_id=release_image_id,
+        payloads=_read_raw_run_paths(run_paths),
+    )
+
+
+def _evaluate_payload_snapshot(
+    baseline_path: Path | str,
+    candidate_path: Path,
+    payloads: Sequence[tuple[str, bytes]],
+    *,
+    source_archive: Path | str,
+    profile_binary: Path | str,
+    release_binary: Path | str,
+    weights: Path | str,
+    tokenizer: Path | str,
+    correctness_report: Path | str,
+    profile_image_id: str,
+    release_image_id: str,
+) -> dict[str, Any]:
+    canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
+    with tempfile.TemporaryDirectory(
+        prefix="rustinfer-performance-evaluate-"
+    ) as temporary:
+        directory = Path(temporary)
+        run_paths: list[Path] = []
+        for name, raw in canonical_payloads:
+            path = directory / name
+            with path.open("xb") as handle:
+                handle.write(raw)
+            run_paths.append(path)
+        return evaluate(
+            baseline_path,
+            candidate_path,
+            source_archive=source_archive,
+            profile_binary=profile_binary,
+            release_binary=release_binary,
+            weights=weights,
+            tokenizer=tokenizer,
+            correctness_report=correctness_report,
+            profile_image_id=profile_image_id,
+            release_image_id=release_image_id,
+            run_paths=run_paths,
+        )
+
+
+def package_release_performance_evidence(
+    baseline_path: Path | str,
+    output_directory: Path | str,
+    *,
+    candidate_id: str,
+    recorded_at_utc: str,
+    source_archive: Path | str,
+    profile_binary: Path | str,
+    release_binary: Path | str,
+    weights: Path | str,
+    tokenizer: Path | str,
+    correctness_report: Path | str,
+    profile_image_id: str,
+    release_image_id: str,
+    run_paths: Sequence[Path | str],
+) -> dict[str, Any]:
+    """Create a checked three-file performance evidence directory.
+
+    All validation and archive self-replay occur in a staging directory.  The
+    requested output directory is then created exclusively and is never reused
+    or overwritten.
+    """
+
+    candidate_id = _candidate_id(candidate_id, "candidate.candidate_id")
+    output = Path(output_directory)
+    if os.path.lexists(output):
+        raise FileExistsError(f"refusing to overwrite existing output: {output}")
+    parent = output.parent
+    if not output.name:
+        raise InputError("--output-directory: must name a new directory")
+    try:
+        parent_metadata = parent.stat()
+    except OSError as error:
+        raise InputError(f"cannot inspect output parent {parent}: {error}") from error
+    if not stat.S_ISDIR(parent_metadata.st_mode):
+        raise InputError(f"output parent is not a directory: {parent}")
+
+    input_payloads = _read_raw_run_paths(run_paths)
+    derived = derive_raw_run_payloads(input_payloads)
+    canonical_payloads = derived["payloads"]
+    candidate = _build_candidate_from_payloads(
+        baseline_path,
+        candidate_id=candidate_id,
+        recorded_at_utc=recorded_at_utc,
+        source_archive=source_archive,
+        profile_binary=profile_binary,
+        release_binary=release_binary,
+        correctness_report=correctness_report,
+        profile_image_id=profile_image_id,
+        release_image_id=release_image_id,
+        payloads=canonical_payloads,
+    )
+
+    staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=parent))
+    staging_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+    staging_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    staging_descriptor = os.open(staging, staging_flags)
+    staging_metadata = os.fstat(staging_descriptor)
+    held_descriptors: dict[str, int] = {}
+    try:
+        candidate_path = staging / PACKAGE_CANDIDATE_NAME
+        candidate_bytes = _json_document_bytes(candidate)
+        held_descriptors[PACKAGE_CANDIDATE_NAME] = _write_new_file(
+            staging_descriptor,
+            PACKAGE_CANDIDATE_NAME,
+            candidate_bytes,
+        )
+        raw_evidence_path = staging / PACKAGE_RAW_EVIDENCE_NAME
+        raw_evidence_sha256 = write_raw_evidence_archive(
+            raw_evidence_path, canonical_payloads
+        )
+        raw_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+        raw_flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        held_descriptors[PACKAGE_RAW_EVIDENCE_NAME] = os.open(
+            PACKAGE_RAW_EVIDENCE_NAME,
+            raw_flags,
+            dir_fd=staging_descriptor,
+        )
+
+        source_report = _evaluate_payload_snapshot(
+            baseline_path,
+            candidate_path,
+            canonical_payloads,
+            source_archive=source_archive,
+            profile_binary=profile_binary,
+            release_binary=release_binary,
+            weights=weights,
+            tokenizer=tokenizer,
+            correctness_report=correctness_report,
+            profile_image_id=profile_image_id,
+            release_image_id=release_image_id,
+        )
+        if source_report["status"] not in {"passed", "failed"}:
+            detail = "; ".join(source_report["errors"]) or source_report["status"]
+            if source_report["status"] == "incomparable":
+                raise ComparabilityError(
+                    "cannot package incomparable release performance evidence: "
+                    f"{detail}"
+                )
+            raise InputError(
+                "cannot package structurally invalid release performance evidence: "
+                f"{detail}"
+            )
+        if source_report["passed"] is not (source_report["status"] == "passed"):
+            raise InputError("performance report status/pass fields are inconsistent")
+        if source_report["errors"] != []:
+            raise InputError("comparable performance report must not contain errors")
+
+        replay = replay_raw_evidence_archive(raw_evidence_path)
+        validate_raw_run_payloads(replay["payloads"], _validate_candidate(candidate))
+        replayed_report = _evaluate_payload_snapshot(
+            baseline_path,
+            candidate_path,
+            replay["payloads"],
+            source_archive=source_archive,
+            profile_binary=profile_binary,
+            release_binary=release_binary,
+            weights=weights,
+            tokenizer=tokenizer,
+            correctness_report=correctness_report,
+            profile_image_id=profile_image_id,
+            release_image_id=release_image_id,
+        )
+        if _json_document_bytes(replayed_report) != _json_document_bytes(
+            source_report
+        ):
+            raise InputError(
+                "raw performance evidence self-replay changed the checked report"
+            )
+
+        report_bytes = _json_document_bytes(replayed_report)
+        held_descriptors[PACKAGE_REPORT_NAME] = _write_new_file(
+            staging_descriptor,
+            PACKAGE_REPORT_NAME,
+            report_bytes,
+        )
+        bindings = {
+            PACKAGE_CANDIDATE_NAME: _record_held_file(
+                held_descriptors[PACKAGE_CANDIDATE_NAME],
+                PACKAGE_CANDIDATE_NAME,
+                maximum=native_profile.MAX_EVIDENCE_BYTES,
+            ),
+            PACKAGE_REPORT_NAME: _record_held_file(
+                held_descriptors[PACKAGE_REPORT_NAME],
+                PACKAGE_REPORT_NAME,
+                maximum=native_profile.MAX_EVIDENCE_BYTES,
+            ),
+            PACKAGE_RAW_EVIDENCE_NAME: _record_held_file(
+                held_descriptors[PACKAGE_RAW_EVIDENCE_NAME],
+                PACKAGE_RAW_EVIDENCE_NAME,
+                maximum=MAX_RAW_EVIDENCE_ARCHIVE_BYTES,
+            ),
+        }
+        expected_digests = {
+            PACKAGE_CANDIDATE_NAME: _digest_bytes(candidate_bytes),
+            PACKAGE_REPORT_NAME: _digest_bytes(report_bytes),
+            PACKAGE_RAW_EVIDENCE_NAME: raw_evidence_sha256,
+        }
+        for name, expected_digest in expected_digests.items():
+            if bindings[name].digest != expected_digest:
+                raise InputError(
+                    f"package child {name}: held bytes differ from generated bytes"
+                )
+        os.fsync(staging_descriptor)
+        if not _same_inode(staging, staging_metadata, directory=True):
+            raise InputError(
+                "private performance staging directory changed before publish"
+            )
+        _verify_package_children(
+            staging_descriptor,
+            staging_metadata,
+            held_descriptors,
+            bindings,
+            "private performance staging directory at publish",
+        )
+        _rename_noreplace(staging, output)
+        _fsync_directory(parent)
+        if not _same_inode(output, staging_metadata, directory=True):
+            raise InputError(
+                "published performance evidence directory changed before completion"
+            )
+        _verify_package_children(
+            staging_descriptor,
+            staging_metadata,
+            held_descriptors,
+            bindings,
+            "published performance evidence directory after path check",
+        )
+        if not _same_inode(output, staging_metadata, directory=True):
+            raise InputError(
+                "published performance evidence path changed during verification"
+            )
+        return {
+            "candidate": candidate,
+            "report": replayed_report,
+            "candidate_sha256": bindings[PACKAGE_CANDIDATE_NAME].digest,
+            "report_sha256": bindings[PACKAGE_REPORT_NAME].digest,
+            "raw_evidence_sha256": bindings[PACKAGE_RAW_EVIDENCE_NAME].digest,
+        }
+    finally:
+        for descriptor in held_descriptors.values():
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+        os.close(staging_descriptor)
 
 
 def _parser() -> argparse.ArgumentParser:

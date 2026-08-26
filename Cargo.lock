@@ -114,6 +114,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustinfer-native"
+version = "0.1.0"
+dependencies = [
+ "rustinfer-model",
+ "rustinfer-runtime",
+]
+
+[[package]]
 name = "rustinfer-runtime"
 version = "0.1.0"
 dependencies = [

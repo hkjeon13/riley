@@ -8,6 +8,7 @@ members = [
     "crates/rustinfer-runtime",
     "crates/rustinfer-scheduler",
     "crates/rustinfer-server",
+    "crates/rustinfer-native",
 ]
 default-members = ["crates/rustinfer-server"]
 exclude = ["tools/python", "tools/native", "experiments/triton"]
@@ -17,6 +18,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 publish = false
+license = "MIT"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

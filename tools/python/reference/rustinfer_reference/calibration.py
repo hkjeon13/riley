@@ -58,11 +58,17 @@ CALIBRATION_PROMPT_COUNT = 31
 LOG_PROB_PIPELINE = "log-softmax-fp32-v1"
 MODEL_EOS_TOKEN_IDS = (0,)
 NATIVE_EXECUTABLE_FILENAME = "rustinfer-native"
+NATIVE_ENGINE_REVISION = "rustinfer-native-contract-v2"
 NATIVE_BUILD_ARGV = (
     "cargo",
     "build",
     "--locked",
     "--release",
+    "--package",
+    "rustinfer-native",
+    "--no-default-features",
+    "--features",
+    "cuda",
     "--bin",
     NATIVE_EXECUTABLE_FILENAME,
 )
@@ -764,6 +770,38 @@ def _flag_values(argv: Sequence[str], flag: str, path: str) -> list[str]:
     return values
 
 
+def _normalized_absolute_posix_path(value: object, path: str) -> str:
+    text = _expect_string(value, path)
+    components = text.split("/")
+    if (
+        not text.startswith("/")
+        or text == "/"
+        or "\\" in text
+        or "\x00" in text
+        or components[0] != ""
+        or any(component in {"", ".", ".."} for component in components[1:])
+    ):
+        raise CalibrationError(f"{path}: expected normalized absolute POSIX path")
+    return text
+
+
+def _normalized_sibling(value: object, path: str, suffix: str) -> str:
+    text = _expect_string(value, path)
+    if (
+        text in {".", ".."}
+        or "/" in text
+        or "\\" in text
+        or "\x00" in text
+        or len(text) <= len(suffix)
+        or not text.endswith(suffix)
+        or Path(text).name != text
+    ):
+        raise CalibrationError(
+            f"{path}: expected normalized sibling filename ending in {suffix}"
+        )
+    return text
+
+
 def _validate_candidate_execution(value: object, path: str) -> dict[str, object]:
     execution = _expect_object(value, path)
     _expect_exact_keys(execution, {"executable", "build_argv", "capture_argv"}, path)
@@ -778,27 +816,35 @@ def _validate_candidate_execution(value: object, path: str) -> dict[str, object]
     capture_argv = _validate_argv(execution["capture_argv"], f"{path}.capture_argv")
     if capture_argv[:2] != [NATIVE_EXECUTABLE_FILENAME, "calibrate"]:
         raise CalibrationError(f"{path}.capture_argv: canonical native calibrate ABI required")
-    exact_single_flags = {
-        "--gate-manifest": HF_SOURCE_PATHS["gate_manifest"],
-        "--prompts": HF_SOURCE_PATHS["prompts"],
-    }
-    for flag, expected in exact_single_flags.items():
-        if _flag_values(capture_argv, flag, f"{path}.capture_argv") != [expected]:
-            raise CalibrationError(f"{path}.capture_argv: {flag} binding differs")
-    if _flag_values(capture_argv, "--reduction-variant", f"{path}.capture_argv") != [
+    expected_flags = [
+        "--repository-root",
+        "--model",
+        "--gate-manifest",
+        "--prompts",
+        "--manifest",
+        "--sidecar",
+        "--reduction-variant",
+        "--reduction-variant",
+    ]
+    if len(capture_argv) != 18 or capture_argv[2::2] != expected_flags:
+        raise CalibrationError(
+            f"{path}.capture_argv: exact ordered contract-v2 flag inventory required"
+        )
+    values = capture_argv[3::2]
+    _normalized_absolute_posix_path(values[0], f"{path}.capture_argv.--repository-root")
+    _normalized_absolute_posix_path(values[1], f"{path}.capture_argv.--model")
+    if values[2] != HF_SOURCE_PATHS["gate_manifest"]:
+        raise CalibrationError(f"{path}.capture_argv: --gate-manifest binding differs")
+    if values[3] != HF_SOURCE_PATHS["prompts"]:
+        raise CalibrationError(f"{path}.capture_argv: --prompts binding differs")
+    _normalized_sibling(values[4], f"{path}.capture_argv.--manifest", ".json")
+    _normalized_sibling(values[5], f"{path}.capture_argv.--sidecar", ".safetensors")
+    expected_variants = [
         str(variant["variant_id"])
         for variant in REQUIRED_CANDIDATE_REDUCTION_VARIANTS
-    ]:
+    ]
+    if values[6:] != expected_variants:
         raise CalibrationError(f"{path}.capture_argv: both ordered variants are required")
-    manifest_outputs = _flag_values(capture_argv, "--manifest", f"{path}.capture_argv")
-    sidecar_outputs = _flag_values(capture_argv, "--sidecar", f"{path}.capture_argv")
-    if (
-        len(manifest_outputs) != 1
-        or Path(manifest_outputs[0]).name != manifest_outputs[0]
-        or len(sidecar_outputs) != 1
-        or Path(sidecar_outputs[0]).name != sidecar_outputs[0]
-    ):
-        raise CalibrationError(f"{path}.capture_argv: sibling outputs must be explicit")
     return execution
 
 
@@ -864,7 +910,7 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
     else:
         if producer != {
             "implementation_id": "rustinfer-native",
-            "engine_revision": producer["engine_revision"],
+            "engine_revision": NATIVE_ENGINE_REVISION,
             "runtime_dependency_class": "native-production",
             "python_version": None,
             "python_executable_sha256": None,

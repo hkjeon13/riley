@@ -21,7 +21,7 @@ PACKAGER = REPOSITORY_ROOT / "ci/release/package_python_free_e2e_evidence.py"
 RELEASE_DIR = REPOSITORY_ROOT / "ci/release"
 sys.path.insert(0, str(RELEASE_DIR))
 from build_release_bundle import build_bundle  # noqa: E402
-from release_common import native_manifest_bytes  # noqa: E402
+from release_common import MIT_LICENSE_BYTES, native_manifest_bytes  # noqa: E402
 from test_release import DEPENDENCIES, EPOCH, fixture_elf  # noqa: E402
 
 SPEC = importlib.util.spec_from_file_location("check_python_free_release_e2e", SCRIPT)
@@ -185,14 +185,10 @@ class E2EFixture:
         repository = root / "repository"
         repository.mkdir()
         (repository / "Cargo.toml").write_text(
-            '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\nlicense = "LicenseRef-Test-Fixture"\n',
+            '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\nlicense = "MIT"\n',
             encoding="utf-8",
         )
-        (repository / "LICENSE").write_text(
-            "Owner-approved fixture license for release contract unit tests.\n"
-            "Permission is granted only inside this temporary test fixture.\n",
-            encoding="utf-8",
-        )
+        (repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         build_bundle(
             binary_path=self.release_binary,
             output=self.release_bundle,

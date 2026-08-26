@@ -27,7 +27,11 @@ from check_reproducible_build import (  # noqa: E402
     check_reproducible_build,
 )
 from package_reproducible_build_evidence import package_evidence  # noqa: E402
-from release_common import ReleaseContractError, canonical_json_bytes  # noqa: E402
+from release_common import (  # noqa: E402
+    MIT_LICENSE_BYTES,
+    ReleaseContractError,
+    canonical_json_bytes,
+)
 from test_release import fixture_elf  # noqa: E402
 from write_reproducible_build_completion import (  # noqa: E402
     CompletionReceiptError,
@@ -317,14 +321,10 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         self.repository.mkdir()
         (self.repository / "Cargo.toml").write_text(
             '[workspace]\nmembers = []\n[workspace.package]\nversion = "0.1.0"\n'
-            'license = "LicenseRef-Test-Fixture"\n',
+            'license = "MIT"\n',
             encoding="utf-8",
         )
-        (self.repository / "LICENSE").write_text(
-            "Owner-approved fixture license for reproducibility unit tests.\n"
-            "Permission is limited to this isolated temporary test fixture.\n",
-            encoding="utf-8",
-        )
+        (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         self.source_archive = self.root / "source.tar"
         write_source_archive(self.source_archive)
         global SOURCE_SHA_PLACEHOLDER

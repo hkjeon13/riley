@@ -8,11 +8,15 @@ Implementation follows the numbered [deployment plan](deploy/README.md). See [CO
 
 ## Production workspace
 
-The production runtime is an explicitly bounded seven-crate Rust workspace; its
-responsibilities and dependency direction are documented in
-[`crates/README.md`](crates/README.md). Python reference tools and Triton
-experiments are intentionally outside that workspace and are never production
+The production runtime remains an explicitly bounded set of seven Rust crates.
+One additional non-default development member, `rustinfer-native`, owns the
+feature-off calibration ABI contract without entering the production dependency
+graph or default build. Responsibilities and dependency direction are documented
+in [`crates/README.md`](crates/README.md). Python reference tools and Triton
+experiments are intentionally outside the workspace and are never production
 Cargo features or build-script inputs.
+
+The repository is licensed under the [MIT License](LICENSE).
 
 The repository pins Rust 1.85.0. A CPU-only checkout needs no CUDA toolkit:
 

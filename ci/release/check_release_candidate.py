@@ -80,6 +80,10 @@ OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
+CANDIDATE_ID_RE = re.compile(
+    r"^rustinfer-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"(?:0|[1-9][0-9]*))-rc([1-9][0-9]*)$"
+)
 PLACEHOLDER_RE = re.compile(
     r"(?:placeholder|replace[-_ ]?me|sha256[-_ ]?of|\btodo\b|<[^>]+>)",
     re.IGNORECASE,
@@ -89,7 +93,6 @@ PERFORMANCE_BASELINE_PATH = (
     Path(__file__).resolve().parents[2]
     / "benchmarks/release/performance-baseline-v1.json"
 )
-PERFORMANCE_RAW_FILES = {f"candidate-{index}.json" for index in range(1, 6)}
 PERFORMANCE_CHECKS = {
     "ttft_p95_regression": ("ttft_p95_ms", "<=", 1.05),
     "tpot_p95_regression": ("tpot_p95_ms", "<=", 1.05),
@@ -195,6 +198,7 @@ class CandidateError(ValueError):
 class _ArtifactSnapshotContext:
     directory: Path
     evidence_root_fd: int
+    seen_file_ids: set[tuple[int, int]]
 
 
 def _fail(path: str, message: str) -> NoReturn:
@@ -224,14 +228,55 @@ def _canonical_json_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def _load_json(path: Path, label: str) -> tuple[dict[str, Any], bytes]:
+def _load_json(
+    path: Path,
+    label: str,
+    *,
+    file_fd: int | None = None,
+) -> tuple[dict[str, Any], bytes]:
     try:
-        metadata = path.lstat()
-        if not stat.S_ISREG(metadata.st_mode):
-            _fail(label, "must be a regular file, not a link or device")
-        if metadata.st_size > MAX_JSON_BYTES:
-            _fail(label, f"exceeds the {MAX_JSON_BYTES}-byte JSON bound")
-        raw = path.read_bytes()
+        if file_fd is None:
+            metadata = path.lstat()
+            if not stat.S_ISREG(metadata.st_mode):
+                _fail(label, "must be a regular file, not a link or device")
+            if metadata.st_size > MAX_JSON_BYTES:
+                _fail(label, f"exceeds the {MAX_JSON_BYTES}-byte JSON bound")
+            raw = path.read_bytes()
+        else:
+            before = os.fstat(file_fd)
+            if not stat.S_ISREG(before.st_mode):
+                _fail(label, "held FD must be a regular file")
+            named_fd = os.open(
+                path,
+                os.O_RDONLY | os.O_CLOEXEC | os.O_NONBLOCK,
+            )
+            try:
+                named = os.fstat(named_fd)
+                if named.st_dev != before.st_dev or named.st_ino != before.st_ino:
+                    _fail(label, "manifest path does not name the held FD")
+            finally:
+                os.close(named_fd)
+            if before.st_size > MAX_JSON_BYTES:
+                _fail(label, f"exceeds the {MAX_JSON_BYTES}-byte JSON bound")
+            raw = os.pread(file_fd, MAX_JSON_BYTES + 1, 0)
+            after = os.fstat(file_fd)
+            stable_fields = (
+                "st_dev",
+                "st_ino",
+                "st_mode",
+                "st_size",
+                "st_mtime_ns",
+                "st_ctime_ns",
+            )
+            if (
+                len(raw) != before.st_size
+                or len(raw) > MAX_JSON_BYTES
+                or any(
+                    getattr(before, field) != getattr(after, field)
+                    for field in stable_fields
+                )
+            ):
+                _fail(label, "held FD changed while it was read")
         text = raw.decode("utf-8")
         value = json.loads(
             text,
@@ -307,6 +352,14 @@ def _image_id(value: Any, path: str) -> str:
         _fail(path, "must be sha256:<lowercase digest>")
     _sha256(image_id.removeprefix("sha256:"), path)
     return image_id
+
+
+def _candidate_id(value: Any, path: str) -> tuple[str, str]:
+    candidate_id = _string(value, path)
+    match = CANDIDATE_ID_RE.fullmatch(candidate_id)
+    if match is None:
+        _fail(path, "must be rustinfer-<major>.<minor>.<patch>-rc<positive integer>")
+    return candidate_id, match.group(1)
 
 
 def _source_date_epoch(value: Any, path: str) -> int:
@@ -429,6 +482,13 @@ def _resolve_artifact(
                 f"{path}.path",
                 "artifact must be a regular file, not a link or device",
             )
+        file_id = (before.st_dev, before.st_ino)
+        if file_id in snapshot_context.seen_file_ids:
+            _fail(
+                f"{path}.path",
+                "artifact must not be a hard-link alias of another manifest path",
+            )
+        snapshot_context.seen_file_ids.add(file_id)
         snapshot = (
             snapshot_context.directory / f"{len(seen_paths):03d}-{pure.name}"
         )
@@ -750,42 +810,10 @@ def _optimization_test(
 def _performance_raw_payloads(path: Path) -> list[tuple[str, bytes]]:
     evidence_path = "performance.raw_evidence"
     try:
-        with tarfile.open(path, "r:*") as archive:
-            members = _safe_tar_members(archive, evidence_path)
-            files: dict[str, tarfile.TarInfo] = {}
-            for member in members:
-                if not member.isreg() or member.name not in PERFORMANCE_RAW_FILES:
-                    _fail(
-                        evidence_path,
-                        "must contain only candidate-1.json through candidate-5.json",
-                    )
-                if member.size <= 0 or member.size > release_performance.native_profile.MAX_EVIDENCE_BYTES:
-                    _fail(
-                        evidence_path,
-                        f"raw run is empty or exceeds the evidence bound: {member.name}",
-                    )
-                files[member.name] = member
-            if set(files) != PERFORMANCE_RAW_FILES:
-                _fail(
-                    evidence_path,
-                    f"exact raw run inventory mismatch: {sorted(files)}",
-                )
-            payloads: list[tuple[str, bytes]] = []
-            for name in sorted(files):
-                source = archive.extractfile(files[name])
-                if source is None:
-                    _fail(evidence_path, f"cannot read {name}")
-                raw = source.read(
-                    release_performance.native_profile.MAX_EVIDENCE_BYTES + 1
-                )
-                if len(raw) != files[name].size:
-                    _fail(evidence_path, f"truncated or oversized raw run: {name}")
-                payloads.append((f"{evidence_path}:{name}", raw))
-            return payloads
-    except CandidateError:
-        raise
-    except (OSError, tarfile.TarError) as error:
-        _fail(evidence_path, f"cannot read raw run archive: {error}")
+        payloads = release_performance.load_raw_evidence_archive(path)
+    except (release_performance.InputError, OSError) as error:
+        _fail(evidence_path, str(error))
+    return [(f"{evidence_path}:{name}", raw) for name, raw in payloads]
 
 
 def _reviewed_performance_baseline() -> dict[str, Any]:
@@ -957,6 +985,7 @@ def _validate_performance(
     optimization_profile_image_sha256: str,
     profile_binary_sha256: str,
     raw_evidence_path: Path,
+    candidate_id: str,
 ) -> None:
     row = _exact(
         report,
@@ -986,6 +1015,11 @@ def _validate_performance(
         )
     except (release_performance.InputError, release_performance.ComparabilityError) as error:
         _fail(f"{path}.candidate", str(error))
+    if validated_candidate["candidate_id"] != candidate_id:
+        _fail(
+            f"{path}.candidate.candidate_id",
+            "does not match the trusted final candidate ID",
+        )
     binding = _exact(
         validated_candidate["source"],
         {
@@ -1284,7 +1318,7 @@ def _validate_soak(
         _fail(f"{path}.observations.final", "all final resource values must be zero")
 
 
-def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> None:
+def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> str:
     try:
         verify_bundle(bundle)
         with tarfile.open(bundle, "r:gz") as archive:
@@ -1308,8 +1342,12 @@ def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> N
     artifact = _object(release_manifest.get("artifact"), "release manifest.artifact")
     if artifact.get("source_revision") != revision:
         _fail("release manifest.artifact.source_revision", "candidate revision mismatch")
+    version = artifact.get("version")
+    if not isinstance(version, str) or not version:
+        _fail("release manifest.artifact.version", "must be a semantic release version")
     if internal_binary_sha256 != binary_sha256:
         _fail("manifest.release.binary", "standalone binary differs from bundle binary")
+    return version
 
 
 def _validate_reproducibility_replay(
@@ -1454,6 +1492,8 @@ def evaluate(
     manifest_path: Path,
     evidence_root: Path,
     *,
+    manifest_fd: int | None = None,
+    expected_candidate_id: str,
     expected_revision: str,
     expected_source_archive_sha256: str,
     expected_release_image_id: str,
@@ -1468,6 +1508,10 @@ def evaluate(
     snapshot_temporary: tempfile.TemporaryDirectory[str] | None = None
     evidence_root_fd = -1
     try:
+        trusted_candidate_id, trusted_release_version = _candidate_id(
+            expected_candidate_id,
+            "--expected-candidate-id",
+        )
         trusted_revision = _revision(expected_revision, "--expected-revision")
         trusted_archive_sha256 = _sha256(
             expected_source_archive_sha256,
@@ -1524,8 +1568,13 @@ def evaluate(
         snapshot_root = _ArtifactSnapshotContext(
             directory=Path(snapshot_temporary.name),
             evidence_root_fd=evidence_root_fd,
+            seen_file_ids=set(),
         )
-        manifest, manifest_raw = _load_json(manifest_path, "manifest")
+        manifest, manifest_raw = _load_json(
+            manifest_path,
+            "manifest",
+            file_fd=manifest_fd,
+        )
         row = _exact(
             manifest,
             {"schema_version", "candidate_id", "source", "release", "evidence"},
@@ -1533,7 +1582,16 @@ def evaluate(
         )
         if row["schema_version"] != MANIFEST_VERSION:
             _fail("manifest.schema_version", f"must be {MANIFEST_VERSION}")
-        candidate_id = _string(row["candidate_id"], "manifest.candidate_id", ID_RE)
+        candidate_id, candidate_release_version = _candidate_id(
+            row["candidate_id"], "manifest.candidate_id"
+        )
+        if candidate_id != trusted_candidate_id:
+            _fail(
+                "manifest.candidate_id",
+                "differs from the trusted expected candidate ID",
+            )
+        if candidate_release_version != trusted_release_version:
+            _fail("manifest.candidate_id", "release version binding differs")
         source_row = _exact(row["source"], {"git_revision", "git_dirty", "archive"}, "manifest.source")
         revision = _revision(source_row["git_revision"], "manifest.source.git_revision")
         if revision != trusted_revision:
@@ -1592,7 +1650,14 @@ def evaluate(
         )
         if not os.access(binary_path, os.X_OK):
             _fail("manifest.release.binary", "must be executable")
-        _verify_bundle_binding(bundle_path, binary_sha256, revision)
+        bundle_release_version = _verify_bundle_binding(
+            bundle_path, binary_sha256, revision
+        )
+        if bundle_release_version != trusted_release_version:
+            _fail(
+                "release manifest.artifact.version",
+                "does not match the trusted candidate ID release version",
+            )
         source = {"git_revision": revision, "archive_sha256": archive_sha256}
         release = {
             "binary_sha256": binary_sha256,
@@ -2009,6 +2074,7 @@ def evaluate(
             optimization_profile_image_sha256=optimization_profile_image_sha256,
             profile_binary_sha256=profile_binary_sha,
             raw_evidence_path=raw_paths["performance"],
+            candidate_id=trusted_candidate_id,
         )
         _validate_soak(
             loaded["reliability_soak"][0], "reliability_soak", revision=revision,
@@ -2068,6 +2134,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--evidence-root", required=True, type=Path)
+    parser.add_argument("--expected-candidate-id", required=True)
     parser.add_argument("--expected-revision", required=True)
     parser.add_argument("--expected-source-archive-sha256", required=True)
     parser.add_argument("--expected-release-image-id", required=True)
@@ -2084,6 +2151,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = evaluate(
         args.manifest,
         args.evidence_root,
+        expected_candidate_id=args.expected_candidate_id,
         expected_revision=args.expected_revision,
         expected_source_archive_sha256=args.expected_source_archive_sha256,
         expected_release_image_id=args.expected_release_image_id,

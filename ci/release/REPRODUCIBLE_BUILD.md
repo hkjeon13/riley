@@ -45,8 +45,9 @@ both offline builds. Changing that ID invalidates the evidence.
 ## Remote execution
 
 On `server-4096`, check out the candidate revision and prepare the builder
-image. The release preflight deliberately fails until the repository owner has
-selected the root `LICENSE` and matching Cargo license metadata.
+image. Release preflight requires the reviewed byte-exact MIT `LICENSE`, the
+workspace `MIT` SPDX expression, and inherited license metadata in every
+workspace member.
 
 ```sh
 docker build \

@@ -321,10 +321,28 @@ def _validate_instance(
             identities = [_json_identity(item) for item in instance]
             if len(identities) != len(set(identities)):
                 _error(path, "must contain unique items")
+
+        prefix_items = schema.get("prefixItems", [])
+        if not isinstance(prefix_items, list) or not all(
+            isinstance(subschema, dict) for subschema in prefix_items
+        ):
+            raise ContractError(f"schema at {path} has invalid prefixItems")
+        for index, subschema in enumerate(prefix_items[: len(instance)]):
+            _validate_instance(
+                instance[index], subschema, root_schema, f"{path}[{index}]"
+            )
+
         items = schema.get("items")
+        trailing_start = len(prefix_items)
+        if items is False and len(instance) > trailing_start:
+            _error(path, "must not contain items after the prefixItems inventory")
         if isinstance(items, dict):
-            for index, item in enumerate(instance):
+            for index, item in enumerate(
+                instance[trailing_start:], start=trailing_start
+            ):
                 _validate_instance(item, items, root_schema, f"{path}[{index}]")
+        elif items is not None and not isinstance(items, bool):
+            raise ContractError(f"schema at {path} has invalid items")
 
     if isinstance(instance, str):
         if "minLength" in schema and len(instance) < schema["minLength"]:

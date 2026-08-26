@@ -1,7 +1,8 @@
 # Production crate boundaries
 
-이 디렉터리의 일곱 crate만 production Cargo workspace member다. Dependency는
-아래 방향으로만 흐르며 모든 crate의 default feature는 비어 있다.
+이 디렉터리의 production crate는 아래 일곱 개로 고정된다. 추가 development
+workspace member `rustinfer-native`는 non-default이며 production dependency graph에
+들어가지 않는다. 모든 crate의 default feature는 비어 있다.
 
 ```text
 rustinfer-server
@@ -30,6 +31,11 @@ rustinfer-cuda   -> rustinfer-core
 | `rustinfer-scheduler` | bounded admission과 continuous-batching state 경계 | HTTP representation |
 | `rustinfer-server` | binary, HTTP DTO/transport, model/runtime/scheduler composition root | native C ABI 세부 구현 |
 
+`rustinfer-native`는 development-only calibration ABI/parser와 향후 native evidence
+producer를 소유한다. Optional `cuda` feature만 `rustinfer-model`과
+`rustinfer-runtime/cuda`를 활성화하며 production crate는 이 development crate에
+의존할 수 없다. PR A에는 library target만 있고 실행 가능한 producer binary는 없다.
+
 `tools/python`, `tools/native`, `experiments/triton`은 workspace member가 아니다.
 Python/Triton은 Cargo dependency나 build-script 입력도 아니다. Python 결과는
 JSON, safetensors, CSV/JSONL 같은
@@ -54,6 +60,9 @@ cargo build --locked --release --features cuda,server
   직렬화 경계를 활성화한다. 실행 binary는 추가로 `cuda`를 요구하며 production
   `rustinfer` artifact에는 포함되지 않는다.
 - `experimental`: 아직 구현을 활성화하지 않는 예약 opt-in 경계다.
+- `rustinfer-native/cuda`: 향후 calibration producer가 사용할 명시적 development
+  feature다. Non-default package이므로 `--package rustinfer-native` 없이 root build에
+  포함되지 않는다.
 
 ## Panic과 error 원칙
 

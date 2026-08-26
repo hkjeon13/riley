@@ -323,6 +323,22 @@ class NativeCorrectnessEvidenceTests(unittest.TestCase):
         ):
             checker.replay_raw_evidence(self.fixture.raw)
 
+    def test_candidate_capture_argv_rejects_unreviewed_arguments(self) -> None:
+        payloads = self.fixture.payloads()
+        manifest = json.loads(payloads["candidate-manifest.json"])
+        manifest["candidate_execution"]["capture_argv"].extend(
+            ["--unreviewed-flag", "unreviewed-value"]
+        )
+        payloads["candidate-manifest.json"] = (
+            json.dumps(manifest, sort_keys=True, indent=2) + "\n"
+        ).encode()
+        self.fixture.rewrite(payloads)
+        with self.assertRaisesRegex(
+            checker.NativeCorrectnessEvidenceError,
+            "exact ordered contract-v2 flag inventory",
+        ):
+            checker.replay_raw_evidence(self.fixture.raw)
+
     def test_candidate_source_revision_is_not_self_declared(self) -> None:
         with self.assertRaisesRegex(
             checker.NativeCorrectnessEvidenceError,

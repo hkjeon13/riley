@@ -14,21 +14,21 @@ rustinfer-VERSION-linux-x86_64-cuda12.8/
     └── release.json
 ```
 
-`release.json` is the machine-readable feature, default, support,
-configuration, and rollback contract. `native-dependencies.txt` is generated
-from the CLI ELF's direct `DT_NEEDED` entries and is limited to the reviewed
-Linux/CUDA runtime allowlist. `SHA256SUMS` covers every payload file except
-itself.
+`release.json` is the machine-readable license, feature, default, support,
+configuration, and rollback contract. Its artifact license is exactly the
+`MIT` SPDX expression. `native-dependencies.txt` is generated from the CLI
+ELF's direct `DT_NEEDED` entries and is limited to the reviewed Linux/CUDA
+runtime allowlist. `SHA256SUMS` covers every payload file except itself.
 
-## Known release blocker: project license
+## Reviewed project license
 
-The repository owner has not selected a root `LICENSE`. Release preflight
-therefore fails closed. Packaging must not infer or generate a license. Before
-the first release candidate, the owner must add an approved, non-placeholder
-root `LICENSE`, decide whether a root `NOTICE` is required, and align Cargo
-package license metadata with that decision.
-
-This blocker is intentional and does not affect ordinary development builds.
+The project uses the standard MIT license with
+`Copyright (c) 2026 rustinfer contributors`. Release preflight and bundle
+production require the root `LICENSE` bytes to match that reviewed text,
+`workspace.package.license` to equal `MIT`, and every workspace package to use
+`license.workspace = true`. Bundle verification independently requires the
+same exact `LICENSE` bytes and canonical embedded SPDX field. A root `NOTICE`
+remains optional and is packaged only when present.
 
 ## Deterministic bundle
 
@@ -66,7 +66,7 @@ missing or mismatched checksums.
 ## Minimal CUDA runtime image
 
 `ci/release/Dockerfile` has separate toolchain, builder, and final runtime
-stages. Build it only after the license blocker is resolved:
+stages:
 
 ```sh
 docker build \
