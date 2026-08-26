@@ -20,6 +20,7 @@ use rustinfer_cuda::{
 use rustinfer_model::LoadedModel;
 
 use super::decode::PrefillKvCacheSink;
+use super::gemm_policy::{LlamaGemmReductionPolicies, canonical_gemm_reduction_policies};
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError,
     LlamaReductionProfile, PhysicalWeightId,
@@ -295,6 +296,7 @@ impl PreparedLlamaForward {
             gemms,
             attention: _,
             reduction_profile: _,
+            gemm_reduction_policies: _,
             buffers,
             io_staging,
             token_bytes: _,
@@ -1125,6 +1127,7 @@ pub struct PreparedLlamaForward {
     pub(super) gemms: GemmPlans,
     attention: PreparedPrefillAttention,
     reduction_profile: LlamaReductionProfile,
+    gemm_reduction_policies: LlamaGemmReductionPolicies,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,
     pub(super) token_bytes: Box<[u8]>,
@@ -1141,6 +1144,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("plan", &self.plan)
             .field("attention_selection", &self.attention.selection_trace())
             .field("reduction_profile", &self.reduction_profile)
+            .field("gemm_reduction_policies", &self.gemm_reduction_policies)
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
             .field("output_ready", &self.output_ready)
@@ -1178,6 +1182,9 @@ impl PreparedLlamaForward {
             ));
         }
 
+        let gemm_reduction_policies =
+            resolve_gemm_reduction_policies(model, config.reduction_profile);
+
         let weights = CudaUploadedWeights::upload(
             model.weights(),
             context,
@@ -1206,6 +1213,7 @@ impl PreparedLlamaForward {
             &plan,
             config.gemm_workspace_cap_bytes,
             config.reduction_profile,
+            gemm_reduction_policies,
         )?;
         let gemm_workspace_bytes = [
             gemms.hidden.workspace_bytes(),
@@ -1259,6 +1267,7 @@ impl PreparedLlamaForward {
             gemms,
             attention,
             reduction_profile: config.reduction_profile,
+            gemm_reduction_policies,
             buffers,
             io_staging,
             token_bytes,
@@ -2456,6 +2465,7 @@ pub(super) fn prepare_gemms(
     plan: &LlamaExecutionPlan,
     workspace_cap: u64,
     reduction_profile: LlamaReductionProfile,
+    policies: LlamaGemmReductionPolicies,
 ) -> LlamaForwardResult<GemmPlans> {
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
     let dimensions = plan.dimensions();
@@ -2473,9 +2483,13 @@ pub(super) fn prepare_gemms(
     // In the fixed profile these five plans validate both reduction widths
     // used by the graph: `hidden` (also the RMSNorm axis) and `intermediate`.
     // Unsupported fixed37 shapes therefore fail here during cold preparation.
-    let prepare = |m, n, k, site| -> LlamaForwardResult<PreparedLlamaGemm> {
+    let prepare = |m, n, k, policy, site| -> LlamaForwardResult<PreparedLlamaGemm> {
         let config = CudaGemmConfig::new(m, n, k, workspace_cap)
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
+        let config = match reduction_profile {
+            LlamaReductionProfile::CanonicalV1 => config.with_reduction_policy(policy),
+            LlamaReductionProfile::FixedContiguous37BalancedV1 => config,
+        };
         match reduction_profile {
             LlamaReductionProfile::CanonicalV1 => context
                 .prepare_gemm(config)
@@ -2491,33 +2505,50 @@ pub(super) fn prepare_gemms(
             sequence,
             hidden,
             hidden,
+            policies.hidden(),
             ExecutionSite::layer(0, LlamaOp::QueryProjection),
         )?,
         key_value: prepare(
             sequence,
             key_value,
             hidden,
+            policies.key_value(),
             ExecutionSite::layer(0, LlamaOp::KeyProjection),
         )?,
         intermediate: prepare(
             sequence,
             intermediate,
             hidden,
+            policies.intermediate(),
             ExecutionSite::layer(0, LlamaOp::GateProjection),
         )?,
         down: prepare(
             sequence,
             hidden,
             intermediate,
+            policies.down(),
             ExecutionSite::layer(0, LlamaOp::DownProjection),
         )?,
         lm_head: prepare(
             sequence,
             vocabulary,
             hidden,
+            policies.lm_head(),
             ExecutionSite::global(LlamaOp::LmHead),
         )?,
     })
+}
+
+fn resolve_gemm_reduction_policies(
+    model: &LoadedModel,
+    profile: LlamaReductionProfile,
+) -> LlamaGemmReductionPolicies {
+    match profile {
+        LlamaReductionProfile::CanonicalV1 => {
+            canonical_gemm_reduction_policies(model.config(), model.spec())
+        }
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => LlamaGemmReductionPolicies::strict(),
+    }
 }
 
 fn allocate_buffers(

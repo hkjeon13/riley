@@ -182,8 +182,10 @@ RustInferCudaStatus validate_config(const RustInferCudaGemmConfig* config,
         "validate cuBLASLt GEMM config",
         "config is null or has an incompatible struct_size");
   }
-  if ((config->flags &
-       ~RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0 ||
+  constexpr uint32_t kKnownGemmFlags =
+      RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
+      RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
+  if ((config->flags & ~kKnownGemmFlags) != 0 ||
       config->reserved0 != 0 ||
       !reserved_is_zero(config->reserved, 3)) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
@@ -311,10 +313,16 @@ bool deterministic_reduction_configuration(
     return scheme ==
            static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE);
   }
-  return (config.flags &
-          RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0 &&
-         scheme ==
-         static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE);
+  if (scheme ==
+      static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE)) {
+    return (config.flags &
+            RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0;
+  }
+  if (scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_INPLACE)) {
+    return (config.flags &
+            RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0;
+  }
+  return false;
 }
 
 bool deterministic_candidate(

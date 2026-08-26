@@ -199,6 +199,25 @@ struct layout, PR 03 symbol 의미는 바꾸지 않는다.
 Caching allocator, stream-ordered memory pool, unified memory, pageable-host async
 copy, model-specific tensor operation은 이 additive 경계의 범위가 아니다.
 
+## PR 06/16 deterministic GEMM policy flags
+
+`RustInferCudaGemmConfig`의 크기와 field offset은 ABI v1 그대로 유지한다. 기존
+`flags` field의 reviewed bit만 additive하게 정의한다.
+
+| bit | macro | 허용하는 split-K reduction |
+| ---: | --- | --- |
+| `1` | `RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K` | `split_k > 1`, `OUTPUT_TYPE` |
+| `2` | `RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K` | `split_k > 1`, `INPLACE` |
+
+두 bit는 함께 사용할 수 있다. bit가 0이면 `split_k <= 1`과 `NONE`만 허용한다.
+`INPLACE`는 output-type storage와 workspace counter로 순서를 보장하고,
+`OUTPUT_TYPE`은 workspace의 output-type partial을 별도 단계에서 합친다. 모든 정책은
+`COMPUTE_TYPE`, 혼합 scheme과 unknown flag를 거부한다. Native plan metadata의
+`split_k`, `reduction_scheme`, workspace, algorithm/tile/stage와 CUDA/cuBLASLt 환경은
+실행 artifact에 함께 기록해야 한다. 이 허용은 pinned environment에서 검증된
+prepared plan에만 적용하며 C ABI flag 자체가 임의 model/shape의 release 승인을 뜻하지
+않는다.
+
 ## PR 09 연속 KV cache와 decode partial-state ABI
 
 PR 09는 ABI version을 올리지 않고 다음 네 symbol과 각 parameter struct를

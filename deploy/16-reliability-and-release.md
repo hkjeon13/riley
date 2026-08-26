@@ -210,6 +210,34 @@ PR 13~15의 scheduler/API/iteration-batch 경로가 없었으므로 release serv
 
 noise보다 작은 threshold를 두지 않는다. 환경 편차를 먼저 측정한다.
 
+## Canonical E0 GEMM Release 진단
+
+첫 candidate의 canonical correctness 재검증은 cuBLASLt reduction policy를 model-global
+switch가 아닌 prepared plan class별 cold contract로 고정한다. `server-4096`의 RTX 4090에서
+HF CUDA 13.1과 native CUDA 12.8 raw first heuristic을 S=18/128/1024/4096/8064에 대해
+비교했으며 algorithm/tile/stage/split-K/reduction/workspace가 모두 일치했다.
+
+- 검증된 BF16 dense-576 Llama: q/o, k/v, down에서 reviewed `OUTPUT_TYPE`/`INPLACE` 보존
+- 같은 profile의 gate/up과 LM head: strict `NONE`
+- 모든 M=1 decode plan: strict `NONE`
+- Qwen2 및 미검증 Llama geometry: 전 plan strict `NONE`
+- `COMPUTE_TYPE`과 unknown C ABI flag: fail closed
+
+`INPLACE`가 실제로 선택되는 S=1024/4096/8064는 process 내부 각 100회와 fresh process
+각 10회에서 first-layer hidden, full BF16 logits와 token이 byte-identical했다. 이 관측은
+pinned GPU/toolchain/workspace contract에 한정한다. 최종 release 승인은 이 진단만으로
+대체하지 않고 동일 candidate revision의 전체 native correctness와 Qwen regression,
+Python-free, reproducible build, performance 및 soak evidence를 계속 요구한다.
+
+## 이번 순차 구현 실행의 Soak Waiver
+
+2026-08-27 사용자 지시에 따라 실제 7시간 15분 soak 실행은 생략한다. Soak launcher,
+raw-evidence packaging, replay checker와 final-candidate binding 구현 및 CPU contract test는
+유지하지만, 이 실행에서는 soak pass artifact를 만들거나 통과했다고 표시하지 않는다.
+따라서 구현 순서를 PR 17로 진행할 수는 있어도 이 revision은
+`soak-qualified release candidate` 또는 tag 생성 가능 상태가 아니다. 실제 release/tag
+승인 전에는 동일 candidate revision으로 원래 soak gate를 별도 실행해야 한다.
+
 ## 비범위
 
 - 새로운 모델 family

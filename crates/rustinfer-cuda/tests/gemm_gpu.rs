@@ -13,7 +13,7 @@ use rustinfer_cuda::{
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 const STANDARD_MAX_WORKSPACE_BYTES: u64 = 64 * 1024 * 1024;
-const QWEN_MAX_WORKSPACE_BYTES: u64 = 16 * 1024 * 1024;
+const PRODUCTION_MAX_WORKSPACE_BYTES: u64 = 16 * 1024 * 1024;
 const UPLOAD_STAGING_BYTES: u64 = 1024 * 1024;
 const WARMUP_ITERATIONS: usize = 2;
 const MEASURED_ITERATIONS: usize = 11;
@@ -55,6 +55,12 @@ const CASES: &[GemmCase] = &[
     GemmCase {
         label: "q-o-m128",
         m: 128,
+        n: 576,
+        k: 576,
+    },
+    GemmCase {
+        label: "q-o-m1024",
+        m: 1_024,
         n: 576,
         k: 576,
     },
@@ -109,6 +115,12 @@ const CASES: &[GemmCase] = &[
     GemmCase {
         label: "down-m128",
         m: 128,
+        n: 576,
+        k: 1_536,
+    },
+    GemmCase {
+        label: "down-m4096",
+        m: 4_096,
         n: 576,
         k: 1_536,
     },
@@ -364,6 +376,14 @@ fn run_case(
             metadata.split_k(),
             metadata.reduction_scheme(),
         ),
+        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1 => assert!(
+            (metadata.split_k() <= 1 && metadata.reduction_scheme() == 0)
+                || (metadata.split_k() > 1 && matches!(metadata.reduction_scheme(), 1 | 4)),
+            "{} reviewed heuristic split-K policy selected ({}, {})",
+            case.label,
+            metadata.split_k(),
+            metadata.reduction_scheme(),
+        ),
         _ => panic!("test does not recognize policy {reduction_policy:?}"),
     }
 
@@ -491,7 +511,7 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
             case,
             u64::try_from(case_index)?,
             STANDARD_MAX_WORKSPACE_BYTES,
-            CudaGemmReductionPolicy::AllowOutputTypeSplitKV1,
+            CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
         )?;
     }
     for (case_index, &case) in QWEN_CASES.iter().enumerate() {
@@ -507,7 +527,7 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
                     .checked_add(case_index)
                     .ok_or("case index overflow")?,
             )?,
-            QWEN_MAX_WORKSPACE_BYTES,
+            PRODUCTION_MAX_WORKSPACE_BYTES,
             CudaGemmReductionPolicy::StrictNoSplitV1,
         )?;
     }
@@ -524,7 +544,7 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
         expected_compute_capability,
         reviewed_shape,
         10_001,
-        STANDARD_MAX_WORKSPACE_BYTES,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
         CudaGemmReductionPolicy::AllowOutputTypeSplitKV1,
     )?;
     let strict = run_case(
@@ -534,7 +554,7 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
         expected_compute_capability,
         reviewed_shape,
         10_001,
-        STANDARD_MAX_WORKSPACE_BYTES,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
         CudaGemmReductionPolicy::StrictNoSplitV1,
     )?;
     assert!(
@@ -542,6 +562,37 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
         "reviewed SmolLM2 M=17 shape must exercise OUTPUT_TYPE split-K on the pinned GPU"
     );
     assert!(strict.split_k() <= 1 && strict.reduction_scheme() == 0);
+
+    let reviewed_in_place_shape = CASES
+        .iter()
+        .copied()
+        .find(|case| case.label == "q-o-m1024")
+        .ok_or("reviewed INPLACE policy A/B shape is missing")?;
+    let preserved = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_in_place_shape,
+        10_002,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    )?;
+    let output_only = run_case(
+        &context,
+        &mut stream,
+        &mut upload_staging,
+        expected_compute_capability,
+        reviewed_in_place_shape,
+        10_002,
+        PRODUCTION_MAX_WORKSPACE_BYTES,
+        CudaGemmReductionPolicy::AllowOutputTypeSplitKV1,
+    )?;
+    assert!(
+        preserved.split_k() > 1 && preserved.reduction_scheme() == 1,
+        "reviewed SmolLM2 M=1024 shape must preserve INPLACE split-K on the pinned GPU"
+    );
+    assert!(output_only.split_k() <= 1 && output_only.reduction_scheme() == 0);
 
     upload_staging.close()?;
     stream.close()?;

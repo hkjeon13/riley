@@ -107,6 +107,19 @@ PR 16 release 진단에서 cuBLASLt가 직접 반환한 `split_k > 1` / `OUTPUT_
 경로는 strict 정책을 유지한다. 이 결과는 threshold 완화나 과거 PR 12 evidence의
 재해석이 아니다.
 
+같은 진단에서 HF CUDA 13.1과 native CUDA 12.8의 raw first heuristic을 SmolLM2의
+S=18/128/1024/4096/8064 모든 linear plan class에 대해 직접 비교했다. 두 버전은
+algorithm, tile, stage, split-K, reduction scheme과 workspace까지 일치했다. 짧은
+sequence의 q/o·k/v·down은 `OUTPUT_TYPE`, 긴 sequence의 q/o·down은 counter로 순서를
+보장하는 `INPLACE`였고 gate/up과 M=1 LM head는 `NONE`이었다. `INPLACE` shape 3개는
+process 내부 각 100회와 fresh process 각 10회에서 hidden/logits/token이 byte-identical했다.
+
+따라서 최종 runtime contract는 source 문자열이나 hot-path 분기가 아니라 cold semantic
+profile resolver다. 검증된 SmolLM2 geometry의 q/o·k/v·down만 raw `OUTPUT_TYPE`/`INPLACE`
+heuristic을 보존하고 gate/up·LM head는 strict로 둔다. Qwen2와 미검증 Llama geometry는
+모든 plan을 strict로 fail closed한다. Qwen 실행 loop는 계속 canonical Llama topology를
+공유하며 family dispatch를 포함하지 않는다.
+
 후속 진단에서는 optimized online attention과 staged-BF16 eager oracle 사이의
 허용 가능한 numerical tie가 exact token 비교에 섞여 있음을 분리했다. 이에 따라
 exact compatibility gate만 위의 reference-attention policy를 명시적으로 선택했고,

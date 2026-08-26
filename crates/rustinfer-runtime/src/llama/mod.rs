@@ -8,6 +8,8 @@ mod decode;
 mod error;
 #[cfg(any(feature = "cuda", test))]
 mod forward;
+#[cfg(any(feature = "cuda", test))]
+mod gemm_policy;
 #[cfg(feature = "cuda")]
 mod generation;
 mod plan;

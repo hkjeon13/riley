@@ -38,6 +38,8 @@ const DETERMINISTIC_REQUIRED: u32 = 1;
 #[cfg(any(feature = "cuda", test))]
 const REDUCTION_SCHEME_NONE: u32 = 0;
 #[cfg(any(feature = "cuda", test))]
+const REDUCTION_SCHEME_INPLACE: u32 = 1;
+#[cfg(any(feature = "cuda", test))]
 const REDUCTION_SCHEME_OUTPUT_TYPE: u32 = 4;
 
 #[cfg(any(feature = "cuda", test))]
@@ -46,10 +48,16 @@ const fn is_deterministic_reduction_configuration(
     split_k: u32,
     scheme: u32,
 ) -> bool {
-    (split_k <= 1 && scheme == REDUCTION_SCHEME_NONE)
-        || (matches!(policy, CudaGemmReductionPolicy::AllowOutputTypeSplitKV1)
-            && split_k > 1
-            && scheme == REDUCTION_SCHEME_OUTPUT_TYPE)
+    if split_k <= 1 {
+        return scheme == REDUCTION_SCHEME_NONE;
+    }
+    match policy {
+        CudaGemmReductionPolicy::StrictNoSplitV1 => false,
+        CudaGemmReductionPolicy::AllowOutputTypeSplitKV1 => scheme == REDUCTION_SCHEME_OUTPUT_TYPE,
+        CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1 => {
+            scheme == REDUCTION_SCHEME_INPLACE || scheme == REDUCTION_SCHEME_OUTPUT_TYPE
+        }
+    }
 }
 
 /// Reviewed deterministic cuBLASLt reduction policy selected during prepare.
@@ -61,6 +69,14 @@ pub enum CudaGemmReductionPolicy {
     StrictNoSplitV1,
     /// Also permit split-K greater than one with `OUTPUT_TYPE` reduction.
     AllowOutputTypeSplitKV1,
+    /// Also permit reviewed `INPLACE` and `OUTPUT_TYPE` split-K reductions.
+    ///
+    /// cuBLASLt's `INPLACE` scheme uses output-type storage plus workspace
+    /// counters to guarantee sequentiality. `OUTPUT_TYPE` stores output-type
+    /// partials in workspace and reduces them in a separate deterministic
+    /// step. This policy preserves either scheme when returned by the reviewed
+    /// first heuristic instead of rewriting it to no-split.
+    AllowInPlaceAndOutputTypeSplitKV1,
 }
 
 impl CudaGemmReductionPolicy {
@@ -70,6 +86,7 @@ impl CudaGemmReductionPolicy {
         match self {
             Self::StrictNoSplitV1 => "strict-no-split-v1",
             Self::AllowOutputTypeSplitKV1 => "allow-output-type-split-k-v1",
+            Self::AllowInPlaceAndOutputTypeSplitKV1 => "allow-in-place-and-output-type-split-k-v1",
         }
     }
 
@@ -78,6 +95,7 @@ impl CudaGemmReductionPolicy {
         match self {
             Self::StrictNoSplitV1 => 0,
             Self::AllowOutputTypeSplitKV1 => 1,
+            Self::AllowInPlaceAndOutputTypeSplitKV1 => 3,
         }
     }
 }
@@ -1180,6 +1198,16 @@ mod tests {
             relaxed.reduction_policy().id(),
             "allow-output-type-split-k-v1"
         );
+        let heuristic = config
+            .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+        assert_eq!(
+            heuristic.reduction_policy(),
+            CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1
+        );
+        assert_eq!(
+            heuristic.reduction_policy().id(),
+            "allow-in-place-and-output-type-split-k-v1"
+        );
         assert_eq!(config.input_dtype(), CudaDType::BF16);
         assert_eq!(config.weight_dtype(), CudaDType::BF16);
         assert_eq!(config.accumulator_dtype(), CudaDType::F32);
@@ -1207,7 +1235,9 @@ mod tests {
 
     #[test]
     fn deterministic_cublaslt_reduction_contract_is_policy_scoped() {
-        use CudaGemmReductionPolicy::{AllowOutputTypeSplitKV1, StrictNoSplitV1};
+        use CudaGemmReductionPolicy::{
+            AllowInPlaceAndOutputTypeSplitKV1, AllowOutputTypeSplitKV1, StrictNoSplitV1,
+        };
 
         for accepted in [(0, 0), (1, 0)] {
             assert!(
@@ -1239,6 +1269,26 @@ mod tests {
                     rejected.1
                 ),
                 "output-type split-K policy accepted {rejected:?}"
+            );
+        }
+        for accepted in [(0, 0), (1, 0), (2, 1), (3, 4), (42, 1), (42, 4)] {
+            assert!(
+                is_deterministic_reduction_configuration(
+                    AllowInPlaceAndOutputTypeSplitKV1,
+                    accepted.0,
+                    accepted.1
+                ),
+                "reviewed heuristic split-K configuration {accepted:?} was rejected"
+            );
+        }
+        for rejected in [(0, 1), (0, 4), (1, 1), (1, 4), (2, 0), (2, 2), (2, 7)] {
+            assert!(
+                !is_deterministic_reduction_configuration(
+                    AllowInPlaceAndOutputTypeSplitKV1,
+                    rejected.0,
+                    rejected.1
+                ),
+                "reviewed heuristic split-K policy accepted {rejected:?}"
             );
         }
     }

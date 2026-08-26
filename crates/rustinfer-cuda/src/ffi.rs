@@ -107,6 +107,7 @@ const GEMM_LAYOUT_ROW_MAJOR: u32 = 1;
 const GEMM_EPILOGUE_NONE: u32 = 0;
 const GEMM_DETERMINISTIC_REQUIRED: u32 = 1;
 const GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K: u32 = 1;
+const GEMM_FLAG_ALLOW_INPLACE_SPLIT_K: u32 = 2;
 
 #[repr(C)]
 struct ErrorInfo {
@@ -3919,7 +3920,7 @@ impl GemmPlanHandle {
         max_workspace_bytes: u64,
         flags: u32,
     ) -> CudaResult<Self> {
-        if flags & !GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K != 0 {
+        if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
             return Err(CudaError::invalid_argument(
                 "prepare CUDA GEMM plan",
                 "unknown GEMM reduction-policy flags",
