@@ -1,11 +1,14 @@
 # PR-16 reliability soak
 
 `reliability-soak-v1.json` is the versioned release workload and
-`ci/run_release_soak.sh` is its Python-free host driver.  The driver starts the
-real `rustinfer serve` executable, changes only `--execution-completion` for the
-two rollback arms, sends real HTTP requests, and writes create-only `run.json`
-plus append-only `events.jsonl`.  It does not invoke a reference framework or
-run an in-process mock.
+`ci/run_release_soak.sh` is its Python-free host driver. The driver starts the
+real `rustinfer serve` executable with explicit
+`--reduction-profile canonical-v1` and `--residual-rmsnorm separate`, and
+changes only `--execution-completion` between the two rollback arms. The
+`rollback-per-operation` arm therefore exercises the exact three-flag
+conservative E0 restart command rather than relying on production defaults.
+It sends real HTTP requests and writes create-only `run.json` plus append-only
+`events.jsonl`; it does not invoke a reference framework or an in-process mock.
 
 The checked-in manifest is intentionally not executable evidence: both golden
 digests are all-zero placeholders.  Before a release run, copy it outside the
@@ -28,6 +31,9 @@ canonical checked-in contract after normalizing only those two golden fields;
 changing a request, threshold, duration, scenario, or target cannot define an
 easier release lane. The exact materialized manifest SHA-256 is recorded in
 `run.json`, so changing either approved golden digest requires a new run.
+Request-body replay mirrors the reviewed remote jq 1.6 serializer, which emits
+integral JSON numbers such as `0.0` as `0`; this prevents a valid remote run
+from being rejected later by Python's different numeric spelling.
 
 `cycle_interval_ms` bounds raw request evidence growth without sampling or
 aggregating away any request.  It is part of the bound manifest; burst-idle
@@ -88,10 +94,21 @@ near the 8192-token release limit without checking a huge string into Git.
 
 Each sample includes the target PID and its `/proc` RSS/HWM/fd/thread values, its complete
 descendant process inventory, summed `nvidia-smi` per-process VRAM, and the
-service metric snapshot.  Each request record includes its client-observed
-outcome, HTTP status, latency, and completion-text digest.  Concurrent writers
-use a lock to preserve a gap-free sequence and strictly increasing Linux
-monotonic timestamps.
+service metric snapshot. Each request record preserves a closed transport
+proof: manifest request profile, client action, exact `stream` boolean, curl
+exit code, exact transmitted request-body SHA-256, response-body SHA-256 and
+byte count, HTTP status, latency, outcome, and (only for completed responses)
+completion-text digest. Request JSON is compact, recursively key-sorted, and
+its hash is recomputed by the checker from the bound manifest profile and
+action. `cancel` sends a non-streaming long request and requires curl timeout
+28 after 50 ms with no response bytes. `disconnect` sends `stream:true`, reads
+exactly 1,024 SSE bytes through a rate-limited unbuffered curl pipeline, then
+requires curl write error 23 and a successful byte-limiter. Normal, invalid,
+and overload actions require their closed non-streaming status/exit contracts.
+Concurrent writers use a lock to preserve a gap-free sequence and strictly
+increasing Linux monotonic timestamps. The checker additionally requires each
+scenario interval to be non-overlapping and to follow manifest order, binding
+the two rollback completion modes to their reviewed transition order.
 
 ## Run and check
 
@@ -119,6 +136,7 @@ ci/run_release_soak.sh
 python3 benchmarks/scripts/check_reliability_soak.py \
   --manifest /var/tmp/rustinfer-soak-manifest.json \
   --run-directory /var/tmp/rustinfer-soak-run001 \
+  --runtime-receipts-directory /var/tmp/rustinfer-soak-launch/runtime-receipts \
   --correctness-golden /evidence/python-free-e2e-golden.json \
   --native-correctness-report /evidence/native-correctness-report.json \
   --report /var/tmp/rustinfer-soak-run001.report.json
@@ -126,22 +144,57 @@ python3 benchmarks/scripts/check_reliability_soak.py \
 python3 benchmarks/scripts/package_reliability_soak_evidence.py \
   --manifest /var/tmp/rustinfer-soak-manifest.json \
   --run-directory /var/tmp/rustinfer-soak-run001 \
+  --runtime-receipts-directory /var/tmp/rustinfer-soak-launch/runtime-receipts \
   --correctness-golden /evidence/python-free-e2e-golden.json \
   --native-correctness-report /evidence/native-correctness-report.json \
   --output /var/tmp/rustinfer-soak-run001.evidence.tar
 ```
 
+The runtime receipt directory is the create-only remote launcher's
+`runtime-receipts/` child.
+It must contain the exact `host-gpu.csv`, `launcher-receipt.json`,
+`release-runtime-closure.tsv`, `release-image-inspect.json`,
+`test-layer-image-inspect.json`, `container-inspect-pre.json`, and
+`container-inspect-post.json` receipt names.
+
 The create-only packager refuses a non-passing run. It preserves exactly the
-materialized manifest plus the run directory's `run.json` and `events.jsonl`
-in a deterministic uncompressed USTAR with canonical ownership, mode, order,
-and timestamps. An internal bytewise-sorted `SHA256SUMS` covers all three raw
-payloads. The loader rejects additional files, links, special members,
+materialized manifest, the run directory's `run.json` and `events.jsonl`, and
+those seven runtime receipts in a deterministic uncompressed USTAR with canonical
+ownership, mode, order, and timestamps. An internal bytewise-sorted
+`SHA256SUMS` covers every raw payload. The loader rejects additional files,
+links, special members,
 noncanonical metadata or tar encoding, checksum drift, and oversized inputs.
 It then reconstructs the existing run-directory contract and recomputes the
 report; the final release-candidate gate requires that result to equal the
 separately submitted report exactly. Report v2 records the trusted E2E golden,
-generated-text, and native-report hashes in `bindings.trusted_correctness`.
-Legacy v1 reports and replay calls without both trusted artifacts fail closed.
+generated-text, and native-report hashes in `bindings.trusted_correctness`, and
+the seven receipt hashes, exact exported `run.json`/`events.jsonl` byte hashes,
+plus designated host/GPU, immutable image, and container IDs in the closed
+`bindings.runtime_provenance`. The v3 launcher receipt is created post-run and
+binds those same two raw-stream hashes plus the canonical release runtime
+closure copied from the created container, preventing receipts from one execution
+from being combined with another execution's stream. Resolved closure rows pin
+the loader path, canonical target, and target SHA-256; build-time unavailable
+runtime-injected `libcuda.so.1` remains the one exact `NOT_FOUND/-/-` row;
+every other unresolved SONAME, and a missing or duplicate libcuda row, is
+rejected. Replay independently checks
+the release/test image lineage, image labels, production user, exact inherited
+environment plus reviewed overrides, and absence of shell/loader injection
+variables. The inherited `PATH`, `LD_LIBRARY_PATH`, `NVIDIA_VISIBLE_DEVICES`, and
+`NVIDIA_DRIVER_CAPABILITIES` must equal the reviewed release-image values;
+`HOME`, `CURL_HOME`, `XDG_CONFIG_HOME`, and every other `LD_*` control are
+forbidden. It also requires the exact no-healthcheck, entrypoint/argument/
+working-directory, network/PID/IPC/UTS/user/cgroup namespace, GPU, device,
+capability, tmpfs, sysctl, group, and mount contract in both container receipts.
+Every bind must retain Docker's empty `Mode` and non-propagating `rprivate`
+setting, so a host submount cannot replace a checked input during the run.
+Strict daemon `Created`/`StartedAt`/`FinishedAt` timestamps must prove at least
+26,100 seconds of exited-0 runtime and cover the preserved monotonic event span.
+The strict `run.json.started_at_utc` must fall inside that lifecycle, its exact
+UTC second must be embedded in `run_id`, and the validated container-name stamp
+must precede Docker `Created` by no more than five minutes; the post-run PID must
+be zero. Legacy three-payload archives, v1 reports, pre-v3 launcher receipts, and
+replay calls without both trusted correctness artifacts fail closed.
 
 The checker runs outside the production dependency boundary and uses only the
 Python standard library.  It fails closed on malformed/duplicate JSON,

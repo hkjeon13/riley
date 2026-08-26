@@ -1,7 +1,9 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 # Run the PR-16 soak against the production rustinfer CLI.  This driver uses
 # host tools only; it never installs Python or a reference runtime in the
 # production image.  Evidence files are create-only or append-only.
+export PATH=/usr/bin:/bin
+export HOME=/nonexistent CURL_HOME=/nonexistent LC_ALL=C TZ=UTC
 set -euo pipefail
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -16,7 +18,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 : "${RUSTINFER_MODEL_REVISION:?set the immutable model revision}"
 : "${RUSTINFER_SOAK_FINAL_METRICS_JSON:?set the shutdown metrics artifact path}"
 
-for tool in bash jq curl sha256sum awk ps flock nvidia-smi readlink find sort grep wc date env; do
+for tool in bash jq curl sha256sum awk ps flock nvidia-smi readlink find sort grep wc head date env; do
     command -v "$tool" >/dev/null 2>&1 || { echo "required host tool is unavailable: $tool" >&2; exit 2; }
 done
 case "$RUSTINFER_SOAK_OUTPUT" in /*) ;; *) echo "RUSTINFER_SOAK_OUTPUT must be absolute" >&2; exit 2 ;; esac
@@ -43,6 +45,7 @@ done
 jq -e '.schema_version == "rustinfer.reliability-soak-manifest.v1"' "$RUSTINFER_SOAK_MANIFEST" >/dev/null
 golden_generated_sha256=$(jq -er '.golden.generated_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RUSTINFER_SOAK_MANIFEST")
 golden_provenance_sha256=$(jq -er '.golden.provenance_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RUSTINFER_SOAK_MANIFEST")
+golden_profile=$(jq -er '.golden.request_profile | select(type == "string" and length > 0)' "$RUSTINFER_SOAK_MANIFEST")
 test -n "$golden_generated_sha256" && test -n "$golden_provenance_sha256"
 
 binary=${RUSTINFER_SOAK_BINARY:-$(jq -er '.target.binary' "$RUSTINFER_SOAK_MANIFEST")}
@@ -90,14 +93,18 @@ completion_path=$(jq -er '.target.completion_path' "$RUSTINFER_SOAK_MANIFEST")
 metrics_path=$(jq -er '.target.metrics_path' "$RUSTINFER_SOAK_MANIFEST")
 sample_interval_ms=$(jq -er '.thresholds.sample_interval_ms' "$RUSTINFER_SOAK_MANIFEST")
 shutdown_deadline_ms=$(jq -er '.thresholds.graceful_shutdown_deadline_ms' "$RUSTINFER_SOAK_MANIFEST")
-run_id="soak-$(date -u +%Y%m%dT%H%M%SZ)-${RUSTINFER_SOURCE_REVISION:0:12}"
 target_pid=0
 sampler_pid=
 emit_shutdown_metrics=0
+golden_preflight_complete=0
+soak_parent_pid=$BASHPID
 
 cleanup() {
     local attempt
-    if [ -n "${sampler_pid:-}" ]; then kill "$sampler_pid" 2>/dev/null || true; fi
+    if [ -n "${sampler_pid:-}" ]; then
+        kill -TERM "$sampler_pid" 2>/dev/null || true
+        wait "$sampler_pid" 2>/dev/null || true
+    fi
     if [ "${target_pid:-0}" -gt 0 ] && kill -0 "$target_pid" 2>/dev/null; then
         kill -TERM "$target_pid" 2>/dev/null || true
         for attempt in {1..50}; do
@@ -109,6 +116,12 @@ cleanup() {
     fi
 }
 trap cleanup EXIT
+
+handle_sampler_failure() {
+    echo "reliability soak sampler failed; aborting the parent run" >&2
+    exit 1
+}
+trap handle_sampler_failure USR1
 
 monotonic_ns() {
     awk '{printf "%.0f\n", $1 * 1000000000}' /proc/uptime
@@ -136,7 +149,8 @@ append_event() {
 }
 
 launch_target() {
-    local mode=$1 argument replaced command_sha ready_deadline
+    local mode=$1 scenario_id=$2 argument replaced command_sha ready_deadline generated
+    local started_at_utc run_stamp run_id
     local -a arguments=()
     while IFS= read -r argument; do
         replaced=${argument//\{model_path\}/$model_path}
@@ -154,20 +168,35 @@ launch_target() {
     fi
     target_pid=$!
     if [ ! -e "$run_file" ]; then
+        started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        run_stamp=${started_at_utc//-/}
+        run_stamp=${run_stamp//:/}
+        run_id="soak-${run_stamp}-${RUSTINFER_SOURCE_REVISION:0:12}"
         jq -nS \
             --arg run_id "$run_id" --arg manifest_sha256 "$manifest_sha" \
             --arg binding_sha256 "$binding_sha" --argjson source "$source_json" \
             --arg kind "$target_kind" --argjson pid "$target_pid" \
             --arg image_id "sha256:$RUSTINFER_IMAGE_SHA256" --arg command_sha256 "$command_sha" \
-            --arg started_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg started_at_utc "$started_at_utc" \
             '{schema_version:"rustinfer.reliability-soak-run.v1",run_id:$run_id,manifest_sha256:$manifest_sha256,binding_sha256:$binding_sha256,source:$source,target:{kind:$kind,pid:$pid,image_id:$image_id,command_sha256:$command_sha256},started_at_utc:$started_at_utc}' >"$run_file"
     fi
     ready_deadline=$(( $(monotonic_ns) + 120000000000 ))
-    until curl --fail --silent --show-error --max-time 2 "$base_url$health_path" >/dev/null; do
+    until curl --disable --fail --silent --show-error --max-time 2 "$base_url$health_path" >/dev/null; do
         kill -0 "$target_pid" 2>/dev/null || { echo "production server exited during startup" >&2; return 1; }
         (( $(monotonic_ns) < ready_deadline )) || { echo "readiness deadline exceeded" >&2; return 1; }
         sleep 0.2
     done
+    if [ "$golden_preflight_complete" -eq 0 ]; then
+        generated=$(probe_hash "$golden_profile") || {
+            append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"golden-preflight",message:"initial golden-profile probe failed"}')"
+            return 1
+        }
+        if [ "$generated" != "$golden_generated_sha256" ]; then
+            append_event "$(jq -cn --arg scenario_id "$scenario_id" --arg message "initial golden-profile digest mismatch: expected=$golden_generated_sha256 actual=$generated" '{kind:"failure",scenario_id:$scenario_id,stage:"golden-preflight",message:$message}')"
+            return 1
+        fi
+        golden_preflight_complete=1
+    fi
 }
 
 stop_target() {
@@ -229,20 +258,24 @@ sample_once() {
     while IFS=, read -r gpu_pid used_mib; do
         gpu_pid=$(awk '{$1=$1;print}' <<<"$gpu_pid")
         used_mib=$(awk '{$1=$1;print}' <<<"$used_mib")
+        [ -n "$gpu_pid" ] || continue
+        if [[ ! $gpu_pid =~ ^[0-9]+$ || ! $used_mib =~ ^[0-9]+$ ]]; then
+            append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"nvidia-smi",message:"compute-app inventory contains a malformed row"}')"
+            return 1
+        fi
         if [[ $pids == *" $gpu_pid "* ]]; then
-            if [[ ! $used_mib =~ ^[0-9]+$ ]]; then
-                append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"nvidia-smi",message:"target VRAM value is not numeric"}')"
-                return 1
-            fi
             matched=1
             vram=$((vram + used_mib * 1024 * 1024))
+        else
+            append_event "$(jq -cn --arg scenario_id "$scenario_id" --arg message "foreign GPU compute PID is present: pid=$gpu_pid" '{kind:"failure",scenario_id:$scenario_id,stage:"nvidia-smi",message:$message}')"
+            return 1
         fi
     done <<<"$gpu_rows"
     if [ "$matched" -ne 1 ]; then
         append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"nvidia-smi",message:"target process is absent from the compute-app inventory"}')"
         return 1
     fi
-    metrics=$(curl --fail --silent --show-error --max-time 2 "$base_url$metrics_path") || {
+    metrics=$(curl --disable --fail --silent --show-error --max-time 2 "$base_url$metrics_path") || {
         append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"metrics",message:"metrics snapshot unavailable"}')"
         return 1
     }
@@ -251,59 +284,112 @@ sample_once() {
 }
 
 sampler_loop() {
-    local scenario_id=$1
-    while kill -0 "$target_pid" 2>/dev/null; do
-        sample_once "$scenario_id" || return 1
+    local scenario_id=$1 sampler_status
+    trap 'exit 0' TERM INT
+    trap 'sampler_status=$?; if [ "$sampler_status" -ne 0 ]; then kill -USR1 "$soak_parent_pid" 2>/dev/null || true; fi' EXIT
+    while :; do
+        if ! kill -0 "$target_pid" 2>/dev/null; then
+            append_event "$(jq -cn --arg scenario_id "$scenario_id" '{kind:"failure",scenario_id:$scenario_id,stage:"sampler",message:"target exited while sampler was active"}')"
+            return 1
+        fi
+        if ! sample_once "$scenario_id"; then
+            return 1
+        fi
         sleep "$(awk -v ms="$sample_interval_ms" 'BEGIN {printf "%.3f", ms / 1000}')"
     done
 }
 
+stop_sampler_planned() {
+    local status=0
+    [ -n "${sampler_pid:-}" ] || return 0
+    kill -TERM "$sampler_pid" 2>/dev/null || true
+    wait "$sampler_pid" || status=$?
+    sampler_pid=
+    if [ "$status" -ne 0 ]; then
+        echo "sampler did not complete a planned stop cleanly: $status" >&2
+        return 1
+    fi
+}
+
 run_request() {
-    local scenario_id=$1 profile=$2 action=${3:-normal} request_id body output start end curl_code http_status latency outcome generated
+    local scenario_id=$1 profile=$2 action=${3:-normal} request_id body output curl_status start end curl_code http_status latency outcome generated semantic_mismatch=0
+    local request_stream=false request_body_sha256 response_body_sha256 response_bytes head_code=0
+    local -a pipeline_codes=()
     request_id="$scenario_id-$BASHPID-$RANDOM-$(monotonic_ns)"
-    body=$(jq -c --arg profile "$profile" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end' "$RUSTINFER_SOAK_MANIFEST")
+    case "$action" in
+        normal|invalid|overload|cancel) request_stream=false ;;
+        disconnect) request_stream=true ;;
+        *) echo "unknown soak client action: $action" >&2; return 1 ;;
+    esac
+    body=$(jq -cS --arg profile "$profile" --argjson request_stream "$request_stream" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end | .stream = $request_stream' "$RUSTINFER_SOAK_MANIFEST")
+    request_body_sha256=$(printf '%s' "$body" | sha256sum | awk '{print $1}')
     output="$RUSTINFER_SOAK_OUTPUT/request-$request_id.body"
+    curl_status="$RUSTINFER_SOAK_OUTPUT/request-$request_id.curl-status"
+    : >"$output"
     start=$(monotonic_ns)
     curl_code=0
-    if [ "$action" = normal ]; then
-        http_status=$(curl --silent --show-error --max-time 300 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
+    if [ "$action" = cancel ]; then
+        http_status=$(curl --disable --silent --show-error --max-time 0.05 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
+    elif [ "$action" = disconnect ]; then
+        : >"$curl_status"
+        if curl --disable --silent --show-error --no-buffer --max-time 300 --limit-rate 1K --write-out '%{stderr}\nRUSTINFER_HTTP_STATUS:%{http_code}\n' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path" 2>"$curl_status" | head -c 1024 >"$output"; then
+            pipeline_codes=("${PIPESTATUS[@]}")
+        else
+            pipeline_codes=("${PIPESTATUS[@]}")
+        fi
+        curl_code=${pipeline_codes[0]}
+        head_code=${pipeline_codes[1]}
+        http_status=$(awk -F: '$1 == "RUSTINFER_HTTP_STATUS" {value=$2} END {print value}' "$curl_status")
     else
-        http_status=$(curl --silent --show-error --max-time 0.05 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
+        http_status=$(curl --disable --silent --show-error --max-time 300 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
     fi
     end=$(monotonic_ns)
     latency=$(awk -v ns="$((end-start))" 'BEGIN {printf "%.6f", ns / 1000000}')
     http_status=$((10#${http_status:-0}))
+    response_body_sha256=$(sha256sum "$output" | awk '{print $1}')
+    response_bytes=$(wc -c <"$output")
+    response_bytes=$((response_bytes))
     generated=null
-    if [ "$action" = cancel ] && [ "$curl_code" -ne 0 ]; then outcome=cancelled
-    elif [ "$action" = disconnect ] && [ "$curl_code" -ne 0 ]; then outcome=disconnected
-    elif [ "$curl_code" -ne 0 ]; then outcome=failure
-    elif [ "$http_status" = 429 ]; then outcome=overload
-    elif [ "$http_status" -ge 400 ] && [ "$http_status" -lt 500 ]; then outcome=invalid
-    elif [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
+    if [ "$action" = cancel ] && [ "$curl_code" -eq 28 ] && [ "$http_status" -eq 0 ] && [ "$response_bytes" -eq 0 ]; then
+        outcome=cancelled
+    elif [ "$action" = disconnect ] && [ "$curl_code" -eq 23 ] && [ "$head_code" -eq 0 ] && [ "$http_status" -eq 200 ] && [ "$response_bytes" -eq 1024 ]; then
+        outcome=disconnected
+    elif [ "$action" = invalid ] && [ "$curl_code" -eq 0 ] && [ "$http_status" -ge 400 ] && [ "$http_status" -lt 500 ] && [ "$http_status" -ne 429 ]; then
+        outcome=invalid
+    elif [ "$action" = overload ] && [ "$curl_code" -eq 0 ] && [ "$http_status" -eq 429 ]; then
+        outcome=overload
+    elif { [ "$action" = normal ] || [ "$action" = overload ]; } && [ "$curl_code" -eq 0 ] && [ "$http_status" -ge 200 ] && [ "$http_status" -lt 300 ]; then
         outcome=success
         generated=$(jq -jr '[.choices[].text] | join("")' "$output" | sha256sum | awk '{print $1}')
+        if [ "$action" = normal ] && [ "$profile" = "$golden_profile" ] && [ "$generated" != "$golden_generated_sha256" ]; then
+            semantic_mismatch=1
+        fi
     else outcome=failure
     fi
-    rm -f "$output"
-    append_event "$(jq -cn --arg scenario_id "$scenario_id" --arg request_id "$request_id" --arg outcome "$outcome" --argjson http_status "${http_status:-0}" --argjson latency_ms "$latency" --argjson generated_sha256 "$(if [ "$generated" = null ]; then printf null; else jq -cn --arg value "$generated" '$value'; fi)" '{kind:"request",scenario_id:$scenario_id,request_id:$request_id,outcome:$outcome,http_status:$http_status,latency_ms:$latency_ms,generated_sha256:$generated_sha256}')"
+    rm -f "$output" "$curl_status"
+    append_event "$(jq -cn --arg scenario_id "$scenario_id" --arg request_id "$request_id" --arg request_profile "$profile" --arg client_action "$action" --argjson request_stream "$request_stream" --argjson curl_exit_code "$curl_code" --arg request_body_sha256 "$request_body_sha256" --arg response_body_sha256 "$response_body_sha256" --argjson response_bytes "$response_bytes" --arg outcome "$outcome" --argjson http_status "${http_status:-0}" --argjson latency_ms "$latency" --argjson generated_sha256 "$(if [ "$generated" = null ]; then printf null; else jq -cn --arg value "$generated" '$value'; fi)" '{kind:"request",scenario_id:$scenario_id,request_id:$request_id,request_profile:$request_profile,client_action:$client_action,request_stream:$request_stream,curl_exit_code:$curl_exit_code,request_body_sha256:$request_body_sha256,response_body_sha256:$response_body_sha256,response_bytes:$response_bytes,outcome:$outcome,http_status:$http_status,latency_ms:$latency_ms,generated_sha256:$generated_sha256}')"
+    if [ "$semantic_mismatch" -eq 1 ]; then
+        append_event "$(jq -cn --arg scenario_id "$scenario_id" --arg message "successful golden-profile request digest mismatch: request_id=$request_id expected=$golden_generated_sha256 actual=$generated" '{kind:"failure",scenario_id:$scenario_id,stage:"golden-request",message:$message}')"
+        return 1
+    fi
 }
 
 probe_hash() {
     local profile=$1 body output
     body=$(jq -c --arg profile "$profile" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end' "$RUSTINFER_SOAK_MANIFEST")
-    output=$(curl --fail --silent --show-error --max-time 300 -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path")
+    output=$(curl --disable --fail --silent --show-error --max-time 300 -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path")
     jq -jr '[.choices[].text] | join("")' <<<"$output" | sha256sum | awk '{print $1}'
 }
 
 run_scenario() {
-    local encoded=$1 id kind duration concurrency cycle_interval_ms primary secondary mode deadline iteration=0 before after restart_start restart_elapsed worker profile action worker_pid
+    local encoded=$1 id kind duration concurrency cycle_interval_ms primary secondary mode deadline iteration=0 before after restart_start restart_elapsed worker profile action worker_pid worker_failed
     local -a worker_pids=()
     id=$(jq -r '.id' <<<"$encoded"); kind=$(jq -r '.kind' <<<"$encoded")
     duration=$(jq -r '.duration_seconds' <<<"$encoded"); concurrency=$(jq -r '.concurrency' <<<"$encoded")
     cycle_interval_ms=$(jq -r '.cycle_interval_ms' <<<"$encoded")
     primary=$(jq -r '.request_profile' <<<"$encoded"); secondary=$(jq -r '.secondary_request_profile // .request_profile' <<<"$encoded")
     mode=$(jq -r '.execution_completion' <<<"$encoded")
-    launch_target "$mode"
+    launch_target "$mode" "$id"
     append_event "$(jq -cn --arg id "$id" --arg mode "$mode" '{kind:"scenario_start",scenario_id:$id,execution_completion:$mode}')"
     sampler_loop "$id" & sampler_pid=$!
     deadline=$(( $(monotonic_ns) + duration * 1000000000 ))
@@ -312,32 +398,44 @@ run_scenario() {
         for ((worker=0; worker<concurrency; worker++)); do
             profile=$primary; action=normal
             [ "$kind" = mixed ] && (( worker % 2 == 1 )) && profile=$secondary
+            [ "$kind" = invalid ] && action=invalid
+            [ "$kind" = overload ] && action=overload
             if [ "$kind" = cancellation-disconnect ]; then
                 if (( worker % 2 == 0 )); then action=cancel; else action=disconnect; fi
             fi
             run_request "$id" "$profile" "$action" &
             worker_pids+=("$!")
         done
-        for worker_pid in "${worker_pids[@]}"; do wait "$worker_pid"; done
+        worker_failed=0
+        for worker_pid in "${worker_pids[@]}"; do
+            wait "$worker_pid" || worker_failed=1
+        done
         worker_pids=()
+        [ "$worker_failed" -eq 0 ] || return 1
         if [ "$cycle_interval_ms" -gt 0 ]; then
             sleep "$(awk -v ms="$cycle_interval_ms" 'BEGIN {printf "%.3f", ms / 1000}')"
         fi
     done
     if [ "$kind" = graceful-restart ]; then
         before=$(probe_hash "$primary")
+        if [ "$primary" = "$golden_profile" ] && [ "$before" != "$golden_generated_sha256" ]; then
+            append_event "$(jq -cn --arg id "$id" --arg message "pre-restart golden digest mismatch: expected=$golden_generated_sha256 actual=$before" '{kind:"failure",scenario_id:$id,stage:"restart-before-golden",message:$message}')"
+            return 1
+        fi
         restart_start=$(monotonic_ns)
-        kill "$sampler_pid" 2>/dev/null || true
-        wait "$sampler_pid" 2>/dev/null || true
+        stop_sampler_planned
         stop_target
-        launch_target "$mode"
+        launch_target "$mode" "$id"
         after=$(probe_hash "$primary")
+        if [ "$primary" = "$golden_profile" ] && [ "$after" != "$golden_generated_sha256" ]; then
+            append_event "$(jq -cn --arg id "$id" --arg message "post-restart golden digest mismatch: expected=$golden_generated_sha256 actual=$after" '{kind:"failure",scenario_id:$id,stage:"restart-after-golden",message:$message}')"
+            return 1
+        fi
         restart_elapsed=$(( ($(monotonic_ns) - restart_start) / 1000000 ))
         append_event "$(jq -cn --arg id "$id" --argjson elapsed_ms "$restart_elapsed" --arg before "$before" --arg after "$after" '{kind:"restart",scenario_id:$id,graceful:true,exit_code:0,elapsed_ms:$elapsed_ms,before_generated_sha256:$before,after_generated_sha256:$after}')"
         sampler_loop "$id" & sampler_pid=$!
     fi
-    kill "$sampler_pid" 2>/dev/null || true
-    wait "$sampler_pid" 2>/dev/null || true
+    stop_sampler_planned
     sample_once "$id"
     append_event "$(jq -cn --arg id "$id" '{kind:"scenario_end",scenario_id:$id,status:"success"}')"
     stop_target
@@ -352,12 +450,25 @@ while IFS= read -r scenario; do
     run_scenario "$scenario"
 done < <(jq -c '.scenarios[]' "$RUSTINFER_SOAK_MANIFEST")
 
+require_post_shutdown_gpu_idle() {
+    local gpu_pids
+    gpu_pids=$(nvidia-smi --query-compute-apps=pid --format=csv,noheader,nounits 2>/dev/null) || {
+        append_event '{"kind":"failure","scenario_id":null,"stage":"post-shutdown-nvidia-smi","message":"final compute-app inventory query failed"}'
+        return 1
+    }
+    if grep -q '[^[:space:]]' <<<"$gpu_pids"; then
+        append_event "$(jq -cn --arg message "foreign GPU compute PID remains after target shutdown: pids=$gpu_pids" '{kind:"failure",scenario_id:null,stage:"post-shutdown-nvidia-smi",message:$message}')"
+        return 1
+    fi
+}
+
 # The server writes this post-shutdown snapshot only after native allocation
 # counters have observed all close operations.  Synthesizing zeros is forbidden.
 jq -e '.active_requests == 0 and .waiting_requests == 0 and .kv_allocated_blocks == 0 and ([.allocation[]] | all(. == 0))' "$RUSTINFER_SOAK_FINAL_METRICS_JSON" >/dev/null
+require_post_shutdown_gpu_idle
 final_metrics=$(jq -c '.' "$RUSTINFER_SOAK_FINAL_METRICS_JSON")
 append_event "$(jq -cn --argjson metrics "$final_metrics" '{kind:"sample",scenario_id:null,process:{pid:0,rss_bytes:0,hwm_bytes:0,fd_count:0,thread_count:0,children:[]},gpu:{vram_bytes:0},metrics:$metrics,sample_dropped:false}')"
 append_event '{"kind":"run_end","scenario_id":null,"status":"success"}'
 rm -f "$sequence_file" "$monotonic_file" "$lock_file"
-trap - EXIT
+trap - EXIT USR1
 echo "soak evidence complete: $RUSTINFER_SOAK_OUTPUT"

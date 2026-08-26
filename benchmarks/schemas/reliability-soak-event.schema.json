@@ -3,44 +3,156 @@
   "$id": "https://rustinfer.dev/schemas/reliability-soak-event-v1.schema.json",
   "title": "rustinfer append-only reliability soak event",
   "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256"],
-  "properties": {
-    "schema_version": {"const": "rustinfer.reliability-soak-event.v1"},
-    "sequence": {"type": "integer", "minimum": 1},
-    "monotonic_ns": {"type": "integer", "minimum": 0},
-    "kind": {"enum": ["run_start", "scenario_start", "sample", "request", "restart", "scenario_end", "failure", "run_end"]},
-    "scenario_id": {"type": ["string", "null"]},
-    "binding_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
-    ,"execution_completion": {"enum": ["iteration-batch", "per-operation"]}
-    ,"process": {"$ref": "#/$defs/process"}
-    ,"gpu": {"$ref": "#/$defs/gpu"}
-    ,"metrics": {"$ref": "#/$defs/metrics"}
-    ,"sample_dropped": {"type": "boolean"}
-    ,"request_id": {"type": "string", "minLength": 1}
-    ,"outcome": {"enum": ["success", "invalid", "overload", "cancelled", "disconnected", "timeout", "failure"]}
-    ,"http_status": {"type": "integer", "minimum": 0, "maximum": 599}
-    ,"latency_ms": {"type": "number", "minimum": 0}
-    ,"generated_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
-    ,"graceful": {"type": "boolean"}
-    ,"exit_code": {"type": "integer", "minimum": 0}
-    ,"elapsed_ms": {"type": "number", "minimum": 0}
-    ,"before_generated_sha256": {"$ref": "#/$defs/sha256"}
-    ,"after_generated_sha256": {"$ref": "#/$defs/sha256"}
-    ,"status": {"enum": ["success", "failure"]}
-    ,"stage": {"type": "string", "minLength": 1}
-    ,"message": {"type": "string", "minLength": 1}
-  },
-  "allOf": [
-    {"if": {"properties": {"kind": {"const": "sample"}}}, "then": {"required": ["process", "gpu", "metrics", "sample_dropped"]}},
-    {"if": {"properties": {"kind": {"const": "request"}}}, "then": {"required": ["request_id", "outcome", "http_status", "latency_ms", "generated_sha256"]}},
-    {"if": {"properties": {"kind": {"const": "scenario_end"}}}, "then": {"required": ["status"]}},
-    {"if": {"properties": {"kind": {"const": "restart"}}}, "then": {"required": ["graceful", "exit_code", "elapsed_ms", "before_generated_sha256", "after_generated_sha256"]}}
+  "oneOf": [
+    {"$ref": "#/$defs/runStartEvent"},
+    {"$ref": "#/$defs/scenarioStartEvent"},
+    {"$ref": "#/$defs/sampleEvent"},
+    {"$ref": "#/$defs/requestEvent"},
+    {"$ref": "#/$defs/restartEvent"},
+    {"$ref": "#/$defs/scenarioEndEvent"},
+    {"$ref": "#/$defs/failureEvent"},
+    {"$ref": "#/$defs/runEndEvent"}
   ],
   "$defs": {
+    "schemaVersion": {"const": "rustinfer.reliability-soak-event.v1"},
+    "sequence": {"type": "integer", "minimum": 1},
+    "monotonicNs": {"type": "integer", "minimum": 0},
+    "scenarioId": {"type": "string", "minLength": 1},
+    "nullableScenarioId": {"type": ["string", "null"], "minLength": 1},
     "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "runStartEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "run_start"},
+        "scenario_id": {"const": null},
+        "binding_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "scenarioStartEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "execution_completion"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "scenario_start"},
+        "scenario_id": {"$ref": "#/$defs/scenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "execution_completion": {"enum": ["iteration-batch", "per-operation"]}
+      }
+    },
+    "sampleEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "process", "gpu", "metrics", "sample_dropped"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "sample"},
+        "scenario_id": {"$ref": "#/$defs/nullableScenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "process": {"$ref": "#/$defs/process"},
+        "gpu": {"$ref": "#/$defs/gpu"},
+        "metrics": {"$ref": "#/$defs/metrics"},
+        "sample_dropped": {"type": "boolean"}
+      }
+    },
+    "requestEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "request_id", "request_profile", "client_action", "request_stream", "curl_exit_code", "request_body_sha256", "response_body_sha256", "response_bytes", "outcome", "http_status", "latency_ms", "generated_sha256"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "request"},
+        "scenario_id": {"$ref": "#/$defs/scenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "request_id": {"type": "string", "minLength": 1},
+        "request_profile": {"type": "string", "minLength": 1},
+        "client_action": {"enum": ["normal", "invalid", "overload", "cancel", "disconnect"]},
+        "request_stream": {"type": "boolean"},
+        "curl_exit_code": {"type": "integer", "minimum": 0, "maximum": 255},
+        "request_body_sha256": {"$ref": "#/$defs/sha256"},
+        "response_body_sha256": {"$ref": "#/$defs/sha256"},
+        "response_bytes": {"type": "integer", "minimum": 0},
+        "outcome": {"enum": ["success", "invalid", "overload", "cancelled", "disconnected", "timeout", "failure"]},
+        "http_status": {"type": "integer", "minimum": 0, "maximum": 599},
+        "latency_ms": {"type": "number", "minimum": 0},
+        "generated_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "restartEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "graceful", "exit_code", "elapsed_ms", "before_generated_sha256", "after_generated_sha256"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "restart"},
+        "scenario_id": {"$ref": "#/$defs/scenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "graceful": {"type": "boolean"},
+        "exit_code": {"type": "integer", "minimum": 0},
+        "elapsed_ms": {"type": "number", "minimum": 0},
+        "before_generated_sha256": {"$ref": "#/$defs/sha256"},
+        "after_generated_sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "scenarioEndEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "status"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "scenario_end"},
+        "scenario_id": {"$ref": "#/$defs/scenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "status": {"enum": ["success", "failure"]}
+      }
+    },
+    "failureEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "stage", "message"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "failure"},
+        "scenario_id": {"$ref": "#/$defs/nullableScenarioId"},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "stage": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1}
+      }
+    },
+    "runEndEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256", "status"],
+      "properties": {
+        "schema_version": {"$ref": "#/$defs/schemaVersion"},
+        "sequence": {"$ref": "#/$defs/sequence"},
+        "monotonic_ns": {"$ref": "#/$defs/monotonicNs"},
+        "kind": {"const": "run_end"},
+        "scenario_id": {"const": null},
+        "binding_sha256": {"$ref": "#/$defs/sha256"},
+        "status": {"enum": ["success", "failure"]}
+      }
+    },
     "process": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["pid", "rss_bytes", "hwm_bytes", "fd_count", "thread_count", "children"],
       "properties": {
         "pid": {"type": "integer", "minimum": 0},
@@ -52,13 +164,24 @@
       }
     },
     "child": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["pid", "comm", "executable"],
-      "properties": {"pid": {"type": "integer", "minimum": 1}, "comm": {"type": "string", "minLength": 1}, "executable": {"type": "string", "minLength": 1}}
+      "properties": {
+        "pid": {"type": "integer", "minimum": 1},
+        "comm": {"type": "string", "minLength": 1},
+        "executable": {"type": "string", "minLength": 1}
+      }
     },
-    "gpu": {"type": "object", "additionalProperties": false, "required": ["vram_bytes"], "properties": {"vram_bytes": {"type": "integer", "minimum": 0}}},
+    "gpu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vram_bytes"],
+      "properties": {"vram_bytes": {"type": "integer", "minimum": 0}}
+    },
     "metrics": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "counters"],
       "properties": {
         "active_requests": {"type": "integer", "minimum": 0},
@@ -69,7 +192,8 @@
       }
     },
     "allocation": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"],
       "properties": {
         "device_live_count": {"type": "integer", "minimum": 0},
@@ -79,7 +203,8 @@
       }
     },
     "counters": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "required": ["cancellations", "disconnects", "overloads", "dropped_observations"],
       "properties": {
         "cancellations": {"type": "integer", "minimum": 0},

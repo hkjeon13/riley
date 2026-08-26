@@ -16,8 +16,12 @@
       "{model_path}",
       "--bind",
       "{bind}",
+      "--reduction-profile",
+      "canonical-v1",
       "--execution-completion",
-      "{execution_completion}"
+      "{execution_completion}",
+      "--residual-rmsnorm",
+      "separate"
     ]
   },
   "thresholds": {

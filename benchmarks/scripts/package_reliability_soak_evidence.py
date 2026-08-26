@@ -16,6 +16,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--run-directory", required=True, type=Path)
+    parser.add_argument("--runtime-receipts-directory", required=True, type=Path)
     parser.add_argument("--correctness-golden", required=True, type=Path)
     parser.add_argument("--native-correctness-report", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
@@ -29,6 +30,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             args.manifest,
             args.run_directory,
             args.output,
+            runtime_receipts_directory=args.runtime_receipts_directory,
             correctness_golden=args.correctness_golden,
             native_correctness_report=args.native_correctness_report,
         )

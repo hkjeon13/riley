@@ -27,7 +27,7 @@
     },
     "gitRevision": {
       "type": "string",
-      "pattern": "^[0-9a-f]{40}$"
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
     },
     "trustedCorrectness": {
       "type": "object",
@@ -69,6 +69,53 @@
         "model_revision": {"type": "string", "minLength": 1}
       }
     },
+    "runtimeProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host_gpu_sha256",
+        "launcher_receipt_sha256",
+        "release_image_inspect_sha256",
+        "test_layer_image_inspect_sha256",
+        "container_inspect_pre_sha256",
+        "container_inspect_post_sha256",
+        "release_runtime_closure_sha256",
+        "run_json_sha256",
+        "events_jsonl_sha256",
+        "hostname",
+        "gpu_uuid",
+        "release_image_id",
+        "test_layer_image_id",
+        "container_id",
+        "container_name"
+      ],
+      "properties": {
+        "host_gpu_sha256": {"$ref": "#/$defs/sha256"},
+        "launcher_receipt_sha256": {"$ref": "#/$defs/sha256"},
+        "release_image_inspect_sha256": {"$ref": "#/$defs/sha256"},
+        "test_layer_image_inspect_sha256": {"$ref": "#/$defs/sha256"},
+        "container_inspect_pre_sha256": {"$ref": "#/$defs/sha256"},
+        "container_inspect_post_sha256": {"$ref": "#/$defs/sha256"},
+        "release_runtime_closure_sha256": {"$ref": "#/$defs/sha256"},
+        "run_json_sha256": {"$ref": "#/$defs/sha256"},
+        "events_jsonl_sha256": {"$ref": "#/$defs/sha256"},
+        "hostname": {"const": "psyche-MS-7D91"},
+        "gpu_uuid": {"const": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0"},
+        "release_image_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "test_layer_image_id": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "container_id": {"$ref": "#/$defs/sha256"},
+        "container_name": {
+          "type": "string",
+          "pattern": "^rustinfer-soak-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z$"
+        }
+      }
+    },
     "bindings": {
       "type": "object",
       "additionalProperties": false,
@@ -78,6 +125,7 @@
         "manifest_sha256",
         "binding_sha256",
         "trusted_correctness",
+        "runtime_provenance",
         "source"
       ],
       "properties": {
@@ -86,6 +134,7 @@
         "manifest_sha256": {"$ref": "#/$defs/sha256"},
         "binding_sha256": {"$ref": "#/$defs/sha256"},
         "trusted_correctness": {"$ref": "#/$defs/trustedCorrectness"},
+        "runtime_provenance": {"$ref": "#/$defs/runtimeProvenance"},
         "source": {"$ref": "#/$defs/source"}
       }
     }

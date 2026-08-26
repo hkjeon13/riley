@@ -7,10 +7,17 @@
   "required": ["schema_version", "run_id", "manifest_sha256", "binding_sha256", "source", "target", "started_at_utc"],
   "properties": {
     "schema_version": {"const": "rustinfer.reliability-soak-run.v1"},
-    "run_id": {"type": "string", "minLength": 1},
+    "run_id": {
+      "type": "string",
+      "pattern": "^soak-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"
+    },
     "manifest_sha256": {"$ref": "#/$defs/sha256"},
     "binding_sha256": {"$ref": "#/$defs/sha256"},
-    "started_at_utc": {"type": "string", "format": "date-time"},
+    "started_at_utc": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
     "source": {
       "type": "object", "additionalProperties": false,
       "required": ["git_commit", "git_dirty", "source_archive_sha256", "binary_sha256", "image_sha256", "model_sha256", "model_id", "model_revision"],

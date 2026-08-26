@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import io
 import json
 import math
 import os
+import posixpath
 import re
 import stat
 import sys
@@ -40,21 +42,146 @@ REQUIRED_KINDS = {
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
+IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 PYTHON_RE = re.compile(r"(^|/)(python|python[23](?:\.[0-9]+)?)(?:$|\s)", re.IGNORECASE)
 MAX_INPUT_BYTES = 512 * 1024 * 1024
-RAW_ARCHIVE_PAYLOADS = ("events.jsonl", "manifest.json", "run.json")
+RUNTIME_RECEIPT_FILENAMES = (
+    "host-gpu.csv",
+    "launcher-receipt.json",
+    "release-runtime-closure.tsv",
+    "release-image-inspect.json",
+    "test-layer-image-inspect.json",
+    "container-inspect-pre.json",
+    "container-inspect-post.json",
+)
+RAW_ARCHIVE_PAYLOADS = tuple(
+    sorted(("events.jsonl", "manifest.json", "run.json", *RUNTIME_RECEIPT_FILENAMES))
+)
 RAW_ARCHIVE_MEMBERS = (*RAW_ARCHIVE_PAYLOADS, "SHA256SUMS")
 RAW_MEMBER_MAX_BYTES = {
     "events.jsonl": MAX_INPUT_BYTES,
     "manifest.json": 4 * 1024 * 1024,
     "run.json": 4 * 1024 * 1024,
-    "SHA256SUMS": 1024,
+    "host-gpu.csv": 4 * 1024,
+    "launcher-receipt.json": 64 * 1024,
+    "release-runtime-closure.tsv": 1024 * 1024,
+    "release-image-inspect.json": 16 * 1024 * 1024,
+    "test-layer-image-inspect.json": 16 * 1024 * 1024,
+    "container-inspect-pre.json": 16 * 1024 * 1024,
+    "container-inspect-post.json": 16 * 1024 * 1024,
+    "SHA256SUMS": 4 * 1024,
 }
 MAX_RAW_ARCHIVE_BYTES = sum(RAW_MEMBER_MAX_BYTES.values()) + 64 * 1024
 MAX_CORRECTNESS_GOLDEN_BYTES = 64 * 1024
 MAX_NATIVE_CORRECTNESS_REPORT_BYTES = 16 * 1024 * 1024
+CURL_TIMEOUT_EXIT_CODE = 28
+CURL_WRITE_ERROR_EXIT_CODE = 23
+DISCONNECT_RESPONSE_BYTES = 1024
+EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256 = (
-    "bbe76150fdc64bb8274f79adb7d500031ccb67f49769de76c56d6c90066e422a"
+    "ef8d50d07aba2e7b8c0c3f3f157bf242452ac62be9dc22080baff8023278e0f3"
+)
+EXPECTED_LAUNCH_ARGUMENTS = [
+    "serve",
+    "--model",
+    "{model_path}",
+    "--bind",
+    "{bind}",
+    "--reduction-profile",
+    "canonical-v1",
+    "--execution-completion",
+    "{execution_completion}",
+    "--residual-rmsnorm",
+    "separate",
+]
+LAUNCHER_RECEIPT_VERSION = "rustinfer.reliability-soak-launcher-receipt.v3"
+DESIGNATED_HOSTNAME = "psyche-MS-7D91"
+DESIGNATED_GPU = {
+    "gpu_name": "NVIDIA GeForce RTX 4090",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "compute_capability": "8.9",
+    "memory_total_mib": 24564,
+    "driver_version": "580.173.02",
+}
+SOAK_USER = "65532:65532"
+SOAK_ENTRYPOINT = ["/opt/rustinfer-soak/ci/run_release_soak.sh"]
+SOAK_CMD: list[str] = []
+SOAK_MANIFEST_DESTINATION = "/run-input/reliability-soak-v1.json"
+SOAK_MODEL_DESTINATION = "/model"
+SOAK_EVIDENCE_DESTINATION = "/evidence"
+SOAK_TMPFS_OPTIONS = {
+    "rw",
+    "nosuid",
+    "nodev",
+    "noexec",
+    "size=67108864",
+}
+SOAK_IMAGE_LABELS = {
+    "release_image_id": "org.rustinfer.reliability-soak.release-image-id",
+    "source_revision": "org.rustinfer.reliability-soak.source-revision",
+    "source_archive_sha256": (
+        "org.rustinfer.reliability-soak.source-archive-sha256"
+    ),
+    "release_binary_sha256": (
+        "org.rustinfer.reliability-soak.release-binary-sha256"
+    ),
+}
+SOAK_IMAGE_ENVIRONMENT_OVERRIDES = {
+    "DEBIAN_FRONTEND": "noninteractive",
+    "LC_ALL": "C",
+    "TZ": "UTC",
+}
+SOAK_RELEASE_ENVIRONMENT = {
+    "PATH": (
+        "/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:"
+        "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    ),
+    "LD_LIBRARY_PATH": "/usr/local/cuda/lib64",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+}
+FORBIDDEN_RUNTIME_ENVIRONMENT = {
+    "BASH_ENV",
+    "BASHOPTS",
+    "CDPATH",
+    "CURL_HOME",
+    "CUDA_VISIBLE_DEVICES",
+    "ENV",
+    "GCONV_PATH",
+    "GLOBIGNORE",
+    "GLIBC_TUNABLES",
+    "HOME",
+    "IFS",
+    "LD_AUDIT",
+    "LD_LIBRARY_PATH",
+    "LD_PRELOAD",
+    "LOCPATH",
+    "MALLOC_TRACE",
+    "NVIDIA_VISIBLE_DEVICES",
+    "NLSPATH",
+    "POSIXLY_CORRECT",
+    "SHELLOPTS",
+    "XDG_CONFIG_HOME",
+}
+FORBIDDEN_RUNTIME_ENVIRONMENT_PREFIXES = ("BASH_FUNC_", "LD_")
+SOAK_HEALTHCHECK = {"Test": ["NONE"]}
+SOAK_CONTAINER_PATH = "/opt/rustinfer-soak/ci/run_release_soak.sh"
+SOAK_CONTAINER_ARGS: list[str] = []
+MINIMUM_SOAK_RUNTIME_SECONDS = 26_100
+MAXIMUM_CONTAINER_NAME_LEAD_SECONDS = 300
+DOCKER_TIMESTAMP_RE = re.compile(
+    r"^(?P<year>[0-9]{4})-(?P<month>[0-9]{2})-(?P<day>[0-9]{2})"
+    r"T(?P<hour>[0-9]{2}):(?P<minute>[0-9]{2}):(?P<second>[0-9]{2})"
+    r"(?:\.(?P<fraction>[0-9]{1,9}))?Z$"
+)
+DOCKER_ZERO_TIMESTAMP = "0001-01-01T00:00:00Z"
+RUN_TIMESTAMP_RE = re.compile(
+    r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+)
+COMPACT_UTC_TIMESTAMP_RE = re.compile(
+    r"^(?P<year>[0-9]{4})(?P<month>[0-9]{2})(?P<day>[0-9]{2})"
+    r"T(?P<hour>[0-9]{2})(?P<minute>[0-9]{2})(?P<second>[0-9]{2})Z$"
 )
 
 
@@ -127,6 +254,31 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _parse_jsonl_bytes(raw: bytes, path: str) -> list[dict[str, Any]]:
+    try:
+        lines = raw.decode("utf-8").splitlines()
+    except UnicodeDecodeError as error:
+        _fail(path, f"cannot read UTF-8 JSONL: {error}")
+    if not lines:
+        _fail(path, "must contain events")
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(lines, 1):
+        if not line.strip():
+            _fail(f"{path}:{line_number}", "blank JSONL lines are forbidden")
+        try:
+            value = json.loads(
+                line,
+                object_pairs_hook=_pairs,
+                parse_constant=_nonfinite,
+            )
+        except (json.JSONDecodeError, InputError) as error:
+            _fail(f"{path}:{line_number}", f"invalid JSON: {error}")
+        if not isinstance(value, dict):
+            _fail(f"{path}:{line_number}", "event must be an object")
+        rows.append(value)
+    return rows
+
+
 def _object(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         _fail(path, "must be an object")
@@ -179,28 +331,74 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _regular_file(path: Path, label: str, maximum_bytes: int) -> tuple[Any, os.stat_result]:
+def _stable_stat_fields() -> tuple[str, ...]:
+    return ("st_dev", "st_ino", "st_mode", "st_size", "st_mtime_ns", "st_ctime_ns")
+
+
+def _same_stat(left: os.stat_result, right: os.stat_result) -> bool:
+    return all(
+        getattr(left, field) == getattr(right, field)
+        for field in _stable_stat_fields()
+    )
+
+
+def _regular_file(
+    path: Path,
+    label: str,
+    maximum_bytes: int,
+    *,
+    directory_fd: int | None = None,
+    entry_name: str | None = None,
+) -> tuple[Any, os.stat_result]:
+    target: str | Path = entry_name if entry_name is not None else path
     try:
-        link_metadata = path.lstat()
+        if directory_fd is None:
+            link_metadata = path.lstat()
+        else:
+            link_metadata = os.stat(
+                target,
+                dir_fd=directory_fd,
+                follow_symlinks=False,
+            )
         if not stat.S_ISREG(link_metadata.st_mode):
             _fail(label, "must be a regular file, not a link or device")
-        handle = path.open("rb")
+        descriptor = os.open(
+            target,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_fd,
+        )
+        try:
+            handle = os.fdopen(descriptor, "rb")
+        except Exception:
+            os.close(descriptor)
+            raise
         metadata = os.fstat(handle.fileno())
     except (FileNotFoundError, OSError) as error:
         _fail(label, f"cannot open evidence file: {error}")
-    if not stat.S_ISREG(metadata.st_mode):
+    if not stat.S_ISREG(metadata.st_mode) or not _same_stat(link_metadata, metadata):
         handle.close()
-        _fail(label, "must be a regular file, not a link or device")
+        _fail(label, "path changed while it was opened or is not a regular file")
     if metadata.st_size <= 0 or metadata.st_size > maximum_bytes:
         handle.close()
         _fail(label, f"must be between 1 and {maximum_bytes} bytes")
     return handle, metadata
 
 
-def _load_regular_json(
-    path: Path, label: str, maximum_bytes: int
-) -> tuple[dict[str, Any], str]:
-    handle, metadata = _regular_file(path, label, maximum_bytes)
+def _load_regular_bytes(
+    path: Path,
+    label: str,
+    maximum_bytes: int,
+    *,
+    directory_fd: int | None = None,
+    entry_name: str | None = None,
+) -> tuple[bytes, str]:
+    handle, metadata = _regular_file(
+        path,
+        label,
+        maximum_bytes,
+        directory_fd=directory_fd,
+        entry_name=entry_name,
+    )
     try:
         raw = handle.read(metadata.st_size + 1)
         after = os.fstat(handle.fileno())
@@ -210,20 +408,158 @@ def _load_regular_json(
         handle.close()
     if len(raw) != metadata.st_size:
         _fail(label, "file changed or was truncated while being read")
-    stable_fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
-    if any(getattr(metadata, field) != getattr(after, field) for field in stable_fields):
+    if not _same_stat(metadata, after):
         _fail(label, "file changed while being read")
+    return raw, hashlib.sha256(raw).hexdigest()
+
+
+def _load_regular_json_value(
+    path: Path, label: str, maximum_bytes: int
+) -> tuple[Any, str]:
+    raw, digest = _load_regular_bytes(path, label, maximum_bytes)
+    return _parse_json_value(raw, label), digest
+
+
+def _parse_json_value(raw: bytes, label: str) -> Any:
     try:
-        value = json.loads(
+        return json.loads(
             raw.decode("utf-8"),
             object_pairs_hook=_pairs,
             parse_constant=_nonfinite,
         )
     except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
         _fail(label, f"cannot read strict UTF-8 JSON: {error}")
+
+
+def _load_regular_json(
+    path: Path, label: str, maximum_bytes: int
+) -> tuple[dict[str, Any], str]:
+    value, digest = _load_regular_json_value(path, label, maximum_bytes)
     if not isinstance(value, dict):
         _fail(label, "root must be an object")
-    return value, hashlib.sha256(raw).hexdigest()
+    return value, digest
+
+
+def _load_runtime_receipt_payloads(
+    directory: Path,
+) -> dict[str, tuple[bytes, str]]:
+    descriptor, before = _open_runtime_receipt_directory(directory)
+    try:
+        payloads = {
+            name: _load_regular_bytes(
+                directory / name,
+                name,
+                RAW_MEMBER_MAX_BYTES[name],
+                directory_fd=descriptor,
+                entry_name=name,
+            )
+            for name in sorted(RUNTIME_RECEIPT_FILENAMES)
+        }
+        _assert_runtime_receipt_directory_stable(descriptor, before)
+        return payloads
+    finally:
+        os.close(descriptor)
+
+
+def _validate_runtime_closure_receipt(raw: bytes) -> str:
+    label = "release-runtime-closure.tsv"
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as error:
+        _fail(label, f"must be canonical ASCII: {error}")
+    if not text.endswith("\n") or "\r" in text or "\0" in text:
+        _fail(label, "must be newline-terminated canonical TSV")
+    lines = text.splitlines()
+    if not lines or len(lines) > 1024 or lines != sorted(set(lines)):
+        _fail(label, "must contain 1..1024 unique bytewise-sorted closure rows")
+    loader_rows = 0
+    unresolved_rows = 0
+    for index, line in enumerate(lines, 1):
+        row_label = f"{label}:{index}"
+        fields = line.split("\t")
+        if len(fields) != 4:
+            _fail(row_label, "must contain dependency, resolved path, target, and SHA-256")
+        dependency, resolved_path, target_path, target_sha256 = fields
+        if re.fullmatch(r"[A-Za-z0-9_+./-]+", dependency) is None:
+            _fail(row_label, "dependency name contains noncanonical characters")
+        if resolved_path == "NOT_FOUND":
+            if (
+                dependency != "libcuda.so.1"
+                or target_path != "-"
+                or target_sha256 != "-"
+            ):
+                _fail(
+                    row_label,
+                    "only libcuda.so.1 may be unresolved as NOT_FOUND, -, -",
+                )
+            unresolved_rows += 1
+            continue
+        for field_name, path_value in (
+            ("resolved path", resolved_path),
+            ("target path", target_path),
+        ):
+            if (
+                not path_value.startswith("/")
+                or path_value.startswith("//")
+                or posixpath.normpath(path_value) != path_value
+            ):
+                _fail(row_label, f"{field_name} must be a normalized absolute path")
+        _string(target_sha256, f"{row_label}.sha256", SHA256_RE)
+        if dependency.startswith("/"):
+            if dependency != resolved_path or "ld-linux" not in dependency:
+                _fail(row_label, "absolute dependency row must identify the resolved loader")
+            loader_rows += 1
+    if loader_rows != 1:
+        _fail(label, "must contain exactly one resolved dynamic-loader row")
+    if unresolved_rows != 1:
+        _fail(label, "must contain exactly one unresolved libcuda.so.1 row")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _open_runtime_receipt_directory(
+    directory: Path,
+) -> tuple[int, os.stat_result]:
+    label = "runtime receipt directory"
+    descriptor = -1
+    try:
+        link_metadata = directory.lstat()
+        if not stat.S_ISDIR(link_metadata.st_mode):
+            _fail(label, "must be a directory, not a link or special file")
+        descriptor = os.open(
+            directory,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW,
+        )
+        before = os.fstat(descriptor)
+        if not stat.S_ISDIR(before.st_mode) or not _same_stat(
+            link_metadata, before
+        ):
+            _fail(label, "path changed while it was opened or is not a directory")
+        _assert_runtime_receipt_directory_stable(descriptor, before)
+        return descriptor, before
+    except InputError:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise
+    except (FileNotFoundError, OSError) as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        _fail(label, f"cannot open exact receipt inventory: {error}")
+
+
+def _assert_runtime_receipt_directory_stable(
+    descriptor: int, metadata: os.stat_result
+) -> None:
+    label = "runtime receipt directory"
+    try:
+        names = os.listdir(descriptor)
+        after = os.fstat(descriptor)
+    except OSError as error:
+        _fail(label, f"cannot revalidate exact receipt inventory: {error}")
+    expected_names = sorted(RUNTIME_RECEIPT_FILENAMES)
+    if sorted(names) != expected_names:
+        _fail(label, f"exact receipt inventory required: {expected_names}")
+    if not _same_stat(metadata, after):
+        _fail(label, "directory changed while receipts were consumed")
 
 
 def _stream_sha256(handle: Any) -> str:
@@ -232,6 +568,32 @@ def _stream_sha256(handle: Any) -> str:
         digest.update(block)
     handle.seek(0)
     return digest.hexdigest()
+
+
+def _assert_held_file_stable(
+    handle: Any, metadata: os.stat_result, label: str
+) -> None:
+    try:
+        after = os.fstat(handle.fileno())
+    except OSError as error:
+        _fail(label, f"cannot revalidate held evidence file: {error}")
+    if not _same_stat(metadata, after):
+        _fail(label, "held evidence file changed while it was consumed")
+
+
+def _assert_path_still_identifies_held_file(
+    path: Path, metadata: os.stat_result, label: str
+) -> None:
+    try:
+        current = path.lstat()
+    except OSError as error:
+        _fail(label, f"held evidence file changed while it was consumed: {error}")
+    if (
+        not stat.S_ISREG(current.st_mode)
+        or current.st_dev != metadata.st_dev
+        or current.st_ino != metadata.st_ino
+    ):
+        _fail(label, "held evidence file changed while it was consumed")
 
 
 def _canonical_tar_info(name: str, size: int) -> tarfile.TarInfo:
@@ -255,6 +617,26 @@ def _canonical_json_bytes(value: Any) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
     ).encode("utf-8")
+
+
+def _jq_1_6_request_json_bytes(value: Any) -> bytes:
+    """Mirror the pinned remote jq 1.6 shape for integral JSON numbers.
+
+    jq 1.6 serializes an input such as ``0.0`` as ``0``. The soak driver hashes
+    those exact jq-produced request bytes, so the offline checker must not use
+    Python's distinct ``0.0`` spelling for the same reviewed manifest value.
+    """
+
+    def normalize(item: Any) -> Any:
+        if isinstance(item, dict):
+            return {key: normalize(child) for key, child in item.items()}
+        if isinstance(item, list):
+            return [normalize(child) for child in item]
+        if isinstance(item, float) and item.is_integer():
+            return int(item)
+        return item
+
+    return _canonical_json_bytes(normalize(value))
 
 
 def _normalized_manifest_sha256(manifest: Mapping[str, Any]) -> str:
@@ -288,11 +670,11 @@ def _validate_manifest(value: dict[str, Any], path: str) -> dict[str, Any]:
         _fail(f"{path}.target.shutdown_signal", "release soak requires SIGTERM")
     for key in ("binary", "model_path", "bind", "completion_path", "health_path", "metrics_path"):
         _string(target[key], f"{path}.target.{key}")
-    if not isinstance(target["launch_arguments"], list) or not target["launch_arguments"]:
-        _fail(f"{path}.target.launch_arguments", "must be a non-empty string array")
-    for index, argument in enumerate(target["launch_arguments"]):
-        if not isinstance(argument, str):
-            _fail(f"{path}.target.launch_arguments[{index}]", "must be a string")
+    if target["launch_arguments"] != EXPECTED_LAUNCH_ARGUMENTS:
+        _fail(
+            f"{path}.target.launch_arguments",
+            "must be the exact canonical-v1/completion-mode/separate E0 command",
+        )
     requests = _object(manifest["requests"], f"{path}.requests")
     golden = _exact(
         manifest["golden"],
@@ -391,7 +773,7 @@ def _validate_run(value: dict[str, Any], path: str, manifest_sha: str) -> dict[s
     )
     if run["schema_version"] != RUN_VERSION:
         _fail(f"{path}.schema_version", f"must be {RUN_VERSION}")
-    _string(run["run_id"], f"{path}.run_id")
+    run_id = _string(run["run_id"], f"{path}.run_id")
     if run["manifest_sha256"] != manifest_sha:
         _fail(f"{path}.manifest_sha256", "does not bind the exact manifest bytes")
     source = _exact(
@@ -415,7 +797,19 @@ def _validate_run(value: dict[str, Any], path: str, manifest_sha: str) -> dict[s
     _integer(target["pid"], f"{path}.target.pid", 1)
     _string(target["image_id"], f"{path}.target.image_id")
     _string(target["command_sha256"], f"{path}.target.command_sha256", SHA256_RE)
-    _string(run["started_at_utc"], f"{path}.started_at_utc")
+    started_at_utc = _string(
+        run["started_at_utc"], f"{path}.started_at_utc", RUN_TIMESTAMP_RE
+    )
+    _docker_timestamp_ns(started_at_utc, f"{path}.started_at_utc")
+    expected_run_id = (
+        f"soak-{started_at_utc.replace('-', '').replace(':', '')}-"
+        f"{source['git_commit'][:12]}"
+    )
+    if run_id != expected_run_id:
+        _fail(
+            f"{path}.run_id",
+            "must embed the exact started_at_utc stamp and source revision prefix",
+        )
     return run
 
 
@@ -513,6 +907,7 @@ def _validate_trusted_correctness(
     required_native_bindings = {
         "candidate_git_revision",
         "candidate_git_status_sha256",
+        "candidate_executable_sha256",
         "model_id",
         "model_revision",
         "config_sha256",
@@ -530,6 +925,11 @@ def _validate_trusted_correctness(
             "native correctness report.bindings.candidate_git_status_sha256",
             "candidate tree was not clean",
         )
+    _string(
+        native_bindings["candidate_executable_sha256"],
+        "native correctness report.bindings.candidate_executable_sha256",
+        SHA256_RE,
+    )
 
     manifest_golden = _object(manifest["golden"], "manifest.golden")
     if manifest_golden["generated_sha256"] != golden["expected_greedy_text_sha256"]:
@@ -615,6 +1015,859 @@ def _validate_trusted_correctness(
     }
 
 
+def _required(value: Mapping[str, Any], key: str, path: str) -> Any:
+    if key not in value:
+        _fail(path, f"missing required field {key!r}")
+    return value[key]
+
+
+def _single_inspect_receipt(
+    payload: tuple[bytes, str], label: str
+) -> tuple[dict[str, Any], str]:
+    raw, digest = payload
+    value = _parse_json_value(raw, label)
+    if not isinstance(value, list) or len(value) != 1:
+        _fail(label, "must be a one-element Docker inspect array")
+    return _object(value[0], f"{label}[0]"), digest
+
+
+def _environment_map(value: Any, path: str) -> dict[str, str]:
+    if not isinstance(value, list):
+        _fail(path, "must be an array of NAME=value strings")
+    result: dict[str, str] = {}
+    for index, raw in enumerate(value):
+        if not isinstance(raw, str) or "=" not in raw:
+            _fail(f"{path}[{index}]", "must be a NAME=value string")
+        name, setting = raw.split("=", 1)
+        if not name or "\x00" in name or name in result:
+            _fail(f"{path}[{index}]", "has an empty, duplicate, or invalid name")
+        result[name] = setting
+    return result
+
+
+def _validate_safe_environment(environment: Mapping[str, str], path: str) -> None:
+    for name, expected in SOAK_RELEASE_ENVIRONMENT.items():
+        if environment.get(name) != expected:
+            _fail(
+                path,
+                f"{name} must equal the exact reviewed release-image value",
+            )
+    forbidden = sorted(
+        name
+        for name in environment
+        if name not in SOAK_RELEASE_ENVIRONMENT
+        and (
+            name in FORBIDDEN_RUNTIME_ENVIRONMENT
+            or name.startswith(FORBIDDEN_RUNTIME_ENVIRONMENT_PREFIXES)
+        )
+    )
+    if forbidden:
+        _fail(
+            path,
+            f"forbidden shell/loader/runtime environment overrides: {forbidden}",
+        )
+
+
+def _string_map(value: Any, path: str) -> dict[str, str]:
+    result = _object(value, path)
+    for key, setting in result.items():
+        if not isinstance(key, str) or not key or not isinstance(setting, str):
+            _fail(path, "must be an object with non-empty string keys and string values")
+    return result
+
+
+def _docker_timestamp_ns(value: Any, path: str) -> int:
+    timestamp = _string(value, path)
+    match = DOCKER_TIMESTAMP_RE.fullmatch(timestamp)
+    if match is None:
+        _fail(path, "must be a strict UTC RFC3339 timestamp with <= 9 fractional digits")
+    parts = {key: match.group(key) for key in match.groupdict()}
+    try:
+        parsed = datetime.datetime(
+            int(parts["year"]),
+            int(parts["month"]),
+            int(parts["day"]),
+            int(parts["hour"]),
+            int(parts["minute"]),
+            int(parts["second"]),
+            tzinfo=datetime.timezone.utc,
+        )
+    except ValueError as error:
+        _fail(path, f"is not a valid Gregorian UTC timestamp: {error}")
+    fraction = parts["fraction"] or ""
+    nanoseconds = int(fraction.ljust(9, "0")) if fraction else 0
+    days = parsed.date().toordinal() - 1
+    seconds = (
+        days * 86_400
+        + parsed.hour * 3_600
+        + parsed.minute * 60
+        + parsed.second
+    )
+    return seconds * 1_000_000_000 + nanoseconds
+
+
+def _compact_utc_timestamp_ns(value: str, path: str) -> int:
+    match = COMPACT_UTC_TIMESTAMP_RE.fullmatch(value)
+    if match is None:
+        _fail(path, "must be a strict compact UTC timestamp")
+    parts = match.groupdict()
+    expanded = (
+        f"{parts['year']}-{parts['month']}-{parts['day']}T"
+        f"{parts['hour']}:{parts['minute']}:{parts['second']}Z"
+    )
+    return _docker_timestamp_ns(expanded, path)
+
+
+def _rootfs_layers(value: Mapping[str, Any], path: str) -> list[str]:
+    rootfs = _object(_required(value, "RootFS", path), f"{path}.RootFS")
+    if _required(rootfs, "Type", f"{path}.RootFS") != "layers":
+        _fail(f"{path}.RootFS.Type", "must be layers")
+    layers = _required(rootfs, "Layers", f"{path}.RootFS")
+    if not isinstance(layers, list) or not layers:
+        _fail(f"{path}.RootFS.Layers", "must be a non-empty array")
+    for index, layer in enumerate(layers):
+        _string(layer, f"{path}.RootFS.Layers[{index}]", IMAGE_ID_RE)
+    return layers
+
+
+def _validate_no_network_addresses(value: Mapping[str, Any], path: str) -> None:
+    network = _object(
+        _required(value, "NetworkSettings", path), f"{path}.NetworkSettings"
+    )
+    for field in (
+        "Gateway",
+        "IPAddress",
+        "IPv6Gateway",
+        "GlobalIPv6Address",
+        "MacAddress",
+    ):
+        if _required(network, field, f"{path}.NetworkSettings") != "":
+            _fail(f"{path}.NetworkSettings.{field}", "network address must be empty")
+    for field in ("IPPrefixLen", "GlobalIPv6PrefixLen"):
+        prefix = _required(network, field, f"{path}.NetworkSettings")
+        if _integer(prefix, f"{path}.NetworkSettings.{field}") != 0:
+            _fail(f"{path}.NetworkSettings.{field}", "network prefix must be zero")
+    ports = _required(network, "Ports", f"{path}.NetworkSettings")
+    if ports not in (None, {}):
+        _fail(f"{path}.NetworkSettings.Ports", "network-none container has ports")
+    networks = _object(
+        _required(network, "Networks", f"{path}.NetworkSettings"),
+        f"{path}.NetworkSettings.Networks",
+    )
+    if set(networks) != {"none"}:
+        _fail(f"{path}.NetworkSettings.Networks", "must contain only network none")
+    none = _object(networks["none"], f"{path}.NetworkSettings.Networks.none")
+    for field in (
+        "Gateway",
+        "IPAddress",
+        "IPv6Gateway",
+        "GlobalIPv6Address",
+        "MacAddress",
+    ):
+        if _required(none, field, f"{path}.NetworkSettings.Networks.none") != "":
+            _fail(
+                f"{path}.NetworkSettings.Networks.none.{field}",
+                "network address must be empty",
+            )
+    for field in ("IPPrefixLen", "GlobalIPv6PrefixLen"):
+        prefix = _required(none, field, f"{path}.NetworkSettings.Networks.none")
+        if _integer(
+            prefix, f"{path}.NetworkSettings.Networks.none.{field}"
+        ) != 0:
+            _fail(
+                f"{path}.NetworkSettings.Networks.none.{field}",
+                "network prefix must be zero",
+            )
+
+
+def _validate_container_receipt(
+    value: dict[str, Any],
+    path: str,
+    *,
+    container_id: str,
+    container_name: str,
+    test_image_id: str,
+    expected_environment: Mapping[str, str],
+    expected_labels: Mapping[str, str],
+    expected_working_directory: str,
+    gpu_uuid: str,
+    post_run: bool,
+) -> dict[str, int]:
+    if _required(value, "Id", path) != container_id:
+        _fail(f"{path}.Id", "does not match the launcher container ID")
+    if _required(value, "Name", path) != f"/{container_name}":
+        _fail(f"{path}.Name", "does not match the launcher container name")
+    if _required(value, "Image", path) != test_image_id:
+        _fail(f"{path}.Image", "does not match the inspected test-layer image")
+    if _required(value, "Path", path) != SOAK_CONTAINER_PATH:
+        _fail(f"{path}.Path", "does not equal the reviewed soak entrypoint path")
+    if _required(value, "Args", path) != SOAK_CONTAINER_ARGS:
+        _fail(f"{path}.Args", "does not equal the empty reviewed argument vector")
+    created_ns = _docker_timestamp_ns(
+        _required(value, "Created", path), f"{path}.Created"
+    )
+    if created_ns <= _docker_timestamp_ns(DOCKER_ZERO_TIMESTAMP, "Docker zero time"):
+        _fail(f"{path}.Created", "must identify a real container creation time")
+
+    config = _object(_required(value, "Config", path), f"{path}.Config")
+    if _required(config, "Image", f"{path}.Config") != test_image_id:
+        _fail(f"{path}.Config.Image", "must be the immutable test-layer image ID")
+    if _required(config, "User", f"{path}.Config") != SOAK_USER:
+        _fail(f"{path}.Config.User", f"must be {SOAK_USER}")
+    if _required(config, "Entrypoint", f"{path}.Config") != SOAK_ENTRYPOINT:
+        _fail(f"{path}.Config.Entrypoint", "does not equal the soak entrypoint")
+    if _required(config, "Cmd", f"{path}.Config") != SOAK_CMD:
+        _fail(f"{path}.Config.Cmd", "does not equal the empty soak command")
+    if (
+        _required(config, "WorkingDir", f"{path}.Config")
+        != expected_working_directory
+    ):
+        _fail(
+            f"{path}.Config.WorkingDir",
+            "does not preserve the inspected test-layer working directory",
+        )
+    healthcheck = _exact(
+        _required(config, "Healthcheck", f"{path}.Config"),
+        {"Test"},
+        f"{path}.Config.Healthcheck",
+    )
+    if healthcheck != SOAK_HEALTHCHECK:
+        _fail(
+            f"{path}.Config.Healthcheck",
+            "must be the exact --no-healthcheck result",
+        )
+    labels = _string_map(
+        _required(config, "Labels", f"{path}.Config"),
+        f"{path}.Config.Labels",
+    )
+    if labels != dict(expected_labels):
+        _fail(f"{path}.Config.Labels", "does not equal the inspected test-layer labels")
+    environment = _environment_map(
+        _required(config, "Env", f"{path}.Config"), f"{path}.Config.Env"
+    )
+    _validate_safe_environment(environment, f"{path}.Config.Env")
+    if environment != dict(expected_environment):
+        _fail(f"{path}.Config.Env", "does not equal the image plus bound soak environment")
+
+    host = _object(_required(value, "HostConfig", path), f"{path}.HostConfig")
+    expected_host_scalars = {
+        "NetworkMode": "none",
+        "PidMode": "host",
+        "IpcMode": "private",
+        "UTSMode": "",
+        "UsernsMode": "",
+        "CgroupnsMode": "private",
+        "Runtime": "runc",
+        "ReadonlyRootfs": True,
+        "PidsLimit": 8192,
+        "Privileged": False,
+        "AutoRemove": False,
+        "PublishAllPorts": False,
+    }
+    for field, expected in expected_host_scalars.items():
+        actual = _required(host, field, f"{path}.HostConfig")
+        if (
+            (isinstance(expected, bool) and actual is not expected)
+            or (
+                isinstance(expected, int)
+                and not isinstance(expected, bool)
+                and (
+                    not isinstance(actual, int)
+                    or isinstance(actual, bool)
+                    or actual != expected
+                )
+            )
+            or (
+                not isinstance(expected, (bool, int))
+                and actual != expected
+            )
+        ):
+            _fail(f"{path}.HostConfig.{field}", f"must be {expected!r}")
+    expected_absent_host_fields = {
+        "Binds": None,
+        "DeviceCgroupRules": None,
+        "Devices": [],
+        "ExtraHosts": None,
+        "GroupAdd": None,
+        "Links": None,
+        "Sysctls": None,
+        "VolumesFrom": None,
+    }
+    for field, expected in expected_absent_host_fields.items():
+        if _required(host, field, f"{path}.HostConfig") != expected:
+            _fail(
+                f"{path}.HostConfig.{field}",
+                "must equal the exact safe empty/default value",
+            )
+    restart = _exact(
+        _required(host, "RestartPolicy", f"{path}.HostConfig"),
+        {"Name", "MaximumRetryCount"},
+        f"{path}.HostConfig.RestartPolicy",
+    )
+    if restart["Name"] != "no" or _integer(
+        restart["MaximumRetryCount"],
+        f"{path}.HostConfig.RestartPolicy.MaximumRetryCount",
+    ) != 0:
+        _fail(f"{path}.HostConfig.RestartPolicy", "must disable restart")
+    if _required(host, "CapDrop", f"{path}.HostConfig") != ["ALL"]:
+        _fail(f"{path}.HostConfig.CapDrop", "must drop ALL capabilities")
+    if _required(host, "CapAdd", f"{path}.HostConfig") not in (None, []):
+        _fail(f"{path}.HostConfig.CapAdd", "must not restore capabilities")
+    if _required(host, "PortBindings", f"{path}.HostConfig") not in (None, {}):
+        _fail(f"{path}.HostConfig.PortBindings", "must not publish ports")
+    security = _required(host, "SecurityOpt", f"{path}.HostConfig")
+    if security not in (["no-new-privileges"], ["no-new-privileges:true"]):
+        _fail(
+            f"{path}.HostConfig.SecurityOpt",
+            "must contain only enabled no-new-privileges",
+        )
+    tmpfs = _object(_required(host, "Tmpfs", f"{path}.HostConfig"), f"{path}.HostConfig.Tmpfs")
+    if set(tmpfs) != {"/tmp"} or not isinstance(tmpfs["/tmp"], str):
+        _fail(f"{path}.HostConfig.Tmpfs", "must contain only the bounded /tmp tmpfs")
+    tmpfs_options = tmpfs["/tmp"].split(",")
+    if (
+        len(tmpfs_options) != len(SOAK_TMPFS_OPTIONS)
+        or set(tmpfs_options) != SOAK_TMPFS_OPTIONS
+    ):
+        _fail(f"{path}.HostConfig.Tmpfs./tmp", "tmpfs options differ from the soak contract")
+
+    requests = _required(host, "DeviceRequests", f"{path}.HostConfig")
+    if not isinstance(requests, list) or len(requests) != 1:
+        _fail(f"{path}.HostConfig.DeviceRequests", "exactly one GPU request is required")
+    request = _exact(
+        requests[0],
+        {"Driver", "Count", "DeviceIDs", "Capabilities", "Options"},
+        f"{path}.HostConfig.DeviceRequests[0]",
+    )
+    if request["Driver"] != "":
+        _fail(f"{path}.HostConfig.DeviceRequests[0].Driver", "must use Docker's exact GPU request")
+    if _integer(
+        request["Count"], f"{path}.HostConfig.DeviceRequests[0].Count"
+    ) != 0:
+        _fail(f"{path}.HostConfig.DeviceRequests[0].Count", "must be exact-ID selected")
+    if request["DeviceIDs"] != [gpu_uuid]:
+        _fail(f"{path}.HostConfig.DeviceRequests[0].DeviceIDs", "wrong GPU UUID")
+    if request["Capabilities"] != [["gpu"]] or request["Options"] != {}:
+        _fail(f"{path}.HostConfig.DeviceRequests[0]", "GPU request contract mismatch")
+
+    mounts = _required(value, "Mounts", path)
+    if not isinstance(mounts, list) or len(mounts) != 3:
+        _fail(f"{path}.Mounts", "exactly three bind mounts are required")
+    expected_mounts = {
+        SOAK_MODEL_DESTINATION: {
+            "rw": False,
+            "mode": "",
+            "propagation": "rprivate",
+        },
+        SOAK_MANIFEST_DESTINATION: {
+            "rw": False,
+            "mode": "",
+            "propagation": "rprivate",
+        },
+        SOAK_EVIDENCE_DESTINATION: {
+            "rw": True,
+            "mode": "",
+            "propagation": "rprivate",
+        },
+    }
+    observed_mounts: dict[str, dict[str, Any]] = {}
+    for index, raw_mount in enumerate(mounts):
+        mount_path = f"{path}.Mounts[{index}]"
+        mount = _object(raw_mount, mount_path)
+        if _required(mount, "Type", mount_path) != "bind":
+            _fail(f"{mount_path}.Type", "must be bind")
+        source = _string(_required(mount, "Source", mount_path), f"{mount_path}.Source")
+        if not source.startswith("/") or "\x00" in source:
+            _fail(f"{mount_path}.Source", "must be an absolute host path")
+        destination = _string(
+            _required(mount, "Destination", mount_path), f"{mount_path}.Destination"
+        )
+        if destination in observed_mounts:
+            _fail(f"{mount_path}.Destination", "duplicate mount destination")
+        writable = _required(mount, "RW", mount_path)
+        if not isinstance(writable, bool):
+            _fail(f"{mount_path}.RW", "must be boolean")
+        mode = _required(mount, "Mode", mount_path)
+        if mode != "":
+            _fail(f"{mount_path}.Mode", "must be the exact empty bind mode")
+        propagation = _required(mount, "Propagation", mount_path)
+        if propagation != "rprivate":
+            _fail(
+                f"{mount_path}.Propagation",
+                "must be the exact non-propagating rprivate bind mode",
+            )
+        observed_mounts[destination] = {
+            "rw": writable,
+            "mode": mode,
+            "propagation": propagation,
+        }
+    if observed_mounts != expected_mounts:
+        _fail(f"{path}.Mounts", "model/manifest/evidence mount policy mismatch")
+
+    _validate_no_network_addresses(value, path)
+    restart_count = _required(value, "RestartCount", path)
+    if restart_count != 0 or isinstance(restart_count, bool):
+        _fail(f"{path}.RestartCount", "must be zero")
+    state = _object(_required(value, "State", path), f"{path}.State")
+    expected_state = {
+        "Status": "exited" if post_run else "created",
+        "Running": False,
+        "Paused": False,
+        "Restarting": False,
+        "OOMKilled": False,
+        "Dead": False,
+        "Error": "",
+        "Pid": 0,
+    }
+    for field, expected in expected_state.items():
+        actual = _required(state, field, f"{path}.State")
+        if (
+            (isinstance(expected, bool) and actual is not expected)
+            or (not isinstance(expected, bool) and actual != expected)
+        ):
+            _fail(f"{path}.State.{field}", f"must be {expected!r}")
+    if _integer(
+        _required(state, "ExitCode", f"{path}.State"),
+        f"{path}.State.ExitCode",
+    ) != 0:
+        _fail(f"{path}.State.ExitCode", "must be zero")
+    started_at = _required(state, "StartedAt", f"{path}.State")
+    finished_at = _required(state, "FinishedAt", f"{path}.State")
+    started_ns = _docker_timestamp_ns(started_at, f"{path}.State.StartedAt")
+    finished_ns = _docker_timestamp_ns(finished_at, f"{path}.State.FinishedAt")
+    if not post_run:
+        if started_at != DOCKER_ZERO_TIMESTAMP or finished_at != DOCKER_ZERO_TIMESTAMP:
+            _fail(
+                f"{path}.State",
+                "created receipt must retain exact zero start/finish timestamps",
+            )
+        return {
+            "created_ns": created_ns,
+            "started_ns": started_ns,
+            "finished_ns": finished_ns,
+            "elapsed_ns": 0,
+        }
+    if started_ns < created_ns:
+        _fail(f"{path}.State.StartedAt", "must not precede container creation")
+    if finished_ns <= started_ns:
+        _fail(f"{path}.State.FinishedAt", "must be later than StartedAt")
+    elapsed_ns = finished_ns - started_ns
+    minimum_ns = MINIMUM_SOAK_RUNTIME_SECONDS * 1_000_000_000
+    if elapsed_ns < minimum_ns:
+        _fail(
+            f"{path}.State",
+            f"container runtime must be at least {MINIMUM_SOAK_RUNTIME_SECONDS} seconds",
+        )
+    return {
+        "created_ns": created_ns,
+        "started_ns": started_ns,
+        "finished_ns": finished_ns,
+        "elapsed_ns": elapsed_ns,
+    }
+
+
+def _validate_runtime_receipts(
+    runtime_receipts_directory: Path | str | None,
+    run: Mapping[str, Any],
+    trusted_correctness: Mapping[str, str],
+    *,
+    run_json_sha256: str,
+    events_jsonl_sha256: str,
+) -> tuple[dict[str, str], dict[str, int]]:
+    if runtime_receipts_directory is None:
+        _fail(
+            "--runtime-receipts-directory",
+            "the seven remote launcher runtime receipts are required",
+        )
+    directory = Path(runtime_receipts_directory)
+    receipt_payloads = _load_runtime_receipt_payloads(directory)
+    launcher_bytes, launcher_sha256 = receipt_payloads["launcher-receipt.json"]
+    launcher_value = _parse_json_value(launcher_bytes, "launcher-receipt.json")
+    launcher = _object(launcher_value, "launcher-receipt.json")
+    launcher = _exact(
+        launcher,
+        {"schema_version", "host", "source", "evidence", "images", "container"},
+        "launcher-receipt.json",
+    )
+    if launcher["schema_version"] != LAUNCHER_RECEIPT_VERSION:
+        _fail(
+            "launcher-receipt.json.schema_version",
+            f"must be {LAUNCHER_RECEIPT_VERSION}",
+        )
+    host = _exact(
+        launcher["host"],
+        {
+            "hostname",
+            "gpu_name",
+            "gpu_uuid",
+            "compute_capability",
+            "memory_total_mib",
+            "driver_version",
+        },
+        "launcher-receipt.json.host",
+    )
+    expected_host: dict[str, Any] = {
+        "hostname": DESIGNATED_HOSTNAME,
+        **DESIGNATED_GPU,
+    }
+    if host != expected_host:
+        _fail("launcher-receipt.json.host", "is not the designated server-4096 GPU")
+    _integer(host["memory_total_mib"], "launcher-receipt.json.host.memory_total_mib", 1)
+    for key in (
+        "hostname",
+        "gpu_name",
+        "gpu_uuid",
+        "compute_capability",
+        "driver_version",
+    ):
+        _string(host[key], f"launcher-receipt.json.host.{key}")
+
+    host_gpu_bytes, host_gpu_sha256 = receipt_payloads["host-gpu.csv"]
+    expected_host_gpu = (
+        f"{host['gpu_name']}, {host['gpu_uuid']}, {host['compute_capability']}, "
+        f"{host['memory_total_mib']}, {host['driver_version']}\n"
+    ).encode("ascii")
+    if host_gpu_bytes != expected_host_gpu:
+        _fail("host-gpu.csv", "must be the exact designated single GPU row")
+    closure_bytes, closure_sha256 = receipt_payloads[
+        "release-runtime-closure.tsv"
+    ]
+    if _validate_runtime_closure_receipt(closure_bytes) != closure_sha256:
+        _fail("release-runtime-closure.tsv", "closure receipt digest changed while read")
+
+    source = _exact(
+        launcher["source"],
+        {
+            "git_revision",
+            "source_archive_sha256",
+            "release_binary_sha256",
+            "model_tree_sha256",
+            "manifest_sha256",
+            "correctness_golden_sha256",
+            "native_correctness_report_sha256",
+        },
+        "launcher-receipt.json.source",
+    )
+    run_source = _object(run["source"], "run.json.source")
+    expected_source = {
+        "git_revision": run_source["git_commit"],
+        "source_archive_sha256": run_source["source_archive_sha256"],
+        "release_binary_sha256": run_source["binary_sha256"],
+        "model_tree_sha256": run_source["model_sha256"],
+        "manifest_sha256": run["manifest_sha256"],
+        "correctness_golden_sha256": trusted_correctness[
+            "e2e_correctness_golden_sha256"
+        ],
+        "native_correctness_report_sha256": trusted_correctness[
+            "native_correctness_report_sha256"
+        ],
+    }
+    if source != expected_source:
+        _fail("launcher-receipt.json.source", "does not bind the checked soak inputs")
+    for key, value in source.items():
+        _string(
+            value,
+            f"launcher-receipt.json.source.{key}",
+            GIT_RE if key == "git_revision" else SHA256_RE,
+        )
+
+    evidence = _exact(
+        launcher["evidence"],
+        {
+            "run_json_sha256",
+            "events_jsonl_sha256",
+            "release_runtime_closure_sha256",
+        },
+        "launcher-receipt.json.evidence",
+    )
+    expected_evidence = {
+        "run_json_sha256": run_json_sha256,
+        "events_jsonl_sha256": events_jsonl_sha256,
+        "release_runtime_closure_sha256": closure_sha256,
+    }
+    if evidence != expected_evidence:
+        _fail(
+            "launcher-receipt.json.evidence",
+            "does not hash the exact exported run.json/events.jsonl bytes and runtime closure",
+        )
+    for key, value in evidence.items():
+        _string(value, f"launcher-receipt.json.evidence.{key}", SHA256_RE)
+
+    images = _exact(
+        launcher["images"],
+        {"release_image_id", "test_layer_image_id"},
+        "launcher-receipt.json.images",
+    )
+    release_image_id = _string(
+        images["release_image_id"],
+        "launcher-receipt.json.images.release_image_id",
+        IMAGE_ID_RE,
+    )
+    test_image_id = _string(
+        images["test_layer_image_id"],
+        "launcher-receipt.json.images.test_layer_image_id",
+        IMAGE_ID_RE,
+    )
+    if release_image_id != f"sha256:{run_source['image_sha256']}":
+        _fail(
+            "launcher-receipt.json.images.release_image_id",
+            "does not match run.json.source.image_sha256",
+        )
+    if test_image_id == release_image_id:
+        _fail("launcher-receipt.json.images.test_layer_image_id", "must be a derivative image")
+
+    container = _exact(
+        launcher["container"],
+        {"id", "name", "exit_code"},
+        "launcher-receipt.json.container",
+    )
+    container_id = _string(
+        container["id"], "launcher-receipt.json.container.id", CONTAINER_ID_RE
+    )
+    container_name = _string(container["name"], "launcher-receipt.json.container.name")
+    expected_name = re.compile(
+        rf"rustinfer-soak-{re.escape(run_source['git_commit'][:12])}-"
+        rf"(?P<stamp>[0-9]{{8}}T[0-9]{{6}}Z)"
+    )
+    container_name_match = expected_name.fullmatch(container_name)
+    if container_name_match is None:
+        _fail("launcher-receipt.json.container.name", "does not bind the source prefix and UTC run stamp")
+    container_name_ns = _compact_utc_timestamp_ns(
+        container_name_match.group("stamp"),
+        "launcher-receipt.json.container.name",
+    )
+    if _integer(container["exit_code"], "launcher-receipt.json.container.exit_code") != 0:
+        _fail("launcher-receipt.json.container.exit_code", "must be zero")
+
+    release_image, release_image_sha256 = _single_inspect_receipt(
+        receipt_payloads["release-image-inspect.json"],
+        "release-image-inspect.json",
+    )
+    if _required(release_image, "Id", "release-image-inspect.json[0]") != release_image_id:
+        _fail("release-image-inspect.json[0].Id", "does not match the release image ID")
+    if _required(release_image, "Os", "release-image-inspect.json[0]") != "linux":
+        _fail("release-image-inspect.json[0].Os", "must be linux")
+    if _required(release_image, "Architecture", "release-image-inspect.json[0]") != "amd64":
+        _fail("release-image-inspect.json[0].Architecture", "must be amd64")
+    release_config = _object(
+        _required(release_image, "Config", "release-image-inspect.json[0]"),
+        "release-image-inspect.json[0].Config",
+    )
+    if _required(release_config, "User", "release-image-inspect.json[0].Config") != SOAK_USER:
+        _fail("release-image-inspect.json[0].Config.User", f"must be {SOAK_USER}")
+    release_environment = _environment_map(
+        _required(release_config, "Env", "release-image-inspect.json[0].Config"),
+        "release-image-inspect.json[0].Config.Env",
+    )
+    _validate_safe_environment(
+        release_environment, "release-image-inspect.json[0].Config.Env"
+    )
+    release_labels_value = release_config.get("Labels")
+    release_labels = (
+        {}
+        if release_labels_value is None
+        else _string_map(
+            release_labels_value, "release-image-inspect.json[0].Config.Labels"
+        )
+    )
+    release_working_directory = _required(
+        release_config, "WorkingDir", "release-image-inspect.json[0].Config"
+    )
+    if not isinstance(release_working_directory, str):
+        _fail("release-image-inspect.json[0].Config.WorkingDir", "must be a string")
+    release_layers = _rootfs_layers(release_image, "release-image-inspect.json[0]")
+
+    test_image, test_image_sha256 = _single_inspect_receipt(
+        receipt_payloads["test-layer-image-inspect.json"],
+        "test-layer-image-inspect.json",
+    )
+    if _required(test_image, "Id", "test-layer-image-inspect.json[0]") != test_image_id:
+        _fail("test-layer-image-inspect.json[0].Id", "does not match the test image ID")
+    if _required(test_image, "Os", "test-layer-image-inspect.json[0]") != "linux":
+        _fail("test-layer-image-inspect.json[0].Os", "must be linux")
+    if _required(test_image, "Architecture", "test-layer-image-inspect.json[0]") != "amd64":
+        _fail("test-layer-image-inspect.json[0].Architecture", "must be amd64")
+    test_config = _object(
+        _required(test_image, "Config", "test-layer-image-inspect.json[0]"),
+        "test-layer-image-inspect.json[0].Config",
+    )
+    if _required(test_config, "User", "test-layer-image-inspect.json[0].Config") != SOAK_USER:
+        _fail("test-layer-image-inspect.json[0].Config.User", f"must be {SOAK_USER}")
+    if _required(test_config, "Entrypoint", "test-layer-image-inspect.json[0].Config") != SOAK_ENTRYPOINT:
+        _fail("test-layer-image-inspect.json[0].Config.Entrypoint", "wrong soak entrypoint")
+    if _required(test_config, "Cmd", "test-layer-image-inspect.json[0].Config") != SOAK_CMD:
+        _fail("test-layer-image-inspect.json[0].Config.Cmd", "wrong soak command")
+    if (
+        _required(test_config, "WorkingDir", "test-layer-image-inspect.json[0].Config")
+        != release_working_directory
+    ):
+        _fail(
+            "test-layer-image-inspect.json[0].Config.WorkingDir",
+            "must preserve the release image working directory",
+        )
+    labels = _string_map(
+        _required(test_config, "Labels", "test-layer-image-inspect.json[0].Config"),
+        "test-layer-image-inspect.json[0].Config.Labels",
+    )
+    expected_labels = {
+        **release_labels,
+        SOAK_IMAGE_LABELS["release_image_id"]: release_image_id,
+        SOAK_IMAGE_LABELS["source_revision"]: run_source["git_commit"],
+        SOAK_IMAGE_LABELS["source_archive_sha256"]: run_source[
+            "source_archive_sha256"
+        ],
+        SOAK_IMAGE_LABELS["release_binary_sha256"]: run_source["binary_sha256"],
+    }
+    if labels != expected_labels:
+        _fail(
+            "test-layer-image-inspect.json[0].Config.Labels",
+            "must equal inherited labels plus the exact soak provenance labels",
+        )
+    test_layers = _rootfs_layers(test_image, "test-layer-image-inspect.json[0]")
+    if len(test_layers) <= len(release_layers) or test_layers[: len(release_layers)] != release_layers:
+        _fail(
+            "test-layer-image-inspect.json[0].RootFS.Layers",
+            "must strictly extend the exact release image RootFS",
+        )
+
+    image_environment = _environment_map(
+        _required(test_config, "Env", "test-layer-image-inspect.json[0].Config"),
+        "test-layer-image-inspect.json[0].Config.Env",
+    )
+    _validate_safe_environment(
+        image_environment, "test-layer-image-inspect.json[0].Config.Env"
+    )
+    expected_image_environment = dict(release_environment)
+    expected_image_environment.update(SOAK_IMAGE_ENVIRONMENT_OVERRIDES)
+    if image_environment != expected_image_environment:
+        _fail(
+            "test-layer-image-inspect.json[0].Config.Env",
+            "must equal the release environment plus exact soak-layer overrides",
+        )
+    expected_environment = dict(image_environment)
+    expected_environment.update(
+        {
+            "RUSTINFER_SOAK_MANIFEST": SOAK_MANIFEST_DESTINATION,
+            "RUSTINFER_SOAK_OUTPUT": "/evidence/run",
+            "RUSTINFER_SOURCE_REVISION": run_source["git_commit"],
+            "RUSTINFER_SOURCE_ARCHIVE_SHA256": run_source[
+                "source_archive_sha256"
+            ],
+            "RUSTINFER_BINARY_SHA256": run_source["binary_sha256"],
+            "RUSTINFER_IMAGE_SHA256": run_source["image_sha256"],
+            "RUSTINFER_MODEL_SHA256": run_source["model_sha256"],
+            "RUSTINFER_MODEL_ID": run_source["model_id"],
+            "RUSTINFER_MODEL_REVISION": run_source["model_revision"],
+            "RUSTINFER_SOAK_FINAL_METRICS_JSON": "/evidence/final-metrics.json",
+            "RUSTINFER_SOAK_BINARY": "/opt/rustinfer/bin/rustinfer",
+            "RUSTINFER_SOAK_MODEL_PATH": SOAK_MODEL_DESTINATION,
+            "RUSTINFER_SOAK_BIND": "127.0.0.1:18080",
+            "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+            "ALL_PROXY": "",
+            "FTP_PROXY": "",
+            "HTTP_PROXY": "",
+            "HTTPS_PROXY": "",
+            "NO_PROXY": "",
+            "all_proxy": "",
+            "ftp_proxy": "",
+            "http_proxy": "",
+            "https_proxy": "",
+            "no_proxy": "",
+        }
+    )
+
+    pre, pre_sha256 = _single_inspect_receipt(
+        receipt_payloads["container-inspect-pre.json"],
+        "container-inspect-pre.json",
+    )
+    post, post_sha256 = _single_inspect_receipt(
+        receipt_payloads["container-inspect-post.json"],
+        "container-inspect-post.json",
+    )
+    pre_timing = _validate_container_receipt(
+        pre,
+        "container-inspect-pre.json[0]",
+        container_id=container_id,
+        container_name=container_name,
+        test_image_id=test_image_id,
+        expected_environment=expected_environment,
+        expected_labels=expected_labels,
+        expected_working_directory=release_working_directory,
+        gpu_uuid=host["gpu_uuid"],
+        post_run=False,
+    )
+    post_timing = _validate_container_receipt(
+        post,
+        "container-inspect-post.json[0]",
+        container_id=container_id,
+        container_name=container_name,
+        test_image_id=test_image_id,
+        expected_environment=expected_environment,
+        expected_labels=expected_labels,
+        expected_working_directory=release_working_directory,
+        gpu_uuid=host["gpu_uuid"],
+        post_run=True,
+    )
+    for field in (
+        "Id",
+        "Name",
+        "Image",
+        "Path",
+        "Args",
+        "Created",
+        "Config",
+        "HostConfig",
+        "Mounts",
+    ):
+        if _required(pre, field, "container-inspect-pre.json[0]") != _required(
+            post, field, "container-inspect-post.json[0]"
+        ):
+            _fail(
+                f"container-inspect-post.json[0].{field}",
+                "immutable container configuration differs from the pre-run receipt",
+            )
+
+    runtime_provenance = {
+        "host_gpu_sha256": host_gpu_sha256,
+        "launcher_receipt_sha256": launcher_sha256,
+        "release_image_inspect_sha256": release_image_sha256,
+        "test_layer_image_inspect_sha256": test_image_sha256,
+        "container_inspect_pre_sha256": pre_sha256,
+        "container_inspect_post_sha256": post_sha256,
+        "release_runtime_closure_sha256": closure_sha256,
+        "run_json_sha256": evidence["run_json_sha256"],
+        "events_jsonl_sha256": evidence["events_jsonl_sha256"],
+        "hostname": host["hostname"],
+        "gpu_uuid": host["gpu_uuid"],
+        "release_image_id": release_image_id,
+        "test_layer_image_id": test_image_id,
+        "container_id": container_id,
+        "container_name": container_name,
+    }
+    if pre_timing["created_ns"] != post_timing["created_ns"]:
+        _fail(
+            "container-inspect-post.json[0].Created",
+            "does not equal the pre-run container creation timestamp",
+        )
+    container_name_lead_ns = pre_timing["created_ns"] - container_name_ns
+    maximum_name_lead_ns = MAXIMUM_CONTAINER_NAME_LEAD_SECONDS * 1_000_000_000
+    if not 0 <= container_name_lead_ns <= maximum_name_lead_ns:
+        _fail(
+            "launcher-receipt.json.container.name",
+            "timestamp must precede Docker Created by at most "
+            f"{MAXIMUM_CONTAINER_NAME_LEAD_SECONDS} seconds",
+        )
+    run_started_ns = _docker_timestamp_ns(
+        run["started_at_utc"], "run.json.started_at_utc"
+    )
+    if not post_timing["started_ns"] <= run_started_ns <= post_timing["finished_ns"]:
+        _fail(
+            "run.json.started_at_utc",
+            "must fall within the validated Docker StartedAt..FinishedAt lifecycle",
+        )
+    return runtime_provenance, post_timing
+
+
 def _validate_sample(event: dict[str, Any], path: str) -> None:
     process = _exact(event["process"], {"pid", "rss_bytes", "hwm_bytes", "fd_count", "thread_count", "children"}, f"{path}.process")
     _integer(process["pid"], f"{path}.process.pid", 0 if event["scenario_id"] is None else 1)
@@ -646,15 +1899,29 @@ def _validate_sample(event: dict[str, Any], path: str) -> None:
         _fail(f"{path}.sample_dropped", "must be boolean")
 
 
-def _validate_events(rows: list[dict[str, Any]], binding_sha: str, scenario_ids: set[str]) -> None:
+def _validate_events(
+    rows: list[dict[str, Any]],
+    binding_sha: str,
+    manifest_scenarios: Sequence[Mapping[str, Any]],
+    manifest_requests: Mapping[str, Any],
+) -> None:
     common = {"schema_version", "sequence", "monotonic_ns", "kind", "scenario_id", "binding_sha256"}
     extras = {
         "run_start": set(), "scenario_start": {"execution_completion"},
         "sample": {"process", "gpu", "metrics", "sample_dropped"},
-        "request": {"request_id", "outcome", "http_status", "latency_ms", "generated_sha256"},
+        "request": {
+            "request_id", "request_profile", "client_action", "request_stream",
+            "curl_exit_code", "request_body_sha256", "response_body_sha256",
+            "response_bytes", "outcome", "http_status", "latency_ms",
+            "generated_sha256",
+        },
         "restart": {"graceful", "exit_code", "elapsed_ms", "before_generated_sha256", "after_generated_sha256"},
         "scenario_end": {"status"}, "failure": {"stage", "message"}, "run_end": {"status"},
     }
+    scenario_order = [scenario["id"] for scenario in manifest_scenarios]
+    scenarios = {scenario["id"]: scenario for scenario in manifest_scenarios}
+    active_scenario: str | None = None
+    completed_scenarios = 0
     previous_time = -1
     for index, event in enumerate(rows, 1):
         path = f"events[{index}]"
@@ -673,17 +1940,122 @@ def _validate_events(rows: list[dict[str, Any]], binding_sha: str, scenario_ids:
         if event["binding_sha256"] != binding_sha:
             _fail(f"{path}.binding_sha256", "does not match run binding")
         scenario_id = event["scenario_id"]
-        if scenario_id is not None and scenario_id not in scenario_ids:
-            _fail(f"{path}.scenario_id", "is absent from manifest")
+        if scenario_id is not None:
+            _string(scenario_id, f"{path}.scenario_id")
+            if scenario_id not in scenarios:
+                _fail(f"{path}.scenario_id", "is absent from manifest")
         if kind not in {"run_start", "run_end", "sample", "failure"} and scenario_id is None:
             _fail(f"{path}.scenario_id", "must identify a scenario")
         if kind in {"run_start", "run_end"} and scenario_id is not None:
             _fail(f"{path}.scenario_id", "run boundary events must use null")
+        if kind == "run_start":
+            if index != 1 or active_scenario is not None or completed_scenarios != 0:
+                _fail(path, "run_start must be the unique first event")
+        elif kind == "scenario_start":
+            if active_scenario is not None:
+                _fail(path, f"overlaps active scenario {active_scenario}")
+            if completed_scenarios >= len(scenario_order):
+                _fail(path, "starts after the manifest scenario inventory completed")
+            expected_scenario = scenario_order[completed_scenarios]
+            if scenario_id != expected_scenario:
+                _fail(
+                    f"{path}.scenario_id",
+                    f"must follow manifest order; expected {expected_scenario}",
+                )
+            active_scenario = scenario_id
+        elif kind == "scenario_end":
+            if active_scenario is None or scenario_id != active_scenario:
+                _fail(path, "does not close the active manifest scenario")
+            active_scenario = None
+            completed_scenarios += 1
+        elif scenario_id is not None and scenario_id != active_scenario:
+            _fail(path, "must occur inside its non-overlapping scenario interval")
+        elif scenario_id is None and kind == "sample":
+            if active_scenario is not None or completed_scenarios != len(scenario_order):
+                _fail(path, "global sample must follow all manifest scenarios")
+        elif kind == "run_end":
+            if active_scenario is not None or completed_scenarios != len(scenario_order):
+                _fail(path, "run_end requires every manifest scenario to finish in order")
         if kind == "sample":
             _validate_sample(event, path)
         elif kind == "request":
             _string(event["request_id"], f"{path}.request_id")
-            if event["outcome"] not in {"success", "invalid", "overload", "cancelled", "disconnected", "timeout", "failure"}:
+            profile = _string(event["request_profile"], f"{path}.request_profile")
+            scenario = scenarios[scenario_id]
+            allowed_profiles = {scenario["request_profile"]}
+            if "secondary_request_profile" in scenario:
+                allowed_profiles.add(scenario["secondary_request_profile"])
+            if profile not in allowed_profiles:
+                _fail(f"{path}.request_profile", "does not belong to the manifest scenario")
+            action = _string(event["client_action"], f"{path}.client_action")
+            expected_actions = {"normal"}
+            if scenario["kind"] == "invalid":
+                expected_actions = {"invalid"}
+            elif scenario["kind"] == "overload":
+                expected_actions = {"overload"}
+            elif scenario["kind"] == "cancellation-disconnect":
+                expected_actions = {"cancel", "disconnect"}
+            if action not in expected_actions:
+                _fail(
+                    f"{path}.client_action",
+                    f"does not match scenario kind {scenario['kind']}",
+                )
+            if not isinstance(event["request_stream"], bool):
+                _fail(f"{path}.request_stream", "must be boolean")
+            request_stream = event["request_stream"]
+            if request_stream != (action == "disconnect"):
+                _fail(
+                    f"{path}.request_stream",
+                    "must be true exactly for the disconnect client action",
+                )
+            curl_exit_code = _integer(
+                event["curl_exit_code"], f"{path}.curl_exit_code"
+            )
+            if curl_exit_code > 255:
+                _fail(f"{path}.curl_exit_code", "must be <= 255")
+            request_body_sha256 = _string(
+                event["request_body_sha256"],
+                f"{path}.request_body_sha256",
+                SHA256_RE,
+            )
+            expected_request = dict(
+                _object(manifest_requests[profile], f"manifest.requests.{profile}")
+            )
+            if "prompt_repeat" in expected_request:
+                repeat = _integer(
+                    expected_request.pop("prompt_repeat"),
+                    f"manifest.requests.{profile}.prompt_repeat",
+                    1,
+                )
+                prompt = _string(
+                    expected_request.get("prompt"),
+                    f"manifest.requests.{profile}.prompt",
+                )
+                expected_request["prompt"] = prompt * repeat
+            expected_request["stream"] = request_stream
+            expected_request_sha256 = hashlib.sha256(
+                _jq_1_6_request_json_bytes(expected_request)
+            ).hexdigest()
+            if request_body_sha256 != expected_request_sha256:
+                _fail(
+                    f"{path}.request_body_sha256",
+                    "does not bind the manifest profile and exact stream action bytes",
+                )
+            response_sha256 = _string(
+                event["response_body_sha256"],
+                f"{path}.response_body_sha256",
+                SHA256_RE,
+            )
+            response_bytes = _integer(
+                event["response_bytes"], f"{path}.response_bytes"
+            )
+            if response_bytes == 0 and response_sha256 != EMPTY_SHA256:
+                _fail(
+                    f"{path}.response_body_sha256",
+                    "zero response bytes require the empty-body SHA-256",
+                )
+            outcome = _string(event["outcome"], f"{path}.outcome")
+            if outcome not in {"success", "invalid", "overload", "cancelled", "disconnected", "timeout", "failure"}:
                 _fail(f"{path}.outcome", "is not a closed outcome")
             status = _integer(event["http_status"], f"{path}.http_status")
             if status > 599:
@@ -692,14 +2064,32 @@ def _validate_events(rows: list[dict[str, Any]], binding_sha: str, scenario_ids:
             generated = event["generated_sha256"]
             if generated is not None:
                 _string(generated, f"{path}.generated_sha256", SHA256_RE)
-            if (event["outcome"] == "success") != (generated is not None):
+            if (outcome == "success") != (generated is not None):
                 _fail(f"{path}.generated_sha256", "must be present exactly for success")
-            if event["outcome"] == "success" and not 200 <= status < 300:
+            if outcome == "success" and not 200 <= status < 300:
                 _fail(f"{path}.http_status", "success requires 2xx")
-            if event["outcome"] == "invalid" and not (400 <= status < 500 and status != 429):
+            if outcome == "invalid" and not (400 <= status < 500 and status != 429):
                 _fail(f"{path}.http_status", "invalid requires non-429 4xx")
-            if event["outcome"] == "overload" and status != 429:
+            if outcome == "overload" and status != 429:
                 _fail(f"{path}.http_status", "overload requires 429")
+            if outcome != "failure":
+                transport_contracts = {
+                    "normal": (False, 0, {"success"}, lambda: 200 <= status < 300 and response_bytes > 0),
+                    "invalid": (False, 0, {"invalid"}, lambda: 400 <= status < 500 and status != 429 and response_bytes > 0),
+                    "overload": (False, 0, {"success", "overload"}, lambda: (200 <= status < 300 or status == 429) and response_bytes > 0),
+                    "cancel": (False, CURL_TIMEOUT_EXIT_CODE, {"cancelled"}, lambda: status == 0 and response_bytes == 0 and response_sha256 == EMPTY_SHA256),
+                    "disconnect": (True, CURL_WRITE_ERROR_EXIT_CODE, {"disconnected"}, lambda: status == 200 and response_bytes == DISCONNECT_RESPONSE_BYTES),
+                }
+                expected_stream, expected_exit, expected_outcomes, proof_matches = (
+                    transport_contracts[action]
+                )
+                if (
+                    request_stream != expected_stream
+                    or curl_exit_code != expected_exit
+                    or outcome not in expected_outcomes
+                    or not proof_matches()
+                ):
+                    _fail(path, f"does not satisfy the exact {action} transport contract")
         elif kind == "restart":
             if not isinstance(event["graceful"], bool):
                 _fail(f"{path}.graceful", "must be boolean")
@@ -737,6 +2127,7 @@ def evaluate(
     manifest_path: Path | str,
     run_directory: Path | str,
     *,
+    runtime_receipts_directory: Path | str | None = None,
     correctness_golden: Path | str | None = None,
     native_correctness_report: Path | str | None = None,
 ) -> dict[str, Any]:
@@ -748,7 +2139,22 @@ def evaluate(
         manifest_file = Path(manifest_path)
         directory = Path(run_directory)
         manifest = _validate_manifest(_load_json(manifest_file), str(manifest_file))
-        run = _validate_run(_load_json(directory / "run.json"), str(directory / "run.json"), _sha256(manifest_file))
+        run_path = directory / "run.json"
+        run_value, run_json_sha256 = _load_regular_json(
+            run_path, str(run_path), RAW_MEMBER_MAX_BYTES["run.json"]
+        )
+        run = _validate_run(
+            run_value,
+            str(run_path),
+            _sha256(manifest_file),
+        )
+        events_path = directory / "events.jsonl"
+        events_raw, events_jsonl_sha256 = _load_regular_bytes(
+            events_path,
+            str(events_path),
+            RAW_MEMBER_MAX_BYTES["events.jsonl"],
+        )
+        rows = _parse_jsonl_bytes(events_raw, str(events_path))
         if run["target"]["kind"] != manifest["target"]["kind"]:
             _fail("run.json.target.kind", "does not match manifest target kind")
         if run["target"]["image_id"] != f"sha256:{run['source']['image_sha256']}":
@@ -759,9 +2165,26 @@ def evaluate(
             correctness_golden,
             native_correctness_report,
         )
-        rows = _load_jsonl(directory / "events.jsonl")
+        runtime_provenance, runtime_timing = _validate_runtime_receipts(
+            runtime_receipts_directory,
+            run,
+            trusted_correctness,
+            run_json_sha256=run_json_sha256,
+            events_jsonl_sha256=events_jsonl_sha256,
+        )
         scenarios = {scenario["id"]: scenario for scenario in manifest["scenarios"]}
-        _validate_events(rows, run["binding_sha256"], set(scenarios))
+        _validate_events(
+            rows,
+            run["binding_sha256"],
+            manifest["scenarios"],
+            manifest["requests"],
+        )
+        event_span_ns = rows[-1]["monotonic_ns"] - rows[0]["monotonic_ns"]
+        if runtime_timing["elapsed_ns"] < event_span_ns:
+            _fail(
+                "container-inspect-post.json[0].State",
+                "Docker runtime is shorter than the preserved monotonic event span",
+            )
         by_scenario: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for event in rows:
             if event["scenario_id"] is not None:
@@ -903,12 +2326,30 @@ def evaluate(
         checks.append(_check("initial_target_pid_binding", first_process_sample is not None and first_process_sample["process"]["pid"] == run["target"]["pid"], None if first_process_sample is None else first_process_sample["process"]["pid"], run["target"]["pid"]))
         final = final_samples[-1] if final_samples else None
         final_values = None if final is None else {
+            "process_pid": final["process"]["pid"],
+            "process_rss_bytes": final["process"]["rss_bytes"],
+            "process_hwm_bytes": final["process"]["hwm_bytes"],
+            "process_fd_count": final["process"]["fd_count"],
+            "process_thread_count": final["process"]["thread_count"],
+            "process_children": final["process"]["children"],
+            "gpu_vram_bytes": final["gpu"]["vram_bytes"],
             "active_requests": final["metrics"]["active_requests"],
             "waiting_requests": final["metrics"]["waiting_requests"],
             "kv_allocated_blocks": final["metrics"]["kv_allocated_blocks"],
             **final["metrics"]["allocation"],
         }
-        checks.append(_check("final_quiescence", final_values is not None and all(value == 0 for value in final_values.values()), final_values, "all zero"))
+        final_quiescent = final_values is not None and all(
+            value == ([] if key == "process_children" else 0)
+            for key, value in final_values.items()
+        )
+        checks.append(
+            _check(
+                "final_quiescence",
+                final_quiescent,
+                final_values,
+                "zero process/GPU/service/allocation state and no children",
+            )
+        )
         python_children = []
         for event in rows:
             if event["kind"] == "sample":
@@ -949,6 +2390,7 @@ def evaluate(
                 "manifest_sha256": run["manifest_sha256"],
                 "binding_sha256": run["binding_sha256"],
                 "trusted_correctness": trusted_correctness,
+                "runtime_provenance": runtime_provenance,
                 "source": run["source"],
             },
             "observations": {"event_count": len(rows), "outcome_counts": dict(sorted(outcome_counts.items())), "service_counter_maxima": dict(sorted(metric_counter_maxima.items())), "final": final_values},
@@ -960,31 +2402,56 @@ def evaluate(
 
 
 def _raw_payload_paths(
-    manifest_path: Path | str, run_directory: Path | str
+    manifest_path: Path | str,
+    run_directory: Path | str,
+    runtime_receipts_directory: Path | str,
 ) -> dict[str, Path]:
     directory = Path(run_directory)
-    return {
+    receipts = Path(runtime_receipts_directory)
+    result = {
         "manifest.json": Path(manifest_path),
         "run.json": directory / "run.json",
         "events.jsonl": directory / "events.jsonl",
     }
+    result.update({name: receipts / name for name in RUNTIME_RECEIPT_FILENAMES})
+    return result
 
 
-def _write_raw_archive(output: Path, inputs: Mapping[str, Path]) -> None:
+def _write_raw_archive(
+    output: Path,
+    inputs: Mapping[str, Path],
+    *,
+    runtime_receipts_directory: Path,
+) -> None:
     if set(inputs) != set(RAW_ARCHIVE_PAYLOADS):
-        _fail("raw evidence inputs", "exact three-file payload inventory is required")
+        _fail("raw evidence inputs", "exact canonical payload inventory is required")
     created = False
     try:
         with ExitStack() as stack:
+            receipts_descriptor, receipts_metadata = (
+                _open_runtime_receipt_directory(runtime_receipts_directory)
+            )
+            stack.callback(os.close, receipts_descriptor)
             opened: dict[str, tuple[Any, os.stat_result]] = {}
             digests: dict[str, str] = {}
             for name in RAW_ARCHIVE_PAYLOADS:
                 handle, metadata = _regular_file(
-                    inputs[name], name, RAW_MEMBER_MAX_BYTES[name]
+                    inputs[name],
+                    name,
+                    RAW_MEMBER_MAX_BYTES[name],
+                    directory_fd=(
+                        receipts_descriptor
+                        if name in RUNTIME_RECEIPT_FILENAMES
+                        else None
+                    ),
+                    entry_name=(
+                        name if name in RUNTIME_RECEIPT_FILENAMES else None
+                    ),
                 )
                 stack.callback(handle.close)
                 opened[name] = (handle, metadata)
                 digests[name] = _stream_sha256(handle)
+                _assert_held_file_stable(handle, metadata, name)
             checksums = b"".join(
                 f"{digests[name]}  {name}\n".encode("ascii")
                 for name in RAW_ARCHIVE_PAYLOADS
@@ -999,6 +2466,11 @@ def _write_raw_archive(output: Path, inputs: Mapping[str, Path]) -> None:
                 for name in sorted(payloads):
                     size, handle = payloads[name]
                     archive.addfile(_canonical_tar_info(name, size), handle)
+            for name, (handle, metadata) in opened.items():
+                _assert_held_file_stable(handle, metadata, name)
+            _assert_runtime_receipt_directory_stable(
+                receipts_descriptor, receipts_metadata
+            )
         descriptor = os.open(output, os.O_RDONLY)
         try:
             os.fsync(descriptor)
@@ -1013,32 +2485,60 @@ def _write_raw_archive(output: Path, inputs: Mapping[str, Path]) -> None:
         raise
 
 
-def _files_equal(left: Path, right: Path) -> bool:
+def _held_file_equals_path(
+    left_handle: Any,
+    left_metadata: os.stat_result,
+    right: Path,
+) -> bool:
+    right_handle: Any | None = None
     try:
-        if left.stat().st_size != right.stat().st_size:
+        right_handle, right_metadata = _regular_file(
+            right, "canonical raw evidence archive", MAX_RAW_ARCHIVE_BYTES
+        )
+        if left_metadata.st_size != right_metadata.st_size:
             return False
-        with left.open("rb") as left_handle, right.open("rb") as right_handle:
-            while True:
-                left_block = left_handle.read(1024 * 1024)
-                right_block = right_handle.read(1024 * 1024)
-                if left_block != right_block:
-                    return False
-                if not left_block:
-                    return True
+        left_handle.seek(0)
+        while True:
+            left_block = left_handle.read(1024 * 1024)
+            right_block = right_handle.read(1024 * 1024)
+            if left_block != right_block:
+                return False
+            if not left_block:
+                _assert_held_file_stable(
+                    left_handle, left_metadata, "raw evidence archive"
+                )
+                _assert_held_file_stable(
+                    right_handle, right_metadata, "canonical raw evidence archive"
+                )
+                return True
     except OSError as error:
         _fail("raw evidence archive", f"cannot compare canonical archive: {error}")
+    finally:
+        left_handle.seek(0)
+        if right_handle is not None:
+            right_handle.close()
 
 
 def _materialize_raw_evidence_archive(path: Path, destination: Path) -> dict[str, str]:
     label = "raw evidence archive"
+    handle: Any | None = None
     try:
-        metadata = path.lstat()
-        if not stat.S_ISREG(metadata.st_mode):
-            _fail(label, "must be a regular file, not a link or device")
-        if metadata.st_size <= 0 or metadata.st_size > MAX_RAW_ARCHIVE_BYTES:
-            _fail(label, f"must be between 1 and {MAX_RAW_ARCHIVE_BYTES} bytes")
-        archive_sha256 = _sha256(path)
-        with tarfile.open(path, "r:") as archive:
+        handle, metadata = _regular_file(path, label, MAX_RAW_ARCHIVE_BYTES)
+        archive_sha256 = _stream_sha256(handle)
+        _assert_held_file_stable(handle, metadata, label)
+        _assert_path_still_identifies_held_file(path, metadata, label)
+        receipts_destination = destination / "runtime-receipts"
+        receipts_destination.mkdir(mode=0o700)
+
+        def materialized_path(name: str) -> Path:
+            parent = (
+                receipts_destination
+                if name in RUNTIME_RECEIPT_FILENAMES
+                else destination
+            )
+            return parent / name
+
+        with tarfile.open(fileobj=handle, mode="r:") as archive:
             members = archive.getmembers()
             expected_names = sorted(RAW_ARCHIVE_MEMBERS)
             if [member.name for member in members] != expected_names:
@@ -1066,7 +2566,7 @@ def _materialize_raw_evidence_archive(path: Path, destination: Path) -> dict[str
                 source = archive.extractfile(member)
                 if source is None:
                     _fail(label, f"cannot read {name}")
-                target_path = destination / name
+                target_path = materialized_path(name)
                 digest = hashlib.sha256()
                 total = 0
                 with target_path.open("xb") as target:
@@ -1081,28 +2581,37 @@ def _materialize_raw_evidence_archive(path: Path, destination: Path) -> dict[str
                 digests[name] = digest.hexdigest()
                 if name == "SHA256SUMS":
                     checksum_bytes = target_path.read_bytes()
+        _assert_held_file_stable(handle, metadata, label)
+
+        expected_checksums = b"".join(
+            f"{digests[name]}  {name}\n".encode("ascii")
+            for name in RAW_ARCHIVE_PAYLOADS
+        )
+        if checksum_bytes != expected_checksums:
+            _fail(
+                f"{label}.SHA256SUMS",
+                "does not exactly checksum the canonical payload files",
+            )
+        canonical = destination / "canonical.tar"
+        _write_raw_archive(
+            canonical,
+            {name: materialized_path(name) for name in RAW_ARCHIVE_PAYLOADS},
+            runtime_receipts_directory=receipts_destination,
+        )
+        if not _held_file_equals_path(handle, metadata, canonical):
+            _fail(label, "bytes are not the canonical deterministic USTAR encoding")
+        _assert_path_still_identifies_held_file(path, metadata, label)
+        return {
+            "archive_sha256": archive_sha256,
+            **{f"{name}_sha256": digests[name] for name in RAW_ARCHIVE_PAYLOADS},
+        }
     except InputError:
         raise
     except (FileExistsError, OSError, tarfile.TarError) as error:
         _fail(label, f"cannot materialize deterministic uncompressed tar: {error}")
-
-    expected_checksums = b"".join(
-        f"{digests[name]}  {name}\n".encode("ascii")
-        for name in RAW_ARCHIVE_PAYLOADS
-    )
-    if checksum_bytes != expected_checksums:
-        _fail(f"{label}.SHA256SUMS", "does not exactly checksum the three payload files")
-    canonical = destination / "canonical.tar"
-    _write_raw_archive(
-        canonical,
-        {name: destination / name for name in RAW_ARCHIVE_PAYLOADS},
-    )
-    if not _files_equal(path, canonical):
-        _fail(label, "bytes are not the canonical deterministic USTAR encoding")
-    return {
-        "archive_sha256": archive_sha256,
-        **{f"{name}_sha256": digests[name] for name in RAW_ARCHIVE_PAYLOADS},
-    }
+    finally:
+        if handle is not None:
+            handle.close()
 
 
 def replay_raw_evidence_archive(
@@ -1119,6 +2628,7 @@ def replay_raw_evidence_archive(
         report = evaluate(
             directory / "manifest.json",
             directory,
+            runtime_receipts_directory=directory / "runtime-receipts",
             correctness_golden=correctness_golden,
             native_correctness_report=native_correctness_report,
         )
@@ -1130,6 +2640,7 @@ def package_raw_evidence(
     run_directory: Path | str,
     output: Path | str,
     *,
+    runtime_receipts_directory: Path | str | None = None,
     correctness_golden: Path | str | None = None,
     native_correctness_report: Path | str | None = None,
 ) -> dict[str, Any]:
@@ -1138,6 +2649,7 @@ def package_raw_evidence(
     report = evaluate(
         manifest_path,
         run_directory,
+        runtime_receipts_directory=runtime_receipts_directory,
         correctness_golden=correctness_golden,
         native_correctness_report=native_correctness_report,
     )
@@ -1145,9 +2657,19 @@ def package_raw_evidence(
         detail = "; ".join(report["errors"]) or report["status"]
         _fail("soak run", f"cannot package non-passing evidence: {detail}")
     output_path = Path(output)
+    if runtime_receipts_directory is None:
+        _fail(
+            "--runtime-receipts-directory",
+            "the seven remote launcher runtime receipts are required",
+        )
     _write_raw_archive(
         output_path,
-        _raw_payload_paths(manifest_path, run_directory),
+        _raw_payload_paths(
+            manifest_path,
+            run_directory,
+            runtime_receipts_directory,
+        ),
+        runtime_receipts_directory=Path(runtime_receipts_directory),
     )
     try:
         replay = replay_raw_evidence_archive(
@@ -1170,6 +2692,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--run-directory", required=True, type=Path)
+    parser.add_argument("--runtime-receipts-directory", required=True, type=Path)
     parser.add_argument("--correctness-golden", required=True, type=Path)
     parser.add_argument("--native-correctness-report", required=True, type=Path)
     parser.add_argument("--report", type=Path, help="create without overwriting")
@@ -1181,6 +2704,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     report = evaluate(
         args.manifest,
         args.run_directory,
+        runtime_receipts_directory=args.runtime_receipts_directory,
         correctness_golden=args.correctness_golden,
         native_correctness_report=args.native_correctness_report,
     )

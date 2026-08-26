@@ -20,7 +20,14 @@
         "health_path": {"type": "string", "pattern": "^/"},
         "metrics_path": {"type": "string", "pattern": "^/"},
         "shutdown_signal": {"const": "TERM"},
-        "launch_arguments": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        "launch_arguments": {
+          "const": [
+            "serve", "--model", "{model_path}", "--bind", "{bind}",
+            "--reduction-profile", "canonical-v1",
+            "--execution-completion", "{execution_completion}",
+            "--residual-rmsnorm", "separate"
+          ]
+        }
       }
     },
     "thresholds": {
