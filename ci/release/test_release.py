@@ -6,6 +6,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import io
+import json
 import struct
 import sys
 import tarfile
@@ -285,7 +286,7 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         self.assertEqual(
             [row["release_qualified"] for row in semantic_paths],
-            [True, False, True],
+            [True, False, False],
         )
         self.assertEqual(semantic_paths[1]["approval_gates"], [])
         self.assertEqual(semantic_paths[1]["release_evidence"], [])
@@ -293,16 +294,12 @@ class ReleaseBundleTests(unittest.TestCase):
             semantic_paths[1]["prior_evidence_gates"],
             ["pr15-fused-residual-rmsnorm-exact-v1"],
         )
+        self.assertEqual(semantic_paths[2]["approval_gates"], [])
+        self.assertEqual(semantic_paths[2]["prior_evidence_gates"], [])
+        self.assertEqual(semantic_paths[2]["release_evidence"], [])
         self.assertEqual(
-            semantic_paths[2]["approval_gates"],
-            [
-                "smollm2-fp32-bf16-native-e0-v2",
-                "pr16-fixed37-production-batch-e0-v1",
-            ],
-        )
-        self.assertEqual(
-            semantic_paths[2]["release_evidence"],
-            ["native-correctness", "optimization-correctness"],
+            semantic_paths[2]["availability"],
+            "unsupported in the first release candidate",
         )
         self.assertEqual(
             manifest["features"]["approximation_policy"],
@@ -315,6 +312,7 @@ class ReleaseBundleTests(unittest.TestCase):
                 "exact_fallback_required": True,
             },
         )
+
         self.assertEqual(
             manifest["support"]["source_families"],
             [
@@ -422,6 +420,46 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         self.assertIn("current checksummed bundle", manifest["rollback"]["validated_scope"])
         self.assertIn("only when one exists", manifest["rollback"]["previous_release_scope"])
+
+    def test_fixed37_cannot_be_promoted_by_manifest_tampering(self) -> None:
+        source = self.build("fixed37-source.tar.gz")
+        tampered = self.root / "fixed37-tampered.tar.gz"
+
+        def promote_fixed37(
+            entries: list[tuple[tarfile.TarInfo, bytes | None]],
+        ) -> None:
+            manifest_entry = next(
+                (
+                    entry
+                    for entry in entries
+                    if entry[0].name.endswith("/manifest/release.json")
+                ),
+                None,
+            )
+            if manifest_entry is None or manifest_entry[1] is None:
+                raise AssertionError("fixture release manifest is missing")
+            manifest = json.loads(manifest_entry[1])
+            fixed37 = next(
+                row
+                for row in manifest["features"]["semantic_paths"]
+                if row["feature_id"] == "fixed-contiguous-37-balanced-reductions"
+            )
+            fixed37["release_qualified"] = True
+            fixed37["availability"] = "supported opt-in E0 path"
+            fixed37["approval_gates"] = ["unreviewed-fixed37-gate"]
+            replacement = (
+                json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+            ).encode("utf-8")
+            replace_archive_file(
+                entries,
+                "manifest/release.json",
+                replacement,
+                update_checksum=True,
+            )
+
+        rewrite_archive(source, tampered, promote_fixed37)
+        with self.assertRaisesRegex(ReleaseContractError, "manifest"):
+            verify_bundle(tampered)
 
     def test_safe_application_strings_are_not_runtime_dependencies(self) -> None:
         binary = fixture_elf() + b"transformers_version ExperimentalTriton"

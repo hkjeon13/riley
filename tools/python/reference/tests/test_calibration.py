@@ -17,16 +17,21 @@ from unittest import mock
 from rustinfer_reference.calibration import (
     ALTERNATE_CANDIDATE_REDUCTION_VARIANT,
     BF16_ORACLE_KIND,
+    CALIBRATION_GATE_ID,
     CALIBRATION_THRESHOLDS,
     CANONICAL_CANDIDATE_REDUCTION_VARIANT,
     CANDIDATE_KIND,
     FP32_ORACLE_KIND,
     HF_ORACLE_REDUCTION_VARIANT,
     HF_SOURCE_PATHS,
+    LEGACY_NATIVE_ENGINE_REVISION,
+    LEGACY_NATIVE_SOURCE_PATHS,
     NATIVE_BUILD_ARGV,
     NATIVE_ENGINE_REVISION,
     NATIVE_EXECUTABLE_FILENAME,
     NATIVE_SOURCE_PATHS,
+    ORACLE_MANIFEST_GATE_ID,
+    ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS,
     REQUIRED_CANDIDATE_REDUCTION_VARIANTS,
     CalibrationError,
     aggregate_tokenizer_sha256,
@@ -216,7 +221,6 @@ class CalibrationFixture:
         self._write_sources()
         self._initialize_git_history()
         self.contract_base = {
-            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
             "model_id": MODEL_ID,
             "model_revision": MODEL_REVISION,
             "config_sha256": MODEL_CONFIG_SHA256,
@@ -233,9 +237,6 @@ class CalibrationFixture:
             "cross_cache_exact_window": 16,
             "top_k": 10,
             "oracle_reduction_variant": dict(HF_ORACLE_REDUCTION_VARIANT),
-            "required_candidate_reduction_variants": [
-                dict(item) for item in REQUIRED_CANDIDATE_REDUCTION_VARIANTS
-            ],
         }
 
     def _initialize_git_history(self) -> None:
@@ -286,6 +287,12 @@ class CalibrationFixture:
         self._write("benchmarks/prompts.jsonl", self.source_prompts)
         self._write(
             "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
+            json.dumps(
+                gate_contract_document(ORACLE_MANIFEST_GATE_ID), sort_keys=True
+            ).encode("utf-8"),
+        )
+        self._write(
+            "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json",
             json.dumps(gate_contract_document(), sort_keys=True).encode("utf-8"),
         )
         self._write("benchmarks/environment.md", b"environment-v1\n")
@@ -314,13 +321,31 @@ class CalibrationFixture:
                     "lane_id": "rustinfer-native",
                     "implementation_id": "rustinfer-native",
                     "runtime_dependency_class": "native-production",
+                    "engine": {"revision": LEGACY_NATIVE_ENGINE_REVISION},
+                }
+            ).encode("utf-8"),
+        )
+        self._write(
+            "benchmarks/lanes/rustinfer-native-v3.json",
+            json.dumps(
+                {
+                    "lane_id": "rustinfer-native",
+                    "implementation_id": "rustinfer-native",
+                    "runtime_dependency_class": "native-production",
                     "engine": {"revision": NATIVE_ENGINE_REVISION},
                 }
             ).encode("utf-8"),
         )
 
-    def _sources(self, kind: str) -> dict[str, object]:
-        paths = NATIVE_SOURCE_PATHS if kind == CANDIDATE_KIND else HF_SOURCE_PATHS
+    def _sources(
+        self, kind: str, gate_id: str = ORACLE_MANIFEST_GATE_ID
+    ) -> dict[str, object]:
+        if kind != CANDIDATE_KIND:
+            paths = HF_SOURCE_PATHS
+        elif gate_id == ORACLE_MANIFEST_GATE_ID:
+            paths = LEGACY_NATIVE_SOURCE_PATHS
+        else:
+            paths = NATIVE_SOURCE_PATHS
         return {
             name: {"path": relative, "sha256": sha256_file(self.root / relative)}
             for name, relative in paths.items()
@@ -355,9 +380,24 @@ class CalibrationFixture:
             "cross_cache_exact_window_match": True,
         }
 
-    def make(self, kind: str) -> tuple[dict[str, object], Path]:
+    def make(
+        self,
+        kind: str,
+        *,
+        candidate_gate_id: str | None = None,
+    ) -> tuple[dict[str, object], Path]:
+        gate_id = (
+            (candidate_gate_id or CALIBRATION_GATE_ID)
+            if kind == CANDIDATE_KIND
+            else ORACLE_MANIFEST_GATE_ID
+        )
+        required_candidate_variants = (
+            ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+            if gate_id == ORACLE_MANIFEST_GATE_ID
+            else REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+        )
         variants = (
-            REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+            required_candidate_variants
             if kind == CANDIDATE_KIND
             else (HF_ORACLE_REDUCTION_VARIANT,)
         )
@@ -455,7 +495,11 @@ class CalibrationFixture:
         producer = (
             {
                 "implementation_id": "rustinfer-native",
-                "engine_revision": NATIVE_ENGINE_REVISION,
+                "engine_revision": (
+                    LEGACY_NATIVE_ENGINE_REVISION
+                    if gate_id == ORACLE_MANIFEST_GATE_ID
+                    else NATIVE_ENGINE_REVISION
+                ),
                 "runtime_dependency_class": "native-production",
                 "python_version": None,
                 "python_executable_sha256": None,
@@ -487,10 +531,14 @@ class CalibrationFixture:
             "candidate_execution": None,
             "contract": {
                 **copy.deepcopy(self.contract_base),
+                "gate_id": gate_id,
+                "required_candidate_reduction_variants": [
+                    dict(item) for item in required_candidate_variants
+                ],
                 "dtype": "float32" if kind == FP32_ORACLE_KIND else "bfloat16",
             },
             "provenance": {
-                "sources": self._sources(kind),
+                "sources": self._sources(kind, gate_id),
                 "git_revision": (
                     self.candidate_revision
                     if kind == CANDIDATE_KIND
@@ -529,19 +577,23 @@ class CalibrationFixture:
                     "--model",
                     "/models/smollm2",
                     "--gate-manifest",
-                    HF_SOURCE_PATHS["gate_manifest"],
+                    (
+                        LEGACY_NATIVE_SOURCE_PATHS
+                        if gate_id == ORACLE_MANIFEST_GATE_ID
+                        else NATIVE_SOURCE_PATHS
+                    )["gate_manifest"],
                     "--prompts",
-                    HF_SOURCE_PATHS["prompts"],
+                    NATIVE_SOURCE_PATHS["prompts"],
                     "--manifest",
                     manifest_path.name,
                     "--sidecar",
                     sidecar_name,
-                    "--reduction-variant",
-                    CANONICAL_CANDIDATE_REDUCTION_VARIANT["variant_id"],
-                    "--reduction-variant",
-                    ALTERNATE_CANDIDATE_REDUCTION_VARIANT["variant_id"],
                 ],
             }
+            for variant in required_candidate_variants:
+                manifest["candidate_execution"]["capture_argv"].extend(
+                    ["--reduction-variant", variant["variant_id"]]
+                )
         manifest_path.write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
@@ -791,8 +843,11 @@ class CalibrationTests(unittest.TestCase):
                     sidecar_loader=fixture.loader,
                 )
 
-    def test_native_contract_v2_build_and_engine_are_exact(self) -> None:
-        self.assertEqual(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v2")
+    def test_native_contract_build_and_versioned_engines_are_exact(self) -> None:
+        self.assertEqual(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v3")
+        self.assertEqual(
+            LEGACY_NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v2"
+        )
         self.assertEqual(
             NATIVE_BUILD_ARGV,
             (
@@ -882,30 +937,52 @@ class CalibrationTests(unittest.TestCase):
                     )
 
     def test_language_neutral_schemas_accept_recomputed_fake_bundle(self) -> None:
-        from benchmarks.scripts.validate_contract import validate_instance
+        from benchmarks.scripts.validate_contract import ContractError, validate_instance
 
         schema_root = Path(__file__).resolve().parents[4] / "benchmarks/schemas"
         schemas = {
             name: json.loads((schema_root / name).read_text(encoding="utf-8"))
             for name in (
                 "correctness-gate.schema.json",
+                "correctness-gate-v3.schema.json",
                 "correctness-calibration-manifest.schema.json",
+                "correctness-calibration-manifest-v3.schema.json",
                 "oracle-calibration-report.schema.json",
-                "correctness-report.schema.json",
+                "correctness-report-v3.schema.json",
             )
         }
         validate_instance(
-            gate_contract_document(), schemas["correctness-gate.schema.json"]
+            gate_contract_document(ORACLE_MANIFEST_GATE_ID),
+            schemas["correctness-gate.schema.json"],
+        )
+        validate_instance(
+            gate_contract_document(), schemas["correctness-gate-v3.schema.json"]
         )
         with tempfile.TemporaryDirectory() as directory:
             fixture = CalibrationFixture(Path(directory))
             fp32, fp32_path = fixture.make(FP32_ORACLE_KIND)
             bf16, bf16_path = fixture.make(BF16_ORACLE_KIND)
             candidate, candidate_path = fixture.make(CANDIDATE_KIND)
-            for manifest in (fp32, bf16, candidate):
+            for manifest in (fp32, bf16):
                 validate_instance(
                     manifest,
                     schemas["correctness-calibration-manifest.schema.json"],
+                )
+            validate_instance(
+                candidate,
+                schemas["correctness-calibration-manifest-v3.schema.json"],
+            )
+            with self.assertRaises(ContractError):
+                validate_instance(
+                    fp32,
+                    schemas["correctness-calibration-manifest-v3.schema.json"],
+                )
+            wrong_count = copy.deepcopy(candidate)
+            wrong_count["sidecar"]["tensor_count"] = 94
+            with self.assertRaises(ContractError):
+                validate_instance(
+                    wrong_count,
+                    schemas["correctness-calibration-manifest-v3.schema.json"],
                 )
             oracle_report, oracle_path = fixture.make_oracle_report(
                 fp32, fp32_path, bf16, bf16_path
@@ -926,9 +1003,9 @@ class CalibrationTests(unittest.TestCase):
                 created_at=FIXED_TIME,
                 sidecar_loader=fixture.loader,
             )
-            validate_instance(report, schemas["correctness-report.schema.json"])
+            validate_instance(report, schemas["correctness-report-v3.schema.json"])
 
-    def test_manifest_requires_full_hidden_and_both_native_variants(self) -> None:
+    def test_v3_manifest_requires_full_hidden_and_canonical_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CalibrationFixture(Path(directory))
             candidate, _ = fixture.make(CANDIDATE_KIND)
@@ -940,12 +1017,48 @@ class CalibrationTests(unittest.TestCase):
                 validate_calibration_manifest(sampled)
             missing = copy.deepcopy(candidate)
             del missing["cases"][0]["variants"][
-                ALTERNATE_CANDIDATE_REDUCTION_VARIANT["variant_id"]
+                CANONICAL_CANDIDATE_REDUCTION_VARIANT["variant_id"]
             ]
             with self.assertRaisesRegex(CalibrationError, "required reduction"):
                 validate_calibration_manifest(missing)
+            extra = copy.deepcopy(candidate)
+            extra["contract"]["required_candidate_reduction_variants"].append(
+                dict(ALTERNATE_CANDIDATE_REDUCTION_VARIANT)
+            )
+            with self.assertRaisesRegex(CalibrationError, "execution contract"):
+                validate_calibration_manifest(extra)
+            wrong_count = copy.deepcopy(candidate)
+            wrong_count["sidecar"]["tensor_count"] = 31 * 2 * 3
+            with self.assertRaisesRegex(CalibrationError, "tensor_count"):
+                validate_calibration_manifest(wrong_count)
+            extra_source = copy.deepcopy(candidate)
+            extra_source["provenance"]["sources"]["matrix"] = {
+                "path": HF_SOURCE_PATHS["matrix"],
+                "sha256": sha256_file(
+                    fixture.root / HF_SOURCE_PATHS["matrix"]
+                ),
+            }
+            with self.assertRaisesRegex(CalibrationError, "source set"):
+                validate_calibration_manifest(extra_source)
 
-    def test_comparator_accepts_future_candidate_revision_and_both_variants(self) -> None:
+    def test_oracle_and_candidate_gate_roles_cannot_be_swapped(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CalibrationFixture(Path(directory))
+            fp32, _ = fixture.make(FP32_ORACLE_KIND)
+            candidate, _ = fixture.make(CANDIDATE_KIND)
+            changed_oracle = copy.deepcopy(fp32)
+            changed_oracle["contract"]["gate_id"] = CALIBRATION_GATE_ID
+            changed_oracle["contract"]["required_candidate_reduction_variants"] = [
+                dict(CANONICAL_CANDIDATE_REDUCTION_VARIANT)
+            ]
+            with self.assertRaisesRegex(CalibrationError, "frozen v2 gate"):
+                validate_calibration_manifest(changed_oracle)
+            changed_candidate = copy.deepcopy(candidate)
+            changed_candidate["contract"]["gate_id"] = ORACLE_MANIFEST_GATE_ID
+            with self.assertRaisesRegex(CalibrationError, "native-production|flag inventory"):
+                validate_calibration_manifest(changed_candidate)
+
+    def test_comparator_accepts_v2_oracles_and_v3_canonical_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = CalibrationFixture(Path(directory))
             fp32, fp32_path = fixture.make(FP32_ORACLE_KIND)
@@ -974,12 +1087,66 @@ class CalibrationTests(unittest.TestCase):
             )
             self.assertEqual(
                 set(report["summary"]["variants"]),
+                {CANONICAL_CANDIDATE_REDUCTION_VARIANT["variant_id"]},
+            )
+            self.assertEqual(report["gate_id"], CALIBRATION_GATE_ID)
+            self.assertEqual(
+                report["bindings"]["oracle_manifest_gate_id"],
+                ORACLE_MANIFEST_GATE_ID,
+            )
+            self.assertIn("oracle_matrix_sha256", report["bindings"])
+            self.assertIn("oracle_gate_manifest_sha256", report["bindings"])
+            self.assertIn("candidate_gate_manifest_sha256", report["bindings"])
+            self.assertNotIn("matrix_sha256", report["bindings"])
+            self.assertNotIn("report_sha256", report)
+
+    def test_historical_v2_two_variant_candidate_report_still_replays(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = CalibrationFixture(Path(directory))
+            fp32, fp32_path = fixture.make(FP32_ORACLE_KIND)
+            bf16, bf16_path = fixture.make(BF16_ORACLE_KIND)
+            oracle_report, oracle_report_path = fixture.make_oracle_report(
+                fp32, fp32_path, bf16, bf16_path
+            )
+            candidate, candidate_path = fixture.make(
+                CANDIDATE_KIND, candidate_gate_id=ORACLE_MANIFEST_GATE_ID
+            )
+            report = compare_calibrations(
+                fp32_manifest=fp32,
+                fp32_manifest_path=fp32_path,
+                bf16_manifest=bf16,
+                bf16_manifest_path=bf16_path,
+                oracle_calibration_report=oracle_report,
+                oracle_calibration_report_path=oracle_report_path,
+                candidate_manifest=candidate,
+                candidate_manifest_path=candidate_path,
+                repo_root=fixture.root,
+                created_at=FIXED_TIME,
+                sidecar_loader=fixture.loader,
+            )
+            self.assertEqual(report["gate_id"], ORACLE_MANIFEST_GATE_ID)
+            self.assertEqual(
+                set(report["summary"]["variants"]),
                 {
                     CANONICAL_CANDIDATE_REDUCTION_VARIANT["variant_id"],
                     ALTERNATE_CANDIDATE_REDUCTION_VARIANT["variant_id"],
                 },
             )
-            self.assertNotIn("report_sha256", report)
+            self.assertIn("matrix_sha256", report["bindings"])
+            self.assertIn("gate_manifest_sha256", report["bindings"])
+            replay_validate_correctness_report(
+                report=report,
+                fp32_manifest=fp32,
+                fp32_manifest_path=fp32_path,
+                bf16_manifest=bf16,
+                bf16_manifest_path=bf16_path,
+                oracle_calibration_report=oracle_report,
+                oracle_calibration_report_path=oracle_report_path,
+                candidate_manifest=candidate,
+                candidate_manifest_path=candidate_path,
+                repo_root=fixture.root,
+                sidecar_loader=fixture.loader,
+            )
 
     def test_top_k_metadata_is_recomputed_from_raw_logits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

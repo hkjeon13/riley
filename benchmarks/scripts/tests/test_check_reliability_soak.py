@@ -130,7 +130,7 @@ class SoakFixture:
     def _native_correctness_report(self) -> dict[str, object]:
         return {
             "schema_version": "1.0.0",
-            "gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "gate_id": "smollm2-fp32-bf16-native-e0-v3",
             "status": "pass",
             "bindings": {
                 "candidate_git_revision": self.source["git_commit"],
@@ -149,7 +149,7 @@ class SoakFixture:
     def _correctness_golden(self) -> dict[str, object]:
         return {
             "schema_version": "rustinfer.python-free-release-e2e-golden.v1",
-            "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v3",
             "correctness_report_sha256": self.native_correctness_report_sha256,
             "source_revision": self.source["git_commit"],
             "model_id": self.source["model_id"],
@@ -1312,6 +1312,41 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         report = self.evaluate(mutate)
         self.assertEqual(report["status"], "error")
         self.assertIn("submitted native correctness report", report["errors"][0])
+
+    def test_frozen_v2_correctness_cannot_authorize_v3_soak(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        old_gate = "smollm2-fp32-bf16-native-e0-v2"
+        fixture.native_correctness_report["gate_id"] = old_gate
+        fixture.native_correctness_report_path.write_text(
+            json.dumps(fixture.native_correctness_report, sort_keys=True) + "\n"
+        )
+        fixture.native_correctness_report_sha256 = hashlib.sha256(
+            fixture.native_correctness_report_path.read_bytes()
+        ).hexdigest()
+        fixture.correctness_golden["correctness_gate_id"] = old_gate
+        fixture.correctness_golden["correctness_report_sha256"] = (
+            fixture.native_correctness_report_sha256
+        )
+        fixture.correctness_golden_path.write_text(
+            json.dumps(fixture.correctness_golden, sort_keys=True) + "\n"
+        )
+        fixture.manifest["golden"]["provenance_sha256"] = (
+            fixture.native_correctness_report_sha256
+        )
+        fixture.write()
+        reviewed = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker, "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256", reviewed
+        ):
+            report = checker.evaluate(
+                fixture.manifest_path,
+                fixture.run_directory,
+                **fixture.trusted_arguments(),
+            )
+        self.assertEqual(report["status"], "error", report)
+        self.assertIn(checker.NATIVE_CORRECTNESS_GATE, report["errors"][0])
 
     def test_native_calibration_executable_digest_is_required_but_distinct(self) -> None:
         directory = tempfile.TemporaryDirectory()

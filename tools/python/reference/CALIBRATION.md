@@ -1,10 +1,10 @@
 # FP32/BF16 correctness calibration
 
 This workflow creates two Hugging Face oracle artifacts, produces a Python-free
-native candidate under the explicit CUDA feature, and compares its two
-`rustinfer-native` execution variants against the oracles with separate Python
-comparison and raw-replay commands. It is not the PR 01 golden fixture and the
-HF BF16 run must never be presented as a native E0 candidate.
+native candidate under the explicit CUDA feature, and compares its
+release-qualified `rustinfer-native` execution against the oracles with
+separate Python comparison and raw-replay commands. It is not the PR 01 golden
+fixture and the HF BF16 run must never be presented as a native E0 candidate.
 
 Before either HF producer imports or loads a model, the shared standard-library
 host probe validates the exact primary host and the transient idle-GPU
@@ -14,16 +14,19 @@ as a Git source. FP32/BF16 comparison additionally requires identical power
 limit, application graphics/memory clocks, persistence mode, and CPU governor
 profile; drift fails calibration instead of producing a report.
 
-The language-neutral authority is
+The frozen oracle authority is
 `benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json`, validated by
-`benchmarks/schemas/correctness-gate.schema.json`. Its gate ID is
-`smollm2-fp32-bf16-native-e0-v2`. The original v1 file remains frozen as
-historical evidence and is not referenced by the active matrix or producers.
-The threshold status is an immutable
-condition: a candidate gate requires a passing, raw-sidecar-replayed HF report
-covering all 31 ordered prompts under v2. A v1 manifest or report cannot
-activate v2. The gate file is not edited from “pending” to “active” after
-oracle generation; doing that would invalidate its own recorded provenance.
+`benchmarks/schemas/correctness-gate.schema.json`. The release candidate
+authority is
+`benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json`, validated by
+`benchmarks/schemas/correctness-gate-v3.schema.json`. V3 changes only the
+required candidate reduction inventory to `canonical-v1`; it inherits the
+byte-exact v2 oracle manifests, all thresholds, roles, corpus, and provenance
+rules through its explicit lineage object. The original v1 and v2 files remain
+frozen historical/oracle evidence. A v1 report cannot activate v2, and a v2
+candidate report cannot authorize the v3 release. Gate files are not edited
+after evidence generation because doing that would invalidate their recorded
+provenance.
 
 ## Produce the two HF oracles
 
@@ -138,7 +141,7 @@ report always contains `e0_candidate_evidence=false`.
 
 ## Native candidate contract
 
-Native candidate contract v2 is owned by the non-default development workspace
+Native candidate contract v3 is owned by the non-default development workspace
 member `crates/rustinfer-native`. The crate owns both its library and the
 `rustinfer-native` binary. Its default feature set is empty, and the binary
 declares `required-features = ["cuda"]`; the producer and native runtime
@@ -160,8 +163,8 @@ package or a server-owned calibration binary would not satisfy the root
 `Cargo.lock`, non-default ownership, and release-artifact boundaries.
 
 A candidate manifest has runtime dependency class `native-production`, uses
-the `rustinfer-native` lane and `Cargo.lock`, and records a clean candidate Git
-revision independently of the older oracle revision. The producer requires a
+the `rustinfer-native-v3` lane and `Cargo.lock`, and records a clean candidate
+Git revision independently of the older oracle revision. The producer requires a
 clean, revision-bound release build and a clean runtime checkout at the exact
 Git revision embedded at build time, then rechecks repository provenance and
 bound source hashes after capture. It performs the CUDA/NVML and primary-host
@@ -173,52 +176,44 @@ The producer emits a create-only manifest, safetensors sidecar, and bundled
 `rustinfer-native` executable as sibling files outside the repository. It
 refuses to overwrite any of them, hashes the bundled executable and sidecar,
 echoes the locked release build argv above, and records the native calibration
-capture argv. Its exact ordered contract-v2 shape is:
+capture argv. Its exact ordered contract-v3 shape is:
 
 ```sh
 rustinfer-native calibrate \
   --repository-root /workspace/rustinfer \
   --model /models/smollm2 \
-  --gate-manifest benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json \
+  --gate-manifest benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json \
   --prompts benchmarks/prompts.jsonl \
   --manifest candidate-manifest.json \
   --sidecar candidate-sidecar.safetensors \
-  --reduction-variant canonical-v1 \
-  --reduction-variant fixed-contiguous-37-balanced-v1
+  --reduction-variant canonical-v1
 ```
 
 Repository and model roots are normalized absolute POSIX paths; outputs are
 normalized sibling filenames. Unknown, reordered, duplicated, or positional
 arguments fail closed. The producer must bind the checkpoint it actually loads
 to the manifest's model revision and config/weights/tokenizer hashes. The
-capture argv also binds the gate, prompt corpus, and both ordered reduction
-variants:
+capture argv also binds the gate, prompt corpus, and the sole release-qualified
+`canonical-v1` production-default reduction variant.
 
-- `canonical-v1`, the production-default execution; and
-- `fixed-contiguous-37-balanced-v1`, the alternate execution.
+The historical `fixed-contiguous-37-balanced-v1` selector remains available
+only for development compatibility and optimizer diagnostics. It is excluded
+from v3 candidate manifests and cannot contribute release evidence. Historical
+v2 manifests, reports, and raw archives retain their two-variant replay contract
+and are never rewritten as v3 evidence.
 
-The alternate applies to every floating-point reduction contributing to the
-captured tensors or greedy logits: matmul dot-product sums, RMSNorm sums of
-squares, attention softmax max/sum, and final log-softmax max/sum. The logical
-reduction axis is traversed in ascending order, split into contiguous
-37-element chunks with one short final chunk, reduced by an ascending local
-left fold, then merged as adjacent chunk partials in an ascending deterministic
-balanced binary tree; an unpaired final partial is carried to the next level.
-The accumulator dtype policy remains the canonical operator policy.
-
-One capture covers exactly 31 ordered prompts, two reduction variants, and
-three tensors per prompt and variant: full first-layer hidden output, final
-logits, and final FP32 log probabilities. The sidecar inventory is therefore
-`31 * 2 * 3 = 186` tensors. Tensor capture uses the cache-off path; each
-candidate variant additionally supplies independent cache-on and cache-off
-semantic paths.
+One v3 capture covers exactly 31 ordered prompts, one reduction variant, and
+three tensors per prompt: full first-layer hidden output, final logits, and
+final FP32 log probabilities. The sidecar inventory is therefore
+`31 * 1 * 3 = 93` tensors. Tensor capture uses the cache-off path; the candidate
+also supplies independent cache-on and cache-off semantic paths.
 
 Numeric values are compared to FP32. Semantic values are path-matched to HF
 BF16 (`cache-on` to `cache-on`, `cache-off` to `cache-off`). Generated IDs and
 top-1 are ordered exact. Top-k is exact as a set, not as a ranked list. Cache
 paths must match through the predeclared 16-token window, and the zero-based
-first divergence step is recomputed from raw token IDs. Both variants and
-every prompt must pass.
+first divergence step is recomputed from raw token IDs. The canonical variant
+and every prompt must pass.
 
 Candidate production does not run the comparator. The separate Python
 comparison command is:
@@ -241,14 +236,18 @@ booleans, or checking a sibling filename is not approval.
 The native lane remains `contract-only`; implementing or running the producer
 does not promote it. It stays contract-only until the separate Python
 comparator and validator complete a passing full raw-sidecar replay for all 31
-prompts and both variants under the immutable v2 gate.
+prompts for the canonical candidate under the v3 release gate, using the
+immutable v2 oracle lineage.
 
 ## Evidence bundle and hashes
 
-The JSON manifests bind model revision, config and weights, tokenizer, ordered
-prompt rows, matrix, gate manifest, environment, lane, dependency lock, Git
-revision/status, sidecar path/hash/shape/dtype, and producer versions. Oracle
-and candidate Git revisions are deliberately separate. An E0 result is
+The oracle JSON manifests bind model revision, config and weights, tokenizer,
+ordered prompt rows, the frozen matrix and v2 gate, environment, lane,
+dependency lock, Git revision/status, sidecar path/hash/shape/dtype, and
+producer versions. The v3 candidate manifest binds the same immutable model,
+prompt, and environment identity plus its distinct v3 gate and lane; it does
+not claim that the frozen matrix was produced at the newer candidate revision.
+Oracle and candidate Git revisions are deliberately separate. An E0 result is
 acceptable only with the replayable bundle named by the gate: both oracle
 manifests and sidecars, the passing oracle report, candidate manifest/sidecar/
 executable, and candidate correctness report. The native lane remains
@@ -267,11 +266,14 @@ sorted keys, separators `,` and `:`, no ASCII escaping, no NaN, and no trailing
 newline. The aggregate is
 `51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db`.
 
-Sidecars and executable bundles are intentionally not committed. The schemas
-are `correctness-calibration-manifest.schema.json`,
-`oracle-calibration-report.schema.json`, and `correctness-report.schema.json`.
-The deterministic fake `CalibrationFixture` in `tests/test_calibration.py`
-constructs all 31 rows, both candidate variants, raw sidecars, two distinct Git
-revisions, and a bundled fake executable. It is the checked-in offline fixture;
-there is intentionally no standalone synthetic “passing” report that could be
-mistaken for E0 evidence.
+Sidecars and executable bundles are intentionally not committed. Frozen v2
+oracle manifests use `correctness-calibration-manifest.schema.json`; v3
+candidate manifests and reports use
+`correctness-calibration-manifest-v3.schema.json` and
+`correctness-report-v3.schema.json`. The oracle activation report continues to
+use `oracle-calibration-report.schema.json`. The deterministic fake
+`CalibrationFixture` in `tests/test_calibration.py` constructs all 31 rows, a
+canonical v3 candidate, raw sidecars, two distinct Git revisions, and a bundled
+fake executable; separate compatibility cases replay historical v2 two-variant
+artifacts. There is intentionally no standalone synthetic “passing” report
+that could be mistaken for E0 evidence.

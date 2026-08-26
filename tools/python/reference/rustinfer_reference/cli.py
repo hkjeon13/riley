@@ -193,7 +193,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     candidate_compare = subparsers.add_parser(
         "calibrate-compare",
-        help="gate a native two-variant candidate against FP32/BF16 raw oracles",
+        help="gate a versioned native candidate against frozen FP32/BF16 raw oracles",
     )
     candidate_compare.add_argument("--fp32-manifest", type=Path, required=True)
     candidate_compare.add_argument("--bf16-manifest", type=Path, required=True)

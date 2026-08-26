@@ -267,8 +267,8 @@ requires the recomputed attestation to equal the submitted object exactly.
 The two correctness roles must never be collapsed into one hash:
 
 - native correctness report `1.0.0`, gate
-  `smollm2-fp32-bf16-native-e0-v2`: must pass all 31 cases and both E0
-  variants from `benchmarks/schemas/correctness-report.schema.json`, bind the
+  `smollm2-fp32-bf16-native-e0-v3`: must pass all 31 cases for the canonical
+  release variant from `benchmarks/schemas/correctness-report-v3.schema.json`, bind the
   exact candidate revision, and record the clean-tree digest. Merely parsing
   that report is not approval. `raw_replay` is deterministic closed USTAR with
   both source revisions, FP32/BF16 manifests and sidecars, the replayed oracle
@@ -283,7 +283,7 @@ The two correctness roles must never be collapsed into one hash:
   CUDA sm89 build, and exact `per-operation` versus `iteration-batch` flags with
   `residual_rmsnorm=separate`. Its exact six-test inventory includes the
   candidate-revision `pr16-fixed37-production-batch-e0-v1` production-batch
-  gate over all 31 immutable golden cases and 481 generated steps; every
+  diagnostic over all 31 immutable golden cases and 481 generated steps; every
   expected semantic mismatch, threshold violation, and CUDA live-allocation
   result is zero. Its canonical USTAR contains the submitted report, ordered
   v3 execution receipt, four executable Linux x86-64 Rust test ELFs, six
@@ -293,7 +293,7 @@ The two correctness roles must never be collapsed into one hash:
   `/evidence/*-gpu-test` ELFs. Replay verifies nonzero ELF entry points and
   executable `PT_LOAD` segments, unique fresh Cargo compiler-artifact
   provenance, original/copied subject equality, exact ten-command
-  environment/exit contracts, source/build/model bindings, semantic log
+  environment/exit contracts, source/build/model bindings, diagnostic log
   records, report bytes, and every subject/log digest. Its immutable optimizer
   image ID is independently trusted and need not equal the reproducibility or
   CUDA-fault image ID. The replayed profile binary must be the same bytes

@@ -84,6 +84,18 @@ NATIVE_E0_APPROVAL_INDEX_PATH = (
 )
 NATIVE_E0_APPROVAL_SCHEMA_PATH = "benchmarks/schemas/native-e0-approval.schema.json"
 CORRECTNESS_REPORT_SCHEMA_PATH = "benchmarks/schemas/correctness-report.schema.json"
+RELEASE_V3_GATE_PATH = (
+    "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json"
+)
+RELEASE_V3_LANE_PATH = "benchmarks/lanes/rustinfer-native-v3.json"
+RELEASE_V3_SCHEMA_PATHS = (
+    "benchmarks/schemas/correctness-gate-v3.schema.json",
+    "benchmarks/schemas/correctness-calibration-manifest-v3.schema.json",
+    "benchmarks/schemas/correctness-report-v3.schema.json",
+)
+RELEASE_V3_GATE_SHA256 = (
+    "e038d4ede9b637423afe2f69bc25021c4153ae1fd4c36e9e9ba8eef37af7bb72"
+)
 NATIVE_E0_VARIANT_IDS = (
     "canonical-v1",
     "fixed-contiguous-37-balanced-v1",
@@ -1571,6 +1583,101 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
     return lane
 
 
+def validate_release_v3_contract(root: Path, matrix: dict[str, Any]) -> None:
+    """Validate the parallel PR16 release gate without repointing v2 history."""
+
+    schema_documents: dict[str, dict[str, Any]] = {}
+    for relative in RELEASE_V3_SCHEMA_PATHS:
+        schema_path = root / relative
+        schema = _read_json(schema_path)
+        _expect(schema.get("$schema"), SCHEMA_DIALECT, f"{schema_path}.$schema")
+        _walk_schema_strictness(schema, str(schema_path))
+        schema_documents[relative] = schema
+
+    gate_path = root / RELEASE_V3_GATE_PATH
+    gate = _read_json(gate_path)
+    gate_schema = schema_documents[RELEASE_V3_SCHEMA_PATHS[0]]
+    validate_instance(gate, gate_schema)
+    _expect(_sha256(gate_path), RELEASE_V3_GATE_SHA256, str(gate_path))
+
+    legacy_gate = _read_json(
+        root / "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"
+    )
+    _exact_keys(gate, {*legacy_gate, "lineage"}, str(gate_path))
+    for field in ("model", "roles", "corpus", "numeric", "semantic", "provenance"):
+        _expect(gate[field], legacy_gate[field], f"{gate_path}.{field}")
+    legacy_reductions = dict(legacy_gate["reduction_variants"])
+    release_reductions = dict(gate["reduction_variants"])
+    legacy_reductions.pop("required_candidate")
+    release_reductions.pop("required_candidate")
+    _expect(
+        release_reductions,
+        legacy_reductions,
+        f"{gate_path}.reduction_variants",
+    )
+    _expect(
+        gate["reduction_variants"]["required_candidate"],
+        [
+            {
+                "variant_id": "canonical-v1",
+                "partition_kind": "production-default",
+                "chunk_elements": None,
+                "remainder_policy": "implementation-default",
+                "merge_order": "implementation-default",
+            }
+        ],
+        f"{gate_path}.reduction_variants.required_candidate",
+    )
+    _expect(
+        gate["lineage"],
+        {
+            "predecessor_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "change_scope": "required-candidate-reduction-variants-only",
+            "thresholds_changed": False,
+            "oracle_manifest_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+            "oracle_calibration_gate_id": "smollm2-hf-fp32-bf16-calibration-v2",
+            "excluded_candidate_variants": [
+                "fixed-contiguous-37-balanced-v1"
+            ],
+        },
+        f"{gate_path}.lineage",
+    )
+
+    lane_path = root / RELEASE_V3_LANE_PATH
+    lane = validate_lane_manifest(_read_json(lane_path), matrix, str(lane_path))
+    legacy_lane = _read_json(root / "benchmarks/lanes/rustinfer-native.json")
+    expected_lane = json.loads(json.dumps(legacy_lane))
+    expected_lane["engine"]["revision"] = "rustinfer-native-contract-v3"
+    _expect(lane, expected_lane, str(lane_path))
+
+    candidate_schema = schema_documents[RELEASE_V3_SCHEMA_PATHS[1]]
+    report_schema = schema_documents[RELEASE_V3_SCHEMA_PATHS[2]]
+    _expect(
+        candidate_schema["properties"]["artifact_kind"].get("const"),
+        "candidate",
+        f"{root / RELEASE_V3_SCHEMA_PATHS[1]}.properties.artifact_kind",
+    )
+    _expect(
+        report_schema["properties"]["summary"]["properties"]
+        ["candidate_variant_count"].get("const"),
+        1,
+        f"{root / RELEASE_V3_SCHEMA_PATHS[2]}.summary.candidate_variant_count",
+    )
+    required_bindings = set(
+        report_schema["properties"]["bindings"].get("required", [])
+    )
+    _expect(
+        {
+            "oracle_manifest_gate_id",
+            "oracle_matrix_sha256",
+            "oracle_gate_manifest_sha256",
+            "candidate_gate_manifest_sha256",
+        }.issubset(required_bindings),
+        True,
+        f"{root / RELEASE_V3_SCHEMA_PATHS[2]}.bindings.required",
+    )
+
+
 def validate_dependency_project(root: Path, lane: Mapping[str, Any]) -> None:
     manifest = lane["dependency_manifest"]
     if manifest is None:
@@ -2181,6 +2288,7 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
     fixture_path = root / "benchmarks/reference/smollm2-135m-bf16.json"
 
     matrix = validate_matrix(_read_json(matrix_path), root)
+    validate_release_v3_contract(root, matrix)
     result_schema = validate_schema_document(
         _read_json(result_schema_path), "result", str(result_schema_path)
     )

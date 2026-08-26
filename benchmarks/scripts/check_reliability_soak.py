@@ -28,7 +28,7 @@ EVENT_VERSION = "rustinfer.reliability-soak-event.v1"
 REPORT_VERSION = "rustinfer.reliability-soak-report.v2"
 E2E_GOLDEN_VERSION = "rustinfer.python-free-release-e2e-golden.v1"
 NATIVE_CORRECTNESS_VERSION = "1.0.0"
-NATIVE_CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
+NATIVE_CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v3"
 REQUIRED_KINDS = {
     "steady",
     "burst-idle",

@@ -13,9 +13,9 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 pub(crate) const CALIBRATION_SCHEMA_VERSION: &str = "1.0.0";
-pub(crate) const CALIBRATION_GATE_ID: &str = "smollm2-fp32-bf16-native-e0-v2";
+pub(crate) const CALIBRATION_GATE_ID: &str = "smollm2-fp32-bf16-native-e0-v3";
 pub(crate) const GATE_MANIFEST_SHA256: &str =
-    "eb97b2011bd77e6b2bfdb039c846484e281b35108ba6b357cdd1aba7033479e9";
+    "e038d4ede9b637423afe2f69bc25021c4153ae1fd4c36e9e9ba8eef37af7bb72";
 pub(crate) const CANDIDATE_KIND: &str = "candidate";
 pub(crate) const MODEL_ID: &str = "HuggingFaceTB/SmolLM2-135M";
 pub(crate) const MODEL_REVISION: &str = "93efa2f097d58c2a74874c7e644dbc9b0cee75a2";
@@ -57,19 +57,18 @@ pub(crate) const ATTENTION_BACKEND: &str = "eager";
 pub(crate) const LOG_PROB_PIPELINE: &str = "log-softmax-fp32-v1";
 pub(crate) const PRIMARY_ENVIRONMENT_ID: &str = "rtx4090-ubuntu22-driver580-v1";
 
-pub(crate) const NATIVE_SOURCE_PATHS: [(&str, &str); 8] = [
-    ("matrix", "benchmarks/matrix.yaml"),
+pub(crate) const NATIVE_SOURCE_PATHS: [(&str, &str); 7] = [
     ("prompts", "benchmarks/prompts.jsonl"),
     (
         "gate_manifest",
-        "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
+        "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json",
     ),
     ("dependency_lock", "Cargo.lock"),
     (
         "python_version_file",
         "tools/python/reference/.python-version",
     ),
-    ("lane_manifest", "benchmarks/lanes/rustinfer-native.json"),
+    ("lane_manifest", "benchmarks/lanes/rustinfer-native-v3.json"),
     ("environment", "benchmarks/environment.md"),
     (
         "environment_probe",
@@ -348,13 +347,6 @@ pub(crate) fn candidate_reduction_variant(id: &str) -> Value {
             "remainder_policy": "implementation-default",
             "merge_order": "implementation-default",
         }),
-        "fixed-contiguous-37-balanced-v1" => json!({
-            "variant_id": "fixed-contiguous-37-balanced-v1",
-            "partition_kind": "fixed-contiguous",
-            "chunk_elements": 37,
-            "remainder_policy": "last-short-chunk",
-            "merge_order": "deterministic-balanced-binary-tree-by-chunk-index",
-        }),
         _ => unreachable!("parser admits only reviewed reduction variants"),
     }
 }
@@ -365,8 +357,8 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        CALIBRATION_PROMPT_COUNT, GATE_MANIFEST_SHA256, load_prompts, sha256_file,
-        token_ids_sha256, utc_from_unix_seconds,
+        CALIBRATION_PROMPT_COUNT, GATE_MANIFEST_SHA256, NATIVE_SOURCE_PATHS, load_prompts,
+        sha256_file, token_ids_sha256, utc_from_unix_seconds,
     };
 
     #[test]
@@ -387,9 +379,19 @@ mod tests {
         assert_eq!(prompts[0].prompt_id, "perf-0128-00");
         assert_eq!(prompts[30].prompt_id, "correct-early-eos");
         assert_eq!(
-            sha256_file(&root.join("benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json"))
+            sha256_file(&root.join("benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json"))
                 .expect("gate digest"),
             GATE_MANIFEST_SHA256
+        );
+        assert_eq!(NATIVE_SOURCE_PATHS.len(), 7);
+        assert!(
+            !NATIVE_SOURCE_PATHS
+                .iter()
+                .any(|(name, _)| *name == "matrix")
+        );
+        assert!(
+            NATIVE_SOURCE_PATHS
+                .contains(&("lane_manifest", "benchmarks/lanes/rustinfer-native-v3.json"))
         );
     }
 

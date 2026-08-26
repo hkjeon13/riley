@@ -13,7 +13,7 @@ file with this closed schema:
 ```json
 {
   "schema_version": "rustinfer.python-free-release-e2e-golden.v1",
-  "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+  "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v3",
   "correctness_report_sha256": "reviewed-lowercase-sha256",
   "source_revision": "clean-40-character-candidate-revision",
   "model_id": "HuggingFaceTB/SmolLM2-135M",
@@ -109,7 +109,7 @@ the exact `rustinfer.release-gate-attestation.v1` check set consumed by the
 final release-candidate gate.
 
 The golden cannot self-authorize a new output: it must bind the exact passing
-`smollm2-fp32-bf16-native-e0-v2` report, clean candidate revision, immutable
+`smollm2-fp32-bf16-native-e0-v3` report, clean candidate revision, immutable
 model revision, weights, the native five-file tokenizer aggregate, and the
 exact runtime `tokenizer.json`. In addition, any final-candidate replay must
 pass the independently reviewed golden SHA-256 to

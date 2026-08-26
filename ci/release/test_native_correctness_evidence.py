@@ -299,6 +299,65 @@ class NativeFixture:
         self.rewrite(payloads)
         return report
 
+    def rewrite_as_historical_v2(self) -> dict[str, object]:
+        candidate, candidate_path = self.calibration.make(
+            calibration.CANDIDATE_KIND,
+            candidate_gate_id=calibration.ORACLE_MANIFEST_GATE_ID,
+        )
+        executable = self.repository / calibration.NATIVE_EXECUTABLE_FILENAME
+        executable.write_bytes(
+            fixture_elf(CALIBRATION_DEPENDENCIES)
+            + b"\0"
+            + b"\0".join(checker.CANDIDATE_BINARY_COMMON_MARKERS)
+            + b"\0"
+            + calibration.ORACLE_MANIFEST_GATE_ID.encode("ascii")
+            + b"\0"
+        )
+        executable.chmod(0o755)
+        candidate["candidate_execution"]["executable"]["sha256"] = sha256(
+            executable
+        )
+        sidecar = candidate_path.parent / candidate["sidecar"]["path"]
+        write_safetensors(sidecar, self.calibration.sidecars[sidecar.name])
+        candidate["sidecar"]["sha256"] = sha256(sidecar)
+        candidate_path.write_text(
+            json.dumps(candidate, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        mappings: list[checker._PureSafeTensorMapping] = []
+
+        def loader(path: Path):
+            mapping = checker._PureSafeTensorMapping(path)
+            mappings.append(mapping)
+            return mapping
+
+        try:
+            report = calibration.compare_calibrations(
+                fp32_manifest=self.fp32,
+                fp32_manifest_path=self.fp32_path,
+                bf16_manifest=self.bf16,
+                bf16_manifest_path=self.bf16_path,
+                oracle_calibration_report=self.oracle_document,
+                oracle_calibration_report_path=self.oracle_report,
+                candidate_manifest=candidate,
+                candidate_manifest_path=candidate_path,
+                repo_root=self.repository,
+                created_at=datetime(2026, 8, 26, tzinfo=timezone.utc),
+                sidecar_loader=loader,
+            )
+        finally:
+            for mapping in reversed(mappings):
+                mapping.close()
+        payloads = self.payloads()
+        payloads["candidate-manifest.json"] = candidate_path.read_bytes()
+        payloads["candidate-sidecar.safetensors"] = sidecar.read_bytes()
+        payloads["candidate-executable"] = executable.read_bytes()
+        payloads["correctness-report.json"] = (
+            json.dumps(report, sort_keys=True, indent=2) + "\n"
+        ).encode("utf-8")
+        self.rewrite(payloads)
+        return report
+
 
 class NativeCorrectnessEvidenceTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -334,6 +393,14 @@ class NativeCorrectnessEvidenceTests(unittest.TestCase):
         self.assertEqual(result.case_count, 31)
         self.assertEqual(result.failure_count, 0)
         self.assertEqual(result.candidate_executable_sha256, sha256(self.fixture.executable))
+
+    def test_historical_v2_two_variant_raw_bundle_still_replays(self) -> None:
+        report = self.fixture.rewrite_as_historical_v2()
+        self.assertEqual(report["gate_id"], calibration.ORACLE_MANIFEST_GATE_ID)
+        self.assertEqual(report["summary"]["candidate_variant_count"], 2)
+        result = self.fixture.replay()
+        self.assertEqual(result.case_count, 31)
+        self.assertEqual(result.failure_count, 0)
 
     def test_archive_is_byte_reproducible(self) -> None:
         second = self.fixture.root / "second.tar"
@@ -493,7 +560,7 @@ class NativeCorrectnessEvidenceTests(unittest.TestCase):
         self.fixture.rewrite(payloads)
         with self.assertRaisesRegex(
             checker.NativeCorrectnessEvidenceError,
-            "exact ordered contract-v2 flag inventory",
+            "exact ordered smollm2-fp32-bf16-native-e0-v3 flag inventory",
         ):
             self.fixture.replay()
 

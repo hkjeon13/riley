@@ -47,7 +47,8 @@ from .environment import (
 )
 
 CALIBRATION_SCHEMA_VERSION = "1.0.0"
-CALIBRATION_GATE_ID = "smollm2-fp32-bf16-native-e0-v2"
+ORACLE_MANIFEST_GATE_ID = "smollm2-fp32-bf16-native-e0-v2"
+CALIBRATION_GATE_ID = "smollm2-fp32-bf16-native-e0-v3"
 FP32_ORACLE_KIND = "fp32-numeric-oracle"
 BF16_ORACLE_KIND = "bf16-semantic-oracle"
 CANDIDATE_KIND = "candidate"
@@ -59,7 +60,8 @@ CALIBRATION_PROMPT_COUNT = 31
 LOG_PROB_PIPELINE = "log-softmax-fp32-v1"
 MODEL_EOS_TOKEN_IDS = (0,)
 NATIVE_EXECUTABLE_FILENAME = "rustinfer-native"
-NATIVE_ENGINE_REVISION = "rustinfer-native-contract-v2"
+LEGACY_NATIVE_ENGINE_REVISION = "rustinfer-native-contract-v2"
+NATIVE_ENGINE_REVISION = "rustinfer-native-contract-v3"
 NATIVE_BUILD_ARGV = (
     "cargo",
     "build",
@@ -97,10 +99,24 @@ ALTERNATE_CANDIDATE_REDUCTION_VARIANT: dict[str, object] = {
     "remainder_policy": "last-short-chunk",
     "merge_order": "deterministic-balanced-binary-tree-by-chunk-index",
 }
-REQUIRED_CANDIDATE_REDUCTION_VARIANTS = (
+ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS = (
     CANONICAL_CANDIDATE_REDUCTION_VARIANT,
     ALTERNATE_CANDIDATE_REDUCTION_VARIANT,
 )
+REQUIRED_CANDIDATE_REDUCTION_VARIANTS = (
+    CANONICAL_CANDIDATE_REDUCTION_VARIANT,
+)
+
+GATE_LINEAGE: dict[str, object] = {
+    "predecessor_gate_id": ORACLE_MANIFEST_GATE_ID,
+    "change_scope": "required-candidate-reduction-variants-only",
+    "thresholds_changed": False,
+    "oracle_manifest_gate_id": ORACLE_MANIFEST_GATE_ID,
+    "oracle_calibration_gate_id": "smollm2-hf-fp32-bf16-calibration-v2",
+    "excluded_candidate_variants": [
+        str(ALTERNATE_CANDIDATE_REDUCTION_VARIANT["variant_id"])
+    ],
+}
 
 # Version 2 was predeclared once from the reviewed, failing full-31 v1 report by
 # applying uniform 15% outward headroom to every observed aggregate metric.
@@ -142,14 +158,18 @@ HF_SOURCE_PATHS = {
     "environment_probe": "tools/python/reference/rustinfer_reference/environment.py",
 }
 NATIVE_SOURCE_PATHS = {
-    "matrix": "benchmarks/matrix.yaml",
     "prompts": "benchmarks/prompts.jsonl",
-    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json",
+    "gate_manifest": "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json",
     "dependency_lock": "Cargo.lock",
     "python_version_file": "tools/python/reference/.python-version",
-    "lane_manifest": "benchmarks/lanes/rustinfer-native.json",
+    "lane_manifest": "benchmarks/lanes/rustinfer-native-v3.json",
     "environment": "benchmarks/environment.md",
     "environment_probe": "tools/python/reference/rustinfer_reference/environment.py",
+}
+LEGACY_NATIVE_SOURCE_PATHS = {
+    **HF_SOURCE_PATHS,
+    "dependency_lock": "Cargo.lock",
+    "lane_manifest": "benchmarks/lanes/rustinfer-native.json",
 }
 SOURCE_NAMES = tuple(HF_SOURCE_PATHS)
 
@@ -163,12 +183,21 @@ class CalibrationError(ValueError):
     """A calibration artifact is malformed or cannot be compared."""
 
 
-def gate_contract_document() -> dict[str, object]:
+def gate_contract_document(
+    gate_id: str = CALIBRATION_GATE_ID,
+) -> dict[str, object]:
     """Return the exact language-neutral gate manifest represented by this tool."""
 
-    return {
+    if gate_id == CALIBRATION_GATE_ID:
+        required_variants = REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+    elif gate_id == ORACLE_MANIFEST_GATE_ID:
+        required_variants = ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+    else:
+        raise CalibrationError(f"unsupported correctness gate ID {gate_id!r}")
+
+    document: dict[str, object] = {
         "contract_version": CALIBRATION_SCHEMA_VERSION,
-        "gate_id": CALIBRATION_GATE_ID,
+        "gate_id": gate_id,
         "model": {
             "id": MODEL_ID,
             "revision": MODEL_REVISION,
@@ -279,7 +308,7 @@ def gate_contract_document() -> dict[str, object]:
         },
         "reduction_variants": {
             "oracle": HF_ORACLE_REDUCTION_VARIANT,
-            "required_candidate": list(REQUIRED_CANDIDATE_REDUCTION_VARIANTS),
+            "required_candidate": list(required_variants),
             "each_candidate_variant_compared_independently": True,
             "all_required_variants_must_pass": True,
             "alternate_profile_definition": {
@@ -335,6 +364,9 @@ def gate_contract_document() -> dict[str, object]:
             "result_correctness_report_sha256": "sha256-of-raw-report-file-bytes",
         },
     }
+    if gate_id == CALIBRATION_GATE_ID:
+        document["lineage"] = GATE_LINEAGE
+    return document
 
 
 def sha256_file(path: Path) -> str:
@@ -674,11 +706,47 @@ def _variant_map(variants: Sequence[Mapping[str, object]]) -> dict[str, dict[str
     return {str(variant["variant_id"]): dict(variant) for variant in variants}
 
 
-def expected_variant_configs(kind: object) -> dict[str, dict[str, object]]:
+def _candidate_variants_for_gate(
+    gate_id: object,
+) -> tuple[dict[str, object], ...]:
+    if gate_id == CALIBRATION_GATE_ID:
+        return REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+    if gate_id == ORACLE_MANIFEST_GATE_ID:
+        return ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+    raise CalibrationError("unsupported candidate correctness gate")
+
+
+def _source_paths(kind: object, gate_id: object) -> dict[str, str]:
+    if kind in {FP32_ORACLE_KIND, BF16_ORACLE_KIND}:
+        if gate_id != ORACLE_MANIFEST_GATE_ID:
+            raise CalibrationError("oracle manifest must use the frozen v2 gate")
+        return HF_SOURCE_PATHS
+    if kind == CANDIDATE_KIND:
+        if gate_id == CALIBRATION_GATE_ID:
+            return NATIVE_SOURCE_PATHS
+        if gate_id == ORACLE_MANIFEST_GATE_ID:
+            return LEGACY_NATIVE_SOURCE_PATHS
+    raise CalibrationError("unsupported artifact kind or correctness gate")
+
+
+def source_names_for_manifest(manifest: Mapping[str, object]) -> tuple[str, ...]:
+    """Return the closed source inventory for the manifest role and gate."""
+
+    contract = _expect_object(manifest.get("contract"), "manifest.contract")
+    return tuple(_source_paths(manifest.get("artifact_kind"), contract.get("gate_id")))
+
+
+def expected_variant_configs(
+    kind: object, gate_id: object | None = None
+) -> dict[str, dict[str, object]]:
     if kind in {FP32_ORACLE_KIND, BF16_ORACLE_KIND}:
         return _variant_map((HF_ORACLE_REDUCTION_VARIANT,))
     if kind == CANDIDATE_KIND:
-        return _variant_map(REQUIRED_CANDIDATE_REDUCTION_VARIANTS)
+        return _variant_map(
+            _candidate_variants_for_gate(
+                CALIBRATION_GATE_ID if gate_id is None else gate_id
+            )
+        )
     raise CalibrationError("unsupported artifact kind")
 
 
@@ -828,7 +896,9 @@ def _normalized_sibling(value: object, path: str, suffix: str) -> str:
     return text
 
 
-def _validate_candidate_execution(value: object, path: str) -> dict[str, object]:
+def _validate_candidate_execution(
+    value: object, path: str, gate_id: object
+) -> dict[str, object]:
     execution = _expect_object(value, path)
     _expect_exact_keys(execution, {"executable", "build_argv", "capture_argv"}, path)
     executable = _expect_object(execution["executable"], f"{path}.executable")
@@ -849,28 +919,27 @@ def _validate_candidate_execution(value: object, path: str) -> dict[str, object]
         "--prompts",
         "--manifest",
         "--sidecar",
-        "--reduction-variant",
-        "--reduction-variant",
     ]
-    if len(capture_argv) != 18 or capture_argv[2::2] != expected_flags:
+    expected_variants = _candidate_variants_for_gate(gate_id)
+    expected_flags.extend("--reduction-variant" for _ in expected_variants)
+    expected_length = 2 + 2 * len(expected_flags)
+    if len(capture_argv) != expected_length or capture_argv[2::2] != expected_flags:
         raise CalibrationError(
-            f"{path}.capture_argv: exact ordered contract-v2 flag inventory required"
+            f"{path}.capture_argv: exact ordered {gate_id} flag inventory required"
         )
     values = capture_argv[3::2]
     _normalized_absolute_posix_path(values[0], f"{path}.capture_argv.--repository-root")
     _normalized_absolute_posix_path(values[1], f"{path}.capture_argv.--model")
-    if values[2] != HF_SOURCE_PATHS["gate_manifest"]:
+    source_paths = _source_paths(CANDIDATE_KIND, gate_id)
+    if values[2] != source_paths["gate_manifest"]:
         raise CalibrationError(f"{path}.capture_argv: --gate-manifest binding differs")
-    if values[3] != HF_SOURCE_PATHS["prompts"]:
+    if values[3] != source_paths["prompts"]:
         raise CalibrationError(f"{path}.capture_argv: --prompts binding differs")
     _normalized_sibling(values[4], f"{path}.capture_argv.--manifest", ".json")
     _normalized_sibling(values[5], f"{path}.capture_argv.--sidecar", ".safetensors")
-    expected_variants = [
-        str(variant["variant_id"])
-        for variant in REQUIRED_CANDIDATE_REDUCTION_VARIANTS
-    ]
-    if values[6:] != expected_variants:
-        raise CalibrationError(f"{path}.capture_argv: both ordered variants are required")
+    expected_variant_ids = [str(variant["variant_id"]) for variant in expected_variants]
+    if values[6:] != expected_variant_ids:
+        raise CalibrationError(f"{path}.capture_argv: exact ordered variants are required")
     return execution
 
 
@@ -897,6 +966,17 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
     kind = root["artifact_kind"]
     if kind not in CALIBRATION_KINDS:
         raise CalibrationError("manifest.artifact_kind: unsupported kind")
+    contract = _expect_object(root["contract"], "manifest.contract")
+    gate_id = _expect_string(
+        contract.get("gate_id"), "manifest.contract.gate_id"
+    )
+    if kind in {FP32_ORACLE_KIND, BF16_ORACLE_KIND}:
+        if gate_id != ORACLE_MANIFEST_GATE_ID:
+            raise CalibrationError(
+                "manifest.contract.gate_id: oracle must use the frozen v2 gate"
+            )
+    elif gate_id not in {ORACLE_MANIFEST_GATE_ID, CALIBRATION_GATE_ID}:
+        raise CalibrationError("manifest.contract.gate_id: unsupported candidate gate")
     parse_utc(root["created_at"])
 
     producer = _expect_object(root["producer"], "manifest.producer")
@@ -934,9 +1014,14 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
             raise CalibrationError("manifest.producer: HF oracle runtime contract mismatch")
         _expect_string(producer["python_version"], "manifest.producer.python_version")
     else:
+        expected_engine_revision = (
+            NATIVE_ENGINE_REVISION
+            if gate_id == CALIBRATION_GATE_ID
+            else LEGACY_NATIVE_ENGINE_REVISION
+        )
         if producer != {
             "implementation_id": "rustinfer-native",
-            "engine_revision": NATIVE_ENGINE_REVISION,
+            "engine_revision": expected_engine_revision,
             "runtime_dependency_class": "native-production",
             "python_version": None,
             "python_executable_sha256": None,
@@ -951,12 +1036,11 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
     candidate_execution: dict[str, object] | None = None
     if kind == CANDIDATE_KIND:
         candidate_execution = _validate_candidate_execution(
-            root["candidate_execution"], "manifest.candidate_execution"
+            root["candidate_execution"], "manifest.candidate_execution", gate_id
         )
     elif root["candidate_execution"] is not None:
         raise CalibrationError("manifest.candidate_execution: HF oracle must use null")
 
-    contract = _expect_object(root["contract"], "manifest.contract")
     _expect_exact_keys(
         contract,
         {
@@ -982,8 +1066,6 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
         },
         "manifest.contract",
     )
-    if contract["gate_id"] != CALIBRATION_GATE_ID:
-        raise CalibrationError("manifest.contract.gate_id: immutable mismatch")
     if (
         contract["model_id"] != MODEL_ID
         or contract["model_revision"] != MODEL_REVISION
@@ -1022,7 +1104,11 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
         or contract["top_k"] != CALIBRATION_TOP_K
         or contract["oracle_reduction_variant"] != HF_ORACLE_REDUCTION_VARIANT
         or contract["required_candidate_reduction_variants"]
-        != list(REQUIRED_CANDIDATE_REDUCTION_VARIANTS)
+        != list(
+            ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+            if kind in {FP32_ORACLE_KIND, BF16_ORACLE_KIND}
+            else _candidate_variants_for_gate(gate_id)
+        )
     ):
         raise CalibrationError("manifest.contract: immutable execution contract mismatch")
     eos_token_ids = _validate_token_ids(
@@ -1044,11 +1130,12 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
         },
         "manifest.provenance",
     )
-    source_paths = NATIVE_SOURCE_PATHS if kind == CANDIDATE_KIND else HF_SOURCE_PATHS
+    source_paths = _source_paths(kind, gate_id)
     sources = _expect_object(provenance["sources"], "manifest.provenance.sources")
-    if set(sources) != set(SOURCE_NAMES):
+    source_names = tuple(source_paths)
+    if set(sources) != set(source_names):
         raise CalibrationError("manifest.provenance.sources: source set mismatch")
-    for name in SOURCE_NAMES:
+    for name in source_names:
         _validate_source_ref(
             sources[name], source_paths[name], f"manifest.provenance.sources.{name}"
         )
@@ -1097,14 +1184,14 @@ def validate_calibration_manifest(manifest: Mapping[str, object]) -> None:
             raise CalibrationError(
                 "manifest.candidate_execution.capture_argv: sidecar output differs"
             )
-    variant_count = len(expected_variant_configs(kind))
+    variant_count = len(expected_variant_configs(kind, gate_id))
     if sidecar["tensor_count"] != prompt_count * len(TENSOR_NAMES) * variant_count:
         raise CalibrationError("manifest.sidecar.tensor_count: inconsistent")
 
     cases = root["cases"]
     if not isinstance(cases, list) or len(cases) != prompt_count:
         raise CalibrationError("manifest.cases: count mismatch")
-    expected_variants = expected_variant_configs(kind)
+    expected_variants = expected_variant_configs(kind, gate_id)
     seen_ids: set[str] = set()
     tensor_keys: set[str] = set()
     for index, raw_case in enumerate(cases):
@@ -1240,7 +1327,8 @@ def load_calibration_manifest(path: Path) -> dict[str, object]:
 
 def verify_manifest_sources(manifest: Mapping[str, object], repo_root: Path) -> None:
     root = repo_root.resolve()
-    for name in SOURCE_NAMES:
+    source_names = source_names_for_manifest(manifest)
+    for name in source_names:
         source = manifest["provenance"]["sources"][name]
         path = (root / source["path"]).resolve()
         if root != path and root not in path.parents:
@@ -1255,7 +1343,7 @@ def verify_manifest_sources(manifest: Mapping[str, object], repo_root: Path) -> 
             check=True,
             capture_output=True,
         )
-        for name in SOURCE_NAMES:
+        for name in source_names:
             source = manifest["provenance"]["sources"][name]
             committed = subprocess.run(
                 ["git", "show", f"{revision}:{source['path']}"],
@@ -1272,7 +1360,10 @@ def verify_manifest_sources(manifest: Mapping[str, object], repo_root: Path) -> 
             f"cannot verify source files at claimed Git revision {revision}: {error}"
         ) from error
     gate_path = root / manifest["provenance"]["sources"]["gate_manifest"]["path"]
-    if _load_json_object(gate_path, "correctness gate manifest") != gate_contract_document():
+    manifest_gate_id = str(manifest["contract"]["gate_id"])
+    if _load_json_object(
+        gate_path, "correctness gate manifest"
+    ) != gate_contract_document(manifest_gate_id):
         raise CalibrationError("language-neutral correctness gate manifest differs from tool")
     from .fixture import load_prompts
 
@@ -1517,10 +1608,12 @@ def _case_map(manifest: Mapping[str, object]) -> dict[str, Mapping[str, object]]
 def _common_bindings(
     fp32: Mapping[str, object], bf16: Mapping[str, object], candidate: Mapping[str, object]
 ) -> dict[str, object]:
-    for left, right, label in (
-        (fp32, bf16, "FP32/BF16 oracle"),
-        (fp32, candidate, "oracle/candidate"),
-    ):
+    candidate_gate_id = candidate["contract"]["gate_id"]
+    if fp32["contract"]["gate_id"] != ORACLE_MANIFEST_GATE_ID or bf16["contract"][
+        "gate_id"
+    ] != ORACLE_MANIFEST_GATE_ID:
+        raise CalibrationError("candidate comparison requires frozen v2 oracle manifests")
+    for left, right, label in ((fp32, bf16, "FP32/BF16 oracle"),):
         for key in (
             "model_id",
             "model_revision",
@@ -1553,6 +1646,37 @@ def _common_bindings(
             right["provenance"]["observed_environment"]
         ):
             raise CalibrationError(f"{label} observed environment differs")
+    for key in (
+        "model_id",
+        "model_revision",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_sha256",
+        "tokenizer_files_sha256",
+        "max_context_tokens",
+        "eos_token_ids",
+    ):
+        if fp32["contract"][key] != candidate["contract"][key]:
+            raise CalibrationError(f"oracle/candidate {key} binding differs")
+    candidate_common_sources = (
+        ("matrix", "prompts", "gate_manifest", "environment", "environment_probe")
+        if candidate_gate_id == ORACLE_MANIFEST_GATE_ID
+        else ("prompts", "environment", "environment_probe")
+    )
+    for source_name in candidate_common_sources:
+        if (
+            fp32["provenance"]["sources"][source_name]["sha256"]
+            != candidate["provenance"]["sources"][source_name]["sha256"]
+        ):
+            raise CalibrationError(f"oracle/candidate {source_name} binding differs")
+    if fp32["provenance"]["environment_id"] != candidate["provenance"]["environment_id"]:
+        raise CalibrationError("oracle/candidate environment_id differs")
+    if environment_comparability_signature(
+        fp32["provenance"]["observed_environment"]
+    ) != environment_comparability_signature(
+        candidate["provenance"]["observed_environment"]
+    ):
+        raise CalibrationError("oracle/candidate observed environment differs")
     for key in ("git_revision", "git_status_sha256"):
         if fp32["provenance"][key] != bf16["provenance"][key]:
             raise CalibrationError(f"FP32/BF16 oracle {key} differs")
@@ -1563,15 +1687,13 @@ def _common_bindings(
         != bf16["provenance"]["sources"]["lane_manifest"]["sha256"]
     ):
         raise CalibrationError("FP32/BF16 oracle dependency provenance differs")
-    return {
+    result = {
         "model_id": fp32["contract"]["model_id"],
         "model_revision": fp32["contract"]["model_revision"],
         "config_sha256": fp32["contract"]["config_sha256"],
         "weights_sha256": fp32["contract"]["weights_sha256"],
         "tokenizer_sha256": fp32["contract"]["tokenizer_sha256"],
-        "matrix_sha256": fp32["provenance"]["sources"]["matrix"]["sha256"],
         "prompts_sha256": fp32["provenance"]["sources"]["prompts"]["sha256"],
-        "gate_manifest_sha256": fp32["provenance"]["sources"]["gate_manifest"]["sha256"],
         "environment_sha256": fp32["provenance"]["sources"]["environment"]["sha256"],
         "environment_id": fp32["provenance"]["environment_id"],
         "oracle_git_revision": fp32["provenance"]["git_revision"],
@@ -1588,6 +1710,27 @@ def _common_bindings(
             canonical_json_bytes(candidate["candidate_execution"]["capture_argv"])
         ).hexdigest(),
     }
+    if candidate_gate_id == ORACLE_MANIFEST_GATE_ID:
+        result.update(
+            {
+                "matrix_sha256": fp32["provenance"]["sources"]["matrix"]["sha256"],
+                "gate_manifest_sha256": fp32["provenance"]["sources"]["gate_manifest"]["sha256"],
+            }
+        )
+    else:
+        result.update(
+            {
+                "oracle_manifest_gate_id": ORACLE_MANIFEST_GATE_ID,
+                "oracle_matrix_sha256": fp32["provenance"]["sources"]["matrix"]["sha256"],
+                "oracle_gate_manifest_sha256": fp32["provenance"]["sources"][
+                    "gate_manifest"
+                ]["sha256"],
+                "candidate_gate_manifest_sha256": candidate["provenance"]["sources"][
+                    "gate_manifest"
+                ]["sha256"],
+            }
+        )
+    return result
 
 
 def _metric_record(reference: object, candidate: object, tensor_name: str) -> dict[str, object]:
@@ -1691,6 +1834,7 @@ def compare_calibrations(
         raise CalibrationError("BF16 input is not the semantic oracle")
     if candidate_manifest["artifact_kind"] != CANDIDATE_KIND:
         raise CalibrationError("candidate input is not a native candidate")
+    candidate_gate_id = str(candidate_manifest["contract"]["gate_id"])
     from .oracle_calibration import replay_validate_oracle_report
 
     loader = sidecar_loader or _default_sidecar_loader
@@ -1723,7 +1867,8 @@ def compare_calibrations(
         raise CalibrationError("oracle/candidate prompt order differs")
 
     candidate_variant_ids = [
-        str(config["variant_id"]) for config in REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+        str(config["variant_id"])
+        for config in _candidate_variants_for_gate(candidate_gate_id)
     ]
     aggregate_metrics: dict[str, dict[str, dict[str, float]]] = {
         variant_id: {
@@ -1821,9 +1966,22 @@ def compare_calibrations(
         }
     numeric_pass = all(summary["numeric_pass"] for summary in variant_summaries.values())
     semantic_pass = all(summary["semantic_pass"] for summary in variant_summaries.values())
+    report_gate_contract: dict[str, object] = {
+        "thresholds": CALIBRATION_THRESHOLDS,
+        "oracle_reduction_variant": HF_ORACLE_REDUCTION_VARIANT,
+        "required_candidate_reduction_variants": list(
+            _candidate_variants_for_gate(candidate_gate_id)
+        ),
+        "cross_cache_exact_window": CROSS_CACHE_EXACT_WINDOW,
+        "top_k_comparison": "set-exact",
+        "top_1_comparison": "ordered-exact",
+        "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report-v2",
+    }
+    if candidate_gate_id == CALIBRATION_GATE_ID:
+        report_gate_contract["lineage"] = GATE_LINEAGE
     report: dict[str, object] = {
         "schema_version": CALIBRATION_SCHEMA_VERSION,
-        "gate_id": CALIBRATION_GATE_ID,
+        "gate_id": candidate_gate_id,
         "created_at": utc_text(created_at),
         "status": "pass" if numeric_pass and semantic_pass else "fail",
         "roles": {
@@ -1832,15 +1990,7 @@ def compare_calibrations(
             "candidate_numeric_reference": "fp32",
             "candidate_semantic_reference": "hf-bf16-path-matched",
         },
-        "gate_contract": {
-            "thresholds": CALIBRATION_THRESHOLDS,
-            "oracle_reduction_variant": HF_ORACLE_REDUCTION_VARIANT,
-            "required_candidate_reduction_variants": list(REQUIRED_CANDIDATE_REDUCTION_VARIANTS),
-            "cross_cache_exact_window": CROSS_CACHE_EXACT_WINDOW,
-            "top_k_comparison": "set-exact",
-            "top_1_comparison": "ordered-exact",
-            "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report-v2",
-        },
+        "gate_contract": report_gate_contract,
         "inputs": {
             "fp32_manifest_sha256": sha256_file(fp32_manifest_path),
             "bf16_manifest_sha256": sha256_file(bf16_manifest_path),
@@ -1993,7 +2143,11 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
         },
         "report",
     )
-    if root["schema_version"] != CALIBRATION_SCHEMA_VERSION or root["gate_id"] != CALIBRATION_GATE_ID:
+    gate_id = _expect_string(root["gate_id"], "report.gate_id")
+    if root["schema_version"] != CALIBRATION_SCHEMA_VERSION or gate_id not in {
+        ORACLE_MANIFEST_GATE_ID,
+        CALIBRATION_GATE_ID,
+    }:
         raise CalibrationError("report: schema or gate ID mismatch")
     parse_utc(root["created_at"])
     if root["roles"] != {
@@ -2003,15 +2157,20 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
         "candidate_semantic_reference": "hf-bf16-path-matched",
     }:
         raise CalibrationError("report.roles: immutable role split changed")
-    if root["gate_contract"] != {
+    expected_gate_contract: dict[str, object] = {
         "thresholds": CALIBRATION_THRESHOLDS,
         "oracle_reduction_variant": HF_ORACLE_REDUCTION_VARIANT,
-        "required_candidate_reduction_variants": list(REQUIRED_CANDIDATE_REDUCTION_VARIANTS),
+        "required_candidate_reduction_variants": list(
+            _candidate_variants_for_gate(gate_id)
+        ),
         "cross_cache_exact_window": CROSS_CACHE_EXACT_WINDOW,
         "top_k_comparison": "set-exact",
         "top_1_comparison": "ordered-exact",
         "threshold_activation_evidence": "replayed-passing-full-31-hf-oracle-calibration-report-v2",
-    }:
+    }
+    if gate_id == CALIBRATION_GATE_ID:
+        expected_gate_contract["lineage"] = GATE_LINEAGE
+    if root["gate_contract"] != expected_gate_contract:
         raise CalibrationError("report.gate_contract: frozen gate changed")
     inputs = _expect_object(root["inputs"], "report.inputs")
     _expect_exact_keys(
@@ -2030,31 +2189,37 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
     for key, digest in inputs.items():
         _expect_sha(digest, f"report.inputs.{key}")
     bindings = _expect_object(root["bindings"], "report.bindings")
-    _expect_exact_keys(
-        bindings,
-        {
-            "model_id",
-            "model_revision",
-            "config_sha256",
-            "weights_sha256",
-            "tokenizer_sha256",
-            "matrix_sha256",
-            "prompts_sha256",
-            "gate_manifest_sha256",
-            "environment_sha256",
-            "environment_id",
-            "oracle_git_revision",
-            "oracle_git_status_sha256",
-            "candidate_git_revision",
-            "candidate_git_status_sha256",
-            "candidate_executable_sha256",
-            "candidate_build_argv_sha256",
-            "candidate_capture_argv_sha256",
-            "dependency_locks",
-            "lane_manifests",
-        },
-        "report.bindings",
-    )
+    binding_keys = {
+        "model_id",
+        "model_revision",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_sha256",
+        "prompts_sha256",
+        "environment_sha256",
+        "environment_id",
+        "oracle_git_revision",
+        "oracle_git_status_sha256",
+        "candidate_git_revision",
+        "candidate_git_status_sha256",
+        "candidate_executable_sha256",
+        "candidate_build_argv_sha256",
+        "candidate_capture_argv_sha256",
+        "dependency_locks",
+        "lane_manifests",
+    }
+    if gate_id == ORACLE_MANIFEST_GATE_ID:
+        binding_keys.update({"matrix_sha256", "gate_manifest_sha256"})
+    else:
+        binding_keys.update(
+            {
+                "oracle_manifest_gate_id",
+                "oracle_matrix_sha256",
+                "oracle_gate_manifest_sha256",
+                "candidate_gate_manifest_sha256",
+            }
+        )
+    _expect_exact_keys(bindings, binding_keys, "report.bindings")
     if bindings["model_id"] != MODEL_ID or bindings["model_revision"] != MODEL_REVISION:
         raise CalibrationError("report.bindings: model identity mismatch")
     if (
@@ -2065,19 +2230,32 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
         raise CalibrationError("report.bindings: immutable model artifact mismatch")
     if bindings["environment_id"] != PRIMARY_ENVIRONMENT_ID:
         raise CalibrationError("report.bindings.environment_id: mismatch")
-    for key in (
+    if (
+        gate_id == CALIBRATION_GATE_ID
+        and bindings["oracle_manifest_gate_id"] != ORACLE_MANIFEST_GATE_ID
+    ):
+        raise CalibrationError("report.bindings.oracle_manifest_gate_id: mismatch")
+    digest_binding_keys = [
         "config_sha256",
         "tokenizer_sha256",
-        "matrix_sha256",
         "prompts_sha256",
-        "gate_manifest_sha256",
         "environment_sha256",
         "oracle_git_status_sha256",
         "candidate_git_status_sha256",
         "candidate_executable_sha256",
         "candidate_build_argv_sha256",
         "candidate_capture_argv_sha256",
-    ):
+    ]
+    digest_binding_keys.extend(
+        ("matrix_sha256", "gate_manifest_sha256")
+        if gate_id == ORACLE_MANIFEST_GATE_ID
+        else (
+            "oracle_matrix_sha256",
+            "oracle_gate_manifest_sha256",
+            "candidate_gate_manifest_sha256",
+        )
+    )
+    for key in digest_binding_keys:
         _expect_sha(bindings[key], f"report.bindings.{key}")
     for key in ("oracle_git_revision", "candidate_git_revision"):
         revision = _expect_string(bindings[key], f"report.bindings.{key}")
@@ -2094,7 +2272,9 @@ def _validate_report_structure(report: Mapping[str, object]) -> None:
         raise CalibrationError(
             f"report.cases: expected full {CALIBRATION_PROMPT_COUNT}-prompt corpus"
         )
-    candidate_variant_ids = [str(item["variant_id"]) for item in REQUIRED_CANDIDATE_REDUCTION_VARIANTS]
+    candidate_variant_ids = [
+        str(item["variant_id"]) for item in _candidate_variants_for_gate(gate_id)
+    ]
     seen_prompts: set[str] = set()
     for case_index, raw_case in enumerate(cases):
         path = f"report.cases[{case_index}]"

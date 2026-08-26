@@ -27,8 +27,7 @@ use crate::contract::{
 };
 use crate::environment::{AcceleratorObservation, probe_primary_environment};
 use crate::numeric::{
-    Fixed37LogSoftmaxWorkspace, canonical_log_softmax_bf16, exact_window_match, first_divergence,
-    ranked_top_k_bf16,
+    canonical_log_softmax_bf16, exact_window_match, first_divergence, ranked_top_k_bf16,
 };
 use crate::sidecar::{SafeTensorWriter, TensorDType, TensorSpec};
 use crate::{
@@ -239,9 +238,9 @@ pub fn run_calibration(args: &CalibrationArgs) -> Result<(), NativeCalibrationEr
     validate_model_root_files(&paths.model_root)?;
     let mut cases = materialize_cases(&model, prompts)?;
     let specs = tensor_specs(&cases)?;
-    if specs.len() != CALIBRATION_PROMPT_COUNT * 2 * 3 {
+    if specs.len() != CALIBRATION_PROMPT_COUNT * crate::REQUIRED_REDUCTION_VARIANTS.len() * 3 {
         return Err(NativeCalibrationError::new(
-            "candidate tensor inventory is not exactly 186 tensors",
+            "candidate tensor inventory is not exactly 93 tensors",
         ));
     }
 
@@ -644,7 +643,7 @@ fn materialize_cases(
 fn tensor_specs(cases: &[CaseState]) -> ProducerResult<Vec<TensorSpec>> {
     let mut specs = Vec::new();
     specs
-        .try_reserve_exact(cases.len() * 2 * 3)
+        .try_reserve_exact(cases.len() * crate::REQUIRED_REDUCTION_VARIANTS.len() * 3)
         .map_err(|_| NativeCalibrationError::new("tensor inventory allocation failed"))?;
     for case in cases {
         for variant in crate::REQUIRED_REDUCTION_VARIANTS {
@@ -689,20 +688,10 @@ fn capture_all_variants(
     sidecar: &mut SafeTensorWriter,
     cases: &mut [CaseState],
 ) -> ProducerResult<()> {
-    let mut fixed_log_softmax = Fixed37LogSoftmaxWorkspace::prepare(context, VOCABULARY_SIZE)
-        .map_err(|error| NativeCalibrationError::context(error, "prepare fixed37 log-softmax"))?;
     let operation = (|| {
         for variant in crate::REQUIRED_REDUCTION_VARIANTS {
             capture_phase(variant, "numeric", || {
-                capture_numeric_variant(
-                    model,
-                    context,
-                    stream,
-                    sidecar,
-                    cases,
-                    variant,
-                    &mut fixed_log_softmax,
-                )
+                capture_numeric_variant(model, context, stream, sidecar, cases, variant)
             })?;
             capture_phase(variant, "cache-on", || {
                 capture_cache_on_variant(model, context, stream, cases, variant)
@@ -716,9 +705,6 @@ fn capture_all_variants(
         }
         Ok(())
     })();
-    let fixed_close = fixed_log_softmax
-        .close()
-        .map_err(|error| NativeCalibrationError::context(error, "close fixed37 log-softmax"));
     let stats = context
         .allocation_stats()
         .map_err(|error| NativeCalibrationError::context(error, "read CUDA allocation stats"));
@@ -731,7 +717,7 @@ fn capture_all_variants(
             )))
         }
     });
-    finish_with_cleanup(operation, [fixed_close, zero])
+    finish_with_cleanup(operation, [zero])
 }
 
 fn capture_numeric_variant(
@@ -741,7 +727,6 @@ fn capture_numeric_variant(
     sidecar: &mut SafeTensorWriter,
     cases: &mut [CaseState],
     variant: ReductionVariant,
-    fixed_log_softmax: &mut Fixed37LogSoftmaxWorkspace,
 ) -> ProducerResult<()> {
     let profile = reduction_profile(variant);
     let mut log_probs = vec![0_u8; VOCABULARY_SIZE * 4];
@@ -800,15 +785,7 @@ fn capture_numeric_variant(
                     .map_err(|error| {
                         NativeCalibrationError::context(error, "write final-logits tensor")
                     })?;
-                match variant {
-                    ReductionVariant::Canonical => {
-                        canonical_log_softmax_bf16(logits, &mut log_probs)
-                    }
-                    ReductionVariant::FixedContiguous37Balanced => {
-                        fixed_log_softmax.execute(logits, &mut log_probs, stream)
-                    }
-                }
-                .map_err(|error| {
+                canonical_log_softmax_bf16(logits, &mut log_probs).map_err(|error| {
                     NativeCalibrationError::context(error, "compute final log-softmax")
                 })?;
                 sidecar
@@ -1246,9 +1223,6 @@ fn semantic_stop_reason(reason: Option<FinishReason>) -> ProducerResult<&'static
 const fn reduction_profile(variant: ReductionVariant) -> LlamaReductionProfile {
     match variant {
         ReductionVariant::Canonical => LlamaReductionProfile::CanonicalV1,
-        ReductionVariant::FixedContiguous37Balanced => {
-            LlamaReductionProfile::FixedContiguous37BalancedV1
-        }
     }
 }
 
@@ -1301,8 +1275,6 @@ fn build_manifest(
         path_text(args.sidecar())?,
         "--reduction-variant".to_owned(),
         crate::REQUIRED_REDUCTION_VARIANTS[0].id().to_owned(),
-        "--reduction-variant".to_owned(),
-        crate::REQUIRED_REDUCTION_VARIANTS[1].id().to_owned(),
     ];
     Ok(json!({
         "schema_version": CALIBRATION_SCHEMA_VERSION,
@@ -1362,7 +1334,7 @@ fn build_manifest(
             "path": path_text(args.sidecar())?,
             "sha256": sidecar_sha256,
             "format": "safetensors",
-            "tensor_count": cases.len() * 2 * 3,
+            "tensor_count": cases.len() * crate::REQUIRED_REDUCTION_VARIANTS.len() * 3,
         },
         "cases": case_values,
     }))
@@ -1566,7 +1538,7 @@ mod tests {
 
     #[test]
     fn cache_off_exact_window_fails_fast_at_the_declared_boundary() {
-        let variant = ReductionVariant::FixedContiguous37Balanced;
+        let variant = ReductionVariant::Canonical;
         let cache_on = (100_u32..116).collect::<Vec<_>>();
         require_cache_off_exact_token("prompt", variant, 0, &cache_on, 100)
             .expect("step zero matches");
@@ -1577,7 +1549,7 @@ mod tests {
             .expect_err("step fifteen mismatch fails");
         let diagnostic = mismatch.to_string();
         assert!(diagnostic.contains("prompt_id=prompt"));
-        assert!(diagnostic.contains("variant=fixed-contiguous-37-balanced-v1"));
+        assert!(diagnostic.contains("variant=canonical-v1"));
         assert!(diagnostic.contains("step=15"));
         assert!(diagnostic.contains("expected=Some(115) observed=999"));
 

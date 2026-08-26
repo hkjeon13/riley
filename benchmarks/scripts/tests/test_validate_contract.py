@@ -57,6 +57,45 @@ class ContractValidatorTests(unittest.TestCase):
         counts = contract.validate_contract(REPOSITORY_ROOT)
         self.assertEqual(counts["lanes"], 3)
 
+    def test_release_v3_is_parallel_and_canonical_only(self) -> None:
+        matrix = json.loads(
+            (REPOSITORY_ROOT / "benchmarks/matrix.yaml").read_text(encoding="utf-8")
+        )
+        contract.validate_release_v3_contract(REPOSITORY_ROOT, matrix)
+        self.assertEqual(
+            matrix["correctness_gate"]["gate_id"],
+            "smollm2-fp32-bf16-native-e0-v2",
+        )
+        gate_path = REPOSITORY_ROOT / contract.RELEASE_V3_GATE_PATH
+        gate = json.loads(gate_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            [
+                row["variant_id"]
+                for row in gate["reduction_variants"]["required_candidate"]
+            ],
+            ["canonical-v1"],
+        )
+        self.assertFalse(gate["lineage"]["thresholds_changed"])
+
+        schema = json.loads(
+            (
+                REPOSITORY_ROOT
+                / "benchmarks/schemas/correctness-gate-v3.schema.json"
+            ).read_text(encoding="utf-8")
+        )
+        changed = copy.deepcopy(gate)
+        changed["reduction_variants"]["required_candidate"].append(
+            {
+                "variant_id": "fixed-contiguous-37-balanced-v1",
+                "partition_kind": "fixed-contiguous",
+                "chunk_elements": 37,
+                "remainder_policy": "last-short-chunk",
+                "merge_order": "deterministic-balanced-binary-tree-by-chunk-index",
+            }
+        )
+        with self.assertRaises(contract.ContractError):
+            contract.validate_instance(changed, schema)
+
     def test_vllm_lane_has_an_available_single_cell_adapter(self) -> None:
         lane = json.loads(
             (REPOSITORY_ROOT / "benchmarks/lanes/vllm.json").read_text(encoding="utf-8")

@@ -75,7 +75,7 @@ REPORT_VERSION = "rustinfer.release-candidate-report.v2"
 PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
 SOAK_VERSION = "rustinfer.reliability-soak-report.v2"
 CORRECTNESS_VERSION = "1.0.0"
-CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
+CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v3"
 OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -705,7 +705,7 @@ def _validate_correctness(
         path,
     )
     if row["schema_version"] != CORRECTNESS_VERSION or row["gate_id"] != CORRECTNESS_GATE:
-        _fail(path, "must be the reviewed native E0 correctness report v2")
+        _fail(path, "must be the reviewed native E0 correctness report v3")
     if row["status"] != "pass":
         _fail(f"{path}.status", "must be pass")
     bindings = _object(row["bindings"], f"{path}.bindings")
@@ -737,7 +737,7 @@ def _validate_correctness(
     summary = _object(row["summary"], f"{path}.summary")
     expected_summary = {
         "case_count": 31,
-        "candidate_variant_count": 2,
+        "candidate_variant_count": 1,
         "failure_count": 0,
         "numeric_pass": True,
         "semantic_pass": True,
@@ -746,8 +746,8 @@ def _validate_correctness(
         if summary.get(key) != expected:
             _fail(f"{path}.summary.{key}", f"must be {expected!r}")
     variants = _object(summary.get("variants"), f"{path}.summary.variants")
-    if set(variants) != {"canonical-v1", "fixed-contiguous-37-balanced-v1"}:
-        _fail(f"{path}.summary.variants", "required E0 variant set mismatch")
+    if set(variants) != {"canonical-v1"}:
+        _fail(f"{path}.summary.variants", "required release variant set mismatch")
     for name, variant in variants.items():
         variant_row = _object(variant, f"{path}.summary.variants.{name}")
         expected = {
@@ -774,7 +774,7 @@ def _validate_correctness(
             _fail(f"{path}.cases[{index}].pass", "must be true")
         case_variants = _exact(
             case["variants"],
-            {"canonical-v1", "fixed-contiguous-37-balanced-v1"},
+            {"canonical-v1"},
             f"{case_path}.variants",
         )
         for name, raw_variant in case_variants.items():
@@ -2425,7 +2425,7 @@ def evaluate(
         ):
             _fail(
                 "optimization_correctness.raw_evidence.fixed37-production-batch-e0",
-                "replayed fixed37 log/test ELF differs from the candidate-qualified gate row",
+                "replayed fixed37 log/test ELF differs from the submitted diagnostic row",
             )
         python_free_model = _validate_python_free_e2e_replay(
             loaded["python_free_e2e"][0],

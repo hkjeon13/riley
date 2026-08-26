@@ -17,7 +17,6 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 from .calibration import (
     BF16_ORACLE_KIND,
-    CALIBRATION_GATE_ID,
     CALIBRATION_SCHEMA_VERSION,
     CALIBRATION_TOP_K,
     CROSS_CACHE_EXACT_WINDOW,
@@ -26,6 +25,8 @@ from .calibration import (
     HF_SOURCE_PATHS,
     LOG_PROB_PIPELINE,
     MODEL_EOS_TOKEN_IDS,
+    ORACLE_MANIFEST_GATE_ID,
+    ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS,
     SEMANTIC_GENERATION_STEPS,
     CalibrationError,
     aggregate_tokenizer_sha256,
@@ -783,7 +784,7 @@ def produce_hf_oracle(
         },
         "candidate_execution": None,
         "contract": {
-            "gate_id": CALIBRATION_GATE_ID,
+            "gate_id": ORACLE_MANIFEST_GATE_ID,
             "model_id": MODEL_ID,
             "model_revision": MODEL_REVISION,
             "config_sha256": metadata.config_sha256,
@@ -815,10 +816,8 @@ def produce_hf_oracle(
     }
     # The oracle declares candidate profiles in the gate contract too; no
     # duplicated oracle tensors are created for those execution profiles.
-    from .calibration import REQUIRED_CANDIDATE_REDUCTION_VARIANTS
-
     manifest["contract"]["required_candidate_reduction_variants"] = [
-        dict(variant) for variant in REQUIRED_CANDIDATE_REDUCTION_VARIANTS
+        dict(variant) for variant in ORACLE_REQUIRED_CANDIDATE_REDUCTION_VARIANTS
     ]
     _write_sidecar_exclusive(sidecar_path, tensors, sidecar_writer)
     try:

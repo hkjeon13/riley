@@ -167,7 +167,7 @@ optimized serving path that ships in the first candidate:
 |---|---|---:|---|---|
 | iteration command batch | `E0` | enabled | `--execution-completion per-operation` | `pr15-iteration-command-batch-exact-v1` |
 | fused residual RMSNorm | `E0` candidate | disabled, unsupported | `--residual-rmsnorm separate` | prior PR15 gate only; no candidate-bound approval |
-| fixed-contiguous-37 balanced reductions | `E0` | disabled | `--reduction-profile canonical-v1` | `smollm2-fp32-bf16-native-e0-v2` **and** `pr16-fixed37-production-batch-e0-v1` |
+| fixed-contiguous-37 balanced reductions | development compatibility selector | disabled, unsupported | `--reduction-profile canonical-v1` | diagnostic only; no first-candidate approval |
 
 The supported release surface includes only `reference` and candidate-approved
 `E0` semantics. `E1`, `A1`, and `M1` paths are absent, approximation is
@@ -179,14 +179,12 @@ PR15 E0 result predates the candidate and no current-revision fused report is
 bound to the final gate. Operators must keep the documented default
 `--residual-rmsnorm separate`.
 
-Fixed37 release qualification is conjunctive. The native gate provides the
-FP32/BF16 numeric-oracle contract, while the candidate-revision production
-batch gate runs all 31 immutable golden cases (481 generated steps, exact
-window 16) through `PreparedLlamaBatchExecutor` in separate residual-norm and
-iteration-batch mode. It requires exact golden top-1 tokens, zero same-path
-prefill byte mismatches, zero allocation deltas/leaks, and the immutable
-cached-decode versus growing-prefix numeric bounds. Neither gate alone
-qualifies this selectable serving path.
+Fixed37 remains a candidate-revision optimizer regression diagnostic. Its
+production-batch test still exercises all 31 immutable cases, but that result
+does not override the frozen native-oracle mismatch and therefore does not
+qualify the selector for the first release candidate. Operators must keep the
+documented `canonical-v1` default; the fixed37 selector remains only for
+development compatibility.
 
 The three stable selector defaults are also bound to the exact reviewed bytes
 of `crates/rustinfer-server/src/main.rs`. Release preflight rejects any source
@@ -200,8 +198,9 @@ merely restating the expected values in Docker arguments.
 The production defaults recorded in every bundle are the `canonical-v1`
 reduction profile, iteration-batched completion, and separate residual
 RMSNorm. Fused residual RMSNorm remains incompatible with iteration-batched
-completion. The opt-in `fixed-contiguous-37-balanced-v1` profile requires an
-effective `--max-sequence-tokens` no greater than 8192.
+completion. The development-only `fixed-contiguous-37-balanced-v1` selector
+remains bounded to an effective `--max-sequence-tokens` no greater than 8192,
+but it is unsupported in the first release candidate.
 
 For optimization isolation, drain or cancel active work, stop the process, and
 restart the same current checksummed bundle with all conservative E0 flags:

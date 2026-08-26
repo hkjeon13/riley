@@ -25,7 +25,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 /// Versioned native candidate engine contract owned by this crate.
-pub const NATIVE_ENGINE_REVISION: &str = "rustinfer-native-contract-v2";
+pub const NATIVE_ENGINE_REVISION: &str = "rustinfer-native-contract-v3";
 
 /// Sibling executable name reserved by the candidate evidence manifest.
 pub const NATIVE_EXECUTABLE_FILENAME: &str = "rustinfer-native";
@@ -46,7 +46,7 @@ pub const NATIVE_BUILD_ARGV: [&str; 11] = [
 ];
 
 /// Correctness gate path required by the native capture ABI.
-pub const GATE_MANIFEST_PATH: &str = "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v2.json";
+pub const GATE_MANIFEST_PATH: &str = "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json";
 
 /// Ordered prompt corpus path required by the native capture ABI.
 pub const PROMPTS_PATH: &str = "benchmarks/prompts.jsonl";
@@ -56,8 +56,6 @@ pub const PROMPTS_PATH: &str = "benchmarks/prompts.jsonl";
 pub enum ReductionVariant {
     /// Existing production-default operator reductions.
     Canonical,
-    /// Contiguous 37-element left folds merged by the reviewed balanced tree.
-    FixedContiguous37Balanced,
 }
 
 impl ReductionVariant {
@@ -66,14 +64,12 @@ impl ReductionVariant {
     pub const fn id(self) -> &'static str {
         match self {
             Self::Canonical => "canonical-v1",
-            Self::FixedContiguous37Balanced => "fixed-contiguous-37-balanced-v1",
         }
     }
 
     fn parse(value: &str) -> Result<Self, CalibrationCliError> {
         match value {
             "canonical-v1" => Ok(Self::Canonical),
-            "fixed-contiguous-37-balanced-v1" => Ok(Self::FixedContiguous37Balanced),
             _ => Err(CalibrationCliError::UnsupportedReductionVariant(
                 value.to_owned(),
             )),
@@ -81,20 +77,16 @@ impl ReductionVariant {
     }
 }
 
-/// Exact ordered reduction variants required by candidate contract v2.
-pub const REQUIRED_REDUCTION_VARIANTS: [ReductionVariant; 2] = [
-    ReductionVariant::Canonical,
-    ReductionVariant::FixedContiguous37Balanced,
-];
+/// Exact reduction variant required by candidate contract v3.
+pub const REQUIRED_REDUCTION_VARIANTS: [ReductionVariant; 1] = [ReductionVariant::Canonical];
 
-const REQUIRED_CAPTURE_FLAGS: [&str; 8] = [
+const REQUIRED_CAPTURE_FLAGS: [&str; 7] = [
     "--repository-root",
     "--model",
     "--gate-manifest",
     "--prompts",
     "--manifest",
     "--sidecar",
-    "--reduction-variant",
     "--reduction-variant",
 ];
 
@@ -107,7 +99,7 @@ pub struct CalibrationArgs {
     prompts: PathBuf,
     manifest: PathBuf,
     sidecar: PathBuf,
-    reduction_variants: [ReductionVariant; 2],
+    reduction_variants: [ReductionVariant; 1],
 }
 
 impl CalibrationArgs {
@@ -147,9 +139,9 @@ impl CalibrationArgs {
         &self.sidecar
     }
 
-    /// Both required variants in their contract order.
+    /// The sole release-qualified reduction variant.
     #[must_use]
-    pub const fn reduction_variants(&self) -> &[ReductionVariant; 2] {
+    pub const fn reduction_variants(&self) -> &[ReductionVariant; 1] {
         &self.reduction_variants
     }
 }
@@ -163,7 +155,7 @@ pub enum CalibrationCliError {
     UnsupportedSubcommand(String),
     /// An argument was not valid UTF-8 and cannot be recorded in JSON evidence.
     NonUtf8Argument,
-    /// A flag is not part of contract v2.
+    /// A flag is not part of contract v3.
     UnknownFlag(String),
     /// A required flag was absent.
     MissingFlag(&'static str),
@@ -173,9 +165,9 @@ pub enum CalibrationCliError {
     MissingValue(&'static str),
     /// A reduction variant identifier is not reviewed.
     UnsupportedReductionVariant(String),
-    /// The two reviewed variants were absent, duplicated, or reordered.
+    /// The sole reviewed variant was absent or duplicated.
     ReductionVariantOrder,
-    /// Reviewed flags did not appear in the canonical contract-v2 order.
+    /// Reviewed flags did not appear in the canonical contract-v3 order.
     ArgumentOrder,
     /// A contract-owned input path differed from its canonical repository path.
     InputPathMismatch(&'static str),
@@ -202,12 +194,11 @@ impl fmt::Display for CalibrationCliError {
             Self::UnsupportedReductionVariant(variant) => {
                 write!(formatter, "unsupported reduction variant {variant:?}")
             }
-            Self::ReductionVariantOrder => formatter.write_str(
-                "reduction variants must be exactly canonical-v1 then \
-                 fixed-contiguous-37-balanced-v1",
-            ),
+            Self::ReductionVariantOrder => {
+                formatter.write_str("reduction variants must be exactly canonical-v1")
+            }
             Self::ArgumentOrder => {
-                formatter.write_str("calibration flags must use canonical contract-v2 order")
+                formatter.write_str("calibration flags must use canonical contract-v3 order")
             }
             Self::InputPathMismatch(flag) => {
                 write!(
@@ -418,7 +409,7 @@ fn validate_absolute_input(value: &str, flag: &'static str) -> Result<(), Calibr
 mod tests {
     use super::{
         CalibrationCliError, GATE_MANIFEST_PATH, NATIVE_BUILD_ARGV, NATIVE_ENGINE_REVISION,
-        NATIVE_EXECUTABLE_FILENAME, PROMPTS_PATH, REQUIRED_REDUCTION_VARIANTS,
+        NATIVE_EXECUTABLE_FILENAME, PROMPTS_PATH, REQUIRED_REDUCTION_VARIANTS, ReductionVariant,
         parse_calibration_command,
     };
 
@@ -439,15 +430,19 @@ mod tests {
             "candidate-sidecar.safetensors",
             "--reduction-variant",
             "canonical-v1",
-            "--reduction-variant",
-            "fixed-contiguous-37-balanced-v1",
         ]
     }
 
     #[test]
-    fn contract_v2_constants_are_exact() {
-        assert_eq!(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v2");
+    fn contract_v3_constants_are_exact() {
+        assert_eq!(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v3");
         assert_eq!(NATIVE_EXECUTABLE_FILENAME, "rustinfer-native");
+        assert_eq!(
+            GATE_MANIFEST_PATH,
+            "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json"
+        );
+        assert_eq!(REQUIRED_REDUCTION_VARIANTS, [ReductionVariant::Canonical]);
+        assert_eq!(canonical_arguments().len(), 15);
         assert_eq!(
             NATIVE_BUILD_ARGV,
             [
@@ -509,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_reduction_substitution_or_reordering() {
+    fn rejects_flag_reordering_or_reduction_substitution() {
         let mut flag_order = canonical_arguments();
         flag_order.swap(1, 3);
         flag_order.swap(2, 4);
@@ -518,21 +513,20 @@ mod tests {
             Err(CalibrationCliError::ArgumentOrder)
         );
 
-        let mut reordered = canonical_arguments();
-        reordered[14] = "fixed-contiguous-37-balanced-v1";
-        reordered[16] = "canonical-v1";
-        assert_eq!(
-            parse_calibration_command(reordered),
-            Err(CalibrationCliError::ReductionVariantOrder)
-        );
-
         let mut unsupported = canonical_arguments();
-        unsupported[16] = "pretend-fixed-v1";
+        unsupported[14] = "fixed-contiguous-37-balanced-v1";
         assert_eq!(
             parse_calibration_command(unsupported),
             Err(CalibrationCliError::UnsupportedReductionVariant(
-                "pretend-fixed-v1".to_owned()
+                "fixed-contiguous-37-balanced-v1".to_owned()
             ))
+        );
+
+        let mut duplicated = canonical_arguments();
+        duplicated.extend(["--reduction-variant", "canonical-v1"]);
+        assert_eq!(
+            parse_calibration_command(duplicated),
+            Err(CalibrationCliError::ArgumentOrder)
         );
     }
 

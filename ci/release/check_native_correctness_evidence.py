@@ -73,7 +73,7 @@ MAX_SOURCE_MEMBER_BYTES = 2 * 1024 * 1024 * 1024
 MAX_SOURCE_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 MAX_SAFETENSORS_HEADER_BYTES = 32 * 1024 * 1024
 COPY_BLOCK_BYTES = 1024 * 1024
-CANDIDATE_BINARY_MARKERS = (
+CANDIDATE_BINARY_COMMON_MARKERS = (
     b"rustinfer-native",
     b"calibrate",
     b"--repository-root",
@@ -83,11 +83,13 @@ CANDIDATE_BINARY_MARKERS = (
     b"--manifest",
     b"--sidecar",
     b"--reduction-variant",
+)
+CANDIDATE_BINARY_MARKERS = (
+    *CANDIDATE_BINARY_COMMON_MARKERS,
     calibration.CALIBRATION_GATE_ID.encode("ascii"),
 )
 REQUIRED_VARIANTS = (
     "canonical-v1",
-    "fixed-contiguous-37-balanced-v1",
 )
 
 
@@ -272,6 +274,11 @@ def _bind_reviewed_oracle(
 def _require_passing_native_e0_report(report: Mapping[str, object]) -> None:
     """Require the complete promotion result, not merely a replay-valid report."""
 
+    if report.get("gate_id") != calibration.CALIBRATION_GATE_ID:
+        _fail(
+            "correctness-report.json.gate_id",
+            f"must be the active {calibration.CALIBRATION_GATE_ID!r} gate",
+        )
     if report.get("status") != "pass":
         _fail("correctness-report.json.status", "must be pass for evidence packaging")
     summary = report.get("summary")
@@ -279,7 +286,7 @@ def _require_passing_native_e0_report(report: Mapping[str, object]) -> None:
         _fail("correctness-report.json.summary", "must be an object")
     expected_summary: tuple[tuple[str, object], ...] = (
         ("case_count", 31),
-        ("candidate_variant_count", 2),
+        ("candidate_variant_count", 1),
         ("failure_count", 0),
         ("numeric_pass", True),
         ("semantic_pass", True),
@@ -299,7 +306,7 @@ def _require_passing_native_e0_report(report: Mapping[str, object]) -> None:
     if not isinstance(variants, dict) or set(variants) != set(REQUIRED_VARIANTS):
         _fail(
             "correctness-report.json.summary.variants",
-            "must contain exactly both reviewed reduction variants",
+            "must contain exactly the release-qualified reduction variant",
         )
     expected_variant_summary: tuple[tuple[str, object], ...] = (
         ("case_count", 31),
@@ -360,7 +367,7 @@ def _require_passing_native_e0_report(report: Mapping[str, object]) -> None:
         ):
             _fail(
                 f"{case_path}.variants",
-                "must contain exactly both reviewed reduction variants",
+                "must contain exactly the release-qualified reduction variant",
             )
         for variant_name in REQUIRED_VARIANTS:
             variant = case_variants[variant_name]
@@ -952,7 +959,8 @@ def _verify_manifest_sources(
         raise calibration.CalibrationError(
             "manifest source revision differs from preserved source archive"
         )
-    for name in calibration.SOURCE_NAMES:
+    source_names = calibration.source_names_for_manifest(manifest)
+    for name in source_names:
         source = manifest["provenance"]["sources"][name]
         path = (root / source["path"]).resolve()
         if root.resolve() != path and root.resolve() not in path.parents:
@@ -960,7 +968,10 @@ def _verify_manifest_sources(
         if calibration.sha256_file(path) != source["sha256"]:
             raise calibration.CalibrationError(f"source {name} SHA-256 differs from archive")
     gate_path = root / manifest["provenance"]["sources"]["gate_manifest"]["path"]
-    if calibration._load_json_object(gate_path, "correctness gate manifest") != calibration.gate_contract_document():
+    manifest_gate_id = str(manifest["contract"]["gate_id"])
+    if calibration._load_json_object(
+        gate_path, "correctness gate manifest"
+    ) != calibration.gate_contract_document(manifest_gate_id):
         raise calibration.CalibrationError(
             "language-neutral correctness gate manifest differs from tool"
         )
@@ -1051,9 +1062,13 @@ def _validate_candidate_binary(
         validate_calibration_binary(raw)
     except ReleaseContractError as error:
         _fail("candidate-executable", f"invalid Linux x86_64 native ELF: {error}")
+    required_markers = (
+        *CANDIDATE_BINARY_COMMON_MARKERS,
+        str(manifest["contract"]["gate_id"]).encode("ascii"),
+    )
     missing = [
         marker.decode("ascii")
-        for marker in CANDIDATE_BINARY_MARKERS
+        for marker in required_markers
         if marker not in raw
     ]
     if missing:

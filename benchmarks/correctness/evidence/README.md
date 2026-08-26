@@ -41,3 +41,9 @@ Raw replay bundle은
 삭제하거나 덮어쓰지 않는다. 재검증 명령은
 `tools/python/reference/CALIBRATION.md`의 `calibrate-validate-manifest`와
 `calibrate-validate-oracles` 절차를 따른다.
+
+V2 gate, matrix, manifests, sidecars와 report는 v3로 재작성하지 않는 frozen
+oracle lineage다. PR16의 별도 `smollm2-fp32-bf16-native-e0-v3` release gate는
+이 exact v2 oracle만 허용하고 `canonical-v1` candidate 하나를 검증한다.
+Fixed37 결과는 optimizer regression diagnostic으로 남지만 첫 release candidate
+승인 evidence가 아니다.

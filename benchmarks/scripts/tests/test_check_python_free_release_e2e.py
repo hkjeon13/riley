@@ -441,6 +441,34 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
             self.assertEqual({row["id"] for row in report["checks"]}, set(checker.CHECK_IDS))
             self.assertEqual(report["raw_evidence_sha256"], sha_bytes(fixture.raw_archive.read_bytes()))
 
+    def test_frozen_v2_golden_cannot_authorize_v3_release_e2e(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = E2EFixture(Path(directory))
+            old_gate = "smollm2-fp32-bf16-native-e0-v2"
+            correctness = json.loads(fixture.correctness_report.read_text())
+            correctness["gate_id"] = old_gate
+            fixture.correctness_report.write_bytes(json_bytes(correctness))
+            fixture.hashes["correctness"] = sha_bytes(
+                fixture.correctness_report.read_bytes()
+            )
+            golden = json.loads(fixture.golden.read_text())
+            golden["correctness_gate_id"] = old_gate
+            golden["correctness_report_sha256"] = fixture.hashes["correctness"]
+            fixture.golden.write_bytes(json_bytes(golden))
+            fixture.hashes["golden"] = sha_bytes(fixture.golden.read_bytes())
+            fixture.raw["model"]["correctness_gate_id"] = old_gate
+            fixture.raw["model"]["correctness_report_sha256"] = fixture.hashes[
+                "correctness"
+            ]
+            fixture.raw["model"]["correctness_golden_sha256"] = fixture.hashes[
+                "golden"
+            ]
+            fixture.write()
+
+            report, diagnostic = fixture.evaluate()
+            self.assertEqual(report["status"], "error")
+            self.assertIn("native E0 v3 gate", diagnostic)
+
     def test_packager_is_deterministic_and_create_only(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = E2EFixture(Path(directory))

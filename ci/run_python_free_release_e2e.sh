@@ -140,7 +140,7 @@ golden_schema=$(jq -er '.schema_version' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
 test "$golden_schema" = rustinfer.python-free-release-e2e-golden.v1
 jq -e 'keys == ["config_sha256","correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_aggregate_sha256","tokenizer_json_sha256","weights_sha256"]' \
     "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" >/dev/null
-test "$(jq -er '.correctness_gate_id' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v2
+test "$(jq -er '.correctness_gate_id' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v3
 test "$(jq -er '.correctness_report_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
 test "$(jq -er '.source_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.model_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_MODEL_REVISION"
@@ -148,7 +148,7 @@ test "$(jq -er '.config_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTIN
 test "$(jq -er '.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
 test "$(jq -er '.tokenizer_json_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
 test "$(jq -er '.tokenizer_aggregate_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
-test "$(jq -er '.gate_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = smollm2-fp32-bf16-native-e0-v2
+test "$(jq -er '.gate_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = smollm2-fp32-bf16-native-e0-v3
 test "$(jq -er '.status' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = pass
 test "$(jq -er '.bindings.candidate_git_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_SOURCE_REVISION"
 test "$(jq -er '.bindings.candidate_git_status_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$(printf '' | sha256sum | awk '{print $1}')"
@@ -478,7 +478,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     --arg weights_sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
     --arg tokenizer_aggregate_sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
     --arg tokenizer_json_sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
-    --arg correctness_gate_id smollm2-fp32-bf16-native-e0-v2 \
+    --arg correctness_gate_id smollm2-fp32-bf16-native-e0-v3 \
     --arg correctness_report_sha256 "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256" \
     --arg correctness_golden_sha256 "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
     --arg first_container_id "$first_container_id" --arg second_container_id "$second_container_id" \

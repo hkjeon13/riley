@@ -1,0 +1,222 @@
+{
+  "contract_version": "1.0.0",
+  "corpus": {
+    "binding": "ordered-id-text-category-language-target-boundary-behavior",
+    "expected_prompt_count": 31,
+    "source": "benchmarks/prompts.jsonl"
+  },
+  "gate_id": "smollm2-fp32-bf16-native-e0-v3",
+  "model": {
+    "config_sha256": "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843",
+    "eos_token_ids": [
+      0
+    ],
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "max_context_tokens": 8192,
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "tokenizer_files_sha256": {
+      "merges.txt": "0b54e8aa4e53d5383e2e4bc635a56b43f9647f7b13832d5d9ecd8f82dac4f510",
+      "special_tokens_map.json": "e786b595b9a23148bf1630df78d9037a048ea671e48bfd3549a1e3c233742bb3",
+      "tokenizer.json": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
+      "tokenizer_config.json": "4bb9af56a342753d39374f4016a16574cab299fe088e896f425ce3c433f61424",
+      "vocab.json": "82b84012e3add4d01d12ba14442026e49b8cbbaead1f79ecf3d919784f82dc79"
+    },
+    "tokenizer_sha256": "51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1"
+  },
+  "numeric": {
+    "comparison_scope": "each-full-tensor-per-prompt-per-candidate-variant",
+    "gate_aggregation": "worst-prompt-metric-and-all-prompts-must-pass",
+    "relative_error_denominator": "max(abs(fp32),1)",
+    "tensors": {
+      "final_log_probs": {
+        "candidate_sidecar_dtype": "float32",
+        "capture_cache_path": "off",
+        "definition": "full-vocabulary-fp32-log-softmax-of-final-logits",
+        "fp32_sidecar_dtype": "float32",
+        "pipeline_id": "log-softmax-fp32-v1",
+        "thresholds": {
+          "cosine_min": 0.9987779663298298,
+          "max_abs_max": 4.998420619964599,
+          "max_relative_max": 0.5767027348279953,
+          "mean_abs_max": 0.6007178144163239,
+          "mean_relative_max": 0.04668832837569344
+        }
+      },
+      "final_logits": {
+        "candidate_sidecar_dtype": "bfloat16",
+        "capture_cache_path": "off",
+        "definition": "full-vocabulary-last-valid-position-logits",
+        "fp32_sidecar_dtype": "float32",
+        "thresholds": {
+          "cosine_min": 0.9979035305495393,
+          "max_abs_max": 5.852936458587647,
+          "max_relative_max": 1.1707394897937775,
+          "mean_abs_max": 1.151280319263363,
+          "mean_relative_max": 0.13616598220459955
+        }
+      },
+      "first_layer_hidden": {
+        "candidate_sidecar_dtype": "bfloat16",
+        "capture_cache_path": "off",
+        "definition": "full-first-transformer-layer-output-all-valid-token-positions",
+        "fp32_sidecar_dtype": "float32",
+        "thresholds": {
+          "cosine_min": 0.999983706829855,
+          "max_abs_max": 0.3884272575378418,
+          "max_relative_max": 0.13578447438776492,
+          "mean_abs_max": 0.008509292567237658,
+          "mean_relative_max": 0.005414661057131772
+        }
+      }
+    },
+    "threshold_activation": {
+      "activation_evidence": "independent-replayed-passing-full-31-v2-corpus-report",
+      "calibration_evidence": {
+        "case_count": 31,
+        "failure_count": 12,
+        "gate_id": "smollm2-fp32-bf16-native-e0-v1",
+        "git_revision": "8ab7490bfdf9efd1d7c7d831204b8e67c0c7c5b9",
+        "report_gate_id": "smollm2-hf-fp32-bf16-calibration-v1",
+        "report_path": "benchmarks/correctness/evidence/smollm2-fp32-bf16-native-e0-v1-failed-oracle-report.json",
+        "observed_aggregate_metrics": {
+          "final_log_probs": {
+            "cosine_similarity": 0.998937362025939,
+            "max_abs": 4.346452713012695,
+            "max_relative": 0.5014806389808655,
+            "mean_abs": 0.5223633168837599,
+            "mean_relative": 0.04059854641364647
+          },
+          "final_logits": {
+            "cosine_similarity": 0.9981769830865559,
+            "max_abs": 5.089509963989258,
+            "max_relative": 1.0180343389511108,
+            "mean_abs": 1.0011133210985765,
+            "mean_relative": 0.11840520191704308
+          },
+          "first_layer_hidden": {
+            "cosine_similarity": 0.9999858320259609,
+            "max_abs": 0.33776283264160156,
+            "max_relative": 0.11807345598936081,
+            "mean_abs": 0.007399384841076224,
+            "mean_relative": 0.004708400919245019
+          }
+        },
+        "report_sha256": "ca13c033af2ddce5cfbf280fc1f4d2f95d0cba0e242bda8c59f2592946cec726",
+        "report_size_bytes": 48625,
+        "report_status": "fail",
+        "semantic_self_check_pass": true
+      },
+      "failure_policy": "gate-fail-requires-version-bump-no-data-dependent-adjustment",
+      "headroom_formula": "upper=observed*1.15;cosine_min=1-(1-observed)*1.15",
+      "headroom_policy": "uniform-15-percent-outward-from-observed-aggregate",
+      "predeclaration_basis": "reviewed-failing-full-31-v1-calibration",
+      "required_oracle_case_count": 31,
+      "required_oracle_gate_id": "smollm2-hf-fp32-bf16-calibration-v2",
+      "required_oracle_report_kind": "hf-oracle-calibration",
+      "required_oracle_report_status": "pass",
+      "status": "predeclared-requires-passing-full-corpus-oracle-report"
+    }
+  },
+  "provenance": {
+    "candidate_execution_bindings": [
+      "bundled-executable-sha256",
+      "clean-git-revision",
+      "cargo-lock-sha256",
+      "build-argv",
+      "capture-argv"
+    ],
+    "candidate_git_dirty": false,
+    "candidate_runtime_dependency_class": "native-production",
+    "e0_result_acceptance": {
+      "approval_command": "rustinfer-reference calibrate-validate-report",
+      "future_activation": "raw-evidence-bundle-replay-required",
+      "pr01_native_lane_status": "contract-only-reject-e0-success",
+      "required_bundle_members": [
+        "fp32-manifest-and-sidecar",
+        "bf16-manifest-and-sidecar",
+        "passing-oracle-calibration-report",
+        "candidate-manifest-sidecar-and-executable",
+        "correctness-report"
+      ]
+    },
+    "required_hash_bindings": [
+      "candidate-manifest",
+      "matrix",
+      "prompts",
+      "model-config",
+      "model-weights",
+      "tokenizer-artifacts",
+      "dependency-locks",
+      "git-revisions",
+      "environment",
+      "lane-manifests"
+    ],
+    "result_correctness_report_sha256": "sha256-of-raw-report-file-bytes"
+  },
+  "reduction_variants": {
+    "all_required_variants_must_pass": true,
+    "alternate_profile_definition": {
+      "accumulator_dtype_policy": "same-as-canonical-operator-contract",
+      "applies_to": "all-floating-point-reductions-contributing-to-captured-tensors-or-greedy-logits",
+      "balanced_merge_order": "merge-adjacent-chunk-partials-by-ascending-index-each-level-carry-unpaired-last",
+      "chunk_elements": 37,
+      "chunk_local_order": "left-fold-in-logical-index-order",
+      "included_reductions": [
+        "matmul-dot-product-sums",
+        "rmsnorm-sum-of-squares",
+        "attention-softmax-max-and-sum",
+        "final-log-softmax-max-and-sum"
+      ],
+      "reduction_axis_order": "logical-reduction-index-ascending",
+      "remainder_policy": "single-short-final-chunk"
+    },
+    "each_candidate_variant_compared_independently": true,
+    "oracle": {
+      "chunk_elements": null,
+      "merge_order": "runtime-default",
+      "partition_kind": "hf-eager-runtime-default",
+      "remainder_policy": "runtime-default",
+      "variant_id": "hf-eager-default-v1"
+    },
+    "required_candidate": [
+      {
+        "chunk_elements": null,
+        "merge_order": "implementation-default",
+        "partition_kind": "production-default",
+        "remainder_policy": "implementation-default",
+        "variant_id": "canonical-v1"
+      }
+    ]
+  },
+  "roles": {
+    "bf16_oracle": "semantic-path-oracle-and-numeric-calibration",
+    "fp32_oracle": "numeric-only",
+    "native_candidate": "numeric-vs-fp32-and-semantic-vs-bf16"
+  },
+  "semantic": {
+    "cross_cache_exact_window": 16,
+    "divergence_step_index_origin": 0,
+    "generated_token_ids_comparison": "ordered-exact",
+    "generation_steps": 32,
+    "path_matching": {
+      "native-cache-off": "hf-bf16-cache-off",
+      "native-cache-on": "hf-bf16-cache-on"
+    },
+    "top_1_comparison": "ordered-exact",
+    "top_k": {
+      "comparison": "set-exact",
+      "k": 10
+    }
+  },
+  "lineage": {
+    "predecessor_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+    "change_scope": "required-candidate-reduction-variants-only",
+    "thresholds_changed": false,
+    "oracle_manifest_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+    "oracle_calibration_gate_id": "smollm2-hf-fp32-bf16-calibration-v2",
+    "excluded_candidate_variants": [
+      "fixed-contiguous-37-balanced-v1"
+    ]
+  }
+}

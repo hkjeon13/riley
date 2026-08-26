@@ -751,7 +751,7 @@ class CandidateFixture:
                 "manifest_sha256": digest(b"soak manifest"),
                 "binding_sha256": digest(b"soak binding"),
                 "trusted_correctness": {
-                    "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v2",
+                    "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v3",
                     "e2e_correctness_golden_sha256": (
                         self.correctness_golden_sha256
                     ),

@@ -91,7 +91,7 @@ CHECK_IDS = (
     "prefill", "decode", "greedy_golden", "sampling", "streaming", "cancellation",
     "graceful_shutdown",
 )
-CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v2"
+CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v3"
 MODEL_ID = "HuggingFaceTB/SmolLM2-135M"
 MODEL_REVISION = "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
 MODEL_CONFIG_SHA256 = "1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843"
@@ -573,7 +573,7 @@ def _validate_golden(document: Mapping[str, Any]) -> dict[str, Any]:
 
 def _validate_correctness_report(document: Mapping[str, Any]) -> dict[str, str]:
     if document.get("gate_id") != CORRECTNESS_GATE or document.get("status") != "pass":
-        _fail("correctness report", "must be the passing native E0 v2 gate")
+        _fail("correctness report", "must be the passing native E0 v3 gate")
     bindings = document.get("bindings")
     if not isinstance(bindings, dict):
         _fail("correctness report.bindings", "must be an object")

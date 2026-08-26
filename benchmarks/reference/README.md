@@ -19,6 +19,12 @@ case와 cache on/off 16-token exact window를 포함하며, 파일 SHA-256은
 `709612e45d735888b240951d51b979b7ded1e87ef6cae9296f0b1250647255d2`이다.
 두 checksum은 파일을 이동하거나 복사한 뒤에도 반드시 다시 검증한다.
 
+이 fixture와 그 v2 gate/matrix binding은 역사적 oracle trust anchor로 동결한다.
+PR16의 `smollm2-fp32-bf16-native-e0-v3` candidate gate는 임계값이나 oracle
+bytes를 다시 이름 붙이지 않고, v2 lineage를 명시한 채 canonical candidate만
+비교한다. 따라서 이 파일은 v3 candidate evidence가 아니며 수정·재바인딩하지
+않는다.
+
 PR 12의 Qwen2 호환성 artifact는
 `qwen2.5-0.5b-instruct-bf16.json`이다. 고정 revision
 `7ae557604adf67be50417f59c2c2f167def9a775`의
