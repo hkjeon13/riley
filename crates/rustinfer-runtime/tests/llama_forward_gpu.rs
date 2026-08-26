@@ -1093,9 +1093,8 @@ fn pinned_smollm2_online_prefill_matches_reference_without_score_storage() -> Te
     optimized.download_last_logits(&mut optimized_last_logits, &mut stream)?;
     assert_bf16_logits_are_finite(&optimized_last_logits);
     assert_eq!(
-        &optimized_prefix_source[..row_bytes],
-        &reference_logits[..row_bytes],
-        "the first causal row must remain byte-exact across attention backends"
+        optimized_prefix_source, reference_logits,
+        "full-causal no-HBM forward must be byte-exact with materialized attention"
     );
 
     let reference_metrics = numeric_metrics(&optimized_last_logits, &reference_last_logits);

@@ -30,7 +30,7 @@ const MAXIMUM_ONLINE_GRID_BATCH: u64 = 65_535;
 const MAXIMUM_ONLINE_GRID_HEADS: u64 = 65_535;
 const MAXIMUM_ONLINE_SEQUENCE_TILES: u64 = i32::MAX as u64;
 const IMPLEMENTATION_VERSION: &str = "1";
-const ONLINE_IMPLEMENTATION_VERSION: &str = "2";
+const ONLINE_IMPLEMENTATION_VERSION: &str = "3";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
     env!("RUSTINFER_CUDA_COMPILED_ARCHITECTURES"),
@@ -86,7 +86,7 @@ pub enum AttentionMask {
 pub enum AttentionPreference {
     /// Require the staged-BF16 native materialized reference.
     Reference,
-    /// Prefer the no-HBM two-score-pass native backend and fall back cold.
+    /// Prefer the no-HBM native backend and fall back cold.
     Optimized,
 }
 
@@ -95,7 +95,8 @@ pub enum AttentionPreference {
 pub enum AttentionBackend {
     /// Four-stage QK, mask, softmax, and AV with a caller score workspace.
     MaterializedReference,
-    /// Online F32 normalizer plus BF16-probability AV without an HBM score matrix.
+    /// No-HBM canonical backend: materialized-order exact for full causal and
+    /// an online F32 normalizer for causal-local.
     Online,
     /// Materialized fixed37 QK, softmax, and AV with canonical score staging.
     Fixed37Materialized,
@@ -780,7 +781,8 @@ impl PreparedPrefillAttention {
             AttentionPreference::Optimized => {
                 let online_reason = if !availability.online {
                     AttentionSelectionReason::OptimizedUnavailableFallback
-                } else if !ONLINE_CAPABILITY.supports_compute_capability(compute_capability) {
+                } else if !ONLINE_CAUSAL_CAPABILITY.supports_compute_capability(compute_capability)
+                {
                     AttentionSelectionReason::UnsupportedComputeCapabilityFallback
                 } else if request.head_size != ONLINE_HEAD_SIZE {
                     AttentionSelectionReason::UnsupportedHeadSizeFallback
@@ -1317,7 +1319,7 @@ const REFERENCE_CAPABILITY: AttentionCapability = AttentionCapability {
     maximum_reduction_elements: None,
 };
 
-const ONLINE_CAPABILITY: AttentionCapability = AttentionCapability {
+const ONLINE_CAUSAL_CAPABILITY: AttentionCapability = AttentionCapability {
     implementation_id: ONLINE_IMPLEMENTATION_ID,
     implementation_version: ONLINE_IMPLEMENTATION_VERSION,
     native_dependency: NATIVE_DEPENDENCY,
@@ -1330,18 +1332,28 @@ const ONLINE_CAPABILITY: AttentionCapability = AttentionCapability {
     compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
     head_size: Some(ONLINE_HEAD_SIZE),
     causal: true,
-    causal_local: true,
-    minimum_local_window_size: Some(0),
+    causal_local: false,
+    minimum_local_window_size: None,
     variable_sequence: true,
     non_contiguous: false,
     cuda_graph_capture: false,
-    online_reduction: true,
+    // Three score passes reproduce the materialized reduction order without
+    // materializing its HBM score matrix.
+    online_reduction: false,
     partial_state_merge: false,
     score_materialization: AttentionScoreMaterialization::None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
     reduction_chunk_elements: None,
     maximum_reduction_elements: None,
+};
+
+const ONLINE_LOCAL_CAPABILITY: AttentionCapability = AttentionCapability {
+    causal: false,
+    causal_local: true,
+    minimum_local_window_size: Some(0),
+    online_reduction: true,
+    ..ONLINE_CAUSAL_CAPABILITY
 };
 
 const FIXED37_MATERIALIZED_CAPABILITY: AttentionCapability = AttentionCapability {
@@ -1409,7 +1421,10 @@ fn prepare_selection(
 ) -> CudaResult<PreparedPrefillAttention> {
     let capability = match backend {
         AttentionBackend::MaterializedReference => REFERENCE_CAPABILITY,
-        AttentionBackend::Online => ONLINE_CAPABILITY,
+        AttentionBackend::Online => match request.mask {
+            AttentionMask::Causal => ONLINE_CAUSAL_CAPABILITY,
+            AttentionMask::CausalLocal { .. } => ONLINE_LOCAL_CAPABILITY,
+        },
         AttentionBackend::Fixed37Materialized => FIXED37_MATERIALIZED_CAPABILITY,
         AttentionBackend::Fixed37TwoPass => FIXED37_TWO_PASS_CAPABILITY,
     };
@@ -1902,9 +1917,9 @@ mod tests {
         assert!(architecture_set_supports("80", (10, 0)));
         assert!(architecture_set_supports("90-real;89-real", (8, 9)));
         assert_eq!(minimum_architecture("90-real;89-real"), (8, 9));
-        assert!(!ONLINE_CAPABILITY.supports_compute_capability((7, 9)));
+        assert!(!ONLINE_CAUSAL_CAPABILITY.supports_compute_capability((7, 9)));
         assert!(compute_capability_at_least(
-            ONLINE_CAPABILITY.minimum_compute_capability(),
+            ONLINE_CAUSAL_CAPABILITY.minimum_compute_capability(),
             MINIMUM_HARDWARE_COMPUTE_CAPABILITY
         ));
     }
@@ -1997,9 +2012,23 @@ mod tests {
             CUDA_COMPILED_ARCHITECTURES
         );
         assert!(capability.supports_compute_capability(trace.compute_capability()));
-        assert!(capability.uses_online_reduction());
-        assert_eq!(capability.minimum_local_window_size(), Some(0));
+        assert!(capability.supports_causal());
+        assert!(!capability.supports_causal_local());
+        assert!(!capability.uses_online_reduction());
+        assert_eq!(capability.minimum_local_window_size(), None);
         assert!(!capability.supports_cuda_graph_capture());
+
+        let local = select_for_test(
+            request(AttentionMask::CausalLocal { window: 0 }),
+            AttentionPreference::Optimized,
+            AttentionBackendAvailability::new(true, true),
+        )
+        .unwrap();
+        let local_capability = local.capability();
+        assert!(!local_capability.supports_causal());
+        assert!(local_capability.supports_causal_local());
+        assert!(local_capability.uses_online_reduction());
+        assert_eq!(local_capability.minimum_local_window_size(), Some(0));
     }
 
     #[test]

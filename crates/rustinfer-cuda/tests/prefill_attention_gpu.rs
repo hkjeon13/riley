@@ -356,6 +356,102 @@ fn run_online_case(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn run_exact_causal_pair(
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    staging: &mut CudaPinnedHostBuffer,
+    batch_size: usize,
+    sequence: usize,
+    query_heads: usize,
+    key_value_heads: usize,
+    query_bytes: &[u8],
+    key_bytes: &[u8],
+    value_bytes: &[u8],
+) -> TestResult<Vec<u8>> {
+    let query = upload(context, stream, staging, query_bytes)?;
+    let key = upload(context, stream, staging, key_bytes)?;
+    let value = upload(context, stream, staging, value_bytes)?;
+    let output_bytes = u64::try_from(query_bytes.len())?;
+    let mut reference_output = context.allocate_device_buffer(output_bytes)?;
+    let mut online_output = context.allocate_device_buffer(output_bytes)?;
+    let request = PrefillAttentionRequest::new(
+        u64::try_from(batch_size)?,
+        u64::try_from(sequence)?,
+        u64::try_from(query_heads)?,
+        u64::try_from(key_value_heads)?,
+        u64::try_from(D)?,
+        SCALE,
+        AttentionMask::Causal,
+    );
+    let reference = PreparedPrefillAttention::select(
+        context,
+        request,
+        AttentionPreference::Reference,
+        AttentionBackendAvailability::linked(),
+    )?;
+    let online = PreparedPrefillAttention::select(
+        context,
+        request,
+        AttentionPreference::Optimized,
+        AttentionBackendAvailability::linked(),
+    )?;
+    assert_eq!(reference.backend(), AttentionBackend::MaterializedReference);
+    assert_eq!(online.backend(), AttentionBackend::Online);
+    assert!(!online.capability().uses_online_reduction());
+    assert_eq!(online.workspace_bytes(), 0);
+    let mut workspace = context.allocate_device_buffer(reference.workspace_bytes())?;
+
+    let before = context.allocation_stats()?;
+    {
+        let workspace_bytes = workspace.byte_len();
+        let mut params = PrefillAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+            value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+            output: CudaBufferSpanMut::new(
+                &mut reference_output,
+                CudaDType::BF16,
+                0,
+                output_bytes,
+            )?,
+            workspace: Some(CudaBufferSpanMut::new(
+                &mut workspace,
+                CudaDType::BF16,
+                0,
+                workspace_bytes,
+            )?),
+        };
+        reference.execute(&mut params, stream)?;
+    }
+    {
+        let mut params = PrefillAttentionParams {
+            query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
+            key: CudaBufferSpan::new(&key, CudaDType::BF16, 0, key.byte_len())?,
+            value: CudaBufferSpan::new(&value, CudaDType::BF16, 0, value.byte_len())?,
+            output: CudaBufferSpanMut::new(&mut online_output, CudaDType::BF16, 0, output_bytes)?,
+            workspace: None,
+        };
+        online.execute(&mut params, stream)?;
+    }
+    assert_eq!(context.allocation_stats()?, before);
+
+    let reference_bytes = download(context, stream, &mut reference_output)?;
+    let online_bytes = download(context, stream, &mut online_output)?;
+    assert_eq!(
+        online_bytes, reference_bytes,
+        "B={batch_size} S={sequence} QH={query_heads} KVH={key_value_heads} full-causal output differs from the materialized reference"
+    );
+
+    workspace.close()?;
+    online_output.close()?;
+    reference_output.close()?;
+    value.close()?;
+    key.close()?;
+    query.close()?;
+    Ok(online_bytes)
+}
+
 fn zero_score_values(batch_size: usize, sequence: usize, key_value_heads: usize) -> Vec<f32> {
     let mut values: Vec<f32> = (0..batch_size * sequence * key_value_heads * D)
         .map(|index| (f32::from(u8::try_from((index * 13 + 7) % 31).unwrap_or(0)) - 15.0) * 0.03125)
@@ -649,7 +745,9 @@ fn online_prefill_covers_batch_mha_gqa_and_tile_boundaries_without_allocating() 
         (1, 32, 4, 4),
         (1, 33, 6, 2),
     ] {
-        run_online_case(
+        let (query, key, value) =
+            deterministic_inputs(batch, sequence, query_heads, key_value_heads);
+        let output = run_exact_causal_pair(
             &context,
             &mut stream,
             &mut staging,
@@ -657,9 +755,95 @@ fn online_prefill_covers_batch_mha_gqa_and_tile_boundaries_without_allocating() 
             sequence,
             query_heads,
             key_value_heads,
-            AttentionMask::Causal,
+            &encode_bf16(&query),
+            &encode_bf16(&key),
+            &encode_bf16(&value),
         )?;
+        assert_eq!(output.len(), batch * sequence * query_heads * D * 2);
     }
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "requires the remote CUDA GPU on server-4096"]
+fn full_causal_exact_path_matches_reference_special_value_poisoning() -> TestResult {
+    let batch_size = 1;
+    let sequence = 2;
+    let query_heads = 1;
+    let key_value_heads = 1;
+    let (context, mut stream) = first_context()?;
+    let mut staging = context.allocate_pinned_host_buffer(1 << 20)?;
+
+    let query = vec![1.0_f32; batch_size * sequence * query_heads * D];
+    let mut key = vec![0.0_f32; batch_size * sequence * key_value_heads * D];
+    let value = vec![0.5_f32; batch_size * sequence * key_value_heads * D];
+    key[kv_index(sequence, key_value_heads, 0, 1, 0, 0)] = f32::NAN;
+    let future_nan = run_exact_causal_pair(
+        &context,
+        &mut stream,
+        &mut staging,
+        batch_size,
+        sequence,
+        query_heads,
+        key_value_heads,
+        &encode_bf16(&query),
+        &encode_bf16(&key),
+        &encode_bf16(&value),
+    )?;
+    assert!(
+        decode_bf16(&future_nan[..D * 2])
+            .into_iter()
+            .all(f32::is_nan),
+        "a future masked NaN score must poison the first reference row"
+    );
+
+    key.fill(0.0);
+    key[kv_index(sequence, key_value_heads, 0, 1, 0, 0)] = f32::INFINITY;
+    let future_infinity = run_exact_causal_pair(
+        &context,
+        &mut stream,
+        &mut staging,
+        batch_size,
+        sequence,
+        query_heads,
+        key_value_heads,
+        &encode_bf16(&query),
+        &encode_bf16(&key),
+        &encode_bf16(&value),
+    )?;
+    assert!(
+        decode_bf16(&future_infinity[..D * 2])
+            .into_iter()
+            .all(f32::is_nan),
+        "a future masked positive-infinity maximum must use reference NaN normalization"
+    );
+
+    key.fill(0.0);
+    let mut infinite_value = value;
+    for depth in 0..D {
+        infinite_value[kv_index(sequence, key_value_heads, 0, 1, 0, depth)] = f32::INFINITY;
+    }
+    let masked_infinity = run_exact_causal_pair(
+        &context,
+        &mut stream,
+        &mut staging,
+        batch_size,
+        sequence,
+        query_heads,
+        key_value_heads,
+        &encode_bf16(&query),
+        &encode_bf16(&key),
+        &encode_bf16(&infinite_value),
+    )?;
+    assert!(
+        decode_bf16(&masked_infinity[..D * 2])
+            .into_iter()
+            .all(f32::is_nan),
+        "reference AV must evaluate zero-probability times infinite future values"
+    );
+
     staging.close()?;
     stream.close()?;
     close_context(context)
@@ -934,24 +1118,16 @@ fn reference_and_online_match_target_gqa_at_s128() -> TestResult {
     }
     assert_eq!(context.allocation_stats()?, before);
 
-    let reference_values = decode_bf16(&download(&context, &mut stream, &mut reference_output)?);
-    let online_values = decode_bf16(&download(&context, &mut stream, &mut online_output)?);
-    let mut dot = 0.0_f64;
-    let mut reference_norm = 0.0_f64;
-    let mut online_norm = 0.0_f64;
-    let mut maximum_absolute = 0.0_f32;
-    for (&reference, &online) in reference_values.iter().zip(&online_values) {
-        maximum_absolute = maximum_absolute.max((reference - online).abs());
-        dot += f64::from(reference) * f64::from(online);
-        reference_norm += f64::from(reference) * f64::from(reference);
-        online_norm += f64::from(online) * f64::from(online);
-    }
-    let cosine = dot / (reference_norm.sqrt() * online_norm.sqrt());
+    let reference_bytes = download(&context, &mut stream, &mut reference_output)?;
+    let online_bytes = download(&context, &mut stream, &mut online_output)?;
     println!(
-        "pr08-prefill-parity B={batch_size} S={sequence} QH={query_heads} KVH={key_value_heads} D={D} cosine={cosine:.12} max_abs={maximum_absolute:.9}"
+        "pr16-prefill-exact-parity B={batch_size} S={sequence} QH={query_heads} KVH={key_value_heads} D={D} bytes={} byte_exact=true",
+        reference_bytes.len(),
     );
-    assert!(cosine >= 0.999);
-    assert!(maximum_absolute <= 0.125);
+    assert_eq!(
+        online_bytes, reference_bytes,
+        "full-causal no-HBM output must be byte-exact with the materialized reference"
+    );
 
     workspace.close()?;
     online_output.close()?;

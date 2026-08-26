@@ -13,7 +13,10 @@ constexpr uint32_t kThreadsPerBlock = kWarpSize * kWarpsPerBlock;
 constexpr uint32_t kHeadSize = 64;
 constexpr uint32_t kKeyTileSize = 32;
 constexpr uint32_t kKeyTileElements = kKeyTileSize * kHeadSize;
+constexpr uint32_t kQueryTileElements = kWarpsPerBlock * kHeadSize;
+constexpr uint32_t kScoreTileElements = kWarpsPerBlock * kKeyTileSize;
 constexpr uint32_t kFullWarpMask = 0xffffffffU;
+constexpr uint32_t kCausalMaskBf16AsF32Bits = 0xff7f0000U;
 
 static_assert(kThreadsPerBlock == 256,
               "online prefill launch geometry changed");
@@ -102,6 +105,247 @@ __device__ __forceinline__ float accumulate_staged_probability(
   // Preserve the prior online path's zero-weight handling for infinite values.
   return probability == 0.0F ? accumulator
                              : fmaf(probability, value, accumulator);
+}
+
+__device__ __forceinline__ __nv_bfloat16 reference_staged_causal_score(
+    const __nv_bfloat16* query_row,
+    const __nv_bfloat16* transposed_key_tile, uint32_t key_offset,
+    float scale, uint64_t query_token, uint64_t key_token) {
+  float dot_product = 0.0F;
+#pragma unroll 1
+  for (uint32_t depth = 0; depth < kHeadSize; ++depth) {
+    dot_product = fmaf(
+        __bfloat162float(query_row[depth]),
+        __bfloat162float(
+            transposed_key_tile[depth * kKeyTileSize + key_offset]),
+        dot_product);
+  }
+  const __nv_bfloat16 staged_dot = __float2bfloat16_rn(dot_product);
+  const __nv_bfloat16 scaled = __float2bfloat16_rn(
+      __bfloat162float(staged_dot) * scale);
+  const float mask = key_token > query_token
+                         ? __uint_as_float(kCausalMaskBf16AsF32Bits)
+                         : 0.0F;
+  return __float2bfloat16_rn(__bfloat162float(scaled) + mask);
+}
+
+__global__ __launch_bounds__(kThreadsPerBlock)
+void reference_exact_causal_bf16_gqa_prefill(
+    const __nv_bfloat16* query, const __nv_bfloat16* key,
+    const __nv_bfloat16* value, __nv_bfloat16* output,
+    uint64_t token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  __shared__ __nv_bfloat16 query_tile[kQueryTileElements];
+  // QK lanes own keys, so transpose K to make each depth load contiguous
+  // across a warp. AV lanes own depths, so V remains row-major by key.
+  __shared__ __nv_bfloat16 key_tile[kKeyTileElements];
+  __shared__ __nv_bfloat16 value_tile[kKeyTileElements];
+  __shared__ __nv_bfloat16 score_tile[kScoreTileElements];
+
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint64_t batch = blockIdx.z;
+  const uint64_t query_head = blockIdx.y;
+  const uint64_t query_tile_start =
+      static_cast<uint64_t>(blockIdx.x) * kWarpsPerBlock;
+  const uint64_t query_token = query_tile_start + warp;
+  const bool active = query_token < token_count;
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint32_t query_row = warp * kHeadSize;
+  const uint32_t score_row = warp * kKeyTileSize;
+
+  if (active) {
+    const uint64_t query_base =
+        ((batch * token_count + query_token) * query_head_count +
+         query_head) *
+        kHeadSize;
+    query_tile[query_row + lane] = query[query_base + lane];
+    query_tile[query_row + lane + kWarpSize] =
+        query[query_base + lane + kWarpSize];
+  } else {
+    query_tile[query_row + lane] = __float2bfloat16_rn(0.0F);
+    query_tile[query_row + lane + kWarpSize] =
+        __float2bfloat16_rn(0.0F);
+  }
+  __syncthreads();
+
+  float maximum = -CUDART_INF_F;
+  bool has_nan = false;
+
+  // Pass one reproduces the materialized backend's serial D=64 QK fold,
+  // staged BF16 scale/mask, and logical-key-order maximum/NaN scan. Future
+  // masked scores are evaluated because the reference evaluates them too.
+  for (uint64_t key_tile_start = 0; key_tile_start < token_count;
+       key_tile_start += kKeyTileSize) {
+    const uint64_t remaining_keys = token_count - key_tile_start;
+    const uint32_t key_tile_count = static_cast<uint32_t>(
+        remaining_keys < kKeyTileSize ? remaining_keys : kKeyTileSize);
+    const uint64_t tile_elements =
+        static_cast<uint64_t>(key_tile_count) * kHeadSize;
+    for (uint64_t tile_index = threadIdx.x; tile_index < tile_elements;
+         tile_index += kThreadsPerBlock) {
+      const uint32_t key_offset =
+          static_cast<uint32_t>(tile_index / kHeadSize);
+      const uint32_t depth =
+          static_cast<uint32_t>(tile_index % kHeadSize);
+      const uint64_t key_token = key_tile_start + key_offset;
+      const uint64_t key_index =
+          ((batch * token_count + key_token) * key_value_head_count +
+           key_value_head) *
+              kHeadSize +
+          depth;
+      key_tile[depth * kKeyTileSize + key_offset] = key[key_index];
+    }
+    __syncthreads();
+
+    if (active) {
+      if (lane < key_tile_count) {
+        const uint64_t key_token = key_tile_start + lane;
+        score_tile[score_row + lane] = reference_staged_causal_score(
+            &query_tile[query_row], key_tile, lane, scale, query_token,
+            key_token);
+      }
+      __syncwarp();
+      if (lane == 0) {
+        for (uint32_t key_offset = 0; key_offset < key_tile_count;
+             ++key_offset) {
+          const float score =
+              __bfloat162float(score_tile[score_row + key_offset]);
+          has_nan = has_nan || isnan(score);
+          maximum = fmaxf(maximum, score);
+        }
+      }
+    }
+    __syncthreads();
+  }
+
+  maximum = __shfl_sync(kFullWarpMask, maximum, 0);
+  has_nan = __shfl_sync(kFullWarpMask, has_nan ? 1U : 0U, 0) != 0;
+  float denominator = 0.0F;
+
+  // Pass two repeats the exact staged scores and then performs the reference
+  // denominator's left fold in ascending logical-key order.
+  for (uint64_t key_tile_start = 0; key_tile_start < token_count;
+       key_tile_start += kKeyTileSize) {
+    const uint64_t remaining_keys = token_count - key_tile_start;
+    const uint32_t key_tile_count = static_cast<uint32_t>(
+        remaining_keys < kKeyTileSize ? remaining_keys : kKeyTileSize);
+    const uint64_t tile_elements =
+        static_cast<uint64_t>(key_tile_count) * kHeadSize;
+    for (uint64_t tile_index = threadIdx.x; tile_index < tile_elements;
+         tile_index += kThreadsPerBlock) {
+      const uint32_t key_offset =
+          static_cast<uint32_t>(tile_index / kHeadSize);
+      const uint32_t depth =
+          static_cast<uint32_t>(tile_index % kHeadSize);
+      const uint64_t key_token = key_tile_start + key_offset;
+      const uint64_t key_index =
+          ((batch * token_count + key_token) * key_value_head_count +
+           key_value_head) *
+              kHeadSize +
+          depth;
+      key_tile[depth * kKeyTileSize + key_offset] = key[key_index];
+    }
+    __syncthreads();
+
+    if (active && !has_nan) {
+      if (lane < key_tile_count) {
+        const uint64_t key_token = key_tile_start + lane;
+        score_tile[score_row + lane] = reference_staged_causal_score(
+            &query_tile[query_row], key_tile, lane, scale, query_token,
+            key_token);
+      }
+      __syncwarp();
+      if (lane == 0) {
+        for (uint32_t key_offset = 0; key_offset < key_tile_count;
+             ++key_offset) {
+          const float score =
+              __bfloat162float(score_tile[score_row + key_offset]);
+          denominator += expf(score - maximum);
+        }
+      }
+    }
+    __syncthreads();
+  }
+
+  denominator = __shfl_sync(kFullWarpMask, denominator, 0);
+  float accumulator_low = 0.0F;
+  float accumulator_high = 0.0F;
+
+  // Pass three stages the normalized probabilities to BF16, then performs
+  // unconditional logical-key-order AV FMAs just like the materialized path.
+  for (uint64_t key_tile_start = 0; key_tile_start < token_count;
+       key_tile_start += kKeyTileSize) {
+    const uint64_t remaining_keys = token_count - key_tile_start;
+    const uint32_t key_tile_count = static_cast<uint32_t>(
+        remaining_keys < kKeyTileSize ? remaining_keys : kKeyTileSize);
+    const uint64_t tile_elements =
+        static_cast<uint64_t>(key_tile_count) * kHeadSize;
+    for (uint64_t tile_index = threadIdx.x; tile_index < tile_elements;
+         tile_index += kThreadsPerBlock) {
+      const uint32_t key_offset =
+          static_cast<uint32_t>(tile_index / kHeadSize);
+      const uint32_t depth =
+          static_cast<uint32_t>(tile_index % kHeadSize);
+      const uint64_t key_token = key_tile_start + key_offset;
+      const uint64_t key_value_index =
+          ((batch * token_count + key_token) * key_value_head_count +
+           key_value_head) *
+              kHeadSize +
+          depth;
+      key_tile[depth * kKeyTileSize + key_offset] = key[key_value_index];
+      value_tile[key_offset * kHeadSize + depth] =
+          value[key_value_index];
+    }
+    __syncthreads();
+
+    if (active) {
+      if (lane < key_tile_count) {
+        __nv_bfloat16 probability;
+        if (has_nan) {
+          probability = __float2bfloat16_rn(CUDART_NAN_F);
+        } else {
+          const uint64_t key_token = key_tile_start + lane;
+          const float score = __bfloat162float(
+              reference_staged_causal_score(
+                  &query_tile[query_row], key_tile, lane, scale,
+                  query_token, key_token));
+          probability = __float2bfloat16_rn(
+              expf(score - maximum) / denominator);
+        }
+        score_tile[score_row + lane] = probability;
+      }
+      __syncwarp();
+      for (uint32_t key_offset = 0; key_offset < key_tile_count;
+           ++key_offset) {
+        const float probability =
+            __bfloat162float(score_tile[score_row + key_offset]);
+        accumulator_low = fmaf(
+            probability,
+            __bfloat162float(
+                value_tile[key_offset * kHeadSize + lane]),
+            accumulator_low);
+        accumulator_high = fmaf(
+            probability,
+            __bfloat162float(value_tile[
+                key_offset * kHeadSize + lane + kWarpSize]),
+            accumulator_high);
+      }
+    }
+    __syncthreads();
+  }
+
+  if (active) {
+    const uint64_t output_base =
+        ((batch * token_count + query_token) * query_head_count +
+         query_head) *
+        kHeadSize;
+    output[output_base + lane] =
+        __float2bfloat16_rn(accumulator_low);
+    output[output_base + lane + kWarpSize] =
+        __float2bfloat16_rn(accumulator_high);
+  }
 }
 
 __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
@@ -292,11 +536,22 @@ cudaError_t rustinfer_cuda_attention_online::launch_bf16_gqa_prefill(
   const dim3 grid(static_cast<uint32_t>(query_tile_count),
                   static_cast<uint32_t>(query_head_count),
                   static_cast<uint32_t>(batch_count));
-  online_bf16_gqa_prefill<<<grid, kThreadsPerBlock, 0, stream>>>(
-      static_cast<const __nv_bfloat16*>(query),
-      static_cast<const __nv_bfloat16*>(key),
-      static_cast<const __nv_bfloat16*>(value),
-      static_cast<__nv_bfloat16*>(output), token_count, query_head_count,
-      key_value_head_count, scale, causal_local, local_window_size);
+  if (causal_local) {
+    online_bf16_gqa_prefill<<<grid, kThreadsPerBlock, 0, stream>>>(
+        static_cast<const __nv_bfloat16*>(query),
+        static_cast<const __nv_bfloat16*>(key),
+        static_cast<const __nv_bfloat16*>(value),
+        static_cast<__nv_bfloat16*>(output), token_count,
+        query_head_count, key_value_head_count, scale, true,
+        local_window_size);
+  } else {
+    reference_exact_causal_bf16_gqa_prefill
+        <<<grid, kThreadsPerBlock, 0, stream>>>(
+            static_cast<const __nv_bfloat16*>(query),
+            static_cast<const __nv_bfloat16*>(key),
+            static_cast<const __nv_bfloat16*>(value),
+            static_cast<__nv_bfloat16*>(output), token_count,
+            query_head_count, key_value_head_count, scale);
+  }
   return cudaGetLastError();
 }

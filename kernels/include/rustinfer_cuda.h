@@ -448,17 +448,21 @@ typedef struct RustInferCudaAvGqaParams {
 // head_size=64 and maps each query head to
 // q_head / (query_head_count / key_value_head_count).
 //
-// CAUSAL requires local_window_size=0. CAUSAL_LOCAL admits the current token
-// plus at most local_window_size-1 preceding tokens; a zero local window masks
-// every key and produces an all-zero BF16 row from the empty online state. The
-// first score pass keeps the online maximum and denominator in F32. A second
-// score pass rounds each normalized probability to BF16, then performs AV as a
-// logical-key-order F32 FMA fold and writes BF16 output. It requires no
-// workspace and never materializes a [S,S] score or probability matrix in HBM.
-// NaN scores poison their row; +Inf maxima receive equal staged weight; and an
-// all-negative-infinity or fully masked row remains all-zero. A zero staged
-// probability does not multiply its value, preserving zero-weight handling for
-// infinite values.
+// CAUSAL requires local_window_size=0. It performs three no-HBM score passes:
+// serial D-order QK and staged-BF16 scale/mask, logical-key-order maximum and
+// denominator, then staged-BF16 probability plus unconditional
+// logical-key-order F32 AV. This is byte-exact with the native materialized
+// reference, including future masked NaN/+Inf and zero-probability AV behavior.
+//
+// CAUSAL_LOCAL admits the current token plus at most local_window_size-1
+// preceding tokens; a zero local window masks every key and produces an
+// all-zero BF16 row from the empty online state. Its first score pass retains
+// the online F32 maximum/denominator and its second pass stages normalized
+// probabilities to BF16 before logical-key-order AV. NaN scores poison their
+// row, +Inf maxima receive equal staged weight, an all-negative-infinity or
+// fully masked row remains all-zero, and zero probabilities skip AV. Both mask
+// paths require no caller workspace and never materialize a complete [S,S]
+// score or probability matrix in HBM.
 typedef struct RustInferCudaPrefillAttentionParams {
   uint32_t struct_size;
   uint32_t reserved0;
