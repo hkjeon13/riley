@@ -798,30 +798,49 @@ fn validate_cache_tree(
     Ok(())
 }
 
+fn cache_tree_node_name(payload: &[u8], cursor: usize) -> Result<&[u8], GitProvenanceError> {
+    let remaining = payload
+        .get(cursor..)
+        .ok_or_else(|| invalid("TREE extension node offset exceeds its payload"))?;
+    let name_offset = remaining
+        .iter()
+        .position(|byte| *byte == 0)
+        .ok_or_else(|| invalid("TREE extension node name is truncated"))?;
+    let name_end = cursor
+        .checked_add(name_offset)
+        .ok_or_else(|| invalid("TREE extension node name offset overflow"))?;
+    payload
+        .get(cursor..name_end)
+        .ok_or_else(|| invalid("TREE extension node name is truncated"))
+}
+
 fn parse_cache_tree_node(
     payload: &[u8],
     cursor: &mut usize,
     expected_name: &[u8],
     expected: &ComputedTree,
 ) -> Result<(), GitProvenanceError> {
-    let name_end = payload[*cursor..]
-        .iter()
-        .position(|byte| *byte == 0)
-        .and_then(|offset| cursor.checked_add(offset))
-        .ok_or_else(|| invalid("TREE extension node name is truncated"))?;
-    if &payload[*cursor..name_end] != expected_name {
-        return Err(invalid("TREE extension subtree order/name differs"));
+    let actual_name = cache_tree_node_name(payload, *cursor)?;
+    if actual_name != expected_name {
+        return Err(invalid("TREE extension subtree name differs"));
     }
-    *cursor = name_end
-        .checked_add(1)
+    *cursor = cursor
+        .checked_add(actual_name.len())
+        .and_then(|offset| offset.checked_add(1))
         .ok_or_else(|| invalid("TREE extension node offset overflow"))?;
-    let header_end = payload[*cursor..]
+    let header_end = payload
+        .get(*cursor..)
+        .ok_or_else(|| invalid("TREE extension node offset exceeds its payload"))?
         .iter()
         .position(|byte| *byte == b'\n')
         .and_then(|offset| cursor.checked_add(offset))
         .ok_or_else(|| invalid("TREE extension node header is truncated"))?;
-    let header = std::str::from_utf8(&payload[*cursor..header_end])
-        .map_err(|_| invalid("TREE extension node header is not ASCII"))?;
+    let header = std::str::from_utf8(
+        payload
+            .get(*cursor..header_end)
+            .ok_or_else(|| invalid("TREE extension node header is truncated"))?,
+    )
+    .map_err(|_| invalid("TREE extension node header is not ASCII"))?;
     let (entry_count, subtree_count) = header
         .split_once(' ')
         .ok_or_else(|| invalid("TREE extension node header is malformed"))?;
@@ -858,8 +877,35 @@ fn parse_cache_tree_node(
             "Git index TREE cache differs from the recursively computed index tree",
         ));
     }
-    for (name, directory) in &expected.directories {
-        parse_cache_tree_node(payload, cursor, name, directory)?;
+
+    // Git writes cache-tree nodes depth-first, but it does not require sibling
+    // nodes to be in lexical order.  Existing indexes can retain historical
+    // sibling insertion order across otherwise clean commits, so validate the
+    // recorded names as a set while preserving the encoded traversal order.
+    let mut observed_names = HashSet::new();
+    observed_names
+        .try_reserve(subtree_count)
+        .map_err(|_| invalid("cannot reserve TREE extension subtree names"))?;
+    for _ in 0..subtree_count {
+        let child_name = cache_tree_node_name(payload, *cursor)?;
+        if !observed_names.insert(child_name.to_vec()) {
+            return Err(invalid(
+                "TREE extension contains duplicate sibling subtree names",
+            ));
+        }
+        let directory = expected.directories.get(child_name).ok_or_else(|| {
+            invalid("TREE extension contains a subtree absent from the computed index tree")
+        })?;
+        parse_cache_tree_node(payload, cursor, child_name, directory)?;
+    }
+    if expected
+        .directories
+        .keys()
+        .any(|name| !observed_names.contains(name))
+    {
+        return Err(invalid(
+            "TREE extension omits a subtree from the computed index tree",
+        ));
     }
     Ok(())
 }
@@ -1273,6 +1319,48 @@ mod tests {
         }
     }
 
+    fn encode_cache_tree_node_with_orders(
+        output: &mut Vec<u8>,
+        name: &[u8],
+        tree: &ComputedTree,
+        child_orders: &BTreeMap<Vec<u8>, Vec<Vec<u8>>>,
+    ) {
+        output.extend_from_slice(name);
+        output.push(0);
+        output.extend_from_slice(
+            format!("{} {}\n", tree.entry_count, tree.directories.len()).as_bytes(),
+        );
+        output.extend_from_slice(&tree.object_id);
+        if let Some(child_names) = child_orders.get(name) {
+            assert_eq!(child_names.len(), tree.directories.len());
+            let unique: HashSet<&[u8]> = child_names.iter().map(Vec::as_slice).collect();
+            assert_eq!(unique.len(), child_names.len());
+            for child_name in child_names {
+                let child = tree
+                    .directories
+                    .get(child_name)
+                    .expect("ordered child must exist in test tree");
+                encode_cache_tree_node_with_orders(output, child_name, child, child_orders);
+            }
+        } else {
+            for (child_name, child) in &tree.directories {
+                encode_cache_tree_node_with_orders(output, child_name, child, child_orders);
+            }
+        }
+    }
+
+    fn compute_test_tree(entries: &[TestIndexEntry]) -> ComputedTree {
+        let entries: Vec<IndexEntry> = entries
+            .iter()
+            .map(|entry| IndexEntry {
+                path: entry.path.as_bytes().to_vec(),
+                mode: entry.mode,
+                object_id: hash_git_object(b"blob", entry.contents),
+            })
+            .collect();
+        compute_index_tree(&entries).expect("compute test tree")
+    }
+
     fn tracked_files() -> [TestIndexEntry; 2] {
         [
             TestIndexEntry {
@@ -1329,6 +1417,132 @@ mod tests {
         let provenance = require_clean_repository(&repository.root).expect("clean repository");
         assert_eq!(provenance.revision, REVISION);
         assert_eq!(provenance.status_sha256, EMPTY_STATUS_SHA256);
+    }
+
+    #[test]
+    fn accepts_persisted_git_cache_tree_with_nonlexical_root_and_nested_siblings() {
+        // This mirrors sibling orders observed in real clean Git indexes. Git
+        // guarantees top-down depth-first records, but sibling insertion order
+        // can persist independently of lexical pathname order.
+        let entries = [
+            TestIndexEntry {
+                path: ".github/workflows/native.yml",
+                mode: 0o100_644,
+                contents: b"workflow\n",
+            },
+            TestIndexEntry {
+                path: "ci/cuda/Dockerfile",
+                mode: 0o100_644,
+                contents: b"FROM scratch\n",
+            },
+            TestIndexEntry {
+                path: "crates/rustinfer-native/src/lib.rs",
+                mode: 0o100_644,
+                contents: b"pub fn native() {}\n",
+            },
+            TestIndexEntry {
+                path: "docs/release/native.md",
+                mode: 0o100_644,
+                contents: b"native release\n",
+            },
+            TestIndexEntry {
+                path: "tools/native/check.sh",
+                mode: 0o100_755,
+                contents: b"#!/bin/sh\n",
+            },
+            TestIndexEntry {
+                path: "tools/python/reference/rustinfer_reference/__init__.py",
+                mode: 0o100_644,
+                contents: b"# package\n",
+            },
+            TestIndexEntry {
+                path: "tools/python/reference/tests/test_reference.py",
+                mode: 0o100_644,
+                contents: b"def test_reference(): pass\n",
+            },
+        ];
+        let tree = compute_test_tree(&entries);
+        let mut child_orders = BTreeMap::new();
+        child_orders.insert(
+            Vec::new(),
+            ["ci", "docs", "tools", "crates", ".github"]
+                .into_iter()
+                .map(str::as_bytes)
+                .map(<[u8]>::to_vec)
+                .collect(),
+        );
+        child_orders.insert(
+            b"reference".to_vec(),
+            ["tests", "rustinfer_reference"]
+                .into_iter()
+                .map(str::as_bytes)
+                .map(<[u8]>::to_vec)
+                .collect(),
+        );
+        let mut payload = Vec::new();
+        encode_cache_tree_node_with_orders(&mut payload, b"", &tree, &child_orders);
+
+        validate_cache_tree(&payload, &tree)
+            .expect("valid depth-first TREE records need not sort sibling names");
+    }
+
+    #[test]
+    fn rejects_duplicate_unexpected_and_stale_cache_tree_records() {
+        let entries = [
+            TestIndexEntry {
+                path: "aa/file",
+                mode: 0o100_644,
+                contents: b"aa\n",
+            },
+            TestIndexEntry {
+                path: "bb/file",
+                mode: 0o100_644,
+                contents: b"bb\n",
+            },
+        ];
+        let tree = compute_test_tree(&entries);
+        let mut payload = Vec::new();
+        encode_cache_tree_node(&mut payload, b"", &tree);
+        let second_child = payload
+            .windows(3)
+            .position(|window| window == b"bb\0")
+            .expect("find second child name");
+
+        let mut duplicate = payload.clone();
+        duplicate[second_child..second_child + 2].copy_from_slice(b"aa");
+        assert!(matches!(
+            validate_cache_tree(&duplicate, &tree),
+            Err(GitProvenanceError::InvalidRepository(message))
+                if message.contains("duplicate sibling")
+        ));
+
+        let mut unexpected = payload.clone();
+        unexpected[second_child..second_child + 2].copy_from_slice(b"cc");
+        assert!(matches!(
+            validate_cache_tree(&unexpected, &tree),
+            Err(GitProvenanceError::InvalidRepository(message))
+                if message.contains("absent from the computed index tree")
+        ));
+
+        let root_object = payload
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .expect("find root header end")
+            + 1;
+        let mut stale_object = payload.clone();
+        stale_object[root_object] ^= 1;
+        assert!(matches!(
+            validate_cache_tree(&stale_object, &tree),
+            Err(GitProvenanceError::DirtyRepository(_))
+        ));
+
+        let mut wrong_subtree_count = payload;
+        assert_eq!(&wrong_subtree_count[..5], &[0, b'2', b' ', b'2', b'\n']);
+        wrong_subtree_count[3] = b'1';
+        assert!(matches!(
+            validate_cache_tree(&wrong_subtree_count, &tree),
+            Err(GitProvenanceError::DirtyRepository(_))
+        ));
     }
 
     #[test]
