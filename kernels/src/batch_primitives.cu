@@ -1067,7 +1067,9 @@ void fixed37_ragged_paged_attention_two_pass_kernel(
   }
 
   const uint64_t token_partial_count =
-      rustinfer_cuda_fixed37::chunk_count(logical_token_count);
+      ((logical_token_count - 1) /
+       rustinfer_cuda_fixed37::kChunkElements) +
+      1;
   const uint64_t group_size = query_head_count / key_value_head_count;
   const uint64_t key_value_head = query_head / group_size;
   const uint64_t query_base =
