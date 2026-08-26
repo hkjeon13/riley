@@ -119,7 +119,34 @@ class Fixture:
             f"generated_token_ids=[{ids}] status=passed\n"
             "ok\n\n"
             "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; "
-            "6 filtered out; finished in 0.01s\n"
+            "9 filtered out; finished in 0.01s\n"
+        )
+        (self.evidence / writer.LOG_FILES["fixed37-production-batch-e0"]).write_text(
+            "running 1 test\n"
+            "test fixed37_production_batch_growing_prefix_matches_golden_exactly ... "
+            f"{writer.FIXED37_PRODUCTION_BATCH_GATE_ID} schema_version=1 "
+            f"fixture_sha256={writer.EXPECTED_FIXED37_FIXTURE_SHA256} "
+            f"generated_token_ids_sha256={writer.EXPECTED_FIXED37_TOKEN_IDS_SHA256} "
+            "cases=31 compared_steps=481 exact_window=16 "
+            "fixed_profile=fixed-contiguous-37-balanced-v1 "
+            "canonical_profile=canonical-v1 residual_rmsnorm=separate "
+            "execution_completion=iteration-batch "
+            "fixed_prefill_raw_logit_mismatches=0 "
+            "fixed_cached_growing_token_id_mismatches=0 "
+            "fixed_cached_growing_cosine_min=0.9979035305495393 "
+            "fixed_cached_growing_max_abs_max=5.852936458587647 "
+            "fixed_cached_growing_mean_abs_max=1.151280319263363 "
+            "fixed_cached_growing_worst_cosine=0.999 "
+            "fixed_cached_growing_worst_max_abs=1.0 "
+            "fixed_cached_growing_worst_mean_abs=0.25 "
+            "fixed_cached_growing_threshold_violations=0 "
+            "fixed_golden_token_id_mismatches=0 "
+            "canonical_golden_token_id_mismatches=0 "
+            "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
+            "status=passed\n"
+            "ok\n\n"
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; "
+            "9 filtered out; finished in 0.01s\n"
         )
 
     def _write_commands(
@@ -131,7 +158,10 @@ class Fixture:
         for command_id in writer.COMMAND_ORDER:
             expected = writer.EXPECTED_COMMANDS[command_id]
             environment = dict(writer.BASE_ENVIRONMENT)
-            if command_id == "smollm2-multi-step-greedy-exact":
+            if command_id in {
+                "smollm2-multi-step-greedy-exact",
+                "fixed37-production-batch-e0",
+            }:
                 environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
             environment.update((environment_override or {}).get(command_id, {}))
             rows.extend(
@@ -182,6 +212,23 @@ class EvidenceWriterTests(unittest.TestCase):
         subject = receipt["subjects"]["host-runtime-gpu-test"]
         self.assertEqual(subject["compile_command_id"], "compile-command-batch-lifecycle")
         self.assertEqual(subject["execute_command_id"], "command-batch-lifecycle")
+        fixed37 = next(
+            row for row in report["tests"] if row["id"] == "fixed37-production-batch-e0"
+        )
+        self.assertEqual(fixed37["gate_id"], writer.FIXED37_PRODUCTION_BATCH_GATE_ID)
+        self.assertEqual(fixed37["cases"], 31)
+        self.assertEqual(fixed37["compared_steps"], 481)
+        self.assertEqual(fixed37["compile_command_id"], "compile-fixed37-production-batch-e0")
+        self.assertEqual(
+            fixed37["test_binary_sha256"],
+            subject_digest := hashlib.sha256(
+                (self.fixture.evidence / "fixed37-production-batch-gpu-test").read_bytes()
+            ).hexdigest(),
+        )
+        self.assertEqual(
+            receipt["subjects"]["fixed37-production-batch-gpu-test"]["sha256"],
+            subject_digest,
+        )
         self.assertEqual(self.fixture.report.read_bytes(), writer.canonical_json_bytes(report))
         self.assertEqual(self.fixture.receipt.read_bytes(), writer.canonical_json_bytes(receipt))
 
@@ -202,6 +249,13 @@ class EvidenceWriterTests(unittest.TestCase):
         with self.assertRaisesRegex(writer.EvidenceWriterError, "reviewed invocation"):
             self.fixture.write()
 
+    def test_fixed37_direct_execution_argv_is_exact(self) -> None:
+        self.fixture._write_commands(
+            {"fixed37-production-batch-e0": ["/evidence/fixed37-production-batch-gpu-test", "unreviewed_test"]}
+        )
+        with self.assertRaisesRegex(writer.EvidenceWriterError, "reviewed invocation"):
+            self.fixture.write()
+
     def test_toolchain_environment_cannot_follow_directory_override(self) -> None:
         self.fixture._write_commands(
             environment_override={
@@ -217,6 +271,78 @@ class EvidenceWriterTests(unittest.TestCase):
         log = self.fixture.evidence / writer.LOG_FILES["smollm2-multi-step-greedy-exact"]
         log.write_text(log.read_text().replace("raw_logit_mismatches=0", "raw_logit_mismatches=1"))
         with self.assertRaisesRegex(writer.EvidenceWriterError, "reviewed E0 result"):
+            self.fixture.write()
+
+    def test_fixed37_marker_fields_are_derived_not_trusted(self) -> None:
+        path = self.fixture.evidence / writer.LOG_FILES["fixed37-production-batch-e0"]
+        original = path.read_text()
+        mutations = (
+            ("fixture_sha256=8733", "fixture_sha256=9733"),
+            ("generated_token_ids_sha256=9e38", "generated_token_ids_sha256=8e38"),
+            ("cases=31", "cases=30"),
+            ("compared_steps=481", "compared_steps=480"),
+            ("exact_window=16", "exact_window=15"),
+            ("fixed_profile=fixed-contiguous-37-balanced-v1", "fixed_profile=canonical-v1"),
+            ("residual_rmsnorm=separate", "residual_rmsnorm=fused"),
+            ("execution_completion=iteration-batch", "execution_completion=per-operation"),
+            (
+                "fixed_prefill_raw_logit_mismatches=0",
+                "fixed_prefill_raw_logit_mismatches=1",
+            ),
+            (
+                "fixed_cached_growing_worst_cosine=0.999",
+                "fixed_cached_growing_worst_cosine=0.900",
+            ),
+            (
+                "fixed_cached_growing_threshold_violations=0",
+                "fixed_cached_growing_threshold_violations=1",
+            ),
+            ("fixed_golden_token_id_mismatches=0", "fixed_golden_token_id_mismatches=1"),
+            ("cuda_live_allocation_delta=0", "cuda_live_allocation_delta=1"),
+        )
+        for old, new in mutations:
+            with self.subTest(field=old.split("=")[0]):
+                changed = original.replace(old, new, 1)
+                self.assertNotEqual(changed, original)
+                path.write_text(changed)
+                with self.assertRaisesRegex(
+                    writer.EvidenceWriterError,
+                    "exact fixed37 production-batch marker|reviewed production-batch E0 result|immutable E0 bounds",
+                ):
+                    self.fixture.write()
+                path.write_text(original)
+
+    def test_llama_batch_exact_logs_require_nine_filtered_tests(self) -> None:
+        for test_id in (
+            "smollm2-multi-step-greedy-exact",
+            "fixed37-production-batch-e0",
+        ):
+            with self.subTest(test_id=test_id):
+                path = self.fixture.evidence / writer.LOG_FILES[test_id]
+                original = path.read_text()
+                changed = original.replace("9 filtered out", "6 filtered out", 1)
+                self.assertNotEqual(changed, original)
+                path.write_text(changed)
+                with self.assertRaisesRegex(
+                    writer.EvidenceWriterError, "exact passing libtest summary"
+                ):
+                    self.fixture.write()
+                path.write_text(original)
+
+    def test_fixed37_log_and_compile_artifact_are_required(self) -> None:
+        log = self.fixture.evidence / writer.LOG_FILES["fixed37-production-batch-e0"]
+        log.unlink()
+        with self.assertRaisesRegex(writer.EvidenceWriterError, "closed pre-receipt inventory"):
+            self.fixture.write()
+
+    def test_fixed37_subject_cannot_claim_parity_command_provenance(self) -> None:
+        text = self.fixture.subjects.read_text()
+        text = text.replace(
+            "compile-fixed37-production-batch-e0\tfixed37-production-batch-e0\n",
+            "compile-smollm2-multi-step-greedy-exact\tsmollm2-multi-step-greedy-exact\n",
+        )
+        self.fixture.subjects.write_text(text)
+        with self.assertRaisesRegex(writer.EvidenceWriterError, "provenance mismatch"):
             self.fixture.write()
 
     def test_pre_receipt_inventory_is_closed(self) -> None:

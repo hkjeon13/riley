@@ -272,7 +272,7 @@ if ((container_status != 0)); then
     exit "${container_status}"
 fi
 
-test "$(cat "${output_dir}/runner-output/completed")" = rustinfer.optimizer-remote-run.completed.v2
+test "$(cat "${output_dir}/runner-output/completed")" = rustinfer.optimizer-remote-run.completed.v3
 cmp --silent "${profile_binary}" "${output_dir}/runner-output/rustinfer-profile" || {
     echo "optimizer-run profile binary differs from the reproducible candidate profile" >&2
     exit 1

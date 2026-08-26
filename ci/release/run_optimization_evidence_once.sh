@@ -30,6 +30,7 @@ export CUDA_HOME=/usr/local/cuda
 export CUDAToolkit_ROOT=/usr/local/cuda
 export RUSTINFER_CUDA_ARCHITECTURES=89
 export RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
+unset RUSTINFER_GROWING_PREFIX_PROMPT_ID
 
 command_records=/runner-output/commands.v2
 subject_records=/runner-output/subjects.v2
@@ -267,4 +268,30 @@ run_recorded \
         iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly \
         --ignored --exact --nocapture --test-threads=1 --color never
 
-printf '%s\n' rustinfer.optimizer-remote-run.completed.v2 > /runner-output/completed
+fixed37_batch_target=/workspace/target/optimizer-evidence/fixed37-production-batch-e0
+run_recorded \
+    compile-fixed37-production-batch-e0 \
+    fixed37-production-batch-e0-build.log \
+    fixed37-production-batch-gpu-test \
+    none \
+    cargo test --locked --offline --package rustinfer-runtime --no-default-features \
+        --features cuda --test llama_batch_gpu --no-run \
+        --message-format=json-render-diagnostics --color never \
+        --target-dir "${fixed37_batch_target}"
+discover_and_copy \
+    fixed37-production-batch-e0-build.log \
+    llama_batch_gpu \
+    "${fixed37_batch_target}" \
+    fixed37-production-batch-gpu-test \
+    compile-fixed37-production-batch-e0 \
+    fixed37-production-batch-e0
+run_recorded \
+    fixed37-production-batch-e0 \
+    fixed37-production-batch-e0-gpu.log \
+    fixed37-production-batch-gpu-test \
+    model \
+    /evidence/fixed37-production-batch-gpu-test \
+        fixed37_production_batch_growing_prefix_matches_golden_exactly \
+        --ignored --exact --nocapture --test-threads=1 --color never
+
+printf '%s\n' rustinfer.optimizer-remote-run.completed.v3 > /runner-output/completed

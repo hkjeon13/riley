@@ -57,9 +57,9 @@ with the trusted reproducible profile ELF, writes the report/receipt, and
 finally calls `check_optimization_evidence.py` to package and replay the raw
 archive.
 
-## Execution receipt v2
+## Execution receipt v3
 
-Receipt schema `rustinfer.optimizer-execution-receipt.v2` records these exact
+Receipt schema `rustinfer.optimizer-execution-receipt.v3` records these exact
 commands in order:
 
 1. Python-free locked CUDA compile smoke.
@@ -71,6 +71,10 @@ commands in order:
 7. locked/offline Cargo `--no-run` for `llama_batch_gpu`.
 8. direct execution of copied `/evidence/llama-batch-gpu-test` with the pinned
    checkpoint mounted at `/model`.
+9. a second locked/offline Cargo `--no-run` for `llama_batch_gpu` in a separate
+   empty fixed37 target directory.
+10. direct execution of the separately copied
+    `/evidence/fixed37-production-batch-gpu-test` with the pinned checkpoint.
 
 Every recorded command carries the exact
 `RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu` environment entry.  Both the
@@ -87,12 +91,26 @@ path.  Each subject receipt binds:
 - stable copied execution path;
 - producing compile command ID and consuming execution command ID.
 
-In addition to the five semantic logs, the raw input inventory contains:
+The sixth semantic log is the candidate-revision
+`pr16-fixed37-production-batch-e0-v1` gate. It forbids prompt filtering and
+runs the immutable `benchmarks/reference/smollm2-135m-bf16.json` corpus:
+31 cases, 481 generated steps, and exact window 16. Both fixed37 cached decode
+and fixed37 growing-prefix prefill must match every golden token; canonical
+cached batch is a golden-token control. The structurally identical first
+prefill is raw-byte exact. Later cached-decode versus growing-prefix logits use
+the immutable full-BF16 cosine/max-absolute/mean-absolute E0 bounds because
+those are different attention paths. The marker records the exact fixture and
+little-endian-U32 golden-token SHA-256 values, profiles, completion and
+residual modes, observed worst metrics, zero threshold/token/prefill mismatch
+counts, and zero live-allocation delta/owner-close count.
+
+In addition to the six semantic logs, the raw input inventory contains:
 
 ```text
 command-batch-lifecycle-build.log
 command-batch-resource-ledger-build.log
 smollm2-multi-step-greedy-exact-build.log
+fixed37-production-batch-e0-build.log
 ```
 
 `write_optimization_execution_evidence.py` rejects command substitution,
@@ -103,8 +121,9 @@ Python environment through `run_release_python.py`, so the same checker also
 runs on the designated Ubuntu 22.04 host's Python 3.10 without importing user
 packages or weakening the standard-library-only contract.
 
-The replay checker must recognize receipt v2, the three additional build logs,
-the eight-command order above, and the expanded subject fields.  Keeping the
-old v1 five-command contract would force the receipt to claim `cargo test`
-while actually executing a copied ELF, so v1 is intentionally not emitted by
-this runner.
+The replay checker must recognize receipt v3, the four build logs, the
+ten-command order above, and the expanded subject fields. The separate fixed37
+Cargo receipt proves that its copied ELF is a fresh candidate-revision
+compiler artifact rather than a second unrecorded execution of the parity ELF.
+Older receipt versions cannot express this closed command/subject inventory
+and are intentionally not emitted by this runner.

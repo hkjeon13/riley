@@ -8,7 +8,9 @@
     clippy::too_many_lines
 )]
 
+use std::collections::BTreeMap;
 use std::error::Error;
+use std::fs;
 use std::path::PathBuf;
 
 use rustinfer_cuda::{
@@ -22,6 +24,8 @@ use rustinfer_runtime::llama::{
     PreparedLlamaForward, PreparedLlamaForwardConfig, ResidualNormImplementation,
 };
 use rustinfer_runtime::paged_kv::{BLOCK_TABLE_V1_VERSION, KV_BLOCK_SIZE};
+use serde_json::Value;
+use sha2::{Digest, Sha256};
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
@@ -29,6 +33,13 @@ const TOKENS_A: [u32; 7] = [504, 2_365, 6_354, 16_438, 11_139, 253, 1_890];
 const TOKENS_B: [u32; 4] = [504, 2_365, 42, 43];
 const BF16_BYTES: usize = 2;
 const ONE_GIB: u64 = 1 << 30;
+const EXPECTED_GOLDEN_CASES: usize = 31;
+const EXPECTED_GOLDEN_STEPS: usize = 481;
+const EXPECTED_GOLDEN_EXACT_WINDOW: usize = 16;
+const EXPECTED_GOLDEN_FIXTURE_SHA256: &str =
+    "87333a1859be45a2f8e7563d898dde5e64256ccc03ca4da3cab90def07dd3c95";
+const EXPECTED_GOLDEN_TOKEN_IDS_SHA256: &str =
+    "9e38488c0d41dae4a28e7e262baf772f2c643e9f8a9c57941a9e47aaec77ac5c";
 // Reuse the immutable PR01 E0 v2 full-corpus final-logit bounds. These are
 // conservative secondary guards beside exact greedy top-1 and are not fitted
 // to the PR13 differential runs.
@@ -50,6 +61,24 @@ struct GreedyExecutionTrace {
     logits_by_iteration: Vec<Vec<u8>>,
     cuda_live_allocation_delta: i128,
     owner_close_live_allocation_count: u64,
+}
+
+#[derive(Debug)]
+struct Fixed37BatchGoldenCase {
+    index: usize,
+    prompt_id: String,
+    prompt_token_ids: Vec<u32>,
+    golden_token_ids: Vec<u32>,
+    fixed_cached_logits: Vec<Vec<u8>>,
+}
+
+#[derive(Debug)]
+struct Fixed37BatchGoldenFixture {
+    cases_by_prompt_length: BTreeMap<usize, Vec<Fixed37BatchGoldenCase>>,
+    total_generated_steps: usize,
+    exact_window: usize,
+    fixture_sha256: String,
+    generated_token_ids_sha256: String,
 }
 
 fn prepared_decode_profile_trace(
@@ -224,6 +253,313 @@ fn vocabulary_row_bytes(model: &LoadedModel) -> TestResult<usize> {
         .vocabulary_size()
         .checked_mul(BF16_BYTES)
         .ok_or("vocabulary row byte length overflow")?)
+}
+
+fn golden_fixture_path() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../benchmarks/reference/smollm2-135m-bf16.json")
+}
+
+fn json_u32_array(value: &Value, field: &'static str) -> TestResult<Vec<u32>> {
+    let values = value.as_array().ok_or(field)?;
+    let mut output = Vec::with_capacity(values.len());
+    for value in values {
+        output.push(u32::try_from(value.as_u64().ok_or(field)?)?);
+    }
+    Ok(output)
+}
+
+fn parse_fixed37_batch_golden_fixture() -> TestResult<Fixed37BatchGoldenFixture> {
+    assert!(
+        std::env::var_os("RUSTINFER_GROWING_PREFIX_PROMPT_ID").is_none(),
+        "the release gate forbids prompt-filtered golden execution"
+    );
+    let fixture_bytes = fs::read(golden_fixture_path())?;
+    let fixture_sha256 = format!("{:x}", Sha256::digest(&fixture_bytes));
+    assert_eq!(fixture_sha256, EXPECTED_GOLDEN_FIXTURE_SHA256);
+    let document: Value = serde_json::from_slice(&fixture_bytes)?;
+    assert_eq!(document["schema_version"], "1.0.0");
+    assert_eq!(
+        document["contract"]["model_id"],
+        "HuggingFaceTB/SmolLM2-135M"
+    );
+    assert_eq!(document["generation"]["strategy"], "greedy");
+    assert_eq!(
+        document["generation"]["cache_modes"],
+        serde_json::json!(["on", "off"])
+    );
+    let exact_window = usize::try_from(
+        document["generation"]["max_new_tokens"]
+            .as_u64()
+            .ok_or("generation.max_new_tokens must be an unsigned integer")?,
+    )?;
+    assert_eq!(exact_window, EXPECTED_GOLDEN_EXACT_WINDOW);
+    let cases = document["cases"]
+        .as_array()
+        .ok_or("cases must be an array")?;
+    assert_eq!(cases.len(), EXPECTED_GOLDEN_CASES);
+    assert_eq!(
+        document["corpus"]["prompt_count"].as_u64(),
+        Some(u64::try_from(cases.len())?)
+    );
+
+    let mut token_hasher = Sha256::new();
+    let mut total_generated_steps = 0_usize;
+    let mut cases_by_prompt_length = BTreeMap::new();
+    for (index, case) in cases.iter().enumerate() {
+        let prompt_id = case["prompt_id"]
+            .as_str()
+            .ok_or("cases[].prompt_id must be a string")?
+            .to_owned();
+        let prompt_token_ids = json_u32_array(
+            &case["input"]["token_ids"],
+            "cases[].input.token_ids must be a U32 array",
+        )?;
+        assert_eq!(
+            case["input"]["token_count"].as_u64(),
+            Some(u64::try_from(prompt_token_ids.len())?)
+        );
+        let golden_token_ids = json_u32_array(
+            &case["greedy"]["cache_on_token_ids"],
+            "cases[].greedy.cache_on_token_ids must be a U32 array",
+        )?;
+        let cache_off_token_ids = json_u32_array(
+            &case["greedy"]["cache_off_token_ids"],
+            "cases[].greedy.cache_off_token_ids must be a U32 array",
+        )?;
+        assert_eq!(golden_token_ids, cache_off_token_ids);
+        assert_eq!(case["greedy"]["exact_match"].as_bool(), Some(true));
+        assert!(!golden_token_ids.is_empty());
+        assert!(golden_token_ids.len() <= exact_window);
+        total_generated_steps = total_generated_steps
+            .checked_add(golden_token_ids.len())
+            .ok_or("golden generated-step count overflow")?;
+        for token_id in &golden_token_ids {
+            token_hasher.update(token_id.to_le_bytes());
+        }
+        cases_by_prompt_length
+            .entry(prompt_token_ids.len())
+            .or_default()
+            .push(Fixed37BatchGoldenCase {
+                index,
+                prompt_id,
+                prompt_token_ids,
+                golden_token_ids,
+                fixed_cached_logits: Vec::new(),
+            });
+    }
+    assert_eq!(total_generated_steps, EXPECTED_GOLDEN_STEPS);
+    let generated_token_ids_sha256 = format!("{:x}", token_hasher.finalize());
+    assert_eq!(generated_token_ids_sha256, EXPECTED_GOLDEN_TOKEN_IDS_SHA256);
+    Ok(Fixed37BatchGoldenFixture {
+        cases_by_prompt_length,
+        total_generated_steps,
+        exact_window,
+        fixture_sha256,
+        generated_token_ids_sha256,
+    })
+}
+
+fn production_batch_config(
+    max_input_tokens: usize,
+    maximum_length: usize,
+    profile: LlamaReductionProfile,
+) -> TestResult<PreparedLlamaBatchExecutorConfig> {
+    let physical_blocks = maximum_length.div_ceil(KV_BLOCK_SIZE);
+    Ok(
+        batch_config(1, max_input_tokens, physical_blocks, 1, physical_blocks)?
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_reduction_profile(profile),
+    )
+}
+
+fn run_cached_batch_golden_group(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    prompt_length: usize,
+    cases: &mut [Fixed37BatchGoldenCase],
+    profile: LlamaReductionProfile,
+    capture_fixed_logits: bool,
+) -> TestResult<usize> {
+    let maximum_steps = cases
+        .iter()
+        .map(|case| case.golden_token_ids.len())
+        .max()
+        .ok_or("golden prompt-length group is empty")?;
+    let maximum_length = prompt_length
+        .checked_add(maximum_steps)
+        .ok_or("cached batch maximum length overflow")?;
+    let mut batch = PreparedLlamaBatchExecutor::prepare(
+        model,
+        context,
+        stream,
+        production_batch_config(prompt_length, maximum_length, profile)?,
+    )?;
+    assert_eq!(batch.reduction_profile(), profile);
+    assert!(batch.reduction_profile_is_coherent());
+    assert_eq!(
+        batch.config().residual_norm_implementation(),
+        ResidualNormImplementation::Separate
+    );
+    assert_eq!(
+        batch.config().execution_completion_implementation(),
+        ExecutionCompletionImplementation::IterationBatch
+    );
+    let stable = context.allocation_stats()?;
+    let row_bytes = vocabulary_row_bytes(model)?;
+    let mut logits = vec![0_u8; row_bytes];
+    let mut compared_steps = 0_usize;
+    for case in cases {
+        let (prompt_ids, prompt_valid) = block_table(prompt_length, 0)?;
+        let prompt_rows = [row(
+            u64::try_from(case.index + 1)?,
+            LlamaBatchRowKind::Prefill,
+            &case.prompt_token_ids,
+            prompt_length,
+            &prompt_ids,
+            &prompt_valid,
+            Some(0),
+        )?];
+        batch.execute(&prompt_rows, stream)?;
+        assert_eq!(context.allocation_stats()?, stable);
+        if capture_fixed_logits {
+            case.fixed_cached_logits.clear();
+            case.fixed_cached_logits
+                .reserve(case.golden_token_ids.len());
+        }
+        for (step, &expected_token_id) in case.golden_token_ids.iter().enumerate() {
+            batch.download_logits(&mut logits, stream)?;
+            let actual_token_id = u32::try_from(top1(&logits))?;
+            assert_eq!(
+                actual_token_id, expected_token_id,
+                "{profile:?} cached production batch differs from golden prompt={} step={step}",
+                case.prompt_id
+            );
+            if capture_fixed_logits {
+                case.fixed_cached_logits.push(logits.clone());
+            }
+            compared_steps = compared_steps
+                .checked_add(1)
+                .ok_or("cached compared-step count overflow")?;
+            if step + 1 < case.golden_token_ids.len() {
+                let target_length = prompt_length
+                    .checked_add(step + 1)
+                    .ok_or("cached decode target length overflow")?;
+                let (ids, valid) = block_table(target_length, 0)?;
+                let tokens = [actual_token_id];
+                let decode_rows = [row(
+                    u64::try_from(case.index + 1)?,
+                    LlamaBatchRowKind::Decode,
+                    &tokens,
+                    target_length,
+                    &ids,
+                    &valid,
+                    Some(0),
+                )?];
+                batch.execute(&decode_rows, stream)?;
+                assert_eq!(context.allocation_stats()?, stable);
+            }
+        }
+    }
+    batch.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    Ok(compared_steps)
+}
+
+fn run_fixed37_growing_prefix_group(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    prompt_length: usize,
+    cases: &[Fixed37BatchGoldenCase],
+) -> TestResult<(usize, LogitMetrics)> {
+    let profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
+    let maximum_steps = cases
+        .iter()
+        .map(|case| case.golden_token_ids.len())
+        .max()
+        .ok_or("golden prompt-length group is empty")?;
+    let row_bytes = vocabulary_row_bytes(model)?;
+    let mut compared_steps = 0_usize;
+    let mut worst_metrics = LogitMetrics {
+        cosine: 1.0,
+        max_abs: 0.0,
+        mean_abs: 0.0,
+    };
+    for step in 0..maximum_steps {
+        let active = cases
+            .iter()
+            .filter(|case| step < case.golden_token_ids.len())
+            .collect::<Vec<_>>();
+        if active.is_empty() {
+            continue;
+        }
+        let sequence_length = prompt_length
+            .checked_add(step)
+            .ok_or("growing-prefix sequence length overflow")?;
+        let mut batch = PreparedLlamaBatchExecutor::prepare(
+            model,
+            context,
+            stream,
+            production_batch_config(sequence_length, sequence_length, profile)?,
+        )?;
+        assert_eq!(batch.reduction_profile(), profile);
+        assert!(batch.reduction_profile_is_coherent());
+        let stable = context.allocation_stats()?;
+        let mut logits = vec![0_u8; row_bytes];
+        for case in active {
+            let mut prefix = Vec::with_capacity(sequence_length);
+            prefix.extend_from_slice(&case.prompt_token_ids);
+            prefix.extend_from_slice(&case.golden_token_ids[..step]);
+            let (ids, valid) = block_table(sequence_length, 0)?;
+            let rows = [row(
+                u64::try_from(case.index + 1)?,
+                LlamaBatchRowKind::Prefill,
+                &prefix,
+                sequence_length,
+                &ids,
+                &valid,
+                Some(0),
+            )?];
+            batch.execute(&rows, stream)?;
+            assert_eq!(context.allocation_stats()?, stable);
+            batch.download_logits(&mut logits, stream)?;
+            let label = format!(
+                "fixed37-cached-growing-prompt-{}-step-{step}",
+                case.prompt_id
+            );
+            let metrics = assert_semantic_parity(&label, &logits, &case.fixed_cached_logits[step]);
+            worst_metrics.cosine = worst_metrics.cosine.min(metrics.cosine);
+            worst_metrics.max_abs = worst_metrics.max_abs.max(metrics.max_abs);
+            worst_metrics.mean_abs = worst_metrics.mean_abs.max(metrics.mean_abs);
+            if step == 0 {
+                // Both sides are fixed37 production-batch prefill. Decode versus
+                // growing-prefix prefill uses different attention paths, so only
+                // this structurally identical path carries a raw-byte contract.
+                assert_exact_bytes(&label, &logits, &case.fixed_cached_logits[step]);
+            }
+            assert_eq!(
+                top1(&logits),
+                top1(&case.fixed_cached_logits[step]),
+                "fixed37 cached/growing production batch top-1 differs prompt={} step={step}",
+                case.prompt_id
+            );
+            assert_eq!(
+                u32::try_from(top1(&logits))?,
+                case.golden_token_ids[step],
+                "fixed37 growing-prefix production batch differs from golden prompt={} step={step}",
+                case.prompt_id
+            );
+            compared_steps = compared_steps
+                .checked_add(1)
+                .ok_or("growing-prefix compared-step count overflow")?;
+        }
+        batch.close()?;
+        assert!(context.allocation_stats()?.is_zero());
+    }
+    Ok((compared_steps, worst_metrics))
 }
 
 fn independent_last_logits(
@@ -711,67 +1047,87 @@ generated_token_ids={:?} status=passed",
 
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
-fn fixed37_whole_reduction_profile_completion_modes_match_multi_step_greedy_exactly() -> TestResult
-{
-    const DECODE_STEPS: usize = 16;
+fn fixed37_production_batch_growing_prefix_matches_golden_exactly() -> TestResult {
+    let mut fixture = parse_fixed37_batch_golden_fixture()?;
     let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
-    let profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
-    let per_operation = greedy_execution_trace(
-        &model,
-        ResidualNormImplementation::Separate,
-        ExecutionCompletionImplementation::PerOperation,
-        profile,
-        None,
-        DECODE_STEPS,
-    )?;
-    let iteration_batch = greedy_execution_trace(
-        &model,
-        ResidualNormImplementation::Separate,
-        ExecutionCompletionImplementation::IterationBatch,
-        profile,
-        None,
-        DECODE_STEPS,
-    )?;
-
-    assert_eq!(per_operation.reduction_profile, profile);
-    assert_eq!(iteration_batch.reduction_profile, profile);
-    assert_eq!(
-        iteration_batch.generated_token_ids, per_operation.generated_token_ids,
-        "whole fixed37 completion modes generated different token IDs"
-    );
-    assert_eq!(
-        iteration_batch.logits_by_iteration.len(),
-        per_operation.logits_by_iteration.len()
-    );
-    for (iteration, (batched_logits, per_operation_logits)) in iteration_batch
-        .logits_by_iteration
-        .iter()
-        .zip(&per_operation.logits_by_iteration)
-        .enumerate()
-    {
-        assert_exact_bytes(
-            &format!("whole fixed37 execution-completion iteration {iteration}"),
-            batched_logits,
-            per_operation_logits,
-        );
-        assert_eq!(
-            top1(batched_logits),
-            top1(per_operation_logits),
-            "whole fixed37 iteration {iteration} top-1 differs"
-        );
+    let fixed_profile = LlamaReductionProfile::FixedContiguous37BalancedV1;
+    let canonical_profile = LlamaReductionProfile::CanonicalV1;
+    let (context, mut stream) = first_context()?;
+    let mut fixed_cached_steps = 0_usize;
+    let mut canonical_cached_steps = 0_usize;
+    let mut fixed_growing_steps = 0_usize;
+    let mut fixed_cached_growing_worst = LogitMetrics {
+        cosine: 1.0,
+        max_abs: 0.0,
+        mean_abs: 0.0,
+    };
+    for (&prompt_length, cases) in &mut fixture.cases_by_prompt_length {
+        fixed_cached_steps = fixed_cached_steps
+            .checked_add(run_cached_batch_golden_group(
+                &model,
+                &context,
+                &mut stream,
+                prompt_length,
+                cases,
+                fixed_profile,
+                true,
+            )?)
+            .ok_or("fixed cached step count overflow")?;
+        canonical_cached_steps = canonical_cached_steps
+            .checked_add(run_cached_batch_golden_group(
+                &model,
+                &context,
+                &mut stream,
+                prompt_length,
+                cases,
+                canonical_profile,
+                false,
+            )?)
+            .ok_or("canonical cached step count overflow")?;
+        let (group_steps, group_metrics) =
+            run_fixed37_growing_prefix_group(&model, &context, &mut stream, prompt_length, cases)?;
+        fixed_growing_steps = fixed_growing_steps
+            .checked_add(group_steps)
+            .ok_or("fixed growing-prefix step count overflow")?;
+        fixed_cached_growing_worst.cosine =
+            fixed_cached_growing_worst.cosine.min(group_metrics.cosine);
+        fixed_cached_growing_worst.max_abs = fixed_cached_growing_worst
+            .max_abs
+            .max(group_metrics.max_abs);
+        fixed_cached_growing_worst.mean_abs = fixed_cached_growing_worst
+            .mean_abs
+            .max(group_metrics.mean_abs);
     }
-    assert_eq!(iteration_batch.cuda_live_allocation_delta, 0);
-    assert_eq!(iteration_batch.owner_close_live_allocation_count, 0);
+    assert_eq!(fixed_cached_steps, fixture.total_generated_steps);
+    assert_eq!(canonical_cached_steps, fixture.total_generated_steps);
+    assert_eq!(fixed_growing_steps, fixture.total_generated_steps);
+    assert!(context.allocation_stats()?.is_zero());
+    stream.close()?;
+    close_context(context)?;
     println!(
-        "pr16-fixed37-whole-profile-completion-parity schema_version=1 \
-profile={} decode_steps={DECODE_STEPS} committed_iterations={} \
-raw_logit_mismatches=0 token_id_mismatches=0 cuda_live_allocation_delta={} \
-owner_close_live_allocation_count={} generated_token_ids={:?} status=passed",
-        profile.id(),
-        iteration_batch.logits_by_iteration.len() - 1,
-        iteration_batch.cuda_live_allocation_delta,
-        iteration_batch.owner_close_live_allocation_count,
-        iteration_batch.generated_token_ids,
+        "pr16-fixed37-production-batch-e0-v1 schema_version=1 \
+fixture_sha256={} generated_token_ids_sha256={} cases={} compared_steps={} \
+exact_window={} fixed_profile={} canonical_profile={} residual_rmsnorm=separate \
+execution_completion=iteration-batch fixed_prefill_raw_logit_mismatches=0 \
+fixed_cached_growing_token_id_mismatches=0 \
+fixed_cached_growing_cosine_min={BATCH_LOGIT_COSINE_MIN} \
+fixed_cached_growing_max_abs_max={BATCH_LOGIT_MAX_ABS_MAX} \
+fixed_cached_growing_mean_abs_max={BATCH_LOGIT_MEAN_ABS_MAX} \
+fixed_cached_growing_worst_cosine={:.17} fixed_cached_growing_worst_max_abs={:.9} \
+fixed_cached_growing_worst_mean_abs={:.9} fixed_cached_growing_threshold_violations=0 \
+fixed_golden_token_id_mismatches=0 \
+canonical_golden_token_id_mismatches=0 cuda_live_allocation_delta=0 \
+owner_close_live_allocation_count=0 status=passed",
+        fixture.fixture_sha256,
+        fixture.generated_token_ids_sha256,
+        EXPECTED_GOLDEN_CASES,
+        fixture.total_generated_steps,
+        fixture.exact_window,
+        fixed_profile.id(),
+        canonical_profile.id(),
+        fixed_cached_growing_worst.cosine,
+        fixed_cached_growing_worst.max_abs,
+        fixed_cached_growing_worst.mean_abs,
     );
     Ok(())
 }

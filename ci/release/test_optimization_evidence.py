@@ -23,7 +23,11 @@ from check_optimization_evidence import (  # noqa: E402
     COMMAND_TEST_BINARIES,
     COMPILE_LOG_FILES,
     EXPECTED_COMMANDS,
+    EXPECTED_FIXED37_FIXTURE_SHA256,
+    EXPECTED_FIXED37_TOKEN_IDS_SHA256,
     EXPECTED_TOKENS,
+    FIXED37_PARITY_RE,
+    FIXED37_PRODUCTION_BATCH_GATE_ID,
     GATE_ID,
     INPUT_FILES,
     LOG_FILES,
@@ -91,6 +95,12 @@ class Fixture:
             "llama-batch-gpu-test": (
                 "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
                 "pr15-execution-completion-parity",
+            ),
+            "fixed37-production-batch-gpu-test": (
+                "fixed37_production_batch_growing_prefix_matches_golden_exactly",
+                FIXED37_PRODUCTION_BATCH_GATE_ID,
+                EXPECTED_FIXED37_FIXTURE_SHA256,
+                EXPECTED_FIXED37_TOKEN_IDS_SHA256,
             ),
         }
         for name, markers in binary_markers.items():
@@ -185,6 +195,7 @@ class Fixture:
             "test command_batch_proxy_is_one_shot_and_drop_restores_stream_use ... ignored\n"
             "test command_batch_releases_multi_primitive_resource_ledger_after_validation_error ... ignored\n"
             "test iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly ... ignored\n"
+            "test fixed37_production_batch_growing_prefix_matches_golden_exactly ... ignored\n"
             + workspace_targets
         ).encode()
         lifecycle = (
@@ -219,7 +230,35 @@ class Fixture:
             "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
             f"generated_token_ids=[{token_text}] status=passed\n"
             "ok\n"
-            + SUMMARY.format(passed=1, ignored=0, filtered=6)
+            + SUMMARY.format(passed=1, ignored=0, filtered=9)
+            + "\n"
+        ).encode()
+        fixed37 = (
+            "Running tests/llama_batch_gpu.rs (target/debug/deps/llama_batch_gpu-fixture)\n"
+            "running 1 test\n"
+            "test fixed37_production_batch_growing_prefix_matches_golden_exactly ... "
+            f"{FIXED37_PRODUCTION_BATCH_GATE_ID} schema_version=1 "
+            f"fixture_sha256={EXPECTED_FIXED37_FIXTURE_SHA256} "
+            f"generated_token_ids_sha256={EXPECTED_FIXED37_TOKEN_IDS_SHA256} "
+            "cases=31 compared_steps=481 exact_window=16 "
+            "fixed_profile=fixed-contiguous-37-balanced-v1 "
+            "canonical_profile=canonical-v1 residual_rmsnorm=separate "
+            "execution_completion=iteration-batch "
+            "fixed_prefill_raw_logit_mismatches=0 "
+            "fixed_cached_growing_token_id_mismatches=0 "
+            "fixed_cached_growing_cosine_min=0.9979035305495393 "
+            "fixed_cached_growing_max_abs_max=5.852936458587647 "
+            "fixed_cached_growing_mean_abs_max=1.151280319263363 "
+            "fixed_cached_growing_worst_cosine=0.999 "
+            "fixed_cached_growing_worst_max_abs=1.0 "
+            "fixed_cached_growing_worst_mean_abs=0.25 "
+            "fixed_cached_growing_threshold_violations=0 "
+            "fixed_golden_token_id_mismatches=0 "
+            "canonical_golden_token_id_mismatches=0 "
+            "cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 "
+            "status=passed\n"
+            "ok\n"
+            + SUMMARY.format(passed=1, ignored=0, filtered=9)
             + "\n"
         ).encode()
         return {
@@ -228,6 +267,7 @@ class Fixture:
             "command-batch-lifecycle": lifecycle,
             "command-batch-resource-ledger": ledger,
             "smollm2-multi-step-greedy-exact": parity,
+            "fixed37-production-batch-e0": fixed37,
         }
 
     def _report(self) -> dict[str, object]:
@@ -270,6 +310,42 @@ class Fixture:
                 "cuda_live_allocation_delta": 0,
                 "owner_close_live_allocation_count": 0,
                 "log_sha256": digest(self.logs["smollm2-multi-step-greedy-exact"]),
+            },
+            {
+                "id": "fixed37-production-batch-e0",
+                "result": "passed",
+                "gate_id": FIXED37_PRODUCTION_BATCH_GATE_ID,
+                "fixture_sha256": EXPECTED_FIXED37_FIXTURE_SHA256,
+                "generated_token_ids_sha256": EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+                "cases": 31,
+                "compared_steps": 481,
+                "exact_window": 16,
+                "fixed_profile": "fixed-contiguous-37-balanced-v1",
+                "canonical_profile": "canonical-v1",
+                "residual_rmsnorm": "separate",
+                "execution_completion": "iteration-batch",
+                "fixed_prefill_raw_logit_mismatches": 0,
+                "fixed_cached_growing_token_id_mismatches": 0,
+                "fixed_cached_growing_cosine_min": 0.997_903_530_549_539_3,
+                "fixed_cached_growing_max_abs_max": 5.852_936_458_587_647,
+                "fixed_cached_growing_mean_abs_max": 1.151_280_319_263_363,
+                "fixed_cached_growing_worst_cosine": 0.999,
+                "fixed_cached_growing_worst_max_abs": 1.0,
+                "fixed_cached_growing_worst_mean_abs": 0.25,
+                "fixed_cached_growing_threshold_violations": 0,
+                "fixed_golden_token_id_mismatches": 0,
+                "canonical_golden_token_id_mismatches": 0,
+                "cuda_live_allocation_delta": 0,
+                "owner_close_live_allocation_count": 0,
+                "compile_command_id": "compile-fixed37-production-batch-e0",
+                "execute_command_id": "fixed37-production-batch-e0",
+                "compile_log_sha256": digest(
+                    self.compile_logs["compile-fixed37-production-batch-e0"]
+                ),
+                "test_binary_sha256": digest(
+                    (self.evidence / "fixed37-production-batch-gpu-test").read_bytes()
+                ),
+                "log_sha256": digest(self.logs["fixed37-production-batch-e0"]),
             },
         ]
         return {
@@ -321,7 +397,10 @@ class Fixture:
         commands = []
         for command_id, argv in EXPECTED_COMMANDS.items():
             environment = dict(BASE_ENVIRONMENT)
-            if command_id == "smollm2-multi-step-greedy-exact":
+            if command_id in {
+                "smollm2-multi-step-greedy-exact",
+                "fixed37-production-batch-e0",
+            }:
                 environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
             commands.append(
                 {
@@ -472,6 +551,96 @@ class OptimizationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed E0 result"):
             self.fixture.produce()
 
+    def test_fixed37_marker_fields_are_derived_from_raw_log(self) -> None:
+        original = self.fixture.logs["fixed37-production-batch-e0"]
+        mutations = (
+            (b"fixture_sha256=8733", b"fixture_sha256=9733"),
+            (b"generated_token_ids_sha256=9e38", b"generated_token_ids_sha256=8e38"),
+            (b"cases=31", b"cases=30"),
+            (b"compared_steps=481", b"compared_steps=480"),
+            (b"exact_window=16", b"exact_window=15"),
+            (
+                b"fixed_profile=fixed-contiguous-37-balanced-v1",
+                b"fixed_profile=canonical-v1",
+            ),
+            (b"canonical_profile=canonical-v1", b"canonical_profile=unreviewed-v1"),
+            (b"residual_rmsnorm=separate", b"residual_rmsnorm=fused"),
+            (b"execution_completion=iteration-batch", b"execution_completion=per-operation"),
+            (
+                b"fixed_prefill_raw_logit_mismatches=0",
+                b"fixed_prefill_raw_logit_mismatches=1",
+            ),
+            (
+                b"fixed_cached_growing_token_id_mismatches=0",
+                b"fixed_cached_growing_token_id_mismatches=1",
+            ),
+            (
+                b"fixed_cached_growing_cosine_min=0.9979035305495393",
+                b"fixed_cached_growing_cosine_min=0.997",
+            ),
+            (
+                b"fixed_cached_growing_worst_cosine=0.999",
+                b"fixed_cached_growing_worst_cosine=0.900",
+            ),
+            (
+                b"fixed_cached_growing_threshold_violations=0",
+                b"fixed_cached_growing_threshold_violations=1",
+            ),
+            (
+                b"fixed_golden_token_id_mismatches=0",
+                b"fixed_golden_token_id_mismatches=1",
+            ),
+            (
+                b"canonical_golden_token_id_mismatches=0",
+                b"canonical_golden_token_id_mismatches=1",
+            ),
+            (b"cuda_live_allocation_delta=0", b"cuda_live_allocation_delta=1"),
+            (
+                b"owner_close_live_allocation_count=0",
+                b"owner_close_live_allocation_count=1",
+            ),
+        )
+        for old, new in mutations:
+            with self.subTest(field=old.decode().split("=")[0]):
+                changed = original.replace(old, new, 1)
+                self.assertNotEqual(changed, original)
+                self.fixture.refresh_log("fixed37-production-batch-e0", changed)
+                with self.assertRaisesRegex(
+                    OptimizationEvidenceError,
+                    "closed fixed37 production-batch marker|reviewed production-batch E0 result|immutable E0 bounds",
+                ):
+                    self.fixture.produce()
+                self.fixture.refresh_log("fixed37-production-batch-e0", original)
+
+    def test_fixed37_marker_must_occur_once(self) -> None:
+        original = self.fixture.logs["fixed37-production-batch-e0"]
+        marker = FIXED37_PARITY_RE.search(original.decode("utf-8"))
+        self.assertIsNotNone(marker)
+        self.fixture.refresh_log(
+            "fixed37-production-batch-e0",
+            original + marker.group(0).encode("utf-8") + b"\n",
+        )
+        with self.assertRaisesRegex(
+            OptimizationEvidenceError, "one closed fixed37 production-batch marker"
+        ):
+            self.fixture.produce()
+
+    def test_exact_llama_batch_filtered_count_is_nine(self) -> None:
+        for test_id in (
+            "smollm2-multi-step-greedy-exact",
+            "fixed37-production-batch-e0",
+        ):
+            with self.subTest(test_id=test_id):
+                original = self.fixture.logs[test_id]
+                changed = original.replace(b"9 filtered out", b"6 filtered out", 1)
+                self.assertNotEqual(changed, original)
+                self.fixture.refresh_log(test_id, changed)
+                with self.assertRaisesRegex(
+                    OptimizationEvidenceError, "exact passing libtest summary"
+                ):
+                    self.fixture.produce()
+                self.fixture.refresh_log(test_id, original)
+
     def test_failed_workspace_summary_is_rejected(self) -> None:
         contents = self.fixture.logs["workspace-all-features-all-targets"].replace(
             b"0 failed", b"1 failed", 1
@@ -528,12 +697,34 @@ class OptimizationEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
             self.fixture.produce()
 
+    def test_fixed37_subject_provenance_is_not_interchangeable(self) -> None:
+        subject = self.fixture.receipt["subjects"][  # type: ignore[index]
+            "fixed37-production-batch-gpu-test"
+        ]
+        subject["compile_command_id"] = "compile-smollm2-multi-step-greedy-exact"
+        subject["execute_command_id"] = "smollm2-multi-step-greedy-exact"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "subject differs"):
+            self.fixture.produce()
+
     def test_compile_log_must_bind_one_fresh_cargo_executable(self) -> None:
         command_id = "compile-command-batch-lifecycle"
         path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
         contents = path.read_bytes().replace(
             b"host_runtime_gpu-fixture", b"host_runtime_gpu-substitute", 1
         )
+        path.write_bytes(contents)
+        with self.assertRaisesRegex(OptimizationEvidenceError, "compiler-artifact"):
+            self.fixture.produce()
+
+    def test_fixed37_compile_log_must_bind_its_separate_fresh_executable(self) -> None:
+        command_id = "compile-fixed37-production-batch-e0"
+        path = self.fixture.evidence / COMPILE_LOG_FILES[command_id]
+        contents = path.read_bytes().replace(
+            b"fixed37-production-batch-e0/debug/deps/llama_batch_gpu-fixture",
+            b"iteration-parity/debug/deps/llama_batch_gpu-fixture",
+        )
+        self.assertNotEqual(contents, path.read_bytes())
         path.write_bytes(contents)
         with self.assertRaisesRegex(OptimizationEvidenceError, "compiler-artifact"):
             self.fixture.produce()
@@ -551,6 +742,21 @@ class OptimizationEvidenceTests(unittest.TestCase):
         self.fixture.receipt = self.fixture._receipt()
         self.fixture._write_receipt()
         with self.assertRaisesRegex(OptimizationEvidenceError, "valid Linux x86_64"):
+            self.fixture.produce()
+
+    def test_fixed37_binary_must_embed_test_gate_and_fixture_markers(self) -> None:
+        path = self.fixture.evidence / "fixed37-production-batch-gpu-test"
+        path.write_bytes(
+            path.read_bytes().replace(
+                b"fixed37_production_batch_growing_prefix_matches_golden_exactly",
+                b"fixed37_production_batch_growing_prefix_matches_unreviewed",
+            )
+        )
+        self.fixture.report = self.fixture._report()
+        self.fixture._write_report()
+        self.fixture.receipt = self.fixture._receipt()
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed test marker"):
             self.fixture.produce()
 
     def test_profile_binary_substitution_is_rejected(self) -> None:
@@ -591,6 +797,17 @@ class OptimizationEvidenceTests(unittest.TestCase):
             if row["id"] == "command-batch-lifecycle"
         )
         command["argv"][0] = "cargo"
+        self.fixture._write_receipt()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
+            self.fixture.produce()
+
+    def test_fixed37_direct_execution_receipt_is_exact(self) -> None:
+        command = next(
+            row
+            for row in self.fixture.receipt["commands"]  # type: ignore[index]
+            if row["id"] == "fixed37-production-batch-e0"
+        )
+        command["argv"][1] = "unreviewed_test"
         self.fixture._write_receipt()
         with self.assertRaisesRegex(OptimizationEvidenceError, "reviewed invocation"):
             self.fixture.produce()
@@ -663,6 +880,11 @@ class OptimizationEvidenceTests(unittest.TestCase):
         target.unlink()
         target.symlink_to(LOG_FILES["cuda-compile-only"])
         with self.assertRaisesRegex(OptimizationEvidenceError, "regular file"):
+            self.fixture.produce()
+
+    def test_fixed37_log_is_a_required_closed_input(self) -> None:
+        (self.fixture.evidence / LOG_FILES["fixed37-production-batch-e0"]).unlink()
+        with self.assertRaisesRegex(OptimizationEvidenceError, "closed input inventory"):
             self.fixture.produce()
 
     def test_submitted_report_must_equal_embedded_canonical_report(self) -> None:

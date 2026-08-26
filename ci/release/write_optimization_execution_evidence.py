@@ -2,8 +2,8 @@
 """Write canonical PR 15/16 optimizer execution evidence.
 
 This producer consumes records emitted by the remote GPU runner.  It does not
-run Cargo, CUDA, or a model.  In particular, it keeps the three Cargo
-``--no-run`` build commands separate from the three executions of the copied
+run Cargo, CUDA, or a model.  In particular, it keeps the four Cargo
+``--no-run`` build commands separate from the four executions of the copied
 test ELFs, and binds every copied subject to the compiler-artifact path that
 Cargo reported.
 """
@@ -23,7 +23,8 @@ from typing import Any, Mapping, NoReturn, Sequence
 
 
 GATE_ID = "pr15-iteration-command-batch-exact-v1"
-RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v2"
+FIXED37_PRODUCTION_BATCH_GATE_ID = "pr16-fixed37-production-batch-e0-v1"
+RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v3"
 COMMAND_RECORD_VERSION = "rustinfer.optimizer-command-log.v2"
 SUBJECT_RECORD_VERSION = "rustinfer.optimizer-subjects.v2"
 
@@ -52,6 +53,15 @@ EXPECTED_TOKENS = [
     16438,
     314,
 ]
+EXPECTED_FIXED37_FIXTURE_SHA256 = (
+    "87333a1859be45a2f8e7563d898dde5e64256ccc03ca4da3cab90def07dd3c95"
+)
+EXPECTED_FIXED37_TOKEN_IDS_SHA256 = (
+    "9e38488c0d41dae4a28e7e262baf772f2c643e9f8a9c57941a9e47aaec77ac5c"
+)
+FIXED37_CACHED_GROWING_COSINE_MIN = 0.997_903_530_549_539_3
+FIXED37_CACHED_GROWING_MAX_ABS_MAX = 5.852_936_458_587_647
+FIXED37_CACHED_GROWING_MEAN_ABS_MAX = 1.151_280_319_263_363
 
 LOG_FILES = {
     "cuda-compile-only": "cuda-compile-only.log",
@@ -59,11 +69,13 @@ LOG_FILES = {
     "command-batch-lifecycle": "command-batch-lifecycle-gpu.log",
     "command-batch-resource-ledger": "command-batch-primitives-gpu.log",
     "smollm2-multi-step-greedy-exact": "iteration-command-batch-model-parity-gpu.log",
+    "fixed37-production-batch-e0": "fixed37-production-batch-e0-gpu.log",
 }
 COMPILE_LOG_FILES = {
     "compile-command-batch-lifecycle": "command-batch-lifecycle-build.log",
     "compile-command-batch-resource-ledger": "command-batch-resource-ledger-build.log",
     "compile-smollm2-multi-step-greedy-exact": "smollm2-multi-step-greedy-exact-build.log",
+    "compile-fixed37-production-batch-e0": "fixed37-production-batch-e0-build.log",
 }
 
 BASE_ENVIRONMENT = {
@@ -126,6 +138,15 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "target_dir": "/workspace/target/optimizer-evidence/smollm2-multi-step-greedy-exact",
         "test_name": "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
     },
+    "fixed37-production-batch-gpu-test": {
+        "cargo_test_target": "llama_batch_gpu",
+        "compile_command_id": "compile-fixed37-production-batch-e0",
+        "execute_command_id": "fixed37-production-batch-e0",
+        "compile_log": COMPILE_LOG_FILES["compile-fixed37-production-batch-e0"],
+        "package": "rustinfer-runtime",
+        "target_dir": "/workspace/target/optimizer-evidence/fixed37-production-batch-e0",
+        "test_name": "fixed37_production_batch_growing_prefix_matches_golden_exactly",
+    },
 }
 
 EXPECTED_COMMANDS: dict[str, dict[str, Any]] = {
@@ -184,6 +205,8 @@ COMMAND_ORDER = [
     "command-batch-resource-ledger",
     "compile-smollm2-multi-step-greedy-exact",
     "smollm2-multi-step-greedy-exact",
+    "compile-fixed37-production-batch-e0",
+    "fixed37-production-batch-e0",
 ]
 
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -197,6 +220,35 @@ PARITY_RE = re.compile(
     r"token_id_mismatches=(?P<tokens>[0-9]+) cuda_live_allocation_delta=(?P<hot>-?[0-9]+) "
     r"owner_close_live_allocation_count=(?P<close>[0-9]+) "
     r"generated_token_ids=\[(?P<ids>[0-9, ]+)\] status=passed"
+)
+FIXED37_PARITY_RE = re.compile(
+    rf"{FIXED37_PRODUCTION_BATCH_GATE_ID} schema_version=1 "
+    r"fixture_sha256=(?P<fixture>[0-9a-f]{64}) "
+    r"generated_token_ids_sha256=(?P<token_sha>[0-9a-f]{64}) "
+    r"cases=(?P<cases>[0-9]+) compared_steps=(?P<steps>[0-9]+) "
+    r"exact_window=(?P<window>[0-9]+) "
+    r"fixed_profile=(?P<fixed_profile>[a-z0-9-]+) "
+    r"canonical_profile=(?P<canonical_profile>[a-z0-9-]+) "
+    r"residual_rmsnorm=(?P<residual>[a-z-]+) "
+    r"execution_completion=(?P<completion>[a-z-]+) "
+    r"fixed_prefill_raw_logit_mismatches=(?P<prefill_logits>[0-9]+) "
+    r"fixed_cached_growing_token_id_mismatches=(?P<tokens>[0-9]+) "
+    r"fixed_cached_growing_cosine_min=(?P<cosine_min>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_max_abs_max=(?P<max_abs_max>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_mean_abs_max=(?P<mean_abs_max>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_worst_cosine=(?P<worst_cosine>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_worst_max_abs=(?P<worst_max_abs>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_worst_mean_abs=(?P<worst_mean_abs>[0-9]+(?:\.[0-9]+)?) "
+    r"fixed_cached_growing_threshold_violations=(?P<threshold_violations>[0-9]+) "
+    r"fixed_golden_token_id_mismatches=(?P<fixed_golden>[0-9]+) "
+    r"canonical_golden_token_id_mismatches=(?P<canonical_golden>[0-9]+) "
+    r"cuda_live_allocation_delta=(?P<hot>-?[0-9]+) "
+    r"owner_close_live_allocation_count=(?P<close>[0-9]+) status=passed"
+)
+EXACT_SUMMARY_END_RE = re.compile(
+    r"test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; "
+    r"(?P<filtered>[0-9]+) filtered out; finished in [0-9]+(?:\.[0-9]+)?s"
+    r"\r?\n\r?\n?\Z"
 )
 
 
@@ -308,7 +360,10 @@ def parse_command_records(path: Path) -> list[dict[str, Any]]:
     for command in commands:
         expected = EXPECTED_COMMANDS[command["id"]]
         expected_environment = dict(BASE_ENVIRONMENT)
-        if command["id"] == "smollm2-multi-step-greedy-exact":
+        if command["id"] in {
+            "smollm2-multi-step-greedy-exact",
+            "fixed37-production-batch-e0",
+        }:
             expected_environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
         if command != {
             "id": command["id"],
@@ -445,6 +500,27 @@ def parse_gpu(path: Path) -> dict[str, Any]:
     }
 
 
+def _require_exact_test_log(
+    text: str,
+    label: str,
+    *,
+    test_name: str,
+    semantic_marker: str,
+    filtered: int,
+) -> None:
+    for marker in (
+        "running 1 test\n",
+        f"test {test_name} ...",
+        semantic_marker,
+        "\nok\n",
+    ):
+        if text.count(marker) != 1:
+            _fail(label, f"must contain exactly one {marker!r} marker")
+    summary = EXACT_SUMMARY_END_RE.search(text)
+    if summary is None or int(summary.group("filtered")) != filtered:
+        _fail(label, "does not end with the exact passing libtest summary")
+
+
 def _validate_execution_logs(evidence_dir: Path) -> dict[str, dict[str, Any]]:
     for filename in [*LOG_FILES.values(), *COMPILE_LOG_FILES.values()]:
         _regular(evidence_dir / filename, filename)
@@ -492,6 +568,142 @@ def _validate_execution_logs(evidence_dir: Path) -> dict[str, dict[str, Any]]:
     }
     if derived != expected:
         _fail("parity log", "semantic values differ from the reviewed E0 result")
+    _require_exact_test_log(
+        parity,
+        "parity log",
+        test_name=(
+            "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly"
+        ),
+        semantic_marker=match.group(0),
+        filtered=9,
+    )
+
+    fixed37 = _text(
+        evidence_dir / LOG_FILES["fixed37-production-batch-e0"],
+        "fixed37 production-batch log",
+    )
+    fixed37_matches = list(FIXED37_PARITY_RE.finditer(fixed37))
+    if len(fixed37_matches) != 1:
+        _fail(
+            "fixed37 production-batch log",
+            "does not contain one exact fixed37 production-batch marker",
+        )
+    fixed37_match = fixed37_matches[0]
+    fixed37_derived = {
+        "gate_id": FIXED37_PRODUCTION_BATCH_GATE_ID,
+        "fixture_sha256": fixed37_match.group("fixture"),
+        "generated_token_ids_sha256": fixed37_match.group("token_sha"),
+        "cases": int(fixed37_match.group("cases")),
+        "compared_steps": int(fixed37_match.group("steps")),
+        "exact_window": int(fixed37_match.group("window")),
+        "fixed_profile": fixed37_match.group("fixed_profile"),
+        "canonical_profile": fixed37_match.group("canonical_profile"),
+        "residual_rmsnorm": fixed37_match.group("residual"),
+        "execution_completion": fixed37_match.group("completion"),
+        "fixed_prefill_raw_logit_mismatches": int(
+            fixed37_match.group("prefill_logits")
+        ),
+        "fixed_cached_growing_token_id_mismatches": int(
+            fixed37_match.group("tokens")
+        ),
+        "fixed_cached_growing_cosine_min": float(
+            fixed37_match.group("cosine_min")
+        ),
+        "fixed_cached_growing_max_abs_max": float(
+            fixed37_match.group("max_abs_max")
+        ),
+        "fixed_cached_growing_mean_abs_max": float(
+            fixed37_match.group("mean_abs_max")
+        ),
+        "fixed_cached_growing_worst_cosine": float(
+            fixed37_match.group("worst_cosine")
+        ),
+        "fixed_cached_growing_worst_max_abs": float(
+            fixed37_match.group("worst_max_abs")
+        ),
+        "fixed_cached_growing_worst_mean_abs": float(
+            fixed37_match.group("worst_mean_abs")
+        ),
+        "fixed_cached_growing_threshold_violations": int(
+            fixed37_match.group("threshold_violations")
+        ),
+        "fixed_golden_token_id_mismatches": int(
+            fixed37_match.group("fixed_golden")
+        ),
+        "canonical_golden_token_id_mismatches": int(
+            fixed37_match.group("canonical_golden")
+        ),
+        "cuda_live_allocation_delta": int(fixed37_match.group("hot")),
+        "owner_close_live_allocation_count": int(fixed37_match.group("close")),
+    }
+    expected_fixed37 = {
+        "gate_id": FIXED37_PRODUCTION_BATCH_GATE_ID,
+        "fixture_sha256": EXPECTED_FIXED37_FIXTURE_SHA256,
+        "generated_token_ids_sha256": EXPECTED_FIXED37_TOKEN_IDS_SHA256,
+        "cases": 31,
+        "compared_steps": 481,
+        "exact_window": 16,
+        "fixed_profile": "fixed-contiguous-37-balanced-v1",
+        "canonical_profile": "canonical-v1",
+        "residual_rmsnorm": "separate",
+        "execution_completion": "iteration-batch",
+        "fixed_prefill_raw_logit_mismatches": 0,
+        "fixed_cached_growing_token_id_mismatches": 0,
+        "fixed_cached_growing_cosine_min": FIXED37_CACHED_GROWING_COSINE_MIN,
+        "fixed_cached_growing_max_abs_max": FIXED37_CACHED_GROWING_MAX_ABS_MAX,
+        "fixed_cached_growing_mean_abs_max": FIXED37_CACHED_GROWING_MEAN_ABS_MAX,
+        "fixed_cached_growing_threshold_violations": 0,
+        "fixed_golden_token_id_mismatches": 0,
+        "canonical_golden_token_id_mismatches": 0,
+        "cuda_live_allocation_delta": 0,
+        "owner_close_live_allocation_count": 0,
+    }
+    if any(
+        fixed37_derived[field] != expected
+        for field, expected in expected_fixed37.items()
+    ):
+        _fail(
+            "fixed37 production-batch log",
+            "semantic values differ from the reviewed production-batch E0 result",
+        )
+    metrics = (
+        fixed37_derived["fixed_cached_growing_worst_cosine"],
+        fixed37_derived["fixed_cached_growing_worst_max_abs"],
+        fixed37_derived["fixed_cached_growing_worst_mean_abs"],
+    )
+    if (
+        metrics[0] < FIXED37_CACHED_GROWING_COSINE_MIN
+        or metrics[1] > FIXED37_CACHED_GROWING_MAX_ABS_MAX
+        or metrics[2] > FIXED37_CACHED_GROWING_MEAN_ABS_MAX
+    ):
+        _fail(
+            "fixed37 production-batch log",
+            "cached/growing metrics exceed the immutable E0 bounds",
+        )
+    _require_exact_test_log(
+        fixed37,
+        "fixed37 production-batch log",
+        test_name=(
+            "fixed37_production_batch_growing_prefix_matches_golden_exactly"
+        ),
+        semantic_marker=fixed37_match.group(0),
+        filtered=9,
+    )
+    fixed37_binary = "fixed37-production-batch-gpu-test"
+    fixed37_compile_id = TEST_SUBJECTS[fixed37_binary]["compile_command_id"]
+    fixed37_derived.update(
+        {
+            "compile_command_id": fixed37_compile_id,
+            "execute_command_id": "fixed37-production-batch-e0",
+            "compile_log_sha256": _sha256_file(
+                evidence_dir / COMPILE_LOG_FILES[fixed37_compile_id],
+                COMPILE_LOG_FILES[fixed37_compile_id],
+            ),
+            "test_binary_sha256": _sha256_file(
+                evidence_dir / fixed37_binary, fixed37_binary
+            ),
+        }
+    )
     return {
         "command-batch-lifecycle": {"one_shot_finish": True, "drop_restores_stream": True},
         "command-batch-resource-ledger": {
@@ -502,6 +714,7 @@ def _validate_execution_logs(evidence_dir: Path) -> dict[str, dict[str, Any]]:
             "owner_close_live_allocation_count": 0,
         },
         "smollm2-multi-step-greedy-exact": derived,
+        "fixed37-production-batch-e0": fixed37_derived,
     }
 
 
