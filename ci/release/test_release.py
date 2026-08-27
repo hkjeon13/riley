@@ -298,8 +298,12 @@ class ReleaseBundleTests(unittest.TestCase):
         self.assertEqual(semantic_paths[2]["prior_evidence_gates"], [])
         self.assertEqual(semantic_paths[2]["release_evidence"], [])
         self.assertEqual(
+            semantic_paths[1]["availability"],
+            "unsupported in the release-candidate series",
+        )
+        self.assertEqual(
             semantic_paths[2]["availability"],
-            "unsupported in the first release candidate",
+            "unsupported in the release-candidate series",
         )
         self.assertEqual(
             manifest["features"]["approximation_policy"],
@@ -407,7 +411,11 @@ class ReleaseBundleTests(unittest.TestCase):
             "Qwen/Qwen2.5-0.5B-Instruct",
         )
         self.assertIn(
-            "first stable release candidate has no preceding stable riley bundle",
+            "release-candidate series has no preceding stable riley bundle",
+            " ".join(manifest["known_limitations"]),
+        )
+        self.assertIn(
+            "do not qualify that arithmetic profile for the release-candidate series",
             " ".join(manifest["known_limitations"]),
         )
         self.assertIn(
@@ -420,6 +428,10 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         self.assertIn("current checksummed bundle", manifest["rollback"]["validated_scope"])
         self.assertIn("only when one exists", manifest["rollback"]["previous_release_scope"])
+        self.assertIn(
+            "unavailable for the release-candidate series",
+            manifest["rollback"]["previous_release_scope"],
+        )
 
     def test_fixed37_cannot_be_promoted_by_manifest_tampering(self) -> None:
         source = self.build("fixed37-source.tar.gz")

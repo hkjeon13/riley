@@ -50,7 +50,7 @@ candidate ID must use the final-gate form
 ```sh
 python3 benchmarks/scripts/package_release_performance_evidence.py \
   --baseline benchmarks/release/performance-baseline-v1.json \
-  --candidate-id riley-0.1.0-rc1 \
+  --candidate-id riley-0.1.0-rc2 \
   --recorded-at-utc 2026-08-26T12:34:56Z \
   --source-archive /evidence/source.tar \
   --profile-binary /evidence/riley-profile \

@@ -6,7 +6,7 @@ Riley (Rust Inference LLM Engine) is a Rust-native, CUDA-first LLM inference
 engine focused on low-latency execution, predictable memory management, and
 reusable model execution patterns.
 
-> Project status: first release candidate
+> Project status: 0.1.0 release candidate (rc2)
 
 Implementation follows the numbered [deployment plan](deploy/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR, validation, benchmark, and `unsafe`/FFI review contract.
 

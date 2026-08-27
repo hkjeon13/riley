@@ -1,5 +1,9 @@
 # Riley 0.1.0-rc1
 
+> **Superseded by `0.1.0-rc2`.** RC1 contains a known mixed-stage
+> output-routing correctness defect, observed in the `C=5` and `C=8`
+> P128/O32 lanes under the default 512-token budget, and must not be used.
+
 **Riley — a Rust-native LLM inference engine.**
 
 Riley (Rust Inference LLM Engine) is a Rust-native, CUDA-first LLM inference

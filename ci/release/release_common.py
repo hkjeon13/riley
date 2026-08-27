@@ -181,7 +181,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
                     },
                     "default_enabled": False,
                     "release_qualified": False,
-                    "availability": "unsupported in the first release candidate",
+                    "availability": "unsupported in the release-candidate series",
                     "exact_fallback": {
                         "flag": "--residual-rmsnorm",
                         "value": "separate",
@@ -201,7 +201,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
                     },
                     "default_enabled": False,
                     "release_qualified": False,
-                    "availability": "unsupported in the first release candidate",
+                    "availability": "unsupported in the release-candidate series",
                     "exact_fallback": {
                         "flag": "--reduction-profile",
                         "value": "canonical-v1",
@@ -354,10 +354,10 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "FP16 is accepted by the strict config and safetensors parsers, but production CUDA execution is BF16-only.",
             "The config parser accepts bounded even head dimensions, but the production continuous-batch CUDA serving executor supports head_dim 64 only.",
             "Fused residual RMSNorm retains prior PR15 E0 evidence but is disabled by default and unsupported in this candidate because no current-revision fused parity report is bound to the final release gate.",
-            "Fixed-contiguous-37 balanced reductions remain an opt-in development compatibility selector; optimizer regression diagnostics do not qualify that arithmetic profile for the first release candidate.",
+            "Fixed-contiguous-37 balanced reductions remain an opt-in development compatibility selector; optimizer regression diagnostics do not qualify that arithmetic profile for the release-candidate series.",
             "Models must be local checksummed safetensors and are read into resident memory within the configured maximum weight-byte bound.",
             "Serving exposes a strict, close-delimited HTTP/1.1 completions surface; chat-completions and other OpenAI endpoints are not implemented.",
-            "The first stable release candidate has no preceding stable riley bundle; PR16 evidence validates conservative E0 flag restart within the current checksummed bundle, while binary rollback requires a preceding stable bundle to exist.",
+            "The release-candidate series has no preceding stable riley bundle; PR16 evidence validates conservative E0 flag restart within the current checksummed bundle, while binary rollback requires a preceding stable bundle to exist.",
         ],
         "configuration": {
             "required": ["serve", "--model PATH"],
@@ -395,7 +395,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             ),
             "previous_release_scope": (
                 "restart a preceding checksummed stable riley bundle only when "
-                "one exists; unavailable for the first stable release candidate"
+                "one exists; unavailable for the release-candidate series"
             ),
             "procedure": [
                 "drain or cancel active requests and stop the current server",

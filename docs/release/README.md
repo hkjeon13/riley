@@ -161,20 +161,20 @@ release build/qualification matrix is Linux x86_64, CUDA 12.8.1, one GPU, and
 ## Semantic path and approximation policy
 
 The bundle's closed `features.semantic_paths` table records every selectable
-optimized serving path that ships in the first candidate:
+optimized serving path that ships in the release-candidate series:
 
 | Path | Class | Stable default | Exact fallback | Approval evidence |
 |---|---|---:|---|---|
 | iteration command batch | `E0` | enabled | `--execution-completion per-operation` | `pr15-iteration-command-batch-exact-v1` |
 | fused residual RMSNorm | `E0` candidate | disabled, unsupported | `--residual-rmsnorm separate` | prior PR15 gate only; no candidate-bound approval |
-| fixed-contiguous-37 balanced reductions | development compatibility selector | disabled, unsupported | `--reduction-profile canonical-v1` | diagnostic only; no first-candidate approval |
+| fixed-contiguous-37 balanced reductions | development compatibility selector | disabled, unsupported | `--reduction-profile canonical-v1` | diagnostic only; no candidate-series approval |
 
 The supported release surface includes only `reference` and candidate-approved
 `E0` semantics. `E1`, `A1`, and `M1` paths are absent, approximation is
 disabled, and both error and quality budgets are `null`; the release cannot
 imply a configured approximation budget for code it does not ship. The fused
 selector remains in the binary for development compatibility, but it is not
-first-release-qualified: its prior
+release-candidate-series-qualified: its prior
 PR15 E0 result predates the candidate and no current-revision fused report is
 bound to the final gate. Operators must keep the documented default
 `--residual-rmsnorm separate`.
@@ -182,9 +182,9 @@ bound to the final gate. Operators must keep the documented default
 Fixed37 remains a candidate-revision optimizer regression diagnostic. Its
 production-batch test still exercises all 31 immutable cases, but that result
 does not override the frozen native-oracle mismatch and therefore does not
-qualify the selector for the first release candidate. Operators must keep the
-documented `canonical-v1` default; the fixed37 selector remains only for
-development compatibility.
+qualify the selector for the release-candidate series. Operators must
+keep the documented `canonical-v1` default; the fixed37 selector remains only
+for development compatibility.
 
 The three stable selector defaults are also bound to the exact reviewed bytes
 of `crates/riley-server/src/main.rs`. Release preflight rejects any source
@@ -200,7 +200,7 @@ reduction profile, iteration-batched completion, and separate residual
 RMSNorm. Fused residual RMSNorm remains incompatible with iteration-batched
 completion. The development-only `fixed-contiguous-37-balanced-v1` selector
 remains bounded to an effective `--max-sequence-tokens` no greater than 8192,
-but it is unsupported in the first release candidate.
+but it is unsupported in the release-candidate series.
 
 For optimization isolation, drain or cancel active work, stop the process, and
 restart the same current checksummed bundle with all conservative E0 flags:
@@ -219,10 +219,10 @@ does not manufacture a preceding stable binary.
 
 For binary release rollback, restart a preceding checksummed stable Riley
 bundle with the same model/configuration only when such a release actually
-exists, verify `/v1/models`, then restore traffic. The first stable release
-candidate has no preceding stable Riley bundle, so only the current-bundle
-conservative E0 restart is available at that point. Rollback never reuses an
-unverified executable or edits a published bundle in place.
+exists, verify `/v1/models`, then restore traffic. The release-candidate series
+has no preceding stable Riley bundle, so only the current-bundle conservative
+E0 restart is available at that point. Rollback never reuses an unverified
+executable or edits a published bundle in place.
 
 ## Graceful shutdown and final metrics
 

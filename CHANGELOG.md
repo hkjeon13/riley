@@ -2,7 +2,25 @@
 
 All notable changes to Riley are documented in this file.
 
+## 0.1.0-rc2 — 2026-08-27
+
+This candidate supersedes `0.1.0-rc1` and fixes a mixed-stage output-routing
+correctness defect. When completing-prefill and decode work shared an
+iteration, output slots could be sampled in stage order and the resulting
+tokens associated with the wrong requests. Riley now canonicalizes dense
+output slots before sampling and covers the mixed-stage ordering with a
+regression test.
+
+The release owner accepted a previously completed soak and authorized this
+prerelease without a candidate-bound 7-hour-15-minute rerun. Gate E therefore
+remains unpassed for `0.1.0-rc2`; this is an explicit owner-approved
+prerelease, not a relaxation of the fail-closed gate.
+
 ## 0.1.0-rc1 — 2026-08-27
+
+> **Superseded by `0.1.0-rc2`.** RC1 contains a known mixed-stage
+> output-routing correctness defect, observed in the `C=5` and `C=8`
+> P128/O32 lanes under the default 512-token budget, and must not be used.
 
 Riley's first source release candidate establishes a Rust-native, CUDA-first
 LLM inference engine with:
