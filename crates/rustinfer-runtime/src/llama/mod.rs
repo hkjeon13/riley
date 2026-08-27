@@ -306,7 +306,8 @@ mod source_contract_tests {
             "PreparedDecodeAttention::select",
             "CudaGemmConfig::new",
             "prepare_gemm",
-            "build_decode_rope_tables",
+            "build_decode_rope_angles",
+            "build_decode_cpu_rope_tables",
             "try_reserve",
         ] {
             assert!(

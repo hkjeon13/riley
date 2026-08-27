@@ -152,9 +152,11 @@ decrement/free가 없고 오류를 성공으로 잘못 보고하지 않았음을
 
 #### `E0`
 
-- reference와 장시간 token-level 회귀
+- reference와 canonical correctness corpus(31 case)의 token-level exact 회귀
 - 여러 partition, graph bucket, backend fallback
 - extreme logits와 긴 context
+
+이 유한 canonical correctness gate는 soak와 독립적으로 실행·판정한다.
 
 #### `E1` preview
 
@@ -212,7 +214,7 @@ noise보다 작은 threshold를 두지 않는다. 환경 편차를 먼저 측정
 
 ## Canonical E0 GEMM Release 진단
 
-첫 candidate의 canonical correctness 재검증은 cuBLASLt reduction policy를 model-global
+첫 candidate 승인을 위한 canonical correctness 재검증은 cuBLASLt reduction policy를 model-global
 switch가 아닌 prepared plan class별 cold contract로 고정한다. `server-4096`의 RTX 4090에서
 HF CUDA 13.1과 native CUDA 12.8 raw first heuristic을 S=18/128/1024/4096/8064에 대해
 비교했으며 algorithm/tile/stage/split-K/reduction/workspace가 모두 일치했다.
@@ -226,8 +228,10 @@ HF CUDA 13.1과 native CUDA 12.8 raw first heuristic을 S=18/128/1024/4096/8064�
 `INPLACE`가 실제로 선택되는 S=1024/4096/8064는 process 내부 각 100회와 fresh process
 각 10회에서 first-layer hidden, full BF16 logits와 token이 byte-identical했다. 이 관측은
 pinned GPU/toolchain/workspace contract에 한정한다. 최종 release 승인은 이 진단만으로
-대체하지 않고 동일 candidate revision의 전체 native correctness와 Qwen regression,
-Python-free, reproducible build, performance 및 soak evidence를 계속 요구한다.
+대체하지 않고 동일한 candidate 대상 revision의 전체 native correctness와 Qwen
+regression, Python-free, reproducible build, performance 및 soak evidence를 각각 요구한다.
+전체 native correctness와 Qwen regression은 soak와 독립적인 단기 gate이며, soak
+실행 여부와 무관하게 판정한다.
 
 ## 이번 순차 구현 실행의 Soak Waiver
 

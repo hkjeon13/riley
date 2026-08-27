@@ -13,10 +13,10 @@ use rustinfer_cuda::{
     CudaPinnedHostBuffer, CudaPreparedFixed37Gemm, CudaPreparedGemm, CudaStream, EmbeddingError,
     EmbeddingParams, Fixed37GemmParams, GatedMultiplyParams, GemmParams, PrefillAttentionParams,
     PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams, ResidualRmsNormParams,
-    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, embedding,
+    RmsNormParams, RopeParams, RopeTableParams, RowBiasAddInPlaceParams, SiluParams, embedding,
     fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
     hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, residual_add,
-    residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
+    residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
 };
 use rustinfer_model::{LoadedModel, ModelConfig};
 
@@ -24,6 +24,7 @@ use super::decode::PrefillKvCacheSink;
 use super::gemm_policy::{
     LlamaGemmReductionPolicies, canonical_gemm_reduction_policies,
     canonical_prefill_attention_preference, is_reviewed_smollm2_rms_norm_geometry,
+    is_reviewed_smollm2_rope_geometry,
 };
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError,
@@ -301,6 +302,7 @@ impl PreparedLlamaForward {
             attention,
             reduction_profile: _,
             rms_norm_profile: _,
+            rope_table_profile: _,
             gemm_reduction_policies: _,
             buffers,
             io_staging,
@@ -532,6 +534,12 @@ pub(super) enum LlamaRmsNormProfile {
     FixedContiguous37Balanced,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum LlamaRopeTableProfile {
+    CpuLibm,
+    HuggingFaceCuda,
+}
+
 fn resolve_rms_norm_profile(
     model: &LoadedModel,
     reduction_profile: LlamaReductionProfile,
@@ -547,6 +555,20 @@ fn resolve_rms_norm_profile(
             LlamaRmsNormProfile::HuggingFaceSmolLm2
         }
         LlamaReductionProfile::CanonicalV1 => LlamaRmsNormProfile::Canonical,
+    }
+}
+
+fn resolve_rope_table_profile(
+    model: &LoadedModel,
+    reduction_profile: LlamaReductionProfile,
+) -> LlamaRopeTableProfile {
+    if reduction_profile == LlamaReductionProfile::CanonicalV1
+        && matches!(model.config(), ModelConfig::Llama(_))
+        && is_reviewed_smollm2_rope_geometry(model.spec())
+    {
+        LlamaRopeTableProfile::HuggingFaceCuda
+    } else {
+        LlamaRopeTableProfile::CpuLibm
     }
 }
 
@@ -1174,6 +1196,7 @@ pub struct PreparedLlamaForward {
     attention: PreparedPrefillAttention,
     reduction_profile: LlamaReductionProfile,
     rms_norm_profile: LlamaRmsNormProfile,
+    rope_table_profile: LlamaRopeTableProfile,
     gemm_reduction_policies: LlamaGemmReductionPolicies,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,
@@ -1192,6 +1215,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("attention_selection", &self.attention.selection_trace())
             .field("reduction_profile", &self.reduction_profile)
             .field("rms_norm_profile", &self.rms_norm_profile)
+            .field("rope_table_profile", &self.rope_table_profile)
             .field("gemm_reduction_policies", &self.gemm_reduction_policies)
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
@@ -1234,6 +1258,7 @@ impl PreparedLlamaForward {
         let gemm_reduction_policies =
             resolve_gemm_reduction_policies(model, config.reduction_profile);
         let rms_norm_profile = resolve_rms_norm_profile(model, config.reduction_profile);
+        let rope_table_profile = resolve_rope_table_profile(model, config.reduction_profile);
 
         let weights = CudaUploadedWeights::upload(
             model.weights(),
@@ -1294,19 +1319,42 @@ impl PreparedLlamaForward {
                 LlamaForwardError::cuda(ExecutionSite::global(LlamaOp::Embedding), source)
             })?;
 
-        let (rope_cos, rope_sin) = build_rope_tables(&plan)?;
-        buffers
-            .rope_cos
-            .upload_from_slice(0, &rope_cos, &mut io_staging, stream)
-            .map_err(|source| {
-                LlamaForwardError::cuda(ExecutionSite::layer(0, LlamaOp::QueryRope), source)
-            })?;
-        buffers
-            .rope_sin
-            .upload_from_slice(0, &rope_sin, &mut io_staging, stream)
-            .map_err(|source| {
-                LlamaForwardError::cuda(ExecutionSite::layer(0, LlamaOp::QueryRope), source)
-            })?;
+        let rope_site = ExecutionSite::layer(0, LlamaOp::QueryRope);
+        let rope_table_bytes = plan.workspace_spec().rope_cos_bytes();
+        if rope_table_profile == LlamaRopeTableProfile::HuggingFaceCuda {
+            let rope_angles = build_rope_angles(&plan)?;
+            buffers
+                .rope_cos
+                .upload_from_slice(0, &rope_angles, &mut io_staging, stream)
+                .map_err(|source| LlamaForwardError::cuda(rope_site, source))?;
+            let mut rope_table_params = RopeTableParams {
+                angles_cos: span_mut(
+                    &mut buffers.rope_cos,
+                    CudaDType::F32,
+                    rope_table_bytes,
+                    rope_site,
+                )?,
+                sin: span_mut(
+                    &mut buffers.rope_sin,
+                    CudaDType::F32,
+                    rope_table_bytes,
+                    rope_site,
+                )?,
+                element_count: rope_table_bytes / mem::size_of::<f32>() as u64,
+            };
+            rope_table(&mut rope_table_params, stream)
+                .map_err(|source| LlamaForwardError::cuda(rope_site, source))?;
+        } else {
+            let (rope_cos, rope_sin) = build_cpu_rope_tables(&plan)?;
+            buffers
+                .rope_cos
+                .upload_from_slice(0, &rope_cos, &mut io_staging, stream)
+                .map_err(|source| LlamaForwardError::cuda(rope_site, source))?;
+            buffers
+                .rope_sin
+                .upload_from_slice(0, &rope_sin, &mut io_staging, stream)
+                .map_err(|source| LlamaForwardError::cuda(rope_site, source))?;
+        }
 
         let token_bytes =
             allocate_host_bytes(workspace.token_ids_bytes(), LlamaForwardResource::TokenIds)?;
@@ -1325,6 +1373,7 @@ impl PreparedLlamaForward {
             attention,
             reduction_profile: config.reduction_profile,
             rms_norm_profile,
+            rope_table_profile,
             gemm_reduction_policies,
             buffers,
             io_staging,
@@ -1362,6 +1411,10 @@ impl PreparedLlamaForward {
 
     pub(super) const fn rms_norm_profile(&self) -> LlamaRmsNormProfile {
         self.rms_norm_profile
+    }
+
+    pub(super) const fn rope_table_profile(&self) -> LlamaRopeTableProfile {
+        self.rope_table_profile
     }
 
     /// Allocates reusable caller-owned host storage for the canonical PR07
@@ -2701,10 +2754,38 @@ fn allocate_host_bytes(
     Ok(bytes.into_boxed_slice())
 }
 
+#[allow(clippy::cast_precision_loss)]
+fn build_rope_angles(plan: &LlamaExecutionPlan) -> LlamaForwardResult<Box<[u8]>> {
+    let dimensions = plan.dimensions();
+    let head_dimension = dimensions.head_dimension();
+    let half = head_dimension / 2;
+    let mut angles = allocate_host_bytes(
+        plan.workspace_spec().rope_cos_bytes(),
+        LlamaForwardResource::RopeCos,
+    )?;
+    let theta = plan.rope_theta();
+    for position in 0..plan.sequence_length() {
+        for pair in 0..half {
+            let exponent = (2 * pair) as f32 / head_dimension as f32;
+            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let angle = position as f32 * inverse_frequency;
+            let element = position
+                .checked_mul(half)
+                .and_then(|value| value.checked_add(pair))
+                .and_then(|value| value.checked_mul(4))
+                .ok_or(LlamaForwardError::ArithmeticOverflow {
+                    resource: LlamaForwardResource::RopeCos,
+                })?;
+            angles[element..element + 4].copy_from_slice(&angle.to_ne_bytes());
+        }
+    }
+    Ok(angles)
+}
+
 type RopeTableBytes = (Box<[u8]>, Box<[u8]>);
 
 #[allow(clippy::cast_precision_loss)]
-fn build_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTableBytes> {
+fn build_cpu_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTableBytes> {
     let dimensions = plan.dimensions();
     let head_dimension = dimensions.head_dimension();
     let half = head_dimension / 2;

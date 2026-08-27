@@ -1,5 +1,5 @@
 use rustinfer_cuda::{AttentionPreference, CudaGemmReductionPolicy};
-use rustinfer_model::{ModelConfig, ModelSpec};
+use rustinfer_model::{ModelConfig, ModelSpec, RopeLayout};
 use rustinfer_tensor::DType;
 
 use super::LlamaReductionProfile;
@@ -13,6 +13,7 @@ const REVIEWED_HEAD_DIMENSION: usize = 64;
 const REVIEWED_LAYER_COUNT: usize = 30;
 const REVIEWED_MAX_SEQUENCE_LENGTH: usize = 8_192;
 const REVIEWED_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
+const REVIEWED_ROPE_THETA_BITS: u64 = 100_000.0_f64.to_bits();
 
 /// Cold, per-plan cuBLASLt reduction policy resolved from validated source
 /// semantics before an execution graph is prepared.
@@ -152,6 +153,17 @@ pub(super) fn is_reviewed_smollm2_rms_norm_geometry(spec: &ModelSpec) -> bool {
         })
 }
 
+pub(super) fn is_reviewed_smollm2_rope_geometry(spec: &ModelSpec) -> bool {
+    is_reviewed_smollm2_rms_norm_geometry(spec)
+        && spec.blocks().iter().all(|block| {
+            let rope = block.attention().rope();
+            rope.dimension() == REVIEWED_HEAD_DIMENSION
+                && rope.max_sequence_length() == REVIEWED_MAX_SEQUENCE_LENGTH
+                && rope.layout() == RopeLayout::Standard
+                && rope.theta().to_bits() == REVIEWED_ROPE_THETA_BITS
+        })
+}
+
 #[allow(clippy::cast_possible_truncation)]
 fn execution_epsilon_bits(epsilon: f64) -> u32 {
     // Llama plan preparation performs this same validated finite-positive
@@ -169,7 +181,7 @@ mod tests {
 
     use super::{
         canonical_gemm_reduction_policies, canonical_prefill_attention_preference,
-        is_reviewed_smollm2_rms_norm_geometry,
+        is_reviewed_smollm2_rms_norm_geometry, is_reviewed_smollm2_rope_geometry,
     };
     use crate::llama::LlamaReductionProfile;
 
@@ -369,5 +381,30 @@ mod tests {
         assert!(!is_reviewed_smollm2_rms_norm_geometry(
             &qwen.to_model_spec()
         ));
+    }
+
+    #[test]
+    fn smollm2_rope_geometry_requires_exact_reviewed_table_contract() {
+        let llama = ModelConfig::from_json_slice(LLAMA_CONFIG.as_bytes()).unwrap();
+        assert!(is_reviewed_smollm2_rope_geometry(&llama.to_model_spec()));
+
+        let different_theta =
+            LLAMA_CONFIG.replace("\"rope_theta\":100000", "\"rope_theta\":100001");
+        let different_theta = ModelConfig::from_json_slice(different_theta.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rope_geometry(
+            &different_theta.to_model_spec()
+        ));
+
+        let different_context = LLAMA_CONFIG.replace(
+            "\"max_position_embeddings\":8192",
+            "\"max_position_embeddings\":4096",
+        );
+        let different_context = ModelConfig::from_json_slice(different_context.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rope_geometry(
+            &different_context.to_model_spec()
+        ));
+
+        let qwen = ModelConfig::from_json_slice(QWEN2_CONFIG.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rope_geometry(&qwen.to_model_spec()));
     }
 }

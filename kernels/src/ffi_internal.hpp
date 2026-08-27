@@ -268,6 +268,10 @@ static_assert(sizeof(RustInferCudaSiluParams) == 152,
               "RustInferCudaSiluParams ABI size changed");
 static_assert(sizeof(RustInferCudaGatedMultiplyParams) == 200,
               "RustInferCudaGatedMultiplyParams ABI size changed");
+static_assert(sizeof(RustInferCudaRopeTableParams) == 152,
+              "RustInferCudaRopeTableParams ABI size changed");
+static_assert(offsetof(RustInferCudaRopeTableParams, element_count) == 104,
+              "RoPE table params ABI dimension offset changed");
 static_assert(sizeof(RustInferCudaRopeParams) == 288,
               "RustInferCudaRopeParams ABI size changed");
 static_assert(offsetof(RustInferCudaRopeParams, token_count) == 200,

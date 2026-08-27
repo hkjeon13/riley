@@ -20,6 +20,9 @@ use crate::ffi;
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const ONLINE_HEAD_SIZE: u64 = 64;
+const HUGGING_FACE_SHORT_DECODE_MAX_TOKENS: u64 = 32;
+const REVIEWED_HF_QUERY_HEAD_COUNT: u64 = 9;
+const REVIEWED_HF_KEY_VALUE_HEAD_COUNT: u64 = 3;
 const FIXED37_MAX_TWO_PASS_TOKENS: u64 = 8192;
 const DEFAULT_TOKENS_PER_PARTITION: u64 = 128;
 const MINIMUM_HARDWARE_COMPUTE_CAPABILITY: (u32, u32) = (8, 0);
@@ -27,10 +30,13 @@ const MAXIMUM_GRID_X: u64 = i32::MAX as u64;
 const MAXIMUM_GRID_Y: u64 = 65_535;
 const REFERENCE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.materialized-gqa-decode.bf16";
 const ONLINE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64";
+const REVIEWED_HF_HYBRID_IMPLEMENTATION_ID: &str =
+    "rustinfer.cuda.reviewed-9qh-3kvh-hf-short-materialized-then-chunked-online.bf16.d64.t32";
 const PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.paged-materialized-gqa-decode.bf16.block16";
 const PAGED_ONLINE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
+const REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID: &str = "rustinfer.cuda.reviewed-9qh-3kvh-paged-hf-short-materialized-then-block-online.bf16.d64.t32.block16";
 const FIXED37_REFERENCE_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.fixed37.materialized-gqa-decode.bf16";
 const FIXED37_PAGED_REFERENCE_IMPLEMENTATION_ID: &str =
@@ -40,6 +46,7 @@ const FIXED37_TWO_PASS_IMPLEMENTATION_ID: &str =
 const FIXED37_PAGED_TWO_PASS_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.fixed37.paged-two-pass-gqa-decode.bf16.d64.t8192.block16";
 const IMPLEMENTATION_VERSION: &str = "1";
+const REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION: &str = "2";
 const NATIVE_DEPENDENCY: &str = concat!(
     "rustinfer_cuda_native@abi1+cuda-architectures=",
     env!("RUSTINFER_CUDA_COMPILED_ARCHITECTURES"),
@@ -52,6 +59,7 @@ pub const DECODE_PARTIAL_STATE_VERSION: u32 = 1;
 pub const PAGED_KV_BLOCK_TABLE_VERSION: u32 = 1;
 /// Fixed number of logical tokens in every PR 10 physical KV block.
 pub const PAGED_KV_BLOCK_SIZE: u64 = 16;
+const _: () = assert!(F32_BYTES % BF16_BYTES == 0);
 #[cfg(feature = "cuda")]
 #[allow(clippy::cast_possible_truncation)] // Guarded by the adjacent const assertion.
 const PAGED_KV_BLOCK_SIZE_ABI: u32 = PAGED_KV_BLOCK_SIZE as u32;
@@ -565,7 +573,10 @@ pub enum DecodeAttentionPreference {
 pub enum DecodeAttentionBackend {
     /// Materializes BF16 `[QH,T]` scores and probabilities.
     MaterializedReference,
-    /// Produces and merges packed F32 partial states.
+    /// Produces and merges packed F32 partial states. The reviewed
+    /// 9QH/3KVH/D64 plan is an explicitly versioned hybrid: logical `T<=32`
+    /// reuses the aligned workspace prefix for HF-eager materialized scores,
+    /// while `T>=33` remains the ordinary online path.
     ChunkedOnline,
     /// Materializes staged BF16 scores and uses fixed-contiguous-37-balanced-v1
     /// for every D/T reduction.
@@ -583,6 +594,9 @@ pub enum DecodeAttentionSelectionReason {
     ExplicitReference,
     /// Every optimized capability matched.
     OptimizedCapabilityMatch,
+    /// The reviewed 9QH/3KVH/D64 geometry selected the versioned
+    /// HF-short/online hybrid production path.
+    ReviewedHuggingFaceShortExactHybrid,
     /// The optimized implementation was not linked.
     OptimizedUnavailableFallback,
     /// The optimized kernel supports D64 only.
@@ -824,6 +838,7 @@ pub struct DecodeAttentionCapability {
     accumulator_dtype: CudaDType,
     materializes_scores: bool,
     partial_state_merge: bool,
+    short_materialized_token_limit: Option<u64>,
     reduction_profile: AttentionReductionProfile,
     reduction_version: Option<u32>,
     reduction_chunk_elements: Option<u64>,
@@ -861,6 +876,13 @@ impl DecodeAttentionCapability {
         self.partial_state_merge
     }
 
+    /// Logical-token boundary for a versioned materialized-score prefix
+    /// inside an otherwise online backend.
+    #[must_use]
+    pub const fn short_materialized_token_limit(self) -> Option<u64> {
+        self.short_materialized_token_limit
+    }
+
     /// Reduction order fixed into the backend.
     #[must_use]
     pub const fn reduction_profile(self) -> AttentionReductionProfile {
@@ -892,6 +914,7 @@ const REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabilit
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
     reduction_chunk_elements: None,
@@ -904,6 +927,20 @@ const ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    short_materialized_token_limit: None,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
+};
+
+const REVIEWED_HF_HYBRID_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: REVIEWED_HF_HYBRID_IMPLEMENTATION_ID,
+    head_size: Some(ONLINE_HEAD_SIZE),
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: true,
+    partial_state_merge: true,
+    short_materialized_token_limit: Some(HUGGING_FACE_SHORT_DECODE_MAX_TOKENS),
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
     reduction_chunk_elements: None,
@@ -916,6 +953,7 @@ const PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCap
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
     reduction_chunk_elements: None,
@@ -928,6 +966,20 @@ const PAGED_ONLINE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapabi
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: true,
+    short_materialized_token_limit: None,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: None,
+};
+
+const REVIEWED_HF_PAGED_HYBRID_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCapability {
+    implementation_id: REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID,
+    head_size: Some(ONLINE_HEAD_SIZE),
+    accumulator_dtype: CudaDType::F32,
+    materializes_scores: true,
+    partial_state_merge: true,
+    short_materialized_token_limit: Some(HUGGING_FACE_SHORT_DECODE_MAX_TOKENS),
     reduction_profile: AttentionReductionProfile::CanonicalV1,
     reduction_version: None,
     reduction_chunk_elements: None,
@@ -940,6 +992,7 @@ const FIXED37_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAttentionC
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
     reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
@@ -952,6 +1005,7 @@ const FIXED37_PAGED_REFERENCE_CAPABILITY: DecodeAttentionCapability = DecodeAtte
     accumulator_dtype: CudaDType::F32,
     materializes_scores: true,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
     reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
@@ -964,6 +1018,7 @@ const FIXED37_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAttentionCa
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
     reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
@@ -976,6 +1031,7 @@ const FIXED37_PAGED_TWO_PASS_CAPABILITY: DecodeAttentionCapability = DecodeAtten
     accumulator_dtype: CudaDType::F32,
     materializes_scores: false,
     partial_state_merge: false,
+    short_materialized_token_limit: None,
     reduction_profile: AttentionReductionProfile::FixedContiguous37BalancedV1,
     reduction_version: Some(FIXED37_REDUCTION_VERSION),
     reduction_chunk_elements: Some(FIXED37_CHUNK_ELEMENTS as u64),
@@ -998,6 +1054,7 @@ pub struct DecodeAttentionSelectionTrace {
     partial_state_bytes: u64,
     partial_state_capacity: u64,
     tokens_per_partition: u64,
+    short_materialized_token_limit: Option<u64>,
     reduction_profile: AttentionReductionProfile,
     dynamic_shared_memory_bytes: u64,
 }
@@ -1054,6 +1111,10 @@ impl DecodeAttentionSelectionTrace {
     #[must_use]
     pub const fn tokens_per_partition(self) -> u64 {
         self.tokens_per_partition
+    }
+    #[must_use]
+    pub const fn short_materialized_token_limit(self) -> Option<u64> {
+        self.short_materialized_token_limit
     }
     /// Immutable reduction profile selected before execution.
     #[must_use]
@@ -1340,12 +1401,21 @@ impl PreparedDecodeAttention {
                     DecodeAttentionSelectionReason::UnsupportedLaunchGeometryFallback
                 } else {
                     validate_optimized_workspace(request)?;
+                    let reason = if is_reviewed_hugging_face_short_decode_shape(
+                        request.query_head_count,
+                        request.key_value_head_count,
+                        request.head_size,
+                    ) {
+                        DecodeAttentionSelectionReason::ReviewedHuggingFaceShortExactHybrid
+                    } else {
+                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch
+                    };
                     return prepare_selection(
                         context,
                         compute_capability,
                         request,
                         DecodeAttentionBackend::ChunkedOnline,
-                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch,
+                        reason,
                     );
                 };
                 if !availability.reference {
@@ -1809,12 +1879,21 @@ impl PreparedPagedDecodeAttention {
                 } else if !paged_optimized_geometry_supported(request)? {
                     DecodeAttentionSelectionReason::UnsupportedLaunchGeometryFallback
                 } else {
+                    let reason = if is_reviewed_hugging_face_short_decode_shape(
+                        request.query_head_count,
+                        request.key_value_head_count,
+                        request.head_size,
+                    ) {
+                        DecodeAttentionSelectionReason::ReviewedHuggingFaceShortExactHybrid
+                    } else {
+                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch
+                    };
                     return prepare_paged_selection(
                         context,
                         compute_capability,
                         request,
                         DecodeAttentionBackend::ChunkedOnline,
-                        DecodeAttentionSelectionReason::OptimizedCapabilityMatch,
+                        reason,
                     );
                 };
                 if !availability.reference {
@@ -2582,11 +2661,29 @@ fn prepare_paged_selection(
                 request.query_head_count,
                 request.head_size,
             )?;
+            let hybrid = is_reviewed_hugging_face_short_decode_shape(
+                request.query_head_count,
+                request.key_value_head_count,
+                request.head_size,
+            );
+            let materialized_score_bytes = if hybrid {
+                hugging_face_short_score_prefix_bytes(
+                    "select_paged_decode_attention",
+                    request.query_head_count,
+                    layout.byte_len(),
+                )?
+            } else {
+                0
+            };
             (
-                PAGED_ONLINE_CAPABILITY,
+                if hybrid {
+                    REVIEWED_HF_PAGED_HYBRID_CAPABILITY
+                } else {
+                    PAGED_ONLINE_CAPABILITY
+                },
                 CudaDType::F32,
                 layout.byte_len(),
-                0,
+                materialized_score_bytes,
                 layout.byte_len(),
                 capacity,
             )
@@ -2600,7 +2697,11 @@ fn prepare_paged_selection(
         trace: DecodeAttentionSelectionTrace {
             reason,
             implementation_id: capability.implementation_id,
-            implementation_version: IMPLEMENTATION_VERSION,
+            implementation_version: if capability.short_materialized_token_limit.is_some() {
+                REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION
+            } else {
+                IMPLEMENTATION_VERSION
+            },
             native_dependency: NATIVE_DEPENDENCY,
             compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
             device_ordinal: context.device_ordinal(),
@@ -2616,6 +2717,7 @@ fn prepare_paged_selection(
                 DecodeAttentionBackend::Fixed37Materialized
                 | DecodeAttentionBackend::Fixed37TwoPass => 0,
             },
+            short_materialized_token_limit: capability.short_materialized_token_limit,
             reduction_profile: capability.reduction_profile,
             dynamic_shared_memory_bytes: match backend {
                 DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
@@ -2988,6 +3090,7 @@ fn paged_pool_bytes(
     )
 }
 
+#[allow(clippy::too_many_lines)]
 fn prepare_selection(
     context: &CudaContext,
     compute_capability: (u32, u32),
@@ -3047,11 +3150,29 @@ fn prepare_selection(
                 request.query_head_count,
                 request.head_size,
             )?;
+            let hybrid = is_reviewed_hugging_face_short_decode_shape(
+                request.query_head_count,
+                request.key_value_head_count,
+                request.head_size,
+            );
+            let materialized_score_bytes = if hybrid {
+                hugging_face_short_score_prefix_bytes(
+                    "select_decode_attention",
+                    request.query_head_count,
+                    layout.byte_len(),
+                )?
+            } else {
+                0
+            };
             (
-                ONLINE_CAPABILITY,
+                if hybrid {
+                    REVIEWED_HF_HYBRID_CAPABILITY
+                } else {
+                    ONLINE_CAPABILITY
+                },
                 CudaDType::F32,
                 layout.byte_len(),
-                0,
+                materialized_score_bytes,
                 layout.byte_len(),
                 capacity,
                 request.tokens_per_partition,
@@ -3066,7 +3187,11 @@ fn prepare_selection(
         trace: DecodeAttentionSelectionTrace {
             reason,
             implementation_id: capability.implementation_id,
-            implementation_version: IMPLEMENTATION_VERSION,
+            implementation_version: if capability.short_materialized_token_limit.is_some() {
+                REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION
+            } else {
+                IMPLEMENTATION_VERSION
+            },
             native_dependency: NATIVE_DEPENDENCY,
             compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
             device_ordinal: context.device_ordinal(),
@@ -3077,6 +3202,7 @@ fn prepare_selection(
             partial_state_bytes,
             partial_state_capacity,
             tokens_per_partition,
+            short_materialized_token_limit: capability.short_materialized_token_limit,
             reduction_profile: capability.reduction_profile,
             dynamic_shared_memory_bytes: match backend {
                 DecodeAttentionBackend::Fixed37Materialized => fixed37_reduction_shared_bytes(
@@ -3343,6 +3469,38 @@ fn validate_no_workspace_execute_params(
     )
 }
 
+const fn is_reviewed_hugging_face_short_decode_shape(
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+) -> bool {
+    query_head_count == REVIEWED_HF_QUERY_HEAD_COUNT
+        && key_value_head_count == REVIEWED_HF_KEY_VALUE_HEAD_COUNT
+        && head_size == ONLINE_HEAD_SIZE
+}
+
+fn hugging_face_short_score_prefix_bytes(
+    operation: &'static str,
+    query_head_count: u64,
+    workspace_bytes: u64,
+) -> CudaResult<u64> {
+    let required = checked_bytes(
+        operation,
+        &[
+            query_head_count,
+            HUGGING_FACE_SHORT_DECODE_MAX_TOKENS,
+            BF16_BYTES,
+        ],
+    )?;
+    require_capacity(
+        operation,
+        "hybrid short-score workspace prefix",
+        workspace_bytes,
+        required,
+    )?;
+    Ok(required)
+}
+
 fn optimized_geometry_supported(request: DecodeAttentionRequest) -> CudaResult<bool> {
     let partitions = partition_count(
         request.maximum_sequence_length,
@@ -3597,6 +3755,33 @@ mod tests {
         assert_eq!(online.partial_state_capacity(), 32);
         assert_eq!(online.workspace_bytes(), 32 * 9 * 66 * 4);
         assert_eq!(online.workspace_dtype(), CudaDType::F32);
+        assert_eq!(
+            online.selection_trace().reason(),
+            DecodeAttentionSelectionReason::ReviewedHuggingFaceShortExactHybrid
+        );
+        assert_eq!(
+            online.selection_trace().implementation_id(),
+            REVIEWED_HF_HYBRID_IMPLEMENTATION_ID
+        );
+        assert_eq!(
+            online.selection_trace().implementation_version(),
+            REVIEWED_HF_HYBRID_IMPLEMENTATION_VERSION
+        );
+        assert_eq!(
+            online.selection_trace().materialized_score_bytes(),
+            9 * 32 * 2
+        );
+        assert_eq!(
+            online.selection_trace().short_materialized_token_limit(),
+            Some(32)
+        );
+        assert!(online.capability().materializes_scores());
+        assert!(online.capability().supports_partial_state_merge());
+        assert_eq!(
+            online.capability().short_materialized_token_limit(),
+            Some(32)
+        );
+        assert!(online.workspace_bytes() >= online.selection_trace().materialized_score_bytes());
 
         let fallback = PreparedDecodeAttention::select_for_compute_capability(
             &context,
@@ -3612,6 +3797,59 @@ mod tests {
         );
         assert_eq!(fallback.workspace_bytes(), 4096 * 9 * 2);
         assert_eq!(fallback.workspace_dtype(), CudaDType::BF16);
+    }
+
+    #[test]
+    #[cfg(not(feature = "cuda"))]
+    fn qwen_and_neighbor_shapes_remain_plain_online_and_fixed37_is_disjoint() {
+        let context = test_context();
+        let availability =
+            DecodeAttentionBackendAvailability::new(true, true).with_fixed37(true, true);
+        for request in [
+            // Qwen2.5-0.5B geometry.
+            DecodeAttentionRequest::new(4096, 14, 2, 64, 0.125),
+            DecodeAttentionRequest::new(4096, 8, 2, 64, 0.125),
+            DecodeAttentionRequest::new(4096, 9, 1, 64, 0.125),
+        ] {
+            let prepared = PreparedDecodeAttention::select(
+                &context,
+                request,
+                DecodeAttentionPreference::Optimized,
+                availability,
+            )
+            .unwrap();
+            assert_eq!(prepared.backend(), DecodeAttentionBackend::ChunkedOnline);
+            assert_eq!(
+                prepared.capability().implementation_id(),
+                ONLINE_IMPLEMENTATION_ID
+            );
+            assert_eq!(
+                prepared.selection_trace().implementation_version(),
+                IMPLEMENTATION_VERSION
+            );
+            assert_eq!(
+                prepared.selection_trace().reason(),
+                DecodeAttentionSelectionReason::OptimizedCapabilityMatch
+            );
+            assert_eq!(prepared.selection_trace().materialized_score_bytes(), 0);
+            assert_eq!(
+                prepared.selection_trace().short_materialized_token_limit(),
+                None
+            );
+            assert!(!prepared.capability().materializes_scores());
+        }
+
+        let fixed37 = PreparedDecodeAttention::select_with_reduction_profile(
+            &context,
+            DecodeAttentionRequest::new(4096, 9, 3, 64, 0.125),
+            DecodeAttentionPreference::Optimized,
+            AttentionReductionProfile::FixedContiguous37BalancedV1,
+            availability,
+        )
+        .unwrap();
+        assert_eq!(fixed37.backend(), DecodeAttentionBackend::Fixed37TwoPass);
+        assert_eq!(fixed37.capability().short_materialized_token_limit(), None);
+        assert_eq!(fixed37.selection_trace().materialized_score_bytes(), 0);
     }
 
     #[test]
@@ -4085,7 +4323,20 @@ mod tests {
         assert_eq!(online.tokens_per_partition(), 16);
         assert_eq!(
             online.capability().implementation_id(),
-            PAGED_ONLINE_IMPLEMENTATION_ID
+            REVIEWED_HF_PAGED_HYBRID_IMPLEMENTATION_ID
+        );
+        assert_eq!(
+            online.selection_trace().reason(),
+            DecodeAttentionSelectionReason::ReviewedHuggingFaceShortExactHybrid
+        );
+        assert_eq!(online.selection_trace().implementation_version(), "2");
+        assert_eq!(
+            online.selection_trace().materialized_score_bytes(),
+            9 * 32 * 2
+        );
+        assert_eq!(
+            online.selection_trace().short_materialized_token_limit(),
+            Some(32)
         );
 
         let fallback = PreparedPagedDecodeAttention::select_for_compute_capability(

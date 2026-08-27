@@ -17,9 +17,9 @@ use rustinfer_cuda::{
     CudaDeviceBuffer, CudaError, CudaExecutionStream, CudaStream, EmbeddingParams,
     FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    ResidualRmsNormParams, RmsNormParams, RowGatherParams, SiluParams, embedding,
+    ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams, SiluParams, embedding,
     fixed37_ragged_paged_attention, gated_multiply, indexed_rope, ragged_paged_attention,
-    ragged_paged_kv_cache_write, residual_add, row_gather, silu,
+    ragged_paged_kv_cache_write, residual_add, rope_table, row_gather, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -28,10 +28,10 @@ use super::batch::{
     LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
 };
 use super::forward::{
-    LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaAllocationReport, PreparedLlamaForward,
-    PreparedLlamaForwardConfig, execute_gemm, execute_profile_residual_rms_norm,
-    execute_profile_rms_norm, execute_projection_bias, poison_for_cuda_error,
-    poison_for_forward_error, span, span_mut, weight_span,
+    LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile, PreparedLlamaAllocationReport,
+    PreparedLlamaForward, PreparedLlamaForwardConfig, execute_gemm,
+    execute_profile_residual_rms_norm, execute_profile_rms_norm, execute_projection_bias,
+    poison_for_cuda_error, poison_for_forward_error, span, span_mut, weight_span,
 };
 use super::{ExecutionSite, LlamaOp, LlamaReductionProfile};
 use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout, PagedKvError};
@@ -642,17 +642,46 @@ impl PreparedLlamaBatchExecutor {
             rope_bytes_per_kind,
             ExecutionSite::layer(0, LlamaOp::QueryRope),
         )?;
-        let (rope_cos, rope_sin) = build_absolute_rope_tables(
-            spec.max_sequence_length(),
-            dimensions.head_dimension(),
-            forward.plan.rope_theta(),
-        )?;
-        absolute_rope_cos
-            .upload_from_slice(0, &rope_cos, &mut forward.io_staging, stream)
-            .map_err(|source| batch_cuda(ExecutionSite::layer(0, LlamaOp::QueryRope), source))?;
-        absolute_rope_sin
-            .upload_from_slice(0, &rope_sin, &mut forward.io_staging, stream)
-            .map_err(|source| batch_cuda(ExecutionSite::layer(0, LlamaOp::QueryRope), source))?;
+        let rope_site = ExecutionSite::layer(0, LlamaOp::QueryRope);
+        if forward.rope_table_profile() == LlamaRopeTableProfile::HuggingFaceCuda {
+            let rope_angles = build_absolute_rope_angles(
+                spec.max_sequence_length(),
+                dimensions.head_dimension(),
+                forward.plan.rope_theta(),
+            )?;
+            absolute_rope_cos
+                .upload_from_slice(0, &rope_angles, &mut forward.io_staging, stream)
+                .map_err(|source| batch_cuda(rope_site, source))?;
+            let mut rope_table_params = RopeTableParams {
+                angles_cos: span_mut(
+                    &mut absolute_rope_cos,
+                    CudaDType::F32,
+                    rope_bytes_per_kind,
+                    rope_site,
+                )?,
+                sin: span_mut(
+                    &mut absolute_rope_sin,
+                    CudaDType::F32,
+                    rope_bytes_per_kind,
+                    rope_site,
+                )?,
+                element_count: rope_bytes_per_kind / F32_BYTES,
+            };
+            rope_table(&mut rope_table_params, stream)
+                .map_err(|source| batch_cuda(rope_site, source))?;
+        } else {
+            let (rope_cos, rope_sin) = build_absolute_cpu_rope_tables(
+                spec.max_sequence_length(),
+                dimensions.head_dimension(),
+                forward.plan.rope_theta(),
+            )?;
+            absolute_rope_cos
+                .upload_from_slice(0, &rope_cos, &mut forward.io_staging, stream)
+                .map_err(|source| batch_cuda(rope_site, source))?;
+            absolute_rope_sin
+                .upload_from_slice(0, &rope_sin, &mut forward.io_staging, stream)
+                .map_err(|source| batch_cuda(rope_site, source))?;
+        }
 
         let device_metadata = allocate_device_metadata(context, bounds)?;
         let gathered_logits_capacity_bytes = checked_product_u64(
@@ -2045,10 +2074,43 @@ fn allocate_zeroed_bytes(
     Ok(bytes.into_boxed_slice())
 }
 
+#[allow(clippy::cast_precision_loss)]
+fn build_absolute_rope_angles(
+    position_count: usize,
+    head_dimension: usize,
+    theta: f32,
+) -> LlamaBatchExecutorResult<Box<[u8]>> {
+    let half = head_dimension / 2;
+    let elements =
+        position_count
+            .checked_mul(half)
+            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RopeCos,
+            })?;
+    let mut angles = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
+    for position in 0..position_count {
+        for pair in 0..half {
+            let exponent = (2 * pair) as f32 / head_dimension as f32;
+            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let angle = position as f32 * inverse_frequency;
+            let byte_offset = position
+                .checked_mul(half)
+                .and_then(|value| value.checked_add(pair))
+                .and_then(|value| value.checked_mul(F32_BYTES_USIZE))
+                .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+                    resource: LlamaBatchExecutorResource::RopeCos,
+                })?;
+            angles[byte_offset..byte_offset + F32_BYTES_USIZE]
+                .copy_from_slice(&angle.to_ne_bytes());
+        }
+    }
+    Ok(angles)
+}
+
 type RopeTableBytes = (Box<[u8]>, Box<[u8]>);
 
 #[allow(clippy::cast_precision_loss)]
-fn build_absolute_rope_tables(
+fn build_absolute_cpu_rope_tables(
     position_count: usize,
     head_dimension: usize,
     theta: f32,

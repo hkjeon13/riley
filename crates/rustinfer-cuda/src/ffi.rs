@@ -64,6 +64,7 @@ const RESIDUAL_RMS_NORM_PARAMS_SIZE: u32 = 304;
 const ROW_BIAS_ADD_IN_PLACE_PARAMS_SIZE: u32 = 152;
 const SILU_PARAMS_SIZE: u32 = 152;
 const GATED_MULTIPLY_PARAMS_SIZE: u32 = 200;
+const ROPE_TABLE_PARAMS_SIZE: u32 = 152;
 const ROPE_PARAMS_SIZE: u32 = 288;
 const INDEXED_ROPE_PARAMS_SIZE: u32 = 320;
 const CAST_PARAMS_SIZE: u32 = 152;
@@ -524,6 +525,16 @@ struct RawGatedMultiplyParams {
     activated_gate: RawBufferSpan,
     up: RawBufferSpan,
     output: RawBufferSpan,
+    element_count: u64,
+    reserved: [u64; 5],
+}
+
+#[repr(C)]
+struct RawRopeTableParams {
+    struct_size: u32,
+    reserved0: u32,
+    angles_cos: RawBufferSpan,
+    sin: RawBufferSpan,
     element_count: u64,
     reserved: [u64; 5],
 }
@@ -1438,6 +1449,11 @@ unsafe extern "C" {
     ) -> i32;
     fn rustinfer_cuda_gated_multiply_execute(
         params: *const RawGatedMultiplyParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_rope_table_execute(
+        params: *const RawRopeTableParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -2873,6 +2889,28 @@ pub(super) fn gated_multiply_execute(
         // SAFETY: params and the borrowed opaque resources outlive the
         // synchronously completing native operation.
         unsafe { rustinfer_cuda_gated_multiply_execute(&params, stream, error) }
+    })
+}
+
+pub(super) fn rope_table_execute(
+    angles_cos: RawBufferSpan,
+    sin: RawBufferSpan,
+    element_count: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRopeTableParams {
+        struct_size: ROPE_TABLE_PARAMS_SIZE,
+        reserved0: 0,
+        angles_cos,
+        sin,
+        element_count,
+        reserved: [0; 5],
+    };
+    primitive_status("prepare CUDA RoPE tables", stream, |stream, error| {
+        // SAFETY: params outlives submission, while native active-use leases
+        // retain both buffers through synchronous completion or command-batch
+        // completion.
+        unsafe { rustinfer_cuda_rope_table_execute(&params, stream, error) }
     })
 }
 
@@ -4866,6 +4904,8 @@ const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, row_count) == 104);
 const _: () = assert!(offset_of!(RawRowBiasAddInPlaceParams, reserved) == 120);
 const _: () = assert!(size_of::<RawSiluParams>() == 152);
 const _: () = assert!(size_of::<RawGatedMultiplyParams>() == 200);
+const _: () = assert!(size_of::<RawRopeTableParams>() == 152);
+const _: () = assert!(offset_of!(RawRopeTableParams, element_count) == 104);
 const _: () = assert!(size_of::<RawRopeParams>() == 288);
 const _: () = assert!(offset_of!(RawRopeParams, position_offset) == 240);
 const _: () = assert!(size_of::<RawIndexedRopeParams>() == 320);

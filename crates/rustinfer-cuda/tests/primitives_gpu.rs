@@ -6,9 +6,10 @@ use rustinfer_cuda::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaCommandBatch, CudaContext, CudaDType,
     CudaDevice, CudaDeviceBuffer, CudaError, CudaErrorKind, CudaPinnedHostBuffer, CudaResult,
     CudaRuntime, CudaStream, EmbeddingError, EmbeddingParams, GatedMultiplyParams,
-    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, SiluParams, cast,
-    embedding, gated_multiply, hugging_face_smollm2_residual_rms_norm,
-    hugging_face_smollm2_rms_norm, residual_add, residual_rms_norm, rms_norm, rope, silu,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams,
+    SiluParams, cast, embedding, gated_multiply, hugging_face_smollm2_residual_rms_norm,
+    hugging_face_smollm2_rms_norm, residual_add, residual_rms_norm, rms_norm, rope, rope_table,
+    silu,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -1082,6 +1083,75 @@ fn residual_rms_norm_validation_is_fail_closed_and_zero_rows_are_a_noop() -> Tes
     normalized_output.close()?;
     standalone_residual.close()?;
     standalone_norm.close()?;
+    staging.close()?;
+    stream.close()?;
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn rope_table_matches_hugging_face_cuda_bf16_boundaries() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    const POSITION_COUNT: u16 = 8_192;
+    const HALF_DIMENSION: u16 = 32;
+    let element_count = usize::from(POSITION_COUNT) * usize::from(HALF_DIMENSION);
+    let mut angles = Vec::with_capacity(element_count);
+    let mut cpu_cos_bf16 = Vec::with_capacity(element_count);
+    let mut cpu_sin_bf16 = Vec::with_capacity(element_count);
+    for position in 0..POSITION_COUNT {
+        for pair in 0..HALF_DIMENSION {
+            let exponent = f32::from(2 * pair) / 64.0;
+            let inverse_frequency = 1.0 / 100_000.0_f32.powf(exponent);
+            let angle = f32::from(position) * inverse_frequency;
+            let (sine, cosine) = angle.sin_cos();
+            angles.push(angle);
+            cpu_cos_bf16.push(f32_to_bf16_bits(cosine));
+            cpu_sin_bf16.push(f32_to_bf16_bits(sine));
+        }
+    }
+    let table_bytes = u64::try_from(element_count)? * 4;
+    let mut staging = context.allocate_pinned_host_buffer(table_bytes)?;
+    let mut angles_cos = upload(&context, &mut stream, &mut staging, &f32_bytes(&angles))?;
+    let mut sin = context.allocate_device_buffer(table_bytes)?;
+    let mut params = RopeTableParams {
+        angles_cos: CudaBufferSpanMut::new(&mut angles_cos, CudaDType::F32, 0, table_bytes)?,
+        sin: CudaBufferSpanMut::new(&mut sin, CudaDType::F32, 0, table_bytes)?,
+        element_count: u64::try_from(element_count)?,
+    };
+    rope_table(&mut params, &mut stream)?;
+
+    let cos_values = decode_f32(&download(&context, &mut stream, &mut angles_cos)?);
+    let sin_values = decode_f32(&download(&context, &mut stream, &mut sin)?);
+    let cos_mismatches: Vec<_> = cos_values
+        .into_iter()
+        .map(f32_to_bf16_bits)
+        .zip(cpu_cos_bf16)
+        .enumerate()
+        .filter_map(|(index, (cuda, cpu))| (cuda != cpu).then_some((index, cpu, cuda)))
+        .collect();
+    let sin_mismatches: Vec<_> = sin_values
+        .into_iter()
+        .map(f32_to_bf16_bits)
+        .zip(cpu_sin_bf16)
+        .enumerate()
+        .filter_map(|(index, (cuda, cpu))| (cuda != cpu).then_some((index, cpu, cuda)))
+        .collect();
+    assert_eq!(
+        cos_mismatches,
+        [(usize::from(5_972_u16) * 32 + 17, 0x3f51, 0x3f52)]
+    );
+    assert_eq!(
+        sin_mismatches,
+        [
+            (usize::from(746_u16) * 32 + 16, 0x3f34, 0x3f35),
+            (usize::from(2_402_u16) * 32 + 9, 0x3c39, 0x3c38),
+        ]
+    );
+
+    angles_cos.close()?;
+    sin.close()?;
     staging.close()?;
     stream.close()?;
     close_context(context)

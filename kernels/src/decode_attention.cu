@@ -31,6 +31,10 @@ constexpr uint64_t kFixed37TwoPassHeadSize = 64;
 constexpr uint64_t kFixed37TwoPassDepthPartialCount =
     rustinfer_cuda_fixed37::chunk_count(kFixed37TwoPassHeadSize);
 constexpr uint64_t kFixed37TwoPassMaximumTokenCount = 8192;
+constexpr uint64_t kHuggingFaceShortDecodeMaximumTokenCount = 32;
+constexpr uint64_t kReviewedHuggingFaceQueryHeadCount = 9;
+constexpr uint64_t kReviewedHuggingFaceKeyValueHeadCount = 3;
+constexpr uint64_t kReviewedHuggingFaceHeadSize = 64;
 constexpr uint64_t kMaximumGridX = 2147483647;
 constexpr uint64_t kMaximumGridYOrZ = 65535;
 
@@ -127,6 +131,41 @@ bool reserved_is_zero(const uint64_t* reserved, size_t count) noexcept {
     }
   }
   return true;
+}
+
+bool use_reviewed_hugging_face_short_decode(
+    uint64_t logical_token_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t head_size) noexcept {
+  return logical_token_count <= kHuggingFaceShortDecodeMaximumTokenCount &&
+         query_head_count == kReviewedHuggingFaceQueryHeadCount &&
+         key_value_head_count == kReviewedHuggingFaceKeyValueHeadCount &&
+         head_size == kReviewedHuggingFaceHeadSize;
+}
+
+RustInferCudaStatus validate_hugging_face_short_workspace_prefix(
+    const ResolvedSpan& workspace, uint64_t current_score_bytes,
+    uint64_t maximum_score_bytes, uint64_t available_bytes,
+    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+  if (current_score_bytes > maximum_score_bytes) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          operation,
+                          "short decode current score bytes exceed the reviewed maximum");
+  }
+  if (maximum_score_bytes > available_bytes ||
+      maximum_score_bytes > workspace.used_bytes) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "decode partial-state workspace cannot hold the short score prefix");
+  }
+  if ((reinterpret_cast<uintptr_t>(workspace.data) %
+       alignof(__nv_bfloat16)) != 0) {
+    return validation_error(
+        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+        "decode partial-state workspace is not BF16 aligned");
+  }
+  return RUSTINFER_CUDA_STATUS_SUCCESS;
 }
 
 RustInferCudaStatus typed_bytes(uint64_t element_count, uint64_t element_size,
@@ -998,6 +1037,77 @@ __global__ void decode_av_reference_kernel(
           __bfloat162float(value_cache[value_index]), accumulator);
     }
     output[index] = __float2bfloat16_rn(accumulator);
+  }
+}
+
+// PyTorch's BF16 eager AV matmul for the reviewed 9QH/3KVH/D64 one-token
+// decode geometry reduces a short K axis as one warp tree. Keeping one output
+// element per warp preserves that order and the final BF16 staging boundary.
+__global__ void reviewed_hugging_face_decode_av_short_kernel(
+    const __nv_bfloat16* probabilities, const __nv_bfloat16* value_cache,
+    __nv_bfloat16* output, uint64_t maximum_token_count,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t head_size, uint64_t logical_token_count) {
+  const uint64_t index = blockIdx.x;
+  const uint64_t depth = index % head_size;
+  const uint64_t query_head = index / head_size;
+  if (query_head >= query_head_count) {
+    return;
+  }
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t token = threadIdx.x;
+  float partial = 0.0F;
+  if (token < logical_token_count) {
+    const uint64_t probability_index = query_head * logical_token_count + token;
+    const uint64_t value_index =
+        (key_value_head * maximum_token_count + token) * head_size + depth;
+    partial = __bfloat162float(probabilities[probability_index]) *
+              __bfloat162float(value_cache[value_index]);
+  }
+#pragma unroll
+  for (uint32_t offset = 16; offset > 0; offset /= 2) {
+    partial += __shfl_down_sync(0xffffffffU, partial, offset);
+  }
+  if (threadIdx.x == 0) {
+    output[index] = __float2bfloat16_rn(partial);
+  }
+}
+
+__global__ void reviewed_hugging_face_paged_decode_av_short_kernel(
+    const __nv_bfloat16* probabilities, const __nv_bfloat16* value_pool,
+    const uint32_t* block_ids, const uint16_t* valid_tokens,
+    __nv_bfloat16* output, uint64_t physical_block_count,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t head_size, uint64_t logical_token_count) {
+  const uint64_t index = blockIdx.x;
+  const uint64_t depth = index % head_size;
+  const uint64_t query_head = index / head_size;
+  if (query_head >= query_head_count) {
+    return;
+  }
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t token = threadIdx.x;
+  float partial = 0.0F;
+  if (token < logical_token_count) {
+    uint64_t value_base = 0;
+    if (!paged_cache_base(block_ids, valid_tokens, token,
+                          physical_block_count, key_value_head,
+                          key_value_head_count, head_size, &value_base)) {
+      partial = CUDART_NAN_F;
+    } else {
+      partial = __bfloat162float(
+                    probabilities[query_head * logical_token_count + token]) *
+                __bfloat162float(value_pool[value_base + depth]);
+    }
+  }
+#pragma unroll
+  for (uint32_t offset = 16; offset > 0; offset /= 2) {
+    partial += __shfl_down_sync(0xffffffffU, partial, offset);
+  }
+  if (threadIdx.x == 0) {
+    output[index] = __float2bfloat16_rn(partial);
   }
 }
 
@@ -2425,6 +2535,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
 
   DecodeByteCounts bytes{};
   uint64_t states_bytes = 0;
+  const bool use_hugging_face_short_decode =
+      status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_reviewed_hugging_face_short_decode(
+          params->logical_token_count, params->query_head_count,
+          params->key_value_head_count, params->head_size);
+  uint64_t maximum_short_score_bytes = 0;
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     status = decode_byte_counts(
         params->maximum_token_count, params->logical_token_count,
@@ -2435,6 +2551,17 @@ extern "C" RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
     status = partial_state_bytes(
         params->partial_state_capacity, params->query_head_count,
         params->head_size, &states_bytes, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode &&
+      !checked_product3(params->query_head_count,
+                        kHuggingFaceShortDecodeMaximumTokenCount,
+                        sizeof(__nv_bfloat16),
+                        &maximum_short_score_bytes)) {
+    status = validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "short decode maximum score workspace size overflows uint64_t");
   }
   if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
     return status;
@@ -2464,6 +2591,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
   }
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     status = reject_overlap(partial_states, output, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    status = validate_hugging_face_short_workspace_prefix(
+        partial_states, bytes.scores, maximum_short_score_bytes,
+        states_bytes, error, kOperation);
   }
   if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
     return status;
@@ -2495,19 +2628,64 @@ extern "C" RustInferCudaStatus rustinfer_cuda_decode_attention_execute(
   }
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    const dim3 grid(static_cast<uint32_t>(partial_state_count),
-                    static_cast<uint32_t>(params->query_head_count));
-    decode_partial_state_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
-        reinterpret_cast<const __nv_bfloat16*>(query.data),
-        reinterpret_cast<const __nv_bfloat16*>(key_cache.data),
-        reinterpret_cast<const __nv_bfloat16*>(value_cache.data),
-        reinterpret_cast<float*>(partial_states.data),
-        params->maximum_token_count, params->logical_token_count,
-        params->query_head_count, params->key_value_head_count,
-        params->tokens_per_partition, params->scale);
+    if (use_hugging_face_short_decode) {
+      const uint64_t score_elements = bytes.scores / sizeof(__nv_bfloat16);
+      decode_qk_reference_kernel
+          <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(query.data),
+              reinterpret_cast<const __nv_bfloat16*>(key_cache.data),
+              reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+              params->maximum_token_count, params->logical_token_count,
+              params->query_head_count, params->key_value_head_count,
+              params->head_size, score_elements);
+    } else {
+      const dim3 grid(static_cast<uint32_t>(partial_state_count),
+                      static_cast<uint32_t>(params->query_head_count));
+      decode_partial_state_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_cache.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_cache.data),
+          reinterpret_cast<float*>(partial_states.data),
+          params->maximum_token_count, params->logical_token_count,
+          params->query_head_count, params->key_value_head_count,
+          params->tokens_per_partition, params->scale);
+    }
     status = launch_status(error, kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    const uint64_t score_elements = bytes.scores / sizeof(__nv_bfloat16);
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+            params->scale, score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    decode_softmax_reference_kernel
+        <<<block_count(params->query_head_count), kThreads, 0,
+           stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+            params->logical_token_count, params->query_head_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    const uint64_t output_elements = bytes.query_output / sizeof(__nv_bfloat16);
+    reviewed_hugging_face_decode_av_short_kernel
+        <<<static_cast<uint32_t>(output_elements), kWarpSize, 0,
+           stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(partial_states.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_cache.data),
+            reinterpret_cast<__nv_bfloat16*>(output.data),
+            params->maximum_token_count, params->query_head_count,
+            params->key_value_head_count, params->head_size,
+            params->logical_token_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      !use_hugging_face_short_decode) {
     launch_partial_state_reducer(
         reinterpret_cast<const float*>(partial_states.data),
         reinterpret_cast<__nv_bfloat16*>(output.data), partial_state_count,
@@ -3333,6 +3511,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
 
   PagedByteCounts bytes{};
   uint64_t states_bytes = 0;
+  const bool use_hugging_face_short_decode =
+      status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_reviewed_hugging_face_short_decode(
+          params->block_table.logical_token_count,
+          params->query_head_count, params->key_value_head_count,
+          params->head_size);
+  uint64_t maximum_short_score_bytes = 0;
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     status = paged_byte_counts(
         params->block_table, params->query_head_count,
@@ -3343,6 +3528,17 @@ extern "C" RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
     status = partial_state_bytes(
         params->partial_state_capacity, params->query_head_count,
         params->head_size, &states_bytes, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode &&
+      !checked_product3(params->query_head_count,
+                        kHuggingFaceShortDecodeMaximumTokenCount,
+                        sizeof(__nv_bfloat16),
+                        &maximum_short_score_bytes)) {
+    status = validation_error(
+        error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "short paged decode maximum score workspace size overflows uint64_t");
   }
   if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
     return status;
@@ -3392,6 +3588,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     status = reject_overlap(output, partial_states, error, kOperation);
   }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    status = validate_hugging_face_short_workspace_prefix(
+        partial_states, bytes.scores, maximum_short_score_bytes,
+        states_bytes, error, kOperation);
+  }
   if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
     return status;
   }
@@ -3423,20 +3625,73 @@ extern "C" RustInferCudaStatus rustinfer_cuda_paged_decode_attention_execute(
   }
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    const dim3 grid(static_cast<uint32_t>(params->block_table.block_count),
-                    static_cast<uint32_t>(params->query_head_count));
-    paged_decode_partial_state_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
-        reinterpret_cast<const __nv_bfloat16*>(query.data),
-        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
-        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
-        reinterpret_cast<const uint32_t*>(block_ids.data),
-        reinterpret_cast<const uint16_t*>(valid_tokens.data),
-        reinterpret_cast<float*>(partial_states.data),
-        params->block_table.physical_block_count, params->query_head_count,
-        params->key_value_head_count, params->scale);
+    if (use_hugging_face_short_decode) {
+      const uint64_t score_elements = bytes.scores / sizeof(__nv_bfloat16);
+      paged_decode_qk_reference_kernel
+          <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+              reinterpret_cast<const __nv_bfloat16*>(query.data),
+              reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+              reinterpret_cast<const uint32_t*>(block_ids.data),
+              reinterpret_cast<const uint16_t*>(valid_tokens.data),
+              reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+              params->block_table.physical_block_count,
+              params->block_table.logical_token_count,
+              params->query_head_count, params->key_value_head_count,
+              params->head_size, score_elements);
+    } else {
+      const dim3 grid(static_cast<uint32_t>(params->block_table.block_count),
+                      static_cast<uint32_t>(params->query_head_count));
+      paged_decode_partial_state_kernel<<<grid, kWarpSize, 0,
+                                          stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<const uint32_t*>(block_ids.data),
+          reinterpret_cast<const uint16_t*>(valid_tokens.data),
+          reinterpret_cast<float*>(partial_states.data),
+          params->block_table.physical_block_count, params->query_head_count,
+          params->key_value_head_count, params->scale);
+    }
     status = launch_status(error, kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    const uint64_t score_elements = bytes.scores / sizeof(__nv_bfloat16);
+    decode_scale_reference_kernel
+        <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+            params->scale, score_elements);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    decode_softmax_reference_kernel
+        <<<block_count(params->query_head_count), kThreads, 0,
+           stream->stream>>>(
+            reinterpret_cast<__nv_bfloat16*>(partial_states.data),
+            params->block_table.logical_token_count,
+            params->query_head_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      use_hugging_face_short_decode) {
+    const uint64_t output_elements = bytes.query_output / sizeof(__nv_bfloat16);
+    reviewed_hugging_face_paged_decode_av_short_kernel
+        <<<static_cast<uint32_t>(output_elements), kWarpSize, 0,
+           stream->stream>>>(
+            reinterpret_cast<const __nv_bfloat16*>(partial_states.data),
+            reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+            reinterpret_cast<const uint32_t*>(block_ids.data),
+            reinterpret_cast<const uint16_t*>(valid_tokens.data),
+            reinterpret_cast<__nv_bfloat16*>(output.data),
+            params->block_table.physical_block_count,
+            params->query_head_count, params->key_value_head_count,
+            params->head_size,
+            params->block_table.logical_token_count);
+    status = launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+      !use_hugging_face_short_decode) {
     launch_partial_state_reducer(
         reinterpret_cast<const float*>(partial_states.data),
         reinterpret_cast<__nv_bfloat16*>(output.data),

@@ -26,11 +26,11 @@ const BF16_BYTES: usize = 2;
 const DEFAULT_PARITY_DECODE_CALLS: usize = 32;
 const LONG_PARITY_DECODE_CALLS: usize = 128;
 const REFERENCE_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.materialized-gqa-decode.bf16";
-const OPTIMIZED_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.chunked-online-gqa-decode.bf16.d64";
+const OPTIMIZED_DECODE_IMPLEMENTATION: &str =
+    "rustinfer.cuda.reviewed-9qh-3kvh-hf-short-materialized-then-chunked-online.bf16.d64.t32";
 const PAGED_REFERENCE_DECODE_IMPLEMENTATION: &str =
     "rustinfer.cuda.paged-materialized-gqa-decode.bf16.block16";
-const PAGED_OPTIMIZED_DECODE_IMPLEMENTATION: &str =
-    "rustinfer.cuda.paged-block-online-gqa-decode.bf16.d64.block16";
+const PAGED_OPTIMIZED_DECODE_IMPLEMENTATION: &str = "rustinfer.cuda.reviewed-9qh-3kvh-paged-hf-short-materialized-then-block-online.bf16.d64.t32.block16";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum TestKvCachePolicy {
@@ -346,6 +346,13 @@ fn run_cached_chain_with_cache(
         }
     };
     assert_eq!(trace.implementation_id(), expected_backend);
+    if reference_decode {
+        assert_eq!(trace.implementation_version(), "1");
+        assert_eq!(trace.short_materialized_token_limit(), None);
+    } else {
+        assert_eq!(trace.implementation_version(), "2");
+        assert_eq!(trace.short_materialized_token_limit(), Some(32));
+    }
     let report = decode.allocation_report();
     assert_decode_report_matches_context(report, context.allocation_stats()?);
     assert_eq!(decode.prompt_length(), prompt.len());

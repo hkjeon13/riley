@@ -86,6 +86,10 @@ _Static_assert(sizeof(RustInferCudaSiluParams) == 152,
                "SiLU params ABI size changed");
 _Static_assert(sizeof(RustInferCudaGatedMultiplyParams) == 200,
                "gated-multiply params ABI size changed");
+_Static_assert(sizeof(RustInferCudaRopeTableParams) == 152,
+               "RoPE table params ABI size changed");
+_Static_assert(offsetof(RustInferCudaRopeTableParams, element_count) == 104,
+               "RoPE table dimension offset changed");
 _Static_assert(sizeof(RustInferCudaRopeParams) == 288,
                "RoPE params ABI size changed");
 _Static_assert(offsetof(RustInferCudaRopeParams, token_count) == 200,
@@ -490,6 +494,9 @@ static RustInferCudaStatus (*const silu_symbol)(
 static RustInferCudaStatus (*const gated_multiply_symbol)(
     const RustInferCudaGatedMultiplyParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_gated_multiply_execute;
+static RustInferCudaStatus (*const rope_table_symbol)(
+    const RustInferCudaRopeTableParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) = rustinfer_cuda_rope_table_execute;
 static RustInferCudaStatus (*const rope_symbol)(
     const RustInferCudaRopeParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_rope_execute;
@@ -650,7 +657,8 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&fixed37_log_softmax_symbol,
     (const void*)&silu_symbol,
     (const void*)&row_bias_add_symbol,   (const void*)&gated_multiply_symbol,
-    (const void*)&rope_symbol,           (const void*)&indexed_rope_symbol,
+    (const void*)&rope_table_symbol,     (const void*)&rope_symbol,
+    (const void*)&indexed_rope_symbol,
     (const void*)&cast_symbol,           (const void*)&row_gather_symbol,
     (const void*)&qk_gqa_symbol,
     (const void*)&fixed37_qk_gqa_symbol,

@@ -1187,6 +1187,69 @@ pub fn gated_multiply<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// Cold preparation inputs for Llama `RoPE` trigonometric tables.
+#[derive(Debug)]
+pub struct RopeTableParams<'a> {
+    /// F32 angle table replaced in place with its cosine.
+    pub angles_cos: CudaBufferSpanMut<'a>,
+    /// F32 output receiving the sine of each input angle.
+    pub sin: CudaBufferSpanMut<'a>,
+    /// Number of logical angle elements in both spans.
+    pub element_count: u64,
+}
+
+/// Replaces an F32 angle table with CUDA cosine and writes its CUDA sine table.
+///
+/// This allocation-free cold operation preserves the angle buffer until the
+/// sine launch has consumed it, then computes cosine in place. It is intended
+/// to reproduce device-side framework trigonometry before repeated `RoPE` use.
+///
+/// # Errors
+///
+/// Returns a descriptor, dtype, range, overlap, launch, or synchronization
+/// error.
+pub fn rope_table<S: CudaExecutionStream + ?Sized>(
+    params: &mut RopeTableParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "rope_table";
+    let stream = execution_stream_mut(stream);
+    require_dtype(
+        OPERATION,
+        "angles_cos",
+        params.angles_cos.dtype,
+        CudaDType::F32,
+    )?;
+    require_dtype(OPERATION, "sin", params.sin.dtype, CudaDType::F32)?;
+    let required = required_vector_bytes(OPERATION, params.element_count, CudaDType::F32)?;
+    require_capacity(
+        OPERATION,
+        "angles_cos",
+        params.angles_cos.byte_len,
+        required,
+    )?;
+    require_capacity(OPERATION, "sin", params.sin.byte_len, required)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[params.angles_cos.buffer, params.sin.buffer],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::rope_table_execute(
+            params.angles_cos.raw(),
+            params.sin.raw(),
+            params.element_count,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Standard non-interleaved Llama `RoPE` invocation.
 #[derive(Debug)]
 pub struct RopeParams<'a> {

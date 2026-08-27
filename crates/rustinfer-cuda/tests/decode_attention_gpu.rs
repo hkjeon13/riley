@@ -320,6 +320,11 @@ fn materialized_and_chunked_decode_cover_gqa_boundaries_without_allocating() -> 
             DecodeAttentionBackend::MaterializedReference
         );
         assert_eq!(online.backend(), DecodeAttentionBackend::ChunkedOnline);
+        let reviewed_hybrid = query_heads == 9 && key_value_heads == 3;
+        assert_eq!(
+            online.selection_trace().short_materialized_token_limit(),
+            reviewed_hybrid.then_some(32)
+        );
         let output_bytes = u64::try_from(query_bytes.len())?;
         let mut reference_output = context.allocate_device_buffer(output_bytes)?;
         let mut online_output = context.allocate_device_buffer(output_bytes)?;
@@ -409,6 +414,28 @@ fn materialized_and_chunked_decode_cover_gqa_boundaries_without_allocating() -> 
         let active_state_elements = active_partitions * query_heads * (D + 2);
         let online_workspace_values =
             decode_f32(&download(&context, &mut stream, &mut online_workspace)?);
+        if reviewed_hybrid && logical == 33 {
+            for partition in 0..active_partitions {
+                for query_head in 0..query_heads {
+                    let denominator = online_workspace_values
+                        [(partition * query_heads + query_head) * (D + 2) + 1];
+                    assert!(
+                        denominator.is_finite() && denominator > 0.0,
+                        "T=33 must retain the online partial-state layout; partition={partition} query_head={query_head} denominator={denominator}"
+                    );
+                }
+            }
+        }
+        if reviewed_hybrid && logical <= 32 {
+            let prefix_elements =
+                usize::try_from(online.selection_trace().materialized_score_bytes() / 4)?;
+            assert!(
+                online_workspace_values[prefix_elements..]
+                    .iter()
+                    .all(|value| value.to_bits() == online_sentinel.to_bits()),
+                "short hybrid modified bytes after its 576-byte score prefix"
+            );
+        }
         assert!(
             online_workspace_values[active_state_elements..]
                 .iter()

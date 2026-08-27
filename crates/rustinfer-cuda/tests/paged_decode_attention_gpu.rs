@@ -355,6 +355,12 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
             DecodeAttentionPreference::Optimized,
             DecodeAttentionBackendAvailability::linked(),
         )?;
+        assert_eq!(
+            paged_online
+                .selection_trace()
+                .short_materialized_token_limit(),
+            Some(32)
+        );
         let contiguous_request = DecodeAttentionRequest::new(
             u64::try_from(logical)?,
             u64::try_from(query_heads)?,
@@ -504,27 +510,29 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
                 &mut stream,
             )?;
         }
-        let descending_output_len = paged_descending_output.byte_len();
-        let mut descending_params = DecodePartialStateReduceParams {
-            partial_states: CudaBufferSpan::new(
-                &paged_online_workspace,
-                CudaDType::F32,
-                0,
-                paged_online.workspace_bytes(),
-            )?,
-            output: CudaBufferSpanMut::new(
-                &mut paged_descending_output,
-                CudaDType::BF16,
-                0,
-                descending_output_len,
-            )?,
-            partial_state_count: u64::try_from(logical_blocks)?,
-            partial_state_capacity: paged_online.partial_state_capacity(),
-            query_head_count: u64::try_from(query_heads)?,
-            head_size: u64::try_from(D)?,
-            order: DecodePartialReductionOrder::LogicalDescending,
-        };
-        decode_partial_states_reduce(&mut descending_params, &mut stream)?;
+        if logical > 32 {
+            let descending_output_len = paged_descending_output.byte_len();
+            let mut descending_params = DecodePartialStateReduceParams {
+                partial_states: CudaBufferSpan::new(
+                    &paged_online_workspace,
+                    CudaDType::F32,
+                    0,
+                    paged_online.workspace_bytes(),
+                )?,
+                output: CudaBufferSpanMut::new(
+                    &mut paged_descending_output,
+                    CudaDType::BF16,
+                    0,
+                    descending_output_len,
+                )?,
+                partial_state_count: u64::try_from(logical_blocks)?,
+                partial_state_capacity: paged_online.partial_state_capacity(),
+                query_head_count: u64::try_from(query_heads)?,
+                head_size: u64::try_from(D)?,
+                order: DecodePartialReductionOrder::LogicalDescending,
+            };
+            decode_partial_states_reduce(&mut descending_params, &mut stream)?;
+        }
         assert_eq!(context.allocation_stats()?, before);
 
         let contiguous_actual =
@@ -536,11 +544,15 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
         )?);
         let online_actual =
             decode_bf16(&download(&context, &mut stream, &mut paged_online_output)?);
-        let descending_actual = decode_bf16(&download(
-            &context,
-            &mut stream,
-            &mut paged_descending_output,
-        )?);
+        let descending_actual = if logical > 32 {
+            decode_bf16(&download(
+                &context,
+                &mut stream,
+                &mut paged_descending_output,
+            )?)
+        } else {
+            online_actual.clone()
+        };
         for (index, ((((&contiguous, &reference), &online), &descending), &expected)) in
             contiguous_actual
                 .iter()
@@ -574,6 +586,28 @@ fn paged_scatter_reference_and_online_match_contiguous_across_boundaries() -> Te
             &mut stream,
             &mut paged_online_workspace,
         )?);
+        if logical == 33 {
+            for logical_block in 0..logical_blocks {
+                for query_head in 0..query_heads {
+                    let denominator =
+                        online_workspace[(logical_block * query_heads + query_head) * (D + 2) + 1];
+                    assert!(
+                        denominator.is_finite() && denominator > 0.0,
+                        "T=33 must retain the paged online state layout; logical_block={logical_block} query_head={query_head} denominator={denominator}"
+                    );
+                }
+            }
+        }
+        if logical <= 32 {
+            let prefix_elements =
+                usize::try_from(paged_online.selection_trace().materialized_score_bytes() / 4)?;
+            assert!(
+                online_workspace[prefix_elements..]
+                    .iter()
+                    .all(|value| value.to_bits() == online_sentinel.to_bits()),
+                "short paged hybrid modified bytes after its 576-byte score prefix"
+            );
+        }
         assert!(
             online_workspace[active_state_elements..]
                 .iter()

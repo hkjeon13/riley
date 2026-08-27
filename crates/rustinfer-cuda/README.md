@@ -88,7 +88,16 @@ must treat the remaining capacity as opaque scratch rather than a strided
 `[QH,max_seq]` tensor.
 
 The online workspace is packed F32
-`[partition_capacity,QH,D+2]`. Each row is version-1 `(m,l,n[D])`: `m` is the
+`[partition_capacity,QH,D+2]`. Implementation version 2 for the reviewed
+9QH/3KVH/D64 production geometry is an explicit hybrid: for logical `T<=32`,
+the aligned workspace prefix is reused as dense BF16 `[QH,T]` scores and
+HF-eager's short AV warp reduction is used; `T>=33`, all other geometries
+(including Qwen), and fixed37 profiles retain their existing backends. The
+selection trace records the hybrid implementation id, implementation version,
+32-token boundary, and 576-byte maximum score prefix. No additional allocation
+is made. The packed partial-state storage contract remains version 1.
+
+For the ordinary online path, each row is version-1 `(m,l,n[D])`: `m` is the
 range maximum, `l` is the unnormalized exponential sum, and `n` is the
 unnormalized weighted-value sum. Empty rows use `m=-inf`, `l=0`, and zero `n`.
 Reducers merge logical slots in an explicit ascending or descending order and

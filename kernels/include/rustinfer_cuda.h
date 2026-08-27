@@ -307,6 +307,18 @@ typedef struct RustInferCudaGatedMultiplyParams {
   uint64_t reserved[5];
 } RustInferCudaGatedMultiplyParams;
 
+// Cold RoPE-table preparation. angles_cos starts as an F32 row-major angle
+// table and is replaced in place with its cosine. sin receives the matching
+// F32 sine table. Both spans have element_count logical elements.
+typedef struct RustInferCudaRopeTableParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RustInferCudaBufferSpan angles_cos;
+  RustInferCudaBufferSpan sin;
+  uint64_t element_count;
+  uint64_t reserved[5];
+} RustInferCudaRopeTableParams;
+
 // Standard non-interleaved Llama RoPE rotates the two contiguous halves of
 // rotary_dimension. cos and sin are F32 tables with logical shape
 // [table_position_count, rotary_dimension / 2]. The input/output logical shape
@@ -601,15 +613,19 @@ typedef struct RustInferCudaDecodeAttentionReferenceParams {
 #define RUSTINFER_CUDA_DECODE_REDUCTION_DESCENDING 2u
 #define RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION 1u
 
-// Partitioned online-softmax decode. The optimized producer supports
-// head_size=64 and writes F32 partial_states with packed logical layout
-// [partial_state_capacity, query_head_count, head_size + 2]. Within each
-// packed row element 0 is max_score (m), element 1 is exp_sum (l), and elements
-// [2, head_size+2) are the unnormalized weighted_value_sum (n). Only the first
+// Partitioned online-softmax decode. The ordinary head_size=64 producer writes
+// F32 partial_states with packed logical layout [partial_state_capacity,
+// query_head_count, head_size + 2]. Within each packed row element 0 is
+// max_score (m), element 1 is exp_sum (l), and elements [2, head_size+2) are
+// the unnormalized weighted_value_sum (n). Only the first
 // ceil(logical_token_count / tokens_per_partition) partitions are written;
 // capacity tail bytes remain untouched. The selected ordered reducer merges
 // those states and normalizes exactly once into BF16 output
-// [query_head_count, head_size].
+// [query_head_count, head_size]. The reviewed 9QH/3KVH/D64 v2 hybrid instead
+// uses the aligned workspace prefix as BF16 [9,T] scores/probabilities for
+// logical T<=32 (at most 576 bytes), then writes the HF-eager-exact output
+// directly. T>=33 keeps the packed F32 layout and reducer above unchanged.
+// The separate materialized-reference params and v1 entry point are unchanged.
 typedef struct RustInferCudaDecodeAttentionParams {
   uint32_t struct_size;
   uint32_t reserved0;
@@ -718,10 +734,15 @@ typedef struct RustInferCudaPagedDecodeAttentionReferenceParams {
   uint64_t reserved[4];
 } RustInferCudaPagedDecodeAttentionReferenceParams;
 
-// Exact D64 paged online producer. One packed F32 DecodePartialState is
-// produced for each logical 16-token block, then the unchanged PR 09 reducer
-// merges block slots in logical order and normalizes once. Capacity is the
-// preallocated number of logical block slots.
+// Exact D64 paged online producer. Ordinarily one packed F32
+// DecodePartialState is produced for each logical 16-token block, then the
+// unchanged PR 09 reducer merges block slots in logical order and normalizes
+// once. Capacity is the preallocated number of logical block slots. The
+// reviewed 9QH/3KVH/D64 v2 hybrid instead uses the aligned workspace prefix as
+// BF16 [9,T] scores/probabilities for logical T<=32 (at most 576 bytes) and
+// writes the HF-eager-exact output directly. T>=33 preserves the existing
+// one-F32-state-per-logical-block layout. The paged materialized-reference v1
+// contract remains independent and unchanged.
 typedef struct RustInferCudaPagedDecodeAttentionParams {
   uint32_t struct_size;
   uint32_t reserved0;
@@ -1245,6 +1266,15 @@ RustInferCudaStatus rustinfer_cuda_silu_execute(
 // supported; partial overlap is rejected.
 RustInferCudaStatus rustinfer_cuda_gated_multiply_execute(
     const RustInferCudaGatedMultiplyParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Computes CUDA sinf/cosf for an F32 angle table during cold preparation.
+// angles_cos is exact-in-place; it must not overlap sin. The operation is
+// allocation-free and follows the stream's ordinary completion/command-batch
+// contract.
+RustInferCudaStatus rustinfer_cuda_rope_table_execute(
+    const RustInferCudaRopeTableParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 

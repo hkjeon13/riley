@@ -15,8 +15,8 @@ use rustinfer_cuda::{
     PAGED_KV_BLOCK_TABLE_VERSION, PagedDecodeAttentionParams, PagedDecodeAttentionRequest,
     PagedKvBlockTableHostV1, PagedKvBlockTableV1, PagedKvCacheAppendParams,
     PreparedDecodeAttention, PreparedPagedDecodeAttention, ResidualAddParams, RmsNormParams,
-    RopeParams, SiluParams, embedding, gated_multiply, kv_cache_append, paged_kv_cache_append,
-    residual_add, rope, silu,
+    RopeParams, RopeTableParams, SiluParams, embedding, gated_multiply, kv_cache_append,
+    paged_kv_cache_append, residual_add, rope, rope_table, silu,
 };
 use rustinfer_model::LoadedModel;
 
@@ -26,7 +26,7 @@ use crate::paged_kv::{
 };
 
 use super::forward::{
-    LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
+    LlamaForwardError, LlamaRopeTableProfile, PreparedLlamaAllocationReport, PreparedLlamaForward,
     PreparedLlamaForwardConfig, PreparedLlamaGemm, execute_gemm, execute_profile_rms_norm,
     execute_projection_bias, poison_for_cuda_error, poison_for_forward_error, span, span_mut,
     weight_span,
@@ -1649,17 +1649,45 @@ impl PreparedLlamaDecode {
             )
         };
 
-        let (cos, sin) = build_decode_rope_tables(
-            maximum_sequence_length,
-            dimensions.head_dimension(),
-            forward.plan.rope_theta(),
-        )?;
-        rope_cos
-            .upload_from_slice(0, &cos, &mut forward.io_staging, stream)
-            .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
-        rope_sin
-            .upload_from_slice(0, &sin, &mut forward.io_staging, stream)
-            .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
+        if forward.rope_table_profile() == LlamaRopeTableProfile::HuggingFaceCuda {
+            let angles = build_decode_rope_angles(
+                maximum_sequence_length,
+                dimensions.head_dimension(),
+                forward.plan.rope_theta(),
+            )?;
+            rope_cos
+                .upload_from_slice(0, &angles, &mut forward.io_staging, stream)
+                .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
+            let mut rope_table_params = RopeTableParams {
+                angles_cos: span_mut(
+                    &mut rope_cos,
+                    CudaDType::F32,
+                    rope_table_bytes_per_kind,
+                    rope_site,
+                )?,
+                sin: span_mut(
+                    &mut rope_sin,
+                    CudaDType::F32,
+                    rope_table_bytes_per_kind,
+                    rope_site,
+                )?,
+                element_count: rope_table_bytes_per_kind / F32_BYTES,
+            };
+            rope_table(&mut rope_table_params, stream)
+                .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
+        } else {
+            let (cos, sin) = build_decode_cpu_rope_tables(
+                maximum_sequence_length,
+                dimensions.head_dimension(),
+                forward.plan.rope_theta(),
+            )?;
+            rope_cos
+                .upload_from_slice(0, &cos, &mut forward.io_staging, stream)
+                .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
+            rope_sin
+                .upload_from_slice(0, &sin, &mut forward.io_staging, stream)
+                .map_err(|source| LlamaDecodeError::cuda(rope_site, source))?;
+        }
 
         let allocation_report = build_decode_allocation_report(
             forward.allocation_report(),
@@ -2822,10 +2850,37 @@ fn allocate_decode_host_bytes(
     Ok(bytes.into_boxed_slice())
 }
 
+#[allow(clippy::cast_precision_loss)]
+fn build_decode_rope_angles(
+    sequence_length: usize,
+    head_dimension: usize,
+    theta: f32,
+) -> LlamaDecodeResult<Box<[u8]>> {
+    let bytes = rope_table_bytes(sequence_length, head_dimension)?;
+    let mut angles = allocate_decode_host_bytes(bytes, LlamaDecodeResource::RopeCos)?;
+    let half = head_dimension / 2;
+    for position in 0..sequence_length {
+        for pair in 0..half {
+            let exponent = (2 * pair) as f32 / head_dimension as f32;
+            let inverse_frequency = 1.0 / theta.powf(exponent);
+            let angle = position as f32 * inverse_frequency;
+            let element = position
+                .checked_mul(half)
+                .and_then(|value| value.checked_add(pair))
+                .and_then(|value| value.checked_mul(4))
+                .ok_or(LlamaDecodeError::ArithmeticOverflow {
+                    resource: LlamaDecodeResource::RopeCos,
+                })?;
+            angles[element..element + 4].copy_from_slice(&angle.to_ne_bytes());
+        }
+    }
+    Ok(angles)
+}
+
 type DecodeRopeTableBytes = (Box<[u8]>, Box<[u8]>);
 
 #[allow(clippy::cast_precision_loss)]
-fn build_decode_rope_tables(
+fn build_decode_cpu_rope_tables(
     sequence_length: usize,
     head_dimension: usize,
     theta: f32,

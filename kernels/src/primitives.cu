@@ -709,6 +709,26 @@ __global__ void gated_multiply_kernel(const T* activated_gate, const T* up,
   }
 }
 
+__global__ void rope_table_sin_kernel(const float* angles, float* sin,
+                                      uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    sin[index] = sinf(angles[index]);
+  }
+}
+
+__global__ void rope_table_cos_in_place_kernel(float* angles_cos,
+                                               uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         threadIdx.x;
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    angles_cos[index] = cosf(angles_cos[index]);
+  }
+}
+
 template <typename T>
 __global__ void rope_kernel(const T* input, const float* cos,
                             const float* sin, T* output,
@@ -918,6 +938,25 @@ void launch_gated_multiply(const ResolvedSpan& activated_gate,
           reinterpret_cast<const T*>(activated_gate.data),
           reinterpret_cast<const T*>(up.data),
           reinterpret_cast<T*>(output.data), element_count);
+}
+
+cudaError_t launch_rope_table(const ResolvedSpan& angles_cos,
+                              const ResolvedSpan& sin,
+                              uint64_t element_count, cudaStream_t stream) {
+  const uint32_t blocks = block_count(element_count);
+  // Preserve the angle input until sine has consumed it. The second launch is
+  // ordered on the same stream and may therefore replace angles with cosine
+  // without an auxiliary allocation.
+  rope_table_sin_kernel<<<blocks, kThreads, 0, stream>>>(
+      reinterpret_cast<const float*>(angles_cos.data),
+      reinterpret_cast<float*>(sin.data), element_count);
+  cudaError_t status = cudaGetLastError();
+  if (status != cudaSuccess) {
+    return status;
+  }
+  rope_table_cos_in_place_kernel<<<blocks, kThreads, 0, stream>>>(
+      reinterpret_cast<float*>(angles_cos.data), element_count);
+  return cudaGetLastError();
 }
 
 template <typename T>
@@ -1873,6 +1912,86 @@ extern "C" RustInferCudaStatus rustinfer_cuda_gated_multiply_execute(
           activated_gate, up, output, params->element_count, stream->stream);
     }
     status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_rope_table_execute(
+    const RustInferCudaRopeTableParams* params, RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "prepare CUDA RoPE trigonometric tables";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 5)) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (params->angles_cos.dtype != RUSTINFER_CUDA_DTYPE_F32 ||
+      params->sin.dtype != RUSTINFER_CUDA_DTYPE_F32) {
+    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
+                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "angles_cos and sin must both use F32 dtype");
+  }
+  uint64_t byte_count = 0;
+  RustInferCudaStatus status =
+      element_bytes(params->element_count, RUSTINFER_CUDA_DTYPE_F32,
+                    &byte_count, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ResolvedSpan angles_cos{};
+  ResolvedSpan sin{};
+  status = resolve_span(params->angles_cos, byte_count, &angles_cos, error,
+                        kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->sin, byte_count, &sin, error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(angles_cos, sin, false, error, kOperation);
+  }
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {angles_cos, sin};
+  status = validate_contexts(stream, spans, 2, error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  if (!uses.add(angles_cos.buffer) || !uses.add(sin.buffer)) {
+    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "primitive buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (params->element_count == 0) {
+    return uses.release_completed()
+               ? RUSTINFER_CUDA_STATUS_SUCCESS
+               : internal_error(error,
+                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation,
+                                "exclusive-use accounting was corrupted");
+  }
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    status = runtime_error(
+        launch_rope_table(angles_cos, sin, params->element_count,
+                          stream->stream),
+        error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
