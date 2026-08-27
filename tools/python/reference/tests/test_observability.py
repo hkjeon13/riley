@@ -4,7 +4,7 @@ import os
 import unittest
 from dataclasses import dataclass
 
-from rustinfer_reference.observability import NvmlProcessTreeSampler
+from riley_reference.observability import NvmlProcessTreeSampler
 
 
 @dataclass

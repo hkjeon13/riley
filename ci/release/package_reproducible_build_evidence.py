@@ -93,7 +93,7 @@ def _tar_info(path: Path, archive_name: str, source_date_epoch: int) -> tarfile.
         info.type = tarfile.REGTYPE
         info.mode = (
             0o755
-            if archive_name.endswith(("/bin/rustinfer", "/bin/rustinfer-profile"))
+            if archive_name.endswith(("/bin/riley", "/bin/riley-profile"))
             else 0o644
         )
         info.size = path.stat().st_size
@@ -233,9 +233,9 @@ def package_evidence(
             "pre-start and post-run Docker receipts describe different containers"
         )
     completion_files = {
-        "bin/rustinfer": binary,
-        "bin/rustinfer-profile": profile_binary,
-        "bundle/rustinfer.tar.gz": bundle,
+        "bin/riley": binary,
+        "bin/riley-profile": profile_binary,
+        "bundle/riley.tar.gz": bundle,
         "manifest/native-dependencies.txt": native_manifest,
         "logs/toolchain.txt": toolchain_log,
         "logs/preflight.log": preflight_log,
@@ -255,19 +255,19 @@ def package_evidence(
         file_paths=completion_files,
     )
 
-    root_name = f"rustinfer-repro-build-{build_id.lower()}"
-    with tempfile.TemporaryDirectory(prefix="rustinfer-repro-package-") as temporary:
+    root_name = f"riley-repro-build-{build_id.lower()}"
+    with tempfile.TemporaryDirectory(prefix="riley-repro-package-") as temporary:
         root = Path(temporary) / root_name
         root.mkdir()
         _copy_regular(source_archive, root / "source.tar", "source archive")
-        _copy_regular(binary, root / "bin/rustinfer", "release binary", 0o755)
+        _copy_regular(binary, root / "bin/riley", "release binary", 0o755)
         _copy_regular(
             profile_binary,
-            root / "bin/rustinfer-profile",
+            root / "bin/riley-profile",
             "release profile binary",
             0o755,
         )
-        _copy_regular(bundle, root / "bundle/rustinfer.tar.gz", "release bundle")
+        _copy_regular(bundle, root / "bundle/riley.tar.gz", "release bundle")
         _copy_regular(
             native_manifest,
             root / "manifest/native-dependencies.txt",

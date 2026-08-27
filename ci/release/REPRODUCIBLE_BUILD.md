@@ -29,7 +29,7 @@ The gate fixes all of the following before build A starts:
   changing otherwise identical unstripped ELFs;
 - `cargo build --locked --offline --release --features cuda,server` for the
   production server, followed by `cargo build --locked --offline --release
-  --features bench,cuda --bin rustinfer-profile` for the profiling subject; and
+  --features bench,cuda --bin riley-profile` for the profiling subject; and
 - Docker `network=none`, the explicit `runc` runtime, no device request, no
   external Cargo cache mount, an explicit shell entrypoint/root UID and GID,
   disabled inherited health checks, closed image-baseline environment plus
@@ -54,18 +54,18 @@ docker build \
   --file ci/release/ReproducibleBuild.Dockerfile \
   --target build-environment \
   --progress plain \
-  --tag rustinfer-repro-builder:pr16 \
+  --tag riley-repro-builder:pr16 \
   .
 
 BUILDER_IMAGE_ID=$(docker image inspect \
-  --format '{{.Id}}' rustinfer-repro-builder:pr16)
+  --format '{{.Id}}' riley-repro-builder:pr16)
 
 ci/run_release_reproducibility.sh \
   --builder-image "${BUILDER_IMAGE_ID}" \
   --expected-source-archive-sha256 \
     SHA256_FROM_REVIEWED_RELEASE_CANDIDATE_CONTRACT \
   --source-revision HEAD \
-  --output-dir /home/psyche/rustinfer-artifacts/pr16/reproducible-build
+  --output-dir /home/psyche/riley-artifacts/pr16/reproducible-build
 ```
 
 The host runner requires `HEAD` to equal the selected revision and the entire
@@ -115,9 +115,9 @@ root and exactly these payloads:
 
 ```text
 SHA256SUMS
-bin/rustinfer
-bin/rustinfer-profile
-bundle/rustinfer.tar.gz
+bin/riley
+bin/riley-profile
+bundle/riley.tar.gz
 logs/bundle-build.log
 logs/bundle-verify.log
 logs/build-completion.json
@@ -158,7 +158,7 @@ Producer status is insufficient for approval. The checker additionally:
   final;
 - derives native dependencies from each ELF instead of accepting a producer
   declaration; and
-- byte-compares the standalone server binary, `rustinfer-profile` binary,
+- byte-compares the standalone server binary, `riley-profile` binary,
   deterministic bundle, and native dependency manifest across A, B, and final.
 
 Success produces `reproducibility-report-v1.json` plus a top-level

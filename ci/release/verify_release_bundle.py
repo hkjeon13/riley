@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify a rustinfer release archive without trusting or extracting its paths."""
+"""Verify a riley release archive without trusting or extracting its paths."""
 
 from __future__ import annotations
 
@@ -153,7 +153,7 @@ def verify_bundle(bundle: Path) -> None:
     required_files = {
         f"{root}/LICENSE",
         f"{root}/SHA256SUMS",
-        f"{root}/bin/rustinfer",
+        f"{root}/bin/riley",
         f"{root}/manifest/native-dependencies.txt",
         f"{root}/manifest/release.json",
     }
@@ -175,7 +175,7 @@ def verify_bundle(bundle: Path) -> None:
         expected_directory = member.name in required_directories
         if expected_directory != member.isdir():
             raise ReleaseContractError(f"archive member type is invalid: {member.name}")
-        expected_mode = 0o755 if expected_directory or member.name.endswith("/bin/rustinfer") else 0o644
+        expected_mode = 0o755 if expected_directory or member.name.endswith("/bin/riley") else 0o644
         if member.mode != expected_mode:
             raise ReleaseContractError(f"archive member mode is invalid: {member.name}")
 
@@ -207,7 +207,7 @@ def verify_bundle(bundle: Path) -> None:
     if notice_path in file_contents and not file_contents[notice_path].strip():
         raise ReleaseContractError("NOTICE must not be empty when present")
 
-    binary_path = f"{root}/bin/rustinfer"
+    binary_path = f"{root}/bin/riley"
     dependencies = validate_binary(file_contents[binary_path])
     native_path = f"{root}/manifest/native-dependencies.txt"
     recorded_dependencies = parse_native_manifest(file_contents[native_path])

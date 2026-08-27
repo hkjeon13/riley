@@ -70,7 +70,7 @@ DeviceProperties
 예:
 
 ```cpp
-extern "C" RustInferStatus rustinfer_fill_f32(
+extern "C" RileyStatus riley_fill_f32(
     float* device_output,
     std::uint64_t element_count,
     float value,
@@ -179,7 +179,7 @@ C11/C++17 header syntax와 workflow YAML parse
 
 CUDA compile/link와 GPU 실행은 `server-4096`에서만 수행했다. Compile image build에는
 GPU를 전달하지 않았고, 실제 GPU gate는 `--gpus all --network none`으로 분리했다.
-Compile gate는 CUDA feature를 켠 `rustinfer-cuda` all-target Clippy까지 포함한다. Runtime
+Compile gate는 CUDA feature를 켠 `riley-cuda` all-target Clippy까지 포함한다. Runtime
 gate는 Python이 없는 image에서 정확히 일곱 GPU test를 실행하며 model, cuBLAS,
 CUTLASS, Triton, NVRTC를 호출하지 않는다.
 

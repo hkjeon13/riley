@@ -34,7 +34,7 @@ class Fixture:
         self.commands = root / "commands.v2"
         self.subjects = root / "subjects.v2"
         self.gpu = root / "gpu.csv"
-        self.profile = root / "rustinfer-profile"
+        self.profile = root / "riley-profile"
         self.report = root / "report.json"
         self.receipt = self.evidence / "run-receipt.json"
         self.profile.write_bytes(b"profile executable fixture")
@@ -162,7 +162,7 @@ class Fixture:
                 "smollm2-multi-step-greedy-exact",
                 "fixed37-production-batch-e0",
             }:
-                environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
+                environment["RILEY_REAL_CHECKPOINT"] = "/model"
             environment.update((environment_override or {}).get(command_id, {}))
             rows.extend(
                 [

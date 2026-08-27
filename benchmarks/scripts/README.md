@@ -15,11 +15,11 @@ python3 benchmarks/scripts/validate_contract.py
 clean checkout의 target host에서 실행한다.
 
 ```bash
-mkdir -p /var/tmp/rustinfer-preflight
-RUSTINFER_PREFLIGHT_OUTPUT_ROOT=/var/tmp/rustinfer-preflight \
+mkdir -p /var/tmp/riley-preflight
+RILEY_PREFLIGHT_OUTPUT_ROOT=/var/tmp/riley-preflight \
   benchmarks/scripts/preflight.sh \
-    > /var/tmp/rustinfer-preflight/preflight.stdout.txt \
-    2> /var/tmp/rustinfer-preflight/preflight.stderr.txt
+    > /var/tmp/riley-preflight/preflight.stdout.txt \
+    2> /var/tmp/riley-preflight/preflight.stderr.txt
 ```
 
 스크립트는 상태를 바꾸지 않는다. GPU 종류·개수·compute capability, idle memory, 온도, compute process와 clean Git revision을 확인하고 비교에 필요한 snapshot을 출력한다. 실패한 run은 측정하지 않는다.
@@ -32,15 +32,15 @@ preflight 출력을 checkout 안에 redirect하면 검사가 시작되기 전에
 
 ```bash
 UV_BIN=/absolute/path/to/pinned/uv
-export UV_PROJECT_ENVIRONMENT=/var/tmp/rustinfer-project-envs/reference-fixture-001
+export UV_PROJECT_ENVIRONMENT=/var/tmp/riley-project-envs/reference-fixture-001
 test ! -e "$UV_PROJECT_ENVIRONMENT"
 UV_PYTHON=3.13.15 UV_PYTHON_DOWNLOADS=never \
   "$UV_BIN" sync --frozen --offline --project tools/python/reference
 "$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference \
-  rustinfer-reference generate \
+  riley-reference generate \
   --prompts benchmarks/prompts.jsonl \
   --repo-root . \
-  --output /var/tmp/rustinfer-reference/<fixture-id>.json
+  --output /var/tmp/riley-reference/<fixture-id>.json
 ```
 
 checkout 밖에서 생성·검증한 뒤 SHA-256과 diff를 검토한 artifact만 version-control
@@ -55,18 +55,18 @@ workflow로 `benchmarks/reference/`에 반입한다. 정확한 CLI와 model cach
 존재하지 않아야 하고 repository 밖에 있어야 한다.
 
 ```bash
-mkdir -p /var/tmp/rustinfer-cache/{uv,uv-python,huggingface,vllm,torchinductor,triton,cuda}
+mkdir -p /var/tmp/riley-cache/{uv,uv-python,huggingface,vllm,torchinductor,triton,cuda}
 UV_BIN=/absolute/path/to/pinned/uv
 test "$("$UV_BIN" --version)" = 'uv 0.12.5 (x86_64-unknown-linux-gnu)'
 test "$(sha256sum "$UV_BIN" | awk '{print $1}')" = \
   b65f23a420c4acc96427efb30e5ed9bc0f7e25d2d712000f6ede77c1a0de5f46
-export UV_CACHE_DIR=/var/tmp/rustinfer-cache/uv
-export UV_PYTHON_INSTALL_DIR=/var/tmp/rustinfer-cache/uv-python
-export HF_HOME=/var/tmp/rustinfer-cache/huggingface
-export VLLM_CACHE_ROOT=/var/tmp/rustinfer-cache/vllm
-export TORCHINDUCTOR_CACHE_DIR=/var/tmp/rustinfer-cache/torchinductor
-export TRITON_CACHE_DIR=/var/tmp/rustinfer-cache/triton
-export CUDA_CACHE_PATH=/var/tmp/rustinfer-cache/cuda
+export UV_CACHE_DIR=/var/tmp/riley-cache/uv
+export UV_PYTHON_INSTALL_DIR=/var/tmp/riley-cache/uv-python
+export HF_HOME=/var/tmp/riley-cache/huggingface
+export VLLM_CACHE_ROOT=/var/tmp/riley-cache/vllm
+export TORCHINDUCTOR_CACHE_DIR=/var/tmp/riley-cache/torchinductor
+export TRITON_CACHE_DIR=/var/tmp/riley-cache/triton
+export CUDA_CACHE_PATH=/var/tmp/riley-cache/cuda
 export HF_HUB_OFFLINE=1
 export TRANSFORMERS_OFFLINE=1
 RUNNER_PYTHON="$(UV_PYTHON_DOWNLOADS=never "$UV_BIN" python find 3.13.15)"
@@ -74,7 +74,7 @@ test "$(sha256sum "$RUNNER_PYTHON" | awk '{print $1}')" = \
   ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866
 "$RUNNER_PYTHON" benchmarks/scripts/run_repeatability_gate.py \
   --lane hf-transformers \
-  --output-root /var/tmp/rustinfer-repeatability-hf-001 \
+  --output-root /var/tmp/riley-repeatability-hf-001 \
   --uv "$UV_BIN" \
   --finalize-to \
     benchmarks/results/20260824T000000Z-hf-transformers-eager-repeatability-run001
@@ -96,7 +96,7 @@ offline 두 flag는 exact `1`, cache root는 기존의 absolute repository-exter
 directory여야 한다. runner는 모든 child에 `UV_OFFLINE=1`을 추가하고 `PATH`,
 locale/TLS/temp 같은 좁은 system allowlist, 위 cache/offline 값, version-controlled
 manifest 값만 담은 exact environment를 plan에 평문 기록한다. ambient environment는
-상속하지 않으며 `RUSTINFER_*`, `VLLM_*`, `CUDA_*`, `TORCH_*`, `OMP_*` 등
+상속하지 않으며 `RILEY_*`, `VLLM_*`, `CUDA_*`, `TORCH_*`, `OMP_*` 등
 측정·preflight를 바꿀 수 있는 미기록 override가 부모에 있으면 시작 전에
 fail closed한다. 부모가 지정한 `UV_PROJECT_ENVIRONMENT`도 거부한다. 대신
 runner가 selected lane, dependency lock SHA-256, gate execution nonce에 바인딩된
@@ -167,7 +167,7 @@ independent run에 첫 request 한 번만 있으므로 throughput CV를 진단 �
 계속 보고하되 gate로 쓰지 않는다. Cold pass/fail은
 `cold_model_load_p50_cv_max=0.10`, peak VRAM 상대 범위, failure count와 token
 identity가 결정한다. Runner와 finalizer는
-`contract_version=rustinfer.repeatability.v2`인 passing report만 허용한다.
+`contract_version=riley.repeatability.v2`인 passing report만 허용한다.
 
 `--finalize-to`는 선택 사항이며 gate가 완전히 통과한 뒤에만 동작한다.
 destination은 기존에 없는 `benchmarks/results/<id>` 한 단계 경로여야 한다.

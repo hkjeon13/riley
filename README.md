@@ -1,15 +1,19 @@
-# rustinfer
+# Riley
 
-**A Rust-native, CUDA-first LLM inference engine focused on low latency, predictable memory management, and reusable transformer kernels.**
+**Riley — a Rust-native LLM inference engine.**
 
-> Project status: design / early prototype
+Riley (Rust Inference LLM Engine) is a Rust-native, CUDA-first LLM inference
+engine focused on low-latency execution, predictable memory management, and
+reusable model execution patterns.
+
+> Project status: first release candidate
 
 Implementation follows the numbered [deployment plan](deploy/README.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for the PR, validation, benchmark, and `unsafe`/FFI review contract.
 
 ## Production workspace
 
 The production runtime remains an explicitly bounded set of seven Rust crates.
-One additional non-default development member, `rustinfer-native`, owns the
+One additional non-default development member, `riley-native`, owns the
 side-effect-free feature-off calibration contract/parser and a Python-free,
 `cuda`-gated native calibration producer. It does not enter the production
 dependency graph or default build. Responsibilities and dependency direction
@@ -28,14 +32,14 @@ cargo test --locked --workspace --no-default-features
 cargo doc --locked --workspace --no-deps --no-default-features
 ```
 
-The default member is `rustinfer-server`. With the `cuda` feature, the same
+The default member is `riley-server`. With the `cuda` feature, the same
 workspace builds the native CUDA C ABI plus the safe PR 03 device, primary
 context, non-default stream, event, and diagnostic fill-kernel host runtime.
 The build command below only compiles and links; it does not receive GPU access.
 
 ```bash
 cargo build --locked --release --features cuda,server
-./target/release/rustinfer --version
+./target/release/riley --version
 ```
 
 The development calibration producer is built separately and is never included
@@ -43,8 +47,8 @@ in the production/profile binaries. This command is compile-and-link only; model
 loading and GPU/NVML capture remain explicit remote operations.
 
 ```bash
-cargo build --locked --release --package rustinfer-native \
-  --no-default-features --features cuda --bin rustinfer-native
+cargo build --locked --release --package riley-native \
+  --no-default-features --features cuda --bin riley-native
 ```
 
 CUDA compilation/link validation is separate from the mandatory CPU gate.
@@ -56,7 +60,7 @@ container commands.
 
 ## 1. Vision
 
-`rustinfer` aims to build a lightweight, high-performance LLM inference engine with a different emphasis from general-purpose engines such as vLLM, SGLang, or TensorRT-LLM.
+Riley aims to build a lightweight, high-performance LLM inference engine with a different emphasis from general-purpose engines such as vLLM, SGLang, or TensorRT-LLM.
 
 The core idea is:
 
@@ -164,9 +168,9 @@ DeepSeek
 
 This approach often causes model support code to grow continuously.
 
-### rustinfer approach
+### Riley approach
 
-Instead, `rustinfer` should analyze model architectures and normalize them into reusable primitives.
+Instead, Riley should analyze model architectures and normalize them into reusable primitives.
 
 ```text
 Hugging Face Transformers
@@ -294,7 +298,7 @@ Instead of only asking:
 
 > Which operation is common?
 
-`rustinfer` should also ask:
+Riley should also ask:
 
 > Which sequence of operations is common enough that fusing it has ecosystem-wide value?
 
@@ -512,7 +516,7 @@ Over time, this becomes a valuable asset:
 Proposed top-level modules:
 
 ```text
-rustinfer/
+riley/
 |
 +-- api/
 |   +-- OpenAI-compatible HTTP API
@@ -623,7 +627,7 @@ Baseline policies:
 - FCFS
 - priority
 
-Possible `rustinfer` policies:
+Possible Riley policies:
 
 - cache-aware
 - latency-aware
@@ -703,7 +707,7 @@ Small-batch decode can be sensitive to kernel-launch overhead.
 
 CUDA Graphs may reduce launch overhead, but they can also increase memory reservation and create shape-management complexity.
 
-Therefore `rustinfer` should avoid treating CUDA Graph usage as a binary global option.
+Therefore Riley should avoid treating CUDA Graph usage as a binary global option.
 
 Potential future policy:
 
@@ -732,7 +736,7 @@ For mainstream GEMM workloads, prefer:
 - CUTLASS
 - Tensor Cores
 
-`rustinfer` should focus custom engineering effort on areas where integration and fusion matter more:
+Riley should focus custom engineering effort on areas where integration and fusion matter more:
 
 - RMSNorm
 - RoPE
@@ -907,17 +911,17 @@ Avoid trying to support every Hugging Face model immediately.
 
 The first milestone should not claim:
 
-> rustinfer is faster than vLLM.
+> Riley is faster than vLLM.
 
 Instead:
 
-> For a narrowly defined workload, rustinfer achieves lower host-side overhead and competitive or better small-batch latency.
+> For a narrowly defined workload, Riley achieves lower host-side overhead and competitive or better small-batch latency.
 
 Suggested benchmark matrix:
 
 ```text
 Engine:
-- rustinfer
+- Riley
 - vLLM
 - SGLang
 - TensorRT-LLM where practical
@@ -966,7 +970,7 @@ All comparisons should use:
 
 ## 20. Potential Differentiators
 
-`rustinfer` should aim to differentiate through:
+Riley should aim to differentiate through:
 
 ### 1. Rust-native runtime
 
@@ -1106,4 +1110,4 @@ This avoids spending months writing CUDA kernels for operations that are not act
 
 ## 25. Working Definition
 
-> **rustinfer is a Rust-native, CUDA-first inference engine that converts transformer architectures into reusable execution primitives and fused patterns, with an initial focus on predictable memory behavior and ultra-low-latency LLM serving.**
+> **Riley is a Rust-native, CUDA-first inference engine that converts transformer architectures into reusable execution primitives and fused patterns, with an initial focus on predictable memory behavior and ultra-low-latency LLM serving.**

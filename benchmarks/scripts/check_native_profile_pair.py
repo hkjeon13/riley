@@ -19,8 +19,8 @@ from pathlib import Path
 from typing import Any, Mapping, NoReturn, Sequence
 
 
-RUN_SCHEMA_VERSION = "rustinfer.native-profile-run.v1"
-REPORT_SCHEMA_VERSION = "rustinfer.native-profile-pair-report.v1"
+RUN_SCHEMA_VERSION = "riley.native-profile-run.v1"
+REPORT_SCHEMA_VERSION = "riley.native-profile-pair-report.v1"
 REQUIRED_RUNS = 5
 TTFT_P95_RATIO_MAX = 1.05
 TPOT_P95_RATIO_MAX = 1.05

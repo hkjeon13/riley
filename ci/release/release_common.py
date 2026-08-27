@@ -18,9 +18,9 @@ CUDA_TOOLKIT = "12.8.1"
 CUDA_ARCHITECTURES = ["89"]
 ARCHIVE_SUFFIX = "linux-x86_64-cuda12.8"
 MIT_LICENSE_EXPRESSION = "MIT"
-SERVER_DEFAULTS_SOURCE_PATH = Path("crates/rustinfer-server/src/main.rs")
+SERVER_DEFAULTS_SOURCE_PATH = Path("crates/riley-server/src/main.rs")
 SERVER_DEFAULTS_SOURCE_SHA256 = (
-    "32389b697e360da6b7b7c21ff2b5b4bd8b4064370812f73287cc284b3c436c1b"
+    "1f50fec5b886703fe110c9f0c62560a51193baaaf1d498713c9ba8c17f00d9be"
 )
 STABLE_OPTIMIZATION_DEFAULTS = {
     "execution_completion": "iteration-batch",
@@ -29,7 +29,7 @@ STABLE_OPTIMIZATION_DEFAULTS = {
 }
 MIT_LICENSE_BYTES = b"""MIT License
 
-Copyright (c) 2026 rustinfer contributors
+Copyright (c) 2026 Riley contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -128,7 +128,7 @@ def validate_server_defaults_source(repository_root: Path) -> None:
 def release_root(version: str) -> str:
     if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?", version):
         raise ReleaseContractError(f"invalid semantic release version: {version!r}")
-    return f"rustinfer-{version}-{ARCHIVE_SUFFIX}"
+    return f"riley-{version}-{ARCHIVE_SUFFIX}"
 
 
 def release_manifest(version: str, source_revision: str, source_date_epoch: int) -> dict[str, Any]:
@@ -140,7 +140,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
     return {
         "schema_version": SCHEMA_VERSION,
         "artifact": {
-            "name": "rustinfer",
+            "name": "riley",
             "version": version,
             "license": MIT_LICENSE_EXPRESSION,
             "target": TARGET,
@@ -152,7 +152,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
         "features": {
             "enabled": ["cuda", "server"],
             "disabled": ["bench", "experimental"],
-            "production_binary": "bin/rustinfer",
+            "production_binary": "bin/riley",
             "semantic_paths": [
                 {
                     "feature_id": "iteration-command-batch",
@@ -266,7 +266,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "cuda_execution_dtypes": ["BF16"],
             "cuda_execution_head_dimension": 64,
             "checkpoint_provenance": (
-                "required rustinfer-checkpoint.json with immutable revision, "
+                "required riley-checkpoint.json with immutable revision, "
                 "exact file inventory, byte lengths, and SHA-256 digests"
             ),
             "model_config_constraints": [
@@ -357,7 +357,7 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
             "Fixed-contiguous-37 balanced reductions remain an opt-in development compatibility selector; optimizer regression diagnostics do not qualify that arithmetic profile for the first release candidate.",
             "Models must be local checksummed safetensors and are read into resident memory within the configured maximum weight-byte bound.",
             "Serving exposes a strict, close-delimited HTTP/1.1 completions surface; chat-completions and other OpenAI endpoints are not implemented.",
-            "The first stable release candidate has no preceding stable rustinfer bundle; PR16 evidence validates conservative E0 flag restart within the current checksummed bundle, while binary rollback requires a preceding stable bundle to exist.",
+            "The first stable release candidate has no preceding stable riley bundle; PR16 evidence validates conservative E0 flag restart within the current checksummed bundle, while binary rollback requires a preceding stable bundle to exist.",
         ],
         "configuration": {
             "required": ["serve", "--model PATH"],
@@ -394,13 +394,13 @@ def release_manifest(version: str, source_revision: str, source_date_epoch: int)
                 "safe flags to isolate an optimization regression"
             ),
             "previous_release_scope": (
-                "restart a preceding checksummed stable rustinfer bundle only when "
+                "restart a preceding checksummed stable riley bundle only when "
                 "one exists; unavailable for the first stable release candidate"
             ),
             "procedure": [
                 "drain or cancel active requests and stop the current server",
                 "restart the current checksummed bundle with every safe flag when isolating an optimization regression",
-                "when a preceding stable checksummed rustinfer bundle exists and binary rollback is required, restart that bundle with the same model and configuration",
+                "when a preceding stable checksummed riley bundle exists and binary rollback is required, restart that bundle with the same model and configuration",
                 "verify /v1/models before restoring traffic",
             ],
         },
@@ -421,7 +421,7 @@ def parse_native_manifest(contents: bytes) -> list[str]:
     lines = text.splitlines()
     expected_headers = [
         "schema_version=1",
-        "binary=bin/rustinfer",
+        "binary=bin/riley",
         "inspection=elf-dt-needed",
     ]
     if lines[:3] != expected_headers:
@@ -456,7 +456,7 @@ def native_manifest_bytes(dependencies: list[str]) -> bytes:
     contents = "\n".join(
         [
             "schema_version=1",
-            "binary=bin/rustinfer",
+            "binary=bin/riley",
             "inspection=elf-dt-needed",
             *(f"dependency={dependency}" for dependency in normalized),
             "",
@@ -622,7 +622,7 @@ def validate_license(contents: bytes) -> None:
     if contents != MIT_LICENSE_BYTES:
         raise ReleaseContractError(
             "root LICENSE must exactly match the reviewed MIT license bytes for "
-            "Copyright (c) 2026 rustinfer contributors"
+            "Copyright (c) 2026 Riley contributors"
         )
 
 

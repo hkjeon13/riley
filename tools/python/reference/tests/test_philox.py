@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from rustinfer_reference.constants import RNG_ALGORITHM, UINT64_MAX
-from rustinfer_reference.philox import (
+from riley_reference.constants import RNG_ALGORITHM, UINT64_MAX
+from riley_reference.philox import (
     Philox4x32,
     derive,
     philox4x32_10,
@@ -26,30 +26,30 @@ class PhiloxContractTests(unittest.TestCase):
         rng = derive(42, "request-0001", "token-sampling")
         self.assertEqual(
             rng.digest.hex(),
-            "71135575b8f1ec48b51e72910fd23520a573d330c60c2b0b3a0fa8e33944e75a",
+            "c9826cff0d3267e8597dd2f16928ca083e76df3b8fc4af9810c747236deb517a",
         )
-        self.assertEqual(rng.key, (0x75551371, 0x48ECF1B8))
-        self.assertEqual(rng.nonce, (0x91721EB5, 0x2035D20F))
-        self.assertEqual(rng.next_u32(), 0xA8DA52B2)
-        self.assertEqual(rng.next_u32(), 0x9D74B2A4)
+        self.assertEqual(rng.key, (0xFF6C82C9, 0xE867320D))
+        self.assertEqual(rng.nonce, (0xF1D27D59, 0x08CA2869))
+        self.assertEqual(rng.next_u32(), 0xC875248D)
+        self.assertEqual(rng.next_u32(), 0x7D889EA1)
         snapshot = rng.snapshot()
         self.assertEqual(snapshot["algorithm_id"], RNG_ALGORITHM)
         self.assertEqual(snapshot["block"], "0")
         self.assertEqual(snapshot["word_offset"], 2)
         restored = Philox4x32.restore(snapshot)
-        self.assertEqual(restored.next_u32(), 0xD4CD2D7A)
-        self.assertEqual(restored.next_u32(), 0x658C3D44)
+        self.assertEqual(restored.next_u32(), 0xD6887282)
+        self.assertEqual(restored.next_u32(), 0x6DAF5198)
         self.assertEqual(restored.snapshot()["block"], "1")
         self.assertEqual(restored.snapshot()["word_offset"], 0)
 
         child = rng.fork("draft")
         self.assertEqual(
             child.digest.hex(),
-            "f5f67e3f27ba60ea8e8ac56c614d162ff11b5133486e7c463ca03a6ba9b512c1",
+            "c266fe1f4647900fd7c88a368c5b9dde897d4d0c49bc5378dbb66dda9c1c84f1",
         )
         self.assertEqual(
             tuple(child.next_u32() for _ in range(4)),
-            (0x4A38999F, 0xD695C269, 0x4DEFE354, 0xE0D2C8F5),
+            (0xF58F7119, 0x0CBF7DC4, 0x8531E25F, 0x50267C0D),
         )
 
     def test_uniform_open_interval_endpoints(self) -> None:

@@ -2,10 +2,10 @@
 
 set -euo pipefail
 
-expected_gpu="${RUSTINFER_EXPECTED_GPU:-NVIDIA GeForce RTX 4090}"
-expected_compute_cap="${RUSTINFER_EXPECTED_COMPUTE_CAP:-8.9}"
-max_idle_memory_mib="${RUSTINFER_MAX_IDLE_MEMORY_MIB:-256}"
-max_start_temperature_c="${RUSTINFER_MAX_START_TEMPERATURE_C:-50}"
+expected_gpu="${RILEY_EXPECTED_GPU:-NVIDIA GeForce RTX 4090}"
+expected_compute_cap="${RILEY_EXPECTED_COMPUTE_CAP:-8.9}"
+max_idle_memory_mib="${RILEY_MAX_IDLE_MEMORY_MIB:-256}"
+max_start_temperature_c="${RILEY_MAX_START_TEMPERATURE_C:-50}"
 expected_driver_version='580.173.02'
 expected_persistence_mode='Disabled'
 expected_cpu_governor='powersave'
@@ -22,9 +22,9 @@ expected_logical_cpu_threads='24'
 expected_mem_total_kib='65610936'
 expected_ram_bytes='67185598464'
 minimum_staging_available_bytes=21474836480
-cpu_governor_root="${RUSTINFER_CPU_GOVERNOR_ROOT:-/sys/devices/system/cpu/cpufreq}"
-host_root="${RUSTINFER_HOST_ROOT:-}"
-staging_output_root="${RUSTINFER_PREFLIGHT_OUTPUT_ROOT:-}"
+cpu_governor_root="${RILEY_CPU_GOVERNOR_ROOT:-/sys/devices/system/cpu/cpufreq}"
+host_root="${RILEY_HOST_ROOT:-}"
+staging_output_root="${RILEY_PREFLIGHT_OUTPUT_ROOT:-}"
 os_release_path="${host_root}/etc/os-release"
 cpuinfo_path="${host_root}/proc/cpuinfo"
 meminfo_path="${host_root}/proc/meminfo"
@@ -199,7 +199,7 @@ if [[ "${clock_synchronized}" != "yes" ]]; then
 fi
 
 if [[ -z "${staging_output_root}" || ! -d "${staging_output_root}" ]]; then
-  echo "preflight: RUSTINFER_PREFLIGHT_OUTPUT_ROOT must name the existing staging directory" >&2
+  echo "preflight: RILEY_PREFLIGHT_OUTPUT_ROOT must name the existing staging directory" >&2
   exit 2
 fi
 staging_available_kib="$(/usr/bin/df -Pk -- "${staging_output_root}" | /usr/bin/mawk 'NR == 2 { print $4 }')"

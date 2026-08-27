@@ -18,7 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from rustinfer_vllm_benchmark.adapter import (  # noqa: E402
+from riley_vllm_benchmark.adapter import (  # noqa: E402
     MODEL_REVISION,
     MODEL_WEIGHTS_SHA256,
     PRIMARY_COMPUTE_CAPABILITY,
@@ -519,7 +519,7 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(len(measurement.requests), 2)
         self.assertEqual(
             [call["request_id"] for call in llm.calls[0]],
-            ["rustinfer-1-0", "rustinfer-1-1"],
+            ["riley-1-0", "riley-1-1"],
         )
 
     def test_engine_timing_sanity_rejects_duration_later_than_host(self) -> None:
@@ -625,8 +625,8 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(
             aborted,
             [
-                "rustinfer-1-0-internal-uuid",
-                "rustinfer-1-1-internal-uuid",
+                "riley-1-0-internal-uuid",
+                "riley-1-1-internal-uuid",
             ],
         )
         self.assertTrue(internal)

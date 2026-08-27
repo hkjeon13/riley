@@ -17,10 +17,10 @@ DOCKERFILE = Path(__file__).with_name("ReliabilitySoak.Dockerfile")
 RUNNER = ROOT / "ci/run_remote_release_soak.sh"
 DRIVER = ROOT / "ci/run_release_soak.sh"
 EXPECTED_REMOTE_RUNNER_SHA256 = (
-    "c329733c37ab370bd04d1959ab7bd46e74cb89fb042a38638a23f24cfab64268"
+    "9b6bdeb24619664c349ceae8fe17ea74f32df9d44ad4f8abf2cf120168236f47"
 )
 EXPECTED_RELEASE_DRIVER_SHA256 = (
-    "c1080c1939f199bf3e8d5dc1503d9149a5dbf9ddf15279ffc5f6bc37623f688b"
+    "3e9c71a9bd9fb1ae584bece955d8e0270fc3269a6b52675da2d6488cc23e1e88"
 )
 EXPECTED_REVIEWED_HOST_TOOLS = (
     "bash|/usr/bin/bash|59474588a312b6b6e73e5a42a59bf71e62b55416b6c9d5e4a6e1c630c2a9ecd4",
@@ -101,10 +101,10 @@ EXPECTED_ABSOLUTE_HOST_TOOL_PATHS = {
     record.split("|")[1] for record in EXPECTED_REVIEWED_HOST_TOOLS
 }
 
-BASE_ARGUMENT = "ARG RUSTINFER_RELEASE_IMAGE_REF"
-IDENTITY_ARGUMENT = "ARG RUSTINFER_RELEASE_IMAGE_ID"
+BASE_ARGUMENT = "ARG RILEY_RELEASE_IMAGE_REF"
+IDENTITY_ARGUMENT = "ARG RILEY_RELEASE_IMAGE_ID"
 BASE_INSTRUCTION = (
-    "FROM ${RUSTINFER_RELEASE_IMAGE_REF} AS reliability-soak-test-layer"
+    "FROM ${RILEY_RELEASE_IMAGE_REF} AS reliability-soak-test-layer"
 )
 APT_INSTALL_MARKER = (
     "apt-get install -y --no-install-recommends --no-upgrade "
@@ -112,18 +112,18 @@ APT_INSTALL_MARKER = (
 )
 EXPECTED_COPIES = (
     "COPY ci/run_release_soak.sh "
-    "/opt/rustinfer-soak/ci/run_release_soak.sh",
+    "/opt/riley-soak/ci/run_release_soak.sh",
     "COPY benchmarks/soak/reliability-soak-v1.json "
-    "/opt/rustinfer-soak/benchmarks/soak/reliability-soak-v1.json",
+    "/opt/riley-soak/benchmarks/soak/reliability-soak-v1.json",
 )
 EXPECTED_NORMALIZED_INSTRUCTION_SHA256 = (
-    "dcd8ca61a97fab028d81d9875c17c4d3b017df3ab6e6cb15337249f840b3e1f1"
+    "23781febd87b8bde37cac14c1b9262dc93c11bb855958765c3fa8b7a4ecbcbf6"
 )
 EXPECTED_LABEL_BINDINGS = (
-    'org.rustinfer.reliability-soak.release-image-id="${RUSTINFER_RELEASE_IMAGE_ID}"',
-    'org.rustinfer.reliability-soak.source-revision="${RUSTINFER_SOURCE_REVISION}"',
-    'org.rustinfer.reliability-soak.source-archive-sha256="${RUSTINFER_SOURCE_ARCHIVE_SHA256}"',
-    'org.rustinfer.reliability-soak.release-binary-sha256="${RUSTINFER_RELEASE_BINARY_SHA256}"',
+    'org.riley.reliability-soak.release-image-id="${RILEY_RELEASE_IMAGE_ID}"',
+    'org.riley.reliability-soak.source-revision="${RILEY_SOURCE_REVISION}"',
+    'org.riley.reliability-soak.source-archive-sha256="${RILEY_SOURCE_ARCHIVE_SHA256}"',
+    'org.riley.reliability-soak.release-binary-sha256="${RILEY_RELEASE_BINARY_SHA256}"',
 )
 
 
@@ -186,11 +186,11 @@ def verify_soak_dockerfile(path: Path = DOCKERFILE) -> None:
             _fail(f"soak Dockerfile label is missing exact binding: {binding}")
 
     required = {
-        "ARG RUSTINFER_SOURCE_REVISION",
-        "ARG RUSTINFER_SOURCE_ARCHIVE_SHA256",
-        "ARG RUSTINFER_RELEASE_BINARY_SHA256",
+        "ARG RILEY_SOURCE_REVISION",
+        "ARG RILEY_SOURCE_ARCHIVE_SHA256",
+        "ARG RILEY_RELEASE_BINARY_SHA256",
         "USER 65532:65532",
-        'ENTRYPOINT ["/opt/rustinfer-soak/ci/run_release_soak.sh"]',
+        'ENTRYPOINT ["/opt/riley-soak/ci/run_release_soak.sh"]',
         "CMD []",
     }
     missing = required - set(instructions)
@@ -203,7 +203,7 @@ def verify_soak_dockerfile(path: Path = DOCKERFILE) -> None:
     commands = [line for line in instructions if line.upper().startswith("CMD ")]
     final_runtime = (
         "USER 65532:65532",
-        'ENTRYPOINT ["/opt/rustinfer-soak/ci/run_release_soak.sh"]',
+        'ENTRYPOINT ["/opt/riley-soak/ci/run_release_soak.sh"]',
         "CMD []",
     )
     if users != ["USER 0:0", final_runtime[0]]:
@@ -214,7 +214,7 @@ def verify_soak_dockerfile(path: Path = DOCKERFILE) -> None:
         _fail("soak Dockerfile must end with the exact production runtime identity")
 
     for marker in (
-        "sha256sum /opt/rustinfer/bin/rustinfer",
+        "sha256sum /opt/riley/bin/riley",
         "for command_name in python python3 pip pip3 cargo rustc nvcc cmake make cc c++",
         "for required_command in bash jq curl sha256sum awk ps flock readlink find sort grep wc date env",
         "find / -xdev -type f",
@@ -224,7 +224,7 @@ def verify_soak_dockerfile(path: Path = DOCKERFILE) -> None:
     if re.search(r"\b(python3?|pip3?)\b", APT_INSTALL_MARKER):
         _fail("soak observation package set must not contain Python")
     closure_markers = (
-        "closure_before=/opt/rustinfer-soak/release-runtime-closure.tsv",
+        "closure_before=/opt/riley-soak/release-runtime-closure.tsv",
         "capture_runtime_closure \"$closure_before\"",
         APT_INSTALL_MARKER,
         "capture_runtime_closure \"$closure_after\"",
@@ -544,7 +544,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
     required_markers = (
         "DESIGNATED_HOSTNAME=psyche-MS-7D91",
         "DESIGNATED_GPU_UUID=GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
-        'lock_path = "/var/tmp/rustinfer-server-4096-gpu-evidence.lock"',
+        'lock_path = "/var/tmp/riley-server-4096-gpu-evidence.lock"',
         "os.O_NOFOLLOW",
         "os.O_NONBLOCK",
         'getattr(os, "O_CLOEXEC", 0)',
@@ -557,12 +557,12 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         "os.close(descriptor)",
         "os.waitpid(child, 0)",
         "signal.signal(forwarded_signal, forward)",
-        '"RUSTINFER_SOAK_SUPERVISOR_PID": str(os.getpid())',
-        '"RUSTINFER_SOAK_SUPERVISOR_LOCK_FD": str(descriptor)',
+        '"RILEY_SOAK_SUPERVISOR_PID": str(os.getpid())',
+        '"RILEY_SOAK_SUPERVISOR_LOCK_FD": str(descriptor)',
         "PR_SET_PDEATHSIG = 1",
         "libc.prctl(PR_SET_PDEATHSIG, signal.SIGTERM",
         "if os.getppid() != supervisor_pid:",
-        'test "$PPID" = "$RUSTINFER_SOAK_SUPERVISOR_PID"',
+        'test "$PPID" = "$RILEY_SOAK_SUPERVISOR_PID"',
         'f"/proc/{supervisor_pid}/exe"',
         'f"/proc/{supervisor_pid}/fd/{descriptor}"',
         'f"/proc/{supervisor_pid}/fdinfo/{descriptor}"',
@@ -626,26 +626,26 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         '$name == "CURL_HOME"',
         '$name == "XDG_CONFIG_HOME"',
         '$name | startswith("BASH_FUNC_")',
-        '/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+        '/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
         '$environment.NVIDIA_VISIBLE_DEVICES == "all"',
         '$environment.NVIDIA_DRIVER_CAPABILITIES == "compute,utility"',
         '--arg expected_ld_library_path "/usr/local/cuda/lib64"',
         '$environment.LD_LIBRARY_PATH == $expected_ld_library_path',
         "DOCKER_BUILDKIT=1 docker build",
         '--file "$build_context/ci/release/ReliabilitySoak.Dockerfile"',
-        'base_image_tag="rustinfer-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"',
+        'base_image_tag="riley-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"',
         'docker image tag "$release_image_id" "$base_image_tag"',
         'test "$resolved_base_image_id" = "$release_image_id"',
         'test "$post_build_base_image_id" = "$release_image_id"',
-        "--build-arg \"RUSTINFER_RELEASE_IMAGE_REF=${base_image_tag}\"",
-        "--build-arg \"RUSTINFER_RELEASE_IMAGE_ID=${release_image_id}\"",
+        "--build-arg \"RILEY_RELEASE_IMAGE_REF=${base_image_tag}\"",
+        "--build-arg \"RILEY_RELEASE_IMAGE_ID=${release_image_id}\"",
         '"$build_context" 2>&1 | tee "$output_dir/test-layer-build.log"',
         '$test_layer[0:($release | length)] == $release',
         'docker image inspect "$test_image_id" >"$runtime_receipts/test-layer-image-inspect.json"',
         'and .[0].Config.User == "65532:65532"',
         'and .[0].Config.WorkingDir == $working_directory',
         'and .[0].Config.Labels == $expected_labels',
-        'and .[0].Config.Entrypoint == ["/opt/rustinfer-soak/ci/run_release_soak.sh"]',
+        'and .[0].Config.Entrypoint == ["/opt/riley-soak/ci/run_release_soak.sh"]',
         'and .[0].Config.Cmd == []',
         'expected_container_environment=$(jq -cn',
         '--user 65532:65532',
@@ -660,14 +660,14 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         'source=${materialized_manifest_copy},destination=/run-input/reliability-soak-v1.json,readonly',
         'source=${container_evidence},destination=/evidence',
         'mkdir -m 0777 "$container_evidence"',
-        'RUSTINFER_SOAK_OUTPUT=/evidence/run',
-        'RUSTINFER_SOAK_FINAL_METRICS_JSON=/evidence/final-metrics.json',
+        'RILEY_SOAK_OUTPUT=/evidence/run',
+        'RILEY_SOAK_FINAL_METRICS_JSON=/evidence/final-metrics.json',
         '$container.State.Status == $status',
         '$container.State.OOMKilled == false',
         '$container.State.Error == ""',
         '$container.State.Pid == 0',
         '$container.Config.Healthcheck == {Test:["NONE"]}',
-        '$container.Path == "/opt/rustinfer-soak/ci/run_release_soak.sh"',
+        '$container.Path == "/opt/riley-soak/ci/run_release_soak.sh"',
         '$container.Args == []',
         'def docker_timestamp:',
         '>= 26100',
@@ -693,10 +693,10 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         'Propagation:"rprivate"',
         'validate_container_contract "$runtime_receipts/container-inspect-pre.json" created 0 false',
         'docker inspect "$container_name" >"$runtime_receipts/container-inspect-pre.json"',
-        'docker cp "$container_name:/opt/rustinfer/bin/rustinfer" "$container_binary_copy"',
+        'docker cp "$container_name:/opt/riley/bin/riley" "$container_binary_copy"',
         'test "$(sha256_file "$container_binary_copy")" = "$expected_release_binary_sha256"',
         'runtime_closure_receipt="$runtime_receipts/release-runtime-closure.tsv"',
-        '"$container_name:/opt/rustinfer-soak/release-runtime-closure.tsv"',
+        '"$container_name:/opt/riley-soak/release-runtime-closure.tsv"',
         'test "$(stat -c \'%a\' "$runtime_closure_receipt")" = 444',
         '$2 == "NOT_FOUND"',
         '$1 != "libcuda.so.1" || $3 != "-" || $4 != "-"',
@@ -711,7 +711,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         '["Id","Name","Image","Path","Args","Created","Config","HostConfig","Mounts"]',
         'run_json_sha256=$(sha256_file "$container_evidence_export/run/run.json")',
         'events_jsonl_sha256=$(sha256_file "$container_evidence_export/run/events.jsonl")',
-        "rustinfer.reliability-soak-launcher-receipt.v3",
+        "riley.reliability-soak-launcher-receipt.v3",
         'host:{hostname:$hostname,gpu_name:$gpu_name,gpu_uuid:$gpu_uuid,compute_capability:$compute_capability,memory_total_mib:$memory_total_mib,driver_version:$driver_version}',
         'source:{git_revision:$git_revision,source_archive_sha256:$source_archive_sha256,release_binary_sha256:$release_binary_sha256,model_tree_sha256:$model_tree_sha256,manifest_sha256:$manifest_sha256,correctness_golden_sha256:$correctness_golden_sha256,native_correctness_report_sha256:$native_correctness_report_sha256}',
         'evidence:{run_json_sha256:$run_json_sha256,events_jsonl_sha256:$events_jsonl_sha256,release_runtime_closure_sha256:$release_runtime_closure_sha256}',
@@ -735,7 +735,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         "test-layer-image-inspect.json",
         'test "$(<"$runtime_receipts/host-gpu.csv")" = "$gpu_rows"',
         '>launcher-SHA256SUMS',
-        'rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"',
+        'riley.remote-release-soak.completed.v1 >"$output_dir/completed"',
     )
     for marker in required_markers:
         if marker not in code:
@@ -795,7 +795,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         'docker wait "$container_name" >"$output_dir/container-exit-code.txt"',
         'validate_container_contract "$runtime_receipts/container-inspect-pre.json" created 0 false',
         'validate_container_contract "$runtime_receipts/container-inspect-post.json" exited 0 true',
-        'rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"',
+        'riley.remote-release-soak.completed.v1 >"$output_dir/completed"',
     ):
         _require_once(code, marker, "remote soak runner")
 
@@ -815,8 +815,8 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
             "DOCKER_BUILDKIT=1 docker build",
             'container_id=$(docker create',
             'validate_container_contract "$runtime_receipts/container-inspect-pre.json" created 0 false',
-            'docker cp "$container_name:/opt/rustinfer/bin/rustinfer" "$container_binary_copy"',
-            '"$container_name:/opt/rustinfer-soak/release-runtime-closure.tsv"',
+            'docker cp "$container_name:/opt/riley/bin/riley" "$container_binary_copy"',
+            '"$container_name:/opt/riley-soak/release-runtime-closure.tsv"',
             'release_runtime_closure_sha256=$(sha256_file "$runtime_closure_receipt")',
             'verify_input_snapshots immediate-pre-start',
             "require_gpu_idle immediate-pre-start",
@@ -830,7 +830,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
             '>"$runtime_receipts/launcher-receipt.json"',
             "actual_runtime_receipts=",
             ">launcher-SHA256SUMS",
-            'rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"',
+            'riley.remote-release-soak.completed.v1 >"$output_dir/completed"',
         ),
         "remote soak runner",
     )
@@ -856,7 +856,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         r'exec\s+9>>',
         r'flock\s+-n\s+9',
         r'os\.set_inheritable\s*\(',
-        r'RUSTINFER_SOAK_GPU_LOCK_FD',
+        r'RILEY_SOAK_GPU_LOCK_FD',
     ):
         if re.search(pattern, code):
             _fail(f"remote soak runner contains forbidden operation: {pattern}")
@@ -897,7 +897,7 @@ def verify_release_soak_driver(path: Path = DRIVER) -> None:
         'started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)',
         'run_stamp=${started_at_utc//-/}',
         'run_stamp=${run_stamp//:/}',
-        'run_id="soak-${run_stamp}-${RUSTINFER_SOURCE_REVISION:0:12}"',
+        'run_id="soak-${run_stamp}-${RILEY_SOURCE_REVISION:0:12}"',
         '--arg started_at_utc "$started_at_utc"',
         "trap handle_sampler_failure USR1",
         'kill -USR1 "$soak_parent_pid"',

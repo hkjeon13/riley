@@ -103,7 +103,7 @@ class ContractValidatorTests(unittest.TestCase):
         self.assertEqual(lane["availability"], "available")
         command = lane["commands"]["benchmark"]
         self.assertEqual(command["status"], "available")
-        self.assertIn("rustinfer-vllm-benchmark", command["argv"])
+        self.assertIn("riley-vllm-benchmark", command["argv"])
         self.assertEqual(
             command["environment"],
             {
@@ -124,7 +124,7 @@ class ContractValidatorTests(unittest.TestCase):
 
     def test_native_lane_contract_is_single_cell_per_process(self) -> None:
         lane = json.loads(
-            (REPOSITORY_ROOT / "benchmarks/lanes/rustinfer-native.json").read_text(
+            (REPOSITORY_ROOT / "benchmarks/lanes/riley-native.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -149,7 +149,7 @@ class ContractValidatorTests(unittest.TestCase):
                 (project_dir / "pyproject.toml").write_text(
                     """\
 [project]
-name = "rustinfer-vllm-benchmark-lane"
+name = "riley-vllm-benchmark-lane"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "nvidia-ml-py==13.610.43",
@@ -158,7 +158,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rustinfer-vllm-benchmark = "rustinfer_vllm_benchmark.cli:main"
+riley-vllm-benchmark = "riley_vllm_benchmark.cli:main"
 """,
                     encoding="utf-8",
                 )
@@ -172,7 +172,7 @@ requires-python = "==3.13.*"
 exclude-newer = "2026-08-24T23:59:59Z"
 
 [[package]]
-name = "rustinfer-vllm-benchmark-lane"
+name = "riley-vllm-benchmark-lane"
 source = { editable = "." }
 
 [package.metadata]
@@ -273,7 +273,7 @@ version = "0.27.1"
         canonical = self._candidate_execution()
         contract.validate_instance(canonical, self.candidate_execution_schema)
         mutations = {
-            "relative-repository-root": (3, "workspace/rustinfer"),
+            "relative-repository-root": (3, "workspace/riley"),
             "empty-first-model-component": (5, "//model"),
             "first-current-model-component": (5, "/./model"),
             "first-parent-model-component": (5, "/../model"),
@@ -417,7 +417,7 @@ version = "0.27.1"
                 / "benchmarks/correctness/evidence/native-e0-approvals.json"
             ).read_text(encoding="utf-8")
         )
-        self.assertEqual(index["schema_version"], "rustinfer.native-e0-approvals.v1")
+        self.assertEqual(index["schema_version"], "riley.native-e0-approvals.v1")
         self.assertEqual(index["approvals"], [])
         contract.validate_instance(index, self.native_e0_approval_schema)
         changed = copy.deepcopy(index)
@@ -453,7 +453,7 @@ version = "0.27.1"
 
         matrix_path = REPOSITORY_ROOT / "benchmarks/matrix.yaml"
         prompts_path = REPOSITORY_ROOT / "benchmarks/prompts.jsonl"
-        lane_path = REPOSITORY_ROOT / "benchmarks/lanes/rustinfer-native.json"
+        lane_path = REPOSITORY_ROOT / "benchmarks/lanes/riley-native.json"
         matrix = json.loads(matrix_path.read_text(encoding="utf-8"))
         lane = json.loads(lane_path.read_text(encoding="utf-8"))
         row.update(
@@ -524,7 +524,7 @@ version = "0.27.1"
                 ): gate_source.read_bytes(),
                 "benchmarks/environment.md": b"test environment bytes\n",
                 "benchmarks/lanes/hf-transformers.json": b"hf lane bytes\n",
-                "benchmarks/lanes/rustinfer-native.json": b"native lane bytes\n",
+                "benchmarks/lanes/riley-native.json": b"native lane bytes\n",
                 "benchmarks/schemas/native-e0-approval.schema.json": (
                     REPOSITORY_ROOT
                     / "benchmarks/schemas/native-e0-approval.schema.json"
@@ -575,7 +575,7 @@ version = "0.27.1"
             )
             contract.validate_instance(
                 {
-                    "schema_version": "rustinfer.native-e0-approvals.v1",
+                    "schema_version": "riley.native-e0-approvals.v1",
                     "approvals": [approval],
                 },
                 self.native_e0_approval_schema,
@@ -585,7 +585,7 @@ version = "0.27.1"
             with self.assertRaisesRegex(contract.ContractError, "must equal"):
                 contract.validate_instance(
                     {
-                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "schema_version": "riley.native-e0-approvals.v1",
                         "approvals": [changed_approval],
                     },
                     self.native_e0_approval_schema,
@@ -595,7 +595,7 @@ version = "0.27.1"
             with self.assertRaisesRegex(contract.ContractError, "must equal"):
                 contract.validate_instance(
                     {
-                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "schema_version": "riley.native-e0-approvals.v1",
                         "approvals": [changed_approval],
                     },
                     self.native_e0_approval_schema,
@@ -614,7 +614,7 @@ version = "0.27.1"
             }
             contract.validate_instance(
                 {
-                    "schema_version": "rustinfer.native-e0-approvals.v1",
+                    "schema_version": "riley.native-e0-approvals.v1",
                     "approvals": [historical],
                 },
                 self.native_e0_approval_schema,
@@ -623,7 +623,7 @@ version = "0.27.1"
             with self.assertRaisesRegex(contract.ContractError, "unexpected properties"):
                 contract.validate_instance(
                     {
-                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "schema_version": "riley.native-e0-approvals.v1",
                         "approvals": [historical],
                     },
                     self.native_e0_approval_schema,
@@ -632,7 +632,7 @@ version = "0.27.1"
             index_path.write_text(
                 json.dumps(
                     {
-                        "schema_version": "rustinfer.native-e0-approvals.v1",
+                        "schema_version": "riley.native-e0-approvals.v1",
                         "approvals": [approval],
                     },
                     indent=2,
@@ -976,9 +976,9 @@ version = "0.27.1"
         command = [
             "git",
             "-c",
-            "user.name=rustinfer tests",
+            "user.name=riley tests",
             "-c",
-            "user.email=rustinfer-tests@example.invalid",
+            "user.email=riley-tests@example.invalid",
             *arguments,
         ]
         return subprocess.run(
@@ -1050,7 +1050,7 @@ version = "0.27.1"
                 root / "benchmarks/lanes/hf-transformers.json"
             ),
             "candidate": contract._sha256(
-                root / "benchmarks/lanes/rustinfer-native.json"
+                root / "benchmarks/lanes/riley-native.json"
             ),
         }
         return report
@@ -1261,25 +1261,25 @@ version = "0.27.1"
 
     def _candidate_execution(self) -> dict[str, object]:
         return {
-            "executable": {"path": "rustinfer-native", "sha256": "0" * 64},
+            "executable": {"path": "riley-native", "sha256": "0" * 64},
             "build_argv": [
                 "cargo",
                 "build",
                 "--locked",
                 "--release",
                 "--package",
-                "rustinfer-native",
+                "riley-native",
                 "--no-default-features",
                 "--features",
                 "cuda",
                 "--bin",
-                "rustinfer-native",
+                "riley-native",
             ],
             "capture_argv": [
-                "rustinfer-native",
+                "riley-native",
                 "calibrate",
                 "--repository-root",
-                "/workspace/rustinfer",
+                "/workspace/riley",
                 "--model",
                 "/models/smollm2",
                 "--gate-manifest",

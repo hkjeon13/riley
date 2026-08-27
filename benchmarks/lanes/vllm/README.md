@@ -1,6 +1,6 @@
 # vLLM baseline adapter
 
-`rustinfer-vllm-benchmark` runs exactly one matrix cell and independent run per
+`riley-vllm-benchmark` runs exactly one matrix cell and independent run per
 fresh process. Warmups and measured warm trials reuse that process's model;
 cold runs contain one measurement and no within-run model reuse. It is
 cache-only by default; `--allow-download` permits fetching only the pinned
@@ -55,7 +55,7 @@ only and never enter repeatability statistics.
 Example (placeholders must be replaced with one selected matrix cell):
 
 ```text
-uv run --frozen --offline --no-sync --project benchmarks/lanes/vllm rustinfer-vllm-benchmark \
+uv run --frozen --offline --no-sync --project benchmarks/lanes/vllm riley-vllm-benchmark \
   --matrix benchmarks/matrix.yaml --prompts benchmarks/prompts.jsonl \
   --result-dir <new-directory> --run-index <1..5> --run-id <id> \
   --warm-state <cold|warm> --concurrency <n> \

@@ -84,7 +84,7 @@ import signal
 import stat
 import sys
 
-lock_path = "/var/tmp/rustinfer-server-4096-gpu-evidence.lock"
+lock_path = "/var/tmp/riley-server-4096-gpu-evidence.lock"
 flags = (os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
          | getattr(os, "O_CLOEXEC", 0))
 descriptor = os.open(lock_path, flags, 0o600)
@@ -105,8 +105,8 @@ environment = {
     "LC_ALL": "C",
     "TZ": "UTC",
     "HOME": "/home/psyche",
-    "RUSTINFER_SOAK_SUPERVISOR_PID": str(os.getpid()),
-    "RUSTINFER_SOAK_SUPERVISOR_LOCK_FD": str(descriptor),
+    "RILEY_SOAK_SUPERVISOR_PID": str(os.getpid()),
+    "RILEY_SOAK_SUPERVISOR_LOCK_FD": str(descriptor),
 }
 supervisor_pid = os.getpid()
 child = os.fork()
@@ -145,9 +145,9 @@ raise SystemExit(128 + os.WTERMSIG(wait_status))
 fi
 shift
 
-[[ ${RUSTINFER_SOAK_SUPERVISOR_PID:-} =~ ^[1-9][0-9]*$ ]]
-[[ ${RUSTINFER_SOAK_SUPERVISOR_LOCK_FD:-} =~ ^[0-9]+$ ]]
-test "$PPID" = "$RUSTINFER_SOAK_SUPERVISOR_PID" || {
+[[ ${RILEY_SOAK_SUPERVISOR_PID:-} =~ ^[1-9][0-9]*$ ]]
+[[ ${RILEY_SOAK_SUPERVISOR_LOCK_FD:-} =~ ^[0-9]+$ ]]
+test "$PPID" = "$RILEY_SOAK_SUPERVISOR_PID" || {
     echo 'release soak: clean lock supervisor parent was bypassed' >&2
     exit 2
 }
@@ -173,7 +173,7 @@ children = {
 }
 if bash_pid not in children:
     raise SystemExit("release soak: Bash is not a direct supervisor child")
-lock_path = "/var/tmp/rustinfer-server-4096-gpu-evidence.lock"
+lock_path = "/var/tmp/riley-server-4096-gpu-evidence.lock"
 metadata = os.stat(lock_path, follow_symlinks=False)
 descriptor_metadata = os.stat(f"/proc/{supervisor_pid}/fd/{descriptor}")
 if (
@@ -194,8 +194,8 @@ if flags_match is None or not (int(flags_match.group(1), 8) & os.O_CLOEXEC):
 lock_pattern = rf"^lock:\s+\d+:\s+FLOCK\s+ADVISORY\s+WRITE\s+{supervisor_pid}\s+"
 if re.search(lock_pattern, fdinfo, re.MULTILINE) is None:
     raise SystemExit("release soak: supervisor does not hold the kernel flock")
-' "$RUSTINFER_SOAK_SUPERVISOR_PID" "$RUSTINFER_SOAK_SUPERVISOR_LOCK_FD" "$$"
-unset RUSTINFER_SOAK_SUPERVISOR_PID RUSTINFER_SOAK_SUPERVISOR_LOCK_FD
+' "$RILEY_SOAK_SUPERVISOR_PID" "$RILEY_SOAK_SUPERVISOR_LOCK_FD" "$$"
+unset RILEY_SOAK_SUPERVISOR_PID RILEY_SOAK_SUPERVISOR_LOCK_FD
 
 export PATH=/usr/bin:/bin
 export LC_ALL=C TZ=UTC
@@ -728,7 +728,7 @@ test "$(sha256_file "$native_correctness_report")" = "$expected_native_correctne
     exit 1
 }
 
-jq -e '.schema_version == "rustinfer.reliability-soak-manifest.v1" and .contract_id == "pr16-release-soak-v1"' \
+jq -e '.schema_version == "riley.reliability-soak-manifest.v1" and .contract_id == "pr16-release-soak-v1"' \
     "$materialized_manifest" >/dev/null
 normalized_template=$(jq -cS \
     '.golden.generated_sha256 = ("0" * 64) | .golden.provenance_sha256 = ("0" * 64)' \
@@ -763,7 +763,7 @@ jq -e \
     --arg tokenizer_aggregate_sha256 "$MODEL_TOKENIZER_AGGREGATE_SHA256" \
     --arg tokenizer_json_sha256 "$MODEL_TOKENIZER_JSON_SHA256" \
     --arg native_report_sha256 "$expected_native_correctness_report_sha256" \
-    '.schema_version == "rustinfer.python-free-release-e2e-golden.v1"
+    '.schema_version == "riley.python-free-release-e2e-golden.v1"
      and .correctness_gate_id == $gate
      and .correctness_report_sha256 == $native_report_sha256
      and .source_revision == $source_revision
@@ -925,7 +925,7 @@ build_context_pre_manifest="$output_dir/test-layer-build-context-SHA256SUMS.pre"
 docker image inspect "$release_image_id" >"$runtime_receipts/release-image-inspect.json"
 jq -e \
     --arg image_id "$release_image_id" \
-    --arg expected_path "/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    --arg expected_path "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     --arg expected_ld_library_path "/usr/local/cuda/lib64" \
     'def environment_map:
        reduce (.[] | capture("^(?<name>[^=]+)=(?<value>.*)$")) as $item
@@ -978,7 +978,7 @@ test "${DOCKER_BUILDKIT:-1}" != 0 || {
 # deterministic, collision-closed local reference, while retaining the
 # original image ID as the only provenance binding. The reference is kept for
 # evidence replay and is checked before and after the build.
-base_image_tag="rustinfer-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"
+base_image_tag="riley-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"
 if docker image inspect "$base_image_tag" >/dev/null 2>&1; then
     test "$(docker image inspect --format '{{.Id}}' "$base_image_tag")" = "$release_image_id" || {
         echo "existing candidate/image base tag resolves to a different image ID" >&2
@@ -1007,11 +1007,11 @@ DOCKER_BUILDKIT=1 docker build \
     --no-cache \
     --pull=false \
     --file "$build_context/ci/release/ReliabilitySoak.Dockerfile" \
-    --build-arg "RUSTINFER_RELEASE_IMAGE_REF=${base_image_tag}" \
-    --build-arg "RUSTINFER_RELEASE_IMAGE_ID=${release_image_id}" \
-    --build-arg "RUSTINFER_SOURCE_REVISION=${resolved_revision}" \
-    --build-arg "RUSTINFER_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
-    --build-arg "RUSTINFER_RELEASE_BINARY_SHA256=${expected_release_binary_sha256}" \
+    --build-arg "RILEY_RELEASE_IMAGE_REF=${base_image_tag}" \
+    --build-arg "RILEY_RELEASE_IMAGE_ID=${release_image_id}" \
+    --build-arg "RILEY_SOURCE_REVISION=${resolved_revision}" \
+    --build-arg "RILEY_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
+    --build-arg "RILEY_RELEASE_BINARY_SHA256=${expected_release_binary_sha256}" \
     --tag "$test_image_tag" \
     "$build_context" 2>&1 | tee "$output_dir/test-layer-build.log"
 
@@ -1026,10 +1026,10 @@ test_image_id=$(docker image inspect --format '{{.Id}}' "$test_image_tag")
 [[ $test_image_id =~ ^sha256:[0-9a-f]{64}$ ]]
 test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$test_image_id")" = linux/amd64
 test "$(docker image inspect --format '{{.Config.User}}' "$test_image_id")" = 65532:65532
-test "$(docker image inspect --format '{{index .Config.Labels "org.rustinfer.reliability-soak.release-image-id"}}' "$test_image_id")" = "$release_image_id"
-test "$(docker image inspect --format '{{index .Config.Labels "org.rustinfer.reliability-soak.source-revision"}}' "$test_image_id")" = "$resolved_revision"
-test "$(docker image inspect --format '{{index .Config.Labels "org.rustinfer.reliability-soak.source-archive-sha256"}}' "$test_image_id")" = "$expected_source_archive_sha256"
-test "$(docker image inspect --format '{{index .Config.Labels "org.rustinfer.reliability-soak.release-binary-sha256"}}' "$test_image_id")" = "$expected_release_binary_sha256"
+test "$(docker image inspect --format '{{index .Config.Labels "org.riley.reliability-soak.release-image-id"}}' "$test_image_id")" = "$release_image_id"
+test "$(docker image inspect --format '{{index .Config.Labels "org.riley.reliability-soak.source-revision"}}' "$test_image_id")" = "$resolved_revision"
+test "$(docker image inspect --format '{{index .Config.Labels "org.riley.reliability-soak.source-archive-sha256"}}' "$test_image_id")" = "$expected_source_archive_sha256"
+test "$(docker image inspect --format '{{index .Config.Labels "org.riley.reliability-soak.release-binary-sha256"}}' "$test_image_id")" = "$expected_release_binary_sha256"
 docker image inspect "$test_image_id" >"$runtime_receipts/test-layer-image-inspect.json"
 printf '%s\n' "$test_image_id" >"$output_dir/test-layer-image-id.txt"
 release_rootfs=$(jq -c '.[0].RootFS.Layers' "$runtime_receipts/release-image-inspect.json")
@@ -1051,10 +1051,10 @@ expected_test_image_labels=$(jq -cn \
     --arg source_archive_sha256 "$expected_source_archive_sha256" \
     --arg release_binary_sha256 "$expected_release_binary_sha256" \
     '$release + {
-       "org.rustinfer.reliability-soak.release-image-id":$release_image_id,
-       "org.rustinfer.reliability-soak.source-revision":$source_revision,
-       "org.rustinfer.reliability-soak.source-archive-sha256":$source_archive_sha256,
-       "org.rustinfer.reliability-soak.release-binary-sha256":$release_binary_sha256
+       "org.riley.reliability-soak.release-image-id":$release_image_id,
+       "org.riley.reliability-soak.source-revision":$source_revision,
+       "org.riley.reliability-soak.source-archive-sha256":$source_archive_sha256,
+       "org.riley.reliability-soak.release-binary-sha256":$release_binary_sha256
      }')
 jq -e --arg image_id "$test_image_id" \
     --arg working_directory "$release_working_directory" \
@@ -1069,7 +1069,7 @@ jq -e --arg image_id "$test_image_id" \
      and .[0].Config.User == "65532:65532"
      and .[0].Config.WorkingDir == $working_directory
      and .[0].Config.Labels == $expected_labels
-     and .[0].Config.Entrypoint == ["/opt/rustinfer-soak/ci/run_release_soak.sh"]
+     and .[0].Config.Entrypoint == ["/opt/riley-soak/ci/run_release_soak.sh"]
      and .[0].Config.Cmd == []' \
     "$runtime_receipts/test-layer-image-inspect.json" >/dev/null
 expected_container_environment=$(jq -cn \
@@ -1086,25 +1086,25 @@ expected_container_environment=$(jq -cn \
            ({}; if has($item.name) then error("duplicate image environment name")
                 else .[$item.name] = $item.value end);
      $image_environment + {
-       RUSTINFER_SOAK_MANIFEST:"/run-input/reliability-soak-v1.json",
-       RUSTINFER_SOAK_OUTPUT:"/evidence/run",
-       RUSTINFER_SOURCE_REVISION:$source_revision,
-       RUSTINFER_SOURCE_ARCHIVE_SHA256:$source_archive_sha256,
-       RUSTINFER_BINARY_SHA256:$release_binary_sha256,
-       RUSTINFER_IMAGE_SHA256:$release_image_sha256,
-       RUSTINFER_MODEL_SHA256:$model_tree_sha256,
-       RUSTINFER_MODEL_ID:$model_id,
-       RUSTINFER_MODEL_REVISION:$model_revision,
-       RUSTINFER_SOAK_FINAL_METRICS_JSON:"/evidence/final-metrics.json",
-       RUSTINFER_SOAK_BINARY:"/opt/rustinfer/bin/rustinfer",
-       RUSTINFER_SOAK_MODEL_PATH:"/model",
-       RUSTINFER_SOAK_BIND:"127.0.0.1:18080",
+       RILEY_SOAK_MANIFEST:"/run-input/reliability-soak-v1.json",
+       RILEY_SOAK_OUTPUT:"/evidence/run",
+       RILEY_SOURCE_REVISION:$source_revision,
+       RILEY_SOURCE_ARCHIVE_SHA256:$source_archive_sha256,
+       RILEY_BINARY_SHA256:$release_binary_sha256,
+       RILEY_IMAGE_SHA256:$release_image_sha256,
+       RILEY_MODEL_SHA256:$model_tree_sha256,
+       RILEY_MODEL_ID:$model_id,
+       RILEY_MODEL_REVISION:$model_revision,
+       RILEY_SOAK_FINAL_METRICS_JSON:"/evidence/final-metrics.json",
+       RILEY_SOAK_BINARY:"/opt/riley/bin/riley",
+       RILEY_SOAK_MODEL_PATH:"/model",
+       RILEY_SOAK_BIND:"127.0.0.1:18080",
        NVIDIA_DRIVER_CAPABILITIES:"compute,utility",
        ALL_PROXY:"",FTP_PROXY:"",HTTP_PROXY:"",HTTPS_PROXY:"",NO_PROXY:"",
        all_proxy:"",ftp_proxy:"",http_proxy:"",https_proxy:"",no_proxy:""
      }')
 
-container_name="rustinfer-soak-${resolved_revision:0:12}-$(date -u +%Y%m%dT%H%M%SZ)"
+container_name="riley-soak-${resolved_revision:0:12}-$(date -u +%Y%m%dT%H%M%SZ)"
 if docker inspect "$container_name" >/dev/null 2>&1; then
     echo "refusing to replace existing soak container: $container_name" >&2
     exit 1
@@ -1169,12 +1169,12 @@ validate_container_contract() {
          | $container.Id == $id
            and $container.Name == $name
            and $container.Image == $image
-           and $container.Path == "/opt/rustinfer-soak/ci/run_release_soak.sh"
+           and $container.Path == "/opt/riley-soak/ci/run_release_soak.sh"
            and $container.Args == []
            and (($container.Created | docker_timestamp) > 0)
            and $container.Config.Image == $image
            and $container.Config.User == $user
-           and $container.Config.Entrypoint == ["/opt/rustinfer-soak/ci/run_release_soak.sh"]
+           and $container.Config.Entrypoint == ["/opt/riley-soak/ci/run_release_soak.sh"]
            and $container.Config.Cmd == []
            and $container.Config.WorkingDir == $working_directory
            and $container.Config.Healthcheck == {Test:["NONE"]}
@@ -1256,19 +1256,19 @@ container_id=$(docker create \
     --security-opt no-new-privileges \
     --pids-limit 8192 \
     --tmpfs /tmp:rw,nosuid,nodev,noexec,size=67108864 \
-    --env "RUSTINFER_SOAK_MANIFEST=/run-input/reliability-soak-v1.json" \
-    --env "RUSTINFER_SOAK_OUTPUT=/evidence/run" \
-    --env "RUSTINFER_SOURCE_REVISION=${resolved_revision}" \
-    --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
-    --env "RUSTINFER_BINARY_SHA256=${expected_release_binary_sha256}" \
-    --env "RUSTINFER_IMAGE_SHA256=${release_image_id#sha256:}" \
-    --env "RUSTINFER_MODEL_SHA256=${expected_model_tree_sha256}" \
-    --env "RUSTINFER_MODEL_ID=${MODEL_ID}" \
-    --env "RUSTINFER_MODEL_REVISION=${MODEL_REVISION}" \
-    --env "RUSTINFER_SOAK_FINAL_METRICS_JSON=/evidence/final-metrics.json" \
-    --env "RUSTINFER_SOAK_BINARY=/opt/rustinfer/bin/rustinfer" \
-    --env "RUSTINFER_SOAK_MODEL_PATH=/model" \
-    --env "RUSTINFER_SOAK_BIND=127.0.0.1:18080" \
+    --env "RILEY_SOAK_MANIFEST=/run-input/reliability-soak-v1.json" \
+    --env "RILEY_SOAK_OUTPUT=/evidence/run" \
+    --env "RILEY_SOURCE_REVISION=${resolved_revision}" \
+    --env "RILEY_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
+    --env "RILEY_BINARY_SHA256=${expected_release_binary_sha256}" \
+    --env "RILEY_IMAGE_SHA256=${release_image_id#sha256:}" \
+    --env "RILEY_MODEL_SHA256=${expected_model_tree_sha256}" \
+    --env "RILEY_MODEL_ID=${MODEL_ID}" \
+    --env "RILEY_MODEL_REVISION=${MODEL_REVISION}" \
+    --env "RILEY_SOAK_FINAL_METRICS_JSON=/evidence/final-metrics.json" \
+    --env "RILEY_SOAK_BINARY=/opt/riley/bin/riley" \
+    --env "RILEY_SOAK_MODEL_PATH=/model" \
+    --env "RILEY_SOAK_BIND=127.0.0.1:18080" \
     --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     --env ALL_PROXY= \
     --env FTP_PROXY= \
@@ -1290,8 +1290,8 @@ active_container=$container_name
 docker inspect "$container_name" >"$runtime_receipts/container-inspect-pre.json"
 validate_container_contract "$runtime_receipts/container-inspect-pre.json" created 0 false
 
-container_binary_copy="$output_dir/container-rustinfer"
-docker cp "$container_name:/opt/rustinfer/bin/rustinfer" "$container_binary_copy"
+container_binary_copy="$output_dir/container-riley"
+docker cp "$container_name:/opt/riley/bin/riley" "$container_binary_copy"
 test -f "$container_binary_copy" && test ! -L "$container_binary_copy"
 test "$(sha256_file "$container_binary_copy")" = "$expected_release_binary_sha256" || {
     echo "actual container binary differs from the reviewed release binary" >&2
@@ -1304,7 +1304,7 @@ chmod 0444 "$container_binary_copy"
 # then enforce the same canonical format consumed by the offline checker.
 runtime_closure_receipt="$runtime_receipts/release-runtime-closure.tsv"
 docker cp \
-    "$container_name:/opt/rustinfer-soak/release-runtime-closure.tsv" \
+    "$container_name:/opt/riley-soak/release-runtime-closure.tsv" \
     "$runtime_closure_receipt"
 test -f "$runtime_closure_receipt" && test ! -L "$runtime_closure_receipt"
 test "$(stat -c '%a' "$runtime_closure_receipt")" = 444
@@ -1399,7 +1399,7 @@ jq -nS \
     --arg container_id "$container_id" \
     --arg container_name "$container_name" \
     --argjson container_exit_code "$container_status" \
-    '{schema_version:"rustinfer.reliability-soak-launcher-receipt.v3",
+    '{schema_version:"riley.reliability-soak-launcher-receipt.v3",
       host:{hostname:$hostname,gpu_name:$gpu_name,gpu_uuid:$gpu_uuid,compute_capability:$compute_capability,memory_total_mib:$memory_total_mib,driver_version:$driver_version},
       source:{git_revision:$git_revision,source_archive_sha256:$source_archive_sha256,release_binary_sha256:$release_binary_sha256,model_tree_sha256:$model_tree_sha256,manifest_sha256:$manifest_sha256,correctness_golden_sha256:$correctness_golden_sha256,native_correctness_report_sha256:$native_correctness_report_sha256},
       evidence:{run_json_sha256:$run_json_sha256,events_jsonl_sha256:$events_jsonl_sha256,release_runtime_closure_sha256:$release_runtime_closure_sha256},
@@ -1408,7 +1408,7 @@ jq -nS \
     >"$runtime_receipts/launcher-receipt.json"
 jq -e \
     'keys == ["container","evidence","host","images","schema_version","source"]
-     and .schema_version == "rustinfer.reliability-soak-launcher-receipt.v3"
+     and .schema_version == "riley.reliability-soak-launcher-receipt.v3"
      and (.host | keys) == ["compute_capability","driver_version","gpu_name","gpu_uuid","hostname","memory_total_mib"]
      and (.source | keys) == ["correctness_golden_sha256","git_revision","manifest_sha256","model_tree_sha256","native_correctness_report_sha256","release_binary_sha256","source_archive_sha256"]
      and (.evidence | keys) == ["events_jsonl_sha256","release_runtime_closure_sha256","run_json_sha256"]
@@ -1455,7 +1455,7 @@ chmod 0444 "$runtime_receipts"/*
         model-snapshot-SHA256SUMS.pre \
         model-snapshot-SHA256SUMS.immediate-pre-start \
         model-snapshot-SHA256SUMS.post \
-        container-rustinfer \
+        container-riley \
         container-evidence-export/run/run.json \
         container-evidence-export/run/events.jsonl \
         container-evidence-export/final-metrics.json \
@@ -1469,7 +1469,7 @@ chmod 0444 "$runtime_receipts"/*
         >launcher-SHA256SUMS
 )
 trap - EXIT INT TERM
-printf '%s\n' rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"
+printf '%s\n' riley.remote-release-soak.completed.v1 >"$output_dir/completed"
 
 echo "release soak completed; persistent container: $container_name"
 echo "release soak evidence: $output_dir"

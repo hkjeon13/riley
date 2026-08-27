@@ -34,9 +34,9 @@ class NativeBuildContractTests(unittest.TestCase):
                 1,
             ),
             "other-target": self.contents.replace(
-                "target_compile_options(rustinfer_cuda_native PRIVATE\n"
+                "target_compile_options(riley_cuda_native PRIVATE\n"
                 "        $<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>",
-                "target_compile_options(rustinfer_cuda_abi_checks PRIVATE\n"
+                "target_compile_options(riley_cuda_abi_checks PRIVATE\n"
                 "        $<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>",
                 1,
             ),

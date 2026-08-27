@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/correctness-calibration-manifest-v3.schema.json",
-  "title": "rustinfer native candidate calibration sidecar manifest v3",
+  "$id": "https://riley.invalid/schemas/correctness-calibration-manifest-v3.schema.json",
+  "title": "riley native candidate calibration sidecar manifest v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -288,10 +288,10 @@
       ],
       "properties": {
         "implementation_id": {
-          "const": "rustinfer-native"
+          "const": "riley-native"
         },
         "engine_revision": {
-          "const": "rustinfer-native-contract-v3"
+          "const": "riley-native-contract-v3"
         },
         "runtime_dependency_class": {
           "const": "native-production"
@@ -337,7 +337,7 @@
           ],
           "properties": {
             "path": {
-              "const": "rustinfer-native"
+              "const": "riley-native"
             },
             "sha256": {
               "$ref": "#/$defs/sha256"
@@ -351,12 +351,12 @@
             "--locked",
             "--release",
             "--package",
-            "rustinfer-native",
+            "riley-native",
             "--no-default-features",
             "--features",
             "cuda",
             "--bin",
-            "rustinfer-native"
+            "riley-native"
           ]
         },
         "capture_argv": {
@@ -365,7 +365,7 @@
           "maxItems": 16,
           "prefixItems": [
             {
-              "const": "rustinfer-native"
+              "const": "riley-native"
             },
             {
               "const": "calibrate"

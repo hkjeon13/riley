@@ -1,6 +1,6 @@
 # Hugging Face Transformers 모델 연산 모듈 및 공통 커널 분석
 
-> `rustinfer` 설계를 위한 기존 구조 분석 문서  
+> Riley 설계를 위한 기존 구조 분석 문서
 > 분석 기준 저장소: [`huggingface/transformers`](https://github.com/huggingface/transformers)  
 > 고정 리비전: [`c7cf04b1e3b1d497dbb1473c2e65e75ee69e12dc`](https://github.com/huggingface/transformers/commit/c7cf04b1e3b1d497dbb1473c2e65e75ee69e12dc)  
 > 리비전 시각: 2026-08-24 07:24:05 UTC  
@@ -16,13 +16,13 @@ Hugging Face Transformers에는 텍스트, 비전, 음성, 비디오, 멀티모�
 
 1. **거의 모든 모델 계열의 바닥에는 GEMM/Linear, convolution, normalization, activation, residual, reduction, tensor layout 변환이 있다.** 이들은 범용 런타임의 기반 연산이다.
 2. **Transformer 계열은 Q/K/V projection, attention score, mask 또는 bias, softmax, value aggregation, output projection, MLP라는 공통 골격을 공유한다.** 텍스트·비전·음성·비디오에서 입력 어댑터만 달라지고 encoder block의 중심은 상당 부분 재사용된다.
-3. **현대 decoder-only LLM에서는 RMSNorm, RoPE, MHA/MQA/GQA, causal KV cache, gated MLP(SwiGLU 계열), pre-norm residual 구조가 반복적으로 등장한다.** `rustinfer`의 초기 범위가 Llama/Qwen 계열이라면 가장 먼저 표준화할 영역이다.
+3. **현대 decoder-only LLM에서는 RMSNorm, RoPE, MHA/MQA/GQA, causal KV cache, gated MLP(SwiGLU 계열), pre-norm residual 구조가 반복적으로 등장한다.** `riley`의 초기 범위가 Llama/Qwen 계열이라면 가장 먼저 표준화할 영역이다.
 4. **모듈 단위보다 반복되는 subgraph 단위가 더 큰 통합 가치를 가진다.** 예를 들어 `RoPE + KV write`, `residual + RMSNorm`, `gate/up projection + SiLU + multiply`, `logits processing + sampling`이 단일 연산보다 실질적인 fusion 후보다.
 5. **Attention만으로 전체 Transformers를 설명할 수는 없다.** Mamba의 selective scan, FNet의 FFT, EnCodec의 residual vector quantization, Autoformer의 시계열 분해는 별도 mixer 또는 domain operator로 남겨야 한다.
 6. **공통성을 이유로 의미 차이를 지우면 안 된다.** RoPE scaling 방식, pre/post norm, MHA/MQA/GQA/MLA/DSA, local/sliding/global attention, cache layout, multimodal 3D position, quantization dtype는 IR에서 명시적으로 보존해야 한다.
-7. Transformers 자체도 `RMSNorm`, `SwiGLUMLP`, `GeGLUMLP`, activation, `rotary_pos_emb`, MoE, Mamba selective scan 등을 의미 단위 kernel ID로 매핑한다. 이는 `rustinfer`의 primitive-centric 접근이 생태계의 실제 최적화 경계와 잘 맞는다는 강한 근거다.
+7. Transformers 자체도 `RMSNorm`, `SwiGLUMLP`, `GeGLUMLP`, activation, `rotary_pos_emb`, MoE, Mamba selective scan 등을 의미 단위 kernel ID로 매핑한다. 이는 `riley`의 primitive-centric 접근이 생태계의 실제 최적화 경계와 잘 맞는다는 강한 근거다.
 
-초기 `rustinfer` 관점에서 우선순위를 요약하면 다음과 같다.
+초기 `riley` 관점에서 우선순위를 요약하면 다음과 같다.
 
 | 우선순위 | 범위 | 핵심 항목 |
 |---|---|---|
@@ -84,7 +84,7 @@ Transformers의 `main`은 빠르게 변하므로 분석 기준을 커밋 `c7cf04
 
 등록된 모델을 연산 구조로 묶으면 다음과 같이 분류할 수 있다.
 
-| 구조 계열 | 대표 모델 | 중심 연산 | 상태/캐시 | `rustinfer` 관련성 |
+| 구조 계열 | 대표 모델 | 중심 연산 | 상태/캐시 | `riley` 관련성 |
 |---|---|---|---|---|
 | Decoder-only dense Transformer | Llama, Qwen, Mistral, Gemma | causal attention, RoPE, gated MLP | KV cache | 초기 핵심 |
 | Encoder-only Transformer | BERT, RoBERTa, ViT | bidirectional attention, GELU MLP | 보통 없음 | 공통 encoder 확장 |
@@ -126,7 +126,7 @@ Transformers의 `main`은 빠르게 변하므로 분석 기준을 커밋 `c7cf04
 | Cast | FP32 accumulator ↔ BF16/FP16 | norm/softmax 안정성 | 추가 bandwidth | kernel 내부 처리 |
 | Masked fill/select | attention, padding, routing | 조건부 값 제거 | elementwise | attention/router fusion |
 
-**판단:** `rustinfer`의 첫 번째 실제 자산은 개별 모델 코드가 아니라 tensor descriptor, stride/layout, dtype conversion, allocator, workspace, stream lifetime을 안전하게 다루는 Rust runtime이어야 한다.
+**판단:** `riley`의 첫 번째 실제 자산은 개별 모델 코드가 아니라 tensor descriptor, stride/layout, dtype conversion, allocator, workspace, stream lifetime을 안전하게 다루는 Rust runtime이어야 한다.
 
 ### 4.2 U0/U3: Convolution 계열
 
@@ -219,7 +219,7 @@ pub struct NormSpec {
 | Tanh/Sigmoid | pooler, router, recurrent gate | head/router/SSM | 범용 elementwise |
 | Softplus | Mamba delta | state-space discretization | SSM 전용 |
 
-Transformers의 kernel mapping도 `FastGELU`, `QuickGELU`, `NewGELU`, `SiLU`, `GeLU`, `GeluTanh`를 서로 다른 의미 ID로 관리한다. `rustinfer` 역시 “GELU 비슷한 것”으로 뭉개지 말고 수식 variant를 보존해야 한다.
+Transformers의 kernel mapping도 `FastGELU`, `QuickGELU`, `NewGELU`, `SiLU`, `GeLU`, `GeluTanh`를 서로 다른 의미 ID로 관리한다. `riley` 역시 “GELU 비슷한 것”으로 뭉개지 말고 수식 variant를 보존해야 한다.
 
 ### 6.2 MLP 패턴
 
@@ -351,7 +351,7 @@ pub enum AttentionMode {
 
 ### 7.4 Attention backend interface
 
-Transformers도 `ALL_ATTENTION_FUNCTIONS`를 통해 eager, SDPA, FlashAttention 등의 구현을 교체한다. `rustinfer`는 더 낮은 수준에서 다음 capability 기반 dispatch를 권장한다.
+Transformers도 `ALL_ATTENTION_FUNCTIONS`를 통해 eager, SDPA, FlashAttention 등의 구현을 교체한다. `riley`는 더 낮은 수준에서 다음 capability 기반 dispatch를 권장한다.
 
 ```rust
 pub struct AttentionRequest<'a> {
@@ -473,7 +473,7 @@ K/V cache write
 | MLA latent cache | compressed latent/rope part | 모델 특화 | custom attention |
 | SSM recurrent state | conv state + recurrent state | seq dimension 없음/작음 | in-place update |
 
-### 9.3 `rustinfer` cache IR 제안
+### 9.3 Riley cache IR 제안
 
 ```rust
 pub enum StateSpec {
@@ -746,7 +746,7 @@ Transformers는 하나의 base model 위에 다양한 head를 붙인다.
 | Time-series distribution | parameter projection + distribution | Autoformer |
 | Codec decode | codebook lookup + decoder | EnCodec |
 
-`rustinfer` 초기 버전에서는 `CausalLMHead + Sampling`만 직접 최적화하고, 나머지는 core와 분리된 extension으로 보는 것이 안전하다.
+`riley` 초기 버전에서는 `CausalLMHead + Sampling`만 직접 최적화하고, 나머지는 core와 분리된 extension으로 보는 것이 안전하다.
 
 ---
 
@@ -908,7 +908,7 @@ Transformers는 하나의 base model 위에 다양한 head를 붙인다.
 - 모든 quantization format
 - 모든 GPU 세대용 최적 kernel
 
-이들은 기존 vendor/library 구현을 호출하고, `rustinfer`는 **dispatch, layout, state management, fusion boundary**에 집중하는 것이 합리적이다.
+이들은 기존 vendor/library 구현을 호출하고, `riley`는 **dispatch, layout, state management, fusion boundary**에 집중하는 것이 합리적이다.
 
 ---
 
@@ -936,7 +936,7 @@ Transformers는 하나의 base model 위에 다양한 head를 붙인다.
 2. **동일 layer도 device와 training/inference mode에 따라 구현이 달라진다.**
 3. **RMSNorm, gated MLP, RoPE, SSM, MoE가 실제 최적화 경계로 인정된다.**
 4. **attention은 하나의 고정 구현이 아니라 repository/backend dispatch 대상이다.**
-5. **`rustinfer`도 Kernel ID + Capability + Mode + Shape signature를 핵심 레지스트리 키로 가져야 한다.**
+5. **`riley`도 Kernel ID + Capability + Mode + Shape signature를 핵심 레지스트리 키로 가져야 한다.**
 
 추천 key 예시:
 
@@ -1274,7 +1274,7 @@ DeepSeek 계열 추가:
 
 ---
 
-## 22. `rustinfer` 초기 분석 결론
+## 22. Riley 초기 분석 결론
 
 ### 22.1 첫 지원 범위
 
@@ -1462,7 +1462,7 @@ manual validation sample
 
 | 차원 | 값 |
 |---|---|
-| Engine | rustinfer, vLLM, SGLang, TensorRT-LLM |
+| Engine | riley, vLLM, SGLang, TensorRT-LLM |
 | Concurrency | 1, 2, 4, 8, 16 |
 | Prompt length | 128, 1K, 4K, 8K |
 | Output length | 32, 128, 512 |
@@ -1487,7 +1487,7 @@ manual validation sample
 
 ## 26. 최종 결론
 
-Transformers의 모델 수가 많다는 사실은 `rustinfer`가 모델마다 별도 실행 엔진을 만들어야 한다는 뜻이 아니다. 소스 구조를 연산 의미로 정규화하면 다음과 같은 작은 중심부가 드러난다.
+Transformers의 모델 수가 많다는 사실은 `riley`가 모델마다 별도 실행 엔진을 만들어야 한다는 뜻이 아니다. 소스 구조를 연산 의미로 정규화하면 다음과 같은 작은 중심부가 드러난다.
 
 ```text
 Common runtime
@@ -1530,7 +1530,7 @@ Embedding
 5. **정확한 frequency는 이후 AST census로 검증하고, 그 전에는 공통성에 과도한 숫자를 붙이지 않는다.**
 6. **성능 판단은 kernel 단독이 아니라 TTFT, TPOT, p99, GPU idle, CPU overhead, VRAM, launch count의 end-to-end 조합으로 한다.**
 
-이 방향이라면 `rustinfer`는 “Transformers 모델을 Rust로 일일이 다시 작성하는 프로젝트”가 아니라, **Transformers 생태계의 반복 계산 구조를 정규화하고 가장 가치 있는 실행 경로를 Rust+CUDA로 최적화하는 inference runtime**으로 정의할 수 있다.
+이 방향이라면 `riley`는 “Transformers 모델을 Rust로 일일이 다시 작성하는 프로젝트”가 아니라, **Transformers 생태계의 반복 계산 구조를 정규화하고 가장 가치 있는 실행 경로를 Rust+CUDA로 최적화하는 inference runtime**으로 정의할 수 있다.
 
 ---
 

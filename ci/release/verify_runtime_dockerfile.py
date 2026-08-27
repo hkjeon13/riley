@@ -23,19 +23,19 @@ BUILDER_PACKAGE_INSTALL = (
 BUILDER_PREFLIGHT = (
     "RUN python3 ci/release/run_release_python.py "
     "ci/release/check_release_preflight.py "
-    '--source-revision "${RUSTINFER_SOURCE_REVISION}" '
+    '--source-revision "${RILEY_SOURCE_REVISION}" '
     '--source-date-epoch "${SOURCE_DATE_EPOCH}"'
 )
 BUILDER_BUNDLE = (
     "RUN mkdir -p /release && python3 ci/release/run_release_python.py "
-    "ci/release/build_release_bundle.py --binary target/release/rustinfer "
-    "--output /release/rustinfer.tar.gz "
-    '--source-revision "${RUSTINFER_SOURCE_REVISION}" '
+    "ci/release/build_release_bundle.py --binary target/release/riley "
+    "--output /release/riley.tar.gz "
+    '--source-revision "${RILEY_SOURCE_REVISION}" '
     '--source-date-epoch "${SOURCE_DATE_EPOCH}" '
     "&& python3 ci/release/run_release_python.py "
-    "ci/release/verify_release_bundle.py /release/rustinfer.tar.gz "
+    "ci/release/verify_release_bundle.py /release/riley.tar.gz "
     "&& mkdir -p /runtime-root && tar --extract --gzip "
-    "--file /release/rustinfer.tar.gz --strip-components=1 "
+    "--file /release/riley.tar.gz --strip-components=1 "
     "--directory /runtime-root"
 )
 RUNTIME_BASE_PYTHON_ARTIFACT_REMOVAL = (
@@ -114,7 +114,7 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
     if any(line.upper().startswith(("FROM ", "ADD ")) for line in runtime):
         raise ReleaseContractError("runtime stage contains an unexpected stage or ADD instruction")
     copy_lines = [line for line in runtime if line.upper().startswith("COPY ")]
-    if copy_lines != ["COPY --from=builder /runtime-root/ /opt/rustinfer/"]:
+    if copy_lines != ["COPY --from=builder /runtime-root/ /opt/riley/"]:
         raise ReleaseContractError("runtime stage may copy only the verified builder output")
     if runtime.count(RUNTIME_BASE_PYTHON_ARTIFACT_REMOVAL) != 1:
         raise ReleaseContractError(
@@ -127,7 +127,7 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
         raise ReleaseContractError("runtime stage must not install packages")
     required = {
         'USER 65532:65532',
-        'ENTRYPOINT ["/opt/rustinfer/bin/rustinfer"]',
+        'ENTRYPOINT ["/opt/riley/bin/riley"]',
         'CMD ["--help"]',
     }
     missing = required - set(runtime)
@@ -136,10 +136,10 @@ def verify_dockerfile(path: Path = DOCKERFILE) -> None:
     runtime_text = "\n".join(runtime)
     for marker in (
         "for command in python python3 pip pip3 cargo rustc nvcc cmake make cc c++",
-        "test -s /opt/rustinfer/SHA256SUMS",
-        "test -s /opt/rustinfer/manifest/native-dependencies.txt",
-        "test -s /opt/rustinfer/manifest/release.json",
-        "ldd /opt/rustinfer/bin/rustinfer",
+        "test -s /opt/riley/SHA256SUMS",
+        "test -s /opt/riley/manifest/native-dependencies.txt",
+        "test -s /opt/riley/manifest/release.json",
+        "ldd /opt/riley/bin/riley",
         "test ! -e /workspace",
         "find / -xdev -type f",
     ):

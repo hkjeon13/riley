@@ -26,7 +26,7 @@ ENV RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
 ENV PATH=/usr/local/cargo/bin:/usr/local/cuda/bin:${PATH}
 ENV CUDA_HOME=/usr/local/cuda
 ENV CUDAToolkit_ROOT=/usr/local/cuda
-ENV RUSTINFER_CUDA_ARCHITECTURES=89
+ENV RILEY_CUDA_ARCHITECTURES=89
 ENV CARGO_INCREMENTAL=0
 ENV CARGO_NET_OFFLINE=true
 

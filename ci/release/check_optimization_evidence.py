@@ -27,7 +27,7 @@ from release_common import ReleaseContractError, canonical_json_bytes, validate_
 
 GATE_ID = "pr15-iteration-command-batch-exact-v1"
 FIXED37_PRODUCTION_BATCH_GATE_ID = "pr16-fixed37-production-batch-e0-v1"
-RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v3"
+RECEIPT_VERSION = "riley.optimizer-execution-receipt.v3"
 EXPECTED_TOKENS = [
     4052,
     2025,
@@ -116,7 +116,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-command-batch-lifecycle",
         "execute_command_id": "command-batch-lifecycle",
         "compile_log": COMPILE_LOG_FILES["compile-command-batch-lifecycle"],
-        "package": "rustinfer-cuda",
+        "package": "riley-cuda",
         "target_dir": "/workspace/target/optimizer-evidence/command-batch-lifecycle",
         "test_name": "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
     },
@@ -125,7 +125,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-command-batch-resource-ledger",
         "execute_command_id": "command-batch-resource-ledger",
         "compile_log": COMPILE_LOG_FILES["compile-command-batch-resource-ledger"],
-        "package": "rustinfer-cuda",
+        "package": "riley-cuda",
         "target_dir": "/workspace/target/optimizer-evidence/command-batch-resource-ledger",
         "test_name": "command_batch_releases_multi_primitive_resource_ledger_after_validation_error",
     },
@@ -134,7 +134,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-smollm2-multi-step-greedy-exact",
         "execute_command_id": "smollm2-multi-step-greedy-exact",
         "compile_log": COMPILE_LOG_FILES["compile-smollm2-multi-step-greedy-exact"],
-        "package": "rustinfer-runtime",
+        "package": "riley-runtime",
         "target_dir": "/workspace/target/optimizer-evidence/smollm2-multi-step-greedy-exact",
         "test_name": "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
     },
@@ -143,7 +143,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-fixed37-production-batch-e0",
         "execute_command_id": "fixed37-production-batch-e0",
         "compile_log": COMPILE_LOG_FILES["compile-fixed37-production-batch-e0"],
-        "package": "rustinfer-runtime",
+        "package": "riley-runtime",
         "target_dir": "/workspace/target/optimizer-evidence/fixed37-production-batch-e0",
         "test_name": "fixed37_production_batch_growing_prefix_matches_golden_exactly",
     },
@@ -163,7 +163,7 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "never",
     ],
     "compile-command-batch-lifecycle": _compile_argv(
-        "rustinfer-cuda",
+        "riley-cuda",
         "host_runtime_gpu",
         TEST_SUBJECTS["host-runtime-gpu-test"]["target_dir"],
     ),
@@ -178,7 +178,7 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "never",
     ],
     "compile-command-batch-resource-ledger": _compile_argv(
-        "rustinfer-cuda",
+        "riley-cuda",
         "primitives_gpu",
         TEST_SUBJECTS["primitives-gpu-test"]["target_dir"],
     ),
@@ -193,7 +193,7 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "never",
     ],
     "compile-smollm2-multi-step-greedy-exact": _compile_argv(
-        "rustinfer-runtime",
+        "riley-runtime",
         "llama_batch_gpu",
         TEST_SUBJECTS["llama-batch-gpu-test"]["target_dir"],
     ),
@@ -208,7 +208,7 @@ EXPECTED_COMMANDS: dict[str, list[str]] = {
         "never",
     ],
     "compile-fixed37-production-batch-e0": _compile_argv(
-        "rustinfer-runtime",
+        "riley-runtime",
         "llama_batch_gpu",
         TEST_SUBJECTS["fixed37-production-batch-gpu-test"]["target_dir"],
     ),
@@ -264,7 +264,7 @@ BASE_ENVIRONMENT = {
     "CARGO_TERM_COLOR": "never",
     "CUDA_HOME": "/usr/local/cuda",
     "CUDAToolkit_ROOT": "/usr/local/cuda",
-    "RUSTINFER_CUDA_ARCHITECTURES": "89",
+    "RILEY_CUDA_ARCHITECTURES": "89",
     "RUSTUP_TOOLCHAIN": "1.85.0-x86_64-unknown-linux-gnu",
 }
 
@@ -532,18 +532,18 @@ def _parse_logs(files: Mapping[str, bytes], report: Mapping[str, Any]) -> dict[s
 
     compile_log = texts["cuda-compile-only"]
     invalid_cuda_root_marker = (
-        "error: rustinfer-cuda native build failed: "
-        "CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda is not a directory"
+        "error: riley-cuda native build failed: "
+        "CUDAToolkit_ROOT=/definitely/missing/riley-cuda is not a directory"
     )
     for marker in (
         "rustc 1.85.0",
         "cargo 1.85.0",
         "Cuda compilation tools, release 12.8, V12.8.93",
         "test native_symbols_link_without_device_initialization ... ok",
-        "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)",
+        "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)",
         invalid_cuda_root_marker,
-        "artifact=target/release/rustinfer\n",
-        "artifact=target/release/rustinfer-profile\n",
+        "artifact=target/release/riley\n",
+        "artifact=target/release/riley-profile\n",
         "Python-free CUDA production/profile compile, C ABI link, tensor memory, version, and dependency smoke passed",
     ):
         if marker not in compile_log:
@@ -1022,7 +1022,7 @@ def _validate_receipt(
             "smollm2-multi-step-greedy-exact",
             "fixed37-production-batch-e0",
         }:
-            expected_environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
+            expected_environment["RILEY_REAL_CHECKPOINT"] = "/model"
         expected_binary = COMMAND_TEST_BINARIES[command_id]
         if command != {
             "id": command_id,

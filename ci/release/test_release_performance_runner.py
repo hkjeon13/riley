@@ -52,7 +52,7 @@ SUPERVISOR_CONTRACT_MARKERS = (
     "os.set_inheritable(lock_fd, True)",
     "PR_SET_PDEATHSIG",
     "signal.pthread_sigmask(signal.SIG_BLOCK, forwarded_signals)",
-    '[[ ${PPID} == "${RUSTINFER_PERF_SUPERVISOR_PID}" ]]',
+    '[[ ${PPID} == "${RILEY_PERF_SUPERVISOR_PID}" ]]',
     "/proc/${PERF_SUPERVISOR_PID}/fdinfo/${PERF_SUPERVISOR_LOCK_FD}",
     "${fdinfo_type} == FLOCK",
     "${fdinfo_kind} == ADVISORY",
@@ -63,7 +63,7 @@ SUPERVISOR_CONTRACT_MARKERS = (
     "timeout=15",
     "except Exception as error:",
     "if os.WIFEXITED(wait_status) and os.WEXITSTATUS(wait_status) == 0:",
-    "org.rustinfer.release-performance-supervisor",
+    "org.riley.release-performance-supervisor",
     '"container", "ls", "--all", "--quiet", "--no-trunc"',
     'if container_status in ("exited", "dead"):',
     'if container_status not in ("created", "running", "paused", "restarting", "removing"):',
@@ -243,12 +243,12 @@ def _gpu() -> dict[str, object]:
 
 def _container_environment() -> dict[str, str]:
     return {
-        "RUSTINFER_PERF_SOURCE_REVISION": REVISION,
-        "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": SOURCE_SHA256,
-        "RUSTINFER_PERF_PROFILE_BINARY_SHA256": "e" * 64,
-        "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": "f" * 64,
-        "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": IMAGE_ID.removeprefix("sha256:"),
-        "RUSTINFER_PERF_MODEL_TREE_SHA256": MODEL_TREE_SHA256,
+        "RILEY_PERF_SOURCE_REVISION": REVISION,
+        "RILEY_PERF_SOURCE_ARCHIVE_SHA256": SOURCE_SHA256,
+        "RILEY_PERF_PROFILE_BINARY_SHA256": "e" * 64,
+        "RILEY_PERF_OPTIMIZER_REPORT_SHA256": "f" * 64,
+        "RILEY_PERF_OPTIMIZER_IMAGE_SHA256": IMAGE_ID.removeprefix("sha256:"),
+        "RILEY_PERF_MODEL_TREE_SHA256": MODEL_TREE_SHA256,
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
         "ALL_PROXY": "",
         "FTP_PROXY": "",
@@ -266,7 +266,7 @@ def _container_environment() -> dict[str, str]:
 def _mount_sources() -> dict[str, str]:
     return {
         "/input/source.tar": "/evidence/source.tar",
-        "/input/rustinfer-profile": "/evidence/inputs/rustinfer-profile",
+        "/input/riley-profile": "/evidence/inputs/riley-profile",
         "/input/optimizer-correctness-report.json": "/evidence/inputs/optimizer.json",
         "/model": "/evidence/inputs/model",
         "/evidence": "/evidence/raw",
@@ -276,8 +276,8 @@ def _mount_sources() -> dict[str, str]:
 def _container_receipt(pair_index: int, *, after: bool) -> list[dict[str, object]]:
     container_id = format(pair_index, "x") * 64
     environment = _container_environment()
-    environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
-    environment["RUSTINFER_PERF_CAPTURE_ID"] = CAPTURE_IDS[pair_index - 1]
+    environment["RILEY_PERF_PAIR_INDEX"] = str(pair_index)
+    environment["RILEY_PERF_CAPTURE_ID"] = CAPTURE_IDS[pair_index - 1]
     mounts = [
         {
             "Type": "bind",
@@ -451,11 +451,11 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             bash_env = Path(directory) / "bash-env"
             bash_env.write_text(
-                "export RUSTINFER_PERF_SUPERVISOR_PID=$PPID\n"
-                "export RUSTINFER_PERF_SUPERVISOR_EXE=/usr/bin/python3.10\n"
-                "export RUSTINFER_PERF_SUPERVISOR_LOCK_FD=9\n"
-                "export RUSTINFER_PERF_SUPERVISOR_LOCK_ID=1:1\n"
-                f"export RUSTINFER_PERF_SUPERVISOR_TOKEN={'0' * 64}\n",
+                "export RILEY_PERF_SUPERVISOR_PID=$PPID\n"
+                "export RILEY_PERF_SUPERVISOR_EXE=/usr/bin/python3.10\n"
+                "export RILEY_PERF_SUPERVISOR_LOCK_FD=9\n"
+                "export RILEY_PERF_SUPERVISOR_LOCK_ID=1:1\n"
+                f"export RILEY_PERF_SUPERVISOR_TOKEN={'0' * 64}\n",
                 encoding="utf-8",
             )
             environment = dict(os.environ)
@@ -539,7 +539,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
         host = HOST_RUNNER.read_text(encoding="utf-8")
         _assert_static_supervisor_contract(host)
         self.assertNotIn("--gpu-lock-held", host)
-        self.assertNotIn("RUSTINFER_PERF_GPU_LOCK_FD", host)
+        self.assertNotIn("RILEY_PERF_GPU_LOCK_FD", host)
         for marker in SUPERVISOR_CONTRACT_MARKERS:
             with self.subTest(marker=marker):
                 mutated = host.replace(marker, "MUTATED_CONTRACT_MARKER")
@@ -552,7 +552,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
         self.assertIn("for pair_index in 1 2 3 4 5; do", host)
         self.assertEqual(host.count('container_id=$("${DOCKER_BIN}" create'), 1)
         for required in (
-            "/var/tmp/rustinfer-server-4096-gpu-evidence.lock",
+            "/var/tmp/riley-server-4096-gpu-evidence.lock",
             "os.O_APPEND",
             "os.O_NONBLOCK",
             "os.O_CLOEXEC",
@@ -579,7 +579,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             '--supervisor-token "${PERF_SUPERVISOR_TOKEN}"',
             '--capture-id "${capture_ids[@]}"',
             '--execution-receipt-output "${execution_receipt_outputs[@]}"',
-            'RUSTINFER_PERF_CAPTURE_ID=${capture_id}',
+            'RILEY_PERF_CAPTURE_ID=${capture_id}',
             "/usr/bin/mkdir -m 0733 \"${run_evidence_dir}\"",
             "/usr/bin/find \"${model_snapshot}\" -type d -exec /usr/bin/chmod 0555",
             "/usr/bin/find \"${model_snapshot}\" -type f -exec /usr/bin/chmod 0444",
@@ -616,13 +616,13 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             "--measured-iterations 30",
             "--sampling-id greedy",
             "--seed none",
-            "candidate-${RUSTINFER_PERF_PAIR_INDEX}.json",
+            "candidate-${RILEY_PERF_PAIR_INDEX}.json",
             "Ubuntu 22.04.5 LTS",
             '--os-release "${os_pretty_name}"',
             '/usr/bin/chmod 0444 "${output}"',
-            ': "${RUSTINFER_PERF_CAPTURE_ID:?missing capture ID}"',
+            ': "${RILEY_PERF_CAPTURE_ID:?missing capture ID}"',
             'date -u +%Y-%m-%dT%H:%M:%S.%NZ',
-            '${RUSTINFER_PERF_CAPTURE_ID}-pair${RUSTINFER_PERF_PAIR_INDEX}',
+            '${RILEY_PERF_CAPTURE_ID}-pair${RILEY_PERF_PAIR_INDEX}',
         ):
             self.assertIn(required, inner)
         self.assertNotIn("python", inner.lower())

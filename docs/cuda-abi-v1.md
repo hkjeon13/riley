@@ -1,13 +1,13 @@
-# rustinfer CUDA C ABI v1
+# Riley CUDA C ABI v1
 
-이 문서는 `kernels/include/rustinfer_cuda.h`가 노출하는 ABI version 1의
+이 문서는 `kernels/include/riley_cuda.h`가 노출하는 ABI version 1의
 binary contract를 정의한다. 이 경계는 Rust ownership API와 CUDA C++ 구현을
 연결하기 위한 것이며 Python, PyTorch object, model tensor를 받지 않는다.
 ABI metadata 함수 이외의 호출은 CUDA driver 또는 runtime을 초기화할 수 있다.
 
 ## 호환성과 type 규칙
 
-- `rustinfer_cuda_abi_version()`은 `RUSTINFER_CUDA_ABI_VERSION`, 현재 `1`을
+- `riley_cuda_abi_version()`은 `RILEY_CUDA_ABI_VERSION`, 현재 `1`을
   반환한다. Rust wrapper는 native library의 값이 자신이 기대하는 값과 같은지
   확인한 뒤 다른 symbol을 사용한다.
 - 모든 exported function은 C linkage와 `noexcept`를 사용한다. C++ exception은
@@ -20,9 +20,9 @@ ABI metadata 함수 이외의 호출은 CUDA driver 또는 runtime을 초기화�
   추가한다. 기존 layout, numeric value, ownership 또는 함수 의미를 바꾸는
   변경은 ABI version을 올린다.
 - v1 caller는 output struct의 `struct_size`를 자신의 `sizeof(struct)`로
-  초기화한다. `RustInferCudaDeviceProperties`가 v1 크기보다 작으면
+  초기화한다. `RileyCudaDeviceProperties`가 v1 크기보다 작으면
   `INVALID_ARGUMENT/VALIDATION`이며 output을 신뢰하면 안 된다. error buffer는
-  선택 사항이므로 `RustInferCudaErrorInfo`가 `NULL`이거나 너무 작으면 상세
+  선택 사항이므로 `RileyCudaErrorInfo`가 `NULL`이거나 너무 작으면 상세
   진단만 쓰지 않고 operation status는 그대로 반환한다. reserved field는
   입력에서 `0`으로 두고 출력에서도 의미를 부여하지 않는다.
 
@@ -31,7 +31,7 @@ ABI metadata 함수 이외의 호출은 CUDA driver 또는 runtime을 초기화�
 v1은 CUDA가 지원되는 64-bit host C ABI를 대상으로 하며 native build의
 `static_assert`가 다음 크기와 핵심 offset을 검증한다.
 
-### `RustInferCudaErrorInfo`
+### `RileyCudaErrorInfo`
 
 | offset | C type | field | 의미 |
 | ---: | --- | --- | --- |
@@ -46,7 +46,7 @@ capacity에 맞게 잘릴 수 있다. status와 숫자 field가 기계 판정의
 message 문자열은 stable parsing interface가 아니다. caller가 error pointer를
 `NULL`로 전달해도 operation의 status 반환은 동일하다.
 
-### `RustInferCudaDeviceProperties`
+### `RileyCudaDeviceProperties`
 
 | offset | C type | field |
 | ---: | --- | --- |
@@ -66,7 +66,7 @@ message 문자열은 stable parsing interface가 아니다. caller가 error poin
 전체 크기는 320 bytes다. `name`은 NUL-terminated device name이다. 조회가
 실패하면 partially populated output을 사용하지 않는다.
 
-### `RustInferCudaAllocationStats` (PR 04 additive)
+### `RileyCudaAllocationStats` (PR 04 additive)
 
 | offset | C type | field |
 | ---: | --- | --- |
@@ -92,7 +92,7 @@ release를 거부한다.
 
 ## status, domain, stage
 
-모든 operation은 `RustInferCudaStatus`를 반환한다. `SUCCESS (0)`만 성공이고
+모든 operation은 `RileyCudaStatus`를 반환한다. `SUCCESS (0)`만 성공이고
 나머지는 다음 stable 분류다.
 
 | 값 | status | 의미 |
@@ -123,9 +123,9 @@ owned message를 함께 보존한다.
 
 ## handle ownership과 context
 
-`RustInferCudaContext`, `RustInferCudaStream`, `RustInferCudaEvent`,
-`RustInferCudaSmokeBuffer`, `RustInferCudaDeviceBuffer`,
-`RustInferCudaPinnedHostBuffer`, `RustInferCudaCopy`는 incomplete C type인 opaque
+`RileyCudaContext`, `RileyCudaStream`, `RileyCudaEvent`,
+`RileyCudaSmokeBuffer`, `RileyCudaDeviceBuffer`,
+`RileyCudaPinnedHostBuffer`, `RileyCudaCopy`는 incomplete C type인 opaque
 handle이다. caller는 그 주소의 내부 layout을 읽거나 복사하지 않는다.
 
 - `*_create` 성공은 caller에게 handle 하나의 소유권을 넘긴다. 실패 시 output
@@ -172,7 +172,7 @@ struct layout, PR 03 symbol 의미는 바꾸지 않는다.
   active copy token이 있으면 빈 access를 포함해 `INVALID_STATE`로 거부한다.
 - `copy_h2d_async`/`copy_d2h_async`는 device buffer, pinned buffer, 명시적 non-default
   stream이 같은 opaque context owner인지 확인한다. non-zero copy는 세 resource의
-  active-use flag를 예약하고 owning `RustInferCudaCopy` token 하나를 반환한다.
+  active-use flag를 예약하고 owning `RileyCudaCopy` token 하나를 반환한다.
   resource당 동시 copy token은 하나만 허용한다. zero-byte copy는 successful
   no-op이고 token은 NULL이다.
 - `cudaMemcpyAsync` 호출을 실제 시도한 뒤 관측한 submission/context-restoration
@@ -201,13 +201,13 @@ copy, model-specific tensor operation은 이 additive 경계의 범위가 아니
 
 ## PR 06/16 deterministic GEMM policy flags
 
-`RustInferCudaGemmConfig`의 크기와 field offset은 ABI v1 그대로 유지한다. 기존
+`RileyCudaGemmConfig`의 크기와 field offset은 ABI v1 그대로 유지한다. 기존
 `flags` field의 reviewed bit만 additive하게 정의한다.
 
 | bit | macro | 허용하는 split-K reduction |
 | ---: | --- | --- |
-| `1` | `RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K` | `split_k > 1`, `OUTPUT_TYPE` |
-| `2` | `RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K` | `split_k > 1`, `INPLACE` |
+| `1` | `RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K` | `split_k > 1`, `OUTPUT_TYPE` |
+| `2` | `RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K` | `split_k > 1`, `INPLACE` |
 
 두 bit는 함께 사용할 수 있다. bit가 0이면 `split_k <= 1`과 `NONE`만 허용한다.
 `INPLACE`는 output-type storage와 workspace counter로 순서를 보장하고,
@@ -223,15 +223,15 @@ prepared plan에만 적용하며 C ABI flag 자체가 임의 model/shape의 rele
 PR 09는 ABI version을 올리지 않고 다음 네 symbol과 각 parameter struct를
 additive하게 추가한다.
 
-- `rustinfer_cuda_kv_cache_write_execute`
-- `rustinfer_cuda_decode_attention_reference_execute`
-- `rustinfer_cuda_decode_attention_execute`
-- `rustinfer_cuda_decode_partial_state_reduce_execute`
+- `riley_cuda_kv_cache_write_execute`
+- `riley_cuda_decode_attention_reference_execute`
+- `riley_cuda_decode_attention_execute`
+- `riley_cuda_decode_partial_state_reduce_execute`
 
-`RustInferCudaKvCacheWriteParams`,
-`RustInferCudaDecodeAttentionReferenceParams`,
-`RustInferCudaDecodeAttentionParams`,
-`RustInferCudaDecodePartialStateReduceParams`의 전체 크기는 64-bit ABI에서 각각
+`RileyCudaKvCacheWriteParams`,
+`RileyCudaDecodeAttentionReferenceParams`,
+`RileyCudaDecodeAttentionParams`,
+`RileyCudaDecodePartialStateReduceParams`의 전체 크기는 64-bit ABI에서 각각
 272, 328, 344, 176 bytes다. C11, C++와 Rust의 독립된 compile-time assertion이
 크기와 핵심 offset을 고정한다. 모든 입력 `reserved` field는 0이어야 하며 기존
 v1 symbol과 struct의 layout이나 의미는 바뀌지 않는다.
@@ -252,7 +252,7 @@ prefix만 읽으므로 capacity tail의 오래된 byte는 관측할 수 없다.
 
 ### `DecodePartialState` version 1
 
-`RUSTINFER_CUDA_DECODE_PARTIAL_STATE_VERSION == 1`인 device storage는 F32 packed
+`RILEY_CUDA_DECODE_PARTIAL_STATE_VERSION == 1`인 device storage는 F32 packed
 array이며 shape과 offset은 다음과 같다.
 
 ```text
@@ -310,19 +310,19 @@ fail-closed busy/accounting leak을 선택한다.
 PR 10은 기존 ABI version과 PR 09 struct를 바꾸지 않고 `U16` dtype discriminant
 `5`와 다음 세 symbol을 additive하게 추가한다.
 
-- `rustinfer_cuda_paged_kv_cache_write_execute`
-- `rustinfer_cuda_paged_decode_attention_reference_execute`
-- `rustinfer_cuda_paged_decode_attention_execute`
+- `riley_cuda_paged_kv_cache_write_execute`
+- `riley_cuda_paged_decode_attention_reference_execute`
+- `riley_cuda_paged_decode_attention_execute`
 
-`RustInferCudaPagedKvBlockTableV1`, `RustInferCudaPagedKvCacheWriteParams`,
-`RustInferCudaPagedDecodeAttentionReferenceParams`,
-`RustInferCudaPagedDecodeAttentionParams`의 전체 크기는 64-bit ABI에서 각각
+`RileyCudaPagedKvBlockTableV1`, `RileyCudaPagedKvCacheWriteParams`,
+`RileyCudaPagedDecodeAttentionReferenceParams`,
+`RileyCudaPagedDecodeAttentionParams`의 전체 크기는 64-bit ABI에서 각각
 168, 432, 480, 488 bytes다. C11, CUDA C++와 Rust assertion이 크기와 핵심
 offset을 함께 고정한다.
 
 ### Block table version 1
 
-`RUSTINFER_CUDA_PAGED_KV_BLOCK_TABLE_VERSION == 1`이고 block size는 고정 16이다.
+`RILEY_CUDA_PAGED_KV_BLOCK_TABLE_VERSION == 1`이고 block size는 고정 16이다.
 K와 V는 별도 BF16 pool이며 한 layer view의 layout은 다음과 같다.
 
 ```text
@@ -346,7 +346,7 @@ upload 완료와 lifetime은 상위 runtime block manager가 별도로 소유한
 pool 밖을 역참조하지 않지만, 성공적인 의미 결과를 얻으려면 같은 table invariant를
 외부에서 지켜야 한다.
 
-`metadata_kind == RUSTINFER_CUDA_PAGED_KV_METADATA_NONE`이고
+`metadata_kind == RILEY_CUDA_PAGED_KV_METADATA_NONE`이고
 `metadata_version == 0`만 v1 exact path에서 허용한다. 즉 sidecar가 없는 경로가
 기본이며 주소 변환 외 metadata branch가 없다. 알 수 없는 kind/version은 launch 전
 `NOT_SUPPORTED/VALIDATION`으로 거부한다. 이후 page 통계나 offload metadata는 이
@@ -477,7 +477,7 @@ symbol을 찾거나 dynamic loading을 시도하지 않고 `Unavailable/Rust/Ini
 ## PR 03 진단 경계와 PR 04 확장
 
 PR 03의 allocation과 kernel은 lifecycle 및 error propagation을 검증하는
-`RustInferCudaSmokeBuffer`와 fill smoke operation으로 제한한다. PR 04는 opaque
+`RileyCudaSmokeBuffer`와 fill smoke operation으로 제한한다. PR 04는 opaque
 untyped allocation, pinned staging, copy token과 accounting만 additive하게 더한다.
 Tensor shape/layout/view metadata는 Rust tensor crate가 맡으며 C ABI에 tensor
 object나 raw pointer를 추가하지 않는다. allocator pool, unified memory, model

@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rustinfer-reference"
+name = "riley-reference"
 version = "0.1.0"
-description = "Pinned external Python reference lane for rustinfer"
+description = "Pinned external Python reference lane for riley"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "nvidia-ml-py==13.610.43",
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rustinfer-reference = "rustinfer_reference.cli:main"
+riley-reference = "riley_reference.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["rustinfer_reference"]
+packages = ["riley_reference"]

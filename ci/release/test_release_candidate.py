@@ -125,8 +125,8 @@ class CandidateFixture:
         install_reviewed_server_defaults_source(repository)
         self.paths = {
             "source": root / "source.tar",
-            "binary": root / "rustinfer",
-            "bundle": root / "rustinfer.tar.gz",
+            "binary": root / "riley",
+            "bundle": root / "riley.tar.gz",
             "python_raw": root / "python-free-evidence.tar",
             "correctness_golden": root / "correctness-golden.json",
             "cuda_raw": root / "cuda-fault-evidence.tar",
@@ -134,10 +134,10 @@ class CandidateFixture:
             "cuda_report": root / "cuda-fault-report.json",
             "native_correctness": root / "native-correctness-report.json",
             "native_replay": root / "native-correctness-replay.tar",
-            "native_executable": root / "rustinfer-native",
+            "native_executable": root / "riley-native",
             "repro_build_a": root / "reproducible-build-a.tar",
             "repro_build_b": root / "reproducible-build-b.tar",
-            "profile_binary": root / "rustinfer-profile",
+            "profile_binary": root / "riley-profile",
             "native_manifest": root / "native-dependencies.txt",
             "optimization_correctness": root / "optimization-correctness-report.json",
             "optimization_raw": root / "optimization-correctness-evidence.tar",
@@ -155,7 +155,7 @@ class CandidateFixture:
         shutil.copyfile(_NATIVE_TEMPLATE.executable, self.paths["native_executable"])
         self.paths["native_executable"].chmod(0o755)
         self.paths["profile_binary"].write_bytes(
-            fixture_elf() + b"rustinfer-profile\0"
+            fixture_elf() + b"riley-profile\0"
         )
         self.paths["profile_binary"].chmod(0o755)
         self.paths["binary"].write_bytes(fixture_elf())
@@ -201,7 +201,7 @@ class CandidateFixture:
         )
         environment_path.write_text(environment, encoding="utf-8")
         (cuda_template.evidence / "release-binary.sha256").write_text(
-            f"{digest(self.paths['binary'].read_bytes())}  target/release/rustinfer\n",
+            f"{digest(self.paths['binary'].read_bytes())}  target/release/riley\n",
             encoding="ascii",
         )
         cuda_template.refresh_checksums()
@@ -437,7 +437,7 @@ class CandidateFixture:
         )
 
         candidate: dict[str, object] = {
-            "candidate_id": "rustinfer-0.1.0-rc1",
+            "candidate_id": "riley-0.1.0-rc1",
             "recorded_at_utc": "2026-08-26T00:00:00Z",
             "source": {
                 "git_commit": self.revision,
@@ -536,7 +536,7 @@ class CandidateFixture:
             for metric in release_performance.METRIC_FIELDS
         }
         return {
-            "schema_version": "rustinfer.release-performance-report.v1",
+            "schema_version": "riley.release-performance-report.v1",
             "status": "passed",
             "passed": True,
             "baseline": {
@@ -737,10 +737,10 @@ class CandidateFixture:
             "release_image_id": f"sha256:{self.image_sha}",
             "test_layer_image_id": "sha256:" + digest(b"soak test layer"),
             "container_id": digest(b"soak container"),
-            "container_name": f"rustinfer-soak-{self.revision[:12]}-20260826T000000Z",
+            "container_name": f"riley-soak-{self.revision[:12]}-20260826T000000Z",
         }
         self.documents["soak"] = {
-            "schema_version": "rustinfer.reliability-soak-report.v2",
+            "schema_version": "riley.reliability-soak-report.v2",
             "status": "passed",
             "passed": True,
             "bindings": {
@@ -835,7 +835,7 @@ class CandidateFixture:
 
         self.manifest = {
             "schema_version": MANIFEST_VERSION,
-            "candidate_id": "rustinfer-0.1.0-rc1",
+            "candidate_id": "riley-0.1.0-rc1",
             "source": {
                 "git_revision": self.revision,
                 "git_dirty": False,
@@ -1026,7 +1026,7 @@ class CandidateFixture:
         if optimization_replay is None:
             optimization_replay = self.optimization_replay()
         anchors = {
-            "expected_candidate_id": "rustinfer-0.1.0-rc1",
+            "expected_candidate_id": "riley-0.1.0-rc1",
             "expected_revision": self.revision,
             "expected_source_archive_sha256": self.trusted_source_sha256,
             "expected_release_image_id": f"sha256:{self.image_sha}",
@@ -1245,7 +1245,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertTrue(report["passed"], report)
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["schema_version"], REPORT_VERSION)
-        self.assertEqual(report["candidate_id"], "rustinfer-0.1.0-rc1")
+        self.assertEqual(report["candidate_id"], "riley-0.1.0-rc1")
         self.assertEqual(report["bindings"]["git_revision"], self.fixture.revision)
         self.assertEqual(
             report["bindings"]["build_image_ids"],
@@ -1329,7 +1329,7 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_legacy_manifest_v1_is_rejected(self) -> None:
         self.fixture.manifest["schema_version"] = (
-            "rustinfer.release-candidate-manifest.v1"
+            "riley.release-candidate-manifest.v1"
         )
         self.fixture.write_manifest()
         report = self.fixture.evaluate()
@@ -1411,7 +1411,7 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_trusted_external_anchors_are_required(self) -> None:
         cases = {
-            "expected_candidate_id": "rustinfer-0.1.0-rc2",
+            "expected_candidate_id": "riley-0.1.0-rc2",
             "expected_revision": "f" * 40,
             "expected_source_archive_sha256": "e" * 64,
             "expected_release_image_id": "sha256:" + "d" * 64,
@@ -1428,9 +1428,9 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_candidate_id_is_a_closed_positive_rc_identity(self) -> None:
         for candidate_id in (
-            "rustinfer-0.1.0-rc0",
-            "rustinfer-00.1.0-rc1",
-            "rustinfer-0.1.0-rc01",
+            "riley-0.1.0-rc0",
+            "riley-00.1.0-rc1",
+            "riley-0.1.0-rc01",
             "release-candidate",
         ):
             with self.subTest(candidate_id=candidate_id):
@@ -1439,17 +1439,17 @@ class ReleaseCandidateTests(unittest.TestCase):
                 self.assertIn("rc<positive integer>", report["errors"][0])
 
     def test_candidate_id_base_must_match_release_bundle_version(self) -> None:
-        self.fixture.manifest["candidate_id"] = "rustinfer-0.2.0-rc1"
+        self.fixture.manifest["candidate_id"] = "riley-0.2.0-rc1"
         self.fixture.write_manifest()
         report = self.fixture.evaluate(
-            expected_candidate_id="rustinfer-0.2.0-rc1"
+            expected_candidate_id="riley-0.2.0-rc1"
         )
         self.assertFalse(report["passed"])
         self.assertIn("artifact.version", report["errors"][0])
 
     def test_performance_candidate_id_must_match_final_candidate(self) -> None:
         self.fixture.documents["performance"]["candidate"]["candidate_id"] = (
-            "rustinfer-0.1.0-rc2"
+            "riley-0.1.0-rc2"
         )
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()
@@ -1498,7 +1498,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         manifest["candidate"]["model_tree_sha256"] = alternate
         manifest["container"]["environment"][
-            "RUSTINFER_PERF_MODEL_TREE_SHA256"
+            "RILEY_PERF_MODEL_TREE_SHA256"
         ] = alternate
         receipt_fixture.replace_runner_receipt(
             "runner-manifest.json",
@@ -1512,8 +1512,8 @@ class ReleaseCandidateTests(unittest.TestCase):
                 environment = document[0]["Config"]["Env"]
                 environment[:] = [
                     (
-                        f"RUSTINFER_PERF_MODEL_TREE_SHA256={alternate}"
-                        if value.startswith("RUSTINFER_PERF_MODEL_TREE_SHA256=")
+                        f"RILEY_PERF_MODEL_TREE_SHA256={alternate}"
+                        if value.startswith("RILEY_PERF_MODEL_TREE_SHA256=")
                         else value
                     )
                     for value in environment
@@ -1620,7 +1620,7 @@ class ReleaseCandidateTests(unittest.TestCase):
         self.assertIn("artifact digest mismatch", report["errors"][0])
 
     def test_path_traversal_fails_before_file_access(self) -> None:
-        self.fixture.manifest["release"]["binary"]["path"] = "../rustinfer"
+        self.fixture.manifest["release"]["binary"]["path"] = "../riley"
         self.fixture.write_manifest()
         report = self.fixture.evaluate()
         self.assertFalse(report["passed"])
@@ -1629,9 +1629,9 @@ class ReleaseCandidateTests(unittest.TestCase):
     def test_artifact_path_must_be_exactly_normalized(self) -> None:
         for relative in (
             ".",
-            "./rustinfer",
-            "nested/../rustinfer",
-            "rustinfer/",
+            "./riley",
+            "nested/../riley",
+            "riley/",
             "bad\x00name",
         ):
             with self.subTest(relative=relative):
@@ -1736,7 +1736,7 @@ class ReleaseCandidateTests(unittest.TestCase):
     def test_duplicate_json_key_is_rejected(self) -> None:
         raw = self.fixture.manifest_path.read_text(encoding="utf-8")
         raw = raw.replace(
-            '"candidate_id": "rustinfer-0.1.0-rc1",',
+            '"candidate_id": "riley-0.1.0-rc1",',
             '"candidate_id": "first", "candidate_id": "second",',
             1,
         )
@@ -2020,7 +2020,7 @@ class ReleaseCandidateTests(unittest.TestCase):
 
     def test_legacy_soak_report_fails_closed(self) -> None:
         self.fixture.documents["soak"]["schema_version"] = (
-            "rustinfer.reliability-soak-report.v1"
+            "riley.reliability-soak-report.v1"
         )
         self.fixture.refresh_manifest()
         report = self.fixture.evaluate()

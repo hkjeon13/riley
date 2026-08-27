@@ -1049,7 +1049,7 @@ def write_manifest(
     try:
         output_binding, parent_fd = _open_output_parent(output, root_path)
         with tempfile.TemporaryDirectory(
-            prefix="rustinfer-manifest-writer-snapshot-"
+            prefix="riley-manifest-writer-snapshot-"
         ) as snapshot_directory:
             snapshots = _snapshot_all(
                 root_fd, artifact_paths, Path(snapshot_directory)

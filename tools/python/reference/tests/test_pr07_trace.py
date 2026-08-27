@@ -14,9 +14,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from rustinfer_reference.calibration import CalibrationError
-from rustinfer_reference.cli import main
-from rustinfer_reference.constants import (
+from riley_reference.calibration import CalibrationError
+from riley_reference.cli import main
+from riley_reference.constants import (
     MODEL_CONFIG_SHA256,
     PRIMARY_ENVIRONMENT_ID,
     PYTHON_EXECUTABLE_SHA256,
@@ -29,9 +29,9 @@ from rustinfer_reference.constants import (
     TORCH_VERSION,
     TRANSFORMERS_VERSION,
 )
-from rustinfer_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
-from rustinfer_reference.hf_calibration import OracleArtifactMetadata
-from rustinfer_reference.pr07_trace import (
+from riley_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
+from riley_reference.hf_calibration import OracleArtifactMetadata
+from riley_reference.pr07_trace import (
     CapturedPr07Trace,
     PR07_TRACE_ARTIFACT_KIND,
     PR07_TRACE_TENSOR_NAMES,
@@ -193,7 +193,7 @@ class Pr07TraceTests(unittest.TestCase):
             [
                 sys.executable,
                 "-c",
-                "import sys; import rustinfer_reference.pr07_trace; "
+                "import sys; import riley_reference.pr07_trace; "
                 "assert 'torch' not in sys.modules; "
                 "assert 'transformers' not in sys.modules; "
                 "assert 'safetensors' not in sys.modules",
@@ -324,7 +324,7 @@ class Pr07TraceTests(unittest.TestCase):
             sidecar_path = workspace / "trace.safetensors"
             backend = FakeTraceBackend()
             with mock.patch(
-                "rustinfer_reference.pr07_trace.write_json_exclusive",
+                "riley_reference.pr07_trace.write_json_exclusive",
                 side_effect=OSError("injected manifest failure"),
             ):
                 with self.assertRaisesRegex(OSError, "manifest failure"):

@@ -4,8 +4,8 @@ FROM rust:1.85.0-bookworm@sha256:16a7f242108de02f10fe4a392991679bafa7694e59f5b40
 # NVIDIA-published linux/amd64 manifest for CUDA 12.8.1 devel on Ubuntu 22.04.
 FROM nvidia/cuda:12.8.1-devel-ubuntu22.04@sha256:6617a625f4090c76c545a0e7d63f2e441718ef9af7f4efe7dd1242a29e289fd7 AS builder
 
-ARG RUSTINFER_CUDA_ARCHITECTURES=89
-ARG RUSTINFER_SOURCE_REVISION
+ARG RILEY_CUDA_ARCHITECTURES=89
+ARG RILEY_SOURCE_REVISION
 ARG SOURCE_DATE_EPOCH
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -28,7 +28,7 @@ ENV RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
 ENV PATH=/usr/local/cargo/bin:/usr/local/cuda/bin:${PATH}
 ENV CUDA_HOME=/usr/local/cuda
 ENV CUDAToolkit_ROOT=/usr/local/cuda
-ENV RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}
+ENV RILEY_CUDA_ARCHITECTURES=${RILEY_CUDA_ARCHITECTURES}
 ENV CARGO_INCREMENTAL=0
 
 WORKDIR /workspace
@@ -36,28 +36,28 @@ COPY . .
 
 # Licensing and immutable provenance fail before the expensive CUDA build.
 RUN python3 ci/release/run_release_python.py ci/release/check_release_preflight.py \
-        --source-revision "${RUSTINFER_SOURCE_REVISION}" \
+        --source-revision "${RILEY_SOURCE_REVISION}" \
         --source-date-epoch "${SOURCE_DATE_EPOCH}"
 RUN cargo build --locked --release --features cuda,server
 RUN mkdir -p /release \
     && python3 ci/release/run_release_python.py ci/release/build_release_bundle.py \
-        --binary target/release/rustinfer \
-        --output /release/rustinfer.tar.gz \
-        --source-revision "${RUSTINFER_SOURCE_REVISION}" \
+        --binary target/release/riley \
+        --output /release/riley.tar.gz \
+        --source-revision "${RILEY_SOURCE_REVISION}" \
         --source-date-epoch "${SOURCE_DATE_EPOCH}" \
     && python3 ci/release/run_release_python.py \
-        ci/release/verify_release_bundle.py /release/rustinfer.tar.gz \
+        ci/release/verify_release_bundle.py /release/riley.tar.gz \
     && mkdir -p /runtime-root \
-    && tar --extract --gzip --file /release/rustinfer.tar.gz \
+    && tar --extract --gzip --file /release/riley.tar.gz \
         --strip-components=1 --directory /runtime-root
 
 # NVIDIA-published linux/amd64 index digest for
 # nvidia/cuda:12.8.1-runtime-ubuntu22.04, resolved 2026-08-26.
 FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04@sha256:fcbbd60a5ad3db3a1c7375bf14546b369b54064c513224310b2026df50c7a9bd AS runtime
 
-COPY --from=builder /runtime-root/ /opt/rustinfer/
+COPY --from=builder /runtime-root/ /opt/riley/
 
-ENV PATH=/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ENV PATH=/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV NVIDIA_VISIBLE_DEVICES=all
 ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
@@ -74,11 +74,11 @@ RUN rm \
 
 # The final image receives only verified bundle contents. It has neither the
 # source/build toolchain nor Python-family executables.
-RUN test -x /opt/rustinfer/bin/rustinfer \
-    && test -s /opt/rustinfer/SHA256SUMS \
-    && test -s /opt/rustinfer/manifest/native-dependencies.txt \
-    && test -s /opt/rustinfer/manifest/release.json \
-    && ldd /opt/rustinfer/bin/rustinfer \
+RUN test -x /opt/riley/bin/riley \
+    && test -s /opt/riley/SHA256SUMS \
+    && test -s /opt/riley/manifest/native-dependencies.txt \
+    && test -s /opt/riley/manifest/release.json \
+    && ldd /opt/riley/bin/riley \
     && for command in python python3 pip pip3 cargo rustc nvcc cmake make cc c++; do \
         if command -v "${command}" >/dev/null 2>&1; then \
             echo "forbidden runtime executable: ${command}" >&2; exit 1; \
@@ -93,5 +93,5 @@ RUN test -x /opt/rustinfer/bin/rustinfer \
 
 USER 65532:65532
 EXPOSE 8080
-ENTRYPOINT ["/opt/rustinfer/bin/rustinfer"]
+ENTRYPOINT ["/opt/riley/bin/riley"]
 CMD ["--help"]

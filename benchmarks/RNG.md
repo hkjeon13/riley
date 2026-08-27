@@ -1,6 +1,6 @@
 # Deterministic RNG contract
 
-`rustinfer.philox4x32-10.v1` is the portable random-number contract used by
+`riley.philox4x32-10.v1` is the portable random-number contract used by
 fixtures, the native runtime, and any Python reference tooling.  A fixed seed
 is reproducible only when the algorithm ID, stream ID, domain, and draw order
 are also fixed.  Reproducibility under this contract does **not** claim that a
@@ -52,10 +52,10 @@ the stream and domain.  Length-prefixed bytes are encoded as
 The trailing NUL in every tag is part of the hash input.
 
 ```text
-SEED_TAG   = b"rustinfer.philox4x32-10.v1/seed\0"
-STREAM_TAG = b"rustinfer.philox4x32-10.v1/stream\0"
-DOMAIN_TAG = b"rustinfer.philox4x32-10.v1/domain\0"
-FORK_TAG   = b"rustinfer.philox4x32-10.v1/fork\0"
+SEED_TAG   = b"riley.philox4x32-10.v1/seed\0"
+STREAM_TAG = b"riley.philox4x32-10.v1/stream\0"
+DOMAIN_TAG = b"riley.philox4x32-10.v1/domain\0"
+FORK_TAG   = b"riley.philox4x32-10.v1/fork\0"
 
 seed_digest   = SHA256(SEED_TAG || LE64(master_seed))
 stream_digest = SHA256(STREAM_TAG || seed_digest || LP(stream))
@@ -98,7 +98,7 @@ A canonical JSON snapshot has this shape:
 
 ```json
 {
-  "algorithm_id": "rustinfer.philox4x32-10.v1",
+  "algorithm_id": "riley.philox4x32-10.v1",
   "derivation_digest_hex": "64 lowercase hexadecimal characters",
   "block": "unsigned decimal u64 encoded as a JSON string",
   "word_offset": 0,
@@ -170,16 +170,16 @@ master_seed = 42
 stream      = UTF-8 "request-0001"
 domain      = UTF-8 "token-sampling"
 
-seed_digest   = 27ba307ffd89d3dbb7ffd3d3d9b25ada9a275b78dae269838a636c8fc900db85
-stream_digest = e9e49a0403fd05d078f7528cacf57fa24c3edb759363db4b8cefc994ca38048e
-digest        = 71135575b8f1ec48b51e72910fd23520a573d330c60c2b0b3a0fa8e33944e75a
-key           = [75551371, 48ecf1b8]
-nonce         = [91721eb5, 2035d20f]
-block 0       = [a8da52b2, 9d74b2a4, d4cd2d7a, 658c3d44]
+seed_digest   = 5593ba984817f52bc0241ca4da04b0ecfee2fe30bd75567c36a8196f66c08418
+stream_digest = c98613181da8edadd6bf2e27d23576268a3ba2542e514fdfdb9f2f18c23dff96
+digest        = c9826cff0d3267e8597dd2f16928ca083e76df3b8fc4af9810c747236deb517a
+key           = [ff6c82c9, e867320d]
+nonce         = [f1d27d59, 08ca2869]
+block 0       = [c875248d, 7d889ea1, d6887282, 6daf5198]
 ```
 
 After two draws the snapshot has `block = "0"`, `word_offset = 2`, and
-`exhausted = false`; restoring it returns `d4cd2d7a` next.  After all four
+`exhausted = false`; restoring it returns `d6887282` next.  After all four
 draws the next state has `block = "1"`, `word_offset = 0`, and
 `exhausted = false`.
 
@@ -187,19 +187,19 @@ The corresponding four binary64 uniforms, printed with 17 significant
 decimal digits, are:
 
 ```text
-0.65958134515676647
-0.61506191745866090
-0.83125576248858124
-0.39667113230098039
+0.78303745703306049
+0.49036590044852346
+0.83801952062640339
+0.42845640156883746
 ```
 
 Forking that state with the UTF-8 label `draft` gives:
 
 ```text
-child_digest = f5f67e3f27ba60ea8e8ac56c614d162ff11b5133486e7c463ca03a6ba9b512c1
-child key    = [3f7ef6f5, ea60ba27]
-child nonce  = [6cc58a8e, 2f164d61]
-child block0 = [4a38999f, d695c269, 4defe354, e0d2c8f5]
+child_digest = c266fe1f4647900fd7c88a368c5b9dde897d4d0c49bc5378dbb66dda9c1c84f1
+child key    = [1ffe66c2, 0f904746]
+child nonce  = [368ac8d7, de9d5b8c]
+child block0 = [f58f7119, 0cbf7dc4, 8531e25f, 50267c0d]
 ```
 
 ## Versioning rule

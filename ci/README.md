@@ -15,8 +15,10 @@ Use the repository-pinned Rust 1.85.0 toolchain:
 ```sh
 cargo fmt --all -- --check
 python3 ci/check_workspace_boundaries.py --locked
+python3 ci/check_extension_gates.py
+python3 -m unittest discover -s ci/tests -p 'test_*.py' -v
 cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
-cargo test --locked --workspace --no-default-features
+cargo test --locked --workspace --all-targets --no-default-features
 ci/verify_python_free_model_loading.sh
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
 ci/check_feature_matrix.sh
@@ -28,20 +30,20 @@ library. Python is used to inspect Cargo metadata in CI; Cargo never invokes it
 and it is not part of a production artifact. The checker fails closed unless:
 
 - the workspace contains exactly seven production crates plus the non-default
-  `rustinfer-native` development member, which owns exactly its library and
+  `riley-native` development member, which owns exactly its library and
   CUDA-gated calibration binary;
 - `tools/python`, `tools/native`, and `experiments/triton` remain excluded;
 - crate edges and feature ownership match `crates/README.md`;
-- `rustinfer` remains the sole `server` production binary,
-  `rustinfer-profile` requires exactly the non-default `bench,cuda` features,
-  and `rustinfer-native` requires exactly its non-default `cuda` feature;
+- `riley` remains the sole `server` production binary,
+  `riley-profile` requires exactly the non-default `bench,cuda` features,
+  and `riley-native` requires exactly its non-default `cuda` feature;
 - every crate inherits `publish = false`;
 - every crate inherits the exact workspace `MIT` SPDX expression and the root
-  `LICENSE` remains the reviewed MIT text for `rustinfer contributors`;
+  `LICENSE` remains the reviewed MIT text for `Riley contributors`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
-  `serde_json`, and `sha2` requirements owned by `rustinfer-model`, the same
-  reviewed `sha2` package used directly by `rustinfer-runtime`, and optional
-  `libc` owned by `rustinfer-server` solely for synchronous POSIX shutdown
+  `serde_json`, and `sha2` requirements owned by `riley-model`, the same
+  reviewed `sha2` package used directly by `riley-runtime`, and optional
+  `libc` owned by `riley-server` solely for synchronous POSIX shutdown
   signal handling;
 - development-only dependency declarations match their own exact allowlist and
   do not count as production edges, while their resolved registry packages
@@ -51,14 +53,45 @@ and it is not part of a production artifact. The checker fails closed unless:
   license expression, MSRV, and dependency edges;
 - no git dependency is present, and every approved package's MSRV is at most
   the workspace Rust 1.85 MSRV; and
-- no production or `rustinfer-native` build script invokes Python or Triton; and
-- production plus `rustinfer-native` crate sources do not launch external
+- no production or `riley-native` build script invokes Python or Triton; and
+- production plus `riley-native` crate sources do not launch external
   processes. The only allowed `std::process` uses are the server's `ExitCode`
   and evidence-directory PID.
 
 The approved dependency manifest is a reviewed allowlist, not a discovery
 output. Adding or upgrading a package requires updating its exact resolved
 closure and re-reviewing every changed checksum, license, and MSRV entry.
+
+The PR 17 extension checker is a second closed allowlist. Registry v1 lands
+empty by default; the checked-in `deploy/extensions/registry.json` is
+authoritative for the current count. Every non-empty entry binds one immutable
+proposal, deploy plan, and benchmark contract, while admission keeps
+`implementation_link_path` null. The standard-library-only checker rejects
+duplicate or unknown fields, unregistered artifacts, Git control/traversal/
+symlink paths, untracked reference/fallback/workload files, byte-hash drift,
+invalid track/class pairs, enabled defaults, and incomplete
+`reference`/`E0`/`E1`/`A1`/`M1` gates. Primary and quality metrics must be
+distinct scalar paths in the common result schema; each track has an exact
+required performance/resource set containing the primary, and quality is
+track/class-specific.
+E0 tolerances bind exactly to the comparison dtype, while query-aware A1 uses a
+bounded omitted-mass fraction. A1/E1/M1 paths without a suitable common-schema
+quality field fail closed pending a schema
+version, and v1 remains single-GPU.
+
+CI supplies `--base-revision` with the full pull-request base SHA or push-before
+SHA. Transition mode enforces bootstrap-empty, append-only entries, immutable
+admitted artifacts, and the no-rename registry+proposal+plan+contract admission
+diff. New experimental flag literals in production crates require one matching
+approved implementation link. A later
+experimental implementation link binds approved metadata, tracked source paths,
+the runtime-flag source, and non-empty `{path, sha256, test_id}` direct top-level
+workspace integration tests that cannot be hidden, ignored, or feature-gated out;
+reviewers still inspect actual default-off, flag-on, and stable-fallback control
+flow. Stable promotion, withdrawal, or contract mutation requires schema v2.
+Canonical semantic SHA-256 pins and mutation tests prevent portable JSON schema
+relaxation from silently diverging from the checker. The checker does not load a
+model or initialize a GPU. See `deploy/extensions/README.md`.
 
 The final shell check copies the current tree to a temporary directory without
 the excluded tool/research roots, then runs locked metadata and an all-targets
@@ -93,10 +126,10 @@ container GPU access:
 SOURCE_REVISION=$(git rev-parse HEAD)
 docker build \
   --file ci/cuda/Dockerfile \
-  --build-arg RUSTINFER_CUDA_ARCHITECTURES=89 \
-  --build-arg "RUSTINFER_SOURCE_REVISION=${SOURCE_REVISION}" \
+  --build-arg RILEY_CUDA_ARCHITECTURES=89 \
+  --build-arg "RILEY_SOURCE_REVISION=${SOURCE_REVISION}" \
   --progress plain \
-  --tag rustinfer-native-cuda:local \
+  --tag riley-native-cuda:local \
   .
 ```
 
@@ -112,14 +145,14 @@ records or checks:
 3. the bench/CUDA-only native profile producer, the CUDA-gated Python-free
    calibration producer, plus the host-only C ABI link test and ABI version 1;
 4. compile-only `host_runtime_gpu` and `memory_gpu` test binaries plus the
-   CUDA-backed `rustinfer-tensor` surface, without device access;
-5. CUDA feature-on `rustinfer-cuda`, `rustinfer-tensor`, `rustinfer-server`, and
-   `rustinfer-native` Clippy across all targets with warnings denied;
-6. `rustinfer --version` reporting the linked CUDA ABI;
+   CUDA-backed `riley-tensor` surface, without device access;
+5. CUDA feature-on `riley-cuda`, `riley-tensor`, `riley-server`, and
+   `riley-native` Clippy across all targets with warnings denied;
+6. `riley --version` reporting the linked CUDA ABI;
 7. a clear failure for an explicit nonexistent CUDA toolkit root; and
 8. `ldd`, `readelf`, `nm`, and `Cargo.lock` evidence with no Python, PyTorch,
    Transformers, or Triton runtime dependency, and an NVML `DT_NEEDED` edge
-   confined to `rustinfer-native` rather than the production/profile binaries.
+   confined to `riley-native` rather than the production/profile binaries.
 
 PR 03부터 artifact는 CUDA Driver API를 link한다. GPU를 의도적으로 주지 않는 이
 compile-only image에는 실제 host driver가 없으므로, `abi_link`와 `--version`처럼
@@ -133,17 +166,17 @@ On a host with CUDA 12.8.1 installed, the equivalent direct build contract is:
 ```sh
 export CUDAToolkit_ROOT=/usr/local/cuda
 export CUDA_HOME=/usr/local/cuda
-export RUSTINFER_CUDA_ARCHITECTURES=89
+export RILEY_CUDA_ARCHITECTURES=89
 cargo build --locked --release --features cuda,server
-cargo build --locked --release --package rustinfer-native \
-  --no-default-features --features cuda --bin rustinfer-native
-cargo test --locked -p rustinfer-cuda --features cuda --test abi_link
-cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+cargo build --locked --release --package riley-native \
+  --no-default-features --features cuda --bin riley-native
+cargo test --locked -p riley-cuda --features cuda --test abi_link
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
   --test host_runtime_gpu --no-run
-cargo test --locked -p rustinfer-cuda --no-default-features --features cuda \
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
   --test memory_gpu --no-run
-cargo test --locked -p rustinfer-tensor --no-default-features --features cuda --no-run
-./target/release/rustinfer --version
+cargo test --locked -p riley-tensor --no-default-features --features cuda --no-run
+./target/release/riley --version
 ```
 
 `native-cuda.yml` runs the pinned container nightly or by manual dispatch. A
@@ -153,7 +186,7 @@ contract change and must update the digest and captured evidence together.
 ## Python-free CUDA host-runtime and memory GPU gate
 
 The image build compiles both `host_runtime_gpu` and `memory_gpu` with
-`--no-run`, together with `rustinfer-tensor --features cuda`. Execution is a
+`--no-run`, together with `riley-tensor --features cuda`. Execution is a
 separate operation and requires NVIDIA Container Toolkit GPU passthrough. On
 an authorized GPU host:
 
@@ -163,20 +196,20 @@ SOURCE_ARCHIVE_PATH=$(mktemp)
 git archive --format=tar --output="${SOURCE_ARCHIVE_PATH}" HEAD
 SOURCE_REVISION=$(git rev-parse HEAD)
 SOURCE_ARCHIVE_SHA256=$(sha256sum "${SOURCE_ARCHIVE_PATH}" | cut -d ' ' -f 1)
-GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' rustinfer-native-cuda:local)
+GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' riley-native-cuda:local)
 docker run --rm \
   --network none \
   --gpus all \
   --env NVIDIA_VISIBLE_DEVICES=all \
   --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-  --env RUSTINFER_CUDA_LEAK_ITERATIONS=128 \
-  --env RUSTINFER_CUDA_COMPUTE_SANITIZER=0 \
-  --env RUSTINFER_GPU_EVIDENCE_DIR=/evidence \
-  --env "RUSTINFER_SOURCE_REVISION=${SOURCE_REVISION}" \
-  --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
-  --env "RUSTINFER_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
+  --env RILEY_CUDA_LEAK_ITERATIONS=128 \
+  --env RILEY_CUDA_COMPUTE_SANITIZER=0 \
+  --env RILEY_GPU_EVIDENCE_DIR=/evidence \
+  --env "RILEY_SOURCE_REVISION=${SOURCE_REVISION}" \
+  --env "RILEY_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
+  --env "RILEY_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
   --volume "${GPU_EVIDENCE_DIR}:/evidence" \
-  rustinfer-native-cuda:local \
+  riley-native-cuda:local \
   ci/verify_python_free_gpu_runtime.sh
 ```
 
@@ -198,7 +231,7 @@ The cumulative `host_runtime_gpu` target contains exactly eight tests covering:
 - launch-time error staging for invalid launch parameters;
 - positive event elapsed timing; and
 - repeated context/stream/event create-drop leak smoke, controlled by
-  `RUSTINFER_CUDA_LEAK_ITERATIONS` (32–4096, default 128).
+  `RILEY_CUDA_LEAK_ITERATIONS` (32–4096, default 128).
 
 The additive PR 04 `memory_gpu` target is exactly five tests:
 
@@ -221,7 +254,7 @@ the four child PIDs must be distinct.
 Its stable accounting marker must report all four values as zero:
 
 ```text
-rustinfer-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0
+riley-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0
 ```
 
 Evidence consists of `environment.txt`, `nvidia-smi-list.txt`,
@@ -243,7 +276,7 @@ inventory, all four PID-isolated child results, parent result, and the exact
 production binary before producing the deterministic raw tar and final
 release-gate attestation. See `ci/release/CUDA_FAULT_EVIDENCE.md`.
 
-Set `RUSTINFER_CUDA_COMPUTE_SANITIZER=1` to repeat both ignored targets serially
+Set `RILEY_CUDA_COMPUTE_SANITIZER=1` to repeat both ignored targets serially
 under `compute-sanitizer --tool memcheck --leak-check full`. The PR 03 output
 retains its existing `compute-sanitizer-memcheck.log` name, while PR 04 writes
 `compute-sanitizer-memory-memcheck.log`, so logs cannot collide. Each log must
@@ -309,7 +342,7 @@ request identity, and GPU-free remote permission probe are documented in
 the documented CPU/static tests.
 
 Release packaging fixes the reviewed license contract to the exact standard
-MIT text for `Copyright (c) 2026 rustinfer contributors`. Preflight and bundle
+MIT text for `Copyright (c) 2026 Riley contributors`. Preflight and bundle
 production require `workspace.package.license = "MIT"` and
 `license.workspace = true` in every member; bundle verification requires the
 same byte-exact `LICENSE` and canonical embedded SPDX field.
@@ -332,7 +365,7 @@ the pre-start receipts must prove distinct anonymous `NoCopy` workspaces. A
 matching post-run daemon receipt must prove each same container exited once
 with status zero, while the last in-container completion receipt binds that
 container and source to the hashes of every artifact and build log. It then
-requires the server binary, `rustinfer-profile` binary, bundle, and native
+requires the server binary, `riley-profile` binary, bundle, and native
 dependency manifest to be byte-identical across A, B, and final. See
 `ci/release/REPRODUCIBLE_BUILD.md` for the remote procedure and exact evidence
 inventory.

@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/native-e0-approval.schema.json",
-  "title": "rustinfer native E0 correctness approvals",
+  "$id": "https://riley.invalid/schemas/native-e0-approval.schema.json",
+  "title": "riley native E0 correctness approvals",
   "description": "A closed, version-controlled allowlist of exact correctness report bytes approved by raw evidence replay.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "approvals"],
   "properties": {
     "schema_version": {
-      "const": "rustinfer.native-e0-approvals.v1"
+      "const": "riley.native-e0-approvals.v1"
     },
     "approvals": {
       "type": "array",
@@ -121,7 +121,7 @@
               "$ref": "#/$defs/sha256"
             },
             "schema_version": {
-              "const": "rustinfer.native-correctness-raw-evidence.v1"
+              "const": "riley.native-correctness-raw-evidence.v1"
             },
             "candidate_source_revision": {
               "type": "string",

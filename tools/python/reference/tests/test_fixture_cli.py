@@ -18,8 +18,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from rustinfer_reference.cli import _build_parser, _run_benchmark, main
-from rustinfer_reference.fixture import (
+from riley_reference.cli import _build_parser, _run_benchmark, main
+from riley_reference.fixture import (
     CacheParityError,
     FixtureValidationError,
     FIXTURE_SOURCE_PATHS,
@@ -31,7 +31,7 @@ from rustinfer_reference.fixture import (
     validate_fixture,
     write_fixture_exclusive,
 )
-from rustinfer_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
+from riley_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
 
 from .support import FakeBackend, fixture_provenance, prompt_rows, write_prompts
 
@@ -426,7 +426,7 @@ class FixtureAndCliTests(unittest.TestCase):
             [
                 sys.executable,
                 "-c",
-                "import sys; import rustinfer_reference.cli; "
+                "import sys; import riley_reference.cli; "
                 "assert 'torch' not in sys.modules; "
                 "assert 'transformers' not in sys.modules; "
                 "assert 'pynvml' not in sys.modules; "
@@ -464,7 +464,7 @@ class FixtureAndCliTests(unittest.TestCase):
             [
                 sys.executable,
                 "-c",
-                "import sys; import rustinfer_reference.hf_backend; "
+                "import sys; import riley_reference.hf_backend; "
                 "assert 'pynvml' not in sys.modules; "
                 "assert 'psutil' not in sys.modules",
             ],
@@ -529,7 +529,7 @@ class FixtureAndCliTests(unittest.TestCase):
             output_tokens=32,
         )
         with mock.patch(
-            "rustinfer_reference.benchmark.run_benchmark",
+            "riley_reference.benchmark.run_benchmark",
             side_effect=fake_run_benchmark,
         ):
             with contextlib.redirect_stdout(io.StringIO()):

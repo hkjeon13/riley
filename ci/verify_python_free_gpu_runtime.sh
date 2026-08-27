@@ -11,99 +11,99 @@ for command_name in python python3 pip pip3; do
     fi
 done
 
-: "${RUSTINFER_GPU_EVIDENCE_DIR:?mount a writable evidence directory and set RUSTINFER_GPU_EVIDENCE_DIR}"
-: "${RUSTINFER_SOURCE_REVISION:?set the exact source revision used to build the image}"
-: "${RUSTINFER_SOURCE_ARCHIVE_SHA256:?set the SHA-256 of git archive --format=tar HEAD}"
-: "${RUSTINFER_GPU_IMAGE_ID:?set the immutable Docker image ID under test}"
-: "${RUSTINFER_CUDA_LEAK_ITERATIONS:=128}"
-: "${RUSTINFER_CUDA_COMPUTE_SANITIZER:=0}"
+: "${RILEY_GPU_EVIDENCE_DIR:?mount a writable evidence directory and set RILEY_GPU_EVIDENCE_DIR}"
+: "${RILEY_SOURCE_REVISION:?set the exact source revision used to build the image}"
+: "${RILEY_SOURCE_ARCHIVE_SHA256:?set the SHA-256 of git archive --format=tar HEAD}"
+: "${RILEY_GPU_IMAGE_ID:?set the immutable Docker image ID under test}"
+: "${RILEY_CUDA_LEAK_ITERATIONS:=128}"
+: "${RILEY_CUDA_COMPUTE_SANITIZER:=0}"
 
-if ! printf '%s\n' "$RUSTINFER_SOURCE_REVISION" \
+if ! printf '%s\n' "$RILEY_SOURCE_REVISION" \
     | grep -Eq '^[0-9a-f]{40,64}$'
 then
-    echo "RUSTINFER_SOURCE_REVISION must be a full lowercase Git object ID" >&2
+    echo "RILEY_SOURCE_REVISION must be a full lowercase Git object ID" >&2
     exit 1
 fi
-if ! printf '%s\n' "$RUSTINFER_SOURCE_ARCHIVE_SHA256" \
+if ! printf '%s\n' "$RILEY_SOURCE_ARCHIVE_SHA256" \
     | grep -Eq '^[0-9a-f]{64}$'
 then
-    echo "RUSTINFER_SOURCE_ARCHIVE_SHA256 must be a lowercase SHA-256" >&2
+    echo "RILEY_SOURCE_ARCHIVE_SHA256 must be a lowercase SHA-256" >&2
     exit 1
 fi
-if ! printf '%s\n' "$RUSTINFER_GPU_IMAGE_ID" \
+if ! printf '%s\n' "$RILEY_GPU_IMAGE_ID" \
     | grep -Eq '^sha256:[0-9a-f]{64}$'
 then
-    echo "RUSTINFER_GPU_IMAGE_ID must be an immutable sha256 Docker image ID" >&2
+    echo "RILEY_GPU_IMAGE_ID must be an immutable sha256 Docker image ID" >&2
     exit 1
 fi
 
-case "$RUSTINFER_CUDA_COMPUTE_SANITIZER" in
+case "$RILEY_CUDA_COMPUTE_SANITIZER" in
     0|false|no) sanitizer_enabled=0 ;;
     1|true|yes) sanitizer_enabled=1 ;;
     *)
-        echo "RUSTINFER_CUDA_COMPUTE_SANITIZER must be a boolean" >&2
+        echo "RILEY_CUDA_COMPUTE_SANITIZER must be a boolean" >&2
         exit 1
         ;;
 esac
 
-case "$RUSTINFER_GPU_EVIDENCE_DIR" in
+case "$RILEY_GPU_EVIDENCE_DIR" in
     /*) ;;
-    *) echo "RUSTINFER_GPU_EVIDENCE_DIR must be an absolute container path" >&2; exit 1 ;;
+    *) echo "RILEY_GPU_EVIDENCE_DIR must be an absolute container path" >&2; exit 1 ;;
 esac
-if [ "$RUSTINFER_GPU_EVIDENCE_DIR" = / ]; then
+if [ "$RILEY_GPU_EVIDENCE_DIR" = / ]; then
     echo "refusing to write GPU evidence at the filesystem root" >&2
     exit 1
 fi
-test -d "$RUSTINFER_GPU_EVIDENCE_DIR"
-test -w "$RUSTINFER_GPU_EVIDENCE_DIR"
+test -d "$RILEY_GPU_EVIDENCE_DIR"
+test -w "$RILEY_GPU_EVIDENCE_DIR"
 
-case "$RUSTINFER_CUDA_LEAK_ITERATIONS" in
+case "$RILEY_CUDA_LEAK_ITERATIONS" in
     ''|*[!0-9]*)
-        echo "RUSTINFER_CUDA_LEAK_ITERATIONS must be an integer from 32 through 4096" >&2
+        echo "RILEY_CUDA_LEAK_ITERATIONS must be an integer from 32 through 4096" >&2
         exit 1
         ;;
 esac
-if [ "$RUSTINFER_CUDA_LEAK_ITERATIONS" -lt 32 ] \
-    || [ "$RUSTINFER_CUDA_LEAK_ITERATIONS" -gt 4096 ]
+if [ "$RILEY_CUDA_LEAK_ITERATIONS" -lt 32 ] \
+    || [ "$RILEY_CUDA_LEAK_ITERATIONS" -gt 4096 ]
 then
-    echo "RUSTINFER_CUDA_LEAK_ITERATIONS must be from 32 through 4096" >&2
+    echo "RILEY_CUDA_LEAK_ITERATIONS must be from 32 through 4096" >&2
     exit 1
 fi
-export RUSTINFER_CUDA_LEAK_ITERATIONS
+export RILEY_CUDA_LEAK_ITERATIONS
 export RUST_TEST_THREADS=1
 
-environment_log="$RUSTINFER_GPU_EVIDENCE_DIR/environment.txt"
-device_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/nvidia-smi-list.txt"
-device_csv="$RUSTINFER_GPU_EVIDENCE_DIR/nvidia-smi-device-metadata.csv"
-test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-list.txt"
-test_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-tests.log"
-memory_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-list.txt"
-memory_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-tests.log"
-memory_fault_test_list_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
-memory_fault_test_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-tests.log"
-memory_fault_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-binary.sha256"
-test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary"
-memory_test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary"
-memory_fault_test_binary_evidence="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-test-binary"
-checksum_file="$RUSTINFER_GPU_EVIDENCE_DIR/SHA256SUMS"
-sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
-memory_sanitizer_log="$RUSTINFER_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
-ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-ldd.txt"
-readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-readelf.txt"
-nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-nm.txt"
-memory_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-ldd.txt"
-memory_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-readelf.txt"
-memory_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-nm.txt"
-memory_fault_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-ldd.txt"
-memory_fault_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-readelf.txt"
-memory_fault_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-fault-nm.txt"
-test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
-memory_test_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
-release_binary_checksum_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-binary.sha256"
-release_ldd_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-ldd.txt"
-release_readelf_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-readelf.txt"
-release_nm_log="$RUSTINFER_GPU_EVIDENCE_DIR/release-nm.txt"
-driver_libraries_log="$RUSTINFER_GPU_EVIDENCE_DIR/cuda-driver-libraries.txt"
+environment_log="$RILEY_GPU_EVIDENCE_DIR/environment.txt"
+device_list_log="$RILEY_GPU_EVIDENCE_DIR/nvidia-smi-list.txt"
+device_csv="$RILEY_GPU_EVIDENCE_DIR/nvidia-smi-device-metadata.csv"
+test_list_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-list.txt"
+test_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-tests.log"
+memory_test_list_log="$RILEY_GPU_EVIDENCE_DIR/memory-test-list.txt"
+memory_test_log="$RILEY_GPU_EVIDENCE_DIR/memory-tests.log"
+memory_fault_test_list_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
+memory_fault_test_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-tests.log"
+memory_fault_test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-binary.sha256"
+test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-binary"
+memory_test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/memory-test-binary"
+memory_fault_test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-binary"
+checksum_file="$RILEY_GPU_EVIDENCE_DIR/SHA256SUMS"
+sanitizer_log="$RILEY_GPU_EVIDENCE_DIR/compute-sanitizer-memcheck.log"
+memory_sanitizer_log="$RILEY_GPU_EVIDENCE_DIR/compute-sanitizer-memory-memcheck.log"
+ldd_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-ldd.txt"
+readelf_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-readelf.txt"
+nm_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-nm.txt"
+memory_ldd_log="$RILEY_GPU_EVIDENCE_DIR/memory-ldd.txt"
+memory_readelf_log="$RILEY_GPU_EVIDENCE_DIR/memory-readelf.txt"
+memory_nm_log="$RILEY_GPU_EVIDENCE_DIR/memory-nm.txt"
+memory_fault_ldd_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-ldd.txt"
+memory_fault_readelf_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-readelf.txt"
+memory_fault_nm_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-nm.txt"
+test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
+memory_test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
+release_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/release-binary.sha256"
+release_ldd_log="$RILEY_GPU_EVIDENCE_DIR/release-ldd.txt"
+release_readelf_log="$RILEY_GPU_EVIDENCE_DIR/release-readelf.txt"
+release_nm_log="$RILEY_GPU_EVIDENCE_DIR/release-nm.txt"
+driver_libraries_log="$RILEY_GPU_EVIDENCE_DIR/cuda-driver-libraries.txt"
 
 for output in \
     "$environment_log" \
@@ -157,20 +157,20 @@ for device_node in /dev/nvidiactl /dev/nvidia-uvm; do
 done
 
 if ! {
-    printf 'source_revision=%s\n' "$RUSTINFER_SOURCE_REVISION"
+    printf 'source_revision=%s\n' "$RILEY_SOURCE_REVISION"
     printf 'source_archive_command=git archive --format=tar HEAD\n'
-    printf 'source_archive_sha256=%s\n' "$RUSTINFER_SOURCE_ARCHIVE_SHA256"
-    printf 'gpu_image_id=%s\n' "$RUSTINFER_GPU_IMAGE_ID"
+    printf 'source_archive_sha256=%s\n' "$RILEY_SOURCE_ARCHIVE_SHA256"
+    printf 'gpu_image_id=%s\n' "$RILEY_GPU_IMAGE_ID"
     printf 'cuda_visible_devices=%s\n' "${CUDA_VISIBLE_DEVICES:-all}"
     printf 'nvidia_visible_devices=%s\n' "${NVIDIA_VISIBLE_DEVICES:-all}"
-    printf 'leak_iterations=%s\n' "$RUSTINFER_CUDA_LEAK_ITERATIONS"
+    printf 'leak_iterations=%s\n' "$RILEY_CUDA_LEAK_ITERATIONS"
     printf 'compute_sanitizer=%s\n' "$sanitizer_enabled"
     uname -a
     rustc --version --verbose
     cargo --version --verbose
     "${CUDA_HOME:?CUDA_HOME is required}/bin/nvcc" --version
     cmake --version
-    target/release/rustinfer --version
+    target/release/riley --version
     cat /etc/os-release
 } >"$environment_log" 2>&1
 then
@@ -198,7 +198,7 @@ test -s "$device_csv"
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test host_runtime_gpu \
@@ -233,7 +233,7 @@ fi
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test memory_gpu \
@@ -265,7 +265,7 @@ fi
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda-test-fault-injection \
     --test memory_fault_injection_gpu \
@@ -339,7 +339,7 @@ cat "$memory_fault_test_binary_checksum_log"
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test host_runtime_gpu \
@@ -351,17 +351,17 @@ fi
 cat "$test_log"
 
 grep -Eq \
-    'rustinfer-cuda-device-metadata ordinal=[0-9]+ name=.+ compute_capability=[0-9]+\.[0-9]+ total_memory_bytes=[1-9][0-9]* multiprocessor_count=[1-9][0-9]* driver_version=[0-9]+ runtime_version=[0-9]+' \
+    'riley-cuda-device-metadata ordinal=[0-9]+ name=.+ compute_capability=[0-9]+\.[0-9]+ total_memory_bytes=[1-9][0-9]* multiprocessor_count=[1-9][0-9]* driver_version=[0-9]+ runtime_version=[0-9]+' \
     "$test_log"
 grep -Eq \
-    "rustinfer-cuda-leak-smoke iterations=${RUSTINFER_CUDA_LEAK_ITERATIONS}( |$)" \
+    "riley-cuda-leak-smoke iterations=${RILEY_CUDA_LEAK_ITERATIONS}( |$)" \
     "$test_log"
 grep -Eq 'test result: ok\. 8 passed; 0 failed; 0 ignored;' "$test_log"
 
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test memory_gpu \
@@ -372,7 +372,7 @@ then
 fi
 cat "$memory_test_log"
 
-memory_accounting_marker='rustinfer-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0'
+memory_accounting_marker='riley-cuda-memory-accounting device_live_bytes=0 device_live_allocations=0 pinned_host_live_bytes=0 pinned_host_live_allocations=0'
 memory_marker_count=$(grep -Fxc "$memory_accounting_marker" "$memory_test_log" || true)
 if [ "$memory_marker_count" -ne 1 ]; then
     echo "expected exactly one all-zero GPU memory accounting marker, found $memory_marker_count" >&2
@@ -385,7 +385,7 @@ grep -Eq 'test result: ok\. 5 passed; 0 failed; 0 ignored;' "$memory_test_log"
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda-test-fault-injection \
     --test memory_fault_injection_gpu \
@@ -404,10 +404,10 @@ for fault_case in \
     deferred-submission-error \
     completion-restore-ambiguous
 do
-    spawn_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=spawn parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
-    start_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=start child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
-    passed_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=passed child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
-    joined_marker_count=$(grep -Ec "rustinfer-cuda-memory-fault-case case=${fault_case} event=joined parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]* exit_code=0" "$memory_fault_test_log" || true)
+    spawn_marker_count=$(grep -Ec "riley-cuda-memory-fault-case case=${fault_case} event=spawn parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    start_marker_count=$(grep -Ec "riley-cuda-memory-fault-case case=${fault_case} event=start child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    passed_marker_count=$(grep -Ec "riley-cuda-memory-fault-case case=${fault_case} event=passed child_pid=[1-9][0-9]*" "$memory_fault_test_log" || true)
+    joined_marker_count=$(grep -Ec "riley-cuda-memory-fault-case case=${fault_case} event=joined parent_pid=[1-9][0-9]* child_pid=[1-9][0-9]* exit_code=0" "$memory_fault_test_log" || true)
     if [ "$spawn_marker_count" -ne 1 ] \
         || [ "$start_marker_count" -ne 1 ] \
         || [ "$passed_marker_count" -ne 1 ] \
@@ -424,7 +424,7 @@ if [ "$fault_summary_count" -ne 5 ]; then
     exit 1
 fi
 
-release_binary=target/release/rustinfer
+release_binary=target/release/riley
 test -f "$release_binary"
 test -x "$release_binary"
 sha256sum "$release_binary" >"$release_binary_checksum_log"
@@ -461,8 +461,8 @@ if grep -Eq '(RPATH|RUNPATH)' "$release_readelf_log"; then
     echo "production release binary embeds an unreviewed runtime search path" >&2
     exit 1
 fi
-if grep -aFq 'rustinfer_cuda_test_memory_fault_' "$release_binary" \
-    || grep -Fq 'rustinfer_cuda_test_memory_fault_' "$release_nm_log"
+if grep -aFq 'riley_cuda_test_memory_fault_' "$release_binary" \
+    || grep -Fq 'riley_cuda_test_memory_fault_' "$release_nm_log"
 then
     echo "production release binary unexpectedly contains CUDA test fault injection" >&2
     exit 1
@@ -575,7 +575,7 @@ fi
     nm -a --defined-only "$memory_fault_test_binary"
 } >"$memory_fault_nm_log"
 cat "$memory_fault_nm_log"
-grep -Fq 'rustinfer_cuda_test_memory_fault_' "$memory_fault_nm_log"
+grep -Fq 'riley_cuda_test_memory_fault_' "$memory_fault_nm_log"
 
 ldconfig -p >"$driver_libraries_log"
 cat "$driver_libraries_log"
@@ -638,7 +638,7 @@ if [ "$sanitizer_enabled" -eq 1 ]; then
 fi
 
 (
-    cd "$RUSTINFER_GPU_EVIDENCE_DIR"
+    cd "$RILEY_GPU_EVIDENCE_DIR"
     evidence_files='environment.txt
 nvidia-smi-list.txt
 nvidia-smi-device-metadata.csv

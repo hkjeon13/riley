@@ -39,14 +39,14 @@
         "--no-sync",
         "--project",
         "tools/python/reference",
-        "rustinfer-reference",
+        "riley-reference",
         "generate",
         "--prompts",
         "benchmarks/prompts.jsonl",
         "--repo-root",
         ".",
         "--output",
-        "/var/tmp/rustinfer-reference/smollm2-135m-bf16.json"
+        "/var/tmp/riley-reference/smollm2-135m-bf16.json"
       ]
     },
     "serve": {
@@ -63,7 +63,7 @@
         "--no-sync",
         "--project",
         "tools/python/reference",
-        "rustinfer-reference",
+        "riley-reference",
         "benchmark",
         "--matrix",
         "benchmarks/matrix.yaml",

@@ -3,9 +3,9 @@ requires = ["hatchling>=1.27,<2"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rustinfer-vllm-benchmark-lane"
+name = "riley-vllm-benchmark-lane"
 version = "0.1.0"
-description = "Pinned offline vLLM baseline adapter for rustinfer benchmarks"
+description = "Pinned offline vLLM baseline adapter for riley benchmarks"
 requires-python = ">=3.13,<3.14"
 dependencies = [
   "nvidia-ml-py==13.610.43",
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rustinfer-vllm-benchmark = "rustinfer_vllm_benchmark.cli:main"
+riley-vllm-benchmark = "riley_vllm_benchmark.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["rustinfer_vllm_benchmark"]
+packages = ["riley_vllm_benchmark"]

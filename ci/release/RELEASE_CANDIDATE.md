@@ -14,7 +14,7 @@ output must be in a separate decision directory:
 python3 ci/release/write_release_candidate_manifest.py \
   --evidence-root /evidence \
   --output /decision/release-candidate.json \
-  --expected-candidate-id rustinfer-X.Y.Z-rcN \
+  --expected-candidate-id riley-X.Y.Z-rcN \
   --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
   --expected-source-archive-sha256 LOWERCASE_SHA256 \
   --expected-release-image-id sha256:LOWERCASE_SHA256 \
@@ -23,8 +23,8 @@ python3 ci/release/write_release_candidate_manifest.py \
   --expected-optimization-build-image-id sha256:LOWERCASE_SHA256 \
   --expected-correctness-golden-sha256 LOWERCASE_SHA256 \
   --source-archive source.tar \
-  --release-binary rustinfer \
-  --release-bundle rustinfer-X.Y.Z-linux-x86_64-cuda12.8.tar.gz \
+  --release-binary riley \
+  --release-bundle riley-X.Y.Z-linux-x86_64-cuda12.8.tar.gz \
   --python-free-e2e-report python-free-report.json \
   --python-free-e2e-raw-evidence python-free-evidence.tar \
   --python-free-e2e-correctness-golden correctness-golden.json \
@@ -32,10 +32,10 @@ python3 ci/release/write_release_candidate_manifest.py \
   --cuda-fault-raw-evidence cuda-fault-evidence.tar \
   --native-correctness-report native-correctness-report.json \
   --native-correctness-raw-replay native-correctness-replay.tar \
-  --native-correctness-candidate-executable rustinfer-native \
+  --native-correctness-candidate-executable riley-native \
   --reproducible-build-a reproducible-build-a.tar \
   --reproducible-build-b reproducible-build-b.tar \
-  --reproducible-profile-binary rustinfer-profile \
+  --reproducible-profile-binary riley-profile \
   --reproducible-native-manifest native-dependencies.txt \
   --optimization-correctness-report optimization-correctness-report.json \
   --optimization-correctness-raw-evidence optimization-correctness-evidence.tar \
@@ -58,7 +58,7 @@ anchors. The checker also requires no-follow `openat` support:
 python3 ci/release/check_release_candidate.py \
   --manifest /decision/release-candidate.json \
   --evidence-root /evidence \
-  --expected-candidate-id rustinfer-X.Y.Z-rcN \
+  --expected-candidate-id riley-X.Y.Z-rcN \
   --expected-revision FULL_LOWERCASE_40_CHARACTER_COMMIT \
   --expected-source-archive-sha256 LOWERCASE_SHA256 \
   --expected-release-image-id sha256:LOWERCASE_SHA256 \
@@ -78,12 +78,12 @@ packaging Python tool, while the CUDA-fault and optimizer images are
 Python-free; their IDs are deliberately independent external anchors.
 
 The candidate ID is the intended tag identity, must have the form
-`rustinfer-X.Y.Z-rcN`, and must use the same core `X.Y.Z` version embedded in
+`riley-X.Y.Z-rcN`, and must use the same core `X.Y.Z` version embedded in
 the release bundle. It is also cross-bound to the five-run performance
 candidate.
 
 The report path is create-only. Only `status=passed` and `passed=true` exits
-zero. The report schema is `rustinfer.release-candidate-report.v2`. A passed
+zero. The report schema is `riley.release-candidate-report.v2`. A passed
 report binds the SHA-256 of the exact input manifest, source archive, release
 binary, release bundle, separate native-calibration and profile executables,
 ten closed final checks, all raw/replay artifacts, and the immutable release plus
@@ -92,7 +92,7 @@ role-specific build image IDs.
 ## Closed candidate manifest
 
 The manifest schema version is
-`rustinfer.release-candidate-manifest.v2`. Every `path` is a normalized POSIX
+`riley.release-candidate-manifest.v2`. Every `path` is a normalized POSIX
 path relative to `--evidence-root`; absolute paths, `..`, links, devices,
 duplicate paths, and paths resolving outside that root are rejected. Every
 file descriptor is exactly `{"path": ..., "sha256": ...}`. The complete
@@ -100,16 +100,16 @@ shape is:
 
 ```json
 {
-  "schema_version": "rustinfer.release-candidate-manifest.v2",
-  "candidate_id": "rustinfer-X.Y.Z-rcN",
+  "schema_version": "riley.release-candidate-manifest.v2",
+  "candidate_id": "riley-X.Y.Z-rcN",
   "source": {
     "git_revision": "FULL_LOWERCASE_40_CHARACTER_COMMIT",
     "git_dirty": false,
     "archive": {"path": "source.tar", "sha256": "LOWERCASE_SHA256"}
   },
   "release": {
-    "binary": {"path": "rustinfer", "sha256": "LOWERCASE_SHA256"},
-    "bundle": {"path": "rustinfer-X.Y.Z-linux-x86_64-cuda12.8.tar.gz", "sha256": "LOWERCASE_SHA256"},
+    "binary": {"path": "riley", "sha256": "LOWERCASE_SHA256"},
+    "bundle": {"path": "riley-X.Y.Z-linux-x86_64-cuda12.8.tar.gz", "sha256": "LOWERCASE_SHA256"},
     "image_digest": "sha256:LOWERCASE_SHA256"
   },
   "evidence": {
@@ -126,14 +126,14 @@ shape is:
     "native_correctness": {
       "report": {"path": "native-correctness-report.json", "sha256": "LOWERCASE_SHA256"},
       "raw_replay": {"path": "native-correctness-replay.tar", "sha256": "LOWERCASE_SHA256"},
-      "candidate_executable": {"path": "rustinfer-native", "sha256": "LOWERCASE_SHA256"}
+      "candidate_executable": {"path": "riley-native", "sha256": "LOWERCASE_SHA256"}
     },
     "reproducible_build": {
       "build_image_id": "sha256:LOWERCASE_SHA256",
       "source_date_epoch": 1700000000,
       "build_a": {"path": "reproducible-build-a.tar", "sha256": "LOWERCASE_SHA256"},
       "build_b": {"path": "reproducible-build-b.tar", "sha256": "LOWERCASE_SHA256"},
-      "profile_binary": {"path": "rustinfer-profile", "sha256": "LOWERCASE_SHA256"},
+      "profile_binary": {"path": "riley-profile", "sha256": "LOWERCASE_SHA256"},
       "native_manifest": {"path": "native-dependencies.txt", "sha256": "LOWERCASE_SHA256"}
     },
     "optimization_correctness": {
@@ -168,7 +168,7 @@ checker opens the tar safely and requires the pax global `comment` and every
 member's inherited comment to equal that revision. A tar containing the right
 files but lacking the Git commit marker is not evidence. The deterministic
 release bundle is then passed through `verify_release_bundle.py`; its embedded
-source revision must match and its embedded `bin/rustinfer` must be
+source revision must match and its embedded `bin/riley` must be
 byte-identical to the separately supplied executable. Each image is identified
 only by an immutable `sha256:` image ID. Runtime reports repeat the release
 image exactly; build evidence repeats the external anchor for its own
@@ -176,16 +176,16 @@ reproducibility, CUDA-fault, or optimizer role.
 
 The reproducibility entry is replayed before GPU evidence is accepted. Build A
 and B must be independent clean, networkless containers using the externally
-trusted immutable build image. Their production binary, `rustinfer-profile`,
+trusted immutable build image. Their production binary, `riley-profile`,
 bundle, native dependency manifest, and source archive must be byte-identical
 to one another and to the selected final artifacts. The selected profile is
 the separate `reproducible_build.profile_binary` artifact. It must equal the
 profile executable replayed by optimizer and performance evidence.
 
 `native_correctness.candidate_executable` has a different role: it is the
-source-bound `rustinfer-native calibrate` development executable embedded in
+source-bound `riley-native calibrate` development executable embedded in
 the native correctness raw evidence. It must equal that raw executable, but it
-must not be substituted for `rustinfer-profile` or shipped as the production
+must not be substituted for `riley-profile` or shipped as the production
 server. Source/archive and report hashes cross-bind the calibration result to
 the release without pretending the two executables have identical bytes.
 
@@ -197,7 +197,7 @@ attestation:
 
 ```json
 {
-  "schema_version": "rustinfer.release-gate-attestation.v1",
+  "schema_version": "riley.release-gate-attestation.v1",
   "gate": "python-free-clean-runtime-e2e",
   "status": "passed",
   "source": {
@@ -317,7 +317,7 @@ python3 ci/release/check_native_correctness_evidence.py \
 
 The remaining cross-bindings are:
 
-- `rustinfer.release-performance-report.v1`: must be `passed`, have no errors,
+- `riley.release-performance-report.v1`: must be `passed`, have no errors,
   have the exact four reviewed passing checks, select semantic class E0, bind the exact source
   archive/release binary/runtime image, and bind the exact optimizer
   equivalence report bytes and gate ID. Its profile image must equal the
@@ -339,7 +339,7 @@ The remaining cross-bindings are:
   profile schema and all source/model/environment/workload/raw hashes, requires
   the canonical request-identity SHA-256 to equal the reviewed PR15 value, and
   recomputes the R7 metrics, baseline ratios, and thresholds;
-- `rustinfer.reliability-soak-report.v2`: must be `passed`, have no errors and
+- `riley.reliability-soak-report.v2`: must be `passed`, have no errors and
   only passing checks, and bind the same clean revision, archive, release
   binary, runtime image, model ID/revision, and canonical model-tree digest as
   the Python-free E2E raw evidence. Its closed `bindings.trusted_correctness`

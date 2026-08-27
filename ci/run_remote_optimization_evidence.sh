@@ -234,10 +234,10 @@ container_id=$(docker create \
     --security-opt no-new-privileges \
     --pids-limit 8192 \
     --tmpfs /tmp:rw,nosuid,nodev,exec,size=2147483648 \
-    --env "RUSTINFER_SOURCE_REVISION=${resolved_revision}" \
-    --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${source_archive_sha256}" \
-    --env "RUSTINFER_BUILD_IMAGE_ID=${builder_image}" \
-    --env "RUSTINFER_MODEL_TREE_SHA256=${expected_model_tree_sha256}" \
+    --env "RILEY_SOURCE_REVISION=${resolved_revision}" \
+    --env "RILEY_SOURCE_ARCHIVE_SHA256=${source_archive_sha256}" \
+    --env "RILEY_BUILD_IMAGE_ID=${builder_image}" \
+    --env "RILEY_MODEL_TREE_SHA256=${expected_model_tree_sha256}" \
     --env "SOURCE_DATE_EPOCH=${source_date_epoch}" \
     --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     --env ALL_PROXY= \
@@ -272,12 +272,12 @@ if ((container_status != 0)); then
     exit "${container_status}"
 fi
 
-test "$(cat "${output_dir}/runner-output/completed")" = rustinfer.optimizer-remote-run.completed.v3
-cmp --silent "${profile_binary}" "${output_dir}/runner-output/rustinfer-profile" || {
+test "$(cat "${output_dir}/runner-output/completed")" = riley.optimizer-remote-run.completed.v3
+cmp --silent "${profile_binary}" "${output_dir}/runner-output/riley-profile" || {
     echo "optimizer-run profile binary differs from the reproducible candidate profile" >&2
     exit 1
 }
-test "$(sha256sum "${output_dir}/runner-output/rustinfer-profile" | awk '{print $1}')" = \
+test "$(sha256sum "${output_dir}/runner-output/riley-profile" | awk '{print $1}')" = \
     "${expected_profile_binary_sha256}"
 cmp --silent "${model_manifest}" "${output_dir}/runner-output/model-SHA256SUMS" || {
     echo "container model manifest differs from the host-verified model tree" >&2

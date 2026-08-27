@@ -2,7 +2,7 @@
 
 `reliability-soak-v1.json` is the versioned release workload and
 `ci/run_release_soak.sh` is its Python-free host driver. The driver starts the
-real `rustinfer serve` executable with explicit
+real `riley serve` executable with explicit
 `--reduction-profile canonical-v1` and `--residual-rmsnorm separate`, and
 changes only `--execution-completion` between the two rollback arms. The
 `rollback-per-operation` arm therefore exercises the exact three-flag
@@ -80,8 +80,8 @@ number of request summaries evicted from the bounded diagnostics ring; a
 nonzero value is expected under a long load and is not a monitoring sample
 loss. Evidence sample loss is checked independently through sequence numbers,
 monotonic time gaps, and each event's `sample_dropped` flag. For only the last server
-lifetime, the driver maps the new absolute `RUSTINFER_SOAK_FINAL_METRICS_JSON`
-path to `RUSTINFER_SHUTDOWN_METRICS_PATH`.  On final shutdown the CLI must
+lifetime, the driver maps the new absolute `RILEY_SOAK_FINAL_METRICS_JSON`
+path to `RILEY_SHUTDOWN_METRICS_PATH`.  On final shutdown the CLI must
 create (never replace) the same metric shape there, after
 stream/context/allocation close has completed.  The driver refuses a stale
 path and refuses to synthesize allocation zeros.
@@ -114,40 +114,40 @@ the two rollback completion modes to their reviewed transition order.
 
 Use a new repository-external output directory and provide exact bindings:
 
-`RUSTINFER_MODEL_SHA256` is the same canonical model-tree digest used by the
+`RILEY_MODEL_SHA256` is the same canonical model-tree digest used by the
 Python-free E2E gate: SHA-256 of bytewise path-sorted lines formatted as
 `<file-sha256><two spaces><relative POSIX path>\n`. The driver recomputes it
 from a symlink-free regular-file tree before starting the server, and the final
 candidate requires the soak value to equal the E2E model-tree binding.
 
 ```bash
-RUSTINFER_SOAK_MANIFEST=/var/tmp/rustinfer-soak-manifest.json \
-RUSTINFER_SOAK_OUTPUT=/var/tmp/rustinfer-soak-run001 \
-RUSTINFER_SOURCE_REVISION=<full-clean-commit> \
-RUSTINFER_SOURCE_ARCHIVE_SHA256=<sha256> \
-RUSTINFER_BINARY_SHA256=<sha256> \
-RUSTINFER_IMAGE_SHA256=<sha256> \
-RUSTINFER_MODEL_SHA256=<sha256> \
-RUSTINFER_MODEL_ID=HuggingFaceTB/SmolLM2-135M \
-RUSTINFER_MODEL_REVISION=<immutable-revision> \
-RUSTINFER_SOAK_FINAL_METRICS_JSON=/var/tmp/rustinfer-final-metrics.json \
+RILEY_SOAK_MANIFEST=/var/tmp/riley-soak-manifest.json \
+RILEY_SOAK_OUTPUT=/var/tmp/riley-soak-run001 \
+RILEY_SOURCE_REVISION=<full-clean-commit> \
+RILEY_SOURCE_ARCHIVE_SHA256=<sha256> \
+RILEY_BINARY_SHA256=<sha256> \
+RILEY_IMAGE_SHA256=<sha256> \
+RILEY_MODEL_SHA256=<sha256> \
+RILEY_MODEL_ID=HuggingFaceTB/SmolLM2-135M \
+RILEY_MODEL_REVISION=<immutable-revision> \
+RILEY_SOAK_FINAL_METRICS_JSON=/var/tmp/riley-final-metrics.json \
 ci/run_release_soak.sh
 
 python3 benchmarks/scripts/check_reliability_soak.py \
-  --manifest /var/tmp/rustinfer-soak-manifest.json \
-  --run-directory /var/tmp/rustinfer-soak-run001 \
-  --runtime-receipts-directory /var/tmp/rustinfer-soak-launch/runtime-receipts \
+  --manifest /var/tmp/riley-soak-manifest.json \
+  --run-directory /var/tmp/riley-soak-run001 \
+  --runtime-receipts-directory /var/tmp/riley-soak-launch/runtime-receipts \
   --correctness-golden /evidence/python-free-e2e-golden.json \
   --native-correctness-report /evidence/native-correctness-report.json \
-  --report /var/tmp/rustinfer-soak-run001.report.json
+  --report /var/tmp/riley-soak-run001.report.json
 
 python3 benchmarks/scripts/package_reliability_soak_evidence.py \
-  --manifest /var/tmp/rustinfer-soak-manifest.json \
-  --run-directory /var/tmp/rustinfer-soak-run001 \
-  --runtime-receipts-directory /var/tmp/rustinfer-soak-launch/runtime-receipts \
+  --manifest /var/tmp/riley-soak-manifest.json \
+  --run-directory /var/tmp/riley-soak-run001 \
+  --runtime-receipts-directory /var/tmp/riley-soak-launch/runtime-receipts \
   --correctness-golden /evidence/python-free-e2e-golden.json \
   --native-correctness-report /evidence/native-correctness-report.json \
-  --output /var/tmp/rustinfer-soak-run001.evidence.tar
+  --output /var/tmp/riley-soak-run001.evidence.tar
 ```
 
 The runtime receipt directory is the create-only remote launcher's

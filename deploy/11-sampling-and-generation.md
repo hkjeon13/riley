@@ -115,7 +115,7 @@ trait RequestRng {
 
 `fork`는 draft, target correction, user-visible sampling처럼 서로 다른 확률 경로가 같은 request 안에서도 독립적인 stream을 갖도록 한다.
 
-Normative algorithm ID는 `rustinfer.philox4x32-10.v1`이다. Random123 Philox4x32-10 core,
+Normative algorithm ID는 `riley.philox4x32-10.v1`이다. Random123 Philox4x32-10 core,
 SHA-256 seed/stream/domain derivation, counter/word order, F64 open-interval mapping,
 snapshot JSON과 fork derivation은 [`benchmarks/RNG.md`](../benchmarks/RNG.md)에 고정했다.
 Greedy는 0 draw, user-visible stochastic sample 성공은 1 draw다. Snapshot/restore/fork는

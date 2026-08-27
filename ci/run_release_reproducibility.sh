@@ -164,10 +164,10 @@ run_one() {
         --cap-drop ALL \
         --security-opt no-new-privileges \
         --pids-limit 4096 \
-        --env "RUSTINFER_REPRO_BUILD_ID=${build_id}" \
-        --env "RUSTINFER_SOURCE_REVISION=${resolved_revision}" \
-        --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${source_archive_sha256}" \
-        --env "RUSTINFER_BUILD_IMAGE_ID=${builder_image}" \
+        --env "RILEY_REPRO_BUILD_ID=${build_id}" \
+        --env "RILEY_SOURCE_REVISION=${resolved_revision}" \
+        --env "RILEY_SOURCE_ARCHIVE_SHA256=${source_archive_sha256}" \
+        --env "RILEY_BUILD_IMAGE_ID=${builder_image}" \
         --env "SOURCE_DATE_EPOCH=${source_date_epoch}" \
         --env ALL_PROXY= \
         --env FTP_PROXY= \
@@ -219,9 +219,9 @@ package_one() {
         --source-revision "${resolved_revision}" \
         --source-date-epoch "${source_date_epoch}" \
         --build-image-id "${builder_image}" \
-        --binary "${run_dir}/artifacts/rustinfer" \
-        --profile-binary "${run_dir}/artifacts/rustinfer-profile" \
-        --bundle "${run_dir}/artifacts/rustinfer.tar.gz" \
+        --binary "${run_dir}/artifacts/riley" \
+        --profile-binary "${run_dir}/artifacts/riley-profile" \
+        --bundle "${run_dir}/artifacts/riley.tar.gz" \
         --native-manifest "${run_dir}/artifacts/native-dependencies.txt" \
         --toolchain-log "${run_dir}/logs/toolchain.txt" \
         --builder-image-inspect "${builder_image_inspect}" \
@@ -240,12 +240,12 @@ package_one A
 package_one B
 
 mkdir "${output_dir}/final"
-install -m 0755 "${output_dir}/run-a/artifacts/rustinfer" \
-    "${output_dir}/final/rustinfer"
-install -m 0755 "${output_dir}/run-a/artifacts/rustinfer-profile" \
-    "${output_dir}/final/rustinfer-profile"
-install -m 0644 "${output_dir}/run-a/artifacts/rustinfer.tar.gz" \
-    "${output_dir}/final/rustinfer.tar.gz"
+install -m 0755 "${output_dir}/run-a/artifacts/riley" \
+    "${output_dir}/final/riley"
+install -m 0755 "${output_dir}/run-a/artifacts/riley-profile" \
+    "${output_dir}/final/riley-profile"
+install -m 0644 "${output_dir}/run-a/artifacts/riley.tar.gz" \
+    "${output_dir}/final/riley.tar.gz"
 install -m 0644 "${output_dir}/run-a/artifacts/native-dependencies.txt" \
     "${output_dir}/final/native-dependencies.txt"
 
@@ -258,9 +258,9 @@ run_release_python "${repository_root}/ci/release/check_reproducible_build.py" \
     --source-revision "${resolved_revision}" \
     --source-date-epoch "${source_date_epoch}" \
     --build-image-id "${builder_image}" \
-    --final-binary "${output_dir}/final/rustinfer" \
-    --final-profile-binary "${output_dir}/final/rustinfer-profile" \
-    --final-bundle "${output_dir}/final/rustinfer.tar.gz" \
+    --final-binary "${output_dir}/final/riley" \
+    --final-profile-binary "${output_dir}/final/riley-profile" \
+    --final-bundle "${output_dir}/final/riley.tar.gz" \
     --final-native-manifest "${output_dir}/final/native-dependencies.txt" \
     --output-report "${output_dir}/reproducibility-report-v1.json"
 
@@ -275,9 +275,9 @@ run_release_python "${repository_root}/ci/release/check_reproducible_build.py" \
         container-inspect-b-post.json \
         run-a/repro-build-a.tar \
         run-b/repro-build-b.tar \
-        final/rustinfer \
-        final/rustinfer-profile \
-        final/rustinfer.tar.gz \
+        final/riley \
+        final/riley-profile \
+        final/riley.tar.gz \
         final/native-dependencies.txt \
         reproducibility-report-v1.json \
         > SHA256SUMS

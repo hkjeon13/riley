@@ -1,49 +1,49 @@
 #include "ffi_internal.hpp"
 
 #include <climits>
-#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
+#if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
 #include <nvml.h>
 #endif
 
 namespace {
 
-using rustinfer_cuda_internal::AllocationStatsGuard;
-using rustinfer_cuda_internal::CurrentContext;
-using rustinfer_cuda_internal::clear_error;
-using rustinfer_cuda_internal::command_batch_thread_token;
-using rustinfer_cuda_internal::driver_error;
-using rustinfer_cuda_internal::internal_error;
-using rustinfer_cuda_internal::release_exclusive_use;
-using rustinfer_cuda_internal::runtime_error;
-using rustinfer_cuda_internal::retain_child;
-using rustinfer_cuda_internal::release_child;
-using rustinfer_cuda_internal::same_context;
-using rustinfer_cuda_internal::set_error;
-using rustinfer_cuda_internal::try_acquire_exclusive_use;
-using rustinfer_cuda_internal::validation_error;
+using riley_cuda_internal::AllocationStatsGuard;
+using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::clear_error;
+using riley_cuda_internal::command_batch_thread_token;
+using riley_cuda_internal::driver_error;
+using riley_cuda_internal::internal_error;
+using riley_cuda_internal::release_exclusive_use;
+using riley_cuda_internal::runtime_error;
+using riley_cuda_internal::retain_child;
+using riley_cuda_internal::release_child;
+using riley_cuda_internal::same_context;
+using riley_cuda_internal::set_error;
+using riley_cuda_internal::try_acquire_exclusive_use;
+using riley_cuda_internal::validation_error;
 
-#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
-RustInferCudaStatus nvml_error(nvmlReturn_t result,
-                               RustInferCudaErrorInfo* error, uint32_t stage,
+#if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
+RileyCudaStatus nvml_error(nvmlReturn_t result,
+                               RileyCudaErrorInfo* error, uint32_t stage,
                                const char* operation) noexcept {
   if (result == NVML_SUCCESS) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_RUNTIME_ERROR;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_RUNTIME_ERROR;
   if (result == NVML_ERROR_INVALID_ARGUMENT) {
-    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+    status = RILEY_CUDA_STATUS_INVALID_ARGUMENT;
   } else if (result == NVML_ERROR_INSUFFICIENT_SIZE) {
-    status = RUSTINFER_CUDA_STATUS_OUT_OF_RANGE;
+    status = RILEY_CUDA_STATUS_OUT_OF_RANGE;
   } else if (result == NVML_ERROR_NOT_SUPPORTED) {
-    status = RUSTINFER_CUDA_STATUS_NOT_SUPPORTED;
+    status = RILEY_CUDA_STATUS_NOT_SUPPORTED;
   } else if (result == NVML_ERROR_DRIVER_NOT_LOADED ||
              result == NVML_ERROR_LIBRARY_NOT_FOUND ||
              result == NVML_ERROR_FUNCTION_NOT_FOUND ||
              result == NVML_ERROR_GPU_IS_LOST) {
-    status = RUSTINFER_CUDA_STATUS_DRIVER_ERROR;
+    status = RILEY_CUDA_STATUS_DRIVER_ERROR;
   }
   return set_error(error, status, static_cast<int32_t>(result),
-                   RUSTINFER_CUDA_ERROR_DOMAIN_NVML, stage, operation,
+                   RILEY_CUDA_ERROR_DOMAIN_NVML, stage, operation,
                    nvmlErrorString(result));
 }
 
@@ -59,27 +59,27 @@ class NvmlSession final {
     }
   }
 
-  RustInferCudaStatus initialize(RustInferCudaErrorInfo* error) noexcept {
+  RileyCudaStatus initialize(RileyCudaErrorInfo* error) noexcept {
     const nvmlReturn_t result = nvmlInit_v2();
     if (result == NVML_SUCCESS) {
       active_ = true;
-      return RUSTINFER_CUDA_STATUS_SUCCESS;
+      return RILEY_CUDA_STATUS_SUCCESS;
     }
-    return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                       "initialize NVML");
   }
 
-  RustInferCudaStatus shutdown(RustInferCudaStatus primary_status,
-                               RustInferCudaErrorInfo* error) noexcept {
+  RileyCudaStatus shutdown(RileyCudaStatus primary_status,
+                               RileyCudaErrorInfo* error) noexcept {
     if (!active_) {
       return primary_status;
     }
     const nvmlReturn_t result = nvmlShutdown();
     active_ = false;
-    if (primary_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (primary_status != RILEY_CUDA_STATUS_SUCCESS) {
       return primary_status;
     }
-    return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                       "shutdown NVML after environment probe");
   }
 
@@ -89,7 +89,7 @@ class NvmlSession final {
 #endif
 
 void clear_nvidia_environment_snapshot(
-    RustInferCudaNvidiaEnvironmentSnapshot* snapshot) noexcept {
+    RileyCudaNvidiaEnvironmentSnapshot* snapshot) noexcept {
   if (snapshot == nullptr || snapshot->struct_size < sizeof(*snapshot)) {
     return;
   }
@@ -97,107 +97,107 @@ void clear_nvidia_environment_snapshot(
   snapshot->struct_size = sizeof(*snapshot);
 }
 
-#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
-RustInferCudaStatus optional_application_clock(
+#if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
+RileyCudaStatus optional_application_clock(
     nvmlDevice_t device, nvmlClockType_t clock_type, uint32_t* output,
-    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+    RileyCudaErrorInfo* error, const char* operation) noexcept {
   unsigned int clock_mhz = 0;
   const nvmlReturn_t result =
       nvmlDeviceGetApplicationsClock(device, clock_type, &clock_mhz);
   if (result == NVML_ERROR_NOT_SUPPORTED) {
-    *output = RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    *output = RILEY_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  const RustInferCudaStatus status =
-      nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, operation);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  const RileyCudaStatus status =
+      nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY, operation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     *output = static_cast<uint32_t>(clock_mhz);
   }
   return status;
 }
 #endif
 
-RustInferCudaStatus device_attribute(CUdevice device,
+RileyCudaStatus device_attribute(CUdevice device,
                                      CUdevice_attribute attribute,
                                      uint32_t* output,
-                                     RustInferCudaErrorInfo* error,
+                                     RileyCudaErrorInfo* error,
                                      const char* operation) noexcept {
   int value = 0;
   const CUresult result = cuDeviceGetAttribute(&value, attribute, device);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         operation);
   }
   if (value < 0) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                           operation, "CUDA returned a negative device attribute");
   }
   *output = static_cast<uint32_t>(value);
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-void destroy_stream_after_failed_create(RustInferCudaContext* context,
+void destroy_stream_after_failed_create(RileyCudaContext* context,
                                         cudaStream_t stream) noexcept {
   CurrentContext cleanup(context);
-  RustInferCudaErrorInfo ignored{};
+  RileyCudaErrorInfo ignored{};
   ignored.struct_size = sizeof(ignored);
-  if (cleanup.enter(&ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  if (cleanup.enter(&ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
                     "cleanup stream after create") ==
-      RUSTINFER_CUDA_STATUS_SUCCESS) {
+      RILEY_CUDA_STATUS_SUCCESS) {
     (void)cudaStreamDestroy(stream);
-    (void)cleanup.leave(RUSTINFER_CUDA_STATUS_SUCCESS, &ignored,
-                        RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    (void)cleanup.leave(RILEY_CUDA_STATUS_SUCCESS, &ignored,
+                        RILEY_CUDA_ERROR_STAGE_CLOSE,
                         "cleanup stream after create");
   }
 }
 
-void destroy_event_after_failed_create(RustInferCudaContext* context,
+void destroy_event_after_failed_create(RileyCudaContext* context,
                                        cudaEvent_t event) noexcept {
   CurrentContext cleanup(context);
-  RustInferCudaErrorInfo ignored{};
+  RileyCudaErrorInfo ignored{};
   ignored.struct_size = sizeof(ignored);
-  if (cleanup.enter(&ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  if (cleanup.enter(&ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
                     "cleanup event after create") ==
-      RUSTINFER_CUDA_STATUS_SUCCESS) {
+      RILEY_CUDA_STATUS_SUCCESS) {
     (void)cudaEventDestroy(event);
-    (void)cleanup.leave(RUSTINFER_CUDA_STATUS_SUCCESS, &ignored,
-                        RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    (void)cleanup.leave(RILEY_CUDA_STATUS_SUCCESS, &ignored,
+                        RILEY_CUDA_ERROR_STAGE_CLOSE,
                         "cleanup event after create");
   }
 }
 
 }  // namespace
 
-#if defined(RUSTINFER_CUDA_ENABLE_NVML_PROBE)
-extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
-    RustInferCudaNvidiaEnvironmentSnapshot* out_snapshot,
-    RustInferCudaErrorInfo* error) noexcept {
+#if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
+extern "C" RileyCudaStatus riley_cuda_nvidia_environment_probe(
+    RileyCudaNvidiaEnvironmentSnapshot* out_snapshot,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_snapshot == nullptr ||
       out_snapshot->struct_size < sizeof(*out_snapshot)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
         "out_snapshot is null or has an incompatible struct_size");
   }
   clear_nvidia_environment_snapshot(out_snapshot);
 
   NvmlSession session;
-  RustInferCudaStatus status = session.initialize(error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = session.initialize(error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
-  status = [&]() noexcept -> RustInferCudaStatus {
+  status = [&]() noexcept -> RileyCudaStatus {
     nvmlReturn_t result = nvmlSystemGetDriverVersion(
         out_snapshot->driver_version,
-        RUSTINFER_CUDA_NVIDIA_DRIVER_VERSION_CAPACITY);
+        RILEY_CUDA_NVIDIA_DRIVER_VERSION_CAPACITY);
     if (result != NVML_SUCCESS) {
-      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+      return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                         "query NVIDIA driver version");
     }
     if (out_snapshot->driver_version[0] == '\0') {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query NVIDIA driver version",
                             "NVML returned an empty driver version");
     }
@@ -205,11 +205,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
     result = nvmlSystemGetCudaDriverVersion_v2(
         &out_snapshot->cuda_driver_api_version);
     if (result != NVML_SUCCESS) {
-      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+      return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                         "query CUDA Driver API version through NVML");
     }
     if (out_snapshot->cuda_driver_api_version <= 0) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query CUDA Driver API version through NVML",
                             "NVML returned a non-positive CUDA version");
     }
@@ -217,13 +217,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
     unsigned int device_count = 0;
     result = nvmlDeviceGetCount_v2(&device_count);
     if (result != NVML_SUCCESS) {
-      return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+      return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                         "enumerate NVIDIA devices through NVML");
     }
-    if (device_count > RUSTINFER_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES) {
+    if (device_count > RILEY_CUDA_NVIDIA_ENVIRONMENT_MAX_DEVICES) {
       return validation_error(
-          error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-          RUSTINFER_CUDA_ERROR_STAGE_QUERY, "probe NVIDIA environment",
+          error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+          RILEY_CUDA_ERROR_STAGE_QUERY, "probe NVIDIA environment",
           "NVML device count exceeds the fixed environment snapshot capacity");
     }
     out_snapshot->device_count = static_cast<uint32_t>(device_count);
@@ -233,39 +233,39 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       nvmlDevice_t device = nullptr;
       result = nvmlDeviceGetHandleByIndex_v2(ordinal, &device);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "select NVIDIA device through NVML");
       }
 
-      RustInferCudaNvidiaDeviceSnapshot* output =
+      RileyCudaNvidiaDeviceSnapshot* output =
           &out_snapshot->devices[ordinal];
       output->struct_size = sizeof(*output);
       output->application_graphics_clock_mhz =
-          RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+          RILEY_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
       output->application_memory_clock_mhz =
-          RUSTINFER_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
+          RILEY_CUDA_NVIDIA_CLOCK_NOT_AVAILABLE;
 
       unsigned int index = 0;
       result = nvmlDeviceGetIndex(device, &index);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA device index");
       }
       if (index != ordinal) {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                               "query NVIDIA device index",
                               "NVML device index disagrees with enumeration order");
       }
       output->index = static_cast<uint32_t>(index);
 
       result = nvmlDeviceGetName(device, output->name,
-                                 RUSTINFER_CUDA_DEVICE_NAME_CAPACITY);
+                                 RILEY_CUDA_DEVICE_NAME_CAPACITY);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA device name");
       }
       if (output->name[0] == '\0') {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                               "query NVIDIA device name",
                               "NVML returned an empty device name");
       }
@@ -274,7 +274,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       memory.version = nvmlMemory_v2;
       result = nvmlDeviceGetMemoryInfo_v2(device, &memory);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA device memory");
       }
       output->total_memory_bytes = static_cast<uint64_t>(memory.total);
@@ -282,7 +282,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       if (output->total_memory_bytes == 0 || memory.reserved > memory.total ||
           memory.used > memory.total - memory.reserved ||
           output->used_memory_bytes > output->total_memory_bytes) {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                               "query NVIDIA device memory",
                               "NVML returned inconsistent device memory");
       }
@@ -291,7 +291,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       result = nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU,
                                         &temperature_c);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA device temperature");
       }
       output->temperature_c = static_cast<uint32_t>(temperature_c);
@@ -299,16 +299,16 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       nvmlEnableState_t persistence_mode = NVML_FEATURE_DISABLED;
       result = nvmlDeviceGetPersistenceMode(device, &persistence_mode);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA persistence mode");
       }
       if (persistence_mode == NVML_FEATURE_DISABLED) {
         output->persistence_mode =
-            RUSTINFER_CUDA_NVIDIA_PERSISTENCE_DISABLED;
+            RILEY_CUDA_NVIDIA_PERSISTENCE_DISABLED;
       } else if (persistence_mode == NVML_FEATURE_ENABLED) {
-        output->persistence_mode = RUSTINFER_CUDA_NVIDIA_PERSISTENCE_ENABLED;
+        output->persistence_mode = RILEY_CUDA_NVIDIA_PERSISTENCE_ENABLED;
       } else {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                               "query NVIDIA persistence mode",
                               "NVML returned an unknown persistence mode");
       }
@@ -317,23 +317,23 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       result =
           nvmlDeviceGetPowerManagementLimit(device, &power_limit_milliwatts);
       if (result != NVML_SUCCESS) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query NVIDIA power limit");
       }
       output->power_limit_milliwatts =
           static_cast<uint32_t>(power_limit_milliwatts);
 
-      RustInferCudaStatus clock_status = optional_application_clock(
+      RileyCudaStatus clock_status = optional_application_clock(
           device, NVML_CLOCK_GRAPHICS,
           &output->application_graphics_clock_mhz, error,
           "query NVIDIA application graphics clock");
-      if (clock_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      if (clock_status != RILEY_CUDA_STATUS_SUCCESS) {
         return clock_status;
       }
       clock_status = optional_application_clock(
           device, NVML_CLOCK_MEM, &output->application_memory_clock_mhz, error,
           "query NVIDIA application memory clock");
-      if (clock_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      if (clock_status != RILEY_CUDA_STATUS_SUCCESS) {
         return clock_status;
       }
 
@@ -341,240 +341,240 @@ extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
       result = nvmlDeviceGetComputeRunningProcesses_v3(device, &process_count,
                                                        nullptr);
       if (result != NVML_SUCCESS && result != NVML_ERROR_INSUFFICIENT_SIZE) {
-        return nvml_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return nvml_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "count NVIDIA compute processes");
       }
       output->compute_process_count = static_cast<uint32_t>(process_count);
       if (UINT32_MAX - aggregate_process_count <
           output->compute_process_count) {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                               "count NVIDIA compute processes",
                               "aggregate compute-process count overflowed");
       }
       aggregate_process_count += output->compute_process_count;
     }
     out_snapshot->compute_process_count = aggregate_process_count;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }();
 
   status = session.shutdown(status, error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     clear_nvidia_environment_snapshot(out_snapshot);
   }
   return status;
 }
 #else
-extern "C" RustInferCudaStatus rustinfer_cuda_nvidia_environment_probe(
-    RustInferCudaNvidiaEnvironmentSnapshot* out_snapshot,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_nvidia_environment_probe(
+    RileyCudaNvidiaEnvironmentSnapshot* out_snapshot,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_snapshot == nullptr ||
       out_snapshot->struct_size < sizeof(*out_snapshot)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "probe NVIDIA environment",
         "out_snapshot is null or has an incompatible struct_size");
   }
   clear_nvidia_environment_snapshot(out_snapshot);
   return set_error(
-      error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-      RUSTINFER_CUDA_ERROR_DOMAIN_NVML,
-      RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE, "probe NVIDIA environment",
+      error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+      RILEY_CUDA_ERROR_DOMAIN_NVML,
+      RILEY_CUDA_ERROR_STAGE_INITIALIZE, "probe NVIDIA environment",
       "native archive was built without NVML probe support");
 }
 #endif
 
-extern "C" RustInferCudaStatus rustinfer_cuda_device_count(
-    uint32_t* out_count, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_device_count(
+    uint32_t* out_count, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_count == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "device count", "out_count is null");
   }
   *out_count = 0;
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "initialize CUDA driver");
   }
   int count = 0;
   result = cuDeviceGetCount(&count);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "enumerate CUDA devices");
   }
   if (count < 0) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                           "enumerate CUDA devices",
                           "CUDA returned a negative device count");
   }
   *out_count = static_cast<uint32_t>(count);
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_device_properties(
-    int32_t ordinal, RustInferCudaDeviceProperties* out_properties,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_device_properties(
+    int32_t ordinal, RileyCudaDeviceProperties* out_properties,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_properties == nullptr ||
       out_properties->struct_size < sizeof(*out_properties)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "query device properties",
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query device properties",
         "out_properties is null or has an incompatible struct_size");
   }
   std::memset(out_properties, 0, sizeof(*out_properties));
   out_properties->struct_size = sizeof(*out_properties);
   out_properties->ordinal = ordinal;
   if (ordinal < 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_DEVICE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_DEVICE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query device properties",
                             "device ordinal must be non-negative");
   }
 
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "initialize CUDA driver");
   }
   CUdevice device = 0;
   result = cuDeviceGet(&device, ordinal);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "select CUDA device");
   }
   result = cuDeviceGetName(out_properties->name,
-                           RUSTINFER_CUDA_DEVICE_NAME_CAPACITY, device);
+                           RILEY_CUDA_DEVICE_NAME_CAPACITY, device);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "query CUDA device name");
   }
   size_t total_memory = 0;
   result = cuDeviceTotalMem(&total_memory, device);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "query CUDA device memory");
   }
   out_properties->total_memory_bytes = static_cast<uint64_t>(total_memory);
 
-  RustInferCudaStatus status = device_attribute(
+  RileyCudaStatus status = device_attribute(
       device, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
       &out_properties->compute_capability_major, error,
       "query compute capability major");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   status = device_attribute(device,
                             CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
                             &out_properties->compute_capability_minor, error,
                             "query compute capability minor");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   status = device_attribute(device, CU_DEVICE_ATTRIBUTE_MULTIPROCESSOR_COUNT,
                             &out_properties->multiprocessor_count, error,
                             "query multiprocessor count");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   status = device_attribute(device, CU_DEVICE_ATTRIBUTE_WARP_SIZE,
                             &out_properties->warp_size, error,
                             "query warp size");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   status = device_attribute(device, CU_DEVICE_ATTRIBUTE_MAX_THREADS_PER_BLOCK,
                             &out_properties->max_threads_per_block, error,
                             "query maximum threads per block");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
   result = cuDriverGetVersion(&out_properties->driver_version);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "query CUDA driver version");
   }
   const cudaError_t runtime_result =
       cudaRuntimeGetVersion(&out_properties->runtime_version);
   if (runtime_result != cudaSuccess) {
     return runtime_error(runtime_result, error,
-                         RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+                         RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                          "query CUDA Runtime version");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_context_create(
-    int32_t ordinal, RustInferCudaContext** out_context,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_context_create(
+    int32_t ordinal, RileyCudaContext** out_context,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA context", "out_context is null");
   }
   *out_context = nullptr;
   if (ordinal < 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_DEVICE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_DEVICE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA context",
                             "device ordinal must be non-negative");
   }
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                         "initialize CUDA driver");
   }
   CUdevice device = 0;
   result = cuDeviceGet(&device, ordinal);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                         "select CUDA context device");
   }
   CUcontext primary = nullptr;
   result = cuDevicePrimaryCtxRetain(&primary, device);
   if (result != CUDA_SUCCESS) {
-    return driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                         "retain CUDA primary context");
   }
-  void* context_storage = std::calloc(1, sizeof(RustInferCudaContext));
+  void* context_storage = std::calloc(1, sizeof(RileyCudaContext));
   if (context_storage == nullptr) {
     (void)cuDevicePrimaryCtxRelease(device);
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create CUDA context",
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA context",
                      "host allocation failed");
   }
   auto* context =
-      new (context_storage) RustInferCudaContext(device, primary, ordinal);
+      new (context_storage) RileyCudaContext(device, primary, ordinal);
 
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   bool context_stack_restored = false;
   {
     CurrentContext scope(context);
-    status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                          "initialize CUDA context");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       status = runtime_error(cudaFree(nullptr), error,
-                             RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+                             RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                              "initialize CUDA Runtime in primary context");
       status = scope.leave(status, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+                           RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                            "initialize CUDA context");
     }
     if (scope.active()) {
       // A failed pop must not be followed by releasing storage still needed by
       // a current primary context. Retry once while preserving the first error.
       status = scope.leave(status, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_INITIALIZE,
+                           RILEY_CUDA_ERROR_STAGE_INITIALIZE,
                            "restore CUDA context after initialization");
     }
     context_stack_restored = !scope.active();
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     if (!context_stack_restored ||
         context->restoration_failed.load(std::memory_order_acquire)) {
       // The driver rejected repeated restoration attempts. Keep the retained
@@ -583,69 +583,69 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_create(
       return status;
     }
     (void)cuDevicePrimaryCtxRelease(device);
-    context->~RustInferCudaContext();
+    context->~RileyCudaContext();
     std::free(context);
     return status;
   }
   *out_context = context;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_context_synchronize(
-    RustInferCudaContext* context, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_context_synchronize(
+    RileyCudaContext* context, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   CurrentContext scope(context);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, "synchronize CUDA context");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, "synchronize CUDA context");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaDeviceSynchronize(), error,
-                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                            "synchronize CUDA context");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                      "synchronize CUDA context");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_context_memory_info(
-    RustInferCudaContext* context, uint64_t* out_free_bytes,
-    uint64_t* out_total_bytes, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_context_memory_info(
+    RileyCudaContext* context, uint64_t* out_free_bytes,
+    uint64_t* out_total_bytes, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_free_bytes == nullptr || out_total_bytes == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query CUDA memory info",
                             "memory output pointer is null");
   }
   *out_free_bytes = 0;
   *out_total_bytes = 0;
   CurrentContext scope(context);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, "query CUDA memory info");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA memory info");
   size_t free_bytes = 0;
   size_t total_bytes = 0;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaMemGetInfo(&free_bytes, &total_bytes), error,
-                           RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+                           RILEY_CUDA_ERROR_STAGE_QUERY,
                            "query CUDA memory info");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                        "query CUDA memory info");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     *out_free_bytes = static_cast<uint64_t>(free_bytes);
     *out_total_bytes = static_cast<uint64_t>(total_bytes);
   }
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_context_allocation_stats(
-    RustInferCudaContext* context, RustInferCudaAllocationStats* out_stats,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_context_allocation_stats(
+    RileyCudaContext* context, RileyCudaAllocationStats* out_stats,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (context == nullptr || out_stats == nullptr ||
       out_stats->struct_size < sizeof(*out_stats)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "query CUDA allocation stats",
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query CUDA allocation stats",
         "context or out_stats is null, or struct_size is incompatible");
   }
   std::memset(out_stats, 0, sizeof(*out_stats));
@@ -659,24 +659,24 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_allocation_stats(
       context->pinned_host_live_bytes.load(std::memory_order_relaxed);
   out_stats->pinned_host_live_allocations =
       context->pinned_host_live_allocations.load(std::memory_order_relaxed);
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_context_close(
-    RustInferCudaContext** context, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_context_close(
+    RileyCudaContext** context, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA context", "context pointer is null");
   }
   if (*context == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if ((*context)->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-        RUSTINFER_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
         "a prior CUDA context-stack restoration failed; refusing to release the primary-context lease");
   }
   const uint32_t live_children =
@@ -686,8 +686,8 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_close(
     std::snprintf(detail, sizeof(detail),
                   "context still owns %u live stream/event/buffer/copy resources",
                   live_children);
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA context", detail);
   }
   bool has_live_allocation_accounting = false;
@@ -702,101 +702,101 @@ extern "C" RustInferCudaStatus rustinfer_cuda_context_close(
   }
   if (has_live_allocation_accounting) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-        RUSTINFER_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
         "context allocation accounting is non-zero; refusing to release the "
         "primary-context lease");
   }
   const CUresult result = cuDevicePrimaryCtxRelease((*context)->device);
-  const RustInferCudaStatus status =
-      driver_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  const RileyCudaStatus status =
+      driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                    "release CUDA primary context");
   // Driver release may report an earlier asynchronous error after decrementing
   // the primary-context refcount. Consume the wrapper after the single release
   // attempt; a genuine failure becomes a safe lease leak, never a double
   // release of another module's shared primary-context ownership.
-  (*context)->~RustInferCudaContext();
+  (*context)->~RileyCudaContext();
   std::free(*context);
   *context = nullptr;
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_create(
-    RustInferCudaContext* context, RustInferCudaStream** out_stream,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_create(
+    RileyCudaContext* context, RileyCudaStream** out_stream,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA stream", "out_stream is null");
   }
   *out_stream = nullptr;
   CurrentContext scope(context);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create CUDA stream");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA stream");
   cudaStream_t native = nullptr;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(
         cudaStreamCreateWithFlags(&native, cudaStreamNonBlocking), error,
-        RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create non-default CUDA stream");
+        RILEY_CUDA_ERROR_STAGE_CREATE, "create non-default CUDA stream");
   }
-  void* stream_storage = std::calloc(1, sizeof(RustInferCudaStream));
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && stream_storage == nullptr) {
-    status = set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                       RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                       RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create CUDA stream",
+  void* stream_storage = std::calloc(1, sizeof(RileyCudaStream));
+  if (status == RILEY_CUDA_STATUS_SUCCESS && stream_storage == nullptr) {
+    status = set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                       RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                       RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA stream",
                        "host allocation failed");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                        "create CUDA stream");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     if (native != nullptr) {
       destroy_stream_after_failed_create(context, native);
     }
     std::free(stream_storage);
     return status;
   }
-  auto* stream = new (stream_storage) RustInferCudaStream{context, native};
+  auto* stream = new (stream_storage) RileyCudaStream{context, native};
   if (!retain_child(context)) {
     destroy_stream_after_failed_create(context, native);
-    stream->~RustInferCudaStream();
+    stream->~RileyCudaStream();
     std::free(stream);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create CUDA stream",
                           "context child-resource counter overflow");
   }
   *out_stream = stream;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_begin(
-    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_begin(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "begin CUDA stream command batch";
   clear_error(error);
   if (stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream is null");
   }
   if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
         "a prior CUDA context-stack restoration failed");
   }
   if (stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream already has an active command batch");
   }
   if (!try_acquire_exclusive_use(stream->active_uses)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream has an active asynchronous use");
   }
   if (stream->command_batch_use_count != 0) {
     (void)release_exclusive_use(stream->active_uses);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kOperation,
                           "inactive command batch retained ledger entries");
   }
@@ -806,47 +806,47 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_begin(
           expected, command_batch_thread_token(), std::memory_order_release,
           std::memory_order_acquire)) {
     (void)release_exclusive_use(stream->active_uses);
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream already has an active command batch");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
-    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "end CUDA stream command batch";
   clear_error(error);
   if (stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream is null");
   }
   const void* owner =
       stream->command_batch_owner.load(std::memory_order_acquire);
   if (owner == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream has no active command batch");
   }
   if (owner != command_batch_thread_token()) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream command batch is owned by another thread");
   }
 
   CurrentContext scope(stream->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
   bool completion_confirmed = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t synchronize_result =
         cudaStreamSynchronize(stream->stream);
     completion_confirmed = synchronize_result == cudaSuccess;
     status = runtime_error(synchronize_result, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, kOperation);
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                        kOperation);
   const bool restoration_confirmed =
       !stream->owner->restoration_failed.load(std::memory_order_acquire);
@@ -859,14 +859,14 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
   // Validate every counter before changing any of them. Only the owner thread
   // can mutate the ledger and the stream lease excludes all other users.
   if (stream->active_uses.load(std::memory_order_acquire) != 1) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                           kOperation,
                           "command-batch stream lease was corrupted");
   }
   for (size_t index = 0; index < stream->command_batch_use_count; ++index) {
     const auto* active = stream->command_batch_uses[index];
     if (active == nullptr || active->load(std::memory_order_acquire) != 1) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                             kOperation,
                             "command-batch resource lease was corrupted");
     }
@@ -877,7 +877,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
         stream->command_batch_uses[stream->command_batch_use_count];
     stream->command_batch_uses[stream->command_batch_use_count] = nullptr;
     if (!release_exclusive_use(*active)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                             kOperation,
                             "command-batch resource release was corrupted");
     }
@@ -887,141 +887,141 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_command_batch_end(
   // after the release this function never dereferences the stream again.
   stream->command_batch_owner.store(nullptr, std::memory_order_release);
   if (!release_exclusive_use(stream->active_uses)) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                           kOperation,
                           "command-batch stream release was corrupted");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_query(
-    RustInferCudaStream* stream, uint8_t* out_complete,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_query(
+    RileyCudaStream* stream, uint8_t* out_complete,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (stream == nullptr || out_complete == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query CUDA stream",
                             "stream or out_complete is null");
   }
   *out_complete = 0;
   if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
       stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query CUDA stream",
                             "stream has an active asynchronous use");
   }
   CurrentContext scope(stream->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, "query CUDA stream");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA stream");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t result = cudaStreamQuery(stream->stream);
     if (result == cudaSuccess) {
       *out_complete = 1;
     }
-    status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                            "query CUDA stream");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                      "query CUDA stream");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_synchronize(
-    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_synchronize(
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "synchronize CUDA stream", "stream is null");
   }
   if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
       stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                             "synchronize CUDA stream",
                             "stream has an active asynchronous use");
   }
   CurrentContext scope(stream->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
       "synchronize CUDA stream");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaStreamSynchronize(stream->stream), error,
-                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                            "synchronize CUDA stream");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                      "synchronize CUDA stream");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_wait_event(
-    RustInferCudaStream* stream, RustInferCudaEvent* event,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_wait_event(
+    RileyCudaStream* stream, RileyCudaEvent* event,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (stream == nullptr || event == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "wait for CUDA event",
                             "stream or event is null");
   }
   if (!same_context(stream->owner, event->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "wait for CUDA event",
                             "stream and event belong to different contexts");
   }
   if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
       stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_RECORD,
                             "wait for CUDA event",
                             "stream has an active asynchronous use");
   }
   CurrentContext scope(stream->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_RECORD, "wait for CUDA event");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_RECORD, "wait for CUDA event");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaStreamWaitEvent(stream->stream, event->event, 0),
-                           error, RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+                           error, RILEY_CUDA_ERROR_STAGE_RECORD,
                            "wait for CUDA event");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_RECORD,
                      "wait for CUDA event");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
-    RustInferCudaStream** stream, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_stream_close(
+    RileyCudaStream** stream, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA stream", "stream pointer is null");
   }
   if (*stream == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if ((*stream)->active_uses.load(std::memory_order_acquire) != 0 ||
       (*stream)->command_batch_owner.load(std::memory_order_acquire) !=
           nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA stream",
                             "stream still has an active asynchronous use");
   }
   CurrentContext scope((*stream)->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE, "close CUDA stream");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA stream");
   bool destroy_attempted = false;
   cudaError_t destroy_result = cudaErrorUnknown;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destroy_attempted = true;
     destroy_result = cudaStreamDestroy((*stream)->stream);
     status = runtime_error(destroy_result, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE,
                            "close CUDA stream");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                        "close CUDA stream");
   if (destroy_attempted) {
     // Runtime destroy calls may report a prior asynchronous error after the
@@ -1029,11 +1029,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
     // single destroy attempt; retrying could double-destroy. A genuine destroy
     // failure is therefore fail-closed as a native-resource leak.
     const bool released = release_child((*stream)->owner);
-    (*stream)->~RustInferCudaStream();
+    (*stream)->~RileyCudaStream();
     std::free(*stream);
     *stream = nullptr;
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS && !released) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA stream",
                             "context child-resource counter underflow");
     }
@@ -1041,199 +1041,199 @@ extern "C" RustInferCudaStatus rustinfer_cuda_stream_close(
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_create(
-    RustInferCudaContext* context, RustInferCudaEvent** out_event,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_create(
+    RileyCudaContext* context, RileyCudaEvent** out_event,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_event == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA event", "out_event is null");
   }
   *out_event = nullptr;
   CurrentContext scope(context);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create CUDA event");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA event");
   cudaEvent_t native = nullptr;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaEventCreateWithFlags(&native, cudaEventDefault),
-                           error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+                           error, RILEY_CUDA_ERROR_STAGE_CREATE,
                            "create timing-enabled CUDA event");
   }
-  void* event_storage = std::calloc(1, sizeof(RustInferCudaEvent));
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && event_storage == nullptr) {
-    status = set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                       RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                       RUSTINFER_CUDA_ERROR_STAGE_CREATE, "create CUDA event",
+  void* event_storage = std::calloc(1, sizeof(RileyCudaEvent));
+  if (status == RILEY_CUDA_STATUS_SUCCESS && event_storage == nullptr) {
+    status = set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                       RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                       RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA event",
                        "host allocation failed");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                        "create CUDA event");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     if (native != nullptr) {
       destroy_event_after_failed_create(context, native);
     }
     std::free(event_storage);
     return status;
   }
-  auto* event = new (event_storage) RustInferCudaEvent{context, native};
+  auto* event = new (event_storage) RileyCudaEvent{context, native};
   if (!retain_child(context)) {
     destroy_event_after_failed_create(context, native);
-    event->~RustInferCudaEvent();
+    event->~RileyCudaEvent();
     std::free(event);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create CUDA event",
                           "context child-resource counter overflow");
   }
   *out_event = event;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_record(
-    RustInferCudaEvent* event, RustInferCudaStream* stream,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_record(
+    RileyCudaEvent* event, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (event == nullptr || stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "record CUDA event", "event or stream is null");
   }
   if (!same_context(event->owner, stream->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "record CUDA event",
                             "event and stream belong to different contexts");
   }
   if (stream->active_uses.load(std::memory_order_acquire) != 0 ||
       stream->command_batch_owner.load(std::memory_order_acquire) != nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_RECORD,
                             "record CUDA event",
                             "stream has an active asynchronous use");
   }
   CurrentContext scope(event->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_RECORD, "record CUDA event");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_RECORD, "record CUDA event");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaEventRecord(event->event, stream->stream), error,
-                           RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+                           RILEY_CUDA_ERROR_STAGE_RECORD,
                            "record CUDA event");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_RECORD,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_RECORD,
                      "record CUDA event");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_query(
-    RustInferCudaEvent* event, uint8_t* out_complete,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_query(
+    RileyCudaEvent* event, uint8_t* out_complete,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (event == nullptr || out_complete == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query CUDA event",
                             "event or out_complete is null");
   }
   *out_complete = 0;
   CurrentContext scope(event->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, "query CUDA event");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA event");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t result = cudaEventQuery(event->event);
     if (result == cudaSuccess) {
       *out_complete = 1;
     }
-    status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                            "query CUDA event");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                      "query CUDA event");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_synchronize(
-    RustInferCudaEvent* event, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_synchronize(
+    RileyCudaEvent* event, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (event == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "synchronize CUDA event", "event is null");
   }
   CurrentContext scope(event->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
       "synchronize CUDA event");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(cudaEventSynchronize(event->event), error,
-                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                            "synchronize CUDA event");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                      "synchronize CUDA event");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_elapsed_ms(
-    RustInferCudaEvent* start, RustInferCudaEvent* end, float* out_elapsed_ms,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_elapsed_ms(
+    RileyCudaEvent* start, RileyCudaEvent* end, float* out_elapsed_ms,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (start == nullptr || end == nullptr || out_elapsed_ms == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "measure CUDA event elapsed time",
                             "event or output pointer is null");
   }
   *out_elapsed_ms = 0.0F;
   if (!same_context(start->owner, end->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "measure CUDA event elapsed time",
                             "events belong to different contexts");
   }
   CurrentContext scope(start->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_QUERY,
       "measure CUDA event elapsed time");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = runtime_error(
         cudaEventElapsedTime(out_elapsed_ms, start->event, end->event), error,
-        RUSTINFER_CUDA_ERROR_STAGE_QUERY, "measure CUDA event elapsed time");
+        RILEY_CUDA_ERROR_STAGE_QUERY, "measure CUDA event elapsed time");
   }
-  return scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                      "measure CUDA event elapsed time");
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_event_close(
-    RustInferCudaEvent** event, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_event_close(
+    RileyCudaEvent** event, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (event == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA event", "event pointer is null");
   }
   if (*event == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   CurrentContext scope((*event)->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE, "close CUDA event");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA event");
   bool destroy_attempted = false;
   cudaError_t destroy_result = cudaErrorUnknown;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destroy_attempted = true;
     destroy_result = cudaEventDestroy((*event)->event);
     status = runtime_error(destroy_result, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE,
                            "close CUDA event");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                        "close CUDA event");
   if (destroy_attempted) {
     // See stream_close: a non-success may be a deferred error even when the
     // event was consumed, so ownership is single-shot after destroy begins.
     const bool released = release_child((*event)->owner);
-    (*event)->~RustInferCudaEvent();
+    (*event)->~RileyCudaEvent();
     std::free(*event);
     *event = nullptr;
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS && !released) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA event",
                             "context child-resource counter underflow");
     }

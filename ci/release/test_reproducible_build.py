@@ -51,11 +51,11 @@ TOOLCHAIN_LOG = (
     b"nvcc_version=Cuda compilation tools, release 12.8, V12.8.93\n"
 )
 CARGO_LOG = (
-    b"   Compiling rustinfer-server v0.1.0 (/workspace/crates/rustinfer-server)\n"
+    b"   Compiling riley-server v0.1.0 (/workspace/crates/riley-server)\n"
     b"    Finished `release` profile [optimized + debuginfo] target(s) in 1.23s\n"
 )
 PROFILE_CARGO_LOG = (
-    b"   Compiling rustinfer-server v0.1.0 (/workspace/crates/rustinfer-server)\n"
+    b"   Compiling riley-server v0.1.0 (/workspace/crates/riley-server)\n"
     b"    Finished `release` profile [optimized + debuginfo] target(s) in 0.42s\n"
 )
 
@@ -79,7 +79,7 @@ def builder_image_inspect() -> list[dict[str, object]]:
                     f"RUSTUP_TOOLCHAIN={RUSTUP_TOOLCHAIN}",
                     "CUDA_HOME=/usr/local/cuda",
                     "CUDAToolkit_ROOT=/usr/local/cuda",
-                    "RUSTINFER_CUDA_ARCHITECTURES=89",
+                    "RILEY_CUDA_ARCHITECTURES=89",
                     "CARGO_INCREMENTAL=0",
                     "CARGO_NET_OFFLINE=true",
                     "CUDA_VERSION=12.8.1",
@@ -93,10 +93,10 @@ def container_inspect(build_id: str) -> list[dict[str, object]]:
     lower = build_id.lower()
     baseline_environment = list(builder_image_inspect()[0]["Config"]["Env"])
     injected_environment = [
-        f"RUSTINFER_REPRO_BUILD_ID={build_id}",
-        f"RUSTINFER_SOURCE_REVISION={REVISION}",
-        f"RUSTINFER_SOURCE_ARCHIVE_SHA256={SOURCE_SHA_PLACEHOLDER}",
-        f"RUSTINFER_BUILD_IMAGE_ID={IMAGE_ID}",
+        f"RILEY_REPRO_BUILD_ID={build_id}",
+        f"RILEY_SOURCE_REVISION={REVISION}",
+        f"RILEY_SOURCE_ARCHIVE_SHA256={SOURCE_SHA_PLACEHOLDER}",
+        f"RILEY_BUILD_IMAGE_ID={IMAGE_ID}",
         f"SOURCE_DATE_EPOCH={EPOCH}",
         *(f"{key}={value}" for key, value in PROXY_ENVIRONMENT.items()),
     ]
@@ -340,10 +340,10 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         (self.logs / "cargo-build.log").write_bytes(CARGO_LOG)
         (self.logs / "profile-build.log").write_bytes(PROFILE_CARGO_LOG)
         (self.logs / "bundle-build.log").write_bytes(
-            b"/workspace/release/rustinfer.tar.gz\n"
+            b"/workspace/release/riley.tar.gz\n"
         )
         (self.logs / "bundle-verify.log").write_bytes(
-            b"verified /workspace/release/rustinfer.tar.gz\n"
+            b"verified /workspace/release/riley.tar.gz\n"
         )
         (self.logs / "builder-image-inspect.json").write_bytes(
             canonical_json_bytes(builder_image_inspect())
@@ -356,7 +356,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
                 canonical_json_bytes(post_container_inspect(build_id))
             )
         self.binary, self.bundle, self.native = self.make_release("first", fixture_elf())
-        self.profile = self.root / "rustinfer-profile"
+        self.profile = self.root / "riley-profile"
         self.profile.write_bytes(fixture_elf() + b"profile binary subject")
         self.profile.chmod(0o755)
         self.receipt_index = 0
@@ -365,10 +365,10 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         self.temporary.cleanup()
 
     def make_release(self, name: str, binary_contents: bytes) -> tuple[Path, Path, Path]:
-        binary = self.root / f"{name}-rustinfer"
+        binary = self.root / f"{name}-riley"
         binary.write_bytes(binary_contents)
         binary.chmod(0o755)
-        bundle = self.root / f"{name}-rustinfer.tar.gz"
+        bundle = self.root / f"{name}-riley.tar.gz"
         build_bundle(
             binary_path=binary,
             output=bundle,
@@ -547,7 +547,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
             self.check(evidence_a, evidence_b)
 
     def test_profile_binary_must_match_a_b_and_final(self) -> None:
-        second_profile = self.root / "second-rustinfer-profile"
+        second_profile = self.root / "second-riley-profile"
         second_profile.write_bytes(fixture_elf() + b"different profile bytes")
         second_profile.chmod(0o755)
         evidence_a = self.package("A")
@@ -563,7 +563,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "failed-post-run-receipt.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             relative = "logs/container-inspect-post.json"
             name = f"{root}/{relative}"
             member, contents = entries[name]
@@ -587,7 +587,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "forged-completion-receipt.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             relative = "logs/build-completion.json"
             name = f"{root}/{relative}"
             member, contents = entries[name]
@@ -611,7 +611,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "forged-completion-output.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             relative = "logs/build-completion.json"
             name = f"{root}/{relative}"
             member, contents = entries[name]
@@ -635,7 +635,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-command.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/manifest/build.json"
             member, contents = entries[name]
             assert contents is not None
@@ -655,7 +655,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-profile-command.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/manifest/build.json"
             member, contents = entries[name]
             assert contents is not None
@@ -675,7 +675,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-network-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -695,7 +695,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-environment-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -715,7 +715,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "injected-builder-environment.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             for relative in (
                 "logs/builder-image-inspect.json",
                 "logs/container-inspect.json",
@@ -745,7 +745,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "injected-builder-path.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             for relative in (
                 "logs/builder-image-inspect.json",
                 "logs/container-inspect.json",
@@ -772,7 +772,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "wrong-rustup-toolchain.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             for relative in (
                 "logs/builder-image-inspect.json",
                 "logs/container-inspect.json",
@@ -803,7 +803,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "host-pid-namespace-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -823,7 +823,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "extra-security-option-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -843,7 +843,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-command-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -863,7 +863,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-entrypoint-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -883,7 +883,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "named-workspace-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -924,7 +924,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "null-readonly-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -949,7 +949,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "custom-workspace-driver-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -984,7 +984,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "started-container-inspect.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
+            root = "riley-repro-build-a"
             name = f"{root}/logs/container-inspect.json"
             member, contents = entries[name]
             assert contents is not None
@@ -1037,8 +1037,8 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "changed-binary.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            root = "rustinfer-repro-build-a"
-            binary_name = f"{root}/bin/rustinfer"
+            root = "riley-repro-build-a"
+            binary_name = f"{root}/bin/riley"
             binary_member, binary_contents = entries[binary_name]
             assert binary_contents is not None
             replacement_binary = binary_contents + b"self-consistent fake claim"
@@ -1057,7 +1057,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
             manifest_member.size = len(replacement_manifest)
             entries[manifest_name] = (manifest_member, replacement_manifest)
 
-            update_checksum(entries, root, "bin/rustinfer", replacement_binary)
+            update_checksum(entries, root, "bin/riley", replacement_binary)
             update_checksum(entries, root, "manifest/build.json", replacement_manifest)
 
         rewrite_evidence(evidence_a, changed, mutate)
@@ -1072,7 +1072,7 @@ class ReproducibleBuildGateTests(unittest.TestCase):
         changed = self.root / "symlink.tar"
 
         def mutate(entries: dict[str, tuple[tarfile.TarInfo, bytes | None]]) -> None:
-            name = "rustinfer-repro-build-a/source.tar"
+            name = "riley-repro-build-a/source.tar"
             member, _ = entries[name]
             member.type = tarfile.SYMTYPE
             member.linkname = "/etc/passwd"
@@ -1144,8 +1144,8 @@ class ReproducibilityRunnerStaticTests(unittest.TestCase):
             'docker start --attach "${container_id}"',
             'post_inspect_path="${output_dir}/container-inspect-${lower_id}-post.json"',
             '--completion-receipt "${run_dir}/logs/build-completion.json"',
-            '--profile-binary "${run_dir}/artifacts/rustinfer-profile"',
-            '--final-profile-binary "${output_dir}/final/rustinfer-profile"',
+            '--profile-binary "${run_dir}/artifacts/riley-profile"',
+            '--final-profile-binary "${output_dir}/final/riley-profile"',
             'run_one A',
             'run_one B',
             "check_reproducible_build.py",
@@ -1186,12 +1186,12 @@ class ReproducibilityRunnerStaticTests(unittest.TestCase):
             "cargo build --locked --offline --release --features bench,cuda",
             contents,
         )
-        self.assertIn("--bin rustinfer-profile", contents)
+        self.assertIn("--bin riley-profile", contents)
         self.assertIn("CARGO_NET_OFFLINE=true", contents)
-        self.assertIn("target/release/rustinfer-profile", contents)
+        self.assertIn("target/release/riley-profile", contents)
         self.assertIn("write_reproducible_build_completion.py", contents)
         self.assertLess(
-            contents.index("install -m 0755 target/release/rustinfer-profile"),
+            contents.index("install -m 0755 target/release/riley-profile"),
             contents.index("write_reproducible_build_completion.py"),
         )
         for forbidden in (

@@ -30,7 +30,7 @@ sys.path.insert(0, str(BENCHMARK_SCRIPTS))
 import check_release_performance as performance  # noqa: E402
 
 
-SCHEMA_VERSION = "rustinfer.release-performance-runner-validation.v2"
+SCHEMA_VERSION = "riley.release-performance-runner-validation.v2"
 GATE_ID = "pr15-iteration-command-batch-exact-v1"
 BASELINE_PATH = ROOT / "benchmarks" / "release" / "performance-baseline-v1.json"
 MODEL_ID = "HuggingFaceTB/SmolLM2-135M"
@@ -492,8 +492,8 @@ def _validate_container_common(
         )
     environment = _container_environment(config.get("Env"), f"{label}.Config.Env")
     required_environment = dict(expected_environment)
-    required_environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
-    required_environment["RUSTINFER_PERF_CAPTURE_ID"] = capture_id
+    required_environment["RILEY_PERF_PAIR_INDEX"] = str(pair_index)
+    required_environment["RILEY_PERF_CAPTURE_ID"] = capture_id
     if not performance._exact_json_value(environment, required_environment):
         _fail(f"{label}.Config.Env", "must equal the exact image env plus runner overrides")
 
@@ -1091,12 +1091,12 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
             _fail("--run", "each raw run must use a distinct evidence directory")
         full_environment = {
             **image["environment"],
-            "RUSTINFER_PERF_SOURCE_REVISION": revision,
-            "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": source_sha,
-            "RUSTINFER_PERF_PROFILE_BINARY_SHA256": profile_sha,
-            "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": report_sha,
-            "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": image_digest,
-            "RUSTINFER_PERF_MODEL_TREE_SHA256": model_tree_sha,
+            "RILEY_PERF_SOURCE_REVISION": revision,
+            "RILEY_PERF_SOURCE_ARCHIVE_SHA256": source_sha,
+            "RILEY_PERF_PROFILE_BINARY_SHA256": profile_sha,
+            "RILEY_PERF_OPTIMIZER_REPORT_SHA256": report_sha,
+            "RILEY_PERF_OPTIMIZER_IMAGE_SHA256": image_digest,
+            "RILEY_PERF_MODEL_TREE_SHA256": model_tree_sha,
             "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
             "ALL_PROXY": "",
             "FTP_PROXY": "",
@@ -1111,7 +1111,7 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
         }
         read_only_mount_sources = {
             "/input/source.tar": str(args.source_archive.resolve()),
-            "/input/rustinfer-profile": str(args.profile_binary.resolve()),
+            "/input/riley-profile": str(args.profile_binary.resolve()),
             "/input/optimizer-correctness-report.json": str(
                 args.optimizer_correctness_report.resolve()
             ),
@@ -1261,8 +1261,8 @@ def validate(args: argparse.Namespace) -> dict[str, Any]:
         if set(tools) != performance.RUNNER_REQUIRED_TOOLS:
             _fail("--tool", "exact trusted tool inventory required")
         manifest_environment = dict(full_environment)
-        manifest_environment["RUSTINFER_PERF_PAIR_INDEX"] = "{pair_index}"
-        manifest_environment["RUSTINFER_PERF_CAPTURE_ID"] = "{capture_id}"
+        manifest_environment["RILEY_PERF_PAIR_INDEX"] = "{pair_index}"
+        manifest_environment["RILEY_PERF_CAPTURE_ID"] = "{capture_id}"
         runner_manifest = {
             "schema_version": performance.RUNNER_MANIFEST_SCHEMA,
             "candidate": {

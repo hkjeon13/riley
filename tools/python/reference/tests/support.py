@@ -8,7 +8,7 @@ import copy
 from dataclasses import dataclass
 from pathlib import Path
 
-from rustinfer_reference.constants import (
+from riley_reference.constants import (
     MODEL_CONFIG_SHA256,
     MODEL_WEIGHTS_SHA256,
     PRIMARY_GPU_COMPUTE_CAPABILITY,
@@ -25,13 +25,13 @@ from rustinfer_reference.constants import (
     TOKENIZER_SHA256,
     TRANSFORMERS_VERSION,
 )
-from rustinfer_reference.fixture import (
+from riley_reference.fixture import (
     BackendMetadata,
     CaseResult,
     FIXTURE_SOURCE_PATHS,
     summarize_values,
 )
-from rustinfer_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
+from riley_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
 
 
 def fixture_provenance() -> dict[str, object]:

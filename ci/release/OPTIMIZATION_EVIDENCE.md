@@ -18,11 +18,11 @@ resulting image.
 docker build \
   --no-cache \
   --file ci/release/OptimizationEvidence.Dockerfile \
-  --tag rustinfer-optimization-evidence:pr16 \
+  --tag riley-optimization-evidence:pr16 \
   .
 
 BUILDER_IMAGE_ID=$(docker image inspect \
-  --format '{{.Id}}' rustinfer-optimization-evidence:pr16)
+  --format '{{.Id}}' riley-optimization-evidence:pr16)
 ```
 
 The actual evidence container resolves that immutable image ID, uses
@@ -44,9 +44,9 @@ ci/run_remote_optimization_evidence.sh \
   --expected-source-archive-sha256 SOURCE_ARCHIVE_SHA256 \
   --expected-model-tree-sha256 MODEL_SHA256SUMS_SHA256 \
   --expected-profile-binary-sha256 PROFILE_BINARY_SHA256 \
-  --model-dir /tmp/rustinfer-pr16-model-93efa2f097d58c2a74874c7e644dbc9b0cee75a2 \
-  --profile-binary /path/to/reproducible/final/rustinfer-profile \
-  --output-dir /home/psyche/rustinfer-artifacts/pr16/optimizer-evidence \
+  --model-dir /tmp/riley-pr16-model-93efa2f097d58c2a74874c7e644dbc9b0cee75a2 \
+  --profile-binary /path/to/reproducible/final/riley-profile \
+  --output-dir /home/psyche/riley-artifacts/pr16/optimizer-evidence \
   --source-revision HEAD
 ```
 
@@ -59,7 +59,7 @@ archive.
 
 ## Execution receipt v3
 
-Receipt schema `rustinfer.optimizer-execution-receipt.v3` records these exact
+Receipt schema `riley.optimizer-execution-receipt.v3` records these exact
 commands in order:
 
 1. Python-free locked CUDA compile smoke.

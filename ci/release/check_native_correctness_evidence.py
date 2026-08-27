@@ -36,16 +36,16 @@ REFERENCE_ROOT = REPOSITORY_ROOT / "tools/python/reference"
 if str(REFERENCE_ROOT) not in sys.path:
     sys.path.insert(0, str(REFERENCE_ROOT))
 
-from rustinfer_reference import calibration  # noqa: E402
-from rustinfer_reference import oracle_calibration  # noqa: E402
-from rustinfer_reference.constants import RUNTIME_DEPENDENCY_CLASS  # noqa: E402
+from riley_reference import calibration  # noqa: E402
+from riley_reference import oracle_calibration  # noqa: E402
+from riley_reference.constants import RUNTIME_DEPENDENCY_CLASS  # noqa: E402
 from release_common import (  # noqa: E402
     ReleaseContractError,
     validate_calibration_binary,
 )
 
 
-SCHEMA_VERSION = "rustinfer.native-correctness-raw-evidence.v1"
+SCHEMA_VERSION = "riley.native-correctness-raw-evidence.v1"
 PAYLOAD_NAMES = (
     "candidate-source.tar",
     "oracle-source.tar",
@@ -74,7 +74,7 @@ MAX_SOURCE_TOTAL_BYTES = 8 * 1024 * 1024 * 1024
 MAX_SAFETENSORS_HEADER_BYTES = 32 * 1024 * 1024
 COPY_BLOCK_BYTES = 1024 * 1024
 CANDIDATE_BINARY_COMMON_MARKERS = (
-    b"rustinfer-native",
+    b"riley-native",
     b"calibrate",
     b"--repository-root",
     b"--model",
@@ -975,7 +975,7 @@ def _verify_manifest_sources(
         raise calibration.CalibrationError(
             "language-neutral correctness gate manifest differs from tool"
         )
-    from rustinfer_reference.fixture import load_prompts
+    from riley_reference.fixture import load_prompts
 
     prompts_path = root / manifest["provenance"]["sources"]["prompts"]["path"]
     prompts, corpus_sha256 = load_prompts(prompts_path)
@@ -1005,11 +1005,11 @@ def _verify_manifest_sources(
     lane = calibration._load_json_object(lane_path, "lane manifest")
     if manifest["artifact_kind"] == calibration.CANDIDATE_KIND:
         if (
-            lane.get("lane_id") != "rustinfer-native"
-            or lane.get("implementation_id") != "rustinfer-native"
+            lane.get("lane_id") != "riley-native"
+            or lane.get("implementation_id") != "riley-native"
             or lane.get("runtime_dependency_class") != "native-production"
         ):
-            raise calibration.CalibrationError("candidate lane manifest is not rustinfer-native")
+            raise calibration.CalibrationError("candidate lane manifest is not riley-native")
         engine = calibration._expect_object(lane.get("engine"), "candidate lane.engine")
         if engine.get("revision") != manifest["producer"]["engine_revision"]:
             raise calibration.CalibrationError("candidate engine revision differs from lane manifest")
@@ -1117,7 +1117,7 @@ def replay_raw_evidence(
         return mapping
 
     try:
-        with tempfile.TemporaryDirectory(prefix="rustinfer-native-replay-") as directory:
+        with tempfile.TemporaryDirectory(prefix="riley-native-replay-") as directory:
             temp = Path(directory)
             raw_root = temp / "raw"
             raw_root.mkdir()

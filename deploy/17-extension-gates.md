@@ -1,6 +1,7 @@
 # PR 17 — 후속 확장 진입 Gate
 
-**상태:** Planned  
+**상태:** Complete — fail-closed metadata/transition gate; bootstrap은 empty-by-default
+
 **선행 조건:** [PR 16](16-reliability-and-release.md)  
 **다음:** 없음
 
@@ -10,20 +11,113 @@
 
 첫 release 이후 기능 요청이 core를 무질서하게 확장하지 않도록, 각 기능의 진입 조건과 독립된 작업 축을 정의한다. 수학적 치환이나 근사 기법도 [PR 00](00-pr-contract.md)의 의미 보존 등급에 따라 별도 deploy 문서와 benchmark contract를 만든 뒤 시작한다.
 
+이 단계가 구현하는 것은 확장 자체가 아니라 **확장을 시작하기 위한 닫힌
+allowlist**다. v1 bootstrap artifact는 빈 registry로 landing하며, 이후 현재 승인
+집합은 [`extensions/registry.json`](extensions/registry.json)이 유일하게 결정한다.
+아래 로드맵에 이름이 있다는 사실만으로 구현을 시작할 수 없다.
+
+PR 16의 이번 순차 구현은 명시적인 soak waiver로 다음 단계 진행만 허용했다. 이후
+release owner가 별도 prerelease 예외를 승인했지만, 이 gate의 구현 자체는 PR 16 soak
+통과나 release qualification을 의미하지 않으며 기존 release checker나 공통 benchmark
+result schema를 변경하지 않는다.
+
+## 구현된 admission boundary
+
+확장을 구현하기 전에 admission-only PR로 다음 네 항목을 함께 등록한다.
+
+```text
+deploy/extensions/registry.json
+deploy/extensions/proposals/<extension-id>.json
+deploy/extensions/plans/<extension-id>.md
+benchmarks/extensions/contracts/<extension-id>.json
+```
+
+[`ci/check_extension_gates.py`](../ci/check_extension_gates.py)는 Python 표준
+라이브러리만 사용하며 다음 drift를 fail closed로 거부한다.
+
+- duplicate JSON key, extension ID, path, runtime flag
+- schema에 없는 field와 알 수 없는 semantic class
+- registry에 없는 proposal/plan/benchmark contract 또는 누락된 등록 파일
+- absolute path, `..`, 비정규 POSIX path, symlink, 허용 디렉터리 이탈
+- registry, proposal, benchmark contract 사이의 ID·등급·경로·flag·metric 불일치
+- `approved-for-implementation` 외 상태, roadmap에 없는 track, 승인 질문 답변 누락
+- admission 시점의 enabled/stable default
+- 의미 보존 등급별 필수 검증 계약 누락
+- reference/fallback/workload의 Git 미추적, `.git` control path, SHA-256 bytes drift
+- track과 semantic class의 닫힌 조합, 공통 result schema 밖 metric path
+- single-GPU 비교 환경, sampling/cold-warm를 포함한 동일조건 실제 값 누락
+
+빈 registry는 명시적으로 성공한다. 이는 “모든 확장 허용”이 아니라 “허용된 확장
+0개”를 뜻한다. 형식, 별도 PR 경계와 실행 명령은
+[`extensions/README.md`](extensions/README.md), benchmark 반복·환경 계약은
+[`benchmarks/extensions/README.md`](../benchmarks/extensions/README.md)를 따른다.
+
+PR CI는 full base SHA를 전달한다. checker는 bootstrap-empty, v1 append-only,
+기존 registry entry와 proposal/plan/contract bytes 불변, 새 admission 한 개의 정확한
+four-file diff를 rename source까지 포함해 검사한다. bootstrap 이후 production
+crate에 새 `RILEY_EXPERIMENTAL_*` flag를 넣으려면 정확히 한 approved
+implementation link가 필요하다. Markdown plan의 의미는 PR template reviewer
+check로 닫는다.
+
 ## 공통 진입 규칙
 
 모든 확장 제안은 먼저 다음을 선언한다.
 
-```yaml
-semantic_class: E0 | E1 | A1 | M1
-reference_path: string
-fallback_path: string
-primary_metric: string
-quality_or_error_metric: string
-runtime_flag: string
+```json
+{
+  "status": "approved-for-implementation",
+  "track": "one closed roadmap track",
+  "semantic_class": "reference | E0 | E1 | A1 | M1",
+  "reference_path": "existing/repository/file",
+  "reference_sha256": "64 lowercase hex characters",
+  "fallback_path": "existing/repository/file",
+  "fallback_sha256": "64 lowercase hex characters",
+  "primary_metric": "closed common-result performance/resource path",
+  "required_metrics": ["closed track-specific metric set"],
+  "quality_or_error_metric": "closed class/track quality path",
+  "runtime_flag": "RILEY_EXPERIMENTAL_*",
+  "default_enabled": false,
+  "stable_default": false
+}
 ```
 
-`A1` 또는 `M1` 기능은 stable 기본값이 될 수 없다. `E1`도 분포 검증과 운영 rollback이 완료되기 전에는 experimental로 유지한다.
+같은 admission의 registry entry는 `implementation_link_path: null`로 시작한다.
+reference와 fallback은 서로 다른 Git-tracked regular file이어야 하며 path와 실제
+bytes SHA-256이 proposal/contract에서 일치한다. workload도 label이 아니라
+Git-tracked `{path, sha256}` object다. 비교 환경은 `gpu_count: 1`과 정확한
+GPU/driver/CUDA/model ID/full 40-hex model revision/dtype, unique positive
+concurrency/prompt/output 배열, 닫힌 sampling config, `cold`와 `warm`을 동결한다.
+
+track/class 조합은 다음처럼 닫는다: quantization=`{E0,A1}`,
+low-rank-weight-compression=`{A1}`, kv-compression=`{A1}`,
+prefix-cache=`{reference}`, kv-offload-prefetch=`{reference}`,
+query-aware-kv-selection=`{A1}`, moe=`{E0,M1}`, mamba-ssm=`{E0}`,
+multimodal=`{E0,M1}`, speculative-decoding=`{E0,E1}`,
+jacobi-lookahead=`{E0,A1,M1}`. Multi-GPU는 current common result contract의
+`gpu_count: 1`과 맞지 않아 v1 allowlist에서 제외한다.
+
+primary와 quality metric은 서로 달라야 한다. primary는 공통 result schema의
+track별 performance/resource scalar allowlist에 속하고 각 track의 닫힌
+`required_metrics` 집합에도 포함되어야 한다. speculative track은 acceptance,
+target-call, draft/verify latency, rejected suffix, rollback, lookahead와 end-to-end
+latency/throughput 지표를 모두 요구한다. E0 tolerance는 실제
+비교 환경 dtype 하나와 정확히 일치하고 `atol`/`rtol`은 각각 1 미만이다. v1
+quality path는 `reference`/`E0`의
+`failure_count`와 query-aware A1의 `sparse_attention.omitted_mass_bound`만 현재
+admission 가능하며, omitted-mass error budget은 `fraction` 단위와 `[0, 1)` 범위다.
+`sparse_attention.exact_fallback_rate`는 운영 metric이지
+quality/error budget이 아니다. 나머지 A1/E1/M1은 적합한 quality field를 갖는 공통
+result schema version-up 전까지 fail closed다.
+
+v1 admission은 구현 작업 시작만 승인한다. 후속 구현 PR은 null link를 한 번만
+experimental implementation manifest로 연결해 approved ID/plan/contract/flag와
+tracked source, `{path, sha256, test_id}` auto-discovered workspace integration
+test를 결합한다. test ID는 hidden/cfg/ignored target이 아닌 direct top-level
+`#[test] fn`이어야 한다. checker의 정적 검사는 test 본문의 runtime semantics
+증명이 아니므로 reviewer가 실제 default-off, flag-on,
+stable fallback control flow와 CPU workspace test 포함을 확인한다. v1은 stable
+promotion, performance result receipt 판정, withdrawal, admitted contract 수정을
+지원하지 않으며 먼저 schema v2 transition이 필요하다.
 
 ---
 
@@ -503,10 +597,12 @@ x_i^(t+1) = F_i(x_1^t, ..., x_(i-1)^t)
 
 ## 확장 승인 질문
 
-새 기능마다 다음을 답한다.
+새 기능마다 다음을 답한다. proposal schema의 닫힌 `approval_answers` object가 열
+질문을 기계적으로 요구하며, semantic class, reference/fallback, implementation
+boundary 같은 공통 field와 함께 checker가 교차 검증한다.
 
 1. 실제 사용자 workload에서 어떤 병목을 해결하는가?
-2. `E0`, `E1`, `A1`, `M1` 중 무엇인가?
+2. `reference`, `E0`, `E1`, `A1`, `M1` 중 무엇이며 track에 허용되는 조합인가?
 3. 기존 IR로 표현 가능한가?
 4. core에 넣어야 하는가, plugin/backend로 분리 가능한가?
 5. correctness reference는 무엇인가?
@@ -518,6 +614,21 @@ x_i^(t+1) = F_i(x_1^t, ..., x_(i-1)^t)
 
 ## 완료 기준
 
-이 문서는 구현 완료 문서가 아니라 범위 통제 문서다. 각 확장은 별도 deploy 문서와 benchmark contract를 만든 뒤 시작한다.
+PR 17의 완료 범위는 확장 구현이 아니라 범위 통제 장치다. 다음 항목을 구현했다.
+
+- empty-by-default closed registry와 proposal/registry/implementation JSON schema
+- 별도 extension benchmark contract schema와 공통 result schema 비변경 원칙
+- registry completeness, Git tracking/hash, path/symlink containment, cross-file,
+  track/class/metric/environment별 fail-closed 검사
+- `reference`·현재 표현 가능한 `E0`·query-aware `A1`의 정상/실패, 공통 quality
+  field가 없는 A1/E1/M1의 version-pending 거부, 빈 registry를 검증하는 CPU unit test
+- base-revision의 bootstrap-empty, append-only admission, immutable artifact,
+  exact four-file diff와 experimental implementation link 검사
+- production CPU CI, PR template, 기여 계약 연결
+
+각 확장은 앞으로도 admission-only PR을 먼저 병합한 뒤 별도 deploy plan의 작은 PR로
+구현한다. bootstrap/default registry는 비어 있고, landing 이후 현재 승인 수는
+registry 내용에서 동적으로 판정한다. stable promotion과 withdrawal은 v1 완료 범위가
+아니며 schema v2 transition을 먼저 설계해야 한다.
 
 [← 이전](16-reliability-and-release.md) | [목차](README.md)

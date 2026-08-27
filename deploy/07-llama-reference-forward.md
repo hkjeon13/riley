@@ -179,7 +179,7 @@ remote strict Clippy:               workspace/all-targets/all-features `-D warni
 remote full SmolLM2 forward:        1 passed (18 captured/compared; 17 gated)
 remote attention tests:             2 passed (S=1,2,5,7,31,32,33)
 remote primitive regressions:       3 passed
-100 hot execute calls:              rustinfer-owned CUDA allocation counters unchanged
+100 hot execute calls:              riley-owned CUDA allocation counters unchanged
 failure/cleanup checks:             cold partial cleanup, foreign stream, explicit close passed
 Compute Sanitizer forward:          1 passed / 0 errors / 0 bytes leaked
 Compute Sanitizer attention:        2 passed / 0 errors / 0 bytes leaked
@@ -201,7 +201,7 @@ device total에는 선택된 GEMM workspace가 추가된다. Materialized attent
 `18 × S²` bytes이므로 기본 512 MiB attention budget은 model maximum 8192와 별개로
 `S≤5461`까지만 허용하며, 더 긴 reference forward에는 budget을 명시적으로 늘려야 한다.
 
-100회 equality는 rustinfer가 소유한 CUDA device/pinned allocation counter 기준이다.
+100회 equality는 riley가 소유한 CUDA device/pinned allocation counter 기준이다.
 성공 경로의 Compute Sanitizer는 zero-error/zero-leak이지만 arbitrary device-fault injection
 뒤의 driver/cuBLAS 내부 allocation 회수까지 증명하지 않는다. Ambiguous native completion은
 stale handle을 재노출하지 않고 fail-closed retain할 수 있으며, 실제 device-fault 격리와
@@ -263,7 +263,7 @@ main commit만 골라 되돌리지 않고 PR 07 구현 range `5a5b366..962d530`�
 - [x] S=7 동일 token IDs의 마지막 `[V]` logits 행이 허용 오차 내 일치
 - [x] 마지막 logits 행의 greedy next token이 golden result와 일치
 - [x] attention primitive의 S=1,2,5,7,31,32,33에서 causal mask 정확
-- [x] token upload 뒤 100회 hot `execute`에 rustinfer-owned allocation 증가 없음
+- [x] token upload 뒤 100회 hot `execute`에 riley-owned allocation 증가 없음
 - [x] graph 실행 오류가 layer 또는 global op 위치를 표시
 
 **중단 조건:** token 결과가 일치하지 않으면 tolerance를 확대하지 말고 최초 divergence layer를 찾는다.

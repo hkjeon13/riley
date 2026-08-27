@@ -29,7 +29,7 @@ from release_common import (  # noqa: E402
     validate_calibration_binary,
 )
 from test_release import DEPENDENCIES, fixture_elf  # noqa: E402
-from rustinfer_reference import calibration, oracle_calibration  # noqa: E402
+from riley_reference import calibration, oracle_calibration  # noqa: E402
 
 
 CALIBRATION_TEST = (

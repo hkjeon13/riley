@@ -1,0 +1,29 @@
+[package]
+name = "riley-scheduler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Scheduling state boundary for Riley"
+
+[features]
+default = []
+cuda = ["riley-runtime/cuda"]
+
+[dependencies]
+riley-core = { path = "../riley-core" }
+riley-runtime = { path = "../riley-runtime" }
+
+[dev-dependencies]
+riley-model = { path = "../riley-model" }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "llama_iteration_gpu"
+path = "tests/llama_iteration_gpu.rs"
+required-features = ["cuda"]

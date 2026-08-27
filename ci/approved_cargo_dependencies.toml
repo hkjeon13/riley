@@ -10,77 +10,77 @@ registry_source = "registry+https://github.com/rust-lang/crates.io-index"
 workspace_msrv = "1.85"
 
 [[direct_dependencies]]
-owner = "rustinfer-model"
+owner = "riley-model"
 name = "serde"
 version = "1.0.228"
 default_features = true
 features = ["derive"]
 
 [[direct_dependencies]]
-owner = "rustinfer-model"
+owner = "riley-model"
 name = "serde_json"
 version = "1.0.145"
 default_features = true
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-model"
+owner = "riley-model"
 name = "sha2"
 version = "0.11.0"
 default_features = false
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-model"
+owner = "riley-model"
 name = "unicode-normalization"
 version = "0.1.25"
 default_features = true
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-runtime"
+owner = "riley-runtime"
 name = "sha2"
 version = "0.11.0"
 default_features = false
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-native"
+owner = "riley-native"
 name = "serde"
 version = "1.0.228"
 default_features = true
 features = ["derive"]
 
 [[direct_dependencies]]
-owner = "rustinfer-native"
+owner = "riley-native"
 name = "serde_json"
 version = "1.0.145"
 default_features = true
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-native"
+owner = "riley-native"
 name = "sha2"
 version = "0.11.0"
 default_features = false
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-server"
+owner = "riley-server"
 name = "libc"
 version = "0.2.189"
 default_features = true
 features = []
 
 [[direct_dependencies]]
-owner = "rustinfer-server"
+owner = "riley-server"
 name = "serde"
 version = "1.0.228"
 default_features = true
 features = ["derive"]
 
 [[direct_dependencies]]
-owner = "rustinfer-server"
+owner = "riley-server"
 name = "serde_json"
 version = "1.0.145"
 default_features = true

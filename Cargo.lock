@@ -91,22 +91,22 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustinfer-core"
+name = "riley-core"
 version = "0.1.0"
 
 [[package]]
-name = "rustinfer-cuda"
+name = "riley-cuda"
 version = "0.1.0"
 dependencies = [
- "rustinfer-core",
+ "riley-core",
 ]
 
 [[package]]
-name = "rustinfer-model"
+name = "riley-model"
 version = "0.1.0"
 dependencies = [
- "rustinfer-core",
- "rustinfer-tensor",
+ "riley-core",
+ "riley-tensor",
  "serde",
  "serde_json",
  "sha2",
@@ -114,57 +114,57 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustinfer-native"
+name = "riley-native"
 version = "0.1.0"
 dependencies = [
- "rustinfer-cuda",
- "rustinfer-model",
- "rustinfer-runtime",
+ "riley-cuda",
+ "riley-model",
+ "riley-runtime",
  "serde",
  "serde_json",
  "sha2",
 ]
 
 [[package]]
-name = "rustinfer-runtime"
+name = "riley-runtime"
 version = "0.1.0"
 dependencies = [
- "rustinfer-core",
- "rustinfer-cuda",
- "rustinfer-model",
- "rustinfer-tensor",
+ "riley-core",
+ "riley-cuda",
+ "riley-model",
+ "riley-tensor",
  "serde_json",
  "sha2",
 ]
 
 [[package]]
-name = "rustinfer-scheduler"
+name = "riley-scheduler"
 version = "0.1.0"
 dependencies = [
- "rustinfer-core",
- "rustinfer-model",
- "rustinfer-runtime",
+ "riley-core",
+ "riley-model",
+ "riley-runtime",
 ]
 
 [[package]]
-name = "rustinfer-server"
+name = "riley-server"
 version = "0.1.0"
 dependencies = [
  "libc",
- "rustinfer-core",
- "rustinfer-model",
- "rustinfer-runtime",
- "rustinfer-scheduler",
+ "riley-core",
+ "riley-model",
+ "riley-runtime",
+ "riley-scheduler",
  "serde",
  "serde_json",
 ]
 
 [[package]]
-name = "rustinfer-tensor"
+name = "riley-tensor"
 version = "0.1.0"
 dependencies = [
- "rustinfer-core",
- "rustinfer-cuda",
+ "riley-core",
+ "riley-cuda",
 ]
 
 [[package]]

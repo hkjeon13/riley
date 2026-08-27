@@ -3,11 +3,11 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch_parent=${TMPDIR:-/tmp}
-scratch=$(mktemp -d "$scratch_parent/rustinfer-production-workspace.XXXXXX")
+scratch=$(mktemp -d "$scratch_parent/riley-production-workspace.XXXXXX")
 
 cleanup() {
     case "$scratch" in
-        "$scratch_parent"/rustinfer-production-workspace.*) rm -rf -- "$scratch" ;;
+        "$scratch_parent"/riley-production-workspace.*) rm -rf -- "$scratch" ;;
         *) echo "refusing to remove unexpected scratch path: $scratch" >&2 ;;
     esac
 }

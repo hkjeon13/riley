@@ -58,8 +58,8 @@ import time
 PYTHON_SHA256 = "7d51cd6b48b521277f5caa4610a82126e315fa2be4df069823a8b1eeb5bd4a86"
 BASH_SHA256 = "59474588a312b6b6e73e5a42a59bf71e62b55416b6c9d5e4a6e1c630c2a9ecd4"
 DOCKER_SHA256 = "29be5f37ee7fcb32bed170244a7d94f2eb94d272912e0bbe9328374e2eb4b7f6"
-LOCK_PATH = "/var/tmp/rustinfer-server-4096-gpu-evidence.lock"
-LABEL = "org.rustinfer.release-performance-supervisor"
+LOCK_PATH = "/var/tmp/riley-server-4096-gpu-evidence.lock"
+LABEL = "org.riley.release-performance-supervisor"
 PR_SET_PDEATHSIG = 1
 
 def file_sha256(path):
@@ -119,11 +119,11 @@ if child_pid == 0:
         "LC_ALL": "C",
         "TZ": "UTC",
         "HOME": "/home/psyche",
-        "RUSTINFER_PERF_SUPERVISOR_PID": str(supervisor_pid),
-        "RUSTINFER_PERF_SUPERVISOR_EXE": "/usr/bin/python3.10",
-        "RUSTINFER_PERF_SUPERVISOR_LOCK_FD": str(lock_fd),
-        "RUSTINFER_PERF_SUPERVISOR_LOCK_ID": f"{metadata.st_dev}:{metadata.st_ino}",
-        "RUSTINFER_PERF_SUPERVISOR_TOKEN": supervisor_token,
+        "RILEY_PERF_SUPERVISOR_PID": str(supervisor_pid),
+        "RILEY_PERF_SUPERVISOR_EXE": "/usr/bin/python3.10",
+        "RILEY_PERF_SUPERVISOR_LOCK_FD": str(lock_fd),
+        "RILEY_PERF_SUPERVISOR_LOCK_ID": f"{metadata.st_dev}:{metadata.st_ino}",
+        "RILEY_PERF_SUPERVISOR_TOKEN": supervisor_token,
     }
     os.execve(
         "/usr/bin/bash",
@@ -164,7 +164,7 @@ docker_environment = {
     "LC_ALL": "C",
     "TZ": "UTC",
     "HOME": "/home/psyche",
-    "DOCKER_CONFIG": "/nonexistent/rustinfer-release-performance-docker-config",
+    "DOCKER_CONFIG": "/nonexistent/riley-release-performance-docker-config",
 }
 
 def run_docker(arguments):
@@ -203,7 +203,7 @@ while True:
                 break
             inspected = run_docker([
                 "container", "inspect", "--format",
-                "{{ index .Config.Labels \"org.rustinfer.release-performance-supervisor\" }} {{.State.Status}}",
+                "{{ index .Config.Labels \"org.riley.release-performance-supervisor\" }} {{.State.Status}}",
                 container_id,
             ])
             inspected_fields = inspected.stdout.split()
@@ -245,43 +245,43 @@ raise SystemExit(125)
 fi
 shift
 
-[[ ${RUSTINFER_PERF_SUPERVISOR_PID:-} =~ ^[1-9][0-9]*$ ]] || {
+[[ ${RILEY_PERF_SUPERVISOR_PID:-} =~ ^[1-9][0-9]*$ ]] || {
     echo 'release performance: supervisor PID was not authenticated' >&2
     exit 2
 }
-[[ ${PPID} == "${RUSTINFER_PERF_SUPERVISOR_PID}" ]] || {
+[[ ${PPID} == "${RILEY_PERF_SUPERVISOR_PID}" ]] || {
     echo 'release performance: supervisor is not the direct parent' >&2
     exit 2
 }
-[[ ${RUSTINFER_PERF_SUPERVISOR_EXE:-} == /usr/bin/python3.10 ]] \
+[[ ${RILEY_PERF_SUPERVISOR_EXE:-} == /usr/bin/python3.10 ]] \
     && [[ /proc/${PPID}/exe -ef /usr/bin/python3.10 ]] || {
         echo 'release performance: supervisor executable differs from reviewed Python' >&2
         exit 2
     }
-[[ ${RUSTINFER_PERF_SUPERVISOR_LOCK_FD:-} =~ ^[0-9]+$ ]] \
-    && ((RUSTINFER_PERF_SUPERVISOR_LOCK_FD >= 3)) || {
+[[ ${RILEY_PERF_SUPERVISOR_LOCK_FD:-} =~ ^[0-9]+$ ]] \
+    && ((RILEY_PERF_SUPERVISOR_LOCK_FD >= 3)) || {
     echo 'release performance: supervisor lock descriptor is invalid' >&2
     exit 2
 }
-[[ ${RUSTINFER_PERF_SUPERVISOR_LOCK_ID:-} =~ ^[0-9]+:[0-9]+$ ]] || {
+[[ ${RILEY_PERF_SUPERVISOR_LOCK_ID:-} =~ ^[0-9]+:[0-9]+$ ]] || {
     echo 'release performance: supervisor lock inode identity is invalid' >&2
     exit 2
 }
-[[ ${RUSTINFER_PERF_SUPERVISOR_TOKEN:-} =~ ^[0-9a-f]{64}$ ]] || {
+[[ ${RILEY_PERF_SUPERVISOR_TOKEN:-} =~ ^[0-9a-f]{64}$ ]] || {
     echo 'release performance: supervisor cleanup token is invalid' >&2
     exit 2
 }
-readonly PERF_SUPERVISOR_PID=${RUSTINFER_PERF_SUPERVISOR_PID}
-readonly PERF_SUPERVISOR_LOCK_FD=${RUSTINFER_PERF_SUPERVISOR_LOCK_FD}
-readonly PERF_SUPERVISOR_LOCK_ID=${RUSTINFER_PERF_SUPERVISOR_LOCK_ID}
-readonly PERF_SUPERVISOR_TOKEN=${RUSTINFER_PERF_SUPERVISOR_TOKEN}
+readonly PERF_SUPERVISOR_PID=${RILEY_PERF_SUPERVISOR_PID}
+readonly PERF_SUPERVISOR_LOCK_FD=${RILEY_PERF_SUPERVISOR_LOCK_FD}
+readonly PERF_SUPERVISOR_LOCK_ID=${RILEY_PERF_SUPERVISOR_LOCK_ID}
+readonly PERF_SUPERVISOR_TOKEN=${RILEY_PERF_SUPERVISOR_TOKEN}
 [[ /proc/${PERF_SUPERVISOR_PID}/fd/${PERF_SUPERVISOR_LOCK_FD} -ef \
-    /var/tmp/rustinfer-server-4096-gpu-evidence.lock ]] || {
+    /var/tmp/riley-server-4096-gpu-evidence.lock ]] || {
     echo 'release performance: supervisor does not hold the canonical lock inode' >&2
     exit 2
 }
 [[ /proc/$$/fd/${PERF_SUPERVISOR_LOCK_FD} -ef \
-    /var/tmp/rustinfer-server-4096-gpu-evidence.lock ]] || {
+    /var/tmp/riley-server-4096-gpu-evidence.lock ]] || {
     echo 'release performance: authentication lock descriptor was not inherited' >&2
     exit 2
 }
@@ -319,11 +319,11 @@ eval "exec ${PERF_SUPERVISOR_LOCK_FD}>&-"
     exit 2
 }
 unset \
-    RUSTINFER_PERF_SUPERVISOR_PID \
-    RUSTINFER_PERF_SUPERVISOR_EXE \
-    RUSTINFER_PERF_SUPERVISOR_LOCK_FD \
-    RUSTINFER_PERF_SUPERVISOR_LOCK_ID \
-    RUSTINFER_PERF_SUPERVISOR_TOKEN
+    RILEY_PERF_SUPERVISOR_PID \
+    RILEY_PERF_SUPERVISOR_EXE \
+    RILEY_PERF_SUPERVISOR_LOCK_FD \
+    RILEY_PERF_SUPERVISOR_LOCK_ID \
+    RILEY_PERF_SUPERVISOR_TOKEN
 
 for unsafe_name in \
     BASH_ENV ENV CDPATH LD_PRELOAD LD_AUDIT LD_LIBRARY_PATH PYTHONPATH PYTHONHOME \
@@ -352,7 +352,7 @@ fi
 
 readonly DESIGNATED_HOSTNAME='psyche-MS-7D91'
 readonly DESIGNATED_GPU_UUID='GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0'
-readonly GPU_LOCK_PATH='/var/tmp/rustinfer-server-4096-gpu-evidence.lock'
+readonly GPU_LOCK_PATH='/var/tmp/riley-server-4096-gpu-evidence.lock'
 readonly MAX_PREFLIGHT_ATTEMPTS=41
 readonly PREFLIGHT_RETRY_SECONDS=30
 readonly BASH_BIN=/usr/bin/bash
@@ -613,7 +613,7 @@ esac
 export DOCKER_CONFIG="${output_dir}/inputs/docker-config"
 
 source_archive="${output_dir}/source.tar"
-profile_snapshot="${output_dir}/inputs/rustinfer-profile"
+profile_snapshot="${output_dir}/inputs/riley-profile"
 optimizer_report_snapshot="${output_dir}/inputs/optimization-correctness-report.json"
 model_snapshot="${output_dir}/inputs/model"
 /usr/bin/mkdir -m 0700 "${model_snapshot}"
@@ -669,7 +669,7 @@ run_preflight() {
         stdout=$(printf '%s/attempt-%03d.stdout' "${attempt_dir}" "${attempt}")
         stderr=$(printf '%s/attempt-%03d.stderr' "${attempt_dir}" "${attempt}")
         set +e
-        RUSTINFER_PREFLIGHT_OUTPUT_ROOT="${output_dir}" \
+        RILEY_PREFLIGHT_OUTPUT_ROOT="${output_dir}" \
             "${BASH_BIN}" "${repository_root}/benchmarks/scripts/preflight.sh" \
             >"${stdout}" 2>"${stderr}"
         status=$?
@@ -853,15 +853,15 @@ for pair_index in 1 2 3 4 5; do
         --security-opt no-new-privileges:true \
         --pids-limit 512 \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=2147483648 \
-        --label "org.rustinfer.release-performance-supervisor=${PERF_SUPERVISOR_TOKEN}" \
-        --env "RUSTINFER_PERF_PAIR_INDEX=${pair_index}" \
-        --env "RUSTINFER_PERF_CAPTURE_ID=${capture_id}" \
-        --env "RUSTINFER_PERF_SOURCE_REVISION=${source_revision}" \
-        --env "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
-        --env "RUSTINFER_PERF_PROFILE_BINARY_SHA256=${expected_profile_binary_sha256}" \
-        --env "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256=${expected_optimizer_correctness_report_sha256}" \
-        --env "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256=${optimizer_image#sha256:}" \
-        --env "RUSTINFER_PERF_MODEL_TREE_SHA256=${expected_model_tree_sha256}" \
+        --label "org.riley.release-performance-supervisor=${PERF_SUPERVISOR_TOKEN}" \
+        --env "RILEY_PERF_PAIR_INDEX=${pair_index}" \
+        --env "RILEY_PERF_CAPTURE_ID=${capture_id}" \
+        --env "RILEY_PERF_SOURCE_REVISION=${source_revision}" \
+        --env "RILEY_PERF_SOURCE_ARCHIVE_SHA256=${expected_source_archive_sha256}" \
+        --env "RILEY_PERF_PROFILE_BINARY_SHA256=${expected_profile_binary_sha256}" \
+        --env "RILEY_PERF_OPTIMIZER_REPORT_SHA256=${expected_optimizer_correctness_report_sha256}" \
+        --env "RILEY_PERF_OPTIMIZER_IMAGE_SHA256=${optimizer_image#sha256:}" \
+        --env "RILEY_PERF_MODEL_TREE_SHA256=${expected_model_tree_sha256}" \
         --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
         --env ALL_PROXY= \
         --env FTP_PROXY= \
@@ -874,7 +874,7 @@ for pair_index in 1 2 3 4 5; do
         --env https_proxy= \
         --env no_proxy= \
         --mount "type=bind,source=${source_archive},destination=/input/source.tar,readonly" \
-        --mount "type=bind,source=${profile_snapshot},destination=/input/rustinfer-profile,readonly" \
+        --mount "type=bind,source=${profile_snapshot},destination=/input/riley-profile,readonly" \
         --mount "type=bind,source=${optimizer_report_snapshot},destination=/input/optimizer-correctness-report.json,readonly" \
         --mount "type=bind,source=${model_snapshot},destination=/model,readonly" \
         --mount "type=bind,source=${run_evidence_dir},destination=/evidence" \
@@ -1034,7 +1034,7 @@ sys.path.insert(0, sys.argv[2])
 import check_release_performance as performance
 receipt = performance.load_runner_receipt_root(sys.argv[1])
 print(json.dumps({
-    "schema_version": "rustinfer.release-performance-receipt-replay.v1",
+    "schema_version": "riley.release-performance-receipt-replay.v1",
     "status": "passed",
     "container_ids": receipt["container_ids"],
     "workspace_volume_names": receipt["workspace_volume_names"],

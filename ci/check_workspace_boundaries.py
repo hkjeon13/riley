@@ -20,17 +20,17 @@ from typing import Any
 
 
 EXPECTED_PRODUCTION_CRATES = {
-    "crates/rustinfer-core": "rustinfer-core",
-    "crates/rustinfer-cuda": "rustinfer-cuda",
-    "crates/rustinfer-tensor": "rustinfer-tensor",
-    "crates/rustinfer-model": "rustinfer-model",
-    "crates/rustinfer-runtime": "rustinfer-runtime",
-    "crates/rustinfer-scheduler": "rustinfer-scheduler",
-    "crates/rustinfer-server": "rustinfer-server",
+    "crates/riley-core": "riley-core",
+    "crates/riley-cuda": "riley-cuda",
+    "crates/riley-tensor": "riley-tensor",
+    "crates/riley-model": "riley-model",
+    "crates/riley-runtime": "riley-runtime",
+    "crates/riley-scheduler": "riley-scheduler",
+    "crates/riley-server": "riley-server",
 }
 
 EXPECTED_DEVELOPMENT_CRATES = {
-    "crates/rustinfer-native": "rustinfer-native",
+    "crates/riley-native": "riley-native",
 }
 
 EXPECTED_WORKSPACE_CRATES = {
@@ -39,134 +39,134 @@ EXPECTED_WORKSPACE_CRATES = {
 }
 
 EXPECTED_INTERNAL_DEPENDENCIES = {
-    "rustinfer-core": set(),
-    "rustinfer-cuda": {"rustinfer-core"},
-    "rustinfer-tensor": {"rustinfer-core", "rustinfer-cuda"},
-    "rustinfer-model": {"rustinfer-core", "rustinfer-tensor"},
-    "rustinfer-runtime": {
-        "rustinfer-core",
-        "rustinfer-cuda",
-        "rustinfer-model",
-        "rustinfer-tensor",
+    "riley-core": set(),
+    "riley-cuda": {"riley-core"},
+    "riley-tensor": {"riley-core", "riley-cuda"},
+    "riley-model": {"riley-core", "riley-tensor"},
+    "riley-runtime": {
+        "riley-core",
+        "riley-cuda",
+        "riley-model",
+        "riley-tensor",
     },
-    "rustinfer-scheduler": {"rustinfer-core", "rustinfer-runtime"},
-    "rustinfer-server": {
-        "rustinfer-core",
-        "rustinfer-model",
-        "rustinfer-runtime",
-        "rustinfer-scheduler",
+    "riley-scheduler": {"riley-core", "riley-runtime"},
+    "riley-server": {
+        "riley-core",
+        "riley-model",
+        "riley-runtime",
+        "riley-scheduler",
     },
-    "rustinfer-native": {"rustinfer-cuda", "rustinfer-model", "rustinfer-runtime"},
+    "riley-native": {"riley-cuda", "riley-model", "riley-runtime"},
 }
 
 EXPECTED_FEATURES = {
-    "rustinfer-core": {"default": []},
-    "rustinfer-cuda": {
+    "riley-core": {"default": []},
+    "riley-cuda": {
         "cuda": [],
         "cuda-test-fault-injection": ["cuda"],
         "default": [],
         "nvml": ["cuda"],
     },
-    "rustinfer-tensor": {
-        "cuda": ["dep:rustinfer-cuda", "rustinfer-cuda/cuda"],
+    "riley-tensor": {
+        "cuda": ["dep:riley-cuda", "riley-cuda/cuda"],
         "default": [],
     },
-    "rustinfer-model": {"default": []},
-    "rustinfer-runtime": {
+    "riley-model": {"default": []},
+    "riley-runtime": {
         "cuda": [
-            "dep:rustinfer-cuda",
-            "rustinfer-cuda/cuda",
-            "rustinfer-tensor/cuda",
+            "dep:riley-cuda",
+            "riley-cuda/cuda",
+            "riley-tensor/cuda",
         ],
         "default": [],
     },
-    "rustinfer-scheduler": {
-        "cuda": ["rustinfer-runtime/cuda"],
+    "riley-scheduler": {
+        "cuda": ["riley-runtime/cuda"],
         "default": [],
     },
-    "rustinfer-server": {
+    "riley-server": {
         "bench": ["dep:serde", "dep:serde_json"],
-        "cuda": ["rustinfer-runtime/cuda", "rustinfer-scheduler/cuda"],
+        "cuda": ["riley-runtime/cuda", "riley-scheduler/cuda"],
         "default": [],
         "experimental": [],
         "server": ["dep:libc", "dep:serde", "dep:serde_json"],
     },
-    "rustinfer-native": {
+    "riley-native": {
         "cuda": [
-            "dep:rustinfer-cuda",
-            "dep:rustinfer-model",
-            "dep:rustinfer-runtime",
-            "rustinfer-cuda/cuda",
-            "rustinfer-cuda/nvml",
-            "rustinfer-runtime/cuda",
+            "dep:riley-cuda",
+            "dep:riley-model",
+            "dep:riley-runtime",
+            "riley-cuda/cuda",
+            "riley-cuda/nvml",
+            "riley-runtime/cuda",
         ],
         "default": [],
     },
 }
 
 EXPECTED_OPTIONAL_DEPENDENCIES = {
-    "rustinfer-core": set(),
-    "rustinfer-cuda": set(),
-    "rustinfer-tensor": {"rustinfer-cuda"},
-    "rustinfer-model": set(),
-    "rustinfer-runtime": {"rustinfer-cuda"},
-    "rustinfer-scheduler": set(),
-    "rustinfer-server": {"libc", "serde", "serde_json"},
-    "rustinfer-native": {"rustinfer-cuda", "rustinfer-model", "rustinfer-runtime"},
+    "riley-core": set(),
+    "riley-cuda": set(),
+    "riley-tensor": {"riley-cuda"},
+    "riley-model": set(),
+    "riley-runtime": {"riley-cuda"},
+    "riley-scheduler": set(),
+    "riley-server": {"libc", "serde", "serde_json"},
+    "riley-native": {"riley-cuda", "riley-model", "riley-runtime"},
 }
 
 EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
-    ("rustinfer-model", "serde"): {
+    ("riley-model", "serde"): {
         "version": "1.0.228",
         "default_features": True,
         "features": ["derive"],
     },
-    ("rustinfer-model", "serde_json"): {
+    ("riley-model", "serde_json"): {
         "version": "1.0.145",
         "default_features": True,
         "features": [],
     },
-    ("rustinfer-model", "sha2"): {
+    ("riley-model", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
         "features": [],
     },
-    ("rustinfer-model", "unicode-normalization"): {
+    ("riley-model", "unicode-normalization"): {
         "version": "0.1.25",
         "default_features": True,
         "features": [],
     },
-    ("rustinfer-runtime", "sha2"): {
+    ("riley-runtime", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
         "features": [],
     },
-    ("rustinfer-native", "serde"): {
+    ("riley-native", "serde"): {
         "version": "1.0.228",
         "default_features": True,
         "features": ["derive"],
     },
-    ("rustinfer-native", "serde_json"): {
+    ("riley-native", "serde_json"): {
         "version": "1.0.145",
         "default_features": True,
         "features": [],
     },
-    ("rustinfer-native", "sha2"): {
+    ("riley-native", "sha2"): {
         "version": "0.11.0",
         "default_features": False,
         "features": [],
     },
-    ("rustinfer-server", "serde"): {
+    ("riley-server", "serde"): {
         "version": "1.0.228",
         "default_features": True,
         "features": ["derive"],
     },
-    ("rustinfer-server", "libc"): {
+    ("riley-server", "libc"): {
         "version": "0.2.189",
         "default_features": True,
         "features": [],
     },
-    ("rustinfer-server", "serde_json"): {
+    ("riley-server", "serde_json"): {
         "version": "1.0.145",
         "default_features": True,
         "features": [],
@@ -174,19 +174,19 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
 }
 
 EXPECTED_DEV_DEPENDENCIES = {
-    ("rustinfer-scheduler", "rustinfer-model"): {
+    ("riley-scheduler", "riley-model"): {
         "req": "*",
         "default_features": True,
         "features": [],
-        "path": "crates/rustinfer-model",
+        "path": "crates/riley-model",
     },
-    ("rustinfer-runtime", "rustinfer-cuda"): {
+    ("riley-runtime", "riley-cuda"): {
         "req": "*",
         "default_features": True,
         "features": [],
-        "path": "crates/rustinfer-cuda",
+        "path": "crates/riley-cuda",
     },
-    ("rustinfer-runtime", "serde_json"): {
+    ("riley-runtime", "serde_json"): {
         "req": "=1.0.145",
         "default_features": True,
         "features": [],
@@ -220,18 +220,18 @@ EXPECTED_LINTS = {
 NVCC_REPRODUCIBLE_OBJECT_BLOCK = "\n".join(
     (
         'if(CMAKE_CUDA_COMPILER_ID STREQUAL "NVIDIA")',
-        "target_compile_options(rustinfer_cuda_native PRIVATE",
+        "target_compile_options(riley_cuda_native PRIVATE",
         "$<$<COMPILE_LANGUAGE:CUDA>:--objdir-as-tempdir>",
         ")",
         "if(WIN32)",
     )
 )
 
-EXPECTED_DEFAULT_MEMBERS = ["crates/rustinfer-server"]
+EXPECTED_DEFAULT_MEMBERS = ["crates/riley-server"]
 EXPECTED_EXCLUDES = ["tools/python", "tools/native", "experiments/triton"]
 EXPECTED_LICENSE_TEXT = """MIT License
 
-Copyright (c) 2026 rustinfer contributors
+Copyright (c) 2026 Riley contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -321,7 +321,7 @@ def validate_native_build_contract_text(contents: str) -> None:
     if normalized.count(NVCC_REPRODUCIBLE_OBJECT_BLOCK) != 1:
         raise BoundaryError(
             "native CUDA reproducibility flag must apply only to the NVIDIA "
-            "compiler, rustinfer_cuda_native target, and CUDA language"
+            "compiler, riley_cuda_native target, and CUDA language"
         )
 
 
@@ -339,7 +339,7 @@ def validate_native_build_contract(root: Path) -> None:
 def validate_license_text(contents: str) -> None:
     if contents != EXPECTED_LICENSE_TEXT:
         raise BoundaryError(
-            "LICENSE must be the reviewed MIT text for rustinfer contributors"
+            "LICENSE must be the reviewed MIT text for Riley contributors"
         )
 
 
@@ -405,8 +405,8 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
     if direct_keys != set(EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES):
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
-            "rustinfer-model -> serde, serde_json, sha2, and unicode-normalization plus "
-            "rustinfer-runtime -> sha2 plus rustinfer-server -> serde and serde_json"
+            "riley-model -> serde, serde_json, sha2, and unicode-normalization plus "
+            "riley-runtime -> sha2 plus riley-server -> serde and serde_json"
         )
     for dependency in direct_dependencies:
         expected = EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES[
@@ -543,7 +543,7 @@ def validate_root_manifest(root: Path) -> None:
         )
     if workspace.get("default-members") != EXPECTED_DEFAULT_MEMBERS:
         raise BoundaryError(
-            "workspace.default-members must make rustinfer-server the root build owner"
+            "workspace.default-members must make riley-server the root build owner"
         )
     if workspace.get("exclude") != EXPECTED_EXCLUDES:
         raise BoundaryError(
@@ -689,9 +689,9 @@ def validate_members(root: Path, metadata: dict[str, Any]) -> dict[str, dict[str
     default_names = {
         id_to_package[package_id]["name"] for package_id in default_ids or []
     }
-    if default_names != {"rustinfer-server"}:
+    if default_names != {"riley-server"}:
         raise BoundaryError(
-            "effective default workspace member must be rustinfer-server"
+            "effective default workspace member must be riley-server"
         )
     return {package["name"]: package for package in members}
 
@@ -912,34 +912,34 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
         if default != []:
             raise BoundaryError(f"{name}: default features must remain empty")
 
-    server_targets = packages["rustinfer-server"].get("targets", [])
+    server_targets = packages["riley-server"].get("targets", [])
     server_bins = {
         target.get("name"): target
         for target in server_targets
         if "bin" in target.get("kind", [])
     }
-    if set(server_bins) != {"rustinfer", "rustinfer-profile"}:
+    if set(server_bins) != {"riley", "riley-profile"}:
         raise BoundaryError(
-            "rustinfer-server must own exactly the production and native-profile binaries"
+            "riley-server must own exactly the production and native-profile binaries"
         )
-    production_binary = server_bins["rustinfer"]
+    production_binary = server_bins["riley"]
     if production_binary.get("required-features") != ["server"]:
         raise BoundaryError(
-            "the rustinfer binary must be owned by rustinfer-server and require only `server`"
+            "the riley binary must be owned by riley-server and require only `server`"
         )
-    profile_binary = server_bins["rustinfer-profile"]
+    profile_binary = server_bins["riley-profile"]
     if profile_binary.get("required-features") != ["bench", "cuda"]:
         raise BoundaryError(
-            "the rustinfer-profile binary must require exactly `bench` and `cuda`"
+            "the riley-profile binary must require exactly `bench` and `cuda`"
         )
     for name in EXPECTED_PRODUCTION_CRATES.values():
-        if name == "rustinfer-server":
+        if name == "riley-server":
             continue
         package = packages[name]
         if any("bin" in target.get("kind", []) for target in package.get("targets", [])):
-            raise BoundaryError(f"{name}: only rustinfer-server may own a binary")
+            raise BoundaryError(f"{name}: only riley-server may own a binary")
 
-    native_targets = packages["rustinfer-native"].get("targets", [])
+    native_targets = packages["riley-native"].get("targets", [])
     native_libraries = [
         target for target in native_targets if target.get("kind") == ["lib"]
     ]
@@ -948,13 +948,13 @@ def validate_features(packages: dict[str, dict[str, Any]]) -> None:
         for target in native_targets
         if "bin" in target.get("kind", [])
     }
-    if len(native_libraries) != 1 or set(native_binaries) != {"rustinfer-native"}:
+    if len(native_libraries) != 1 or set(native_binaries) != {"riley-native"}:
         raise BoundaryError(
-            "rustinfer-native must own exactly its library and calibration binary"
+            "riley-native must own exactly its library and calibration binary"
         )
-    if native_binaries["rustinfer-native"].get("required-features") != ["cuda"]:
+    if native_binaries["riley-native"].get("required-features") != ["cuda"]:
         raise BoundaryError(
-            "the rustinfer-native calibration binary must require exactly `cuda`"
+            "the riley-native calibration binary must require exactly `cuda`"
         )
 
 
@@ -1175,12 +1175,12 @@ def main() -> int:
 
     print("workspace boundary check passed")
     print("  production crates: 7")
-    print("  development crates: 1 (rustinfer-native, non-default, CUDA-gated binary)")
+    print("  development crates: 1 (riley-native, non-default, CUDA-gated binary)")
     print("  excluded tool/research roots: tools/python, tools/native, experiments/triton")
     print(
         "  approved direct third-party Cargo dependencies: "
         f"{len(dependency_policy['direct_dependencies'])} "
-        "(rustinfer-model, rustinfer-runtime, rustinfer-server, and rustinfer-native)"
+        "(riley-model, riley-runtime, riley-server, and riley-native)"
     )
     print(
         "  approved third-party Cargo package closure: "

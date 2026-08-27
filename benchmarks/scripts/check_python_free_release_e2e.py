@@ -18,9 +18,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, NoReturn, Sequence
 
 
-RAW_SCHEMA = "rustinfer.python-free-release-e2e-raw.v2"
-GOLDEN_SCHEMA = "rustinfer.python-free-release-e2e-golden.v1"
-REPORT_SCHEMA = "rustinfer.release-gate-attestation.v1"
+RAW_SCHEMA = "riley.python-free-release-e2e-raw.v2"
+GOLDEN_SCHEMA = "riley.python-free-release-e2e-golden.v1"
+REPORT_SCHEMA = "riley.release-gate-attestation.v1"
 GATE = "python-free-clean-runtime-e2e"
 SHA_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -501,7 +501,7 @@ def _verify_bundle(bundle: Path, binary_sha256: str, revision: str) -> None:
     try:
         release_verify.verify_bundle(bundle)
         with tarfile.open(bundle, "r:gz") as archive:
-            binaries = [member for member in archive.getmembers() if member.name.endswith("/bin/rustinfer")]
+            binaries = [member for member in archive.getmembers() if member.name.endswith("/bin/riley")]
             manifests = [member for member in archive.getmembers() if member.name.endswith("/manifest/release.json")]
             if len(binaries) != 1 or len(manifests) != 1:
                 _fail("--release-bundle", "must contain one binary and one release manifest")
@@ -631,8 +631,8 @@ def _validate_process_claims(value: Any, path: str) -> list[dict[str, Any]]:
         if FORBIDDEN_RE.search(process["comm"] + " " + process["args"]):
             _fail(f"{path}[{index}]", "contains a forbidden Python-family process")
         result.append(process)
-    if not any(row["comm"] == "rustinfer" for row in result):
-        _fail(path, "does not contain the rustinfer server")
+    if not any(row["comm"] == "riley" for row in result):
+        _fail(path, "does not contain the riley server")
     return result
 
 
@@ -968,7 +968,7 @@ def _validate_image_inspect(raw: bytes, image_id: str) -> None:
         _fail("image-inspect.json", "immutable ID or linux/amd64 platform mismatch")
     config = row.get("Config")
     rootfs = row.get("RootFS")
-    if not isinstance(config, dict) or config.get("Entrypoint") != ["/opt/rustinfer/bin/rustinfer"] or config.get("Cmd") != ["--help"] or config.get("User") != "65532:65532":
+    if not isinstance(config, dict) or config.get("Entrypoint") != ["/opt/riley/bin/riley"] or config.get("Cmd") != ["--help"] or config.get("User") != "65532:65532":
         _fail("image-inspect.json.Config", "release entrypoint, command, or non-root user mismatch")
     if not isinstance(rootfs, dict) or rootfs.get("Type") != "layers" or not isinstance(rootfs.get("Layers"), list) or not rootfs["Layers"]:
         _fail("image-inspect.json.RootFS", "must preserve nonempty immutable layers")
@@ -977,14 +977,14 @@ def _validate_image_inspect(raw: bytes, image_id: str) -> None:
             _fail(f"image-inspect.json.RootFS.Layers[{index}]", "must be sha256:<digest>")
         _sha(layer.removeprefix("sha256:"), f"image-inspect.json.RootFS.Layers[{index}]")
     env = config.get("Env")
-    if not isinstance(env, list) or not any(isinstance(item, str) and item.startswith("PATH=/opt/rustinfer/bin:") for item in env):
+    if not isinstance(env, list) or not any(isinstance(item, str) and item.startswith("PATH=/opt/riley/bin:") for item in env):
         _fail("image-inspect.json.Config.Env", "release PATH binding is missing")
 
 
 def _container_snapshot(raw: bytes, label: str, *, container_id: str, image_id: str, model_id: str, running: bool) -> dict[str, Any]:
     row = _docker_record(raw, label)
     expected_args = expected_container_args(model_id)
-    if row.get("Id") != container_id or row.get("Image") != image_id or row.get("Path") != "/opt/rustinfer/bin/rustinfer" or row.get("Args") != expected_args:
+    if row.get("Id") != container_id or row.get("Image") != image_id or row.get("Path") != "/opt/riley/bin/riley" or row.get("Args") != expected_args:
         _fail(label, "container identity/image/executable arguments mismatch")
     config = row.get("Config")
     host = row.get("HostConfig")
@@ -1037,8 +1037,8 @@ def _process_snapshot(raw: bytes, label: str, expected_pid: int) -> list[dict[st
         if FORBIDDEN_RE.search(row["comm"] + " " + row["args"]):
             _fail(label, "contains a forbidden Python-family process")
         result.append(row)
-    if not any(row["pid"] == expected_pid and row["comm"] == "rustinfer" for row in result):
-        _fail(label, "does not bind the inspected rustinfer server PID")
+    if not any(row["pid"] == expected_pid and row["comm"] == "riley" for row in result):
+        _fail(label, "does not bind the inspected riley server PID")
     return result
 
 
@@ -1094,8 +1094,8 @@ def _replay_runtime(payloads: Mapping[str, bytes], validated: Mapping[str, Any],
             _fail(f"container-{ordinal}-post.json", "missing post-SIGTERM finish timestamp")
         pre_processes = _process_snapshot(payloads[f"process-{ordinal}-pre.txt"], f"process-{ordinal}-pre.txt", pre_state["Pid"])
         runtime_processes = _process_snapshot(payloads[f"process-{ordinal}-runtime.txt"], f"process-{ordinal}-runtime.txt", active_state["Pid"])
-        if not any(row["comm"] == "rustinfer" for row in pre_processes) or not any(row["comm"] == "rustinfer" for row in runtime_processes):
-            _fail(f"process-{ordinal}", "rustinfer disappeared during the observed runtime")
+        if not any(row["comm"] == "riley" for row in pre_processes) or not any(row["comm"] == "riley" for row in runtime_processes):
+            _fail(f"process-{ordinal}", "riley disappeared during the observed runtime")
         snapshots[(ordinal, "runtime_processes")] = {"rows": runtime_processes}
     if observations["python_free"]["processes"] != snapshots[("first", "runtime_processes")]["rows"]:
         _fail("raw.observations.python_free.processes", "differs from process-first-runtime.txt")

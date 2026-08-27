@@ -1,0 +1,401 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/extension-proposal-v1.schema.json",
+  "title": "riley extension admission proposal",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "schema_version",
+    "extension_id",
+    "status",
+    "track",
+    "title",
+    "semantic_class",
+    "problem_statement",
+    "implementation_boundary",
+    "reference_path",
+    "reference_sha256",
+    "fallback_path",
+    "fallback_sha256",
+    "primary_metric",
+    "required_metrics",
+    "quality_or_error_metric",
+    "runtime_flag",
+    "default_enabled",
+    "stable_default",
+    "result_disclosure",
+    "rollback",
+    "deploy_document_path",
+    "benchmark_contract_path",
+    "class_gate",
+    "approval_answers"
+  ],
+  "properties": {
+    "$schema": {
+      "const": "../proposal.schema.json"
+    },
+    "schema_version": {
+      "const": "riley.extension-proposal.v1"
+    },
+    "extension_id": {
+      "$ref": "#/$defs/extensionId"
+    },
+    "status": {
+      "const": "approved-for-implementation"
+    },
+    "track": {
+      "$ref": "#/$defs/track"
+    },
+    "title": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "semantic_class": {
+      "$ref": "#/$defs/semanticClass"
+    },
+    "problem_statement": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "implementation_boundary": {
+      "enum": ["core", "backend", "plugin", "research"]
+    },
+    "reference_path": {
+      "$ref": "#/$defs/repositoryPath"
+    },
+    "reference_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "fallback_path": {
+      "$ref": "#/$defs/repositoryPath"
+    },
+    "fallback_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "primary_metric": {
+      "$ref": "#/$defs/performanceMetricPath"
+    },
+    "required_metrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"$ref": "#/$defs/performanceMetricPath"}
+    },
+    "quality_or_error_metric": {
+      "$ref": "#/$defs/qualityMetricPath"
+    },
+    "runtime_flag": {
+      "type": "string",
+      "pattern": "^RILEY_EXPERIMENTAL_[A-Z0-9_]+$"
+    },
+    "default_enabled": {
+      "const": false
+    },
+    "stable_default": {
+      "const": false
+    },
+    "result_disclosure": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "rollback": {
+      "$ref": "#/$defs/nonEmptyString"
+    },
+    "deploy_document_path": {
+      "type": "string",
+      "pattern": "^deploy/extensions/plans/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.md$"
+    },
+    "benchmark_contract_path": {
+      "type": "string",
+      "pattern": "^benchmarks/extensions/contracts/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.json$"
+    },
+    "class_gate": {
+      "oneOf": [
+        {"$ref": "#/$defs/referenceGate"},
+        {"$ref": "#/$defs/e0Gate"},
+        {"$ref": "#/$defs/e1Gate"},
+        {"$ref": "#/$defs/a1Gate"},
+        {"$ref": "#/$defs/m1Gate"}
+      ]
+    },
+    "approval_answers": {
+      "$ref": "#/$defs/approvalAnswers"
+    }
+  },
+  "allOf": [
+    {"$ref": "#/$defs/trackSemanticClassRules"},
+    {"$ref": "#/$defs/metricCompatibilityRules"},
+    {
+      "if": {"properties": {"semantic_class": {"const": "reference"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/referenceGate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "E0"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/e0Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "E1"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/e1Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "A1"}}, "required": ["semantic_class"]},
+      "then": {"properties": {"class_gate": {"$ref": "#/$defs/a1Gate"}}}
+    },
+    {
+      "if": {"properties": {"semantic_class": {"const": "M1"}}, "required": ["semantic_class"]},
+      "then": {
+        "properties": {
+          "implementation_boundary": {"const": "research"},
+          "class_gate": {"$ref": "#/$defs/m1Gate"}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "extensionId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+    },
+    "semanticClass": {
+      "enum": ["reference", "E0", "E1", "A1", "M1"]
+    },
+    "track": {
+      "enum": [
+        "quantization",
+        "low-rank-weight-compression",
+        "kv-compression",
+        "prefix-cache",
+        "kv-offload-prefetch",
+        "query-aware-kv-selection",
+        "moe",
+        "mamba-ssm",
+        "multimodal",
+        "speculative-decoding",
+        "jacobi-lookahead"
+      ]
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+    },
+    "performanceMetricPath": {
+      "enum": [
+        "metrics.batch_wall_ms",
+        "metrics.cpu_utilization_percent",
+        "metrics.gpu_utilization_percent",
+        "metrics.model_load_ms",
+        "metrics.output_tokens_per_second",
+        "metrics.peak_vram_bytes",
+        "quantization.gemm_throughput_tflops",
+        "quantization.kv_bytes",
+        "quantization.transform_runtime_ms",
+        "quantization.weight_bytes",
+        "requests[].end_to_end_ms",
+        "requests[].mean_tpot_ms",
+        "requests[].ttft_ms",
+        "sparse_attention.page_bound_time_ms",
+        "sparse_attention.page_metadata_bytes",
+        "sparse_attention.exact_fallback_rate",
+        "sparse_attention.selected_pages",
+        "sparse_attention.total_pages",
+        "speculative.acceptance_rate",
+        "speculative.accepted_tokens_per_verify",
+        "speculative.draft_latency_ms",
+        "speculative.lookahead",
+        "speculative.rejected_suffix_tokens",
+        "speculative.rollback_count",
+        "speculative.target_calls_per_output_token",
+        "speculative.verification_latency_ms"
+      ]
+    },
+    "qualityMetricPath": {
+      "enum": [
+        "failure_count",
+        "sparse_attention.omitted_mass_bound"
+      ]
+    },
+    "repositoryPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\\\)(?!(?:.*/)?\\.{1,2}(?:/|$))(?!(?:.*/)?(?:\\.git|\\.gitignore|\\.gitattributes|\\.gitmodules|\\.mailmap)(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "tolerance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dtype", "atol", "rtol"],
+      "properties": {
+        "dtype": {"$ref": "#/$defs/nonEmptyString"},
+        "atol": {"type": "number", "minimum": 0, "exclusiveMaximum": 1},
+        "rtol": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+      }
+    },
+    "errorBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "unit", "maximum"],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/qualityMetricPath",
+          "$comment": "The CI checker additionally requires this value to equal quality_or_error_metric. Draft 2020-12 cannot express arbitrary sibling-value equality."
+        },
+        "unit": {"const": "fraction"},
+        "maximum": {"type": "number", "minimum": 0, "exclusiveMaximum": 1}
+      }
+    },
+    "existingIrExpression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["disposition", "rationale"],
+      "properties": {
+        "disposition": {
+          "enum": [
+            "existing-ir",
+            "additive-ir-change",
+            "separate-mixer-or-backend"
+          ]
+        },
+        "rationale": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "approvalAnswers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "user_workload_bottleneck",
+        "semantic_class_rationale",
+        "existing_ir_expression",
+        "implementation_location_rationale",
+        "correctness_reference",
+        "error_or_distribution_contract",
+        "memory_and_operational_complexity",
+        "fallback_and_rollback",
+        "expected_resource_reduction",
+        "end_to_end_benefit_hypothesis"
+      ],
+      "properties": {
+        "user_workload_bottleneck": {"$ref": "#/$defs/nonEmptyString"},
+        "semantic_class_rationale": {"$ref": "#/$defs/nonEmptyString"},
+        "existing_ir_expression": {"$ref": "#/$defs/existingIrExpression"},
+        "implementation_location_rationale": {"$ref": "#/$defs/nonEmptyString"},
+        "correctness_reference": {"$ref": "#/$defs/repositoryPath"},
+        "error_or_distribution_contract": {"$ref": "#/$defs/nonEmptyString"},
+        "memory_and_operational_complexity": {"$ref": "#/$defs/nonEmptyString"},
+        "fallback_and_rollback": {"$ref": "#/$defs/nonEmptyString"},
+        "expected_resource_reduction": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": ["flops", "serial-depth", "hbm-traffic"]
+          }
+        },
+        "end_to_end_benefit_hypothesis": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "trackSemanticClassRules": {
+      "allOf": [
+        {"if": {"properties": {"track": {"const": "quantization"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1"]}}}},
+        {"if": {"properties": {"track": {"const": "low-rank-weight-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "prefix-cache"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-offload-prefetch"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "query-aware-kv-selection"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "moe"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "mamba-ssm"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0"]}}}},
+        {"if": {"properties": {"track": {"const": "multimodal"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "speculative-decoding"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "E1"]}}}},
+        {"if": {"properties": {"track": {"const": "jacobi-lookahead"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1", "M1"]}}}}
+      ]
+    },
+    "metricCompatibilityRules": {
+      "allOf": [
+        {
+          "if": {"properties": {"semantic_class": {"enum": ["reference", "E0"]}}, "required": ["semantic_class"]},
+          "then": {"properties": {"quality_or_error_metric": {"const": "failure_count"}}}
+        },
+        {
+          "if": {"properties": {"semantic_class": {"const": "A1"}}, "required": ["semantic_class"]},
+          "then": {
+            "properties": {
+              "track": {"const": "query-aware-kv-selection"},
+              "quality_or_error_metric": {"enum": ["sparse_attention.omitted_mass_bound"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"semantic_class": {"enum": ["E1", "M1"]}}, "required": ["semantic_class"]},
+          "then": false
+        }
+      ]
+    },
+    "referenceGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "behavioral_parity", "token_parity", "stable_fallback", "lifetime_resource_regression"],
+      "properties": {
+        "kind": {"const": "reference"},
+        "behavioral_parity": {"const": true},
+        "token_parity": {"const": true},
+        "stable_fallback": {"const": true},
+        "lifetime_resource_regression": {"const": true}
+      }
+    },
+    "e0Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reference_parity", "dtype_tolerances", "extreme_value_cases", "token_level_regression"],
+      "properties": {
+        "kind": {"const": "E0"},
+        "reference_parity": {"const": true},
+        "dtype_tolerances": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/tolerance"}},
+        "extreme_value_cases": {"const": true},
+        "token_level_regression": {"const": true}
+      }
+    },
+    "e1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "distribution_contract", "statistical_test", "rng_isolation", "rng_snapshot_restore", "greedy_exact", "fixed_seed_definition"],
+      "properties": {
+        "kind": {"const": "E1"},
+        "distribution_contract": {"$ref": "#/$defs/nonEmptyString"},
+        "statistical_test": {"$ref": "#/$defs/nonEmptyString"},
+        "rng_isolation": {"const": true},
+        "rng_snapshot_restore": {"const": true},
+        "greedy_exact": {"const": true},
+        "fixed_seed_definition": {"$ref": "#/$defs/nonEmptyString"}
+      }
+    },
+    "a1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "error_budget", "exact_fallback", "opt_in", "usage_disclosure", "quality_latency_curve"],
+      "properties": {
+        "kind": {"const": "A1"},
+        "error_budget": {"$ref": "#/$defs/errorBudget"},
+        "exact_fallback": {"const": true},
+        "opt_in": {"const": true},
+        "usage_disclosure": {"const": true},
+        "quality_latency_curve": {"const": true}
+      }
+    },
+    "m1Gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "research_track", "calibration_or_training_provenance", "production_core_isolated", "opt_in", "usage_disclosure", "quality_latency_curve"],
+      "properties": {
+        "kind": {"const": "M1"},
+        "research_track": {"$ref": "#/$defs/nonEmptyString"},
+        "calibration_or_training_provenance": {"$ref": "#/$defs/nonEmptyString"},
+        "production_core_isolated": {"const": true},
+        "opt_in": {"const": true},
+        "usage_disclosure": {"const": true},
+        "quality_latency_curve": {"const": true}
+      }
+    }
+  }
+}

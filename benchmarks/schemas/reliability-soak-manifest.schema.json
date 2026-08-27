@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/reliability-soak-manifest-v1.schema.json",
-  "title": "rustinfer reliability soak manifest",
+  "$id": "https://riley.dev/schemas/reliability-soak-manifest-v1.schema.json",
+  "title": "riley reliability soak manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "contract_id", "target", "thresholds", "requests", "golden", "scenarios"],
   "properties": {
-    "schema_version": {"const": "rustinfer.reliability-soak-manifest.v1"},
+    "schema_version": {"const": "riley.reliability-soak-manifest.v1"},
     "contract_id": {"$ref": "#/$defs/id"},
     "target": {
       "type": "object", "additionalProperties": false,

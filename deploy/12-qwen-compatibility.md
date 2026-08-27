@@ -30,7 +30,7 @@ PR 12의 호환성 계약은 다음 고정 artifact를 기준으로 한다.
 - `model_type=qwen2`와 `Qwen2ForCausalLM`은 bounded strict parser에서만
   선택한다. 알 수 없는 field, 불일치하는 차원, 지원하지 않는 execution
   semantic은 upload나 실행 전에 구조화된 오류로 거절한다.
-- Qwen config를 `rustinfer-model-spec-v2` canonical IR로 변환한다. dense Qwen2는
+- Qwen config를 `riley-model-spec-v2` canonical IR로 변환한다. dense Qwen2는
   별도 architecture가 아니라 기존 `ModelArchitecture::Llama` topology를 사용한다.
 - source weight 이름을 canonical slot으로 완전 매핑하고, tied LM head는 token
   embedding의 명시적 alias로 표현한다. Q/K/V bias는 각 projection의 optional

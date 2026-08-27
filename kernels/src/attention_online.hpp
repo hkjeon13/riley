@@ -1,11 +1,11 @@
-#ifndef RUSTINFER_CUDA_ATTENTION_ONLINE_HPP_
-#define RUSTINFER_CUDA_ATTENTION_ONLINE_HPP_
+#ifndef RILEY_CUDA_ATTENTION_ONLINE_HPP_
+#define RILEY_CUDA_ATTENTION_ONLINE_HPP_
 
 #include <cuda_runtime_api.h>
 
 #include <cstdint>
 
-namespace rustinfer_cuda_attention_online {
+namespace riley_cuda_attention_online {
 
 // The public C ABI validates every argument before calling this internal
 // allocation-free launcher. Full causal attention uses three score passes to
@@ -20,6 +20,6 @@ cudaError_t launch_bf16_gqa_prefill(
     uint64_t key_value_head_count, float scale, bool causal_local,
     uint64_t local_window_size, cudaStream_t stream) noexcept;
 
-}  // namespace rustinfer_cuda_attention_online
+}  // namespace riley_cuda_attention_online
 
-#endif  // RUSTINFER_CUDA_ATTENTION_ONLINE_HPP_
+#endif  // RILEY_CUDA_ATTENTION_ONLINE_HPP_

@@ -8,17 +8,17 @@
 set -euo pipefail
 set -o noclobber
 
-output_dir=${RUSTINFER_PROFILE_OUTPUT_DIR:-/out}
-model_dir=${RUSTINFER_PROFILE_MODEL_DIR:-/model}
-binary=${RUSTINFER_PROFILE_BINARY:-/usr/local/bin/rustinfer}
-bind_port=${RUSTINFER_PROFILE_PORT:-18080}
-residual_rmsnorm=${RUSTINFER_PROFILE_RESIDUAL_RMSNORM:-separate}
-execution_completion=${RUSTINFER_PROFILE_EXECUTION_COMPLETION:-per-operation}
-output_tokens=${RUSTINFER_PROFILE_OUTPUT_TOKENS:-2}
-source_revision=${RUSTINFER_PROFILE_SOURCE_REVISION:?source revision is required}
-source_archive_sha256=${RUSTINFER_PROFILE_SOURCE_ARCHIVE_SHA256:?source archive SHA-256 is required}
-container_image_sha256=${RUSTINFER_PROFILE_CONTAINER_IMAGE_SHA256:?container image SHA-256 is required}
-correctness_report_sha256=${RUSTINFER_PROFILE_CORRECTNESS_REPORT_SHA256:?correctness report SHA-256 is required}
+output_dir=${RILEY_PROFILE_OUTPUT_DIR:-/out}
+model_dir=${RILEY_PROFILE_MODEL_DIR:-/model}
+binary=${RILEY_PROFILE_BINARY:-/usr/local/bin/riley}
+bind_port=${RILEY_PROFILE_PORT:-18080}
+residual_rmsnorm=${RILEY_PROFILE_RESIDUAL_RMSNORM:-separate}
+execution_completion=${RILEY_PROFILE_EXECUTION_COMPLETION:-per-operation}
+output_tokens=${RILEY_PROFILE_OUTPUT_TOKENS:-2}
+source_revision=${RILEY_PROFILE_SOURCE_REVISION:?source revision is required}
+source_archive_sha256=${RILEY_PROFILE_SOURCE_ARCHIVE_SHA256:?source archive SHA-256 is required}
+container_image_sha256=${RILEY_PROFILE_CONTAINER_IMAGE_SHA256:?container image SHA-256 is required}
+correctness_report_sha256=${RILEY_PROFILE_CORRECTNESS_REPORT_SHA256:?correctness report SHA-256 is required}
 profile_pid=
 profile_status=0
 
@@ -113,14 +113,14 @@ done
   printf 'residual_rmsnorm=%s\n' "$residual_rmsnorm"
   printf 'execution_completion=%s\n' "$execution_completion"
 } >"$output_dir/runtime-flag.txt"
-for model_name in rustinfer-checkpoint.json config.json tokenizer.json model.safetensors; do
+for model_name in riley-checkpoint.json config.json tokenizer.json model.safetensors; do
   if [[ ! -f "$model_dir/$model_name" ]]; then
     echo "profile sentinel: required model artifact $model_name is absent" >&2
     exit 2
   fi
 done
 sha256sum \
-  "$model_dir/rustinfer-checkpoint.json" \
+  "$model_dir/riley-checkpoint.json" \
   "$model_dir/config.json" \
   "$model_dir/tokenizer.json" \
   "$model_dir/model.safetensors" \

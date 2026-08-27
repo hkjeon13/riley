@@ -25,7 +25,7 @@ from typing import Any, Mapping, Sequence
 
 _NATIVE_CHECKER_PATH = Path(__file__).with_name("check_native_profile_pair.py")
 _NATIVE_SPEC = importlib.util.spec_from_file_location(
-    "rustinfer_release_native_profile_contract", _NATIVE_CHECKER_PATH
+    "riley_release_native_profile_contract", _NATIVE_CHECKER_PATH
 )
 if _NATIVE_SPEC is None or _NATIVE_SPEC.loader is None:  # pragma: no cover
     raise RuntimeError(f"cannot load native profile contract: {_NATIVE_CHECKER_PATH}")
@@ -34,10 +34,10 @@ sys.modules[_NATIVE_SPEC.name] = native_profile
 _NATIVE_SPEC.loader.exec_module(native_profile)
 
 
-BASELINE_SCHEMA = "rustinfer.release-performance-baseline.v1"
-CANDIDATE_SCHEMA = "rustinfer.release-performance-candidate.v1"
-REPORT_SCHEMA = "rustinfer.release-performance-report.v1"
-BASELINE_SHA256 = "fb80fd829ac3a7ff9097d046413c0b2dc3c12053597ec562c8d964737eae9bf5"
+BASELINE_SCHEMA = "riley.release-performance-baseline.v1"
+CANDIDATE_SCHEMA = "riley.release-performance-candidate.v1"
+REPORT_SCHEMA = "riley.release-performance-report.v1"
+BASELINE_SHA256 = "3052b334bfb6370fc47b327566d8553cb7591ac23bbfa636e69ca99c893edf7c"
 PR15_REQUEST_IDENTITY_SHA256 = (
     "e6a99a749c41a8227574c96a1d23f8b7d877d6e75b0df4d99154db1b1921a2e6"
 )
@@ -74,12 +74,12 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}([0-9a-f]{24})?$")
 UTC_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 CANDIDATE_ID_RE = re.compile(
-    r"^rustinfer-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"^riley-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
     r"(?:0|[1-9][0-9]*))-rc([1-9][0-9]*)$"
 )
-RUNNER_MANIFEST_SCHEMA = "rustinfer.release-performance-runner-manifest.v3"
-RUNNER_EXECUTION_SCHEMA = "rustinfer.release-performance-execution-receipt.v1"
-RUNNER_SUPERVISOR_LABEL = "org.rustinfer.release-performance-supervisor"
+RUNNER_MANIFEST_SCHEMA = "riley.release-performance-runner-manifest.v3"
+RUNNER_EXECUTION_SCHEMA = "riley.release-performance-execution-receipt.v1"
+RUNNER_SUPERVISOR_LABEL = "org.riley.release-performance-supervisor"
 RUNNER_ZERO_TIME = "0001-01-01T00:00:00Z"
 RUNNER_CONTAINER_COMMAND = (
     "test -z \"$(/usr/bin/find /workspace -mindepth 1 -print -quit)\"; "
@@ -445,7 +445,7 @@ def _candidate_id(value: Any, path: str) -> str:
     if CANDIDATE_ID_RE.fullmatch(candidate_id) is None:
         raise InputError(
             f"{path}: expected "
-            "rustinfer-<major>.<minor>.<patch>-rc<positive integer>"
+            "riley-<major>.<minor>.<patch>-rc<positive integer>"
         )
     return candidate_id
 
@@ -2117,14 +2117,14 @@ def _runner_manifest(
     ):
         raise InputError("runner-manifest.container.environment: must be a string map")
     fixed_overrides = {
-        "RUSTINFER_PERF_SOURCE_REVISION": revision,
-        "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": candidate["source_archive_sha256"],
-        "RUSTINFER_PERF_PROFILE_BINARY_SHA256": candidate["profile_binary_sha256"],
-        "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": candidate["optimizer_correctness_report_sha256"],
-        "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": image_id.removeprefix("sha256:"),
-        "RUSTINFER_PERF_MODEL_TREE_SHA256": candidate["model_tree_sha256"],
-        "RUSTINFER_PERF_PAIR_INDEX": "{pair_index}",
-        "RUSTINFER_PERF_CAPTURE_ID": "{capture_id}",
+        "RILEY_PERF_SOURCE_REVISION": revision,
+        "RILEY_PERF_SOURCE_ARCHIVE_SHA256": candidate["source_archive_sha256"],
+        "RILEY_PERF_PROFILE_BINARY_SHA256": candidate["profile_binary_sha256"],
+        "RILEY_PERF_OPTIMIZER_REPORT_SHA256": candidate["optimizer_correctness_report_sha256"],
+        "RILEY_PERF_OPTIMIZER_IMAGE_SHA256": image_id.removeprefix("sha256:"),
+        "RILEY_PERF_MODEL_TREE_SHA256": candidate["model_tree_sha256"],
+        "RILEY_PERF_PAIR_INDEX": "{pair_index}",
+        "RILEY_PERF_CAPTURE_ID": "{capture_id}",
         "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
         **RUNNER_PROXY_ENV,
     }
@@ -2140,7 +2140,7 @@ def _runner_manifest(
     read_only_sources = container["read_only_mount_sources"]
     expected_destinations = {
         "/input/source.tar",
-        "/input/rustinfer-profile",
+        "/input/riley-profile",
         "/input/optimizer-correctness-report.json",
         "/model",
     }
@@ -2312,8 +2312,8 @@ def _validate_runner_container(
             f"{label}.Config.Labels: exact image-plus-supervisor labels required"
         )
     expected_environment = dict(contract["environment"])
-    expected_environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
-    expected_environment["RUSTINFER_PERF_CAPTURE_ID"] = manifest["executions"][
+    expected_environment["RILEY_PERF_PAIR_INDEX"] = str(pair_index)
+    expected_environment["RILEY_PERF_CAPTURE_ID"] = manifest["executions"][
         pair_index - 1
     ]["capture_id"]
     if _runner_environment(config.get("Env"), f"{label}.Config.Env") != expected_environment:
@@ -3240,7 +3240,7 @@ def _evaluate_payload_snapshot(
 ) -> dict[str, Any]:
     canonical_payloads = derive_raw_run_payloads(payloads)["payloads"]
     with tempfile.TemporaryDirectory(
-        prefix="rustinfer-performance-evaluate-"
+        prefix="riley-performance-evaluate-"
     ) as temporary:
         directory = Path(temporary)
         run_paths: list[Path] = []

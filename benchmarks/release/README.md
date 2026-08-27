@@ -16,16 +16,16 @@ matching model/workload summaries with different prompt/generated-token
 identity are incomparable.
 
 The PR16 candidate document uses schema version
-`rustinfer.release-performance-candidate.v1` and is intentionally closed. See
+`riley.release-performance-candidate.v1` and is intentionally closed. See
 the fixture builder in `benchmarks/scripts/tests/test_check_release_performance.py`
 for the exact shape. It must contain:
 
 - a SHA-256 of the baseline file bytes;
-- clean candidate git/source-archive, exact `rustinfer-profile` producer binary
-  and producer image, release `rustinfer` binary and runtime image,
+- clean candidate git/source-archive, exact `riley-profile` producer binary
+  and producer image, release `riley` binary and runtime image,
   correctness-report, weights, and tokenizer bindings;
 - the exact baseline model/environment/workload records;
-- exactly five SHA-bound raw `rustinfer.native-profile-run.v1` candidate files.
+- exactly five SHA-bound raw `riley.native-profile-run.v1` candidate files.
   The checker validates every closed raw record, source/model/environment/
   workload binding, status, trace, warmup/iteration count, and token identity;
 - TTFT p95, TPOT p95, E2E median, and median output throughput exactly
@@ -45,16 +45,16 @@ lane.
 
 Create the candidate, checked report, and canonical raw archive together. The
 candidate ID must use the final-gate form
-`rustinfer-<major>.<minor>.<patch>-rc<positive integer>`:
+`riley-<major>.<minor>.<patch>-rc<positive integer>`:
 
 ```sh
 python3 benchmarks/scripts/package_release_performance_evidence.py \
   --baseline benchmarks/release/performance-baseline-v1.json \
-  --candidate-id rustinfer-0.1.0-rc1 \
+  --candidate-id riley-0.1.0-rc1 \
   --recorded-at-utc 2026-08-26T12:34:56Z \
   --source-archive /evidence/source.tar \
-  --profile-binary /evidence/rustinfer-profile \
-  --release-binary /release/rustinfer \
+  --profile-binary /evidence/riley-profile \
+  --release-binary /release/riley \
   --weights /models/smollm2/model.safetensors \
   --tokenizer /models/smollm2/tokenizer.json \
   --correctness-report /evidence/optimization-correctness-report.json \
@@ -109,8 +109,8 @@ python3 benchmarks/scripts/check_release_performance.py \
   --baseline benchmarks/release/performance-baseline-v1.json \
   --candidate /evidence/release-performance-candidate.json \
   --source-archive /evidence/source.tar \
-  --profile-binary /evidence/rustinfer-profile \
-  --release-binary /release/rustinfer \
+  --profile-binary /evidence/riley-profile \
+  --release-binary /release/riley \
   --weights /models/smollm2/model.safetensors \
   --tokenizer /models/smollm2/tokenizer.json \
   --correctness-report /evidence/correctness-report.json \

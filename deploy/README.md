@@ -1,6 +1,6 @@
-# rustinfer 단계별 실행 계획
+# Riley 단계별 실행 계획
 
-이 폴더는 `rustinfer`의 방대한 설계 문서를 **한 번에 하나씩 검토·구현·검증할 수 있는 PR 단위**로 분해한다.
+이 폴더는 `riley`의 방대한 설계 문서를 **한 번에 하나씩 검토·구현·검증할 수 있는 PR 단위**로 분해한다.
 
 기준 문서:
 
@@ -39,7 +39,18 @@
 | 14 | [API와 Streaming](14-api-and-streaming.md) | OpenAI 호환 서비스 경계 제공 | 취소·backpressure 포함 서버 |
 | 15 | [Profiling과 최적화](15-profiling-and-optimization.md) | cuBLASLt→CUTLASS/custom CUDA 순으로 측정된 병목 개선 | 성능 회귀 방지와 최적 fast path |
 | 16 | [신뢰성 및 Release Gate](16-reliability-and-release.md) | Python-free runtime과 의미 보존 등급별 배포 검증 | 첫 release candidate |
-| 17 | [확장 Gate](17-extension-gates.md) | Quantization 변환, speculative, sparse attention, SSM 등 진입 조건 정의 | 범위 폭증 방지용 후속 로드맵 |
+| 17 | [확장 Gate](17-extension-gates.md) | 확장별 admission metadata와 등급별 검증 계약을 fail closed로 검사 | 빈 기본 allowlist와 범위 폭증 방지용 후속 로드맵 |
+
+PR 17 admission 장치의 bootstrap/default 상태는 빈 registry이며, 이후의 현재 승인
+집합은 문구에 고정한 숫자가 아니라
+[`extensions/registry.json`](extensions/registry.json)이 결정한다. 이는 PR 16의
+이번 soak waiver에 따라 구현 순서만 진행한 결과다. 이후 release owner가 이전 soak를
+근거로 prerelease를 명시적으로 승인했지만, 이는 현재 Riley revision의 soak 통과나
+Gate E qualification을 뜻하지 않는다. Gate E의 실제 조건은 그대로다.
+
+PR 02~15에 기록된 일부 원격 artifact 경로, container tag와 checked-in result
+directory는 Riley rename 이전에 생성된 immutable provenance다. 해당 식별자의
+`rustinfer` 문자열은 실제 보존 위치와 hash를 가리키므로 이름을 바꾸지 않는다.
 
 ## Production 기술 경계
 
@@ -74,7 +85,9 @@ Python
 
 ## 수학적 최적화 배치 원칙
 
-수학적으로 연산을 치환할 수 있다는 이유만으로 초기 core에 넣지 않는다. 모든 최적화는 다음 네 등급 중 하나를 선언한다.
+수학적으로 연산을 치환할 수 있다는 이유만으로 초기 core에 넣지 않는다. 모든
+최적화는 다음 네 등급 중 하나를 선언한다. allocator/scheduler/cache처럼 수학적
+변환이 없는 exact systems 확장은 별도 `reference` class를 사용한다.
 
 | 등급 | 의미 | 기본 정책 | 배치 단계 |
 |---|---|---|---|
@@ -115,7 +128,9 @@ PR 14에서 취소, 연결 종료, 과부하, 오류 응답이 GPU 자원 누수
 
 ### Gate E — 첫 릴리스
 
-PR 16의 soak test와 성능 회귀 gate를 통과해야 release tag를 만든다. `A1` 근사는 첫 릴리스 기본 경로가 아니다.
+동일 candidate revision이 canonical E0 correctness, Python-free, 성능 회귀와
+soak gate를 각각 통과해야 release tag를 만든다. Canonical correctness는
+soak와 독립적인 단기 gate다. `A1` 근사는 첫 릴리스 기본 경로가 아니다.
 
 ### Gate F — Python-free production
 
@@ -130,7 +145,7 @@ PR 16에서 Python이 설치되지 않은 release 환경으로 model load, prefi
 5. 모든 `unsafe`와 CUDA FFI는 작은 경계에 가둔다.
 6. 외부 backend를 먼저 사용하고, profiler가 증명한 병목만 custom kernel 대상으로 삼는다.
 7. 한 PR에서 correctness와 aggressive optimization을 동시에 하지 않는다.
-8. `E0`, `E1`, `A1`, `M1` 중 의미 보존 등급을 선언하지 않은 최적화는 병합하지 않는다.
+8. `reference`, `E0`, `E1`, `A1`, `M1` 중 적용되는 의미 보존 등급을 선언하지 않은 최적화는 병합하지 않는다.
 9. 근사 최적화는 error budget, exact fallback, feature flag와 결과 표기를 가져야 한다.
 10. production crate가 `tools/python` 또는 `experiments/triton`에 의존하면 병합하지 않는다.
 

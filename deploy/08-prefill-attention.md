@@ -19,7 +19,7 @@ Production attention path는 Python, PyTorch extension 또는 Triton Python JIT�
 - Materialized reference는 기존 staged-BF16 `QK → scale/mask → softmax → AV`를
   interface 뒤에서 유지한다. Caller-owned `[QH,S,S]` BF16 workspace 하나를 batch 간
   재사용한다.
-- Optimized backend `rustinfer.cuda.online-gqa-prefill.bf16.d64@1`은 D64 MHA/GQA의
+- Optimized backend `riley.cuda.online-gqa-prefill.bf16.d64@1`은 D64 MHA/GQA의
   causal·causal-local prefill을 8 warps/CTA, warp당 query row 하나, K/V 32-token tile로
   실행한다. Full score/probability matrix를 global memory에 쓰지 않는다.
 - QK 결과와 scaled score는 reference 계약과 같은 위치에서 BF16으로 반올림하되 register에만
@@ -252,7 +252,7 @@ non-contiguous view는 `false`로 선언된다. Online은 causal-local을 지원
 Native code는 Rust crate에 AOT link되며 backend별 runtime `dlopen`은 없다. Linked availability
 부재는 cold selector의 fallback/error 계약으로 다룬다.
 
-결과는 `RUSTINFER_CUDA_ARCHITECTURES=89`, RTX 4090, CUDA 12.8.93, driver 580.173.02에
+결과는 `RILEY_CUDA_ARCHITECTURES=89`, RTX 4090, CUDA 12.8.93, driver 580.173.02에
 귀속된다. 다른 architecture/toolkit은 동일 gate를 다시 실행해야 한다. NaN/±Inf와 empty row
 동작은 API/CPU merge contract에 정의했지만 model-level E0 evidence는 finite input 범위다.
 
