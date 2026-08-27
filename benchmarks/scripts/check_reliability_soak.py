@@ -1884,7 +1884,7 @@ def _validate_sample(event: dict[str, Any], path: str) -> None:
     _integer(gpu["vram_bytes"], f"{path}.gpu.vram_bytes")
     metrics = _exact(
         event["metrics"],
-        {"active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "counters"},
+        {"active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "batch_shapes", "counters"},
         f"{path}.metrics",
     )
     for key in ("active_requests", "waiting_requests", "kv_allocated_blocks"):
@@ -1892,11 +1892,57 @@ def _validate_sample(event: dict[str, Any], path: str) -> None:
     allocation = _exact(metrics["allocation"], {"device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"}, f"{path}.metrics.allocation")
     for key, value in allocation.items():
         _integer(value, f"{path}.metrics.allocation.{key}")
+    _validate_batch_shapes(metrics["batch_shapes"], f"{path}.metrics.batch_shapes")
     counters = _exact(metrics["counters"], {"cancellations", "disconnects", "overloads", "dropped_observations"}, f"{path}.metrics.counters")
     for key, value in counters.items():
         _integer(value, f"{path}.metrics.counters.{key}")
     if not isinstance(event["sample_dropped"], bool):
         _fail(f"{path}.sample_dropped", "must be boolean")
+
+
+def _validate_batch_shapes(value: Any, path: str) -> None:
+    shapes = _exact(value, {"metrics_degraded", "last", "bucket_count", "buckets"}, path)
+    if not isinstance(shapes["metrics_degraded"], bool):
+        _fail(f"{path}.metrics_degraded", "must be boolean")
+    bucket_count = _integer(shapes["bucket_count"], f"{path}.bucket_count")
+    if bucket_count > 10:
+        _fail(f"{path}.bucket_count", "must not exceed 10")
+    buckets = shapes["buckets"]
+    if not isinstance(buckets, list) or len(buckets) != 10:
+        _fail(f"{path}.buckets", "must contain exactly 10 fixed-capacity entries")
+    previous_dense_rows = 0
+    for index, raw in enumerate(buckets):
+        bucket_path = f"{path}.buckets[{index}]"
+        bucket = _exact(raw, {
+            "dense_rows", "hit_count", "latency_sample_count", "gpu_execution_ns_total",
+            "gpu_execution_ns_average", "gpu_execution_ns_maximum", "gpu_execution_ns_last",
+        }, bucket_path)
+        parsed = {name: _integer(item, f"{bucket_path}.{name}") for name, item in bucket.items()}
+        if index < bucket_count:
+            if parsed["dense_rows"] <= previous_dense_rows:
+                _fail(f"{bucket_path}.dense_rows", "prepared buckets must be positive and strictly increasing")
+            previous_dense_rows = parsed["dense_rows"]
+            samples = parsed["latency_sample_count"]
+            if parsed["hit_count"] != samples:
+                _fail(bucket_path, "committed hit and latency sample counts must match")
+            expected_average = parsed["gpu_execution_ns_total"] // samples if samples else 0
+            if parsed["gpu_execution_ns_average"] != expected_average:
+                _fail(f"{bucket_path}.gpu_execution_ns_average", "must equal total divided by sample count")
+        elif any(parsed.values()):
+            _fail(bucket_path, "unused fixed-capacity entries must be zeroed")
+    last = shapes["last"]
+    if last is None:
+        if any(buckets[index]["hit_count"] for index in range(bucket_count)):
+            _fail(f"{path}.last", "must exist after the first committed bucket hit")
+        return
+    observation = _exact(last, {"active_rows", "selected_dense_rows", "padding_rows"}, f"{path}.last")
+    active = _integer(observation["active_rows"], f"{path}.last.active_rows", 1)
+    selected = _integer(observation["selected_dense_rows"], f"{path}.last.selected_dense_rows", 1)
+    padding = _integer(observation["padding_rows"], f"{path}.last.padding_rows")
+    if active + padding != selected:
+        _fail(f"{path}.last", "active_rows + padding_rows must equal selected_dense_rows")
+    if not any(buckets[index]["dense_rows"] == selected and buckets[index]["hit_count"] > 0 for index in range(bucket_count)):
+        _fail(f"{path}.last.selected_dense_rows", "must reference a committed prepared bucket")
 
 
 def _validate_events(

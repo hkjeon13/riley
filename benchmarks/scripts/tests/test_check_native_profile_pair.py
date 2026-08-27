@@ -332,6 +332,60 @@ class NativeProfilePairTests(unittest.TestCase):
                 {"name": "execution_completion", "value": "iteration-batch"},
             )
 
+    def test_decode_fast_path_pairs_are_supported(self) -> None:
+        pairs = [
+            (
+                "batch_shape_policy",
+                "fixed-max",
+                "power-of-two",
+                "pr16-active-row-buckets-exact-v1",
+            ),
+            (
+                "metadata_transport",
+                "synchronous",
+                "packed-async",
+                "pr16-packed-metadata-h2d-exact-v1",
+            ),
+            (
+                "decode_fast_path",
+                "fixed-sync-cpu",
+                "bucket-packed-gpu",
+                "pr16-decode-fast-path-exact-v1",
+            ),
+            (
+                "greedy_output",
+                "cpu-logits",
+                "gpu-token",
+                "pr16-gpu-greedy-exact-v1",
+            ),
+        ]
+        for name, baseline_value, candidate_value, gate in pairs:
+            with self.subTest(name), tempfile.TemporaryDirectory() as directory:
+                fixture = ProfilePairFixture(Path(directory))
+                for row in fixture.baseline:
+                    row["source"]["implementation_id"] = f"native-{baseline_value}"
+                    row["source"]["runtime_flag"] = {
+                        "name": name,
+                        "value": baseline_value,
+                    }
+                    row["source"]["correctness_gate_id"] = gate
+                for row in fixture.candidate:
+                    row["source"]["implementation_id"] = f"native-{candidate_value}"
+                    row["source"]["runtime_flag"] = {
+                        "name": name,
+                        "value": candidate_value,
+                    }
+                    row["source"]["correctness_gate_id"] = gate
+                fixture.write()
+                report = checker.evaluate(
+                    fixture.baseline_paths, fixture.candidate_paths
+                )
+                self.assertTrue(report["passed"], report)
+                self.assertEqual(
+                    report["bindings"]["candidate_runtime"]["runtime_flag"],
+                    {"name": name, "value": candidate_value},
+                )
+
     def test_runtime_pair_requires_its_exact_correctness_gate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = ProfilePairFixture(Path(directory))

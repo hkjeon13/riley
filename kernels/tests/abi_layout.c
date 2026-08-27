@@ -119,6 +119,24 @@ _Static_assert(offsetof(RileyCudaRowGatherParams, input_row_count) == 152,
                "row gather dimension offset changed");
 _Static_assert(offsetof(RileyCudaRowGatherParams, reserved) == 176,
                "row gather reserved tail changed");
+_Static_assert(sizeof(RileyCudaBf16ArgmaxResult) == 8,
+               "BF16 argmax result ABI size changed");
+_Static_assert(offsetof(RileyCudaBf16ArgmaxResult, status) == 4,
+               "BF16 argmax result status offset changed");
+_Static_assert(RILEY_CUDA_BF16_ARGMAX_STATUS_SUCCESS == 0 &&
+                   RILEY_CUDA_BF16_ARGMAX_STATUS_NON_FINITE == 1 &&
+                   RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID == UINT32_MAX,
+               "BF16 argmax result constants changed");
+_Static_assert(sizeof(RileyCudaBf16ArgmaxParams) == 152,
+               "BF16 argmax params ABI size changed");
+_Static_assert(offsetof(RileyCudaBf16ArgmaxParams, logits) == 8,
+               "BF16 argmax logits offset changed");
+_Static_assert(offsetof(RileyCudaBf16ArgmaxParams, results) == 56,
+               "BF16 argmax results offset changed");
+_Static_assert(offsetof(RileyCudaBf16ArgmaxParams, row_count) == 104,
+               "BF16 argmax dimension offset changed");
+_Static_assert(offsetof(RileyCudaBf16ArgmaxParams, reserved) == 120,
+               "BF16 argmax reserved tail changed");
 _Static_assert(sizeof(RileyCudaQkGqaParams) == 216,
                "QK GQA params ABI size changed");
 _Static_assert(offsetof(RileyCudaQkGqaParams, query) == 8,
@@ -454,6 +472,10 @@ _Static_assert(offsetof(RileyCudaFixed37GemmPlanInfo, reserved) == 72,
 static RileyCudaStatus (*const nvidia_environment_probe_symbol)(
     RileyCudaNvidiaEnvironmentSnapshot*, RileyCudaErrorInfo*) =
     riley_cuda_nvidia_environment_probe;
+static RileyCudaStatus (*const command_batch_copy_h2d_symbol)(
+    RileyCudaDeviceBuffer*, uint64_t, RileyCudaPinnedHostBuffer*, uint64_t,
+    uint64_t, RileyCudaStream*, RileyCudaErrorInfo*) =
+    riley_cuda_command_batch_copy_h2d_async;
 static RileyCudaStatus (*const embedding_symbol)(
     const RileyCudaEmbeddingParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_embedding_execute;
@@ -509,6 +531,9 @@ static RileyCudaStatus (*const cast_symbol)(
 static RileyCudaStatus (*const row_gather_symbol)(
     const RileyCudaRowGatherParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_row_gather_execute;
+static RileyCudaStatus (*const bf16_argmax_symbol)(
+    const RileyCudaBf16ArgmaxParams*, RileyCudaStream*,
+    RileyCudaErrorInfo*) = riley_cuda_bf16_argmax_execute;
 static RileyCudaStatus (*const qk_gqa_symbol)(
     const RileyCudaQkGqaParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_qk_gqa_execute;
@@ -607,6 +632,10 @@ static RileyCudaStatus (*const ragged_paged_attention_symbol)(
     const RileyCudaRaggedPagedAttentionParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) =
     riley_cuda_ragged_paged_attention_execute;
+static RileyCudaStatus (*const ragged_paged_attention_grouped_heads_symbol)(
+    const RileyCudaRaggedPagedAttentionParams*, RileyCudaStream*,
+    RileyCudaErrorInfo*) =
+    riley_cuda_ragged_paged_attention_grouped_heads_execute;
 static RileyCudaStatus (*const
                                 fixed37_ragged_paged_attention_two_pass_symbol)(
     const RileyCudaFixed37RaggedPagedAttentionParams*,
@@ -616,6 +645,10 @@ static RileyCudaStatus (*const gemm_plan_create_symbol)(
     RileyCudaContext*, const RileyCudaGemmConfig*,
     RileyCudaGemmPlan**,
     RileyCudaErrorInfo*) = riley_cuda_gemm_plan_create;
+static RileyCudaStatus (*const gemm_plan_create_anchored_symbol)(
+    RileyCudaContext*, const RileyCudaGemmConfig*, RileyCudaGemmPlan*,
+    RileyCudaGemmPlan**,
+    RileyCudaErrorInfo*) = riley_cuda_gemm_plan_create_anchored;
 static RileyCudaStatus (*const gemm_plan_info_symbol)(
     RileyCudaGemmPlan*, RileyCudaGemmAlgorithmInfo*,
     RileyCudaErrorInfo*) = riley_cuda_gemm_plan_info;
@@ -647,6 +680,7 @@ static RileyCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 // warning configurations.
 const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
+    (const void*)&command_batch_copy_h2d_symbol,
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&hugging_face_smollm2_rms_norm_symbol,
     (const void*)&fixed37_rms_norm_symbol,
@@ -660,6 +694,7 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&rope_table_symbol,     (const void*)&rope_symbol,
     (const void*)&indexed_rope_symbol,
     (const void*)&cast_symbol,           (const void*)&row_gather_symbol,
+    (const void*)&bf16_argmax_symbol,
     (const void*)&qk_gqa_symbol,
     (const void*)&fixed37_qk_gqa_symbol,
     (const void*)&scale_causal_mask_symbol,
@@ -685,8 +720,10 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&paged_decode_attention_symbol,
     (const void*)&ragged_paged_kv_cache_write_symbol,
     (const void*)&ragged_paged_attention_symbol,
+    (const void*)&ragged_paged_attention_grouped_heads_symbol,
     (const void*)&fixed37_ragged_paged_attention_two_pass_symbol,
     (const void*)&gemm_plan_create_symbol,
+    (const void*)&gemm_plan_create_anchored_symbol,
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
     (const void*)&gemm_plan_close_symbol,

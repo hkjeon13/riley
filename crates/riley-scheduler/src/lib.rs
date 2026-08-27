@@ -73,7 +73,9 @@ pub use execution::{
 #[cfg(feature = "cuda")]
 pub use execution::{
     IterationExecutionFailure, LlamaIterationCudaTimer, execute_llama_iteration,
-    execute_llama_iteration_timed,
+    execute_llama_iteration_greedy, execute_llama_iteration_greedy_timed,
+    execute_llama_iteration_greedy_timed_with_workspace,
+    execute_llama_iteration_greedy_with_workspace, execute_llama_iteration_timed,
 };
 pub use metrics::{
     IterationMetricSample, MetricWindowSnapshot, SchedulerGauges, SchedulerMetricsSnapshot,

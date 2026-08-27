@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaDeviceBuffer,
-    CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaGemmReductionPolicy, CudaPinnedHostBuffer,
-    CudaRuntime, CudaStream, GemmParams,
+    CudaErrorKind, CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaGemmReductionPolicy,
+    CudaPinnedHostBuffer, CudaPreparedGemm, CudaRuntime, CudaStream, GemmParams,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -18,6 +18,8 @@ const UPLOAD_STAGING_BYTES: u64 = 1024 * 1024;
 const WARMUP_ITERATIONS: usize = 2;
 const MEASURED_ITERATIONS: usize = 11;
 const LARGE_CASE_SAMPLES: u64 = 97;
+const ANCHOR_ROWS: u64 = 256;
+const ACTIVE_ROW_BUCKETS: [u64; 8] = [1, 2, 4, 8, 16, 32, 64, 128];
 
 #[derive(Clone, Copy, Debug)]
 struct GemmCase {
@@ -26,6 +28,47 @@ struct GemmCase {
     n: u64,
     k: u64,
 }
+
+#[derive(Clone, Copy, Debug)]
+struct AnchoredGemmCase {
+    label: &'static str,
+    n: u64,
+    k: u64,
+    reduction_policy: CudaGemmReductionPolicy,
+}
+
+const ANCHORED_SMOLLM2_CASES: &[AnchoredGemmCase] = &[
+    AnchoredGemmCase {
+        label: "hidden",
+        n: 576,
+        k: 576,
+        reduction_policy: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    },
+    AnchoredGemmCase {
+        label: "key-value",
+        n: 192,
+        k: 576,
+        reduction_policy: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    },
+    AnchoredGemmCase {
+        label: "intermediate",
+        n: 1_536,
+        k: 576,
+        reduction_policy: CudaGemmReductionPolicy::StrictNoSplitV1,
+    },
+    AnchoredGemmCase {
+        label: "down",
+        n: 576,
+        k: 1_536,
+        reduction_policy: CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1,
+    },
+    AnchoredGemmCase {
+        label: "lm-head",
+        n: 49_152,
+        k: 576,
+        reduction_policy: CudaGemmReductionPolicy::StrictNoSplitV1,
+    },
+];
 
 const CASES: &[GemmCase] = &[
     GemmCase {
@@ -494,6 +537,96 @@ fn run_case(
     Ok(metadata)
 }
 
+fn zero_padded_input(first_row: &[u8], rows: u64, columns: u64) -> TestResult<Vec<u8>> {
+    let row_bytes = columns.checked_mul(2).ok_or("BF16 row bytes overflow")?;
+    assert_eq!(u64::try_from(first_row.len())?, row_bytes);
+    let total_bytes = rows
+        .checked_mul(row_bytes)
+        .ok_or("BF16 padded input bytes overflow")?;
+    let mut input = vec![0_u8; usize::try_from(total_bytes)?];
+    input[..first_row.len()].copy_from_slice(first_row);
+    Ok(input)
+}
+
+fn execute_prepared_plan(
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    plan: &mut CudaPreparedGemm,
+    input: &CudaDeviceBuffer,
+    weight: &CudaDeviceBuffer,
+) -> TestResult<Vec<u8>> {
+    let config = plan.config();
+    let metadata = plan.algorithm_metadata();
+    let mut output = context.allocate_device_buffer(config.output_bytes())?;
+    let mut workspace = if metadata.workspace_bytes() == 0 {
+        None
+    } else {
+        Some(context.allocate_device_buffer(metadata.workspace_bytes())?)
+    };
+    {
+        let workspace_span = workspace
+            .as_mut()
+            .map(|buffer| {
+                CudaBufferSpanMut::new(buffer, CudaDType::U8, 0, metadata.workspace_bytes())
+            })
+            .transpose()?;
+        let mut params = GemmParams {
+            input: CudaBufferSpan::new(input, CudaDType::BF16, 0, config.input_bytes())?,
+            weight: CudaBufferSpan::new(weight, CudaDType::BF16, 0, config.weight_bytes())?,
+            output: CudaBufferSpanMut::new(&mut output, CudaDType::BF16, 0, config.output_bytes())?,
+            workspace: workspace_span,
+        };
+        plan.execute(&mut params, stream)?;
+    }
+    let result = download(context, stream, &mut output)?;
+    output.close()?;
+    if let Some(workspace) = workspace {
+        workspace.close()?;
+    }
+    Ok(result)
+}
+
+fn assert_anchored_algorithm_signature(
+    label: &str,
+    anchor: CudaGemmAlgorithmMetadata,
+    child: CudaGemmAlgorithmMetadata,
+    child_m: u64,
+    n: u64,
+    k: u64,
+) {
+    assert_eq!(anchor.dimensions(), (ANCHOR_ROWS, n, k), "{label}");
+    assert_eq!(child.dimensions(), (child_m, n, k), "{label}");
+    assert_eq!(child.backend_id(), anchor.backend_id(), "{label}");
+    assert_eq!(child.algorithm_id(), anchor.algorithm_id(), "{label}");
+    assert_eq!(child.tile_id(), anchor.tile_id(), "{label}");
+    assert_eq!(child.stages_id(), anchor.stages_id(), "{label}");
+    assert_eq!(child.split_k(), anchor.split_k(), "{label}");
+    assert_eq!(
+        child.reduction_scheme(),
+        anchor.reduction_scheme(),
+        "{label}"
+    );
+    assert_eq!(child.cta_swizzling(), anchor.cta_swizzling(), "{label}");
+    assert_eq!(child.custom_option(), anchor.custom_option(), "{label}");
+    assert_eq!(
+        child.numerical_implementation_flags(),
+        anchor.numerical_implementation_flags(),
+        "{label}"
+    );
+    assert_eq!(child.deterministic(), anchor.deterministic(), "{label}");
+    assert_eq!(
+        child.compute_capability(),
+        anchor.compute_capability(),
+        "{label}"
+    );
+    assert_eq!(child.runtime_version(), anchor.runtime_version(), "{label}");
+    assert_eq!(
+        child.cublaslt_version(),
+        anchor.cublaslt_version(),
+        "{label}"
+    );
+}
+
 #[test]
 #[ignore = "remote GPU"]
 fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes() -> TestResult {
@@ -651,5 +784,142 @@ fn deterministic_bf16_gemm_matches_f32_reference_for_odd_smollm2_and_qwen_shapes
     assert!(context.allocation_stats()?.is_zero());
     context.synchronize()?;
     context.close()?;
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn anchored_maximum_algorithms_preserve_smollm2_active_row_gemm_bytes() -> TestResult {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut upload_staging = context.allocate_pinned_host_buffer(UPLOAD_STAGING_BYTES)?;
+
+    for (case_index, case) in ANCHORED_SMOLLM2_CASES.iter().enumerate() {
+        let maximum_config =
+            CudaGemmConfig::new(ANCHOR_ROWS, case.n, case.k, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(case.reduction_policy);
+        let mut maximum = context.prepare_gemm(maximum_config)?;
+        let maximum_metadata = maximum.algorithm_metadata();
+        let first_row = patterned_bf16_bytes(
+            case.k,
+            u64::try_from(case_index)?.wrapping_mul(2).wrapping_add(1),
+        )?;
+        let maximum_input = upload(
+            &context,
+            &mut stream,
+            &mut upload_staging,
+            &zero_padded_input(&first_row, ANCHOR_ROWS, case.k)?,
+        )?;
+        let weight = upload(
+            &context,
+            &mut stream,
+            &mut upload_staging,
+            &patterned_bf16_bytes(
+                case.n
+                    .checked_mul(case.k)
+                    .ok_or("weight element overflow")?,
+                u64::try_from(case_index)?.wrapping_mul(2).wrapping_add(2),
+            )?,
+        )?;
+        let maximum_output =
+            execute_prepared_plan(&context, &mut stream, &mut maximum, &maximum_input, &weight)?;
+        let first_row_bytes = usize::try_from(case.n.checked_mul(2).ok_or("row bytes overflow")?)?;
+
+        for &active_rows in &ACTIVE_ROW_BUCKETS {
+            let child_config =
+                CudaGemmConfig::new(active_rows, case.n, case.k, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                    .with_reduction_policy(case.reduction_policy);
+            let mut child = context
+                .prepare_gemm_anchored(child_config, &maximum)
+                .map_err(|source| {
+                    std::io::Error::other(format!(
+                        "{} M={active_rows} must retain the M={ANCHOR_ROWS} algorithm: {source}",
+                        case.label
+                    ))
+                })?;
+            let child_metadata = child.algorithm_metadata();
+            assert_anchored_algorithm_signature(
+                case.label,
+                maximum_metadata,
+                child_metadata,
+                active_rows,
+                case.n,
+                case.k,
+            );
+            assert!(
+                child_metadata.workspace_bytes() <= child_config.max_workspace_bytes(),
+                "{} M={active_rows} workspace exceeds the configured cap",
+                case.label
+            );
+            let child_input = upload(
+                &context,
+                &mut stream,
+                &mut upload_staging,
+                &zero_padded_input(&first_row, active_rows, case.k)?,
+            )?;
+            let child_output =
+                execute_prepared_plan(&context, &mut stream, &mut child, &child_input, &weight)?;
+            assert_eq!(
+                &child_output[..first_row_bytes],
+                &maximum_output[..first_row_bytes],
+                "{} M={active_rows} first-row bytes differ from the M={ANCHOR_ROWS} anchor",
+                case.label
+            );
+            child.close()?;
+            child_input.close()?;
+        }
+
+        maximum.close()?;
+        maximum_input.close()?;
+        weight.close()?;
+    }
+
+    let anchor_config = CudaGemmConfig::new(ANCHOR_ROWS, 576, 576, PRODUCTION_MAX_WORKSPACE_BYTES)?
+        .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1);
+    let anchor = context.prepare_gemm(anchor_config)?;
+    let incompatible_dimensions = context
+        .prepare_gemm_anchored(
+            CudaGemmConfig::new(1, 577, 576, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1),
+            &anchor,
+        )
+        .expect_err("N/K mismatch must not fall back to a heuristic");
+    assert_eq!(
+        incompatible_dimensions.kind(),
+        CudaErrorKind::InvalidArgument
+    );
+    let incompatible_policy = context
+        .prepare_gemm_anchored(
+            CudaGemmConfig::new(1, 576, 576, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(CudaGemmReductionPolicy::StrictNoSplitV1),
+            &anchor,
+        )
+        .expect_err("reduction-policy mismatch must not fall back to a heuristic");
+    assert_eq!(incompatible_policy.kind(), CudaErrorKind::InvalidArgument);
+    let foreign_context = device.create_context()?;
+    let foreign_anchor = foreign_context.prepare_gemm(anchor_config)?;
+    let foreign_context_error = context
+        .prepare_gemm_anchored(
+            CudaGemmConfig::new(1, 576, 576, PRODUCTION_MAX_WORKSPACE_BYTES)?
+                .with_reduction_policy(CudaGemmReductionPolicy::AllowInPlaceAndOutputTypeSplitKV1),
+            &foreign_anchor,
+        )
+        .expect_err("foreign-context anchor must be rejected before native preparation");
+    assert_eq!(foreign_context_error.kind(), CudaErrorKind::InvalidState);
+    foreign_anchor.close()?;
+    foreign_context.close()?;
+    anchor.close()?;
+
+    upload_staging.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    context.synchronize()?;
+    context.close()?;
+    println!(
+        "riley-cuda-anchored-gemm schema_version=1 anchor_m={ANCHOR_ROWS} \
+active_buckets=1,2,4,8,16,32,64,128 geometries=hidden,key-value,intermediate,down,lm-head \
+heuristic_fallbacks=0 first_row_byte_mismatches=0 status=passed"
+    );
     Ok(())
 }

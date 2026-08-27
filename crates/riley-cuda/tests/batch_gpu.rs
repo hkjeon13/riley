@@ -10,8 +10,8 @@ use riley_cuda::{
     PackedBatchHostV1, PackedBatchV1, PagedDecodeAttentionNoWorkspaceParams,
     PagedDecodeAttentionRequest, PagedKvBlockTableHostV1, PagedKvBlockTableV1,
     PreparedPagedDecodeAttention, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
-    RopeParams, RowGatherParams, fixed37_ragged_paged_attention, indexed_rope,
-    ragged_paged_attention, ragged_paged_kv_cache_write, rope, row_gather,
+    RopeParams, RowGatherParams, fixed37_ragged_paged_attention, grouped_ragged_paged_attention,
+    indexed_rope, ragged_paged_kv_cache_write, rope, row_gather,
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -831,8 +831,8 @@ fn ragged_kv_scatter_crosses_15_16_17_and_preserves_every_untouched_lane() -> Te
 }
 
 #[test]
-#[ignore = "requires the remote CUDA GPU on server-4096"]
-fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestResult {
+#[ignore = "requires the remote CUDA GPU on ai-assistant"]
+fn grouped_ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestResult {
     let Some((context, mut stream)) = first_context()? else {
         return Ok(());
     };
@@ -843,8 +843,10 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
     let row_sequence_slots = [0_u32, 1, 0, 1, 0];
     let row_positions = [17_u32, 4, 0, 2, 16];
     let physical_block_count = 6_usize;
-    let query_head_count = 4_usize;
-    let key_value_head_count = 2_usize;
+    // Exercise the production SmolLM2 GQA geometry: three query-head warps
+    // share each KV head's staged K/V tile.
+    let query_head_count = 9_usize;
+    let key_value_head_count = 3_usize;
     let output_row_count = 8_usize;
     let host = PackedBatchHostV1::new(
         &sequence_block_offsets,
@@ -946,7 +948,7 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
     let baseline = context.allocation_stats()?;
 
     let output_len = output.byte_len();
-    let error = ragged_paged_attention(
+    let error = grouped_ragged_paged_attention(
         &mut RaggedPagedAttentionParams {
             query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
             key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
@@ -977,7 +979,7 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
     assert_eq!(error.kind(), CudaErrorKind::InvalidArgument);
 
     let output_len = output.byte_len();
-    let error = ragged_paged_attention(
+    let error = grouped_ragged_paged_attention(
         &mut RaggedPagedAttentionParams {
             query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
             key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
@@ -1012,9 +1014,10 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
         "attention validation mutated output"
     );
 
+    let mut prior_output = None;
     for _ in 0..3 {
         let output_len = output.byte_len();
-        ragged_paged_attention(
+        grouped_ragged_paged_attention(
             &mut RaggedPagedAttentionParams {
                 query: CudaBufferSpan::new(&query, CudaDType::BF16, 0, query.byte_len())?,
                 key_pool: CudaBufferSpan::new(&key_pool, CudaDType::BF16, 0, key_pool.byte_len())?,
@@ -1041,9 +1044,18 @@ fn ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail() -> TestR
             },
             &mut stream,
         )?;
+        let current = download(&context, &mut stream, &mut output)?;
+        if let Some(prior) = &prior_output {
+            assert_eq!(
+                current, *prior,
+                "grouped-head ragged attention must remain byte-deterministic"
+            );
+        }
+        prior_output = Some(current);
     }
 
-    let actual = decode_bf16(&download(&context, &mut stream, &mut output)?);
+    let actual =
+        decode_bf16(&prior_output.expect("three grouped-head launches must produce an output"));
     let active_elements = row_positions.len() * query_head_count * D;
     assert_close(
         &actual[..active_elements],

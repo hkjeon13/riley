@@ -104,11 +104,13 @@ fn cuda_config() -> TestResult<CudaBackendConfig> {
         )?,
         PreparedLlamaForwardConfig::default(),
     )
-    .with_fused_residual_norm();
+    .with_fused_residual_norm()
+    .with_grouped_ragged_attention_heads();
     Ok(CudaBackendConfig {
         device_ordinal: 0,
         scheduler,
         executor,
+        gpu_greedy: false,
     })
 }
 

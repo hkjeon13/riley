@@ -596,8 +596,62 @@ def _validate_correctness_report(document: Mapping[str, Any]) -> dict[str, str]:
     }
 
 
+def _validate_batch_shapes(value: Any, path: str) -> dict[str, Any]:
+    row = _closed(value, {"metrics_degraded", "last", "bucket_count", "buckets"}, path)
+    bucket_count = _integer(row["bucket_count"], f"{path}.bucket_count")
+    if bucket_count > 10:
+        _fail(f"{path}.bucket_count", "must not exceed 10")
+    raw_buckets = row["buckets"]
+    if not isinstance(raw_buckets, list) or len(raw_buckets) != 10:
+        _fail(f"{path}.buckets", "must contain exactly 10 fixed-capacity entries")
+    buckets: list[dict[str, int]] = []
+    previous_dense_rows = 0
+    keys = {
+        "dense_rows", "hit_count", "latency_sample_count", "gpu_execution_ns_total",
+        "gpu_execution_ns_average", "gpu_execution_ns_maximum", "gpu_execution_ns_last",
+    }
+    for index, raw in enumerate(raw_buckets):
+        bucket_path = f"{path}.buckets[{index}]"
+        bucket = _closed(raw, keys, bucket_path)
+        parsed = {name: _integer(item, f"{bucket_path}.{name}") for name, item in bucket.items()}
+        if index < bucket_count:
+            if parsed["dense_rows"] <= previous_dense_rows:
+                _fail(f"{bucket_path}.dense_rows", "prepared buckets must be positive and strictly increasing")
+            previous_dense_rows = parsed["dense_rows"]
+            samples = parsed["latency_sample_count"]
+            if parsed["hit_count"] != samples:
+                _fail(bucket_path, "committed hit and latency sample counts must match")
+            average = parsed["gpu_execution_ns_total"] // samples if samples else 0
+            if parsed["gpu_execution_ns_average"] != average:
+                _fail(f"{bucket_path}.gpu_execution_ns_average", "must equal total divided by sample count")
+        elif any(parsed.values()):
+            _fail(bucket_path, "unused fixed-capacity entries must be zeroed")
+        buckets.append(parsed)
+    last = row["last"]
+    parsed_last = None
+    if last is not None:
+        observation = _closed(last, {"active_rows", "selected_dense_rows", "padding_rows"}, f"{path}.last")
+        parsed_last = {
+            "active_rows": _integer(observation["active_rows"], f"{path}.last.active_rows", 1),
+            "selected_dense_rows": _integer(observation["selected_dense_rows"], f"{path}.last.selected_dense_rows", 1),
+            "padding_rows": _integer(observation["padding_rows"], f"{path}.last.padding_rows"),
+        }
+        if parsed_last["active_rows"] + parsed_last["padding_rows"] != parsed_last["selected_dense_rows"]:
+            _fail(f"{path}.last", "active_rows + padding_rows must equal selected_dense_rows")
+        if not any(bucket["dense_rows"] == parsed_last["selected_dense_rows"] and bucket["hit_count"] > 0 for bucket in buckets[:bucket_count]):
+            _fail(f"{path}.last.selected_dense_rows", "must reference a committed prepared bucket")
+    elif any(bucket["hit_count"] for bucket in buckets[:bucket_count]):
+        _fail(f"{path}.last", "must exist after the first committed bucket hit")
+    return {
+        "metrics_degraded": _boolean(row["metrics_degraded"], f"{path}.metrics_degraded"),
+        "last": parsed_last,
+        "bucket_count": bucket_count,
+        "buckets": buckets,
+    }
+
+
 def _validate_metrics(value: Any, path: str, *, final: bool) -> dict[str, Any]:
-    row = _closed(value, {"active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "counters"}, path)
+    row = _closed(value, {"active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "batch_shapes", "counters"}, path)
     allocation = _closed(
         row["allocation"],
         {"device_live_count", "device_live_bytes", "pinned_live_count", "pinned_live_bytes"},
@@ -609,6 +663,7 @@ def _validate_metrics(value: Any, path: str, *, final: bool) -> dict[str, Any]:
         "waiting_requests": _integer(row["waiting_requests"], f"{path}.waiting_requests"),
         "kv_allocated_blocks": _integer(row["kv_allocated_blocks"], f"{path}.kv_allocated_blocks"),
         "allocation": {key: _integer(item, f"{path}.allocation.{key}") for key, item in allocation.items()},
+        "batch_shapes": _validate_batch_shapes(row["batch_shapes"], f"{path}.batch_shapes"),
         "counters": {key: _integer(item, f"{path}.counters.{key}") for key, item in counters.items()},
     }
     if final and any((result["active_requests"], result["waiting_requests"], result["kv_allocated_blocks"], *result["allocation"].values())):

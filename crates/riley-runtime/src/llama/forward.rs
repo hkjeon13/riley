@@ -304,6 +304,7 @@ impl PreparedLlamaForward {
             rms_norm_profile: _,
             rope_table_profile: _,
             gemm_reduction_policies: _,
+            gemm_workspace_cap_bytes: _,
             buffers,
             io_staging,
             token_bytes: _,
@@ -1146,6 +1147,30 @@ impl PreparedLlamaAllocationReport {
     pub const fn pinned_host_allocation_count(self) -> u64 {
         self.pinned_host_allocation_count
     }
+
+    fn replace_gemm_workspace_bytes(&mut self, replacement_bytes: u64) -> LlamaForwardResult<()> {
+        let previous_bytes = self.gemm_workspace_bytes;
+        let total_device_bytes = self
+            .total_device_bytes
+            .checked_sub(previous_bytes)
+            .and_then(|bytes| bytes.checked_add(replacement_bytes))
+            .ok_or(LlamaForwardError::ArithmeticOverflow {
+                resource: LlamaForwardResource::GemmWorkspace,
+            })?;
+        let device_allocation_count = if previous_bytes == 0 && replacement_bytes != 0 {
+            self.device_allocation_count.checked_add(1).ok_or(
+                LlamaForwardError::ArithmeticOverflow {
+                    resource: LlamaForwardResource::GemmWorkspace,
+                },
+            )?
+        } else {
+            self.device_allocation_count
+        };
+        self.total_device_bytes = total_device_bytes;
+        self.device_allocation_count = device_allocation_count;
+        self.gemm_workspace_bytes = replacement_bytes;
+        Ok(())
+    }
 }
 
 pub(super) struct GemmPlans {
@@ -1163,6 +1188,48 @@ impl GemmPlans {
             || self.intermediate.is_poisoned()
             || self.down.is_poisoned()
             || self.lm_head.is_poisoned()
+    }
+
+    pub(super) fn maximum_workspace_bytes(&self) -> u64 {
+        [
+            self.hidden.workspace_bytes(),
+            self.key_value.workspace_bytes(),
+            self.intermediate.workspace_bytes(),
+            self.down.workspace_bytes(),
+            self.lm_head.workspace_bytes(),
+        ]
+        .into_iter()
+        .max()
+        .unwrap_or(0)
+    }
+
+    pub(super) fn close(self) -> LlamaForwardResult<()> {
+        let Self {
+            hidden,
+            key_value,
+            intermediate,
+            down,
+            lm_head,
+        } = self;
+        let mut first = None;
+        record_close(&mut first, LlamaForwardResource::HiddenGemm, hidden.close());
+        record_close(
+            &mut first,
+            LlamaForwardResource::KeyValueGemm,
+            key_value.close(),
+        );
+        record_close(
+            &mut first,
+            LlamaForwardResource::IntermediateGemm,
+            intermediate.close(),
+        );
+        record_close(&mut first, LlamaForwardResource::DownGemm, down.close());
+        record_close(
+            &mut first,
+            LlamaForwardResource::LmHeadGemm,
+            lm_head.close(),
+        );
+        first.map_or(Ok(()), Err)
     }
 }
 
@@ -1198,6 +1265,7 @@ pub struct PreparedLlamaForward {
     rms_norm_profile: LlamaRmsNormProfile,
     rope_table_profile: LlamaRopeTableProfile,
     gemm_reduction_policies: LlamaGemmReductionPolicies,
+    gemm_workspace_cap_bytes: u64,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,
     pub(super) token_bytes: Box<[u8]>,
@@ -1217,6 +1285,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("rms_norm_profile", &self.rms_norm_profile)
             .field("rope_table_profile", &self.rope_table_profile)
             .field("gemm_reduction_policies", &self.gemm_reduction_policies)
+            .field("gemm_workspace_cap_bytes", &self.gemm_workspace_cap_bytes)
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
             .field("output_ready", &self.output_ready)
@@ -1296,17 +1365,9 @@ impl PreparedLlamaForward {
             config.gemm_workspace_cap_bytes,
             config.reduction_profile,
             gemm_reduction_policies,
+            None,
         )?;
-        let gemm_workspace_bytes = [
-            gemms.hidden.workspace_bytes(),
-            gemms.key_value.workspace_bytes(),
-            gemms.intermediate.workspace_bytes(),
-            gemms.down.workspace_bytes(),
-            gemms.lm_head.workspace_bytes(),
-        ]
-        .into_iter()
-        .max()
-        .unwrap_or(0);
+        let gemm_workspace_bytes = gemms.maximum_workspace_bytes();
         let mut buffers = allocate_buffers(
             context,
             &plan,
@@ -1375,6 +1436,7 @@ impl PreparedLlamaForward {
             rms_norm_profile,
             rope_table_profile,
             gemm_reduction_policies,
+            gemm_workspace_cap_bytes: config.gemm_workspace_cap_bytes,
             buffers,
             io_staging,
             token_bytes,
@@ -1389,6 +1451,99 @@ impl PreparedLlamaForward {
     #[must_use]
     pub const fn plan(&self) -> &LlamaExecutionPlan {
         &self.plan
+    }
+
+    /// Prepares one exact dense-row plan and its GEMM variants against this
+    /// owner's uploaded weights and maximum-size shared workspace.
+    ///
+    /// The returned value owns algorithms only. It borrows no model data and
+    /// allocates no duplicate weights, KV storage, or graph buffers.
+    pub(super) fn prepare_batch_shape_variant(
+        &self,
+        model: &LoadedModel,
+        context: &CudaContext,
+        dense_rows: usize,
+    ) -> LlamaForwardResult<(LlamaExecutionPlan, GemmPlans)> {
+        if dense_rows == 0 || dense_rows >= self.plan.sequence_length() {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "dense_rows",
+                reason: "batch shape variants must be non-zero and smaller than the maximum plan",
+            });
+        }
+        let plan = LlamaExecutionPlan::prepare(model.spec(), &self.weights, dense_rows)?;
+        if plan.dimensions() != self.plan.dimensions()
+            || plan.layers().len() != self.plan.layers().len()
+            || plan.rope_theta().to_bits() != self.plan.rope_theta().to_bits()
+        {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "batch_shape_plan",
+                reason: "shape variant changed immutable model topology",
+            });
+        }
+        let gemms = prepare_gemms(
+            context,
+            &plan,
+            self.gemm_workspace_cap_bytes,
+            self.reduction_profile,
+            self.gemm_reduction_policies,
+            Some(&self.gemms),
+        )?;
+        Ok((plan, gemms))
+    }
+
+    /// Grows the one shared GEMM workspace to the largest requirement selected
+    /// across the maximum plan and every cold-prepared batch-shape variant.
+    /// This cold-path operation never reallocates after preparation returns.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the selected requirement exceeds the configured cap, the
+    /// replacement allocation or old-buffer close fails, or report arithmetic
+    /// cannot represent the replacement.
+    pub(super) fn ensure_batch_shape_gemm_workspace(
+        &mut self,
+        context: &CudaContext,
+        required_bytes: u64,
+    ) -> LlamaForwardResult<()> {
+        if required_bytes > self.gemm_workspace_cap_bytes {
+            return Err(LlamaForwardError::InvalidConfiguration {
+                field: "gemm_workspace_bytes",
+                reason: "a prepared batch shape exceeded the configured GEMM workspace cap",
+            });
+        }
+        let current_bytes = self
+            .buffers
+            .gemm_workspace
+            .as_ref()
+            .map_or(0, CudaDeviceBuffer::byte_len);
+        if required_bytes <= current_bytes {
+            return Ok(());
+        }
+
+        let mut replacement_report = self.allocation_report;
+        replacement_report.replace_gemm_workspace_bytes(required_bytes)?;
+        let replacement = context
+            .allocate_device_buffer(required_bytes)
+            .map_err(|source| {
+                LlamaForwardError::cuda(ExecutionSite::layer(0, LlamaOp::QueryProjection), source)
+            })?;
+        // Allocate before replacing the live owner so an allocation failure
+        // leaves the previous workspace and allocation report untouched. Once
+        // the replacement is installed, a failed old-buffer close poisons this
+        // forward owner rather than exposing a partially reconciled workspace
+        // to a later execution attempt.
+        let previous = self.buffers.gemm_workspace.replace(replacement);
+        self.allocation_report = replacement_report;
+        if let Some(previous) = previous {
+            if let Err(source) = previous.close() {
+                self.poisoned = true;
+                return Err(LlamaForwardError::cuda(
+                    ExecutionSite::layer(0, LlamaOp::QueryProjection),
+                    source,
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Exact owned allocations expected after successful preparation.
@@ -2588,6 +2743,7 @@ pub(super) fn prepare_gemms(
     workspace_cap: u64,
     reduction_profile: LlamaReductionProfile,
     policies: LlamaGemmReductionPolicies,
+    anchors: Option<&GemmPlans>,
 ) -> LlamaForwardResult<GemmPlans> {
     let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
     let dimensions = plan.dimensions();
@@ -2605,7 +2761,13 @@ pub(super) fn prepare_gemms(
     // In the fixed profile these five plans validate both reduction widths
     // used by the graph: `hidden` (also the RMSNorm axis) and `intermediate`.
     // Unsupported fixed37 shapes therefore fail here during cold preparation.
-    let prepare = |m, n, k, policy, site| -> LlamaForwardResult<PreparedLlamaGemm> {
+    let prepare = |m,
+                   n,
+                   k,
+                   policy,
+                   site,
+                   anchor: Option<&PreparedLlamaGemm>|
+     -> LlamaForwardResult<PreparedLlamaGemm> {
         let config = CudaGemmConfig::new(m, n, k, workspace_cap)
             .map_err(|source| LlamaForwardError::cuda(site, source))?;
         let config = match reduction_profile {
@@ -2613,9 +2775,18 @@ pub(super) fn prepare_gemms(
             LlamaReductionProfile::FixedContiguous37BalancedV1 => config,
         };
         match reduction_profile {
-            LlamaReductionProfile::CanonicalV1 => context
-                .prepare_gemm(config)
-                .map(PreparedLlamaGemm::Canonical),
+            LlamaReductionProfile::CanonicalV1 => match anchor {
+                None => context.prepare_gemm(config).map(PreparedLlamaGemm::Canonical),
+                Some(PreparedLlamaGemm::Canonical(anchor)) => context
+                    .prepare_gemm_anchored(config, anchor)
+                    .map(PreparedLlamaGemm::Canonical),
+                Some(PreparedLlamaGemm::Fixed37(_)) => {
+                    return Err(LlamaForwardError::InvalidConfiguration {
+                        field: "gemm_anchor",
+                        reason: "canonical shape variants require canonical maximum-shape GEMM anchors",
+                    });
+                }
+            },
             LlamaReductionProfile::FixedContiguous37BalancedV1 => context
                 .prepare_fixed37_gemm(config)
                 .map(PreparedLlamaGemm::Fixed37),
@@ -2629,6 +2800,7 @@ pub(super) fn prepare_gemms(
             hidden,
             policies.hidden(),
             ExecutionSite::layer(0, LlamaOp::QueryProjection),
+            anchors.map(|value| &value.hidden),
         )?,
         key_value: prepare(
             sequence,
@@ -2636,6 +2808,7 @@ pub(super) fn prepare_gemms(
             hidden,
             policies.key_value(),
             ExecutionSite::layer(0, LlamaOp::KeyProjection),
+            anchors.map(|value| &value.key_value),
         )?,
         intermediate: prepare(
             sequence,
@@ -2643,6 +2816,7 @@ pub(super) fn prepare_gemms(
             hidden,
             policies.intermediate(),
             ExecutionSite::layer(0, LlamaOp::GateProjection),
+            anchors.map(|value| &value.intermediate),
         )?,
         down: prepare(
             sequence,
@@ -2650,6 +2824,7 @@ pub(super) fn prepare_gemms(
             intermediate,
             policies.down(),
             ExecutionSite::layer(0, LlamaOp::DownProjection),
+            anchors.map(|value| &value.down),
         )?,
         lm_head: prepare(
             sequence,
@@ -2657,6 +2832,7 @@ pub(super) fn prepare_gemms(
             hidden,
             policies.lm_head(),
             ExecutionSite::global(LlamaOp::LmHead),
+            anchors.map(|value| &value.lm_head),
         )?,
     })
 }
@@ -2820,4 +2996,58 @@ fn build_cpu_rope_tables(plan: &LlamaExecutionPlan) -> LlamaForwardResult<RopeTa
 
 fn to_u64(value: usize, resource: LlamaForwardResource) -> LlamaForwardResult<u64> {
     u64::try_from(value).map_err(|_| LlamaForwardError::ArithmeticOverflow { resource })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workspace_growth_updates_exact_allocation_totals_once() {
+        let mut report = PreparedLlamaAllocationReport {
+            weight_bytes: 100,
+            graph_bytes: 200,
+            gemm_workspace_bytes: 0,
+            total_device_bytes: 300,
+            device_allocation_count: 7,
+            pinned_host_bytes: 64,
+            pinned_host_allocation_count: 1,
+        };
+
+        report
+            .replace_gemm_workspace_bytes(32)
+            .expect("zero-to-nonzero workspace growth is representable");
+        assert_eq!(report.gemm_workspace_bytes(), 32);
+        assert_eq!(report.total_device_bytes(), 332);
+        assert_eq!(report.device_allocation_count(), 8);
+
+        report
+            .replace_gemm_workspace_bytes(96)
+            .expect("nonzero workspace replacement is representable");
+        assert_eq!(report.gemm_workspace_bytes(), 96);
+        assert_eq!(report.total_device_bytes(), 396);
+        assert_eq!(report.device_allocation_count(), 8);
+    }
+
+    #[test]
+    fn workspace_report_growth_is_atomic_on_overflow() {
+        let mut report = PreparedLlamaAllocationReport {
+            weight_bytes: u64::MAX,
+            graph_bytes: 0,
+            gemm_workspace_bytes: 0,
+            total_device_bytes: u64::MAX,
+            device_allocation_count: 1,
+            pinned_host_bytes: 0,
+            pinned_host_allocation_count: 1,
+        };
+        let before = report;
+
+        assert!(matches!(
+            report.replace_gemm_workspace_bytes(1),
+            Err(LlamaForwardError::ArithmeticOverflow {
+                resource: LlamaForwardResource::GemmWorkspace,
+            })
+        ));
+        assert_eq!(report, before);
+    }
 }

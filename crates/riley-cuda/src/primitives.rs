@@ -1,5 +1,6 @@
 use std::error;
 use std::fmt;
+use std::mem::{offset_of, size_of};
 
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 use crate::gemm::FIXED37_MAX_REDUCTION_ELEMENTS;
@@ -17,6 +18,39 @@ pub const HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE: u64 = 576;
 pub const HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS: u64 = 8_192;
 /// Exact FP32 epsilon bits required by the reviewed `SmolLM2` model.
 pub const HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
+/// Successful deterministic BF16 argmax row.
+pub const BF16_ARGMAX_STATUS_SUCCESS: u32 = 0;
+/// At least one logit in the row was NaN or infinity.
+pub const BF16_ARGMAX_STATUS_NON_FINITE: u32 = 1;
+/// Token sentinel written for a non-finite row.
+pub const BF16_ARGMAX_INVALID_TOKEN_ID: u32 = u32::MAX;
+/// U32 words in one [`Bf16ArgmaxResult`] device record.
+pub const BF16_ARGMAX_RESULT_U32_WORDS: u64 = 2;
+
+/// One fixed-layout deterministic greedy result copied from device storage.
+///
+/// Device output is exposed as U32 storage, with one record per logits row.
+/// Unknown status values must be treated as a native-contract failure by the
+/// integration layer rather than as successful sampling.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
+pub struct Bf16ArgmaxResult {
+    /// Lowest token id tied for the finite row maximum, or the invalid sentinel.
+    pub token_id: u32,
+    /// One of the `BF16_ARGMAX_STATUS_*` constants.
+    pub status: u32,
+}
+
+impl Bf16ArgmaxResult {
+    /// Whether this row contains a valid greedy token.
+    #[must_use]
+    pub const fn is_success(self) -> bool {
+        self.status == BF16_ARGMAX_STATUS_SUCCESS
+    }
+}
+
+const _: () = assert!(size_of::<Bf16ArgmaxResult>() == 8);
+const _: () = assert!(offset_of!(Bf16ArgmaxResult, status) == 4);
 
 /// Scalar storage types accepted by the PR 06 CUDA primitive boundary.
 ///
@@ -1420,6 +1454,93 @@ pub fn cast(params: &mut CastParams<'_>, stream: &mut CudaStream) -> CudaResult<
     }
 }
 
+/// Inputs and row results for deterministic greedy BF16 selection.
+#[derive(Debug)]
+pub struct Bf16ArgmaxParams<'a> {
+    /// Contiguous BF16 `[row_count, vocabulary_size]` logits.
+    pub logits: CudaBufferSpan<'a>,
+    /// U32 `[row_count, 2]` storage for [`Bf16ArgmaxResult`] records.
+    pub results: CudaBufferSpanMut<'a>,
+    /// Number of independent logits rows.
+    pub row_count: u64,
+    /// Non-zero logits count per row, no larger than `u32::MAX`.
+    pub vocabulary_size: u64,
+}
+
+/// Selects one deterministic greedy token per BF16 logits row.
+///
+/// All logits in a row must be finite. A row containing any NaN or infinity
+/// writes `{ token_id: u32::MAX, status: BF16_ARGMAX_STATUS_NON_FINITE }`.
+/// Finite ties select the lower token id. This API has no RNG input or state.
+/// Within a [`crate::CudaCommandBatch`], the kernel is enqueued without adding
+/// an intermediate stream synchronization.
+///
+/// # Errors
+///
+/// Returns a dtype, shape, capacity, context, busy-state, launch, or completion
+/// error. Non-finite row values are data-plane statuses, not call failures.
+pub fn deterministic_bf16_argmax<S: CudaExecutionStream + ?Sized>(
+    params: &mut Bf16ArgmaxParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "deterministic_bf16_argmax";
+    let stream = execution_stream_mut(stream);
+    validate_bf16_argmax_descriptor(
+        params.logits.dtype,
+        params.logits.byte_len,
+        params.results.dtype,
+        params.results.byte_len,
+        params.row_count,
+        params.vocabulary_size,
+    )?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[params.logits.buffer, params.results.buffer],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::bf16_argmax_execute(
+            params.logits.raw(),
+            params.results.raw(),
+            params.row_count,
+            params.vocabulary_size,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+fn validate_bf16_argmax_descriptor(
+    logits_dtype: CudaDType,
+    logits_byte_len: u64,
+    results_dtype: CudaDType,
+    results_byte_len: u64,
+    row_count: u64,
+    vocabulary_size: u64,
+) -> CudaResult<()> {
+    const OPERATION: &str = "deterministic_bf16_argmax";
+    require_dtype(OPERATION, "logits", logits_dtype, CudaDType::BF16)?;
+    require_dtype(OPERATION, "results", results_dtype, CudaDType::U32)?;
+    require_nonzero(OPERATION, "vocabulary_size", vocabulary_size)?;
+    if vocabulary_size > u64::from(u32::MAX) {
+        return Err(CudaError::out_of_range(
+            OPERATION,
+            "vocabulary_size exceeds the U32 token-id contract",
+        ));
+    }
+    let logits_required =
+        required_matrix_bytes(OPERATION, row_count, vocabulary_size, CudaDType::BF16)?;
+    let result_elements = checked_product(OPERATION, row_count, BF16_ARGMAX_RESULT_U32_WORDS)?;
+    let results_required = required_vector_bytes(OPERATION, result_elements, CudaDType::U32)?;
+    require_capacity(OPERATION, "logits", logits_byte_len, logits_required)?;
+    require_capacity(OPERATION, "results", results_byte_len, results_required)
+}
+
 fn validate_embedding_params(params: &EmbeddingParams<'_>, stream: &CudaStream) -> CudaResult<()> {
     const OPERATION: &str = "embedding";
     require_nonzero(OPERATION, "vocabulary_size", params.vocabulary_size)?;
@@ -1691,8 +1812,12 @@ fn native_contract_error(operation: &'static str, message: impl Into<String>) ->
 
 #[cfg(test)]
 mod tests {
+    use std::mem::{offset_of, size_of};
+
     use super::{
-        CudaDType, checked_product3, required_matrix_bytes, validate_fixed37_axis, validate_span,
+        BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
+        Bf16ArgmaxResult, CudaDType, checked_product3, required_matrix_bytes,
+        validate_bf16_argmax_descriptor, validate_fixed37_axis, validate_span,
     };
     use crate::{CudaErrorKind, CudaErrorStage};
 
@@ -1734,5 +1859,121 @@ mod tests {
             30
         );
         assert!(checked_product3("test", u64::MAX, 2, 1).is_err());
+    }
+
+    #[test]
+    fn bf16_argmax_result_layout_and_status_contract_are_fixed() {
+        assert_eq!(size_of::<Bf16ArgmaxResult>(), 8);
+        assert_eq!(offset_of!(Bf16ArgmaxResult, token_id), 0);
+        assert_eq!(offset_of!(Bf16ArgmaxResult, status), 4);
+        assert_eq!(BF16_ARGMAX_STATUS_SUCCESS, 0);
+        assert_eq!(BF16_ARGMAX_STATUS_NON_FINITE, 1);
+        assert_eq!(BF16_ARGMAX_INVALID_TOKEN_ID, u32::MAX);
+    }
+
+    #[test]
+    fn bf16_argmax_descriptor_is_bf16_to_two_u32_words_per_row() {
+        validate_bf16_argmax_descriptor(CudaDType::BF16, 12, CudaDType::U32, 16, 2, 3)
+            .expect("two rows of three BF16 logits have two result records");
+        validate_bf16_argmax_descriptor(CudaDType::BF16, 0, CudaDType::U32, 0, 0, 3)
+            .expect("zero rows are a validated no-op");
+
+        let wrong_logits =
+            validate_bf16_argmax_descriptor(CudaDType::F32, 24, CudaDType::U32, 16, 2, 3)
+                .expect_err("F32 logits must fail closed");
+        assert_eq!(wrong_logits.kind(), CudaErrorKind::InvalidArgument);
+        let wrong_results =
+            validate_bf16_argmax_descriptor(CudaDType::BF16, 12, CudaDType::U16, 8, 2, 3)
+                .expect_err("result records must use U32 storage");
+        assert_eq!(wrong_results.kind(), CudaErrorKind::InvalidArgument);
+        let zero_vocabulary =
+            validate_bf16_argmax_descriptor(CudaDType::BF16, 0, CudaDType::U32, 8, 1, 0)
+                .expect_err("empty rows cannot select a token");
+        assert_eq!(zero_vocabulary.kind(), CudaErrorKind::InvalidArgument);
+        let token_overflow = validate_bf16_argmax_descriptor(
+            CudaDType::BF16,
+            u64::MAX,
+            CudaDType::U32,
+            8,
+            1,
+            u64::from(u32::MAX) + 1,
+        )
+        .expect_err("the invalid sentinel cannot also be a valid token id");
+        assert_eq!(token_overflow.kind(), CudaErrorKind::OutOfRange);
+
+        for (logits_bytes, results_bytes) in [(11, 16), (12, 15)] {
+            let error = validate_bf16_argmax_descriptor(
+                CudaDType::BF16,
+                logits_bytes,
+                CudaDType::U32,
+                results_bytes,
+                2,
+                3,
+            )
+            .expect_err("short input or output capacity must fail");
+            assert_eq!(error.kind(), CudaErrorKind::OutOfRange);
+        }
+        let shape_overflow = validate_bf16_argmax_descriptor(
+            CudaDType::BF16,
+            u64::MAX,
+            CudaDType::U32,
+            u64::MAX,
+            u64::MAX,
+            u64::from(u32::MAX),
+        )
+        .expect_err("shape arithmetic must not wrap");
+        assert_eq!(shape_overflow.kind(), CudaErrorKind::OutOfRange);
+    }
+
+    #[allow(clippy::float_cmp)]
+    fn reference_bf16_argmax(bits: &[u16]) -> Bf16ArgmaxResult {
+        let mut selected: Option<(f32, u32)> = None;
+        for (index, &value_bits) in bits.iter().enumerate() {
+            if value_bits & 0x7f80 == 0x7f80 {
+                return Bf16ArgmaxResult {
+                    token_id: BF16_ARGMAX_INVALID_TOKEN_ID,
+                    status: BF16_ARGMAX_STATUS_NON_FINITE,
+                };
+            }
+            let value = f32::from_bits(u32::from(value_bits) << 16);
+            let token_id = u32::try_from(index).expect("small CPU fixture");
+            if selected.is_none_or(|(maximum, selected_token)| {
+                value > maximum || (value == maximum && token_id < selected_token)
+            }) {
+                selected = Some((value, token_id));
+            }
+        }
+        Bf16ArgmaxResult {
+            token_id: selected.expect("non-empty CPU fixture").1,
+            status: BF16_ARGMAX_STATUS_SUCCESS,
+        }
+    }
+
+    #[test]
+    fn bf16_argmax_contract_rejects_non_finite_and_uses_lower_tie_id() {
+        assert_eq!(
+            reference_bf16_argmax(&[0xbf80, 0x4000, 0x4000, 0x3f80]),
+            Bf16ArgmaxResult {
+                token_id: 1,
+                status: BF16_ARGMAX_STATUS_SUCCESS,
+            }
+        );
+        assert_eq!(
+            reference_bf16_argmax(&[0xbf80, 0x0000, 0x8000, 0x0000]),
+            Bf16ArgmaxResult {
+                token_id: 1,
+                status: BF16_ARGMAX_STATUS_SUCCESS,
+            },
+            "+0 and -0 tie at the lower token id"
+        );
+        for non_finite in [0x7f80, 0xff80, 0x7fc1] {
+            assert_eq!(
+                reference_bf16_argmax(&[0x3f80, non_finite, 0x4000]),
+                Bf16ArgmaxResult {
+                    token_id: BF16_ARGMAX_INVALID_TOKEN_ID,
+                    status: BF16_ARGMAX_STATUS_NON_FINITE,
+                }
+            );
+        }
     }
 }

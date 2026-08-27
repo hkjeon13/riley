@@ -476,11 +476,192 @@ pub struct EngineAllocationMetrics {
     pub pinned_host_live_allocations: u64,
 }
 
+/// Maximum number of cold-prepared dense-row buckets exposed by one engine.
+///
+/// This mirrors the runtime executor's fixed inline capacity without making
+/// the no-CUDA server API depend on CUDA-only runtime types.
+pub const ENGINE_BATCH_SHAPE_BUCKET_CAPACITY: usize = 10;
+
+/// Active and selected dense-row facts for the latest committed iteration.
+#[allow(clippy::struct_field_names)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineBatchShapeObservation {
+    /// Flattened input-token rows executed by the runtime.
+    pub active_rows: usize,
+    /// Cold-prepared dense rows selected for execution.
+    pub selected_dense_rows: usize,
+    /// Inactive rows executed only to fill the selected dense shape.
+    pub padding_rows: usize,
+}
+
+/// Committed execution counters and GPU latency for one dense-row bucket.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct EngineBatchShapeBucketMetrics {
+    /// Exact dense-row count represented by this bucket.
+    pub dense_rows: usize,
+    /// Successfully committed iterations that selected this bucket.
+    pub hit_count: u64,
+    /// Committed iterations with one CUDA-event latency sample.
+    pub latency_sample_count: u64,
+    /// Sum of committed GPU execution durations in nanoseconds.
+    pub gpu_execution_ns_total: u64,
+    /// Largest committed GPU execution duration in nanoseconds.
+    pub gpu_execution_ns_maximum: u64,
+    /// Most recent committed GPU execution duration in nanoseconds.
+    pub gpu_execution_ns_last: u64,
+}
+
+impl EngineBatchShapeBucketMetrics {
+    /// Mean committed GPU execution duration in nanoseconds.
+    #[must_use]
+    pub const fn gpu_execution_ns_average(self) -> Option<u64> {
+        if self.latency_sample_count == 0 {
+            None
+        } else {
+            Some(self.gpu_execution_ns_total / self.latency_sample_count)
+        }
+    }
+}
+
+/// Fixed-capacity batch-shape metrics collected on the exclusive CUDA worker.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct EngineBatchShapeMetricsSnapshot {
+    /// Sticky signal that a non-authoritative shape metric could not be updated.
+    pub metrics_degraded: bool,
+    /// Latest successfully committed iteration, or none before the first hit.
+    pub last: Option<EngineBatchShapeObservation>,
+    /// Number of valid entries in [`Self::buckets`].
+    pub bucket_count: usize,
+    /// Cold-prepared buckets followed by zeroed unused entries.
+    pub buckets: [EngineBatchShapeBucketMetrics; ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
+}
+
+impl Default for EngineBatchShapeMetricsSnapshot {
+    fn default() -> Self {
+        Self {
+            metrics_degraded: false,
+            last: None,
+            bucket_count: 0,
+            buckets: [EngineBatchShapeBucketMetrics::default(); ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
+        }
+    }
+}
+
+impl EngineBatchShapeMetricsSnapshot {
+    /// Cold-prepared bucket entries in ascending dense-row order.
+    #[must_use]
+    pub fn prepared_buckets(&self) -> &[EngineBatchShapeBucketMetrics] {
+        self.buckets
+            .split_at(self.bucket_count.min(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY))
+            .0
+    }
+}
+
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BatchShapeExecutionSample {
+    active_rows: usize,
+    selected_dense_rows: usize,
+    padding_rows: usize,
+    gpu_execution_ns: u64,
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn prepare_batch_shape_metrics(
+    dense_rows: impl ExactSizeIterator<Item = usize>,
+) -> Result<EngineBatchShapeMetricsSnapshot, &'static str> {
+    let bucket_count = dense_rows.len();
+    if bucket_count == 0 {
+        return Err("batch-shape metrics require at least one prepared bucket");
+    }
+    if bucket_count > ENGINE_BATCH_SHAPE_BUCKET_CAPACITY {
+        return Err("batch-shape metrics exceed the fixed bucket capacity");
+    }
+    let mut snapshot = EngineBatchShapeMetricsSnapshot {
+        bucket_count,
+        ..EngineBatchShapeMetricsSnapshot::default()
+    };
+    let mut previous = 0_usize;
+    for (index, dense_rows) in dense_rows.enumerate() {
+        if dense_rows == 0 || dense_rows <= previous {
+            return Err("batch-shape metric buckets must be positive and strictly increasing");
+        }
+        snapshot.buckets[index].dense_rows = dense_rows;
+        previous = dense_rows;
+    }
+    Ok(snapshot)
+}
+
+/// Records only a scheduler-committed iteration. Staged execution facts are
+/// intentionally discarded when sampling, result construction, or scheduler
+/// commit fails before an iteration metric is produced.
+#[cfg(any(feature = "cuda", test))]
+fn record_committed_batch_shape(
+    snapshot: &mut EngineBatchShapeMetricsSnapshot,
+    staged: Option<BatchShapeExecutionSample>,
+    iteration_metric_recorded: bool,
+) {
+    if !iteration_metric_recorded {
+        return;
+    }
+    let Some(staged) = staged else {
+        snapshot.metrics_degraded = true;
+        return;
+    };
+    if staged.active_rows == 0
+        || staged.active_rows > staged.selected_dense_rows
+        || staged.selected_dense_rows - staged.active_rows != staged.padding_rows
+    {
+        snapshot.metrics_degraded = true;
+        return;
+    }
+    let Some(bucket_index) = snapshot
+        .prepared_buckets()
+        .iter()
+        .position(|bucket| bucket.dense_rows == staged.selected_dense_rows)
+    else {
+        snapshot.metrics_degraded = true;
+        return;
+    };
+    let bucket = snapshot.buckets[bucket_index];
+    let Some(next_hit_count) = bucket.hit_count.checked_add(1) else {
+        snapshot.metrics_degraded = true;
+        return;
+    };
+    let Some(next_latency_sample_count) = bucket.latency_sample_count.checked_add(1) else {
+        snapshot.metrics_degraded = true;
+        return;
+    };
+    let Some(next_gpu_execution_ns_total) = bucket
+        .gpu_execution_ns_total
+        .checked_add(staged.gpu_execution_ns)
+    else {
+        snapshot.metrics_degraded = true;
+        return;
+    };
+
+    snapshot.buckets[bucket_index] = EngineBatchShapeBucketMetrics {
+        dense_rows: bucket.dense_rows,
+        hit_count: next_hit_count,
+        latency_sample_count: next_latency_sample_count,
+        gpu_execution_ns_total: next_gpu_execution_ns_total,
+        gpu_execution_ns_maximum: bucket.gpu_execution_ns_maximum.max(staged.gpu_execution_ns),
+        gpu_execution_ns_last: staged.gpu_execution_ns,
+    };
+    snapshot.last = Some(EngineBatchShapeObservation {
+        active_rows: staged.active_rows,
+        selected_dense_rows: staged.selected_dense_rows,
+        padding_rows: staged.padding_rows,
+    });
+}
+
 /// Bounded operational snapshot produced on the exclusive backend worker.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EngineMetricsSnapshot {
     /// Scheduler counters, gauges, and fixed-window p95 values when available.
     pub scheduler: Option<SchedulerMetricsSnapshot>,
+    /// Committed CUDA batch-shape counters and latency when available.
+    pub batch_shapes: Option<EngineBatchShapeMetricsSnapshot>,
     /// CUDA allocation gauges when a native context is active.
     pub allocation: Option<EngineAllocationMetrics>,
 }
@@ -1317,13 +1498,16 @@ mod cuda_backend {
         FinishReason as RuntimeFinishReason, GenerationRequest as RuntimeGenerationRequest,
         GenerationState,
     };
-    use riley_runtime::llama::{PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig};
+    use riley_runtime::llama::{
+        MAX_LLAMA_BATCH_SHAPE_BUCKETS, PreparedLlamaBatchExecutor, PreparedLlamaBatchExecutorConfig,
+    };
     use riley_runtime::sampling::{SamplingParams, SamplingWorkspace, TokenConstraints};
     use riley_runtime::{CudaContext, CudaRuntime, CudaStream};
     use riley_scheduler::{
         ExecutionAbort, LlamaIterationCudaTimer, RequestCompletion, RequestDescriptor,
         RequestFinishReason, RequestId as SchedulerRequestId, SampledIterationToken, Scheduler,
-        SchedulerConfig, SchedulerError, execute_llama_iteration_timed,
+        SchedulerConfig, SchedulerError, execute_llama_iteration_greedy_timed_with_workspace,
+        execute_llama_iteration_timed,
     };
 
     use crate::domain::{
@@ -1332,10 +1516,14 @@ mod cuda_backend {
     };
 
     use super::{
-        BackendError, BackendEvent, EngineAllocationMetrics, EngineBackend, EngineConfig,
+        BackendError, BackendEvent, BatchShapeExecutionSample, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
+        EngineAllocationMetrics, EngineBackend, EngineBatchShapeMetricsSnapshot, EngineConfig,
         EngineError, EngineMetricsSnapshot, EngineRequestId, InferenceEngine,
-        private_request_error, visible_utf8_prefix,
+        prepare_batch_shape_metrics, private_request_error, record_committed_batch_shape,
+        visible_utf8_prefix,
     };
+
+    const _: () = assert!(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY == MAX_LLAMA_BATCH_SHAPE_BUCKETS);
 
     /// Cold CUDA, scheduler, and fixed-batch preparation settings.
     #[derive(Clone, Debug)]
@@ -1346,6 +1534,8 @@ mod cuda_backend {
         pub scheduler: SchedulerConfig,
         /// Fixed-M runtime metadata and forward policy.
         pub executor: PreparedLlamaBatchExecutorConfig,
+        /// Enables exact device-side greedy selection for eligible requests.
+        pub gpu_greedy: bool,
     }
 
     /// Fully prepared ownership bundle transferred into the engine worker.
@@ -1357,6 +1547,7 @@ mod cuda_backend {
         stream: CudaStream,
         executor: PreparedLlamaBatchExecutor,
         timer: LlamaIterationCudaTimer,
+        gpu_greedy: bool,
     }
 
     impl std::fmt::Debug for CudaEngineResources {
@@ -1423,6 +1614,7 @@ mod cuda_backend {
                 stream,
                 executor,
                 timer,
+                gpu_greedy: config.gpu_greedy,
             })
         }
 
@@ -1481,10 +1673,13 @@ mod cuda_backend {
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
         addressable_tokens: usize,
+        gpu_greedy: bool,
+        greedy_token_workspace: Vec<u32>,
         requests: Vec<CudaRequest>,
         samples: Vec<SampledIterationToken>,
         pending_tokens: Vec<PendingToken>,
         pending_events: VecDeque<BackendEvent>,
+        batch_shapes: EngineBatchShapeMetricsSnapshot,
         final_metrics: EngineMetricsSnapshot,
         clock: Instant,
     }
@@ -1506,6 +1701,10 @@ mod cuda_backend {
                 .map_err(|_| internal("allowed-token mask allocation failed"))?;
             allowed_tokens.resize(vocabulary_size, false);
             let output_capacity = resources.executor.config().metadata().max_output_slots();
+            let mut greedy_token_workspace = Vec::new();
+            greedy_token_workspace
+                .try_reserve_exact(output_capacity)
+                .map_err(|_| internal("greedy-token workspace allocation failed"))?;
             let mut samples = Vec::new();
             samples
                 .try_reserve_exact(output_capacity)
@@ -1528,6 +1727,14 @@ mod cuda_backend {
             pending_events
                 .try_reserve_exact(request_capacity)
                 .map_err(|_| internal("pending event allocation failed"))?;
+            let batch_shapes = prepare_batch_shape_metrics(
+                resources
+                    .executor
+                    .shape_bucket_hits()
+                    .iter()
+                    .map(|bucket| bucket.dense_rows()),
+            )
+            .map_err(internal)?;
             Ok(Self {
                 metadata: resources.metadata,
                 model: resources.model,
@@ -1539,10 +1746,13 @@ mod cuda_backend {
                 sampling,
                 allowed_tokens,
                 addressable_tokens,
+                gpu_greedy: resources.gpu_greedy,
+                greedy_token_workspace,
                 requests,
                 samples,
                 pending_tokens,
                 pending_events,
+                batch_shapes,
                 final_metrics: EngineMetricsSnapshot::default(),
                 clock: Instant::now(),
             })
@@ -1657,6 +1867,7 @@ mod cuda_backend {
             &mut self,
             plan: &riley_scheduler::IterationPlan,
             downloaded: &riley_scheduler::DownloadedLlamaIteration,
+            gpu_greedy: bool,
         ) -> Result<(), BackendError> {
             self.samples.clear();
             self.pending_tokens.clear();
@@ -1670,48 +1881,55 @@ mod cuda_backend {
                 let request_index = self
                     .request_index_by_scheduler(item.request_id())
                     .ok_or_else(|| internal("iteration references unknown request"))?;
-                let logits = downloaded
-                    .logits_for_slot(slot)
-                    .map_err(|source| internal(format!("logit routing failed: {source}")))?;
-
-                self.allowed_tokens.fill(false);
-                self.allowed_tokens[..self.addressable_tokens].fill(true);
                 let request = &mut self.requests[request_index];
-                for &token_id in request.state.masked_finish_token_ids() {
-                    let index = usize::try_from(token_id)
-                        .map_err(|_| internal("masked token ID cannot index vocabulary"))?;
-                    let allowed = self
-                        .allowed_tokens
-                        .get_mut(index)
-                        .ok_or_else(|| internal("masked token ID is outside vocabulary"))?;
-                    *allowed = false;
-                }
-                let distribution = self
-                    .sampling
-                    .process_bf16_native(
-                        logits,
-                        TokenConstraints::AllowedMask(&self.allowed_tokens),
-                        request.state.history_token_ids(),
-                        request.state.request().sampling_params,
+                let (token_id, token_logprob) = if gpu_greedy {
+                    (
+                        downloaded.greedy_token_for_slot(slot).map_err(|source| {
+                            internal(format!("greedy token routing failed: {source}"))
+                        })?,
+                        Some(0.0),
                     )
-                    .map_err(|source| internal(format!("sampling failed: {source}")))?;
-                let sample = distribution
-                    .sample(
-                        request
-                            .state
-                            .sampling_rng()
-                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?,
-                    )
-                    .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
+                } else {
+                    let logits = downloaded
+                        .logits_for_slot(slot)
+                        .map_err(|source| internal(format!("logit routing failed: {source}")))?;
+                    self.allowed_tokens.fill(false);
+                    self.allowed_tokens[..self.addressable_tokens].fill(true);
+                    for &masked_id in request.state.masked_finish_token_ids() {
+                        let index = usize::try_from(masked_id)
+                            .map_err(|_| internal("masked token ID cannot index vocabulary"))?;
+                        let allowed = self
+                            .allowed_tokens
+                            .get_mut(index)
+                            .ok_or_else(|| internal("masked token ID is outside vocabulary"))?;
+                        *allowed = false;
+                    }
+                    let distribution = self
+                        .sampling
+                        .process_bf16_native(
+                            logits,
+                            TokenConstraints::AllowedMask(&self.allowed_tokens),
+                            request.state.history_token_ids(),
+                            request.state.request().sampling_params,
+                        )
+                        .map_err(|source| internal(format!("sampling failed: {source}")))?;
+                    let sample =
+                        distribution
+                            .sample(request.state.sampling_rng().map_err(|source| {
+                                internal(format!("sampling RNG failed: {source}"))
+                            })?)
+                            .map_err(|source| internal(format!("sampling RNG failed: {source}")))?;
+                    (sample.token_id(), sample.token_logprob())
+                };
                 let needs_decoding = request
                     .state
-                    .token_needs_decoding(sample.token_id())
+                    .token_needs_decoding(token_id)
                     .map_err(|source| internal(format!("token acceptance failed: {source}")))?;
                 let decoded_count = if needs_decoding {
                     self.model
                         .tokenizer()
                         .decode_token_bytes_into(
-                            sample.token_id(),
+                            token_id,
                             DecodeOptions {
                                 skip_special_tokens: true,
                             },
@@ -1725,7 +1943,7 @@ mod cuda_backend {
                     needs_decoding.then_some(&request.decoded_token_bytes[..decoded_count]);
                 let generated = request
                     .state
-                    .accept_sample(sample, decoded)
+                    .accept_token(token_id, token_logprob, decoded)
                     .map_err(|source| internal(format!("token acceptance failed: {source}")))?;
                 let stop = matches!(
                     generated.finish_reason(),
@@ -1736,14 +1954,44 @@ mod cuda_backend {
                     )
                 );
                 self.samples
-                    .push(SampledIterationToken::new(sample.token_id(), stop));
+                    .push(SampledIterationToken::new(token_id, stop));
                 self.pending_tokens.push(PendingToken {
                     scheduler_id: item.request_id(),
-                    token_id: sample.token_id(),
+                    token_id,
                     text_delta: generated.text_delta().to_owned(),
                 });
             }
             Ok(())
+        }
+
+        #[allow(clippy::float_cmp)]
+        fn iteration_gpu_greedy_eligible(
+            &self,
+            plan: &riley_scheduler::IterationPlan,
+        ) -> Result<bool, BackendError> {
+            if !self.gpu_greedy || self.addressable_tokens != self.sampling.vocabulary_size() {
+                return Ok(false);
+            }
+            for &slot in plan.output_slots() {
+                let item = plan
+                    .prefill_items()
+                    .iter()
+                    .chain(plan.decode_items())
+                    .find(|item| item.output_slot() == Some(slot))
+                    .ok_or_else(|| internal("output slot has no scheduler work item"))?;
+                let request_index = self
+                    .request_index_by_scheduler(item.request_id())
+                    .ok_or_else(|| internal("iteration references unknown request"))?;
+                let state = &self.requests[request_index].state;
+                let params = state.request().sampling_params;
+                if params.temperature != 0.0
+                    || params.repetition_penalty != 1.0
+                    || !state.masked_finish_token_ids().is_empty()
+                {
+                    return Ok(false);
+                }
+            }
+            Ok(true)
         }
 
         fn snapshot_cancel_deltas(
@@ -1856,6 +2104,7 @@ mod cuda_backend {
                         Ok(allocation) => {
                             self.final_metrics = EngineMetricsSnapshot {
                                 scheduler: None,
+                                batch_shapes: Some(self.batch_shapes),
                                 allocation: Some(EngineAllocationMetrics {
                                     device_live_bytes: allocation.device_live_bytes(),
                                     device_live_allocations: allocation.device_live_allocations(),
@@ -2017,7 +2266,9 @@ mod cuda_backend {
                 return Ok(events);
             };
             self.snapshot_cancel_deltas(&plan)?;
-            let (downloaded, timing) = {
+            let gpu_greedy = self.iteration_gpu_greedy_eligible(&plan)?;
+            let expected_active_rows = plan.total_tokens();
+            let (mut downloaded, timing, staged_shape) = {
                 let executor = self
                     .executor
                     .as_mut()
@@ -2030,15 +2281,55 @@ mod cuda_backend {
                     .timer
                     .as_mut()
                     .ok_or_else(|| internal("CUDA timer is already closed"))?;
-                match execute_llama_iteration_timed(&plan, executor, stream, timer) {
-                    Ok(measured) => measured,
+                let execution = if gpu_greedy {
+                    execute_llama_iteration_greedy_timed_with_workspace(
+                        &plan,
+                        executor,
+                        stream,
+                        timer,
+                        &mut self.greedy_token_workspace,
+                    )
+                } else {
+                    execute_llama_iteration_timed(&plan, executor, stream, timer)
+                };
+                match execution {
+                    Ok((downloaded, timing)) => {
+                        let staged_shape = executor
+                            .last_shape_observation()
+                            .filter(|shape| shape.active_rows() == expected_active_rows)
+                            .map(|shape| BatchShapeExecutionSample {
+                                active_rows: shape.active_rows(),
+                                selected_dense_rows: shape.selected_dense_rows(),
+                                padding_rows: shape.padding_rows(),
+                                gpu_execution_ns: timing.gpu_execution_ns(),
+                            });
+                        (downloaded, timing, staged_shape)
+                    }
                     Err(failure) => {
                         events.extend(self.settle_execution_failure(&failure)?);
                         return Ok(events);
                     }
                 }
             };
-            if let Err(error) = self.sample_iteration(&plan, &downloaded) {
+            let sampling = self.sample_iteration(&plan, &downloaded, gpu_greedy);
+            if gpu_greedy {
+                if let Err(source) =
+                    downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
+                {
+                    let (iteration, abort) = downloaded.abort_data();
+                    let detail = format!("greedy-token workspace recovery failed: {source}");
+                    let now_ns = self.now_ns();
+                    self.scheduler_mut()?
+                        .abort_iteration(iteration, abort, now_ns)
+                        .map_err(|abort_source| {
+                            internal(format!(
+                                "workspace-recovery abort failed after {detail}: {abort_source}"
+                            ))
+                        })?;
+                    return Err(internal(detail));
+                }
+            }
+            if let Err(error) = sampling {
                 let (iteration, abort) = downloaded.abort_data();
                 let now_ns = self.now_ns();
                 let _ = self
@@ -2090,6 +2381,11 @@ mod cuda_backend {
                     return Err(internal(detail));
                 }
             };
+            record_committed_batch_shape(
+                &mut self.batch_shapes,
+                staged_shape,
+                updates.iteration_metric().is_some(),
+            );
 
             // External publication starts only after the authoritative commit
             // above returns successfully.
@@ -2141,6 +2437,7 @@ mod cuda_backend {
                 .map_err(|source| internal(format!("allocation metrics failed: {source}")))?;
             Ok(EngineMetricsSnapshot {
                 scheduler: Some(scheduler),
+                batch_shapes: Some(self.batch_shapes),
                 allocation: Some(EngineAllocationMetrics {
                     device_live_bytes: allocation.device_live_bytes(),
                     device_live_allocations: allocation.device_live_allocations(),
@@ -2215,8 +2512,10 @@ mod tests {
     };
 
     use super::{
-        BackendError, BackendEvent, EngineBackend, EngineConfig, EngineError, EngineRequestId,
-        InferenceEngine, private_request_error, visible_utf8_prefix,
+        BackendError, BackendEvent, BatchShapeExecutionSample, EngineBackend,
+        EngineBatchShapeMetricsSnapshot, EngineConfig, EngineError, EngineRequestId,
+        InferenceEngine, prepare_batch_shape_metrics, private_request_error,
+        record_committed_batch_shape, visible_utf8_prefix,
     };
 
     #[derive(Debug)]
@@ -2411,6 +2710,121 @@ mod tests {
             engine.final_metrics_snapshot(),
             Some(super::EngineMetricsSnapshot::default())
         );
+    }
+
+    #[test]
+    fn staged_shape_metrics_count_only_committed_iterations() {
+        let mut metrics =
+            prepare_batch_shape_metrics([8].into_iter()).expect("fixed-maximum bucket");
+        let staged = Some(BatchShapeExecutionSample {
+            active_rows: 3,
+            selected_dense_rows: 8,
+            padding_rows: 5,
+            gpu_execution_ns: 70,
+        });
+
+        // A D2H failure returns before staging. Sampling, result-construction,
+        // and scheduler-commit failures may retain this local staged value, but
+        // none produces the authoritative iteration metric required below.
+        record_committed_batch_shape(&mut metrics, staged, false);
+        assert_eq!(metrics.prepared_buckets()[0].hit_count, 0);
+        assert_eq!(metrics.last, None);
+
+        record_committed_batch_shape(&mut metrics, staged, true);
+        let bucket = metrics.prepared_buckets()[0];
+        assert_eq!(bucket.hit_count, 1);
+        assert_eq!(bucket.latency_sample_count, 1);
+        assert_eq!(bucket.gpu_execution_ns_total, 70);
+        assert_eq!(bucket.gpu_execution_ns_average(), Some(70));
+        assert_eq!(bucket.gpu_execution_ns_maximum, 70);
+        assert_eq!(bucket.gpu_execution_ns_last, 70);
+        assert_eq!(
+            metrics.last,
+            Some(super::EngineBatchShapeObservation {
+                active_rows: 3,
+                selected_dense_rows: 8,
+                padding_rows: 5,
+            })
+        );
+    }
+
+    #[test]
+    fn active_shape_buckets_route_without_hot_path_growth() {
+        let mut metrics =
+            prepare_batch_shape_metrics([1, 2, 4, 8].into_iter()).expect("active-row buckets");
+        record_committed_batch_shape(
+            &mut metrics,
+            Some(BatchShapeExecutionSample {
+                active_rows: 3,
+                selected_dense_rows: 4,
+                padding_rows: 1,
+                gpu_execution_ns: 11,
+            }),
+            true,
+        );
+
+        assert_eq!(metrics.bucket_count, 4);
+        assert_eq!(
+            metrics
+                .prepared_buckets()
+                .iter()
+                .map(|bucket| (bucket.dense_rows, bucket.hit_count))
+                .collect::<Vec<_>>(),
+            [(1, 0), (2, 0), (4, 1), (8, 0)]
+        );
+        assert!(!std::mem::needs_drop::<EngineBatchShapeMetricsSnapshot>());
+
+        let source = include_str!("engine.rs");
+        let start = source
+            .find("fn record_committed_batch_shape(")
+            .expect("shape recorder source");
+        let end = source[start..]
+            .find("/// Bounded operational snapshot")
+            .map(|offset| start + offset)
+            .expect("shape recorder source end");
+        let hot_path = &source[start..end];
+        for forbidden in ["Vec<", "Box<", "String", "format!", "collect(", "push("] {
+            assert!(
+                !hot_path.contains(forbidden),
+                "shape hot path must not contain allocation primitive {forbidden}"
+            );
+        }
+    }
+
+    #[test]
+    fn shape_metric_overflow_is_isolated_as_degraded_observability() {
+        let mut metrics =
+            prepare_batch_shape_metrics([8].into_iter()).expect("fixed-maximum bucket");
+        metrics.buckets[0].hit_count = u64::MAX;
+        let before = metrics.buckets[0];
+
+        record_committed_batch_shape(
+            &mut metrics,
+            Some(BatchShapeExecutionSample {
+                active_rows: 8,
+                selected_dense_rows: 8,
+                padding_rows: 0,
+                gpu_execution_ns: 1,
+            }),
+            true,
+        );
+
+        assert!(metrics.metrics_degraded);
+        assert_eq!(metrics.buckets[0], before);
+        assert_eq!(metrics.last, None);
+    }
+
+    #[test]
+    fn committed_shape_without_matching_flattened_rows_degrades_without_a_hit() {
+        let mut metrics =
+            prepare_batch_shape_metrics([8].into_iter()).expect("fixed-maximum bucket");
+
+        // The CUDA staging boundary converts a mismatch between the runtime's
+        // active rows and IterationPlan::total_tokens into a missing sample.
+        record_committed_batch_shape(&mut metrics, None, true);
+
+        assert!(metrics.metrics_degraded);
+        assert_eq!(metrics.prepared_buckets()[0].hit_count, 0);
     }
 
     #[test]

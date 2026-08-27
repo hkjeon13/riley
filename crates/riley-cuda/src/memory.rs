@@ -4,7 +4,10 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::error::{CudaError, CudaResult};
-use crate::runtime::{ContextInner, CudaContext, CudaStream, ensure_same_context};
+use crate::runtime::{
+    ContextInner, CudaCommandStream, CudaContext, CudaStream, ensure_same_context,
+    execution_stream_mut,
+};
 
 #[cfg(feature = "cuda")]
 use crate::ffi;
@@ -492,6 +495,85 @@ impl CudaDeviceBuffer {
             downloaded += chunk_len;
         }
         Ok(())
+    }
+
+    /// Enqueues an asynchronous pinned-host-to-device copy in a command batch.
+    ///
+    /// Unlike [`Self::copy_from_pinned_async`], this allocation-free path is
+    /// available only through an active [`CudaCommandStream`]. It creates no
+    /// standalone completion token and performs no per-copy synchronization;
+    /// [`crate::CudaCommandBatch::finish`] is the completion boundary. Native
+    /// batch leases reject CPU access, out-of-batch reuse, or close of either
+    /// buffer until that finish confirms completion. A failed or ambiguous
+    /// finish keeps the leases live and therefore fails closed.
+    ///
+    /// The copy direction is fixed to pinned-host-to-device by the typed API.
+    /// All handle ownership and byte ranges are validated before submission.
+    /// A zero-byte in-range copy is a successful no-op.
+    ///
+    /// ```compile_fail
+    /// fn cannot_drop_copy_resources_before_batch_finish(
+    ///     device: riley_cuda::CudaDeviceBuffer,
+    ///     source: riley_cuda::CudaPinnedHostBuffer,
+    ///     mut stream: riley_cuda::CudaStream,
+    /// ) {
+    ///     let mut batch = stream.begin_command_batch().unwrap();
+    ///     {
+    ///         let mut commands = batch.commands();
+    ///         device
+    ///             .copy_from_pinned_in_command_batch(0, &source, 0, 1, &mut commands)
+    ///             .unwrap();
+    ///     }
+    ///     drop(source);
+    ///     batch.finish().unwrap();
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns a range, context-ownership, busy-state, command-batch-lifecycle,
+    /// or native copy error.
+    pub fn copy_from_pinned_in_command_batch<'stream>(
+        &'stream self,
+        destination_offset: u64,
+        source: &'stream CudaPinnedHostBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        commands: &mut CudaCommandStream<'_, 'stream>,
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "CudaDeviceBuffer::copy_from_pinned_in_command_batch";
+        let stream = execution_stream_mut(commands);
+        prepare_copy(
+            &self.context,
+            self.byte_len,
+            destination_offset,
+            &source.context,
+            source.byte_len,
+            source_offset,
+            byte_len,
+            &stream.context,
+            OPERATION,
+        )?;
+        self.use_state.ensure_idle(OPERATION, "device buffer")?;
+        source
+            .use_state
+            .ensure_idle(OPERATION, "pinned host buffer")?;
+
+        #[cfg(feature = "cuda")]
+        {
+            self.native.copy_from_pinned_in_command_batch(
+                destination_offset,
+                &source.native,
+                source_offset,
+                byte_len,
+                &mut stream.native,
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (destination_offset, source_offset, byte_len, stream);
+            Err(CudaError::unavailable(OPERATION))
+        }
     }
 
     /// Enqueues an asynchronous pinned-host-to-device copy.

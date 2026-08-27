@@ -392,6 +392,34 @@ typedef struct RileyCudaRowGatherParams {
   uint64_t reserved[4];
 } RileyCudaRowGatherParams;
 
+#define RILEY_CUDA_BF16_ARGMAX_STATUS_SUCCESS 0u
+#define RILEY_CUDA_BF16_ARGMAX_STATUS_NON_FINITE 1u
+#define RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID UINT32_MAX
+
+// One deterministic greedy result per BF16 logits row. A successful row holds
+// the lowest token id whose finite logit equals the row maximum. If any value
+// in the row is NaN or infinity, token_id is INVALID_TOKEN_ID and status is
+// NON_FINITE. The record is deliberately two U32 words so callers can use an
+// ordinary U32 device span without a representation conversion.
+typedef struct RileyCudaBf16ArgmaxResult {
+  uint32_t token_id;
+  uint32_t status;
+} RileyCudaBf16ArgmaxResult;
+
+// Allocation-free deterministic greedy selection over contiguous BF16
+// [row_count, vocabulary_size] logits. results is U32 storage for exactly
+// row_count RileyCudaBf16ArgmaxResult records. No RNG state is accepted,
+// consumed, or produced.
+typedef struct RileyCudaBf16ArgmaxParams {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  RileyCudaBufferSpan logits;
+  RileyCudaBufferSpan results;
+  uint64_t row_count;
+  uint64_t vocabulary_size;
+  uint64_t reserved[4];
+} RileyCudaBf16ArgmaxParams;
+
 // Correctness-first materialized GQA attention. Query is BF16
 // [token_count, query_head_count, head_size], key is BF16
 // [token_count, key_value_head_count, head_size], and output is BF16
@@ -1131,6 +1159,21 @@ RileyCudaStatus riley_cuda_copy_d2h_async(
     RileyCudaStream* stream,
     RileyCudaCopy** out_copy,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Enqueues one pinned-host-to-device copy in the command batch currently owned
+// by this thread. No standalone RileyCudaCopy token is created and this call
+// does not synchronize. The command batch retains both buffers until
+// riley_cuda_stream_command_batch_end confirms stream completion. Any
+// submission or context-restoration ambiguity therefore remains fail closed
+// behind the batch resource ledger.
+RileyCudaStatus riley_cuda_command_batch_copy_h2d_async(
+    RileyCudaDeviceBuffer* destination,
+    uint64_t destination_offset,
+    RileyCudaPinnedHostBuffer* source,
+    uint64_t source_offset,
+    uint64_t byte_len,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // out_complete is 1 when native buffer-use counters have been released, even
 // if the returned status reports a deferred submission error.
 RileyCudaStatus riley_cuda_copy_query(
@@ -1305,6 +1348,14 @@ RileyCudaStatus riley_cuda_cast_execute(
 
 RileyCudaStatus riley_cuda_row_gather_execute(
     const RileyCudaRowGatherParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// BF16-only deterministic row argmax. logits and results may not overlap.
+// Non-finite logits are reported per row and do not fail the enclosing CUDA
+// operation. vocabulary_size must be in 1..=UINT32_MAX.
+RileyCudaStatus riley_cuda_bf16_argmax_execute(
+    const RileyCudaBf16ArgmaxParams* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
@@ -1486,6 +1537,13 @@ RileyCudaStatus riley_cuda_ragged_paged_attention_execute(
     const RileyCudaRaggedPagedAttentionParams* params,
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Executes the same canonical D64 GQA contract while grouping independent
+// query-head warps into each CTA. This additive entry point leaves the legacy
+// one-warp launch available for rollout control and paired profiling.
+RileyCudaStatus riley_cuda_ragged_paged_attention_grouped_heads_execute(
+    const RileyCudaRaggedPagedAttentionParams* params,
+    RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // D64/T8192 no-HBM fixed37 execution follows the packed-call lifetime above:
 // an active command batch retains all nine real buffers until batch finish.
 RileyCudaStatus
@@ -1499,6 +1557,22 @@ riley_cuda_fixed37_ragged_paged_attention_two_pass_execute(
 RileyCudaStatus riley_cuda_gemm_plan_create(
     RileyCudaContext* context,
     const RileyCudaGemmConfig* config,
+    RileyCudaGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+
+// Creates an exact-M child plan by copying the opaque algorithm selected by
+// anchor_plan, rather than querying a shape-specific heuristic. The child and
+// anchor must belong to the same context and have identical GEMM contracts
+// except for M and the child workspace cap. Native validates the copied
+// algorithm against the child descriptors with cublasLtMatmulAlgoCheck,
+// records the child-specific workspace requirement, and returns NOT_SUPPORTED
+// without heuristic fallback when that reduction topology cannot execute at
+// the requested M. The child retains no pointer to anchor_plan after this
+// synchronous call returns.
+RileyCudaStatus riley_cuda_gemm_plan_create_anchored(
+    RileyCudaContext* context,
+    const RileyCudaGemmConfig* config,
+    RileyCudaGemmPlan* anchor_plan,
     RileyCudaGemmPlan** out_plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_gemm_plan_info(

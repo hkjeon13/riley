@@ -8,6 +8,9 @@ namespace {
 using riley_cuda_internal::AllocationStatsGuard;
 using riley_cuda_internal::CurrentContext;
 using riley_cuda_internal::clear_error;
+using riley_cuda_internal::command_batch_is_active;
+using riley_cuda_internal::command_batch_is_owned_by_current_thread;
+using riley_cuda_internal::command_batch_register_use;
 using riley_cuda_internal::internal_error;
 using riley_cuda_internal::release_child;
 using riley_cuda_internal::retain_child;
@@ -823,6 +826,92 @@ extern "C" RileyCudaStatus riley_cuda_copy_h2d_async(
     RileyCudaCopy** out_copy, RileyCudaErrorInfo* error) noexcept {
   return submit_copy(destination, destination_offset, source, source_offset,
                      byte_len, stream, cudaMemcpyHostToDevice, out_copy, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_command_batch_copy_h2d_async(
+    RileyCudaDeviceBuffer* destination, uint64_t destination_offset,
+    RileyCudaPinnedHostBuffer* source, uint64_t source_offset,
+    uint64_t byte_len, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "enqueue command-batch pinned host-to-device copy";
+  clear_error(error);
+  if (destination == nullptr || source == nullptr || stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "destination, source, or stream handle is null");
+  }
+  if (!command_batch_is_active(stream)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "stream has no active command batch");
+  }
+  if (!command_batch_is_owned_by_current_thread(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "the active stream command batch is owned by another thread");
+  }
+  if (!same_context(destination->owner, source->owner) ||
+      !same_context(destination->owner, stream->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "copy resources belong to different context owners");
+  }
+  if (destination->owner->restoration_failed.load(
+          std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "CUDA context is poisoned by a prior restoration failure");
+  }
+  if (!valid_range(destination->byte_len, destination_offset, byte_len) ||
+      !valid_range(source->byte_len, source_offset, byte_len)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "copy offset and length exceed a buffer range");
+  }
+  if (byte_len == 0) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+
+  // All handle/context/range validation precedes ledger mutation. Once a
+  // resource is registered it deliberately remains retained until batch end,
+  // including when a later registration, CUDA submission, or context restore
+  // fails. This matches the command-batch fail-closed transaction boundary.
+  RileyCudaStatus status = command_batch_register_use(
+      stream, &destination->active_uses, error, kOperation,
+      "destination device buffer already has an active asynchronous use");
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  status = command_batch_register_use(
+      stream, &source->active_uses, error, kOperation,
+      "source pinned host buffer already has an active asynchronous use");
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  CurrentContext scope(destination->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    auto* destination_bytes =
+        static_cast<uint8_t*>(destination->device_data);
+    auto* source_bytes = static_cast<uint8_t*>(source->host_data);
+    status = runtime_error(
+        cudaMemcpyAsync(
+            static_cast<void*>(destination_bytes +
+                               static_cast<size_t>(destination_offset)),
+            static_cast<const void*>(source_bytes +
+                                     static_cast<size_t>(source_offset)),
+            static_cast<size_t>(byte_len), cudaMemcpyHostToDevice,
+            stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
+  }
+  // Deliberately no cudaStreamSynchronize and no RileyCudaCopy allocation.
+  // Batch end is the only completion/release boundary for these ledger uses.
+  return scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_COPY, kOperation);
 }
 
 extern "C" RileyCudaStatus riley_cuda_copy_d2h_async(

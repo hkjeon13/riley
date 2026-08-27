@@ -205,3 +205,91 @@ fn copy_ranges_and_context_ownership_are_validated() -> Result<(), Box<dyn Error
     close_context(context)?;
     close_context(foreign_context)
 }
+
+#[test]
+#[ignore = "remote GPU"]
+fn command_batch_h2d_is_ordered_and_releases_both_buffer_leases() -> Result<(), Box<dyn Error>> {
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let pattern = b"command batch owns this pinned H2D transfer until finish";
+    let byte_len = u64::try_from(pattern.len())?;
+    let mut device_buffer = context.allocate_device_buffer(byte_len)?;
+    let mut pinned_buffer = context.allocate_pinned_host_buffer(byte_len)?;
+    let stable = context.allocation_stats()?;
+
+    pinned_buffer.write(0, pattern)?;
+    let mut batch = stream.begin_command_batch()?;
+    {
+        let mut commands = batch.commands();
+        device_buffer.copy_from_pinned_in_command_batch(
+            0,
+            &pinned_buffer,
+            0,
+            byte_len,
+            &mut commands,
+        )?;
+    }
+    batch.finish()?;
+    assert_eq!(context.allocation_stats()?, stable);
+
+    pinned_buffer.write(0, &vec![0; pattern.len()])?;
+    device_buffer
+        .copy_to_pinned_async(0, &mut pinned_buffer, 0, byte_len, &mut stream)?
+        .synchronize()?;
+    assert_eq!(pinned_buffer.to_vec()?, pattern);
+
+    device_buffer.close()?;
+    pinned_buffer.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    close_context(context)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn command_batch_h2d_validates_ranges_and_context_before_submission() -> Result<(), Box<dyn Error>>
+{
+    let (_runtime, device) = first_device()?;
+    let context = device.create_context()?;
+    let foreign_context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let device_buffer = context.allocate_device_buffer(16)?;
+    let pinned_buffer = context.allocate_pinned_host_buffer(16)?;
+    let foreign_pinned = foreign_context.allocate_pinned_host_buffer(16)?;
+
+    let mut batch = stream.begin_command_batch()?;
+    {
+        let mut commands = batch.commands();
+        let range_error = device_buffer
+            .copy_from_pinned_in_command_batch(15, &pinned_buffer, 0, 2, &mut commands)
+            .expect_err("out-of-range command-batch copy must fail before submission");
+        assert_eq!(range_error.kind(), riley_cuda::CudaErrorKind::OutOfRange);
+
+        let ownership_error = device_buffer
+            .copy_from_pinned_in_command_batch(0, &foreign_pinned, 0, 1, &mut commands)
+            .expect_err("cross-context command-batch copy must fail before submission");
+        assert_eq!(
+            ownership_error.kind(),
+            riley_cuda::CudaErrorKind::InvalidState
+        );
+
+        device_buffer.copy_from_pinned_in_command_batch(
+            16,
+            &pinned_buffer,
+            16,
+            0,
+            &mut commands,
+        )?;
+    }
+    batch.finish()?;
+
+    device_buffer.close()?;
+    pinned_buffer.close()?;
+    foreign_pinned.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    assert!(foreign_context.allocation_stats()?.is_zero());
+    close_context(context)?;
+    close_context(foreign_context)
+}

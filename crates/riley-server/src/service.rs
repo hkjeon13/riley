@@ -25,7 +25,7 @@ use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
     RequestMetadata, ServiceErrorClass,
 };
-use crate::engine::EngineMetricsSnapshot;
+use crate::engine::{ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineMetricsSnapshot};
 use crate::http::{
     HttpLimits, HttpMethod, HttpReadError, HttpRequest, read_request, write_response,
     write_sse_head,
@@ -1135,6 +1135,62 @@ pub struct OperationalAllocationMetrics {
     pub pinned_live_bytes: u64,
 }
 
+/// Flattened input-token shape selected for the latest committed iteration.
+#[allow(clippy::struct_field_names)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct OperationalBatchShapeObservation {
+    /// Flattened input-token rows executed by the runtime.
+    pub active_rows: u64,
+    /// Cold-prepared dense rows selected for execution.
+    pub selected_dense_rows: u64,
+    /// Inactive rows executed only to fill the selected dense shape.
+    pub padding_rows: u64,
+}
+
+/// Committed count and CUDA-event execution latency for one shape bucket.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+pub struct OperationalBatchShapeBucketMetrics {
+    /// Exact dense-row count represented by this bucket.
+    pub dense_rows: u64,
+    /// Successfully committed iterations that selected this bucket.
+    pub hit_count: u64,
+    /// Committed iterations with one latency sample.
+    pub latency_sample_count: u64,
+    /// Sum of committed GPU execution durations in nanoseconds.
+    pub gpu_execution_ns_total: u64,
+    /// Integer mean committed GPU execution duration in nanoseconds.
+    pub gpu_execution_ns_average: u64,
+    /// Largest committed GPU execution duration in nanoseconds.
+    pub gpu_execution_ns_maximum: u64,
+    /// Most recent committed GPU execution duration in nanoseconds.
+    pub gpu_execution_ns_last: u64,
+}
+
+/// Fixed-capacity shape metrics exposed by `/metrics` and shutdown evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct OperationalBatchShapeMetrics {
+    /// Sticky signal that a non-authoritative shape metric could not be updated.
+    pub metrics_degraded: bool,
+    /// Latest successfully committed iteration, or `null` before the first hit.
+    pub last: Option<OperationalBatchShapeObservation>,
+    /// Number of valid leading entries in [`Self::buckets`].
+    pub bucket_count: u64,
+    /// Cold-prepared buckets followed by zeroed unused entries.
+    pub buckets: [OperationalBatchShapeBucketMetrics; ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
+}
+
+impl Default for OperationalBatchShapeMetrics {
+    fn default() -> Self {
+        Self {
+            metrics_degraded: false,
+            last: None,
+            bucket_count: 0,
+            buckets: [OperationalBatchShapeBucketMetrics::default();
+                ENGINE_BATCH_SHAPE_BUCKET_CAPACITY],
+        }
+    }
+}
+
 /// Monotonic service counters in the operational metrics response.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct OperationalCounters {
@@ -1159,6 +1215,8 @@ pub struct OperationalMetricsSnapshot {
     pub kv_allocated_blocks: u64,
     /// Native allocation gauges.
     pub allocation: OperationalAllocationMetrics,
+    /// Committed batch-shape counters and CUDA-event latency.
+    pub batch_shapes: OperationalBatchShapeMetrics,
     /// Monotonic service counters.
     pub counters: OperationalCounters,
 }
@@ -1191,6 +1249,7 @@ fn operational_metrics_from_snapshot(
         u64::try_from(snapshot.gauges.allocated_kv_blocks).unwrap_or(u64::MAX)
     });
     let allocation = backend_metrics.allocation.unwrap_or_default();
+    let batch_shapes = operational_batch_shapes(backend_metrics);
     OperationalMetricsSnapshot {
         active_requests: u64::try_from(status.active_requests).unwrap_or(u64::MAX),
         waiting_requests: u64::try_from(status.waiting_requests).unwrap_or(u64::MAX),
@@ -1201,6 +1260,7 @@ fn operational_metrics_from_snapshot(
             pinned_live_count: allocation.pinned_host_live_allocations,
             pinned_live_bytes: allocation.pinned_host_live_bytes,
         },
+        batch_shapes,
         counters: OperationalCounters {
             cancellations: scheduler_cancellations
                 .max(metrics.cancellations.load(Ordering::Acquire)),
@@ -1209,6 +1269,43 @@ fn operational_metrics_from_snapshot(
             dropped_observations: observations.dropped(),
         },
     }
+}
+
+fn operational_batch_shapes(
+    backend_metrics: &EngineMetricsSnapshot,
+) -> OperationalBatchShapeMetrics {
+    let Some(engine) = backend_metrics.batch_shapes else {
+        return OperationalBatchShapeMetrics::default();
+    };
+    let bucket_count = engine.bucket_count.min(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY);
+    let mut result = OperationalBatchShapeMetrics {
+        metrics_degraded: engine.metrics_degraded
+            || engine.bucket_count > ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
+        last: engine.last.map(|last| OperationalBatchShapeObservation {
+            active_rows: u64::try_from(last.active_rows).unwrap_or(u64::MAX),
+            selected_dense_rows: u64::try_from(last.selected_dense_rows).unwrap_or(u64::MAX),
+            padding_rows: u64::try_from(last.padding_rows).unwrap_or(u64::MAX),
+        }),
+        bucket_count: u64::try_from(bucket_count).unwrap_or(u64::MAX),
+        ..OperationalBatchShapeMetrics::default()
+    };
+    for (target, source) in result
+        .buckets
+        .iter_mut()
+        .zip(engine.buckets)
+        .take(bucket_count)
+    {
+        *target = OperationalBatchShapeBucketMetrics {
+            dense_rows: u64::try_from(source.dense_rows).unwrap_or(u64::MAX),
+            hit_count: source.hit_count,
+            latency_sample_count: source.latency_sample_count,
+            gpu_execution_ns_total: source.gpu_execution_ns_total,
+            gpu_execution_ns_average: source.gpu_execution_ns_average().unwrap_or(0),
+            gpu_execution_ns_maximum: source.gpu_execution_ns_maximum,
+            gpu_execution_ns_last: source.gpu_execution_ns_last,
+        };
+    }
+    result
 }
 
 fn write_operational_metrics(
@@ -1967,6 +2064,10 @@ mod tests {
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
         RequestMetadata, ServiceErrorClass, TokenUsage,
     };
+    use crate::engine::{
+        ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineBatchShapeBucketMetrics,
+        EngineBatchShapeMetricsSnapshot, EngineBatchShapeObservation,
+    };
 
     const TEST_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -2017,6 +2118,7 @@ mod tests {
         shutdown_called: AtomicBool,
         final_metrics_available: AtomicBool,
         shutdown_delay: Mutex<Option<Duration>>,
+        engine_metrics: Mutex<EngineMetricsSnapshot>,
     }
 
     impl TestBackend {
@@ -2040,6 +2142,7 @@ mod tests {
                 shutdown_called: AtomicBool::new(false),
                 final_metrics_available: AtomicBool::new(true),
                 shutdown_delay: Mutex::new(None),
+                engine_metrics: Mutex::new(EngineMetricsSnapshot::default()),
             })
         }
 
@@ -2052,6 +2155,13 @@ mod tests {
                 .shutdown_delay
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(delay);
+        }
+
+        fn set_engine_metrics(&self, snapshot: &EngineMetricsSnapshot) {
+            *self
+                .engine_metrics
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = *snapshot;
         }
     }
 
@@ -2069,10 +2179,22 @@ mod tests {
             }
         }
 
+        fn metrics_snapshot(&self) -> Result<EngineMetricsSnapshot, ServiceErrorClass> {
+            Ok(*self
+                .engine_metrics
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner))
+        }
+
         fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
             self.final_metrics_available
                 .load(Ordering::Acquire)
-                .then_some(EngineMetricsSnapshot::default())
+                .then(|| {
+                    *self
+                        .engine_metrics
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                })
         }
 
         fn submit(
@@ -2374,6 +2496,7 @@ mod tests {
             [
                 "active_requests",
                 "allocation",
+                "batch_shapes",
                 "counters",
                 "kv_allocated_blocks",
                 "waiting_requests",
@@ -2388,6 +2511,15 @@ mod tests {
         assert_eq!(metrics_json["allocation"]["device_live_bytes"], 0);
         assert_eq!(metrics_json["allocation"]["pinned_live_count"], 0);
         assert_eq!(metrics_json["allocation"]["pinned_live_bytes"], 0);
+        assert_eq!(metrics_json["batch_shapes"]["bucket_count"], 0);
+        assert_eq!(metrics_json["batch_shapes"]["last"], Value::Null);
+        assert_eq!(
+            metrics_json["batch_shapes"]["buckets"]
+                .as_array()
+                .expect("fixed shape buckets")
+                .len(),
+            ENGINE_BATCH_SHAPE_BUCKET_CAPACITY
+        );
         assert_eq!(
             server.metrics_snapshot().expect("snapshot"),
             OperationalMetricsSnapshot::default()
@@ -2411,6 +2543,63 @@ mod tests {
         );
         assert_eq!(response_status(&missing), 404);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn metrics_endpoint_consumes_committed_fixed_shape_snapshot() {
+        let backend = TestBackend::new([]);
+        let mut buckets =
+            [EngineBatchShapeBucketMetrics::default(); ENGINE_BATCH_SHAPE_BUCKET_CAPACITY];
+        buckets[0] = EngineBatchShapeBucketMetrics {
+            dense_rows: 8,
+            hit_count: 2,
+            latency_sample_count: 2,
+            gpu_execution_ns_total: 120,
+            gpu_execution_ns_maximum: 70,
+            gpu_execution_ns_last: 50,
+        };
+        backend.set_engine_metrics(&EngineMetricsSnapshot {
+            batch_shapes: Some(EngineBatchShapeMetricsSnapshot {
+                metrics_degraded: false,
+                last: Some(EngineBatchShapeObservation {
+                    active_rows: 3,
+                    selected_dense_rows: 8,
+                    padding_rows: 5,
+                }),
+                bucket_count: 1,
+                buckets,
+            }),
+            ..EngineMetricsSnapshot::default()
+        });
+        let backend_trait: Arc<dyn CompletionBackend> = backend.clone();
+        let server = start_server(test_config(), backend_trait).expect("start server");
+
+        let response = send_request(
+            server.local_address(),
+            b"GET /metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 200);
+        let metrics: Value =
+            serde_json::from_slice(response_body(&response)).expect("metrics JSON");
+        let shapes = &metrics["batch_shapes"];
+        assert_eq!(shapes["metrics_degraded"], false);
+        assert_eq!(shapes["bucket_count"], 1);
+        assert_eq!(shapes["last"]["active_rows"], 3);
+        assert_eq!(shapes["last"]["selected_dense_rows"], 8);
+        assert_eq!(shapes["last"]["padding_rows"], 5);
+        assert_eq!(shapes["buckets"][0]["dense_rows"], 8);
+        assert_eq!(shapes["buckets"][0]["hit_count"], 2);
+        assert_eq!(shapes["buckets"][0]["latency_sample_count"], 2);
+        assert_eq!(shapes["buckets"][0]["gpu_execution_ns_total"], 120);
+        assert_eq!(shapes["buckets"][0]["gpu_execution_ns_average"], 60);
+        assert_eq!(shapes["buckets"][0]["gpu_execution_ns_maximum"], 70);
+        assert_eq!(shapes["buckets"][0]["gpu_execution_ns_last"], 50);
+
+        let final_metrics = server
+            .shutdown_with_metrics()
+            .expect("shutdown metrics retain shape evidence");
+        assert_eq!(final_metrics.batch_shapes.bucket_count, 1);
+        assert_eq!(final_metrics.batch_shapes.buckets[0].hit_count, 2);
     }
 
     #[test]

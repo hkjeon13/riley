@@ -33,6 +33,10 @@ const SCHEMA_VERSION: &str = "riley.native-profile-run.v1";
 const PRIMARY_METRIC: &str = "aggregate.host.execute_ns";
 const RESIDUAL_RMSNORM_CORRECTNESS_GATE: &str = "pr15-fused-residual-rmsnorm-exact-v1";
 const EXECUTION_COMPLETION_CORRECTNESS_GATE: &str = "pr15-iteration-command-batch-exact-v1";
+const BATCH_SHAPE_CORRECTNESS_GATE: &str = "pr16-active-row-buckets-exact-v1";
+const PACKED_METADATA_CORRECTNESS_GATE: &str = "pr16-packed-metadata-h2d-exact-v1";
+const GPU_GREEDY_CORRECTNESS_GATE: &str = "pr16-gpu-greedy-exact-v1";
+const DECODE_FAST_PATH_CORRECTNESS_GATE: &str = "pr16-decode-fast-path-exact-v1";
 
 const USAGE: &str = "\
 usage: riley-profile [options]
@@ -53,8 +57,8 @@ source provenance (all required):
   --git-dirty false
   --executable-sha256 SHA256
   --implementation-id ID
-  --runtime-flag-name residual_rmsnorm|execution_completion
-  --runtime-flag-value separate|fused|per-operation|iteration-batch
+  --runtime-flag-name residual_rmsnorm|execution_completion|batch_shape_policy|metadata_transport|greedy_output|decode_fast_path
+  --runtime-flag-value separate|fused|per-operation|iteration-batch|fixed-max|power-of-two|synchronous|packed-async|cpu-logits|gpu-token|fixed-sync-cpu|bucket-packed-gpu
   --semantic-class E0
   --correctness-gate-id ID
   --correctness-report-sha256 SHA256
@@ -147,9 +151,37 @@ enum ExecutionCompletionMode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BatchShapeMode {
+    FixedMaximum,
+    PowerOfTwo,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GreedyOutputMode {
+    CpuLogits,
+    GpuToken,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MetadataTransportMode {
+    Synchronous,
+    PackedAsync,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DecodeFastPathMode {
+    FixedSyncCpu,
+    BucketPackedGpu,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RuntimeSelection {
     ResidualRmsNorm(ResidualRmsNormMode),
     ExecutionCompletion(ExecutionCompletionMode),
+    BatchShape(BatchShapeMode),
+    MetadataTransport(MetadataTransportMode),
+    GreedyOutput(GreedyOutputMode),
+    DecodeFastPath(DecodeFastPathMode),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -259,8 +291,36 @@ impl Options {
             ("execution_completion", "iteration-batch") => Ok(
                 RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
             ),
+            ("batch_shape_policy", "fixed-max") => {
+                Ok(RuntimeSelection::BatchShape(BatchShapeMode::FixedMaximum))
+            }
+            ("batch_shape_policy", "power-of-two") => {
+                Ok(RuntimeSelection::BatchShape(BatchShapeMode::PowerOfTwo))
+            }
+            ("metadata_transport", "synchronous") => Ok(RuntimeSelection::MetadataTransport(
+                MetadataTransportMode::Synchronous,
+            )),
+            ("metadata_transport", "packed-async") => Ok(RuntimeSelection::MetadataTransport(
+                MetadataTransportMode::PackedAsync,
+            )),
+            ("greedy_output", "cpu-logits") => {
+                Ok(RuntimeSelection::GreedyOutput(GreedyOutputMode::CpuLogits))
+            }
+            ("greedy_output", "gpu-token") => {
+                Ok(RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken))
+            }
+            ("decode_fast_path", "fixed-sync-cpu") => Ok(RuntimeSelection::DecodeFastPath(
+                DecodeFastPathMode::FixedSyncCpu,
+            )),
+            ("decode_fast_path", "bucket-packed-gpu") => Ok(RuntimeSelection::DecodeFastPath(
+                DecodeFastPathMode::BucketPackedGpu,
+            )),
             _ => Err("runtime flag must be residual_rmsnorm=separate|fused or \
-                 execution_completion=per-operation|iteration-batch"
+                 execution_completion=per-operation|iteration-batch or \
+                 batch_shape_policy=fixed-max|power-of-two or \
+                 metadata_transport=synchronous|packed-async or \
+                 greedy_output=cpu-logits|gpu-token or \
+                 decode_fast_path=fixed-sync-cpu|bucket-packed-gpu"
                 .to_owned()),
         }
     }
@@ -270,6 +330,10 @@ impl Options {
         let expected_correctness_gate = match runtime_selection {
             RuntimeSelection::ResidualRmsNorm(_) => RESIDUAL_RMSNORM_CORRECTNESS_GATE,
             RuntimeSelection::ExecutionCompletion(_) => EXECUTION_COMPLETION_CORRECTNESS_GATE,
+            RuntimeSelection::BatchShape(_) => BATCH_SHAPE_CORRECTNESS_GATE,
+            RuntimeSelection::MetadataTransport(_) => PACKED_METADATA_CORRECTNESS_GATE,
+            RuntimeSelection::GreedyOutput(_) => GPU_GREEDY_CORRECTNESS_GATE,
+            RuntimeSelection::DecodeFastPath(_) => DECODE_FAST_PATH_CORRECTNESS_GATE,
         };
         if self.source.correctness_gate_id != expected_correctness_gate {
             return Err(format!(
@@ -280,16 +344,26 @@ impl Options {
             (
                 Role::Baseline,
                 RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Separate)
-                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation),
+                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::PerOperation)
+                | RuntimeSelection::BatchShape(BatchShapeMode::FixedMaximum)
+                | RuntimeSelection::MetadataTransport(MetadataTransportMode::Synchronous)
+                | RuntimeSelection::GreedyOutput(GreedyOutputMode::CpuLogits)
+                | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::FixedSyncCpu),
             )
             | (
                 Role::Candidate,
                 RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused)
-                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch),
+                | RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch)
+                | RuntimeSelection::BatchShape(BatchShapeMode::PowerOfTwo)
+                | RuntimeSelection::MetadataTransport(MetadataTransportMode::PackedAsync)
+                | RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
+                | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu),
             ) => Ok(()),
             _ => Err(
-                "runtime flag must bind baseline/candidate to separate/fused or \
-                 per-operation/iteration-batch"
+                "runtime flag must bind baseline/candidate to separate/fused, \
+                 per-operation/iteration-batch, fixed-max/power-of-two, or \
+                 synchronous/packed-async, cpu-logits/gpu-token, or \
+                 fixed-sync-cpu/bucket-packed-gpu"
                     .to_owned(),
             ),
         }
@@ -448,10 +522,21 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<Comm
     let runtime_flag_value = take_required(&mut values, "--runtime-flag-value")?;
     if !matches!(
         runtime_flag_value.as_str(),
-        "separate" | "fused" | "per-operation" | "iteration-batch"
+        "separate"
+            | "fused"
+            | "per-operation"
+            | "iteration-batch"
+            | "fixed-max"
+            | "power-of-two"
+            | "synchronous"
+            | "packed-async"
+            | "cpu-logits"
+            | "gpu-token"
+            | "fixed-sync-cpu"
+            | "bucket-packed-gpu"
     ) {
         return Err(
-            "--runtime-flag-value requires separate, fused, per-operation, or iteration-batch"
+            "--runtime-flag-value requires a supported residual, completion, shape, metadata, or greedy-output mode"
                 .to_owned(),
         );
     }
@@ -929,14 +1014,46 @@ fn benchmark_config(options: &Options) -> Result<NativeBenchmarkConfig, String> 
         RuntimeSelection::ResidualRmsNorm(ResidualRmsNormMode::Fused) => executor
             .with_fused_residual_norm()
             .with_per_operation_completion(),
-        RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch) => executor
+        RuntimeSelection::ExecutionCompletion(ExecutionCompletionMode::IterationBatch)
+        | RuntimeSelection::BatchShape(BatchShapeMode::FixedMaximum)
+        | RuntimeSelection::GreedyOutput(_)
+        | RuntimeSelection::MetadataTransport(MetadataTransportMode::Synchronous) => executor
             .with_separate_residual_norm()
-            .with_iteration_batch_completion(),
+            .with_iteration_batch_completion()
+            .with_fixed_maximum_shape()
+            .with_synchronous_metadata(),
+        RuntimeSelection::DecodeFastPath(DecodeFastPathMode::FixedSyncCpu) => executor
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_fixed_maximum_shape()
+            .with_synchronous_metadata()
+            .with_legacy_ragged_attention_heads(),
+        RuntimeSelection::BatchShape(BatchShapeMode::PowerOfTwo) => executor
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_active_row_buckets(),
+        RuntimeSelection::MetadataTransport(MetadataTransportMode::PackedAsync) => executor
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_fixed_maximum_shape()
+            .with_packed_async_metadata(),
+        RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu) => executor
+            .with_separate_residual_norm()
+            .with_iteration_batch_completion()
+            .with_active_row_buckets()
+            .with_packed_async_metadata()
+            .with_grouped_ragged_attention_heads(),
     };
+    let gpu_greedy = matches!(
+        options.runtime_selection()?,
+        RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken)
+            | RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu)
+    );
     Ok(NativeBenchmarkConfig {
         device_ordinal: options.environment.gpu.device_index,
         scheduler,
         executor,
+        gpu_greedy,
     })
 }
 
@@ -1449,11 +1566,14 @@ fn write_output(path: Option<&Path>, output: &[u8]) -> Result<(), String> {
 mod tests {
     use std::ffi::OsString;
 
+    use riley_runtime::llama::RaggedAttentionImplementation;
     use serde_json::json;
 
     use super::{
-        Command, ExecutionCompletionMode, Measurement, ResidualRmsNormMode, Role, RuntimeSelection,
-        parse_arguments, request_latency_ms, resize_token_ids, validate_rfc3339_utc,
+        BatchShapeMode, Command, DecodeFastPathMode, ExecutionCompletionMode, GreedyOutputMode,
+        Measurement, MetadataTransportMode, ResidualRmsNormMode, Role, RuntimeSelection,
+        benchmark_config, parse_arguments, request_latency_ms, resize_token_ids,
+        validate_rfc3339_utc,
     };
 
     const SHA_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -1463,6 +1583,10 @@ mod tests {
     fn valid_arguments(role: &str, flag_name: &str, flag_value: &str) -> Vec<OsString> {
         let correctness_gate = match flag_name {
             "execution_completion" => "pr15-iteration-command-batch-exact-v1",
+            "batch_shape_policy" => "pr16-active-row-buckets-exact-v1",
+            "metadata_transport" => "pr16-packed-metadata-h2d-exact-v1",
+            "greedy_output" => "pr16-gpu-greedy-exact-v1",
+            "decode_fast_path" => "pr16-decode-fast-path-exact-v1",
             _ => "pr15-fused-residual-rmsnorm-exact-v1",
         };
         let pairs = [
@@ -1585,6 +1709,87 @@ mod tests {
                 "iteration-batch",
             ))
             .is_err()
+        );
+    }
+
+    #[test]
+    fn parser_binds_decode_candidates_to_independent_flags() {
+        for (flag_name, baseline, candidate, expected) in [
+            (
+                "batch_shape_policy",
+                "fixed-max",
+                "power-of-two",
+                RuntimeSelection::BatchShape(BatchShapeMode::PowerOfTwo),
+            ),
+            (
+                "metadata_transport",
+                "synchronous",
+                "packed-async",
+                RuntimeSelection::MetadataTransport(MetadataTransportMode::PackedAsync),
+            ),
+            (
+                "decode_fast_path",
+                "fixed-sync-cpu",
+                "bucket-packed-gpu",
+                RuntimeSelection::DecodeFastPath(DecodeFastPathMode::BucketPackedGpu),
+            ),
+            (
+                "greedy_output",
+                "cpu-logits",
+                "gpu-token",
+                RuntimeSelection::GreedyOutput(GreedyOutputMode::GpuToken),
+            ),
+        ] {
+            parse_arguments(valid_arguments("baseline", flag_name, baseline))
+                .expect("supported baseline binding");
+            let command = parse_arguments(valid_arguments("candidate", flag_name, candidate))
+                .expect("supported candidate binding");
+            let Command::Run(options) = command else {
+                panic!("expected run command");
+            };
+            assert_eq!(
+                options.runtime_selection().expect("validated runtime flag"),
+                expected
+            );
+            assert!(parse_arguments(valid_arguments("baseline", flag_name, candidate)).is_err());
+            assert!(parse_arguments(valid_arguments("candidate", flag_name, baseline)).is_err());
+        }
+    }
+
+    #[test]
+    fn decode_fast_path_binds_legacy_and_grouped_ragged_attention_launches() {
+        let fixed = parse_arguments(valid_arguments(
+            "baseline",
+            "decode_fast_path",
+            "fixed-sync-cpu",
+        ))
+        .expect("supported fixed decode path");
+        let Command::Run(fixed) = fixed else {
+            panic!("expected run command");
+        };
+        assert_eq!(
+            benchmark_config(&fixed)
+                .expect("fixed benchmark config")
+                .executor
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::Legacy
+        );
+
+        let bucketed = parse_arguments(valid_arguments(
+            "candidate",
+            "decode_fast_path",
+            "bucket-packed-gpu",
+        ))
+        .expect("supported bucketed decode path");
+        let Command::Run(bucketed) = bucketed else {
+            panic!("expected run command");
+        };
+        assert_eq!(
+            benchmark_config(&bucketed)
+                .expect("bucketed benchmark config")
+                .executor
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::GroupedHeads
         );
     }
 

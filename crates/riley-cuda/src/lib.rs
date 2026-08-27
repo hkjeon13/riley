@@ -28,8 +28,9 @@ pub use attention::{
 pub use batch::{
     FIXED37_RAGGED_MAX_LOGICAL_TOKENS, IndexedRopeParams, PACKED_BATCH_BLOCK_SIZE,
     PACKED_BATCH_VERSION, PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams,
-    RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention, indexed_rope,
-    ragged_paged_attention, ragged_paged_kv_cache_write, row_gather,
+    RaggedPagedKvCacheWriteParams, RowGatherParams, fixed37_ragged_paged_attention,
+    grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
+    ragged_paged_kv_cache_write, row_gather,
 };
 pub use decode::{
     DECODE_PARTIAL_STATE_VERSION, DecodeAttentionBackend, DecodeAttentionBackendAvailability,
@@ -66,12 +67,14 @@ pub use prefill::{
     PreparedPrefillAttention,
 };
 pub use primitives::{
-    CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
-    Fixed37LogSoftmaxParams, GatedMultiplyParams, HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS,
+    BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_RESULT_U32_WORDS, BF16_ARGMAX_STATUS_NON_FINITE,
+    BF16_ARGMAX_STATUS_SUCCESS, Bf16ArgmaxParams, Bf16ArgmaxResult, CastParams, CudaBufferSpan,
+    CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams, Fixed37LogSoftmaxParams,
+    GatedMultiplyParams, HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS,
     HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS,
     ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, RopeTableParams,
-    RowBiasAddInPlaceParams, SiluParams, cast, embedding, fixed37_log_softmax,
-    fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
+    RowBiasAddInPlaceParams, SiluParams, cast, deterministic_bf16_argmax, embedding,
+    fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
     hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, residual_add,
     residual_rms_norm, rms_norm, rope, rope_table, row_bias_add_in_place, silu,
 };

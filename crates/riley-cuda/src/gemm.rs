@@ -469,6 +469,61 @@ impl CudaContext {
             Err(CudaError::unavailable("CudaContext::prepare_gemm"))
         }
     }
+
+    /// Prepares an exact-M child GEMM that preserves an existing plan's
+    /// cuBLASLt reduction topology.
+    ///
+    /// This is intended for shape-bucketed execution where changing only M
+    /// must not permit cuBLASLt to select a numerically different heuristic.
+    /// The anchor must belong to this context and use the same GEMM contract
+    /// other than M. Native validates the copied opaque algorithm against the
+    /// child descriptors and fails closed without a heuristic fallback if that
+    /// algorithm cannot execute for the requested shape.
+    ///
+    /// # Errors
+    ///
+    /// Returns invalid-state for a foreign or poisoned anchor; returns
+    /// not-supported when the anchor algorithm is not valid for `config`.
+    pub fn prepare_gemm_anchored(
+        &self,
+        config: CudaGemmConfig,
+        anchor: &CudaPreparedGemm,
+    ) -> CudaResult<CudaPreparedGemm> {
+        const OPERATION: &str = "CudaContext::prepare_gemm_anchored";
+        ensure_same_context(&self.inner, &anchor.context, OPERATION)?;
+        if anchor.poisoned {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the anchor GEMM plan was poisoned by a prior native execution failure",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = ffi::GemmPlanHandle::create_anchored(
+                &self.inner.native,
+                config.m,
+                config.n,
+                config.k,
+                config.max_workspace_bytes,
+                config.reduction_policy.abi_flags(),
+                &anchor.native,
+            )?;
+            let algorithm = CudaGemmAlgorithmMetadata::from_native(config, native.info()?)?;
+            Ok(CudaPreparedGemm {
+                native,
+                context: Arc::clone(&self.inner),
+                config,
+                algorithm,
+                poisoned: false,
+                _not_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = config;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
 }
 
 impl CudaPreparedGemm {

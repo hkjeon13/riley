@@ -182,12 +182,13 @@
     "metrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "counters"],
+      "required": ["active_requests", "waiting_requests", "kv_allocated_blocks", "allocation", "batch_shapes", "counters"],
       "properties": {
         "active_requests": {"type": "integer", "minimum": 0},
         "waiting_requests": {"type": "integer", "minimum": 0},
         "kv_allocated_blocks": {"type": "integer", "minimum": 0},
         "allocation": {"$ref": "#/$defs/allocation"},
+        "batch_shapes": {"$ref": "#/$defs/batchShapes"},
         "counters": {"$ref": "#/$defs/counters"}
       }
     },
@@ -200,6 +201,51 @@
         "device_live_bytes": {"type": "integer", "minimum": 0},
         "pinned_live_count": {"type": "integer", "minimum": 0},
         "pinned_live_bytes": {"type": "integer", "minimum": 0}
+      }
+    },
+    "batchShapes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metrics_degraded", "last", "bucket_count", "buckets"],
+      "properties": {
+        "metrics_degraded": {"type": "boolean"},
+        "last": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/batchShapeObservation"}
+          ]
+        },
+        "bucket_count": {"type": "integer", "minimum": 0, "maximum": 10},
+        "buckets": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {"$ref": "#/$defs/batchShapeBucket"}
+        }
+      }
+    },
+    "batchShapeObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_rows", "selected_dense_rows", "padding_rows"],
+      "properties": {
+        "active_rows": {"type": "integer", "minimum": 1},
+        "selected_dense_rows": {"type": "integer", "minimum": 1},
+        "padding_rows": {"type": "integer", "minimum": 0}
+      }
+    },
+    "batchShapeBucket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dense_rows", "hit_count", "latency_sample_count", "gpu_execution_ns_total", "gpu_execution_ns_average", "gpu_execution_ns_maximum", "gpu_execution_ns_last"],
+      "properties": {
+        "dense_rows": {"type": "integer", "minimum": 0},
+        "hit_count": {"type": "integer", "minimum": 0},
+        "latency_sample_count": {"type": "integer", "minimum": 0},
+        "gpu_execution_ns_total": {"type": "integer", "minimum": 0},
+        "gpu_execution_ns_average": {"type": "integer", "minimum": 0},
+        "gpu_execution_ns_maximum": {"type": "integer", "minimum": 0},
+        "gpu_execution_ns_last": {"type": "integer", "minimum": 0}
       }
     },
     "counters": {

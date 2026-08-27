@@ -69,6 +69,7 @@ const ROPE_PARAMS_SIZE: u32 = 288;
 const INDEXED_ROPE_PARAMS_SIZE: u32 = 320;
 const CAST_PARAMS_SIZE: u32 = 152;
 const ROW_GATHER_PARAMS_SIZE: u32 = 208;
+const BF16_ARGMAX_PARAMS_SIZE: u32 = 152;
 const QK_GQA_PARAMS_SIZE: u32 = 216;
 const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
 const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
@@ -593,6 +594,17 @@ struct RawRowGatherParams {
     input_row_count: u64,
     output_row_count: u64,
     column_count: u64,
+    reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawBf16ArgmaxParams {
+    struct_size: u32,
+    reserved0: u32,
+    logits: RawBufferSpan,
+    results: RawBufferSpan,
+    row_count: u64,
+    vocabulary_size: u64,
     reserved: [u64; 4],
 }
 
@@ -1348,6 +1360,15 @@ unsafe extern "C" {
         out_copy: *mut *mut RawCopy,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_command_batch_copy_h2d_async(
+        destination: *mut RawDeviceBuffer,
+        destination_offset: u64,
+        source: *mut RawPinnedHostBuffer,
+        source_offset: u64,
+        byte_len: u64,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_copy_d2h_async(
         destination: *mut RawPinnedHostBuffer,
         destination_offset: u64,
@@ -1468,6 +1489,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_bf16_argmax_execute(
+        params: *const RawBf16ArgmaxParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_qk_gqa_execute(
         params: *const RawQkGqaParams,
         stream: *mut RawStream,
@@ -1578,6 +1604,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_ragged_paged_attention_grouped_heads_execute(
+        params: *const RawRaggedPagedAttentionParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_hf_prefill_attention_plan_create(
         context: *mut RawContext,
         config: *const RawHfPrefillAttentionConfig,
@@ -1611,6 +1642,13 @@ unsafe extern "C" {
     fn riley_cuda_gemm_plan_create(
         context: *mut RawContext,
         config: *const RawGemmConfig,
+        out_plan: *mut *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_gemm_plan_create_anchored(
+        context: *mut RawContext,
+        config: *const RawGemmConfig,
+        anchor_plan: *mut RawGemmPlan,
         out_plan: *mut *mut RawGemmPlan,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -2240,6 +2278,37 @@ impl DeviceBufferHandle {
             byte_len,
             reserved: [0; 2],
         }
+    }
+
+    pub(super) fn copy_from_pinned_in_command_batch(
+        &self,
+        destination_offset: u64,
+        source: &PinnedHostBufferHandle,
+        source_offset: u64,
+        byte_len: u64,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe command-batch guard exclusively borrows the stream;
+        // both opaque buffers remain borrowed for this submission. Native
+        // validation registers their active-use counters in the owning batch
+        // before enqueuing the fixed-direction H2D operation.
+        let status = unsafe {
+            riley_cuda_command_batch_copy_h2d_async(
+                self.as_ptr(),
+                destination_offset,
+                source.as_ptr(),
+                source_offset,
+                byte_len,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(
+            status,
+            "enqueue command-batch pinned host-to-device copy",
+            &error,
+        )
     }
 
     pub(super) fn close(&mut self) -> CudaResult<()> {
@@ -3006,6 +3075,33 @@ pub(super) fn row_gather_execute(
         // the synchronously completing native operation.
         unsafe { riley_cuda_row_gather_execute(&params, stream, error) }
     })
+}
+
+pub(super) fn bf16_argmax_execute(
+    logits: RawBufferSpan,
+    results: RawBufferSpan,
+    row_count: u64,
+    vocabulary_size: u64,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawBf16ArgmaxParams {
+        struct_size: BF16_ARGMAX_PARAMS_SIZE,
+        reserved0: 0,
+        logits,
+        results,
+        row_count,
+        vocabulary_size,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute deterministic CUDA BF16 argmax",
+        stream,
+        |stream, error| {
+            // SAFETY: params and both borrowed opaque resources remain live
+            // for the synchronously completing native operation.
+            unsafe { riley_cuda_bf16_argmax_execute(&params, stream, error) }
+        },
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -3955,6 +4051,49 @@ pub(super) fn ragged_paged_attention_execute(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(super) fn ragged_paged_attention_grouped_heads_execute(
+    query: RawBufferSpan,
+    key_pool: RawBufferSpan,
+    value_pool: RawBufferSpan,
+    output: RawBufferSpan,
+    batch: &PackedBatchRawV1,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    output_row_count: u64,
+    scale: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRaggedPagedAttentionParams {
+        struct_size: RAGGED_PAGED_ATTENTION_PARAMS_SIZE,
+        reserved0: 0,
+        query,
+        key_pool,
+        value_pool,
+        output,
+        batch: raw_packed_batch_v1(batch),
+        query_head_count,
+        key_value_head_count,
+        head_size,
+        output_row_count,
+        scale,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute CUDA grouped-head ragged paged attention",
+        stream,
+        |stream, error| {
+            // SAFETY: the fixed-layout descriptor and all exclusively
+            // borrowed buffers remain live through synchronous completion.
+            unsafe {
+                riley_cuda_ragged_paged_attention_grouped_heads_execute(&params, stream, error)
+            }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(super) fn fixed37_ragged_paged_attention_two_pass_execute(
     query: RawBufferSpan,
     key_pool: RawBufferSpan,
@@ -4380,6 +4519,55 @@ impl GemmPlanHandle {
         status_result(status, "prepare CUDA GEMM plan", &error)?;
         let pointer = NonNull::new(pointer).ok_or_else(|| {
             missing_output("prepare CUDA GEMM plan", "native GEMM plan handle is null")
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    pub(super) fn create_anchored(
+        context: &ContextHandle,
+        m: u64,
+        n: u64,
+        k: u64,
+        max_workspace_bytes: u64,
+        flags: u32,
+        anchor: &Self,
+    ) -> CudaResult<Self> {
+        if flags & !(GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K | GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0 {
+            return Err(CudaError::invalid_argument(
+                "prepare anchored CUDA GEMM plan",
+                "unknown GEMM reduction-policy flags",
+            ));
+        }
+        let config = RawGemmConfig::new(flags, m, n, k, max_workspace_bytes);
+        let anchor = anchor.pointer.ok_or_else(|| {
+            CudaError::invalid_state(
+                "prepare anchored CUDA GEMM plan",
+                "the anchor GEMM plan has already been closed",
+            )
+        })?;
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: both plans are owned by this safe layer. Native borrows the
+        // anchor only for this synchronous preparation call, validates context
+        // and immutable GEMM compatibility, then copies its opaque algorithm
+        // into the returned child without retaining the anchor pointer.
+        let status = unsafe {
+            riley_cuda_gemm_plan_create_anchored(
+                context.as_ptr(),
+                &config,
+                anchor.as_ptr(),
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare anchored CUDA GEMM plan", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "prepare anchored CUDA GEMM plan",
+                "native anchored GEMM plan handle is null",
+            )
         })?;
         Ok(Self {
             pointer: Some(pointer),
@@ -4869,6 +5057,11 @@ const _: () = assert!(size_of::<RawCastParams>() == 152);
 const _: () = assert!(size_of::<RawRowGatherParams>() == 208);
 const _: () = assert!(offset_of!(RawRowGatherParams, input_row_count) == 152);
 const _: () = assert!(offset_of!(RawRowGatherParams, reserved) == 176);
+const _: () = assert!(size_of::<RawBf16ArgmaxParams>() == 152);
+const _: () = assert!(offset_of!(RawBf16ArgmaxParams, logits) == 8);
+const _: () = assert!(offset_of!(RawBf16ArgmaxParams, results) == 56);
+const _: () = assert!(offset_of!(RawBf16ArgmaxParams, row_count) == 104);
+const _: () = assert!(offset_of!(RawBf16ArgmaxParams, reserved) == 120);
 const _: () = assert!(size_of::<RawQkGqaParams>() == 216);
 const _: () = assert!(offset_of!(RawQkGqaParams, token_count) == 152);
 const _: () = assert!(offset_of!(RawQkGqaParams, reserved) == 184);

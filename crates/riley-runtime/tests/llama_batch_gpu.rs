@@ -18,8 +18,9 @@ use riley_cuda::{
 };
 use riley_model::{LoadLimits, LoadedModel};
 use riley_runtime::llama::{
-    ExecutionCompletionImplementation, LlamaBatchBlockTable, LlamaBatchMetadataConfig,
-    LlamaBatchRow, LlamaBatchRowKind, LlamaReductionProfile, PreparedLlamaBatchExecutor,
+    BatchMetadataTransport, ExecutionCompletionImplementation, LlamaBatchBlockTable,
+    LlamaBatchExecutorError, LlamaBatchMetadataConfig, LlamaBatchRow, LlamaBatchRowKind,
+    LlamaReductionProfile, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
     PreparedLlamaBatchExecutorConfig, PreparedLlamaDecode, PreparedLlamaDecodeConfig,
     PreparedLlamaForward, PreparedLlamaForwardConfig, ResidualNormImplementation,
 };
@@ -58,6 +59,74 @@ struct LogitMetrics {
 struct GreedyExecutionTrace {
     generated_token_ids: Vec<u32>,
     logits_by_iteration: Vec<Vec<u8>>,
+    allocation_report: PreparedLlamaBatchAllocationReport,
+    cuda_live_allocation_delta: i128,
+    owner_close_live_allocation_count: u64,
+}
+
+#[derive(Debug)]
+struct MixedTransportTrace {
+    initial_logits: Vec<u8>,
+    mixed_logits: Vec<u8>,
+    decode_token: u32,
+    output_count: usize,
+    allocation_report: PreparedLlamaBatchAllocationReport,
+    cuda_live_allocation_delta: i128,
+    owner_close_live_allocation_count: u64,
+}
+
+#[derive(Debug)]
+struct OwnedBatchRow {
+    sequence_tag: u64,
+    kind: LlamaBatchRowKind,
+    tokens: Vec<u32>,
+    target_length: usize,
+    physical_block_ids: Vec<u32>,
+    valid_tokens: Vec<u16>,
+    output_slot: Option<u32>,
+}
+
+impl OwnedBatchRow {
+    fn new(
+        sequence_tag: u64,
+        kind: LlamaBatchRowKind,
+        tokens: Vec<u32>,
+        target_length: usize,
+        first_physical: u32,
+        output_slot: Option<u32>,
+    ) -> TestResult<Self> {
+        let (physical_block_ids, valid_tokens) = block_table(target_length, first_physical)?;
+        Ok(Self {
+            sequence_tag,
+            kind,
+            tokens,
+            target_length,
+            physical_block_ids,
+            valid_tokens,
+            output_slot,
+        })
+    }
+
+    fn borrowed(&self) -> TestResult<LlamaBatchRow<'_>> {
+        row(
+            self.sequence_tag,
+            self.kind,
+            &self.tokens,
+            self.target_length,
+            &self.physical_block_ids,
+            &self.valid_tokens,
+            self.output_slot,
+        )
+    }
+}
+
+#[derive(Debug)]
+struct Phase1ShapeTrace {
+    selected_dense_rows: Vec<usize>,
+    output_row_counts: Vec<usize>,
+    logits_by_iteration: Vec<Vec<u8>>,
+    selection_history: Vec<usize>,
+    prepared_shape_count: usize,
     cuda_live_allocation_delta: i128,
     owner_close_live_allocation_count: u64,
 }
@@ -712,6 +781,7 @@ fn greedy_execution_trace(
     model: &LoadedModel,
     residual_norm: ResidualNormImplementation,
     execution_completion: ExecutionCompletionImplementation,
+    metadata_transport: BatchMetadataTransport,
     reduction_profile: LlamaReductionProfile,
     ragged_attention_reduction_profile: Option<AttentionReductionProfile>,
     decode_steps: usize,
@@ -737,6 +807,10 @@ fn greedy_execution_trace(
         ExecutionCompletionImplementation::IterationBatch => {
             config.with_iteration_batch_completion()
         }
+    };
+    let config = match metadata_transport {
+        BatchMetadataTransport::Synchronous => config.with_synchronous_metadata(),
+        BatchMetadataTransport::PackedAsync => config.with_packed_async_metadata(),
     }
     .with_reduction_profile(reduction_profile);
     let config = ragged_attention_reduction_profile.map_or(config, |profile| {
@@ -758,6 +832,24 @@ fn greedy_execution_trace(
         batch.config().ragged_attention_reduction_profile(),
         expected_ragged_profile
     );
+    assert_eq!(batch.config().metadata_transport(), metadata_transport);
+    let allocation_report = batch.allocation_report();
+    if metadata_transport == BatchMetadataTransport::PackedAsync {
+        assert!(
+            allocation_report.batch_input_device_bytes()
+                > allocation_report.packed_metadata_device_bytes(),
+            "the packed input slab must include token IDs in addition to the six metadata arrays"
+        );
+        assert_eq!(
+            allocation_report.pinned_host_allocation_count(),
+            allocation_report
+                .forward()
+                .pinned_host_allocation_count()
+                .checked_add(1)
+                .expect("packed pinned-host allocation count overflow"),
+            "packed async must own exactly one additional pinned input slab"
+        );
+    }
     let (prompt_ids, prompt_valid) = block_table(TOKENS_A.len(), 0)?;
     let prompt_rows = [row(
         15,
@@ -773,9 +865,11 @@ fn greedy_execution_trace(
     let mut logits = vec![0_u8; vocabulary_row_bytes(model)?];
     batch.download_logits(&mut logits, &mut stream)?;
     let stable = context.allocation_stats()?;
+    assert_report_matches_context(allocation_report, stable);
     let mut trace = GreedyExecutionTrace {
         generated_token_ids: Vec::with_capacity(decode_steps),
         logits_by_iteration: Vec::with_capacity(decode_steps + 1),
+        allocation_report,
         cuda_live_allocation_delta: 0,
         owner_close_live_allocation_count: 0,
     };
@@ -821,6 +915,262 @@ fn greedy_execution_trace(
     Ok(trace)
 }
 
+fn phase1_test_tokens(length: usize, salt: usize) -> Vec<u32> {
+    TOKENS_A
+        .iter()
+        .chain(&TOKENS_B)
+        .copied()
+        .cycle()
+        .skip(salt)
+        .take(length)
+        .collect()
+}
+
+fn phase1_decode_rows(count: usize) -> TestResult<Vec<OwnedBatchRow>> {
+    (0..count)
+        .map(|index| {
+            OwnedBatchRow::new(
+                10_000 + u64::try_from(index)?,
+                LlamaBatchRowKind::Decode,
+                phase1_test_tokens(1, index),
+                1,
+                u32::try_from(index)?,
+                Some(u32::try_from(count - index - 1)?),
+            )
+        })
+        .collect()
+}
+
+fn execute_phase1_iteration(
+    batch: &mut PreparedLlamaBatchExecutor,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    owned_rows: &[OwnedBatchRow],
+    stable: CudaAllocationStats,
+) -> TestResult<(usize, usize, Vec<u8>)> {
+    let active_rows = owned_rows
+        .iter()
+        .try_fold(0_usize, |total, owned| {
+            total.checked_add(owned.tokens.len()).ok_or(())
+        })
+        .map_err(|()| "Phase 1 active-row count overflow")?;
+    let selected_dense_rows = batch.select_dense_rows(active_rows)?;
+    let rows = owned_rows
+        .iter()
+        .map(OwnedBatchRow::borrowed)
+        .collect::<TestResult<Vec<_>>>()?;
+    batch.execute(&rows, stream)?;
+    assert_eq!(
+        context.allocation_stats()?,
+        stable,
+        "shape dispatch allocated CUDA storage for T={active_rows} M={selected_dense_rows}"
+    );
+    let output_count = owned_rows
+        .iter()
+        .filter(|row| row.output_slot.is_some())
+        .count();
+    let mut logits = vec![0_u8; batch.output_byte_len()?];
+    batch.download_logits(&mut logits, stream)?;
+    assert_eq!(
+        context.allocation_stats()?,
+        stable,
+        "shape output download allocated CUDA storage for T={active_rows} M={selected_dense_rows}"
+    );
+    Ok((selected_dense_rows, output_count, logits))
+}
+
+fn run_phase1_shape_trace(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    active_row_buckets: bool,
+    grouped_ragged_attention_heads: bool,
+) -> TestResult<Phase1ShapeTrace> {
+    const MAX_DENSE_ROWS: usize = 256;
+    const MAX_ROWS: usize = 17;
+    const MAX_BLOCK_ENTRIES: usize = 34;
+    const MAX_OUTPUT_SLOTS: usize = 17;
+    const PHYSICAL_BLOCKS: usize = 34;
+
+    let config = batch_config(
+        MAX_ROWS,
+        MAX_DENSE_ROWS,
+        MAX_BLOCK_ENTRIES,
+        MAX_OUTPUT_SLOTS,
+        PHYSICAL_BLOCKS,
+    )?
+    .with_separate_residual_norm()
+    .with_iteration_batch_completion();
+    let config = if active_row_buckets {
+        config.with_active_row_buckets()
+    } else {
+        // Exercise the public kill switch after first selecting the optimized
+        // policy instead of relying only on the default.
+        config.with_active_row_buckets().with_fixed_maximum_shape()
+    };
+    let config = if grouped_ragged_attention_heads {
+        config.with_grouped_ragged_attention_heads()
+    } else {
+        config.with_legacy_ragged_attention_heads()
+    };
+    assert_eq!(
+        config.select_dense_rows(1)?,
+        if active_row_buckets {
+            1
+        } else {
+            MAX_DENSE_ROWS
+        }
+    );
+    let mut batch = PreparedLlamaBatchExecutor::prepare(model, context, stream, config)?;
+    let prepared_shape_count = batch.prepared_shape_count();
+    assert_eq!(prepared_shape_count, if active_row_buckets { 9 } else { 1 });
+    let stable = context.allocation_stats()?;
+    assert_report_matches_context(batch.allocation_report(), stable);
+    let mut selected_dense_rows = Vec::new();
+    let mut output_row_counts = Vec::new();
+    let mut logits_by_iteration = Vec::new();
+
+    let mut execute = |rows: &[OwnedBatchRow]| -> TestResult<()> {
+        let (selected, output_count, logits) =
+            execute_phase1_iteration(&mut batch, context, stream, rows, stable)?;
+        selected_dense_rows.push(selected);
+        output_row_counts.push(output_count);
+        logits_by_iteration.push(logits);
+        Ok(())
+    };
+
+    for count in [1_usize, 2, 8, 17] {
+        execute(&phase1_decode_rows(count)?)?;
+    }
+
+    let boundary_prefill = [OwnedBatchRow::new(
+        20_001,
+        LlamaBatchRowKind::Prefill,
+        phase1_test_tokens(15, 1),
+        15,
+        0,
+        Some(0),
+    )?];
+    execute(&boundary_prefill)?;
+    let boundary_decode_16 = [OwnedBatchRow::new(
+        20_001,
+        LlamaBatchRowKind::Decode,
+        vec![42],
+        16,
+        0,
+        Some(0),
+    )?];
+    execute(&boundary_decode_16)?;
+    let boundary_decode_17 = [OwnedBatchRow::new(
+        20_001,
+        LlamaBatchRowKind::Decode,
+        vec![43],
+        17,
+        0,
+        Some(0),
+    )?];
+    execute(&boundary_decode_17)?;
+
+    let mixed = [
+        OwnedBatchRow::new(20_001, LlamaBatchRowKind::Decode, vec![504], 18, 0, Some(1))?,
+        OwnedBatchRow::new(
+            20_002,
+            LlamaBatchRowKind::Prefill,
+            phase1_test_tokens(7, 3),
+            7,
+            2,
+            Some(0),
+        )?,
+    ];
+    execute(&mixed)?;
+
+    let selection_history_start = 8;
+    for (history_index, token_count) in [128_usize, 1, 8, 256, 1].into_iter().enumerate() {
+        let rows = [OwnedBatchRow::new(
+            30_000 + u64::try_from(history_index)?,
+            LlamaBatchRowKind::Prefill,
+            phase1_test_tokens(token_count, history_index),
+            token_count,
+            0,
+            Some(0),
+        )?];
+        execute(&rows)?;
+    }
+    let selection_history = selected_dense_rows[selection_history_start..].to_vec();
+
+    let current = context.allocation_stats()?;
+    let cuda_live_allocation_delta = live_allocation_delta(stable, current);
+    assert_eq!(cuda_live_allocation_delta, 0);
+    batch.close()?;
+    let after_owner_close = context.allocation_stats()?;
+    let owner_close_live_allocation_count = live_allocation_count(after_owner_close);
+    assert!(
+        after_owner_close.is_zero(),
+        "Phase 1 shape executor close leaked CUDA allocations"
+    );
+    Ok(Phase1ShapeTrace {
+        selected_dense_rows,
+        output_row_counts,
+        logits_by_iteration,
+        selection_history,
+        prepared_shape_count,
+        cuda_live_allocation_delta,
+        owner_close_live_allocation_count,
+    })
+}
+
+fn assert_phase1_shape_trace_parity(
+    model: &LoadedModel,
+    fixed: &Phase1ShapeTrace,
+    active: &Phase1ShapeTrace,
+) -> TestResult {
+    const LABELS: [&str; 13] = [
+        "decode-t1",
+        "decode-t2",
+        "decode-t8",
+        "decode-t17",
+        "prefill-kv15",
+        "decode-kv15-to16",
+        "decode-kv16-to17",
+        "mixed-prefill-decode-t8",
+        "history-t128",
+        "history-t1-first",
+        "history-t8",
+        "history-t256",
+        "history-t1-second",
+    ];
+    assert_eq!(fixed.logits_by_iteration.len(), LABELS.len());
+    assert_eq!(active.logits_by_iteration.len(), LABELS.len());
+    assert_eq!(fixed.output_row_counts, active.output_row_counts);
+    let row_bytes = vocabulary_row_bytes(model)?;
+    for (((label, &row_count), fixed_logits), active_logits) in LABELS
+        .iter()
+        .zip(&fixed.output_row_counts)
+        .zip(&fixed.logits_by_iteration)
+        .zip(&active.logits_by_iteration)
+    {
+        assert_eq!(fixed_logits.len(), row_count * row_bytes, "{label}");
+        assert_eq!(active_logits.len(), row_count * row_bytes, "{label}");
+        for (slot, (fixed_row, active_row)) in fixed_logits
+            .chunks_exact(row_bytes)
+            .zip(active_logits.chunks_exact(row_bytes))
+            .enumerate()
+        {
+            assert_semantic_parity(
+                &format!("phase1-{label}-slot-{slot}"),
+                active_row,
+                fixed_row,
+            );
+            assert_eq!(
+                top1(active_row),
+                top1(fixed_row),
+                "Phase 1 {label} slot {slot} greedy token differs"
+            );
+        }
+    }
+    Ok(())
+}
+
 #[test]
 #[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
 fn concurrency_one_matches_the_single_request_forward() -> TestResult {
@@ -862,6 +1212,7 @@ fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResul
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
+        BatchMetadataTransport::Synchronous,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
@@ -870,6 +1221,7 @@ fn fused_residual_norm_matches_separate_multi_step_greedy_exactly() -> TestResul
         &model,
         ResidualNormImplementation::Fused,
         ExecutionCompletionImplementation::PerOperation,
+        BatchMetadataTransport::Synchronous,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
@@ -918,6 +1270,7 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
+        BatchMetadataTransport::Synchronous,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
@@ -926,6 +1279,16 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::IterationBatch,
+        BatchMetadataTransport::Synchronous,
+        LlamaReductionProfile::CanonicalV1,
+        Some(AttentionReductionProfile::CanonicalV1),
+        DECODE_STEPS,
+    )?;
+    let packed_async = greedy_execution_trace(
+        &model,
+        ResidualNormImplementation::Separate,
+        ExecutionCompletionImplementation::IterationBatch,
+        BatchMetadataTransport::PackedAsync,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::CanonicalV1),
         DECODE_STEPS,
@@ -977,6 +1340,53 @@ fn iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly() 
         );
     }
     assert_eq!(raw_logit_mismatches, 0);
+    assert_eq!(
+        packed_async.generated_token_ids, iteration_batch.generated_token_ids,
+        "packed-async and synchronous iteration batches produced different greedy token IDs"
+    );
+    assert_eq!(
+        packed_async.logits_by_iteration.len(),
+        iteration_batch.logits_by_iteration.len()
+    );
+    for (iteration, (packed_logits, synchronous_logits)) in packed_async
+        .logits_by_iteration
+        .iter()
+        .zip(&iteration_batch.logits_by_iteration)
+        .enumerate()
+    {
+        assert_exact_bytes(
+            &format!("packed-async iteration {iteration}"),
+            packed_logits,
+            synchronous_logits,
+        );
+        assert_eq!(
+            top1(packed_logits),
+            top1(synchronous_logits),
+            "packed-async iteration {iteration} top-1 differs"
+        );
+    }
+    assert_eq!(packed_async.cuda_live_allocation_delta, 0);
+    assert_eq!(packed_async.owner_close_live_allocation_count, 0);
+    assert!(
+        packed_async
+            .allocation_report
+            .additional_device_allocation_count()
+            < iteration_batch
+                .allocation_report
+                .additional_device_allocation_count(),
+        "one packed input slab must replace the synchronous metadata allocation set"
+    );
+    assert_eq!(
+        packed_async
+            .allocation_report
+            .pinned_host_allocation_count(),
+        iteration_batch
+            .allocation_report
+            .pinned_host_allocation_count()
+            .checked_add(1)
+            .expect("packed pinned-host allocation count overflow"),
+        "packed async must add exactly one pinned-host input allocation"
+    );
     println!(
         "pr15-execution-completion-parity schema_version=1 decode_steps={DECODE_STEPS} \
 committed_iterations={} raw_logit_mismatches={raw_logit_mismatches} \
@@ -1000,6 +1410,7 @@ fn fixed37_ragged_attention_completion_modes_match_multi_step_greedy_exactly() -
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::PerOperation,
+        BatchMetadataTransport::Synchronous,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::FixedContiguous37BalancedV1),
         DECODE_STEPS,
@@ -1008,6 +1419,7 @@ fn fixed37_ragged_attention_completion_modes_match_multi_step_greedy_exactly() -
         &model,
         ResidualNormImplementation::Separate,
         ExecutionCompletionImplementation::IterationBatch,
+        BatchMetadataTransport::Synchronous,
         LlamaReductionProfile::CanonicalV1,
         Some(AttentionReductionProfile::FixedContiguous37BalancedV1),
         DECODE_STEPS,
@@ -1301,47 +1713,41 @@ worst_mean_abs={worst_mean_abs:.9} status=passed",
 }
 
 #[test]
-#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on server-4096"]
-fn multiple_independent_requests_and_permuted_output_slots_match() -> TestResult {
+#[ignore = "requires the pinned SmolLM2 checkpoint and CUDA GPU on ai-assistant"]
+fn active_row_buckets_match_fixed_maximum_across_decode_mixed_and_kv_boundaries() -> TestResult {
     let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let (context, mut stream) = first_context()?;
-    let expected_a = independent_last_logits(&model, &context, &mut stream, &TOKENS_A[..3])?;
-    let expected_b = independent_last_logits(&model, &context, &mut stream, &TOKENS_B)?;
-    let mut batch = PreparedLlamaBatchExecutor::prepare(
-        &model,
-        &context,
-        &mut stream,
-        batch_config(2, 8, 8, 2, 32)?,
-    )?;
-    let (ids_a, valid_a) = block_table(3, 0)?;
-    let (ids_b, valid_b) = block_table(TOKENS_B.len(), 1)?;
-    let rows = [
-        row(
-            11,
-            LlamaBatchRowKind::Prefill,
-            &TOKENS_A[..3],
-            3,
-            &ids_a,
-            &valid_a,
-            Some(1),
-        )?,
-        row(
-            22,
-            LlamaBatchRowKind::Prefill,
-            &TOKENS_B,
-            TOKENS_B.len(),
-            &ids_b,
-            &valid_b,
-            Some(0),
-        )?,
-    ];
-    batch.execute(&rows, &mut stream)?;
-    let row_bytes = vocabulary_row_bytes(&model)?;
-    let mut actual = vec![0_u8; batch.output_byte_len()?];
-    batch.download_logits(&mut actual, &mut stream)?;
-    assert_semantic_parity("permuted-slot-b", &actual[..row_bytes], &expected_b);
-    assert_semantic_parity("permuted-slot-a", &actual[row_bytes..], &expected_a);
-    batch.close()?;
+    let fixed = run_phase1_shape_trace(&model, &context, &mut stream, false, false)?;
+    let active = run_phase1_shape_trace(&model, &context, &mut stream, true, true)?;
+
+    assert_eq!(fixed.prepared_shape_count, 1);
+    assert!(
+        fixed
+            .selected_dense_rows
+            .iter()
+            .all(|&dense_rows| dense_rows == 256),
+        "fixed-maximum rollback dispatched a non-maximum shape"
+    );
+    assert_eq!(
+        active.selected_dense_rows,
+        [1, 2, 8, 32, 16, 1, 1, 8, 128, 1, 8, 256, 1]
+    );
+    assert_eq!(active.selection_history, [128, 1, 8, 256, 1]);
+    assert_eq!(active.prepared_shape_count, 9);
+    assert_eq!(fixed.cuda_live_allocation_delta, 0);
+    assert_eq!(active.cuda_live_allocation_delta, 0);
+    assert_eq!(fixed.owner_close_live_allocation_count, 0);
+    assert_eq!(active.owner_close_live_allocation_count, 0);
+    assert_phase1_shape_trace_parity(&model, &fixed, &active)?;
+    println!(
+        "phase1-active-row-buckets schema_version=2 decode_active_rows=1,2,8,17 \
+kv_boundaries=15-to-16,16-to-17 mixed_prefill_decode=true \
+selection_history=128,1,8,256,1 fixed_rollback=true \
+fixed_ragged_attention=legacy active_ragged_attention=grouped-heads \
+fixed_prepared_shapes={} active_prepared_shapes={} top1_mismatches=0 \
+cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 status=passed",
+        fixed.prepared_shape_count, active.prepared_shape_count,
+    );
     stream.close()?;
     close_context(context)
 }
@@ -1351,12 +1757,129 @@ fn multiple_independent_requests_and_permuted_output_slots_match() -> TestResult
 fn mixed_prefill_chunk_and_decode_match_independent_full_sequences() -> TestResult {
     let model = LoadedModel::load(&checkpoint_path(), checkpoint_load_limits()?)?;
     let (context, mut stream) = first_context()?;
-    let mut batch = PreparedLlamaBatchExecutor::prepare(
+    let invalid_config = batch_config(2, 8, 8, 2, 32)?.with_packed_async_metadata();
+    let invalid_error =
+        PreparedLlamaBatchExecutor::prepare(&model, &context, &mut stream, invalid_config)
+            .expect_err("packed async without iteration-batch completion must fail closed");
+    assert!(matches!(
+        invalid_error,
+        LlamaBatchExecutorError::InvalidConfiguration {
+            field: "metadata_transport",
+            reason: "packed async metadata requires iteration-batch completion",
+        }
+    ));
+    assert!(
+        context.allocation_stats()?.is_zero(),
+        "invalid packed-async preparation must not allocate CUDA storage"
+    );
+
+    let synchronous = mixed_transport_trace(
         &model,
         &context,
         &mut stream,
-        batch_config(2, 8, 8, 2, 32)?,
+        BatchMetadataTransport::Synchronous,
     )?;
+    let packed_async = mixed_transport_trace(
+        &model,
+        &context,
+        &mut stream,
+        BatchMetadataTransport::PackedAsync,
+    )?;
+    assert_exact_bytes(
+        "packed-async initial mixed prefill",
+        &packed_async.initial_logits,
+        &synchronous.initial_logits,
+    );
+    assert_exact_bytes(
+        "packed-async mixed prefill/decode",
+        &packed_async.mixed_logits,
+        &synchronous.mixed_logits,
+    );
+    assert_eq!(packed_async.decode_token, synchronous.decode_token);
+    assert_eq!(packed_async.output_count, synchronous.output_count);
+    assert_eq!(packed_async.output_count, 2);
+    assert_eq!(synchronous.cuda_live_allocation_delta, 0);
+    assert_eq!(packed_async.cuda_live_allocation_delta, 0);
+    assert_eq!(synchronous.owner_close_live_allocation_count, 0);
+    assert_eq!(packed_async.owner_close_live_allocation_count, 0);
+    assert!(
+        packed_async
+            .allocation_report
+            .additional_device_allocation_count()
+            < synchronous
+                .allocation_report
+                .additional_device_allocation_count()
+    );
+    assert_eq!(
+        packed_async
+            .allocation_report
+            .pinned_host_allocation_count(),
+        synchronous
+            .allocation_report
+            .pinned_host_allocation_count()
+            .checked_add(1)
+            .expect("packed pinned-host allocation count overflow")
+    );
+
+    let row_bytes = vocabulary_row_bytes(&model)?;
+    let mut full_a = TOKENS_A[..3].to_vec();
+    full_a.push(packed_async.decode_token);
+    let expected_a = independent_last_logits(&model, &context, &mut stream, &full_a)?;
+    let expected_b = independent_last_logits(&model, &context, &mut stream, &TOKENS_B)?;
+    assert_semantic_parity(
+        "packed-mixed-prefill-b-output-slot-0",
+        &packed_async.mixed_logits[..row_bytes],
+        &expected_b,
+    );
+    assert_semantic_parity(
+        "packed-mixed-decode-a-output-slot-1",
+        &packed_async.mixed_logits[row_bytes..],
+        &expected_a,
+    );
+    println!(
+        "phase2-packed-async-executor-parity schema_version=1 h2d_copies_per_iteration=1 \
+tokens_match=true kv_continuation_match=true output_slots=2,1-to-0,0-to-1 \
+raw_logit_mismatches=0 synchronous_fallback=true invalid_pairing_fail_closed=true \
+cuda_live_allocation_delta=0 owner_close_live_allocation_count=0 status=passed"
+    );
+    stream.close()?;
+    close_context(context)
+}
+
+fn mixed_transport_trace(
+    model: &LoadedModel,
+    context: &CudaContext,
+    stream: &mut CudaStream,
+    metadata_transport: BatchMetadataTransport,
+) -> TestResult<MixedTransportTrace> {
+    let config = batch_config(2, 8, 8, 2, 32)?.with_iteration_batch_completion();
+    let config = match metadata_transport {
+        BatchMetadataTransport::Synchronous => config.with_synchronous_metadata(),
+        BatchMetadataTransport::PackedAsync => config.with_packed_async_metadata(),
+    };
+    let mut batch = PreparedLlamaBatchExecutor::prepare(model, context, stream, config)?;
+    assert_eq!(batch.config().metadata_transport(), metadata_transport);
+    assert_eq!(
+        batch.config().execution_completion_implementation(),
+        ExecutionCompletionImplementation::IterationBatch
+    );
+    let allocation_report = batch.allocation_report();
+    let stable = context.allocation_stats()?;
+    assert_report_matches_context(allocation_report, stable);
+    if metadata_transport == BatchMetadataTransport::PackedAsync {
+        assert!(
+            allocation_report.batch_input_device_bytes()
+                > allocation_report.packed_metadata_device_bytes()
+        );
+        assert_eq!(
+            allocation_report.pinned_host_allocation_count(),
+            allocation_report
+                .forward()
+                .pinned_host_allocation_count()
+                .checked_add(1)
+                .expect("packed pinned-host allocation count overflow")
+        );
+    }
     let (ids_a3, valid_a3) = block_table(3, 0)?;
     let (ids_b2, valid_b2) = block_table(2, 1)?;
     let initial = [
@@ -1379,10 +1902,12 @@ fn mixed_prefill_chunk_and_decode_match_independent_full_sequences() -> TestResu
             Some(1),
         )?,
     ];
-    batch.execute(&initial, &mut stream)?;
-    let row_bytes = vocabulary_row_bytes(&model)?;
+    batch.execute(&initial, stream)?;
+    assert_eq!(batch.output_count(), 2);
     let mut initial_logits = vec![0_u8; batch.output_byte_len()?];
-    batch.download_logits(&mut initial_logits, &mut stream)?;
+    batch.download_logits(&mut initial_logits, stream)?;
+    assert_eq!(context.allocation_stats()?, stable);
+    let row_bytes = vocabulary_row_bytes(model)?;
     let decode_token = u32::try_from(top1(&initial_logits[..row_bytes]))?;
     let continuation = &TOKENS_B[2..4];
     let (ids_a4, valid_a4) = block_table(4, 0)?;
@@ -1407,18 +1932,28 @@ fn mixed_prefill_chunk_and_decode_match_independent_full_sequences() -> TestResu
             Some(0),
         )?,
     ];
-    batch.execute(&mixed, &mut stream)?;
-    let mut actual = vec![0_u8; batch.output_byte_len()?];
-    batch.download_logits(&mut actual, &mut stream)?;
-    let mut full_a = TOKENS_A[..3].to_vec();
-    full_a.push(decode_token);
-    let expected_a = independent_last_logits(&model, &context, &mut stream, &full_a)?;
-    let expected_b = independent_last_logits(&model, &context, &mut stream, &TOKENS_B)?;
-    assert_semantic_parity("mixed-prefill-b", &actual[..row_bytes], &expected_b);
-    assert_semantic_parity("mixed-decode-a", &actual[row_bytes..], &expected_a);
+    batch.execute(&mixed, stream)?;
+    let output_count = batch.output_count();
+    assert_eq!(output_count, 2);
+    let mut mixed_logits = vec![0_u8; batch.output_byte_len()?];
+    batch.download_logits(&mut mixed_logits, stream)?;
+    let current = context.allocation_stats()?;
+    assert_eq!(current, stable);
     batch.close()?;
-    stream.close()?;
-    close_context(context)
+    let after_owner_close = context.allocation_stats()?;
+    assert!(
+        after_owner_close.is_zero(),
+        "{metadata_transport:?} mixed executor close leaked CUDA allocations"
+    );
+    Ok(MixedTransportTrace {
+        initial_logits,
+        mixed_logits,
+        decode_token,
+        output_count,
+        allocation_report,
+        cuda_live_allocation_delta: live_allocation_delta(stable, current),
+        owner_close_live_allocation_count: live_allocation_count(after_owner_close),
+    })
 }
 
 #[test]

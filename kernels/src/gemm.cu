@@ -377,6 +377,65 @@ bool deterministic_candidate(
   return true;
 }
 
+bool record_algorithm(RileyCudaGemmPlan* plan,
+                      const cublasLtMatmulAlgo_t& algorithm,
+                      size_t workspace_bytes) noexcept {
+  if (plan == nullptr ||
+      workspace_bytes >
+          static_cast<size_t>(std::numeric_limits<uint64_t>::max()) ||
+      !algorithm_has_supported_alignment(&algorithm)) {
+    return false;
+  }
+
+  int32_t algorithm_id = 0;
+  uint32_t tile_id = 0;
+  uint32_t stages_id = 0;
+  uint32_t split_k = 0;
+  uint32_t reduction_scheme = 0;
+  uint32_t cta_swizzling = 0;
+  uint32_t custom_option = 0;
+  uint64_t numerical_flags = 0;
+  if (!algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_ID,
+                              &algorithm_id) ||
+      !algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_TILE_ID,
+                              &tile_id) ||
+      !algorithm_config_value(&algorithm,
+                              CUBLASLT_ALGO_CONFIG_STAGES_ID,
+                              &stages_id) ||
+      !algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
+                              &split_k) ||
+      !algorithm_config_value(&algorithm,
+                              CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
+                              &reduction_scheme) ||
+      !algorithm_config_value(&algorithm,
+                              CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,
+                              &cta_swizzling) ||
+      !algorithm_config_value(&algorithm,
+                              CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION,
+                              &custom_option) ||
+      !algorithm_capability_value(
+          &algorithm, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS,
+          &numerical_flags) ||
+      !deterministic_reduction_configuration(plan->config, split_k,
+                                              reduction_scheme)) {
+    return false;
+  }
+
+  plan->algorithm = algorithm;
+  plan->algorithm_info.algorithm_id = algorithm_id;
+  plan->algorithm_info.tile_id = tile_id;
+  plan->algorithm_info.stages_id = stages_id;
+  plan->algorithm_info.split_k = split_k;
+  plan->algorithm_info.reduction_scheme = reduction_scheme;
+  plan->algorithm_info.cta_swizzling = cta_swizzling;
+  plan->algorithm_info.custom_option = custom_option;
+  plan->algorithm_info.workspace_bytes =
+      static_cast<uint64_t>(workspace_bytes);
+  plan->algorithm_info.numerical_implementation_flags = numerical_flags;
+  plan->algorithm_ready = true;
+  return true;
+}
+
 RileyCudaStatus query_plan_environment(
     RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error) noexcept {
   int capability_major = 0;
@@ -461,63 +520,12 @@ RileyCudaStatus select_deterministic_algorithm(
     const cublasLtMatmulHeuristicResult_t& candidate = candidates[index];
     cublasLtMatmulAlgo_t algorithm{};
     size_t workspace_bytes = 0;
-    if (!deterministic_candidate(plan, candidate, &algorithm,
-                                 &workspace_bytes) ||
-        workspace_bytes > plan->config.max_workspace_bytes ||
-        !algorithm_has_supported_alignment(&algorithm)) {
-      continue;
+    if (deterministic_candidate(plan, candidate, &algorithm,
+                                &workspace_bytes) &&
+        workspace_bytes <= plan->config.max_workspace_bytes &&
+        record_algorithm(plan, algorithm, workspace_bytes)) {
+      return RILEY_CUDA_STATUS_SUCCESS;
     }
-
-    int32_t algorithm_id = 0;
-    uint32_t tile_id = 0;
-    uint32_t stages_id = 0;
-    uint32_t split_k = 0;
-    uint32_t reduction_scheme = 0;
-    uint32_t cta_swizzling = 0;
-    uint32_t custom_option = 0;
-    uint64_t numerical_flags = 0;
-    if (!algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_ID,
-                                &algorithm_id) ||
-        !algorithm_config_value(&algorithm, CUBLASLT_ALGO_CONFIG_TILE_ID,
-                                &tile_id) ||
-        !algorithm_config_value(&algorithm,
-                                CUBLASLT_ALGO_CONFIG_STAGES_ID,
-                                &stages_id) ||
-        !algorithm_config_value(&algorithm,
-                                CUBLASLT_ALGO_CONFIG_SPLITK_NUM,
-                                &split_k) ||
-        !algorithm_config_value(&algorithm,
-                                CUBLASLT_ALGO_CONFIG_REDUCTION_SCHEME,
-                                &reduction_scheme) ||
-        !algorithm_config_value(&algorithm,
-                                CUBLASLT_ALGO_CONFIG_CTA_SWIZZLING,
-                                &cta_swizzling) ||
-        !algorithm_config_value(&algorithm,
-                                CUBLASLT_ALGO_CONFIG_CUSTOM_OPTION,
-                                &custom_option) ||
-        !algorithm_capability_value(
-            &algorithm, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS,
-            &numerical_flags)) {
-      continue;
-    }
-    if (!deterministic_reduction_configuration(
-            plan->config, split_k, reduction_scheme)) {
-      continue;
-    }
-
-    plan->algorithm = algorithm;
-    plan->algorithm_info.algorithm_id = algorithm_id;
-    plan->algorithm_info.tile_id = tile_id;
-    plan->algorithm_info.stages_id = stages_id;
-    plan->algorithm_info.split_k = split_k;
-    plan->algorithm_info.reduction_scheme = reduction_scheme;
-    plan->algorithm_info.cta_swizzling = cta_swizzling;
-    plan->algorithm_info.custom_option = custom_option;
-    plan->algorithm_info.workspace_bytes =
-        static_cast<uint64_t>(workspace_bytes);
-    plan->algorithm_info.numerical_implementation_flags = numerical_flags;
-    plan->algorithm_ready = true;
-    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   return set_error(
@@ -528,8 +536,51 @@ RileyCudaStatus select_deterministic_algorithm(
       "no deterministic algorithm satisfies the workspace and 256-byte alignment contract");
 }
 
+RileyCudaStatus select_anchored_deterministic_algorithm(
+    RileyCudaGemmPlan* plan, const RileyCudaGemmPlan* anchor,
+    RileyCudaErrorInfo* error) noexcept {
+  if (plan == nullptr || anchor == nullptr || !anchor->algorithm_ready) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_PREPARE,
+                            "prepare anchored cuBLASLt GEMM plan",
+                            "anchor GEMM plan is null or has no prepared algorithm");
+  }
+
+  const cublasLtMatmulAlgo_t algorithm = anchor->algorithm;
+  cublasLtMatmulHeuristicResult_t checked{};
+  const cublasStatus_t check_status = cublasLtMatmulAlgoCheck(
+      plan->handle, plan->operation, plan->weight_layout, plan->input_layout,
+      plan->output_layout, plan->output_layout, &algorithm, &checked);
+  if (check_status != CUBLAS_STATUS_SUCCESS ||
+      checked.state != CUBLAS_STATUS_SUCCESS) {
+    const int32_t native_code = static_cast<int32_t>(
+        check_status == CUBLAS_STATUS_SUCCESS ? checked.state : check_status);
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, native_code,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
+                     "prepare anchored cuBLASLt GEMM plan",
+                     "the anchor algorithm is unsupported for the requested exact-M descriptors");
+  }
+  if (checked.workspaceSize > plan->config.max_workspace_bytes) {
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
+                     "prepare anchored cuBLASLt GEMM plan",
+                     "the anchor algorithm exceeds the requested exact-M workspace cap");
+  }
+  if (!record_algorithm(plan, algorithm, checked.workspaceSize)) {
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
+                     "prepare anchored cuBLASLt GEMM plan",
+                     "the anchor algorithm violates the exact-M deterministic metadata or alignment contract");
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 RileyCudaStatus prepare_plan(RileyCudaGemmPlan* plan,
-                                 RileyCudaErrorInfo* error) noexcept {
+                              const RileyCudaGemmPlan* anchor,
+                              RileyCudaErrorInfo* error) noexcept {
   RileyCudaStatus status = cublaslt_error(
       cublasLtCreate(&plan->handle), error,
       RILEY_CUDA_ERROR_STAGE_PREPARE,
@@ -648,7 +699,9 @@ RileyCudaStatus prepare_plan(RileyCudaGemmPlan* plan,
 
   status = query_plan_environment(plan, error);
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    status = select_deterministic_algorithm(plan, error);
+    status = anchor == nullptr
+                 ? select_deterministic_algorithm(plan, error)
+                 : select_anchored_deterministic_algorithm(plan, anchor, error);
   }
   return status;
 }
@@ -993,6 +1046,25 @@ RileyCudaStatus complete_execution(
   return status;
 }
 
+bool anchored_config_is_compatible(const RileyCudaGemmConfig& anchor,
+                                   const RileyCudaGemmConfig& child) noexcept {
+  // M and the child workspace cap intentionally vary. Every other operation,
+  // storage, and deterministic-reduction field must remain identical so an
+  // opaque cuBLASLt algorithm copy cannot cross a semantic GEMM boundary.
+  return anchor.flags == child.flags && anchor.n == child.n &&
+         anchor.k == child.k && anchor.input_dtype == child.input_dtype &&
+         anchor.weight_dtype == child.weight_dtype &&
+         anchor.accumulator_dtype == child.accumulator_dtype &&
+         anchor.output_dtype == child.output_dtype &&
+         anchor.input_transpose == child.input_transpose &&
+         anchor.weight_transpose == child.weight_transpose &&
+         anchor.input_layout == child.input_layout &&
+         anchor.weight_layout == child.weight_layout &&
+         anchor.output_layout == child.output_layout &&
+         anchor.epilogue == child.epilogue &&
+         anchor.deterministic == child.deterministic;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(
@@ -1044,7 +1116,7 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(
   status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                        "prepare cuBLASLt GEMM plan");
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    status = prepare_plan(plan, error);
+    status = prepare_plan(plan, nullptr, error);
   }
   if (status != RILEY_CUDA_STATUS_SUCCESS) {
     (void)destroy_plan_resources(plan, nullptr,
@@ -1071,6 +1143,130 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(
   }
   // Any ambiguous descriptor destruction or context restoration deliberately
   // retains the unreachable wrapper and context-child lease fail closed.
+  return status;
+}
+
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_create_anchored(
+    RileyCudaContext* context, const RileyCudaGemmConfig* config,
+    RileyCudaGemmPlan* anchor_plan, RileyCudaGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  if (out_plan == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "create anchored cuBLASLt GEMM plan",
+                            "out_plan is null");
+  }
+  *out_plan = nullptr;
+  if (context == nullptr || anchor_plan == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "create anchored cuBLASLt GEMM plan",
+                            "context or anchor_plan is null");
+  }
+
+  GemmByteLengths lengths{};
+  RileyCudaStatus status = validate_config(config, &lengths, error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  RileyCudaGemmConfig normalized_config = *config;
+  normalized_config.struct_size = sizeof(normalized_config);
+
+  if (!try_acquire_exclusive_use(anchor_plan->active_uses)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_PREPARE,
+                            "create anchored cuBLASLt GEMM plan",
+                            "the anchor GEMM plan already has an active use");
+  }
+  if (anchor_plan->owner != context || !anchor_plan->algorithm_ready ||
+      !anchored_config_is_compatible(anchor_plan->config, normalized_config)) {
+    const char* detail = anchor_plan->owner != context
+                             ? "the anchor GEMM plan belongs to another context"
+                         : !anchor_plan->algorithm_ready
+                             ? "the anchor GEMM plan has no prepared algorithm"
+                             : "the anchor GEMM contract differs outside M or workspace cap";
+    if (!release_exclusive_use(anchor_plan->active_uses)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                            "create anchored cuBLASLt GEMM plan",
+                            "anchor GEMM plan use accounting was corrupted");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_PREPARE,
+                            "create anchored cuBLASLt GEMM plan", detail);
+  }
+
+  void* storage = std::calloc(1, sizeof(RileyCudaGemmPlan));
+  if (storage == nullptr) {
+    if (!release_exclusive_use(anchor_plan->active_uses)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                            "create anchored cuBLASLt GEMM plan",
+                            "anchor GEMM plan use accounting was corrupted");
+    }
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
+                     "create anchored cuBLASLt GEMM plan",
+                     "host plan allocation failed");
+  }
+  auto* plan = new (storage)
+      RileyCudaGemmPlan(context, normalized_config, lengths);
+  if (!retain_child(context)) {
+    plan->~RileyCudaGemmPlan();
+    std::free(plan);
+    if (!release_exclusive_use(anchor_plan->active_uses)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                            "create anchored cuBLASLt GEMM plan",
+                            "anchor GEMM plan use accounting was corrupted");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          "create anchored cuBLASLt GEMM plan",
+                          "context child-resource counter overflow");
+  }
+
+  CurrentContext scope(context);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       "prepare anchored cuBLASLt GEMM plan");
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prepare_plan(plan, anchor_plan, error);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    (void)destroy_plan_resources(plan, nullptr,
+                                 RILEY_CUDA_ERROR_STAGE_PREPARE,
+                                 "cleanup failed anchored cuBLASLt GEMM plan");
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       "prepare anchored cuBLASLt GEMM plan");
+
+  if (!release_exclusive_use(anchor_plan->active_uses)) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                              "create anchored cuBLASLt GEMM plan",
+                              "anchor GEMM plan use accounting was corrupted");
+      (void)destroy_plan_resources(plan, nullptr,
+                                   RILEY_CUDA_ERROR_STAGE_PREPARE,
+                                   "cleanup failed anchored cuBLASLt GEMM plan");
+    }
+  }
+
+  const bool restoration_confirmed =
+      !context->restoration_failed.load(std::memory_order_acquire);
+  if (status == RILEY_CUDA_STATUS_SUCCESS && restoration_confirmed) {
+    *out_plan = plan;
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (plan_resources_destroyed(plan) && restoration_confirmed) {
+    if (!release_child(context)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                            "cleanup failed anchored cuBLASLt GEMM plan",
+                            "context child-resource counter underflow");
+    }
+    plan->~RileyCudaGemmPlan();
+    std::free(plan);
+  }
+  // The child holds no anchor pointer. Ambiguous child cleanup or context
+  // restoration retains only the child/context lease, matching unanchored
+  // plan creation's fail-closed lifetime behavior.
   return status;
 }
 

@@ -623,7 +623,7 @@ impl IterationTiming {
     }
 }
 
-/// Owned native-endian BF16 logits downloaded in dense output-slot order.
+/// Owned logits or exact greedy tokens downloaded in dense output-slot order.
 ///
 /// Device work and the owning stream have completed before this value is
 /// returned. It is therefore always safe either to build an [`IterationResult`]
@@ -633,12 +633,19 @@ pub struct DownloadedLlamaIteration {
     iteration_id: IterationId,
     vocabulary_size: usize,
     output_count: usize,
-    logits_bf16_native: Vec<u8>,
+    output: DownloadedLlamaOutput,
     commit_outputs: Vec<IterationOutput>,
 }
 
+#[derive(Debug)]
+#[cfg_attr(not(feature = "cuda"), allow(dead_code))]
+enum DownloadedLlamaOutput {
+    Logits(Vec<u8>),
+    GreedyTokens(Vec<u32>),
+}
+
 impl DownloadedLlamaIteration {
-    /// Scheduler iteration identity matching these logits.
+    /// Scheduler iteration identity matching this downloaded output.
     #[must_use]
     pub const fn iteration_id(&self) -> IterationId {
         self.iteration_id
@@ -659,7 +666,60 @@ impl DownloadedLlamaIteration {
     /// Complete native-endian BF16 `[O,V]` logit storage.
     #[must_use]
     pub fn logits_bf16_native(&self) -> &[u8] {
-        &self.logits_bf16_native
+        match &self.output {
+            DownloadedLlamaOutput::Logits(logits) => logits,
+            DownloadedLlamaOutput::GreedyTokens(_) => &[],
+        }
+    }
+
+    /// Exact device-selected greedy token IDs in dense output-slot order.
+    #[must_use]
+    pub fn greedy_token_ids(&self) -> &[u32] {
+        match &self.output {
+            DownloadedLlamaOutput::Logits(_) => &[],
+            DownloadedLlamaOutput::GreedyTokens(token_ids) => token_ids,
+        }
+    }
+
+    /// Returns the device-greedy allocation to a caller-owned reuse workspace.
+    ///
+    /// The workspace-aware execution APIs temporarily move the caller's
+    /// allocation into this downloaded value so token routing can use the same
+    /// owning result type as the logits rollback path. Call this after sampling
+    /// and before consuming the download with [`Self::into_result`]. The
+    /// restored workspace is cleared but retains its original allocation.
+    ///
+    /// # Errors
+    ///
+    /// Returns without changing either vector when this download contains
+    /// logits instead of a complete dense greedy-token result, or when the
+    /// supplied workspace is not the empty placeholder left by a successful
+    /// workspace-aware execution.
+    pub fn restore_greedy_token_workspace(
+        &mut self,
+        workspace: &mut Vec<u32>,
+    ) -> IterationAdapterResult<()> {
+        let DownloadedLlamaOutput::GreedyTokens(token_ids) = &mut self.output else {
+            return Err(IterationAdapterError::InvalidRuntimeOutput {
+                field: "greedy token IDs",
+                reason: "download does not own one greedy token per output row",
+            });
+        };
+        if token_ids.len() != self.output_count {
+            return Err(IterationAdapterError::InvalidRuntimeOutput {
+                field: "greedy token IDs",
+                reason: "download does not own one greedy token per output row",
+            });
+        }
+        if !workspace.is_empty() || workspace.capacity() != 0 {
+            return Err(IterationAdapterError::InvalidRuntimeOutput {
+                field: "greedy token workspace",
+                reason: "workspace is not the empty execution placeholder",
+            });
+        }
+        std::mem::swap(token_ids, workspace);
+        workspace.clear();
+        Ok(())
     }
 
     /// Returns one vocabulary-wide BF16 row for a dense plan output slot.
@@ -696,12 +756,37 @@ impl DownloadedLlamaIteration {
                 .ok_or(IterationAdapterError::ArithmeticOverflow {
                     field: "logit row byte range",
                 })?;
-        self.logits_bf16_native
-            .get(start..end)
-            .ok_or(IterationAdapterError::InvalidRuntimeOutput {
+        self.logits_bf16_native().get(start..end).ok_or(
+            IterationAdapterError::InvalidRuntimeOutput {
                 field: "logits",
                 reason: "downloaded storage is shorter than its declared shape",
-            })
+            },
+        )
+    }
+
+    /// Returns one device-selected greedy token for a dense output slot.
+    ///
+    /// # Errors
+    ///
+    /// Returns when this iteration downloaded logits instead of greedy tokens,
+    /// or when `slot` lies outside the declared dense output range.
+    pub fn greedy_token_for_slot(&self, slot: OutputSlot) -> IterationAdapterResult<u32> {
+        let index =
+            usize::try_from(slot.get()).map_err(|_| IterationAdapterError::ArithmeticOverflow {
+                field: "output slot index",
+            })?;
+        if index >= self.output_count {
+            return Err(IterationAdapterError::InvalidRuntimeOutput {
+                field: "output slot",
+                reason: "requested slot is outside the downloaded dense output range",
+            });
+        }
+        self.greedy_token_ids().get(index).copied().ok_or(
+            IterationAdapterError::InvalidRuntimeOutput {
+                field: "greedy token IDs",
+                reason: "iteration downloaded logits instead of greedy token IDs",
+            },
+        )
     }
 
     /// Safe scheduler abort data if sampling or result publication cannot finish.
@@ -778,7 +863,7 @@ impl DownloadedLlamaIteration {
     }
 }
 
-/// Owning, retryable failure while converting downloaded logits to commit data.
+/// Owning, retryable failure while converting downloaded output to commit data.
 #[derive(Debug)]
 pub struct IterationCommitFailure {
     iteration: DownloadedLlamaIteration,
@@ -790,7 +875,7 @@ impl IterationCommitFailure {
         Self { iteration, error }
     }
 
-    /// Downloaded logits retained for corrected sampling or inspection.
+    /// Downloaded output retained for corrected sampling or inspection.
     #[must_use]
     pub const fn iteration(&self) -> &DownloadedLlamaIteration {
         &self.iteration
@@ -808,7 +893,7 @@ impl IterationCommitFailure {
         self.iteration.abort_data()
     }
 
-    /// Recovers the logits and validation error.
+    /// Recovers the downloaded output and validation error.
     #[must_use]
     pub fn into_parts(self) -> (DownloadedLlamaIteration, IterationAdapterError) {
         (self.iteration, self.error)
@@ -928,7 +1013,73 @@ pub fn execute_llama_iteration(
     executor: &mut PreparedLlamaBatchExecutor,
     stream: &mut CudaStream,
 ) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
-    execute_llama_iteration_inner(plan, executor, stream, None).map(|(downloaded, _)| downloaded)
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        None,
+        IterationOutputMode::Logits,
+        None,
+    )
+    .map(|(downloaded, _)| downloaded)
+}
+
+/// Executes one scheduler plan using exact device-side greedy selection and
+/// downloads only one token/status record per output row.
+///
+/// The caller must prove the complete iteration is eligible for unconstrained
+/// temperature-zero decoding before calling this function.
+///
+/// # Errors
+///
+/// Returns an [`IterationExecutionFailure`] with safe abort data when planning,
+/// runtime execution, token download, or result validation fails.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_greedy(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        None,
+        IterationOutputMode::GreedyTokens,
+        None,
+    )
+    .map(|(downloaded, _)| downloaded)
+}
+
+/// Executes exact device-side greedy selection using caller-owned token
+/// storage that was reserved during cold preparation.
+///
+/// On failure the workspace remains owned by the caller. On success its
+/// allocation moves into the returned download and must be returned with
+/// [`DownloadedLlamaIteration::restore_greedy_token_workspace`] after token
+/// routing. This function never grows the supplied vector.
+///
+/// # Errors
+///
+/// Returns the same failures as [`execute_llama_iteration_greedy`], including
+/// a pre-dispatch capacity failure when `greedy_token_workspace` cannot hold
+/// every dense output slot.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_greedy_with_workspace(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+    greedy_token_workspace: &mut Vec<u32>,
+) -> Result<DownloadedLlamaIteration, IterationExecutionFailure> {
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        None,
+        IterationOutputMode::GreedyTokens,
+        Some(greedy_token_workspace),
+    )
+    .map(|(downloaded, _)| downloaded)
 }
 
 /// Executes one scheduler plan with exact same-stream CUDA event timings.
@@ -950,15 +1101,80 @@ pub fn execute_llama_iteration_timed(
     stream: &mut CudaStream,
     timer: &mut LlamaIterationCudaTimer,
 ) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
-    execute_llama_iteration_inner(plan, executor, stream, Some(timer))
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        Some(timer),
+        IterationOutputMode::Logits,
+        None,
+    )
+}
+
+/// Timed variant of [`execute_llama_iteration_greedy`].
+///
+/// # Errors
+///
+/// Returns the same failures as [`execute_llama_iteration_greedy`], plus CUDA
+/// event recording or elapsed-time collection failures.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_greedy_timed(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+    timer: &mut LlamaIterationCudaTimer,
+) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        Some(timer),
+        IterationOutputMode::GreedyTokens,
+        None,
+    )
+}
+
+/// Timed variant of [`execute_llama_iteration_greedy_with_workspace`].
+///
+/// # Errors
+///
+/// Returns the same failures as
+/// [`execute_llama_iteration_greedy_with_workspace`], plus CUDA event timing
+/// failures.
+#[cfg(feature = "cuda")]
+pub fn execute_llama_iteration_greedy_timed_with_workspace(
+    plan: &IterationPlan,
+    executor: &mut PreparedLlamaBatchExecutor,
+    stream: &mut CudaStream,
+    timer: &mut LlamaIterationCudaTimer,
+    greedy_token_workspace: &mut Vec<u32>,
+) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
+    execute_llama_iteration_inner(
+        plan,
+        executor,
+        stream,
+        Some(timer),
+        IterationOutputMode::GreedyTokens,
+        Some(greedy_token_workspace),
+    )
 }
 
 #[cfg(feature = "cuda")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum IterationOutputMode {
+    Logits,
+    GreedyTokens,
+}
+
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_lines)]
 fn execute_llama_iteration_inner(
     plan: &IterationPlan,
     executor: &mut PreparedLlamaBatchExecutor,
     stream: &mut CudaStream,
     mut timer: Option<&mut LlamaIterationCudaTimer>,
+    output_mode: IterationOutputMode,
+    mut greedy_token_workspace: Option<&mut Vec<u32>>,
 ) -> Result<(DownloadedLlamaIteration, IterationTiming), IterationExecutionFailure> {
     let iteration_id = plan.iteration_id();
     let prepared = PreparedLlamaIteration::prepare(plan).map_err(|error| {
@@ -982,26 +1198,72 @@ fn execute_llama_iteration_inner(
             IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
         })?;
 
-    let output_bytes = executor
-        .output_byte_len_for(prepared.output_count)
-        .map_err(|source| {
-            IterationExecutionFailure::new(
-                iteration_id,
-                Some(ExecutionAbort::NotDispatched),
-                IterationAdapterError::Runtime(Box::new(source)),
+    let (mut logits_bf16_native, mut greedy_token_ids) = match output_mode {
+        IterationOutputMode::Logits => {
+            let output_bytes = executor
+                .output_byte_len_for(prepared.output_count)
+                .map_err(|source| {
+                    IterationExecutionFailure::new(
+                        iteration_id,
+                        Some(ExecutionAbort::NotDispatched),
+                        IterationAdapterError::Runtime(Box::new(source)),
+                    )
+                })?;
+            (
+                zeroed_vec(output_bytes, "downloaded BF16 logits").map_err(|error| {
+                    IterationExecutionFailure::new(
+                        iteration_id,
+                        Some(ExecutionAbort::NotDispatched),
+                        error,
+                    )
+                })?,
+                Vec::new(),
             )
-        })?;
-    let mut logits_bf16_native =
-        zeroed_vec(output_bytes, "downloaded BF16 logits").map_err(|error| {
-            IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
-        })?;
+        }
+        IterationOutputMode::GreedyTokens => {
+            executor
+                .greedy_result_byte_len_for(prepared.output_count)
+                .map_err(|source| {
+                    IterationExecutionFailure::new(
+                        iteration_id,
+                        Some(ExecutionAbort::NotDispatched),
+                        IterationAdapterError::Runtime(Box::new(source)),
+                    )
+                })?;
+            if let Some(tokens) = greedy_token_workspace.as_deref_mut() {
+                prepare_greedy_token_workspace(tokens, prepared.output_count).map_err(|error| {
+                    IterationExecutionFailure::new(
+                        iteration_id,
+                        Some(ExecutionAbort::NotDispatched),
+                        error,
+                    )
+                })?;
+                (Vec::new(), Vec::new())
+            } else {
+                let mut tokens = reserve_vec(prepared.output_count, "downloaded greedy tokens")
+                    .map_err(|error| {
+                        IterationExecutionFailure::new(
+                            iteration_id,
+                            Some(ExecutionAbort::NotDispatched),
+                            error,
+                        )
+                    })?;
+                tokens.resize(prepared.output_count, 0);
+                (Vec::new(), tokens)
+            }
+        }
+    };
 
     if let Some(timer) = timer.as_deref_mut() {
         timer.record_start(stream).map_err(|error| {
             IterationExecutionFailure::new(iteration_id, Some(ExecutionAbort::NotDispatched), error)
         })?;
     }
-    if let Err(source) = executor.execute(prepared.rows(), stream) {
+    let execution = match output_mode {
+        IterationOutputMode::Logits => executor.execute(prepared.rows(), stream),
+        IterationOutputMode::GreedyTokens => executor.execute_greedy(prepared.rows(), stream),
+    };
+    if let Err(source) = execution {
         invalidate_timer(&mut timer);
         return Err(classify_runtime_failure(
             iteration_id,
@@ -1020,7 +1282,17 @@ fn execute_llama_iteration_inner(
             stream,
         ));
     }
-    if let Err(source) = executor.download_logits(&mut logits_bf16_native, stream) {
+    let download = match output_mode {
+        IterationOutputMode::Logits => executor.download_logits(&mut logits_bf16_native, stream),
+        IterationOutputMode::GreedyTokens => {
+            if let Some(tokens) = greedy_token_workspace.as_deref_mut() {
+                executor.download_greedy_tokens(tokens, stream)
+            } else {
+                executor.download_greedy_tokens(&mut greedy_token_ids, stream)
+            }
+        }
+    };
+    if let Err(source) = download {
         invalidate_timer(&mut timer);
         return Err(classify_runtime_failure(
             iteration_id,
@@ -1050,12 +1322,20 @@ fn execute_llama_iteration_inner(
         ));
     }
 
+    if let Some(tokens) = greedy_token_workspace {
+        greedy_token_ids = std::mem::take(tokens);
+    }
+    let output = match output_mode {
+        IterationOutputMode::Logits => DownloadedLlamaOutput::Logits(logits_bf16_native),
+        IterationOutputMode::GreedyTokens => DownloadedLlamaOutput::GreedyTokens(greedy_token_ids),
+    };
+
     Ok((
         DownloadedLlamaIteration {
             iteration_id,
             vocabulary_size,
             output_count: prepared.output_count,
-            logits_bf16_native,
+            output,
             commit_outputs: prepared.commit_outputs,
         },
         timing,
@@ -1187,6 +1467,23 @@ fn reserve_vec<T>(capacity: usize, resource: &'static str) -> IterationAdapterRe
     Ok(values)
 }
 
+#[cfg(any(feature = "cuda", test))]
+fn prepare_greedy_token_workspace(
+    workspace: &mut Vec<u32>,
+    output_count: usize,
+) -> IterationAdapterResult<()> {
+    if workspace.capacity() < output_count {
+        return Err(IterationAdapterError::CapacityExceeded {
+            resource: "greedy token workspace",
+            requested: output_count,
+            capacity: workspace.capacity(),
+        });
+    }
+    workspace.clear();
+    workspace.resize(output_count, 0);
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 fn zeroed_vec(length: usize, resource: &'static str) -> IterationAdapterResult<Vec<u8>> {
     let mut values = reserve_vec(length, resource)?;
@@ -1199,8 +1496,8 @@ mod tests {
     use riley_runtime::paged_kv::BLOCK_TABLE_V1_VERSION;
 
     use super::{
-        DownloadedLlamaIteration, IterationAdapterError, IterationTiming, PreparedLlamaIteration,
-        SampledIterationToken,
+        DownloadedLlamaIteration, DownloadedLlamaOutput, IterationAdapterError, IterationTiming,
+        PreparedLlamaIteration, SampledIterationToken, prepare_greedy_token_workspace,
     };
     use crate::plan::{
         IterationId, IterationPlan, OutputSlot, OwnedBlockTable, RequestId, WorkItem, WorkKind,
@@ -1389,7 +1686,7 @@ mod tests {
             iteration_id: IterationId::new(7).expect("iteration"),
             vocabulary_size: 3,
             output_count: 2,
-            logits_bf16_native: vec![0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15],
+            output: DownloadedLlamaOutput::Logits(vec![0, 1, 2, 3, 4, 5, 10, 11, 12, 13, 14, 15]),
             commit_outputs,
         };
 
@@ -1433,7 +1730,7 @@ mod tests {
             iteration_id: IterationId::new(8).expect("iteration"),
             vocabulary_size: 2,
             output_count: 1,
-            logits_bf16_native: vec![0; 4],
+            output: DownloadedLlamaOutput::Logits(vec![0; 4]),
             commit_outputs: Vec::with_capacity(1),
         };
         let failure = downloaded
@@ -1452,5 +1749,121 @@ mod tests {
             crate::ExecutionAbort::DeviceQuiescedMutationUnknown
         );
         assert_eq!(failure.iteration().logits_bf16_native(), &[0; 4]);
+    }
+
+    #[test]
+    fn downloaded_greedy_tokens_map_dense_slots_without_logits() {
+        let downloaded = DownloadedLlamaIteration {
+            iteration_id: IterationId::new(9).expect("iteration"),
+            vocabulary_size: 8,
+            output_count: 2,
+            output: DownloadedLlamaOutput::GreedyTokens(vec![7, 3]),
+            commit_outputs: Vec::with_capacity(2),
+        };
+
+        assert_eq!(downloaded.greedy_token_ids(), &[7, 3]);
+        assert_eq!(
+            downloaded
+                .greedy_token_for_slot(OutputSlot::new(0))
+                .expect("slot zero"),
+            7
+        );
+        assert_eq!(
+            downloaded
+                .greedy_token_for_slot(OutputSlot::new(1))
+                .expect("slot one"),
+            3
+        );
+        assert!(
+            downloaded
+                .greedy_token_for_slot(OutputSlot::new(2))
+                .is_err()
+        );
+        assert!(downloaded.logits_for_slot(OutputSlot::new(0)).is_err());
+    }
+
+    #[test]
+    fn reusable_greedy_workspace_is_bounded_and_never_reallocated() {
+        let mut workspace = Vec::with_capacity(4);
+        workspace.extend([9, 8, 7]);
+        let allocation = workspace.as_ptr();
+
+        prepare_greedy_token_workspace(&mut workspace, 4).expect("prepared within capacity");
+        assert_eq!(workspace, [0, 0, 0, 0]);
+        assert_eq!(workspace.capacity(), 4);
+        assert_eq!(workspace.as_ptr(), allocation);
+
+        workspace.copy_from_slice(&[1, 2, 3, 4]);
+        let error = prepare_greedy_token_workspace(&mut workspace, 5)
+            .expect_err("capacity growth must fail closed");
+        assert!(matches!(
+            error,
+            IterationAdapterError::CapacityExceeded {
+                resource: "greedy token workspace",
+                requested: 5,
+                capacity: 4,
+            }
+        ));
+        assert_eq!(workspace, [1, 2, 3, 4]);
+        assert_eq!(workspace.as_ptr(), allocation);
+    }
+
+    #[test]
+    fn downloaded_greedy_allocation_returns_to_empty_execution_placeholder() {
+        let mut greedy_token_ids = Vec::with_capacity(4);
+        greedy_token_ids.extend([7, 3]);
+        let allocation = greedy_token_ids.as_ptr();
+        let original_capacity = greedy_token_ids.capacity();
+        let mut downloaded = DownloadedLlamaIteration {
+            iteration_id: IterationId::new(10).expect("iteration"),
+            vocabulary_size: 8,
+            output_count: 2,
+            output: DownloadedLlamaOutput::GreedyTokens(greedy_token_ids),
+            commit_outputs: Vec::with_capacity(2),
+        };
+        let mut workspace = Vec::new();
+
+        downloaded
+            .restore_greedy_token_workspace(&mut workspace)
+            .expect("restore allocation");
+
+        assert!(downloaded.greedy_token_ids().is_empty());
+        assert!(workspace.is_empty());
+        assert_eq!(workspace.capacity(), original_capacity);
+        assert_eq!(workspace.as_ptr(), allocation);
+        prepare_greedy_token_workspace(&mut workspace, 2).expect("reuse allocation");
+        assert_eq!(workspace.as_ptr(), allocation);
+    }
+
+    #[test]
+    fn greedy_workspace_restore_failure_preserves_both_allocations() {
+        let mut greedy_token_ids = Vec::with_capacity(4);
+        greedy_token_ids.extend([7, 3]);
+        let greedy_allocation = greedy_token_ids.as_ptr();
+        let mut downloaded = DownloadedLlamaIteration {
+            iteration_id: IterationId::new(11).expect("iteration"),
+            vocabulary_size: 8,
+            output_count: 2,
+            output: DownloadedLlamaOutput::GreedyTokens(greedy_token_ids),
+            commit_outputs: Vec::with_capacity(2),
+        };
+        let mut occupied_workspace = Vec::with_capacity(2);
+        let occupied_allocation = occupied_workspace.as_ptr();
+
+        let error = downloaded
+            .restore_greedy_token_workspace(&mut occupied_workspace)
+            .expect_err("occupied placeholder must be rejected");
+
+        assert!(matches!(
+            error,
+            IterationAdapterError::InvalidRuntimeOutput {
+                field: "greedy token workspace",
+                ..
+            }
+        ));
+        assert_eq!(downloaded.greedy_token_ids(), &[7, 3]);
+        assert_eq!(downloaded.greedy_token_ids().as_ptr(), greedy_allocation);
+        assert!(occupied_workspace.is_empty());
+        assert_eq!(occupied_workspace.as_ptr(), occupied_allocation);
     }
 }

@@ -1,0 +1,44 @@
+{
+  "schema_version": "riley.decode-attention-correctness.v1",
+  "recorded_at_utc": "2026-08-27T11:19:11Z",
+  "source": {
+    "git_commit": "883e68207a6372459cb9ecf0a4cde5d446810f11",
+    "git_dirty": false,
+    "source_archive_sha256": "b920ccb35d3b862bc5af7d3c9c869a2207c37efe302999ae6abb80c6df7c9460",
+    "release_executable_sha256": "01f51fe41af69715451382ef72a82f78657888867d78d004653b70434125e8b4"
+  },
+  "environment": {
+    "host": "ai-assistant",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "cuda_runtime": "12.8.1",
+    "cuda_toolkit": "12.8.93",
+    "container_image": "rustinfer-optimization-evidence:pr16-f13a7c21a895"
+  },
+  "change": {
+    "implementation": "shared-kv-gqa-ragged-attention",
+    "geometry": "SmolLM2 QH=9, KVH=3; grid=(active_rows, 3), block=96",
+    "contract": "BF16 K/V tiles are shared per KV head while each query-head warp preserves the canonical D64 reduction and online-softmax token order."
+  },
+  "tests": [
+    {
+      "name": "grouped_ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail",
+      "command": "cargo test --locked --offline -p riley-cuda --features cuda --test batch_gpu grouped_ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail -- --ignored --exact --nocapture",
+      "result": "passed",
+      "coverage": "QH=9/KVH=3 direct GPU-to-CPU parity, page boundary, inactive-row zero tail, and byte determinism"
+    },
+    {
+      "name": "active_row_buckets_match_fixed_maximum_across_decode_mixed_and_kv_boundaries",
+      "command": "RILEY_REAL_CHECKPOINT=/model cargo test --locked --offline -p riley-runtime --features cuda --test llama_batch_gpu active_row_buckets_match_fixed_maximum_across_decode_mixed_and_kv_boundaries -- --ignored --exact --nocapture --test-threads=1",
+      "result": "passed",
+      "coverage": "active rows 1/2/8/17, mixed prefill/decode, KV 15-to-16 and 16-to-17, history boundaries, exact top-1 parity"
+    },
+    {
+      "name": "real_cuda_http_lifecycle_is_bounded_and_consistent",
+      "command": "RILEY_REAL_CHECKPOINT=/model cargo test --locked --offline -p riley-server --features 'server cuda' --test api_gpu real_cuda_http_lifecycle_is_bounded_and_consistent -- --ignored --exact --nocapture --test-threads=1",
+      "result": "passed",
+      "coverage": "real CUDA HTTP lifecycle and bounded generation"
+    }
+  ],
+  "status": "passed"
+}

@@ -133,6 +133,23 @@ fn command_batch_api_exposes_only_the_non_replaceable_proxy() {
 }
 
 #[test]
+fn command_batch_h2d_api_is_typed_and_token_free() {
+    fn enqueue<'stream>(
+        destination: &'stream CudaDeviceBuffer,
+        source: &'stream CudaPinnedHostBuffer,
+        commands: &mut riley_cuda::CudaCommandStream<'_, 'stream>,
+    ) -> Result<(), CudaError> {
+        destination.copy_from_pinned_in_command_batch(0, source, 0, 0, commands)
+    }
+
+    // Merely naming the function item type-checks the public, CUDA-disabled
+    // surface without constructing unavailable native resources. Its unit
+    // output proves that completion belongs to the enclosing command batch,
+    // not to a standalone pending-copy token.
+    let _ = enqueue;
+}
+
+#[test]
 fn memory_fault_injection_is_compile_time_test_only() {
     let manifest = include_str!("../Cargo.toml");
     let build = include_str!("../build.rs");

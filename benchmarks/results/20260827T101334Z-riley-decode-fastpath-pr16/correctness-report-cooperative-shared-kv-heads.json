@@ -1,0 +1,45 @@
+{
+  "schema_version": "riley.decode-attention-correctness.v1",
+  "recorded_at_utc": "2026-08-27T11:31:00Z",
+  "source": {
+    "git_commit": "436dad64526f228292c24cec73a652a72e0b1e38",
+    "git_dirty": false,
+    "source_archive_sha256": "385107119fef5ebe65a80632bc3b4c765a77fea9bac5a07feb51331fc3ac03fa",
+    "release_executable_sha256": "a6870817235c80342878258a689973d979ebdcd0e04bc2638235a82a135b1ffc"
+  },
+  "environment": {
+    "host": "ai-assistant",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "cuda_runtime": "12.8.1",
+    "cuda_toolkit": "12.8.93",
+    "container_image": "rustinfer-optimization-evidence:pr16-f13a7c21a895"
+  },
+  "change": {
+    "implementation": "cooperative-shared-kv-gqa-ragged-attention",
+    "geometry": "SmolLM2 QH=9, KVH=3; grid=(active_rows, 3), block=96",
+    "contract": "Each GQA query-head warp cooperatively preloads disjoint BF16 K/V token offsets once per KV head, then preserves the canonical D64 reduction and online-softmax token order for every query head."
+  },
+  "tests": [
+    {
+      "name": "grouped_ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail",
+      "command": "cargo test --locked --offline -p riley-cuda --features cuda --test batch_gpu grouped_ragged_d64_gqa_attention_matches_cpu_for_all_lanes_and_zeroes_tail -- --ignored --exact --nocapture",
+      "result": "passed",
+      "coverage": "QH=9/KVH=3 direct GPU-to-CPU parity, page boundary, inactive-row zero tail, and byte determinism"
+    },
+    {
+      "name": "active_row_buckets_match_fixed_maximum_across_decode_mixed_and_kv_boundaries",
+      "command": "RILEY_REAL_CHECKPOINT=/model cargo test --locked --offline -p riley-runtime --features cuda --test llama_batch_gpu active_row_buckets_match_fixed_maximum_across_decode_mixed_and_kv_boundaries -- --ignored --exact --nocapture --test-threads=1",
+      "result": "passed",
+      "coverage": "active rows 1/2/8/17, mixed prefill/decode, KV 15-to-16 and 16-to-17, history boundaries, exact top-1 parity"
+    },
+    {
+      "name": "real_cuda_http_lifecycle_is_bounded_and_consistent",
+      "command": "RILEY_REAL_CHECKPOINT=/model cargo test --locked --offline -p riley-server --features 'server cuda' --test api_gpu real_cuda_http_lifecycle_is_bounded_and_consistent -- --ignored --exact --nocapture --test-threads=1",
+      "result": "passed",
+      "coverage": "real CUDA HTTP lifecycle and bounded generation"
+    }
+  ],
+  "known_limit": "Malformed metadata is rejected by host-side validation. A direct device-path corruption-to-NaN case is a follow-up hardening test, not part of this release gate.",
+  "status": "passed"
+}

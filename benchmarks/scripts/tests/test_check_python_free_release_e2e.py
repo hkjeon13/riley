@@ -237,6 +237,14 @@ class E2EFixture:
             "waiting_requests": 0,
             "kv_allocated_blocks": 0,
             "allocation": {"device_live_count": 0, "device_live_bytes": 0, "pinned_live_count": 0, "pinned_live_bytes": 0},
+            "batch_shapes": {
+                "metrics_degraded": False, "last": None, "bucket_count": 0,
+                "buckets": [{
+                    "dense_rows": 0, "hit_count": 0, "latency_sample_count": 0,
+                    "gpu_execution_ns_total": 0, "gpu_execution_ns_average": 0,
+                    "gpu_execution_ns_maximum": 0, "gpu_execution_ns_last": 0,
+                } for _ in range(10)],
+            },
             "counters": {"cancellations": cancellations, "disconnects": disconnects, "overloads": 0, "dropped_observations": 0},
         }
 

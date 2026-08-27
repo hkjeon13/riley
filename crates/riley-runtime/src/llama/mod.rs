@@ -24,9 +24,11 @@ pub use batch::{
 
 #[cfg(feature = "cuda")]
 pub use batch_executor::{
-    ExecutionCompletionImplementation, LlamaBatchExecutorError, LlamaBatchExecutorResource,
-    LlamaBatchExecutorResult, PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
-    PreparedLlamaBatchExecutorConfig, ResidualNormImplementation,
+    BatchMetadataTransport, ExecutionCompletionImplementation, LlamaBatchExecutorError,
+    LlamaBatchExecutorResource, LlamaBatchExecutorResult, LlamaBatchShapeBucketHit,
+    LlamaBatchShapeObservation, LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS,
+    PreparedLlamaBatchAllocationReport, PreparedLlamaBatchExecutor,
+    PreparedLlamaBatchExecutorConfig, RaggedAttentionImplementation, ResidualNormImplementation,
 };
 
 pub use error::{
@@ -76,7 +78,7 @@ mod source_contract_tests {
     use super::batch::LlamaBatchMetadataConfig;
     use super::batch_executor::{
         ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
-        ResidualNormImplementation, normalize_prepared_config,
+        RaggedAttentionImplementation, ResidualNormImplementation, normalize_prepared_config,
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
@@ -220,6 +222,35 @@ mod source_contract_tests {
         assert_eq!(
             normalized.execution_completion_implementation(),
             ExecutionCompletionImplementation::IterationBatch
+        );
+    }
+
+    #[test]
+    fn batch_ragged_attention_launch_is_explicit_reversible_and_preserved() {
+        let metadata = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid bounds");
+        let defaults =
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
+        assert_eq!(
+            defaults.ragged_attention_implementation(),
+            RaggedAttentionImplementation::Legacy
+        );
+        assert_eq!(
+            defaults
+                .with_grouped_ragged_attention_heads()
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::GroupedHeads
+        );
+        assert_eq!(
+            normalize_prepared_config(defaults.with_grouped_ragged_attention_heads())
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::GroupedHeads
+        );
+        assert_eq!(
+            defaults
+                .with_grouped_ragged_attention_heads()
+                .with_legacy_ragged_attention_heads()
+                .ragged_attention_implementation(),
+            RaggedAttentionImplementation::Legacy
         );
     }
 
@@ -395,7 +426,49 @@ mod source_contract_tests {
     }
 
     #[test]
-    fn iteration_completion_guard_wraps_only_the_fixed_graph_and_output_gather() {
+    fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
+        let forward = include_str!("forward.rs");
+        let variant_begin = forward
+            .find("fn prepare_batch_shape_variant(")
+            .expect("batch shape variant preparation remains explicit");
+        let variant_end = forward[variant_begin..]
+            .find("fn ensure_batch_shape_gemm_workspace(")
+            .map(|offset| variant_begin + offset)
+            .expect("shared workspace reconciliation remains explicit");
+        let variant = &forward[variant_begin..variant_end];
+        assert!(variant.contains("self.gemm_workspace_cap_bytes"));
+        assert!(variant.contains("Some(&self.gemms)"));
+        assert!(!variant.contains("gemm_workspace.as_ref()"));
+        let gemm_prepare_begin = forward
+            .find("pub(super) fn prepare_gemms(")
+            .expect("GEMM preparation remains explicit");
+        let gemm_prepare = &forward[gemm_prepare_begin..];
+        assert!(gemm_prepare.contains(".prepare_gemm_anchored(config, anchor)"));
+
+        let batch = include_str!("batch_executor.rs");
+        let prepare_variants = batch
+            .find("let shape_variants = match prepare_shape_variants(")
+            .expect("shape variants are cold-prepared");
+        let maximum_requirement = batch
+            .find("let required_gemm_workspace_bytes = shape_variants.iter().fold(")
+            .expect("all prepared shape requirements are reduced to one maximum");
+        let reconcile = batch
+            .find("forward.ensure_batch_shape_gemm_workspace(")
+            .expect("the shared workspace is reconciled once during preparation");
+        let hot_begin = batch
+            .find("// HOT_BATCH_EXECUTE_BEGIN")
+            .expect("batch hot-path marker remains present");
+        assert!(prepare_variants < maximum_requirement);
+        assert!(maximum_requirement < reconcile);
+        assert!(reconcile < hot_begin);
+        assert_eq!(
+            batch.matches("ensure_batch_shape_gemm_workspace(").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn packed_metadata_transport_keeps_the_exact_synchronous_fallback() {
         let source = include_str!("batch_executor.rs");
         let begin = source
             .find("// HOT_BATCH_EXECUTE_BEGIN")
@@ -405,32 +478,84 @@ mod source_contract_tests {
             .expect("batch hot execute end marker");
         let hot = &source[begin..end];
 
-        let metadata_upload = hot
-            .find("let batch = PackedBatchV1::new(")
-            .expect("metadata is bound before execution");
-        let command_begin = hot
-            .find("let mut command_batch = stream")
-            .expect("iteration completion begins explicitly");
-        let body_result = hot
-            .find("let body_result = {")
-            .expect("iteration body result is retained through completion");
-        let command_proxy = hot
-            .find("let mut commands = command_batch.commands();")
-            .expect("iteration body uses the non-replaceable command proxy");
-        let body_call = hot
-            .find("execute_iteration_body(&mut commands)")
-            .expect("iteration body dispatches through the command proxy");
-        let command_finish = hot
-            .find("let completion_result = command_batch")
-            .expect("iteration completion finishes explicitly");
+        assert_eq!(
+            hot.matches("upload_batch_tokens(").count(),
+            1,
+            "synchronous fallback must retain its established token upload"
+        );
+        assert_eq!(
+            hot.matches("upload_prefix(").count(),
+            6,
+            "synchronous fallback must retain all six metadata uploads"
+        );
+        assert_eq!(
+            hot.matches(".copy_from_pinned_in_command_batch(").count(),
+            1,
+            "packed async must enqueue exactly one contiguous H2D call"
+        );
+        assert!(hot.contains("BatchMetadataTransport::Synchronous"));
+        assert!(hot.contains("BatchMetadataTransport::PackedAsync"));
+    }
 
-        assert!(metadata_upload < command_begin);
+    #[test]
+    fn iteration_completion_guards_synchronous_and_packed_async_bodies() {
+        let source = include_str!("batch_executor.rs");
+        let begin = source
+            .find("// HOT_BATCH_EXECUTE_BEGIN")
+            .expect("batch hot execute begin marker");
+        let end = source
+            .find("// HOT_BATCH_EXECUTE_END")
+            .expect("batch hot execute end marker");
+        let hot = &source[begin..end];
+
+        let execution_match = hot
+            .find("match (config.execution_completion, config.metadata_transport)")
+            .expect("execution and metadata policies dispatch together");
+        let execution = &hot[execution_match..];
+        let synchronous_arm = execution
+            .find("BatchMetadataTransport::Synchronous,\n        ) => {")
+            .expect("synchronous iteration arm remains explicit");
+        let packed_arm = execution
+            .find("BatchMetadataTransport::PackedAsync,\n        ) => {")
+            .expect("packed async iteration arm remains explicit");
+        let synchronous = &execution[synchronous_arm..packed_arm];
+        assert!(synchronous.contains("per_operation_device_views("));
+        assert!(synchronous.contains("let mut command_batch = stream"));
+        assert!(synchronous.contains("&mut commands,"));
+        assert!(synchronous.contains("let completion_result = command_batch"));
+        assert!(!synchronous.contains("copy_from_pinned_in_command_batch"));
+
+        let packed = &execution[packed_arm..];
+        let command_begin = packed
+            .find("let mut command_batch = stream")
+            .expect("packed iteration completion begins explicitly");
+        let body_result = packed
+            .find("let body_result = {")
+            .expect("packed body result is retained through completion");
+        let command_proxy = packed
+            .find("let mut commands = command_batch.commands();")
+            .expect("packed body uses the non-replaceable command proxy");
+        let copy = packed
+            .find("copy_from_pinned_in_command_batch(")
+            .expect("packed input uses one command-batch H2D");
+        let bind_views = packed
+            .find("match packed_device_views(")
+            .expect("packed device spans bind after the H2D enqueue");
+        let body_call = packed
+            .find("Ok(views) => execute_iteration_body(")
+            .expect("packed graph dispatches through the command proxy");
+        let command_finish = packed
+            .find("let completion_result = command_batch")
+            .expect("packed iteration completion finishes explicitly");
+
         assert!(command_begin < body_result);
         assert!(body_result < command_proxy);
-        assert!(command_proxy < body_call);
+        assert!(command_proxy < copy);
+        assert!(copy < bind_views);
+        assert!(bind_views < body_call);
         assert!(body_result < command_finish);
         assert!(
-            hot[body_result..command_finish].contains("command_batch.commands()"),
+            packed[body_result..command_finish].contains("command_batch.commands()"),
             "body errors must be retained without skipping command-batch finish"
         );
         assert!(

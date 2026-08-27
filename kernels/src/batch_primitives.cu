@@ -28,7 +28,16 @@ constexpr uint32_t kMaximumBlocks = 65535;
 constexpr size_t kMaximumBatchBuffers = 9;
 constexpr uint32_t kWarpSize = 32;
 constexpr uint32_t kFullWarpMask = 0xffffffffU;
+// Grouped GQA execution keeps the query-head warp's reduction and online
+// token order intact, while allowing the query heads that share one KV head to
+// reuse the same BF16 K/V tile from shared memory. This cap also preserves a
+// bounded generic fallback for shapes that cannot use the shared-KV launch.
+constexpr uint32_t kRaggedAttentionMaximumWarpsPerBlock = 16;
+constexpr uint32_t kRaggedAttentionThreads =
+    kWarpSize * kRaggedAttentionMaximumWarpsPerBlock;
 constexpr uint64_t kAttentionHeadSize = 64;
+constexpr uint32_t kRaggedAttentionSharedTileTokens =
+    RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
 constexpr uint64_t kFixed37RaggedMaximumTokenCount = 8192;
 constexpr uint64_t kFixed37RaggedDepthPartialCount =
     riley_cuda_fixed37::chunk_count(kAttentionHeadSize);
@@ -56,6 +65,20 @@ static_assert(offsetof(RileyCudaRowGatherParams, input_row_count) == 152,
               "row gather dimension offset changed");
 static_assert(offsetof(RileyCudaRowGatherParams, reserved) == 176,
               "row gather reserved tail changed");
+static_assert(sizeof(RileyCudaBf16ArgmaxResult) == 8,
+              "BF16 argmax result ABI size changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxResult, status) == 4,
+              "BF16 argmax result status offset changed");
+static_assert(sizeof(RileyCudaBf16ArgmaxParams) == 152,
+              "BF16 argmax params ABI size changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, logits) == 8,
+              "BF16 argmax logits offset changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, results) == 56,
+              "BF16 argmax results offset changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, row_count) == 104,
+              "BF16 argmax dimension offset changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, reserved) == 120,
+              "BF16 argmax reserved tail changed");
 static_assert(sizeof(RileyCudaPackedBatchV1) == 320,
               "packed batch ABI size changed");
 static_assert(offsetof(RileyCudaPackedBatchV1,
@@ -135,6 +158,8 @@ static_assert(
     "fixed37 ragged paged attention reserved tail changed");
 static_assert(kAttentionHeadSize == 2 * kWarpSize,
               "ragged attention lane ownership changed");
+static_assert(kThreads % kWarpSize == 0,
+              "BF16 argmax requires a whole number of warps");
 static_assert(kFixed37RaggedDepthPartialCount == 2,
               "fixed37 ragged D64 partial shape changed");
 static_assert(kFixed37RaggedMaximumTokenPartialCount == 222,
@@ -808,6 +833,99 @@ __global__ void row_gather_kernel(const T* input, const uint32_t* row_indices,
   }
 }
 
+__device__ __forceinline__ void select_argmax_candidate(
+    float candidate_value, uint32_t candidate_token, float* selected_value,
+    uint32_t* selected_token) {
+  if (candidate_token != RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID &&
+      (*selected_token == RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID ||
+       candidate_value > *selected_value ||
+       (candidate_value == *selected_value &&
+        candidate_token < *selected_token))) {
+    *selected_value = candidate_value;
+    *selected_token = candidate_token;
+  }
+}
+
+__device__ __forceinline__ void reduce_argmax_warp(
+    float* selected_value, uint32_t* selected_token,
+    uint32_t* non_finite) {
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  for (uint32_t offset = kWarpSize / 2; offset != 0; offset /= 2) {
+    const float candidate_value =
+        __shfl_down_sync(kFullWarpMask, *selected_value, offset);
+    const uint32_t candidate_token =
+        __shfl_down_sync(kFullWarpMask, *selected_token, offset);
+    const uint32_t candidate_non_finite =
+        __shfl_down_sync(kFullWarpMask, *non_finite, offset);
+    if (lane + offset < kWarpSize) {
+      *non_finite |= candidate_non_finite;
+      select_argmax_candidate(candidate_value, candidate_token,
+                              selected_value, selected_token);
+    }
+  }
+}
+
+__global__ void bf16_argmax_kernel(
+    const __nv_bfloat16* logits, RileyCudaBf16ArgmaxResult* results,
+    uint64_t row_count, uint64_t vocabulary_size) {
+  constexpr uint32_t kWarpCount = kThreads / kWarpSize;
+  __shared__ float warp_values[kWarpCount];
+  __shared__ uint32_t warp_tokens[kWarpCount];
+  __shared__ uint32_t warp_non_finite[kWarpCount];
+
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  for (uint64_t row = blockIdx.x; row < row_count; row += gridDim.x) {
+    float selected_value = -CUDART_INF_F;
+    uint32_t selected_token = RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
+    uint32_t non_finite = 0;
+    const uint64_t row_base = row * vocabulary_size;
+    for (uint64_t column = threadIdx.x; column < vocabulary_size;
+         column += blockDim.x) {
+      const float value = __bfloat162float(logits[row_base + column]);
+      if (!isfinite(value)) {
+        non_finite = 1;
+        continue;
+      }
+      const uint32_t token = static_cast<uint32_t>(column);
+      select_argmax_candidate(value, token, &selected_value,
+                              &selected_token);
+    }
+
+    reduce_argmax_warp(&selected_value, &selected_token, &non_finite);
+    if (lane == 0) {
+      warp_values[warp] = selected_value;
+      warp_tokens[warp] = selected_token;
+      warp_non_finite[warp] = non_finite;
+    }
+    __syncthreads();
+
+    if (warp == 0) {
+      if (lane < kWarpCount) {
+        selected_value = warp_values[lane];
+        selected_token = warp_tokens[lane];
+        non_finite = warp_non_finite[lane];
+      } else {
+        selected_value = -CUDART_INF_F;
+        selected_token = RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
+        non_finite = 0;
+      }
+      reduce_argmax_warp(&selected_value, &selected_token, &non_finite);
+      if (lane == 0) {
+        if (non_finite != 0 ||
+            selected_token == RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID) {
+          results[row].token_id = RILEY_CUDA_BF16_ARGMAX_INVALID_TOKEN_ID;
+          results[row].status = RILEY_CUDA_BF16_ARGMAX_STATUS_NON_FINITE;
+        } else {
+          results[row].token_id = selected_token;
+          results[row].status = RILEY_CUDA_BF16_ARGMAX_STATUS_SUCCESS;
+        }
+      }
+    }
+    __syncthreads();
+  }
+}
+
 __device__ __forceinline__ bool resolve_row_cache_base(
     const DeviceBatch& batch, uint64_t row, uint64_t logical_position,
     uint64_t key_value_head, uint64_t key_value_head_count,
@@ -937,6 +1055,10 @@ __device__ __forceinline__ float update_numerator(float numerator,
   return fmaf(beta, value, alpha * numerator);
 }
 
+// Keep the original one-warp launch and operation ordering available as the
+// compatibility path.  The grouped-head kernel below is selected only through
+// the additive ABI entry point so that a single binary can benchmark and roll
+// back the two launch geometries without changing the numerical contract.
 __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
     const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
     const __nv_bfloat16* value_pool, __nv_bfloat16* output,
@@ -1014,6 +1136,242 @@ __global__ __launch_bounds__(kWarpSize) void ragged_paged_attention_kernel(
   output[output_base + lane] = __float2bfloat16_rn(output_low);
   output[output_base + lane + kWarpSize] =
       __float2bfloat16_rn(output_high);
+}
+
+__global__ __launch_bounds__(kRaggedAttentionThreads)
+void ragged_paged_attention_grouped_heads_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
+    DeviceBatch batch, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint64_t row = blockIdx.x;
+  const uint64_t warps_per_block = blockDim.x / kWarpSize;
+  const uint64_t query_head =
+      static_cast<uint64_t>(blockIdx.y) * warps_per_block + warp;
+  if (query_head >= query_head_count) {
+    return;
+  }
+  const uint64_t output_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+  if (row >= batch.active_row_count) {
+    const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
+    output[output_base + lane] = zero;
+    output[output_base + lane + kWarpSize] = zero;
+    return;
+  }
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t query_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+  const float query_low = __bfloat162float(query[query_base + lane]);
+  const float query_high =
+      __bfloat162float(query[query_base + lane + kWarpSize]);
+
+  const uint64_t logical_position = batch.row_positions[row];
+  const uint64_t logical_token_count = logical_position + 1;
+  float maximum = -CUDART_INF_F;
+  float denominator = 0.0F;
+  float numerator_low = 0.0F;
+  float numerator_high = 0.0F;
+  bool valid = true;
+  for (uint64_t logical_token = 0; logical_token < logical_token_count;
+       ++logical_token) {
+    uint64_t cache_base = 0;
+    if (!resolve_row_cache_base(batch, row, logical_token, key_value_head,
+                                key_value_head_count, kAttentionHeadSize,
+                                &cache_base)) {
+      valid = false;
+      break;
+    }
+    const float key_low = __bfloat162float(key_pool[cache_base + lane]);
+    const float key_high =
+        __bfloat162float(key_pool[cache_base + lane + kWarpSize]);
+    float score = fmaf(query_low, key_low, query_high * key_high);
+    score = warp_sum(score);
+    score = staged_attention_score(
+        __shfl_sync(kFullWarpMask, score, 0), scale);
+
+    float alpha = 0.0F;
+    float beta = 0.0F;
+    if (lane == 0) {
+      update_online_state(score, &maximum, &denominator, &alpha, &beta);
+    }
+    alpha = __shfl_sync(kFullWarpMask, alpha, 0);
+    beta = __shfl_sync(kFullWarpMask, beta, 0);
+    numerator_low = update_numerator(
+        numerator_low, __bfloat162float(value_pool[cache_base + lane]), alpha,
+        beta);
+    numerator_high = update_numerator(
+        numerator_high,
+        __bfloat162float(value_pool[cache_base + lane + kWarpSize]), alpha,
+        beta);
+  }
+
+  // Only lane zero owns the scalar online state. Broadcast its final
+  // denominator before every lane normalizes its two value dimensions.
+  denominator = __shfl_sync(kFullWarpMask, denominator, 0);
+  const float inverse_denominator =
+      !valid ? CUDART_NAN_F
+             : (isnan(denominator)
+                    ? CUDART_NAN_F
+                    : (denominator > 0.0F ? 1.0F / denominator : 0.0F));
+  const float output_low = numerator_low * inverse_denominator;
+  const float output_high = numerator_high * inverse_denominator;
+  output[output_base + lane] = __float2bfloat16_rn(output_low);
+  output[output_base + lane + kWarpSize] =
+      __float2bfloat16_rn(output_high);
+}
+
+// GQA decode specialization for group sizes in [2, 16]. One CTA owns a
+// `(row, key_value_head)` pair and has one warp per associated query head.
+// It deliberately preserves the existing per-warp D64 reduction, staged
+// score rounding, online-softmax token order, and numerator update order.
+// Only immutable BF16 K/V loads and row-to-page address resolution are shared
+// across the independent query heads.
+__global__ __launch_bounds__(kRaggedAttentionThreads)
+void ragged_paged_attention_gqa_shared_kv_kernel(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
+    DeviceBatch batch, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  const uint32_t lane = threadIdx.x % kWarpSize;
+  const uint32_t warp = threadIdx.x / kWarpSize;
+  const uint64_t row = blockIdx.x;
+  const uint64_t warps_per_block = blockDim.x / kWarpSize;
+  const uint64_t key_value_head = blockIdx.y;
+  const uint64_t query_head = key_value_head * warps_per_block + warp;
+  const uint64_t output_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+  if (row >= batch.active_row_count) {
+    const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
+    output[output_base + lane] = zero;
+    output[output_base + lane + kWarpSize] = zero;
+    return;
+  }
+
+  // The host dispatch below launches exactly QH/KVH warps for this KV head.
+  // Do not add a per-warp early return here: the shared-K/V staging path uses
+  // CTA barriers, so every launched warp must participate in them.
+  const uint64_t query_base =
+      (row * query_head_count + query_head) * kAttentionHeadSize;
+  const float query_low = __bfloat162float(query[query_base + lane]);
+  const float query_high =
+      __bfloat162float(query[query_base + lane + kWarpSize]);
+  const uint64_t logical_token_count =
+      static_cast<uint64_t>(batch.row_positions[row]) + 1;
+
+  // BF16 shared storage preserves the exact global-storage representation. A
+  // tile has the same width as a paged KV block, so no preload crosses a
+  // physical-page boundary for the normal aligned tiles.
+  __shared__ __nv_bfloat16 shared_keys[kRaggedAttentionSharedTileTokens]
+                                      [kAttentionHeadSize];
+  __shared__ __nv_bfloat16 shared_values[kRaggedAttentionSharedTileTokens]
+                                        [kAttentionHeadSize];
+
+  float maximum = -CUDART_INF_F;
+  float denominator = 0.0F;
+  float numerator_low = 0.0F;
+  float numerator_high = 0.0F;
+  bool valid = true;
+
+  for (uint64_t tile_start = 0; tile_start < logical_token_count;
+       tile_start += kRaggedAttentionSharedTileTokens) {
+    // Every consumer has completed reads from the prior tile before the CTA
+    // overwrites the shared K/V staging area. The first tile has nothing to
+    // protect.
+    if (tile_start != 0) {
+      __syncthreads();
+    }
+    const uint64_t remaining = logical_token_count - tile_start;
+    const uint32_t tile_count = static_cast<uint32_t>(
+        remaining < kRaggedAttentionSharedTileTokens
+            ? remaining
+            : kRaggedAttentionSharedTileTokens);
+
+    // Each query-head warp preloads disjoint token offsets. K/V values are
+    // still fetched exactly once per KV head, but the otherwise idle consumer
+    // warps now overlap the immutable page-address and global-memory work.
+    // The broadcasts remain warp-local, so no value crosses KV-head groups.
+    bool tile_valid = true;
+    for (uint32_t tile_offset = warp; tile_offset < tile_count;
+         tile_offset += static_cast<uint32_t>(warps_per_block)) {
+      uint32_t cache_base_low = 0;
+      uint32_t cache_base_high = 0;
+      int token_valid = 0;
+      if (lane == 0) {
+        uint64_t cache_base = 0;
+        token_valid = resolve_row_cache_base(
+                          batch, row, tile_start + tile_offset,
+                          key_value_head, key_value_head_count,
+                          kAttentionHeadSize, &cache_base)
+                          ? 1
+                          : 0;
+        cache_base_low = static_cast<uint32_t>(cache_base);
+        cache_base_high = static_cast<uint32_t>(cache_base >> 32);
+      }
+      token_valid = __shfl_sync(kFullWarpMask, token_valid, 0);
+      cache_base_low = __shfl_sync(kFullWarpMask, cache_base_low, 0);
+      cache_base_high = __shfl_sync(kFullWarpMask, cache_base_high, 0);
+      if (token_valid == 0) {
+        tile_valid = false;
+        continue;
+      }
+      const uint64_t cache_base =
+          (static_cast<uint64_t>(cache_base_high) << 32) | cache_base_low;
+      shared_keys[tile_offset][lane] = key_pool[cache_base + lane];
+      shared_keys[tile_offset][lane + kWarpSize] =
+          key_pool[cache_base + lane + kWarpSize];
+      shared_values[tile_offset][lane] = value_pool[cache_base + lane];
+      shared_values[tile_offset][lane + kWarpSize] =
+          value_pool[cache_base + lane + kWarpSize];
+    }
+
+    // This barrier publishes all K/V loads and reduces malformed metadata to
+    // one CTA-uniform decision. On an invalid logical token the legacy kernel
+    // also produces NaN, so no partially loaded tile is consumed here.
+    if (__syncthreads_or(tile_valid ? 0 : 1) != 0) {
+      valid = false;
+      break;
+    }
+    for (uint32_t tile_offset = 0; tile_offset < tile_count; ++tile_offset) {
+      const float key_low =
+          __bfloat162float(shared_keys[tile_offset][lane]);
+      const float key_high =
+          __bfloat162float(shared_keys[tile_offset][lane + kWarpSize]);
+      float score = fmaf(query_low, key_low, query_high * key_high);
+      score = warp_sum(score);
+      score = staged_attention_score(
+          __shfl_sync(kFullWarpMask, score, 0), scale);
+
+      float alpha = 0.0F;
+      float beta = 0.0F;
+      if (lane == 0) {
+        update_online_state(score, &maximum, &denominator, &alpha, &beta);
+      }
+      alpha = __shfl_sync(kFullWarpMask, alpha, 0);
+      beta = __shfl_sync(kFullWarpMask, beta, 0);
+      numerator_low = update_numerator(
+          numerator_low,
+          __bfloat162float(shared_values[tile_offset][lane]), alpha, beta);
+      numerator_high = update_numerator(
+          numerator_high,
+          __bfloat162float(shared_values[tile_offset][lane + kWarpSize]),
+          alpha, beta);
+    }
+  }
+
+  denominator = __shfl_sync(kFullWarpMask, denominator, 0);
+  const float inverse_denominator =
+      !valid ? CUDART_NAN_F
+             : (isnan(denominator)
+                    ? CUDART_NAN_F
+                    : (denominator > 0.0F ? 1.0F / denominator : 0.0F));
+  output[output_base + lane] =
+      __float2bfloat16_rn(numerator_low * inverse_denominator);
+  output[output_base + lane + kWarpSize] =
+      __float2bfloat16_rn(numerator_high * inverse_denominator);
 }
 
 __global__ __launch_bounds__(riley_cuda_fixed37::kThreadsPerBlock)
@@ -1553,6 +1911,122 @@ extern "C" RileyCudaStatus riley_cuda_row_gather_execute(
                             error, kOperation);
 }
 
+extern "C" RileyCudaStatus riley_cuda_bf16_argmax_execute(
+    const RileyCudaBf16ArgmaxParams* params, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "execute deterministic BF16 argmax";
+  clear_error(error);
+  if (params == nullptr || params->struct_size < sizeof(*params)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params is null or has an incompatible struct_size");
+  }
+  const RileyCudaBf16ArgmaxParams stable_params = *params;
+  params = &stable_params;
+  if (params->reserved0 != 0 || !reserved_is_zero(params->reserved, 4)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "params reserved fields must be zero");
+  }
+  if (params->logits.dtype != RILEY_CUDA_DTYPE_BF16 ||
+      params->results.dtype != RILEY_CUDA_DTYPE_U32) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "argmax requires BF16 logits and U32 result records");
+  }
+  if (params->vocabulary_size == 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "vocabulary_size must be greater than zero");
+  }
+  if (params->vocabulary_size > UINT32_MAX) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "vocabulary_size exceeds the U32 token-id contract");
+  }
+
+  uint64_t logit_elements = 0;
+  uint64_t result_elements = 0;
+  if (!checked_multiply(params->row_count, params->vocabulary_size,
+                        &logit_elements) ||
+      !checked_multiply(params->row_count, uint64_t{2}, &result_elements)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+                            "argmax shape overflows uint64_t");
+  }
+  uint64_t logit_bytes = 0;
+  uint64_t result_bytes = 0;
+  RileyCudaStatus status =
+      typed_bytes(logit_elements, RILEY_CUDA_DTYPE_BF16, &logit_bytes,
+                  error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = typed_bytes(result_elements, RILEY_CUDA_DTYPE_U32,
+                         &result_bytes, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+
+  ResolvedSpan logits{};
+  ResolvedSpan results{};
+  status = resolve_span(params->logits, RILEY_CUDA_DTYPE_BF16,
+                        logit_bytes, &logits, error, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = resolve_span(params->results, RILEY_CUDA_DTYPE_U32,
+                          result_bytes, &results, error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = reject_overlap(results, logits, false, error, kOperation);
+  }
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const ResolvedSpan spans[] = {logits, results};
+  status = validate_contexts(stream, spans, 2, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  ExclusiveUses uses(stream);
+  if (!uses.add(logits.buffer) || !uses.add(results.buffer)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                          kOperation, "batch buffer set overflow");
+  }
+  status = uses.acquire(error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  if (params->row_count == 0) {
+    return uses.release_completed()
+               ? RILEY_CUDA_STATUS_SUCCESS
+               : internal_error(error,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                                kOperation,
+                                "exclusive-use accounting was corrupted");
+  }
+
+  bool launch_attempted = false;
+  CurrentContext scope(stream->owner);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = prior_launch_status(error, kOperation);
+  }
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    launch_attempted = true;
+    const uint32_t blocks = static_cast<uint32_t>(
+        params->row_count < kMaximumBlocks ? params->row_count
+                                           : kMaximumBlocks);
+    bf16_argmax_kernel<<<blocks, kThreads, 0, stream->stream>>>(
+        reinterpret_cast<const __nv_bfloat16*>(logits.data),
+        reinterpret_cast<RileyCudaBf16ArgmaxResult*>(results.data),
+        params->row_count, params->vocabulary_size);
+    status = launch_status(error, kOperation);
+  }
+  return complete_execution(&uses, &scope, stream, status, launch_attempted,
+                            error, kOperation);
+}
+
 extern "C" RileyCudaStatus
 riley_cuda_ragged_paged_kv_cache_write_execute(
     const RileyCudaRaggedPagedKvCacheWriteParams* params,
@@ -1705,10 +2179,12 @@ riley_cuda_ragged_paged_kv_cache_write_execute(
                             error, kOperation);
 }
 
-extern "C" RileyCudaStatus
-riley_cuda_ragged_paged_attention_execute(
+namespace {
+
+RileyCudaStatus execute_ragged_paged_attention(
     const RileyCudaRaggedPagedAttentionParams* params,
-    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+    RileyCudaStream* stream, RileyCudaErrorInfo* error,
+    bool grouped_heads) noexcept {
   constexpr const char* kOperation = "execute ragged causal paged attention";
   clear_error(error);
   if (params == nullptr || params->struct_size < sizeof(*params)) {
@@ -1868,19 +2344,74 @@ riley_cuda_ragged_paged_attention_execute(
   }
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    const dim3 grid(static_cast<uint32_t>(params->output_row_count),
-                    static_cast<uint32_t>(params->query_head_count), 1);
-    ragged_paged_attention_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
-        reinterpret_cast<const __nv_bfloat16*>(query.data),
-        reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
-        reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
-        reinterpret_cast<__nv_bfloat16*>(output.data),
-        device_batch(params->batch, batch), params->query_head_count,
-        params->key_value_head_count, params->scale);
+    const uint64_t query_head_group_size =
+        params->query_head_count / params->key_value_head_count;
+    if (grouped_heads && query_head_group_size > 1 &&
+        query_head_group_size <= kRaggedAttentionMaximumWarpsPerBlock) {
+      // One CTA per KV head lets its GQA query-head warps reuse the same
+      // immutable paged K/V tile. Shapes outside the bounded GQA group fall
+      // through to the existing generic grouped-head path below.
+      const dim3 grid(static_cast<uint32_t>(params->output_row_count),
+                      static_cast<uint32_t>(params->key_value_head_count),
+                      1);
+      ragged_paged_attention_gqa_shared_kv_kernel<<<
+          grid, static_cast<uint32_t>(query_head_group_size * kWarpSize), 0,
+          stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<__nv_bfloat16*>(output.data),
+          device_batch(params->batch, batch), params->query_head_count,
+          params->key_value_head_count, params->scale);
+    } else if (grouped_heads) {
+      const uint32_t query_head_warps = static_cast<uint32_t>(
+          params->query_head_count < kRaggedAttentionMaximumWarpsPerBlock
+              ? params->query_head_count
+              : kRaggedAttentionMaximumWarpsPerBlock);
+      const uint32_t query_head_tiles = static_cast<uint32_t>(
+          (params->query_head_count + query_head_warps - 1) /
+          query_head_warps);
+      const dim3 grid(static_cast<uint32_t>(params->output_row_count),
+                      query_head_tiles, 1);
+      ragged_paged_attention_grouped_heads_kernel<<<
+          grid, query_head_warps * kWarpSize, 0, stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<__nv_bfloat16*>(output.data),
+          device_batch(params->batch, batch), params->query_head_count,
+          params->key_value_head_count, params->scale);
+    } else {
+      const dim3 grid(static_cast<uint32_t>(params->output_row_count),
+                      static_cast<uint32_t>(params->query_head_count), 1);
+      ragged_paged_attention_kernel<<<grid, kWarpSize, 0, stream->stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(query.data),
+          reinterpret_cast<const __nv_bfloat16*>(key_pool.data),
+          reinterpret_cast<const __nv_bfloat16*>(value_pool.data),
+          reinterpret_cast<__nv_bfloat16*>(output.data),
+          device_batch(params->batch, batch), params->query_head_count,
+          params->key_value_head_count, params->scale);
+    }
     status = launch_status(error, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus
+riley_cuda_ragged_paged_attention_execute(
+    const RileyCudaRaggedPagedAttentionParams* params,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  return execute_ragged_paged_attention(params, stream, error, false);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_ragged_paged_attention_grouped_heads_execute(
+    const RileyCudaRaggedPagedAttentionParams* params,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
+  return execute_ragged_paged_attention(params, stream, error, true);
 }
 
 extern "C" RileyCudaStatus

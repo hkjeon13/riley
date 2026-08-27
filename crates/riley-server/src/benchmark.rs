@@ -771,7 +771,7 @@ mod cuda_executor {
     use riley_scheduler::{
         ExecutionAbort, IterationPlan, LlamaIterationCudaTimer, OverloadPolicy, RequestDescriptor,
         RequestState, SampledIterationToken, Scheduler, SchedulerConfig,
-        execute_llama_iteration_timed,
+        execute_llama_iteration_greedy_timed_with_workspace, execute_llama_iteration_timed,
     };
 
     use super::{
@@ -796,6 +796,8 @@ mod cuda_executor {
         pub scheduler: SchedulerConfig,
         /// Fixed-M runtime metadata and forward policy.
         pub executor: PreparedLlamaBatchExecutorConfig,
+        /// Exact device-side greedy selection with token-only D2H.
+        pub gpu_greedy: bool,
     }
 
     /// Proof that explicit close released scheduler and CUDA allocations.
@@ -864,7 +866,9 @@ mod cuda_executor {
         sampling: SamplingWorkspace,
         allowed_tokens: Vec<bool>,
         addressable_tokens: usize,
+        gpu_greedy: bool,
         model_sequence_tokens: usize,
+        greedy_token_workspace: Vec<u32>,
         samples: Vec<SampledIterationToken>,
         clock: Instant,
         terminal: bool,
@@ -894,12 +898,19 @@ mod cuda_executor {
                     "must be within the model vocabulary",
                 ));
             }
+            if config.gpu_greedy && addressable_tokens != vocabulary_size {
+                return Err(invalid(
+                    "gpu_greedy",
+                    "requires every model vocabulary token to be tokenizer-addressable",
+                ));
+            }
             let sampling = SamplingWorkspace::new(vocabulary_size)
                 .map_err(|_| NativeBenchmarkError::Preparation)?;
             let mut allowed_tokens = reserve_vec(vocabulary_size, "allowed-token mask")?;
             allowed_tokens.resize(vocabulary_size, false);
             allowed_tokens[..addressable_tokens].fill(true);
             let output_capacity = config.executor.metadata().max_output_slots();
+            let greedy_token_workspace = reserve_vec(output_capacity, "greedy-token workspace")?;
             let samples = reserve_vec(output_capacity, "sample staging")?;
 
             let runtime =
@@ -948,7 +959,9 @@ mod cuda_executor {
                 sampling,
                 allowed_tokens,
                 addressable_tokens,
+                gpu_greedy: config.gpu_greedy,
                 model_sequence_tokens,
+                greedy_token_workspace,
                 samples,
                 clock: Instant::now(),
                 terminal: false,
@@ -1077,14 +1090,25 @@ mod cuda_executor {
                 let iteration_id = plan.iteration_id();
 
                 let execution_started_ns = self.now_ns()?;
-                let (downloaded, timing) = {
+                let (mut downloaded, timing) = {
                     let executor = self
                         .executor
                         .as_mut()
                         .ok_or(NativeBenchmarkError::Terminal)?;
                     let stream = self.stream.as_mut().ok_or(NativeBenchmarkError::Terminal)?;
                     let timer = self.timer.as_mut().ok_or(NativeBenchmarkError::Terminal)?;
-                    match execute_llama_iteration_timed(&plan, executor, stream, timer) {
+                    let execution = if self.gpu_greedy {
+                        execute_llama_iteration_greedy_timed_with_workspace(
+                            &plan,
+                            executor,
+                            stream,
+                            timer,
+                            &mut self.greedy_token_workspace,
+                        )
+                    } else {
+                        execute_llama_iteration_timed(&plan, executor, stream, timer)
+                    };
+                    match execution {
                         Ok(measured) => measured,
                         Err(failure) => {
                             if let Some((failed_iteration, abort)) = failure.abort_data() {
@@ -1097,8 +1121,26 @@ mod cuda_executor {
                         }
                     }
                 };
-                let execution_finished_ns = self.now_ns()?;
-                if let Err(error) = self.sample_iteration(&plan, &downloaded) {
+                // Keep the fallible clock read pending until the borrowed
+                // greedy allocation has been returned below. This preserves
+                // the cold workspace even if the monotonic timestamp cannot
+                // be represented.
+                let execution_finished_ns = self.now_ns();
+                let sampling = self.sample_iteration(&plan, &downloaded);
+                if self.gpu_greedy
+                    && downloaded
+                        .restore_greedy_token_workspace(&mut self.greedy_token_workspace)
+                        .is_err()
+                {
+                    let (failed_iteration, abort) = downloaded.abort_data();
+                    let now_ns = self.now_ns()?;
+                    self.scheduler_mut()?
+                        .abort_iteration(failed_iteration, abort, now_ns)
+                        .map_err(|_| NativeBenchmarkError::Execution)?;
+                    return Err(NativeBenchmarkError::Execution);
+                }
+                let execution_finished_ns = execution_finished_ns?;
+                if let Err(error) = sampling {
                     let (failed_iteration, abort) = downloaded.abort_data();
                     let now_ns = self.now_ns()?;
                     self.scheduler_mut()?
@@ -1175,6 +1217,14 @@ mod cuda_executor {
         ) -> NativeBenchmarkResult<()> {
             self.samples.clear();
             for &slot in plan.output_slots() {
+                if self.gpu_greedy {
+                    let token_id = downloaded
+                        .greedy_token_for_slot(slot)
+                        .map_err(|_| NativeBenchmarkError::Sampling)?;
+                    self.samples
+                        .push(SampledIterationToken::new(token_id, false));
+                    continue;
+                }
                 let logits = downloaded
                     .logits_for_slot(slot)
                     .map_err(|_| NativeBenchmarkError::Sampling)?;

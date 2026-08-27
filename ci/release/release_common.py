@@ -20,7 +20,7 @@ ARCHIVE_SUFFIX = "linux-x86_64-cuda12.8"
 MIT_LICENSE_EXPRESSION = "MIT"
 SERVER_DEFAULTS_SOURCE_PATH = Path("crates/riley-server/src/main.rs")
 SERVER_DEFAULTS_SOURCE_SHA256 = (
-    "1f50fec5b886703fe110c9f0c62560a51193baaaf1d498713c9ba8c17f00d9be"
+    "d24145ab2ebb1df2723673821585f7f14d2f3f2e6d9cc80a08c4c9a8e15c61f9"
 )
 STABLE_OPTIMIZATION_DEFAULTS = {
     "execution_completion": "iteration-batch",

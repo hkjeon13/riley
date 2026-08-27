@@ -38,6 +38,10 @@ CANONICAL_PRIMARY_METRIC = "aggregate.host.execute_ns"
 CORRECTNESS_GATES = {
     "residual_rmsnorm": "pr15-fused-residual-rmsnorm-exact-v1",
     "execution_completion": "pr15-iteration-command-batch-exact-v1",
+    "batch_shape_policy": "pr16-active-row-buckets-exact-v1",
+    "metadata_transport": "pr16-packed-metadata-h2d-exact-v1",
+    "greedy_output": "pr16-gpu-greedy-exact-v1",
+    "decode_fast_path": "pr16-decode-fast-path-exact-v1",
 }
 
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -766,6 +770,10 @@ def _bind_pair(
     flag_pairs = {
         "residual_rmsnorm": ("separate", "fused"),
         "execution_completion": ("per-operation", "iteration-batch"),
+        "batch_shape_policy": ("fixed-max", "power-of-two"),
+        "metadata_transport": ("synchronous", "packed-async"),
+        "greedy_output": ("cpu-logits", "gpu-token"),
+        "decode_fast_path": ("fixed-sync-cpu", "bucket-packed-gpu"),
     }
     baseline_name = baseline_flag["name"]
     candidate_name = candidate_flag["name"]

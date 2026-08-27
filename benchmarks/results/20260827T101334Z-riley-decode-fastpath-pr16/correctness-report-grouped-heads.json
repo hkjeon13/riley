@@ -1,0 +1,61 @@
+{
+  "schema_version": "riley.decode-fastpath-correctness.v2",
+  "status": "passed",
+  "recorded_at_utc": "2026-08-27T11:05:00Z",
+  "scope": "Explicit legacy-versus-grouped canonical ragged attention launch selection for decode",
+  "source": {
+    "git_commit": "823305642d00437b40de3edd4b2c30924e5440f7",
+    "source_archive_sha256": "c825a5e976663da070f233db8fa8582e8768d4e633c64fa8a26a3b8314807ae3",
+    "profile_executable_sha256": "56c5fd752748b502a7e8075893e813b9bb6d096f0bea1cba02c27956f7c8f84f"
+  },
+  "environment": {
+    "host_alias": "ai-assistant",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "gpu_compute_capability": "8.9",
+    "container_image_sha256": "f51d74009d8a5abd2aa0115ab51967aca200f99c0c0ffbafcff603212af258c1",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cublas_version": "12.8.4.1"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bf16",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+  },
+  "tests": [
+    {
+      "id": "grouped-ragged-d64-gqa-cpu-parity",
+      "result": "passed",
+      "summary": "The grouped CUDA entry point matches the CPU D64 GQA reference for all lanes, inactive-row zeroing, invalid metadata rejection, and three byte-deterministic repeats."
+    },
+    {
+      "id": "legacy-to-grouped-active-row-kv-parity",
+      "result": "passed",
+      "summary": "The legacy fixed-max path and grouped active-row candidate agree exactly across T=1,2,8,17, mixed prefill/decode, KV 15-to-16 and 16-to-17 boundaries, and history 128,1,8,256,1."
+    },
+    {
+      "id": "grouped-server-http-lifecycle",
+      "result": "passed",
+      "summary": "The real CUDA HTTP lifecycle uses grouped canonical attention and remains bounded and consistent."
+    }
+  ],
+  "known_preexisting_gates": [
+    {
+      "id": "fixed37-fixture-sha",
+      "status": "baseline-failure-not-waived",
+      "detail": "This unrelated fixed37 fixture mismatch was not modified or waived by the grouped-attention change."
+    },
+    {
+      "id": "generic-32-step-cosine",
+      "status": "baseline-failure-not-waived",
+      "detail": "This unrelated generic step-20 cosine gate was not weakened or waived by the grouped-attention change."
+    }
+  ],
+  "limitations": [
+    "This report binds correctness only; it does not claim a latency or throughput improvement.",
+    "The paired performance campaign must use this exact executable for both legacy and grouped modes."
+  ]
+}

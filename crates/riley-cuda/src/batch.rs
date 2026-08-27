@@ -692,6 +692,50 @@ pub fn ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// Executes canonical D64 GQA ragged paged attention with independent
+/// query-head warps grouped into each CUDA thread block.
+///
+/// The per-head reduction and online-token order match
+/// [`ragged_paged_attention`]. This explicit entry point keeps the legacy
+/// one-warp launch available for rollout control and paired profiling.
+///
+/// # Errors
+///
+/// Returns before launch unless the same shape, span, context, and stream
+/// contract as [`ragged_paged_attention`] is satisfied.
+#[allow(clippy::too_many_lines)]
+pub fn grouped_ragged_paged_attention<S: CudaExecutionStream + ?Sized>(
+    params: &mut RaggedPagedAttentionParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "grouped_ragged_paged_attention";
+    let stream = execution_stream_mut(stream);
+    validate_ragged_paged_attention(OPERATION, params, stream)?;
+
+    #[cfg(feature = "cuda")]
+    {
+        let batch = params.batch.raw();
+        ffi::ragged_paged_attention_grouped_heads_execute(
+            params.query.raw(),
+            params.key_pool.raw(),
+            params.value_pool.raw(),
+            params.output.raw(),
+            &batch,
+            params.query_head_count,
+            params.key_value_head_count,
+            params.head_size,
+            params.output_row_count,
+            params.scale,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Executes fixed37 D64 GQA ragged paged attention without a workspace.
 ///
 /// Each active row attends through `position + 1` logical tokens, inclusive,
@@ -1329,6 +1373,7 @@ mod tests {
             "riley_cuda_row_gather_execute",
             "riley_cuda_ragged_paged_kv_cache_write_execute",
             "riley_cuda_ragged_paged_attention_execute",
+            "riley_cuda_ragged_paged_attention_grouped_heads_execute",
             "RileyCudaFixed37RaggedPagedAttentionParams",
             "riley_cuda_fixed37_ragged_paged_attention_two_pass_execute",
         ] {

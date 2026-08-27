@@ -1,0 +1,76 @@
+{
+  "schema_version": "riley.decode-fastpath-correctness.v1",
+  "status": "passed",
+  "recorded_at_utc": "2026-08-27T10:18:00Z",
+  "scope": "Phase 1-3 active-row bucket, packed metadata H2D, and GPU greedy fast path",
+  "source": {
+    "git_commit": "42669152cf09fac8e798f49cfed0882447957dbf",
+    "source_archive_sha256": "76c099741df31b77598ab07e09b2f96294f687245c46ce27c1f8541afaad7b2e",
+    "profile_executable_sha256": "b244ea88ec6d94a4cf936596843a6b7068e127940dd380dde1380d621fcd2b10"
+  },
+  "environment": {
+    "host_alias": "ai-assistant",
+    "gpu_model": "NVIDIA GeForce RTX 4090",
+    "gpu_uuid": "GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
+    "gpu_compute_capability": "8.9",
+    "container_image_sha256": "f51d74009d8a5abd2aa0115ab51967aca200f99c0c0ffbafcff603212af258c1",
+    "cuda_runtime_version": "12.8.1",
+    "cuda_toolkit_version": "12.8.93",
+    "cublas_version": "12.8.4.1"
+  },
+  "model": {
+    "id": "HuggingFaceTB/SmolLM2-135M",
+    "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
+    "dtype": "bf16",
+    "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
+    "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c"
+  },
+  "tests": [
+    {
+      "id": "bf16-greedy-semantic",
+      "result": "passed",
+      "summary": "3 GPU tests: odd rows, command-batch ordering, and pre-mutation validation"
+    },
+    {
+      "id": "packed-h2d-lifecycle",
+      "result": "passed",
+      "summary": "7 GPU tests: pinned/device ownership, ordering, validation, and allocation accounting"
+    },
+    {
+      "id": "anchored-gemm-bytes",
+      "result": "passed",
+      "summary": "5 SmolLM2 projection geometries across M=1,2,4,8,16,32,64,128 match the M=256 active-row BF16 bytes; incompatible anchor/context cases are rejected"
+    },
+    {
+      "id": "active-row-kv-parity",
+      "result": "passed",
+      "summary": "fixed-max and bucketed decode/mixed/KV-boundary traces agree on logits, top-1, and continuation"
+    },
+    {
+      "id": "scheduler-prefill-decode",
+      "result": "passed",
+      "summary": "scheduler plan executes and commits prefill followed by decode"
+    },
+    {
+      "id": "server-http-lifecycle",
+      "result": "passed",
+      "summary": "real CUDA HTTP lifecycle remains bounded and consistent"
+    }
+  ],
+  "known_preexisting_gates": [
+    {
+      "id": "fixed37-fixture-sha",
+      "status": "baseline-failure-not-waived",
+      "detail": "The GPU fixture bytes hash to 57b41e8faf7cc044e9eeb235011109224cb6cddfd19719920641a1662cc41fd3 while the test pins 87333a1859be45a2f8e7563d898dde5e64256ccc03ca4da3cab90def07dd3c95."
+    },
+    {
+      "id": "generic-32-step-cosine",
+      "status": "baseline-failure-not-waived",
+      "detail": "Baseline and candidate both emit the same token but fail the existing step-20 cosine threshold (0.997528... < 0.997903...)."
+    }
+  ],
+  "limitations": [
+    "This report binds correctness only; it does not claim a latency or throughput improvement.",
+    "The two known baseline failures were not weakened or counted as candidate regressions."
+  ]
+}

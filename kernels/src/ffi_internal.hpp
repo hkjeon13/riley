@@ -241,6 +241,20 @@ static_assert(offsetof(RileyCudaEmbeddingParams, out_report) == 200,
               "embedding params ABI report offset changed");
 static_assert(offsetof(RileyCudaEmbeddingParams, reserved) == 232,
               "embedding params ABI tail changed");
+static_assert(sizeof(RileyCudaBf16ArgmaxResult) == 8,
+              "RileyCudaBf16ArgmaxResult ABI size changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxResult, status) == 4,
+              "BF16 argmax result ABI layout changed");
+static_assert(sizeof(RileyCudaBf16ArgmaxParams) == 152,
+              "RileyCudaBf16ArgmaxParams ABI size changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, logits) == 8,
+              "BF16 argmax input ABI layout changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, results) == 56,
+              "BF16 argmax output ABI layout changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, row_count) == 104,
+              "BF16 argmax dimension ABI layout changed");
+static_assert(offsetof(RileyCudaBf16ArgmaxParams, reserved) == 120,
+              "BF16 argmax tail ABI layout changed");
 static_assert(sizeof(RileyCudaRmsNormParams) == 208,
               "RileyCudaRmsNormParams ABI size changed");
 static_assert(offsetof(RileyCudaRmsNormParams, epsilon) == 168,

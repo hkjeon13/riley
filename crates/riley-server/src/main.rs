@@ -8,6 +8,7 @@ use std::process::ExitCode;
 mod signal;
 
 const DEFAULT_MAX_WEIGHT_BYTES: u64 = 2 * 1_024 * 1_024 * 1_024;
+const MAX_BATCH_SHAPE_BUCKETS: usize = 10;
 #[cfg(any(feature = "cuda", test))]
 const FIXED37_MAX_SEQUENCE_TOKENS: usize = 8_192;
 #[cfg(feature = "cuda")]
@@ -34,6 +35,10 @@ serve options:
   --kv-blocks N                  physical 16-token KV blocks (default: full active promise)
   --residual-rmsnorm MODE        fused E0 candidate or separate path (default: separate)
   --execution-completion MODE    per-operation or iteration-batch (default: iteration-batch)
+  --batch-shape-policy MODE      fixed-max or power-of-two (default: fixed-max)
+  --batch-shape-buckets LIST     custom power-of-two-policy shapes, ending at token budget
+  --metadata-transport MODE      synchronous or packed-async (default: synchronous)
+  --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
   --shutdown-on-stdin            gracefully stop after one input line or EOF
@@ -61,6 +66,10 @@ struct ServeOptions {
     physical_kv_blocks: Option<usize>,
     residual_rmsnorm: ResidualRmsNormMode,
     execution_completion: ExecutionCompletionMode,
+    batch_shape_policy: BatchShapePolicyMode,
+    batch_shape_buckets: Option<Vec<usize>>,
+    metadata_transport: MetadataTransportMode,
+    sampling_backend: SamplingBackendMode,
     reduction_profile: ReductionProfileMode,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
@@ -76,6 +85,24 @@ enum ResidualRmsNormMode {
 enum ExecutionCompletionMode {
     PerOperation,
     IterationBatch,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BatchShapePolicyMode {
+    FixedMaximum,
+    PowerOfTwo,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SamplingBackendMode {
+    Cpu,
+    GpuGreedy,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MetadataTransportMode {
+    Synchronous,
+    PackedAsync,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -149,6 +176,10 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut physical_kv_blocks = None;
     let mut residual_rmsnorm = None;
     let mut execution_completion = None;
+    let mut batch_shape_policy = None;
+    let mut batch_shape_buckets = None;
+    let mut metadata_transport = None;
+    let mut sampling_backend = None;
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
@@ -245,6 +276,26 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 parse_execution_completion(next_value(&mut arguments, "--execution-completion")?)?,
                 "--execution-completion",
             )?,
+            "--batch-shape-policy" => set_once(
+                &mut batch_shape_policy,
+                parse_batch_shape_policy(next_value(&mut arguments, "--batch-shape-policy")?)?,
+                "--batch-shape-policy",
+            )?,
+            "--batch-shape-buckets" => set_once(
+                &mut batch_shape_buckets,
+                parse_batch_shape_buckets(next_value(&mut arguments, "--batch-shape-buckets")?)?,
+                "--batch-shape-buckets",
+            )?,
+            "--metadata-transport" => set_once(
+                &mut metadata_transport,
+                parse_metadata_transport(next_value(&mut arguments, "--metadata-transport")?)?,
+                "--metadata-transport",
+            )?,
+            "--sampling-backend" => set_once(
+                &mut sampling_backend,
+                parse_sampling_backend(next_value(&mut arguments, "--sampling-backend")?)?,
+                "--sampling-backend",
+            )?,
             "--reduction-profile" => set_once(
                 &mut reduction_profile,
                 parse_reduction_profile(next_value(&mut arguments, "--reduction-profile")?)?,
@@ -271,12 +322,28 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let residual_rmsnorm = residual_rmsnorm.unwrap_or(ResidualRmsNormMode::Separate);
     let execution_completion =
         execution_completion.unwrap_or(ExecutionCompletionMode::IterationBatch);
+    let batch_shape_policy = batch_shape_policy.unwrap_or(BatchShapePolicyMode::FixedMaximum);
+    let batch_token_budget = batch_token_budget.unwrap_or(512);
+    let metadata_transport = metadata_transport.unwrap_or(MetadataTransportMode::Synchronous);
     if residual_rmsnorm == ResidualRmsNormMode::Fused
         && execution_completion == ExecutionCompletionMode::IterationBatch
     {
         return Err(
             "fused residual RMSNorm may only be used with per-operation completion".to_owned(),
         );
+    }
+    if metadata_transport == MetadataTransportMode::PackedAsync
+        && execution_completion != ExecutionCompletionMode::IterationBatch
+    {
+        return Err(
+            "packed-async metadata transport requires iteration-batch completion".to_owned(),
+        );
+    }
+    if batch_shape_buckets.is_some() && batch_shape_policy != BatchShapePolicyMode::PowerOfTwo {
+        return Err("--batch-shape-buckets requires --batch-shape-policy power-of-two".to_owned());
+    }
+    if let Some(buckets) = batch_shape_buckets.as_deref() {
+        validate_batch_shape_buckets(buckets, batch_token_budget)?;
     }
 
     Ok(CliCommand::Serve(ServeOptions {
@@ -288,11 +355,15 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
         max_sequence_tokens,
         max_output_tokens,
-        batch_token_budget: batch_token_budget.unwrap_or(512),
+        batch_token_budget,
         prefill_chunk_tokens: prefill_chunk_tokens.unwrap_or(512),
         physical_kv_blocks,
         residual_rmsnorm,
         execution_completion,
+        batch_shape_policy,
+        batch_shape_buckets,
+        metadata_transport,
+        sampling_backend: sampling_backend.unwrap_or(SamplingBackendMode::Cpu),
         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
@@ -312,6 +383,65 @@ fn parse_execution_completion(value: OsString) -> Result<ExecutionCompletionMode
         "per-operation" => Ok(ExecutionCompletionMode::PerOperation),
         "iteration-batch" => Ok(ExecutionCompletionMode::IterationBatch),
         _ => Err("--execution-completion requires per-operation or iteration-batch".to_owned()),
+    }
+}
+
+fn parse_batch_shape_policy(value: OsString) -> Result<BatchShapePolicyMode, String> {
+    match parse_utf8(value, "--batch-shape-policy")?.as_str() {
+        "fixed-max" => Ok(BatchShapePolicyMode::FixedMaximum),
+        "power-of-two" => Ok(BatchShapePolicyMode::PowerOfTwo),
+        _ => Err("--batch-shape-policy requires fixed-max or power-of-two".to_owned()),
+    }
+}
+
+fn parse_batch_shape_buckets(value: OsString) -> Result<Vec<usize>, String> {
+    let value = parse_utf8(value, "--batch-shape-buckets")?;
+    if value.is_empty() {
+        return Err("--batch-shape-buckets requires a non-empty comma-separated list".to_owned());
+    }
+    let mut buckets = Vec::new();
+    for entry in value.split(',') {
+        if buckets.len() == MAX_BATCH_SHAPE_BUCKETS {
+            return Err(format!(
+                "--batch-shape-buckets supports at most {MAX_BATCH_SHAPE_BUCKETS} entries"
+            ));
+        }
+        let bucket = entry.parse::<usize>().map_err(|_| {
+            "--batch-shape-buckets requires comma-separated positive decimal integers".to_owned()
+        })?;
+        buckets.push(bucket);
+    }
+    Ok(buckets)
+}
+
+fn validate_batch_shape_buckets(buckets: &[usize], maximum_rows: usize) -> Result<(), String> {
+    if buckets.first().copied() != Some(1) {
+        return Err("--batch-shape-buckets must start with 1".to_owned());
+    }
+    if buckets.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err("--batch-shape-buckets must be strictly increasing".to_owned());
+    }
+    if buckets.last().copied() != Some(maximum_rows) {
+        return Err(
+            "--batch-shape-buckets must end at the effective --batch-token-budget".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn parse_metadata_transport(value: OsString) -> Result<MetadataTransportMode, String> {
+    match parse_utf8(value, "--metadata-transport")?.as_str() {
+        "synchronous" => Ok(MetadataTransportMode::Synchronous),
+        "packed-async" => Ok(MetadataTransportMode::PackedAsync),
+        _ => Err("--metadata-transport requires synchronous or packed-async".to_owned()),
+    }
+}
+
+fn parse_sampling_backend(value: OsString) -> Result<SamplingBackendMode, String> {
+    match parse_utf8(value, "--sampling-backend")?.as_str() {
+        "cpu" => Ok(SamplingBackendMode::Cpu),
+        "gpu-greedy" => Ok(SamplingBackendMode::GpuGreedy),
+        _ => Err("--sampling-backend requires cpu or gpu-greedy".to_owned()),
     }
 }
 
@@ -402,6 +532,10 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         options.physical_kv_blocks,
         options.residual_rmsnorm,
         options.execution_completion,
+        options.batch_shape_policy,
+        options.batch_shape_buckets,
+        options.metadata_transport,
+        options.sampling_backend,
         options.reduction_profile,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
@@ -526,6 +660,19 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         ExecutionCompletionMode::PerOperation => executor.with_per_operation_completion(),
         ExecutionCompletionMode::IterationBatch => executor.with_iteration_batch_completion(),
     };
+    let executor = match options.metadata_transport {
+        MetadataTransportMode::Synchronous => executor.with_synchronous_metadata(),
+        MetadataTransportMode::PackedAsync => executor.with_packed_async_metadata(),
+    };
+    let executor = match options.batch_shape_policy {
+        BatchShapePolicyMode::FixedMaximum => executor.with_fixed_maximum_shape(),
+        BatchShapePolicyMode::PowerOfTwo => match options.batch_shape_buckets.as_deref() {
+            Some(buckets) => executor
+                .with_custom_active_row_buckets(buckets)
+                .map_err(|error| format!("invalid batch shape buckets: {error}"))?,
+            None => executor.with_active_row_buckets(),
+        },
+    };
     let executor = match options.reduction_profile {
         ReductionProfileMode::CanonicalV1 => {
             executor.with_reduction_profile(LlamaReductionProfile::CanonicalV1)
@@ -555,6 +702,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
             device_ordinal: options.device_ordinal,
             scheduler,
             executor,
+            gpu_greedy: options.sampling_backend == SamplingBackendMode::GpuGreedy,
         },
     )
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?;
@@ -597,7 +745,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
             let snapshot = server
                 .shutdown_with_metrics()
                 .map_err(|error| format!("graceful shutdown failed: {error}"))?;
-            write_shutdown_metrics(&path, snapshot)?;
+            write_shutdown_metrics(&path, &snapshot)?;
             println!(
                 "riley wrote verified shutdown metrics to {}",
                 path.display()
@@ -633,7 +781,7 @@ fn validate_shutdown_metrics_path(value: Option<OsString>) -> Result<Option<Path
 #[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
 fn write_shutdown_metrics(
     path: &std::path::Path,
-    snapshot: riley_server::service::OperationalMetricsSnapshot,
+    snapshot: &riley_server::service::OperationalMetricsSnapshot,
 ) -> Result<(), String> {
     use std::fs::OpenOptions;
     use std::io::Write;
@@ -731,8 +879,9 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
-        ReductionProfileMode, ResidualRmsNormMode, ServeOptions, USAGE, parse_arguments,
+        BatchShapePolicyMode, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
+        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
+        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, parse_arguments,
         validate_reduction_profile_context, validate_shutdown_metrics_path, write_shutdown_metrics,
     };
 
@@ -751,6 +900,13 @@ mod tests {
         assert!(USAGE.contains("(default: iteration-batch)"));
         assert!(USAGE.contains("--reduction-profile ID"));
         assert!(USAGE.contains("(default: canonical-v1)"));
+        assert!(USAGE.contains("--batch-shape-policy MODE"));
+        assert!(USAGE.contains("(default: fixed-max)"));
+        assert!(USAGE.contains("--batch-shape-buckets LIST"));
+        assert!(USAGE.contains("--metadata-transport MODE"));
+        assert!(USAGE.contains("(default: synchronous)"));
+        assert!(USAGE.contains("--sampling-backend MODE"));
+        assert!(USAGE.contains("(default: cpu)"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -773,6 +929,10 @@ mod tests {
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
+                batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
+                batch_shape_buckets: None,
+                metadata_transport: MetadataTransportMode::Synchronous,
+                sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
@@ -782,6 +942,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn serve_explicit_options_and_duplicate_rejection_are_deterministic() {
         let parsed = parse_arguments(args(&[
             "serve",
@@ -811,6 +972,14 @@ mod tests {
             "separate",
             "--execution-completion",
             "iteration-batch",
+            "--batch-shape-policy",
+            "power-of-two",
+            "--batch-shape-buckets",
+            "1,2,4,8,16,32,64",
+            "--metadata-transport",
+            "packed-async",
+            "--sampling-backend",
+            "gpu-greedy",
             "--reduction-profile",
             "fixed-contiguous-37-balanced-v1",
             "--max-weight-bytes",
@@ -833,6 +1002,10 @@ mod tests {
                 physical_kv_blocks: Some(512),
                 residual_rmsnorm: ResidualRmsNormMode::Separate,
                 execution_completion: ExecutionCompletionMode::IterationBatch,
+                batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
+                batch_shape_buckets: Some(vec![1, 2, 4, 8, 16, 32, 64]),
+                metadata_transport: MetadataTransportMode::PackedAsync,
+                sampling_backend: SamplingBackendMode::GpuGreedy,
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
@@ -840,6 +1013,50 @@ mod tests {
         );
         assert!(parse_arguments(args(&["serve", "--model", "/a", "--model", "/b"])).is_err());
         assert!(parse_arguments(args(&["serve", "--model", "/a", "--bogus"])).is_err());
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--metadata-transport",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--metadata-transport",
+                "synchronous",
+                "--metadata-transport",
+                "packed-async",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--sampling-backend",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--sampling-backend",
+                "cpu",
+                "--sampling-backend",
+                "gpu-greedy",
+            ]))
+            .is_err()
+        );
         assert!(
             parse_arguments(args(&[
                 "serve",
@@ -869,6 +1086,120 @@ mod tests {
                 "/a",
                 "--execution-completion",
                 "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--batch-shape-policy",
+                "unknown",
+            ]))
+            .is_err()
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--batch-shape-policy",
+                "fixed-max",
+                "--batch-shape-policy",
+                "fixed-max",
+            ]))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn custom_batch_shape_buckets_require_active_policy_and_exact_budget_bound() {
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--batch-shape-buckets",
+                "1,2,4,512",
+            ]))
+            .is_err()
+        );
+        assert_eq!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--batch-token-budget",
+                "7",
+                "--batch-shape-policy",
+                "power-of-two",
+                "--batch-shape-buckets",
+                "1,3,7",
+            ])),
+            Ok(CliCommand::Serve(ServeOptions {
+                model_path: PathBuf::from("/a"),
+                model_id: None,
+                bind_address: "127.0.0.1:8080".to_owned(),
+                device_ordinal: 0,
+                max_active_sequences: 8,
+                max_waiting_requests: 64,
+                max_sequence_tokens: None,
+                max_output_tokens: None,
+                batch_token_budget: 7,
+                prefill_chunk_tokens: 512,
+                physical_kv_blocks: None,
+                residual_rmsnorm: ResidualRmsNormMode::Separate,
+                execution_completion: ExecutionCompletionMode::IterationBatch,
+                batch_shape_policy: BatchShapePolicyMode::PowerOfTwo,
+                batch_shape_buckets: Some(vec![1, 3, 7]),
+                metadata_transport: MetadataTransportMode::Synchronous,
+                sampling_backend: SamplingBackendMode::Cpu,
+                reduction_profile: ReductionProfileMode::CanonicalV1,
+                max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
+                shutdown_on_stdin: false,
+            }))
+        );
+
+        for invalid in [
+            "",
+            "0,7",
+            "2,7",
+            "1,2,2,7",
+            "1,4,2,7",
+            "1,2,4",
+            "1,2,3,4,5,6,7,8,9,10,11",
+            "1,,7",
+        ] {
+            assert!(
+                parse_arguments(args(&[
+                    "serve",
+                    "--model",
+                    "/a",
+                    "--batch-token-budget",
+                    "7",
+                    "--batch-shape-policy",
+                    "power-of-two",
+                    "--batch-shape-buckets",
+                    invalid,
+                ]))
+                .is_err(),
+                "invalid bucket list {invalid:?}"
+            );
+        }
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--batch-token-budget",
+                "7",
+                "--batch-shape-policy",
+                "power-of-two",
+                "--batch-shape-buckets",
+                "1,7",
+                "--batch-shape-buckets",
+                "1,7",
             ]))
             .is_err()
         );
@@ -936,10 +1267,26 @@ mod tests {
                 physical_kv_blocks: None,
                 residual_rmsnorm: ResidualRmsNormMode::Fused,
                 execution_completion: ExecutionCompletionMode::PerOperation,
+                batch_shape_policy: BatchShapePolicyMode::FixedMaximum,
+                batch_shape_buckets: None,
+                metadata_transport: MetadataTransportMode::Synchronous,
+                sampling_backend: SamplingBackendMode::Cpu,
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
             }))
+        );
+        assert!(
+            parse_arguments(args(&[
+                "serve",
+                "--model",
+                "/a",
+                "--execution-completion",
+                "per-operation",
+                "--metadata-transport",
+                "packed-async",
+            ]))
+            .is_err()
         );
     }
 
@@ -984,8 +1331,8 @@ mod tests {
             Ok(Some(path.clone()))
         );
         let snapshot = riley_server::service::OperationalMetricsSnapshot::default();
-        write_shutdown_metrics(&path, snapshot).expect("create shutdown metrics");
-        assert!(write_shutdown_metrics(&path, snapshot).is_err());
+        write_shutdown_metrics(&path, &snapshot).expect("create shutdown metrics");
+        assert!(write_shutdown_metrics(&path, &snapshot).is_err());
         let encoded = std::fs::read(&path).expect("read shutdown metrics");
         let decoded: serde_json::Value =
             serde_json::from_slice(&encoded).expect("decode shutdown metrics");
