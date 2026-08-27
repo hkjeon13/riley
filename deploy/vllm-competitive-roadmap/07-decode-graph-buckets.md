@@ -1,0 +1,223 @@
+# C07 — Pure-decode CUDA Graph Buckets
+
+**상태:** Planned  
+**의미 등급:** `E0`  
+**한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
+
+[이전: C06](06-graph-signature-dispatcher.md) | [목차](README.md) | [다음: C08](08-executable-pattern-registry.md)
+
+## 1. 배경과 가설
+
+M1 이후 대표 candidate의 host execute와 CUDA stream span 차이가 매우 작았다는 evidence가 있어 CUDA Graph가 단독으로 큰 TPOT 개선을 만들지 못할 가능성도 있다. 따라서 이 PR은 `Graph가 반드시 빠르다`를 전제로 하지 않는다.
+
+사전 가설은 다음과 같다.
+
+> stable-address pure decode에서 반복 kernel submission과 host jitter를 graph replay로 줄이면 representative TPOT p50/p95가 사전 threshold 이상 개선된다.
+
+실패하면 graph path를 default로 승격하지 않고 evidence와 함께 opt-in 또는 rejected 상태로 남긴다.
+
+## 2. 대상 경로
+
+초기 graph는 다음 조건을 모두 만족할 때만 사용한다.
+
+- pure decode iteration
+- active-row bucket `1,2,4,8,16,32`
+- prepared model/weight/KV owner
+- fixed metadata layout signature
+- capture-safe attention/GEMM/kernel inventory
+- temperature 0, repetition penalty 1, finish-token masking 없음
+- GPU greedy output
+- iteration-batch completion
+
+하나라도 다르면 exact eager다.
+
+## 3. Stable address 설계
+
+Graph는 pointer가 매 iteration 바뀌지 않아야 한다. executor owner가 다음 maximum-capacity storage를 cold prepare한다.
+
+```text
+fixed token input buffer
+fixed packed metadata host slab
+fixed packed metadata device slab
+fixed descriptor/control buffer
+shared forward workspace
+shared output token/status buffer
+shared weights/KV/RoPE
+bucket-specific GEMM descriptors
+```
+
+iteration별 값은 address를 바꾸지 않고 buffer contents만 갱신한다.
+
+## 4. Metadata layout
+
+packed slab의 offset이 실제 길이에 따라 움직이지 않도록 bucket별 fixed-offset layout을 사용한다.
+
+```text
+header
+bucket-sized token IDs
+bucket-sized position IDs
+fixed-capacity request row metadata
+fixed-capacity block-table descriptors
+output slot metadata
+control/status
+```
+
+사용하지 않는 tail은 deterministic zero/sentinel로 채운다. layout signature에는 field offset, size, alignment, schema version이 포함된다.
+
+H2D는 다음 두 후보를 독립 비교한다.
+
+1. graph 안의 fixed-size memcpy node
+2. graph launch 전 same-stream async copy + graph replay
+
+한 PR에서 결과를 본 뒤 유리한 후보만 숨기지 않고 두 candidate의 evidence를 보존한다.
+
+## 5. Capture boundary
+
+host validation과 scheduler plan packing은 capture 밖에서 완료한다.
+
+Graph 내부 후보:
+
+```text
+fixed metadata H2D 또는 dependency
+embedding
+layer loop:
+  norms/projections/RoPE/KV write/attention/MLP/residual
+final norm
+LM head
+GPU greedy
+small token/status D2H 또는 completion dependency
+```
+
+embedding token range validation처럼 host report/synchronize가 필요한 operation은 capture-safe prevalidation 또는 device status aggregation으로 분리한다. capture를 위해 안전 검사를 제거하지 않는다.
+
+## 6. Graph prepare
+
+- startup 또는 model load의 cold phase에서 bucket별 capture
+- sample metadata는 production-valid sentinel을 사용
+- instantiate 후 one-shot parity 확인
+- graph resource bytes와 capture time 기록
+- 실패 bucket은 startup receipt에 제외 이유를 기록하고 eager fallback
+
+request hot path에서 새로운 bucket을 capture하지 않는다.
+
+## 7. Launch sequence
+
+```text
+validate immutable IterationPlan
+select bucket M
+pack fixed-layout metadata
+copy/update control data
+lookup exact GraphSignature
+launch graph
+wait/query one completion boundary
+download/validate token status
+scheduler commit
+publish stream event
+```
+
+commit 실패 시 기존 abort/ownership 계약을 유지한다. graph를 재실행해 commit을 보상하지 않는다.
+
+## 8. Correctness matrix
+
+- bucket `1,2,4,8,16,32`
+- active rows exactly bucket 및 padding case
+- position/KV page boundary
+- request/output slot permutation
+- repeated decode 1, 2, 32, 128 steps
+- graph/eager alternating history
+- graph hit 후 unsupported sampling eager fallback
+- capture/launch failure
+- cancellation before launch, in-flight, post-result/pre-commit
+- SmolLM2와 Qwen representative geometry
+
+검증 항목:
+
+- generated token hash exact
+- final token/top-1 mismatch 0
+- KV continuation parity
+- inactive row zero/sentinel integrity
+- graph replay determinism
+- owner close allocation 0
+
+## 9. Performance campaign
+
+### Primary
+
+- RTX 4090
+- current accepted clean candidate
+- SmolLM2 diagnostic `c1/p128/o32/greedy`
+- exact eager candidate vs graph candidate
+- independent process 5쌍 AB/BA
+
+### Required regression
+
+- `c2,c4,c8/p128/o32`
+- `c1/p1024/o128`
+- `c1/p4096/o128`
+- mixed prefill/decode는 eager로 fallback하며 이전 대비 회귀가 없어야 함
+
+### Metric
+
+- request mean TPOT p50/p95
+- TTFT p50/p95
+- E2E, output tok/s
+- host execute, CUDA API time
+- stream span, GPU idle gap
+- kernel launch submission count와 graph launch count
+- peak VRAM, usable KV blocks
+- graph hit rate
+
+## 10. 사전 promotion gate
+
+- token/failure/dropped trace 0
+- primary paired TPOT improvement `>= 15%`
+- M2 absolute target `TPOT p50 <= 3.58 ms`
+- TTFT p95 ratio `<= 1.05`
+- c8 throughput ratio `>= 0.95`
+- long/mixed fallback workload p95 ratio `<= 1.05`
+- peak VRAM 증가 `<= 5%`
+- usable KV block 감소 없음 또는 사전 선언한 1% 미만 reservation
+- hot allocation 0
+
+15% 미만이면 default로 승격하지 않는다. lifecycle 안정성만 유의미하면 experimental/benchmark-only로 유지할 수 있다.
+
+## 11. Configuration
+
+C06의 CLI를 사용한다.
+
+```text
+--execution-graph-policy disabled|auto|require
+--execution-graph-buckets 1,2,4,8,16,32
+```
+
+성능/correctness gate 전까지 default는 `disabled`다. 승격 시에도 `disabled` rollback이 항상 남아야 한다.
+
+## 12. 예상 파일 변경
+
+```text
+crates/riley-runtime/src/llama/executor/graph.rs
+crates/riley-runtime/src/llama/executor/metadata.rs
+crates/riley-runtime/src/llama/executor/dispatch.rs
+crates/riley-runtime/src/llama/executor/output.rs
+crates/riley-runtime/tests/llama_graph_gpu.rs
+crates/riley-scheduler/tests/llama_iteration_gpu.rs
+crates/riley-server/src/benchmark.rs
+benchmarks/results/<campaign>/...
+docs/decode-performance-implementation-report.md
+```
+
+## 13. 실패와 recovery
+
+- prepare/capture failure: 해당 bucket 제외, eager 유지
+- launch 전 mismatch: eager
+- launch completion 확인 + graph failure: graph poison, safe하면 이후 iteration eager
+- completion 미확정: executor poison, request failure, 자동 재실행 금지
+- repeated graph failure: circuit breaker로 graph policy disabled 상태 전환 가능하되 metric/receipt에 기록
+
+## 14. 롤백
+
+운영 즉시 rollback은 `--execution-graph-policy disabled`다. 코드 rollback은 bucket registration과 Llama graph implementation을 revert하되 C05/C06의 generic ABI/dispatcher는 독립적으로 유지할 수 있다.
+
+## 15. 완료 정의
+
+모든 준비 bucket에서 graph/eager 의미가 일치하고 사전 15%·M2 gate를 통과하여 `auto` default 승격 여부를 closed report로 판정할 수 있을 때 완료다. gate 미달도 정상적인 완료 결과이며 `not-promoted`로 기록한다.

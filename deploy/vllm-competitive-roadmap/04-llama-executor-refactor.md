@@ -1,0 +1,184 @@
+# C04 — Llama Batch Executor 동작 보존 분리
+
+**상태:** Planned  
+**의미 등급:** `reference`  
+**한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
+
+[이전: C03](03-scheduler-output-routing-fuzz.md) | [목차](README.md) | [다음: C05](05-cuda-graph-ownership-abi.md)
+
+## 1. 배경
+
+현재 `crates/riley-runtime/src/llama/batch_executor.rs`는 weight/KV ownership, shape bucket, GEMM plan, metadata transport, execution, output download, metric을 한 파일에서 다룬다. 여기에 graph capture와 여러 fused path를 직접 추가하면 lifetime 검토, rollback, test 영향 범위가 지나치게 커진다.
+
+이 PR은 성능 개선이나 production default 변경을 하지 않는다. public API, C ABI, CLI, output, allocation behavior를 유지한 채 내부 구조만 분리한다.
+
+## 2. 목표 구조
+
+```text
+crates/riley-runtime/src/llama/executor/
+  mod.rs                # public composition and stable facade
+  owner.rs              # weights/KV/stream/workspace lifetime
+  buffers.rs            # cold-reserved tensor/device/host buffers
+  shape.rs              # active-row bucket and shape variant
+  gemm_plan.rs           # anchored plan inventory
+  metadata.rs            # synchronous/packed transport
+  dispatch.rs            # exact backend selection
+  output.rs              # logits/token status and canonical output map
+  metrics.rs             # allocation-free counters/snapshots
+  poison.rs              # post-dispatch failure state
+```
+
+향후 C05/C06용 예약 module은 interface만 둘 수 있다.
+
+```text
+  graph.rs               # feature-off placeholder/interface only
+```
+
+실제 CUDA Graph 구현은 C05 이후에만 추가한다.
+
+## 3. Freeze할 외부 계약
+
+- `PreparedLlamaBatchExecutor` 생성/실행/close API
+- scheduler runtime adapter가 사용하는 trait
+- CUDA C ABI symbol과 layout
+- server CLI 및 default
+- model load와 weight hash validation
+- exact fallback 조합
+- metric name/meaning
+- error category와 poison semantics
+- hot path allocation count
+
+공개 타입 rename이 필요하면 type alias와 deprecation 없이 내부 `pub(crate)` 경계에서 해결한다.
+
+## 4. Ownership 원칙
+
+### 단일 실체 owner
+
+다음은 executor owner 하나만 소유한다.
+
+- uploaded weights
+- paged KV arena
+- RoPE table
+- maximum-capacity forward/output workspace
+- pinned/device metadata slab
+- CUDA stream/context lease
+
+shape variant는 descriptor와 plan만 소유하며 weight/KV/buffer를 복제하지 않는다.
+
+### Drop에 의존하지 않는 close
+
+기존 explicit close 결과와 오류 전달을 유지한다. module 분리 후에도 `Drop`은 best-effort 보조일 뿐 qualification의 정상 회수 경계가 아니다.
+
+### Poison state
+
+post-dispatch mutation이 불명확한 오류는 executor 전체 또는 명시된 sub-owner를 poison한다. module 간 오류 변환에서 CUDA stage/status를 잃지 않는다.
+
+## 5. 분리 순서
+
+1. 기존 behavior를 characterizing test로 고정한다.
+2. metric과 작은 value type부터 `metrics.rs`, `shape.rs`로 이동한다.
+3. buffer descriptor와 cold allocation을 `buffers.rs`로 이동한다.
+4. metadata packing/transport를 `metadata.rs`로 이동한다.
+5. GEMM shape plan을 `gemm_plan.rs`로 이동한다.
+6. output download/status/canonical map을 `output.rs`로 이동한다.
+7. execute orchestration을 `dispatch.rs`로 축소한다.
+8. facade `mod.rs`가 기존 API를 동일하게 노출한다.
+9. 원래 파일은 제거하거나 얇은 compatibility module로 끝낸다.
+
+각 단계는 컴파일 가능한 commit으로 유지하되 최종 merge는 하나의 behavior-preserving PR이다.
+
+## 6. Allocation 검증
+
+다음 경로의 allocation snapshot을 refactor 전/후 비교한다.
+
+- cold prepare
+- c1 decode 100 iterations
+- c8 mixed prefill/decode
+- packed metadata fallback
+- GPU greedy success/failure
+- cancellation/commit failure
+- explicit close
+
+hot iteration의 Rust heap, pinned/device allocation delta는 0이어야 한다. cold allocation 수가 달라지면 byte/count와 이유를 문서화하고 VRAM/KV capacity가 변하지 않아야 한다.
+
+## 7. Correctness 검증
+
+- canonical 31-case
+- SmolLM2/Qwen 32-step greedy
+- fixed-max vs active-row
+- metadata synchronous vs packed
+- CPU logits vs GPU token
+- mixed output slot mapping
+- KV `15→16→17`
+- invalid metadata와 unsupported shape fallback
+- poison/close lifecycle
+
+가능한 경로는 raw BF16 bytes와 token hash를 refactor 전 accepted executable과 비교한다.
+
+## 8. Performance non-regression
+
+이 PR은 개선을 주장하지 않는다. 같은 GPU에서 before/after를 5쌍 실행한다.
+
+```text
+TTFT p95 ratio <= 1.03
+TPOT p95 ratio <= 1.03
+throughput ratio >= 0.97
+peak VRAM ratio <= 1.00
+kernel launch inventory unchanged
+H2D/D2H bytes unchanged
+```
+
+3%를 넘는 변화가 있으면 원인을 찾기 전 병합하지 않는다. compiler layout 차이로 미세 변화가 있어도 threshold를 결과에 맞춰 늘리지 않는다.
+
+## 9. 예상 파일 변경
+
+```text
+crates/riley-runtime/src/llama/mod.rs
+crates/riley-runtime/src/llama/batch_executor.rs
+crates/riley-runtime/src/llama/executor/*.rs
+crates/riley-runtime/tests/llama_batch_gpu.rs
+crates/riley-runtime/tests/architecture_boundary.rs
+```
+
+`riley-cuda`, scheduler, server 변경은 import/path 적응을 제외하고 금지한다.
+
+## 10. Architecture boundary test
+
+- executor module이 scheduler/server를 import하지 않음
+- graph placeholder가 CUDA native symbol을 호출하지 않음
+- shape plan이 weight/KV storage를 소유하지 않음
+- output module이 request scheduling policy를 알지 않음
+- metadata module이 model architecture decision을 알지 않음
+
+dependency 방향을 source scan과 compile test로 고정한다.
+
+## 11. Review 단위
+
+리뷰 시 rename/move와 semantic change를 분리해 볼 수 있도록 다음을 제공한다.
+
+- old→new symbol map
+- 각 module 책임 표
+- public API diff가 비어 있음을 확인한 report
+- before/after call graph
+- allocation/benchmark comparison
+
+대규모 format-only 변경을 함께 넣지 않는다.
+
+## 12. 승인 기준
+
+- 모든 기존 CPU/CUDA test 통과
+- public Rust API/C ABI/CLI contract 변화 없음
+- canonical output/token exact
+- hot allocation 0 유지
+- KV capacity/peak VRAM 회귀 없음
+- performance non-regression gate 통과
+- 원래 executor가 facade 또는 제거 가능한 크기로 축소
+- C05가 graph owner를 별도 module에 추가할 수 있는 명시적 extension point 확보
+
+## 13. 롤백
+
+module 분리는 한 commit 범위로 함께 revert한다. 부분적으로 old/new module을 섞어 rollback하지 않는다. rollback 후 C03 corpus와 기존 GPU parity를 다시 실행한다.
+
+## 14. 완료 정의
+
+한 파일을 수정하지 않고도 graph ownership, shape dispatch, output fast path를 각각 독립 module에서 구현·리뷰할 수 있고, refactor 전후 observable behavior와 성능이 계약 범위에서 동일할 때 완료다.
