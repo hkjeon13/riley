@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rustinfer.invalid/schemas/extension-registry-v1.schema.json",
+  "title": "rustinfer approved extension registry",
+  "description": "The closed allowlist of extensions admitted to implementation work. An empty registry is valid and means that no extension is approved.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "schema_version", "extensions"],
+  "properties": {
+    "$schema": {
+      "const": "registry.schema.json"
+    },
+    "schema_version": {
+      "const": "rustinfer.extension-registry.v1"
+    },
+    "extensions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "extensionId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$"
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "extension_id",
+        "status",
+        "track",
+        "semantic_class",
+        "proposal_path",
+        "deploy_document_path",
+        "benchmark_contract_path",
+        "implementation_link_path"
+      ],
+      "properties": {
+        "extension_id": {
+          "$ref": "#/$defs/extensionId"
+        },
+        "status": {
+          "const": "approved-for-implementation"
+        },
+        "track": {
+          "$ref": "#/$defs/track"
+        },
+        "semantic_class": {
+          "enum": ["reference", "E0", "E1", "A1", "M1"]
+        },
+        "proposal_path": {
+          "type": "string",
+          "pattern": "^deploy/extensions/proposals/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.json$"
+        },
+        "deploy_document_path": {
+          "type": "string",
+          "pattern": "^deploy/extensions/plans/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.md$"
+        },
+        "benchmark_contract_path": {
+          "type": "string",
+          "pattern": "^benchmarks/extensions/contracts/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.json$"
+        },
+        "implementation_link_path": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "string",
+              "pattern": "^deploy/extensions/implementations/[a-z0-9][a-z0-9-]{1,62}[a-z0-9]\\.json$"
+            }
+          ]
+        }
+      },
+      "allOf": [{"$ref": "#/$defs/trackSemanticClassRules"}]
+    },
+    "track": {
+      "enum": [
+        "quantization",
+        "low-rank-weight-compression",
+        "kv-compression",
+        "prefix-cache",
+        "kv-offload-prefetch",
+        "query-aware-kv-selection",
+        "moe",
+        "mamba-ssm",
+        "multimodal",
+        "speculative-decoding",
+        "jacobi-lookahead"
+      ]
+    },
+    "trackSemanticClassRules": {
+      "allOf": [
+        {"if": {"properties": {"track": {"const": "quantization"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1"]}}}},
+        {"if": {"properties": {"track": {"const": "low-rank-weight-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-compression"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "prefix-cache"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "kv-offload-prefetch"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["reference"]}}}},
+        {"if": {"properties": {"track": {"const": "query-aware-kv-selection"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["A1"]}}}},
+        {"if": {"properties": {"track": {"const": "moe"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "mamba-ssm"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0"]}}}},
+        {"if": {"properties": {"track": {"const": "multimodal"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "M1"]}}}},
+        {"if": {"properties": {"track": {"const": "speculative-decoding"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "E1"]}}}},
+        {"if": {"properties": {"track": {"const": "jacobi-lookahead"}}, "required": ["track"]}, "then": {"properties": {"semantic_class": {"enum": ["E0", "A1", "M1"]}}}}
+      ]
+    }
+  }
+}

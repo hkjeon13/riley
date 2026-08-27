@@ -38,3 +38,14 @@ compact separator와 trailing newline을 사용하고 gzip은 level 9와 `mtime=
 대형 profiler trace, checkpoint, model weight, 전체 tensor dump, 실행 binary는 Git에 넣지 않는다. 외부 artifact store를 사용하고 결과 README에 URI, 크기, SHA-256 checksum, 보존 기간을 기록한다. secret, credential, 사용자 prompt나 개인정보가 포함된 raw artifact는 저장하지 않는다.
 
 서로 다른 model, dtype, sampling, prompt/output 길이, warm state의 결과를 직접적인 before/after 성능 주장에 사용하지 않는다. Python reference lane과 native production lane은 dependency class를 명시해 구분한다.
+
+첫 릴리스 이후 확장은 구현 전에
+[`benchmarks/extensions/`](extensions/README.md)의 별도 benchmark contract를
+등록한다. 이 admission contract는 공통 `result.schema.json`을 변경하지 않으며,
+서로 다른 Git-tracked reference/fallback과 workload artifact의 SHA-256, one-GPU
+GPU/driver/CUDA/model ID/full 40-hex model revision/dtype, concurrency, prompt/output 길이,
+sampling, cold/warm의 실제 값을 고정한다. primary/quality metric은 공통 result
+schema의 서로 다른 scalar path여야 하고 primary는 exact track-required set에
+포함되어야 한다.
+적합한 quality field나 multi-GPU 표현이 없으면
+공통 schema를 먼저 version-up하기 전까지 admission을 허용하지 않는다.

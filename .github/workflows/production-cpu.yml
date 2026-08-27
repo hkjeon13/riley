@@ -21,6 +21,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install exact Rust toolchain
         run: |
@@ -32,10 +34,13 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: Dependency, license, feature, and workspace boundary policy
-        run: python3 ci/check_workspace_boundaries.py --locked
+        run: |
+          python3 ci/check_workspace_boundaries.py --locked
+          python3 ci/check_extension_gates.py --base-revision "${{ github.event.pull_request.base.sha || github.event.before }}"
 
       - name: Release, performance, and reliability contract tests
         run: |
+          python3 -m unittest discover -s ci/tests -p 'test_*.py' -v
           python3 -m unittest discover -s ci/release -p 'test_*.py' -v
           python3 -m unittest discover -s benchmarks/scripts/tests -p 'test_*.py' -v
           python3 ci/release/verify_runtime_dockerfile.py
@@ -46,7 +51,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
 
       - name: Unit tests
-        run: cargo test --locked --workspace --no-default-features
+        run: cargo test --locked --workspace --all-targets --no-default-features
 
       - name: Python-free synthetic model loading
         run: ci/verify_python_free_model_loading.sh

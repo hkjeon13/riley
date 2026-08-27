@@ -15,8 +15,10 @@ Use the repository-pinned Rust 1.85.0 toolchain:
 ```sh
 cargo fmt --all -- --check
 python3 ci/check_workspace_boundaries.py --locked
+python3 ci/check_extension_gates.py
+python3 -m unittest discover -s ci/tests -p 'test_*.py' -v
 cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
-cargo test --locked --workspace --no-default-features
+cargo test --locked --workspace --all-targets --no-default-features
 ci/verify_python_free_model_loading.sh
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
 ci/check_feature_matrix.sh
@@ -59,6 +61,37 @@ and it is not part of a production artifact. The checker fails closed unless:
 The approved dependency manifest is a reviewed allowlist, not a discovery
 output. Adding or upgrading a package requires updating its exact resolved
 closure and re-reviewing every changed checksum, license, and MSRV entry.
+
+The PR 17 extension checker is a second closed allowlist. Registry v1 lands
+empty by default; the checked-in `deploy/extensions/registry.json` is
+authoritative for the current count. Every non-empty entry binds one immutable
+proposal, deploy plan, and benchmark contract, while admission keeps
+`implementation_link_path` null. The standard-library-only checker rejects
+duplicate or unknown fields, unregistered artifacts, Git control/traversal/
+symlink paths, untracked reference/fallback/workload files, byte-hash drift,
+invalid track/class pairs, enabled defaults, and incomplete
+`reference`/`E0`/`E1`/`A1`/`M1` gates. Primary and quality metrics must be
+distinct scalar paths in the common result schema; each track has an exact
+required performance/resource set containing the primary, and quality is
+track/class-specific.
+E0 tolerances bind exactly to the comparison dtype, while query-aware A1 uses a
+bounded omitted-mass fraction. A1/E1/M1 paths without a suitable common-schema
+quality field fail closed pending a schema
+version, and v1 remains single-GPU.
+
+CI supplies `--base-revision` with the full pull-request base SHA or push-before
+SHA. Transition mode enforces bootstrap-empty, append-only entries, immutable
+admitted artifacts, and the no-rename registry+proposal+plan+contract admission
+diff. New experimental flag literals in production crates require one matching
+approved implementation link. A later
+experimental implementation link binds approved metadata, tracked source paths,
+the runtime-flag source, and non-empty `{path, sha256, test_id}` direct top-level
+workspace integration tests that cannot be hidden, ignored, or feature-gated out;
+reviewers still inspect actual default-off, flag-on, and stable-fallback control
+flow. Stable promotion, withdrawal, or contract mutation requires schema v2.
+Canonical semantic SHA-256 pins and mutation tests prevent portable JSON schema
+relaxation from silently diverging from the checker. The checker does not load a
+model or initialize a GPU. See `deploy/extensions/README.md`.
 
 The final shell check copies the current tree to a temporary directory without
 the excluded tool/research roots, then runs locked metadata and an all-targets
