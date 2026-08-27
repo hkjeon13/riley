@@ -13,6 +13,8 @@ mod error;
 #[allow(unsafe_code)]
 mod ffi;
 mod gemm;
+#[cfg(any(feature = "cuda", test))]
+mod hf_eager_allowlist;
 mod memory;
 mod prefill;
 mod primitives;

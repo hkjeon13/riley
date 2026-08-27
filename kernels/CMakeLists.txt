@@ -18,6 +18,7 @@ message(STATUS
     "rustinfer CUDA AOT architectures: ${CMAKE_CUDA_ARCHITECTURES} (compile targets only)")
 
 add_library(rustinfer_cuda_native STATIC
+    src/attention_cublaslt.cu
     src/attention_reference.cu
     src/attention_online.cu
     src/batch_primitives.cu

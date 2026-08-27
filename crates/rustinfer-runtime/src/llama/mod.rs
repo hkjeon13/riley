@@ -105,6 +105,7 @@ mod source_contract_tests {
     #[test]
     fn optimized_attention_is_default_and_reference_is_explicit() {
         let defaults = PreparedLlamaForwardConfig::default();
+        assert_eq!(defaults.attention_budget_bytes(), 1_342_177_280);
         assert_eq!(
             defaults.attention_preference(),
             AttentionPreference::Optimized
@@ -116,6 +117,12 @@ mod source_contract_tests {
         assert_eq!(
             defaults.with_optimized_attention().attention_preference(),
             AttentionPreference::Optimized
+        );
+
+        let explicit_small_budget = PreparedLlamaForwardConfig::new(1, 1, 1, 512 * 1024 * 1024);
+        assert_eq!(
+            explicit_small_budget.attention_budget_bytes(),
+            512 * 1024 * 1024
         );
     }
 

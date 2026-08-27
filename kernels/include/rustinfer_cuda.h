@@ -147,6 +147,8 @@ typedef struct RustInferCudaPinnedHostBuffer RustInferCudaPinnedHostBuffer;
 typedef struct RustInferCudaCopy RustInferCudaCopy;
 typedef struct RustInferCudaGemmPlan RustInferCudaGemmPlan;
 typedef struct RustInferCudaFixed37GemmPlan RustInferCudaFixed37GemmPlan;
+typedef struct RustInferCudaHfPrefillAttentionPlan
+    RustInferCudaHfPrefillAttentionPlan;
 
 // Raw C callers must externally synchronize opaque-handle lifetime: no call
 // may begin with a handle while another thread can close that same handle.
@@ -480,6 +482,72 @@ typedef struct RustInferCudaPrefillAttentionParams {
   uint64_t local_window_size;
   uint64_t reserved[4];
 } RustInferCudaPrefillAttentionParams;
+
+// Prepared full-causal BF16 prefill matching the Hugging Face eager sequence:
+// repeat_kv, strided-batched cuBLASLt QK, staged BF16 scale/mask/softmax, then
+// repeat_kv and strided-batched cuBLASLt AV. Inputs and output retain the dense
+// BSHD layout. The caller workspace stores one [QH,S,S] BF16 score matrix
+// followed by one [QH,S,D] BF16 repeated-K/V scratch and is reused for every
+// batch item. max_cublas_workspace_bytes is a cold heuristic cap; the current
+// exact contract rejects an algorithm requiring non-zero cuBLASLt workspace.
+typedef struct RustInferCudaHfPrefillAttentionConfig {
+  uint32_t struct_size;
+  uint32_t reserved0;
+  uint64_t batch_count;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  float scale;
+  uint32_t deterministic;
+  uint64_t max_cublas_workspace_bytes;
+  uint64_t reserved[4];
+} RustInferCudaHfPrefillAttentionConfig;
+
+#define RUSTINFER_CUDA_ATTENTION_BACKEND_HF_CUBLASLT 3u
+
+// Immutable algorithm, environment, and memory provenance for both prepared
+// matmuls. layout_copy_bytes counts repeat-K plus repeat-V bytes per batch.
+typedef struct RustInferCudaHfPrefillAttentionPlanInfo {
+  uint32_t struct_size;
+  uint32_t backend;
+  int32_t qk_algorithm_id;
+  uint32_t qk_tile_id;
+  uint32_t qk_stages_id;
+  uint32_t qk_split_k;
+  uint32_t qk_reduction_scheme;
+  uint32_t qk_cta_swizzling;
+  uint32_t qk_custom_option;
+  uint32_t qk_reserved0;
+  uint64_t qk_workspace_bytes;
+  uint64_t qk_numerical_implementation_flags;
+  int32_t av_algorithm_id;
+  uint32_t av_tile_id;
+  uint32_t av_stages_id;
+  uint32_t av_split_k;
+  uint32_t av_reduction_scheme;
+  uint32_t av_cta_swizzling;
+  uint32_t av_custom_option;
+  uint32_t av_reserved0;
+  uint64_t av_workspace_bytes;
+  uint64_t av_numerical_implementation_flags;
+  uint32_t deterministic;
+  uint32_t compute_capability_major;
+  uint32_t compute_capability_minor;
+  int32_t runtime_version;
+  int32_t cublaslt_version;
+  uint32_t reserved0;
+  uint64_t workspace_bytes;
+  uint64_t score_bytes;
+  uint64_t repeated_key_value_bytes;
+  uint64_t layout_copy_bytes;
+  uint64_t batch_count;
+  uint64_t token_count;
+  uint64_t query_head_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint64_t reserved[2];
+} RustInferCudaHfPrefillAttentionPlanInfo;
 
 // Copies paired BF16 K/V rows from dense single-request source layout
 // [source_token_count, key_value_head_count, head_size] into the contiguous
@@ -1254,6 +1322,33 @@ RustInferCudaStatus rustinfer_cuda_fixed37_prefill_attention_execute(
 RustInferCudaStatus rustinfer_cuda_prefill_attention_execute(
     const RustInferCudaPrefillAttentionParams* params,
     RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Additive prepared HF-eager full-causal backend. Creation performs all
+// descriptor construction and first-heuristic selection. Execute performs no
+// allocation or descriptor query, exclusively borrows all spans, and writes
+// direct BSHD output. Close consumes the plan only after descriptor teardown
+// and context restoration are confirmed.
+RustInferCudaStatus rustinfer_cuda_hf_prefill_attention_plan_create(
+    RustInferCudaContext* context,
+    const RustInferCudaHfPrefillAttentionConfig* config,
+    RustInferCudaHfPrefillAttentionPlan** out_plan,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_hf_prefill_attention_plan_info(
+    RustInferCudaHfPrefillAttentionPlan* plan,
+    RustInferCudaHfPrefillAttentionPlanInfo* out_info,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_hf_prefill_attention_plan_execute(
+    RustInferCudaHfPrefillAttentionPlan* plan,
+    const RustInferCudaBufferSpan* query,
+    const RustInferCudaBufferSpan* key,
+    const RustInferCudaBufferSpan* value,
+    const RustInferCudaBufferSpan* output,
+    const RustInferCudaBufferSpan* workspace,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+RustInferCudaStatus rustinfer_cuda_hf_prefill_attention_plan_close(
+    RustInferCudaHfPrefillAttentionPlan** plan,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
 // These single-request cache/decode calls are allocation-free, exclusively

@@ -1,6 +1,8 @@
-use rustinfer_cuda::CudaGemmReductionPolicy;
+use rustinfer_cuda::{AttentionPreference, CudaGemmReductionPolicy};
 use rustinfer_model::{ModelConfig, ModelSpec};
 use rustinfer_tensor::DType;
+
+use super::LlamaReductionProfile;
 
 const REVIEWED_HIDDEN_SIZE: usize = 576;
 const REVIEWED_INTERMEDIATE_SIZE: usize = 1_536;
@@ -89,6 +91,29 @@ pub(super) fn canonical_gemm_reduction_policies(
     }
 }
 
+/// Resolves the canonical prefill implementation at the validated model
+/// boundary. The fixed-sequence forward always has `B=1`; the remaining
+/// reviewed Hugging Face eager shape is pinned here so unrelated dense Llama
+/// and Qwen2 checkpoints continue to use the established online backend.
+pub(super) fn canonical_prefill_attention_preference(
+    config: &ModelConfig,
+    spec: &ModelSpec,
+    sequence_length: usize,
+    configured: AttentionPreference,
+    profile: LlamaReductionProfile,
+) -> AttentionPreference {
+    if configured == AttentionPreference::Optimized
+        && profile == LlamaReductionProfile::CanonicalV1
+        && sequence_length <= REVIEWED_MAX_SEQUENCE_LENGTH
+        && matches!(config, ModelConfig::Llama(_))
+        && is_reviewed_llama_geometry(spec)
+    {
+        AttentionPreference::HuggingFaceEager
+    } else {
+        configured
+    }
+}
+
 fn is_reviewed_llama_geometry(spec: &ModelSpec) -> bool {
     let embedding = spec.embedding();
     let lm_head = spec.lm_head();
@@ -116,12 +141,14 @@ fn is_reviewed_llama_geometry(spec: &ModelSpec) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use rustinfer_cuda::CudaGemmReductionPolicy::{
-        AllowInPlaceAndOutputTypeSplitKV1, StrictNoSplitV1,
+    use rustinfer_cuda::{
+        AttentionPreference,
+        CudaGemmReductionPolicy::{AllowInPlaceAndOutputTypeSplitKV1, StrictNoSplitV1},
     };
     use rustinfer_model::ModelConfig;
 
-    use super::canonical_gemm_reduction_policies;
+    use super::{canonical_gemm_reduction_policies, canonical_prefill_attention_preference};
+    use crate::llama::LlamaReductionProfile;
 
     const LLAMA_CONFIG: &str = r#"{
       "architectures":["LlamaForCausalLM"],
@@ -215,5 +242,85 @@ mod tests {
         assert_eq!(f16.intermediate(), StrictNoSplitV1);
         assert_eq!(f16.down(), StrictNoSplitV1);
         assert_eq!(f16.lm_head(), StrictNoSplitV1);
+    }
+
+    #[test]
+    fn canonical_attention_promotes_only_the_reviewed_dense_llama_shape() {
+        let llama = ModelConfig::from_json_slice(LLAMA_CONFIG.as_bytes()).unwrap();
+        let llama_spec = llama.to_model_spec();
+        assert_eq!(
+            canonical_prefill_attention_preference(
+                &llama,
+                &llama_spec,
+                8_192,
+                AttentionPreference::Optimized,
+                LlamaReductionProfile::CanonicalV1,
+            ),
+            AttentionPreference::HuggingFaceEager
+        );
+
+        let qwen = ModelConfig::from_json_slice(QWEN2_CONFIG.as_bytes()).unwrap();
+        let qwen_spec = qwen.to_model_spec();
+        assert_eq!(
+            canonical_prefill_attention_preference(
+                &qwen,
+                &qwen_spec,
+                8,
+                AttentionPreference::Optimized,
+                LlamaReductionProfile::CanonicalV1,
+            ),
+            AttentionPreference::Optimized
+        );
+
+        let other_llama = LLAMA_CONFIG
+            .replace("\"hidden_size\":576", "\"hidden_size\":768")
+            .replace("\"num_attention_heads\":9", "\"num_attention_heads\":12");
+        let other_llama = ModelConfig::from_json_slice(other_llama.as_bytes()).unwrap();
+        let other_spec = other_llama.to_model_spec();
+        assert_eq!(
+            canonical_prefill_attention_preference(
+                &other_llama,
+                &other_spec,
+                128,
+                AttentionPreference::Optimized,
+                LlamaReductionProfile::CanonicalV1,
+            ),
+            AttentionPreference::Optimized
+        );
+    }
+
+    #[test]
+    fn attention_promotion_preserves_explicit_and_unreviewed_selections() {
+        let llama = ModelConfig::from_json_slice(LLAMA_CONFIG.as_bytes()).unwrap();
+        let spec = llama.to_model_spec();
+
+        for (sequence_length, configured, profile) in [
+            (
+                128,
+                AttentionPreference::Reference,
+                LlamaReductionProfile::CanonicalV1,
+            ),
+            (
+                128,
+                AttentionPreference::Optimized,
+                LlamaReductionProfile::FixedContiguous37BalancedV1,
+            ),
+            (
+                8_193,
+                AttentionPreference::Optimized,
+                LlamaReductionProfile::CanonicalV1,
+            ),
+        ] {
+            assert_eq!(
+                canonical_prefill_attention_preference(
+                    &llama,
+                    &spec,
+                    sequence_length,
+                    configured,
+                    profile,
+                ),
+                configured
+            );
+        }
     }
 }

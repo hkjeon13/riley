@@ -73,6 +73,8 @@ const SCALE_CAUSAL_MASK_PARAMS_SIZE: u32 = 112;
 const CAUSAL_SOFTMAX_PARAMS_SIZE: u32 = 112;
 const AV_GQA_PARAMS_SIZE: u32 = 216;
 const PREFILL_ATTENTION_PARAMS_SIZE: u32 = 288;
+const HF_PREFILL_ATTENTION_CONFIG_SIZE: u32 = 96;
+const HF_PREFILL_ATTENTION_PLAN_INFO_SIZE: u32 = 216;
 const KV_CACHE_WRITE_PARAMS_SIZE: u32 = 272;
 const DECODE_ATTENTION_REFERENCE_PARAMS_SIZE: u32 = 328;
 const DECODE_ATTENTION_PARAMS_SIZE: u32 = 344;
@@ -390,6 +392,12 @@ struct RawFixed37GemmPlan {
     _not_send_sync: PhantomData<*mut ()>,
 }
 
+#[repr(C)]
+struct RawHfPrefillAttentionPlan {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
 #[derive(Clone, Copy)]
 #[repr(C)]
 pub(super) struct RawBufferSpan {
@@ -644,6 +652,171 @@ struct RawPrefillAttentionParams {
     mask_kind: u32,
     local_window: u64,
     reserved: [u64; 4],
+}
+
+#[repr(C)]
+struct RawHfPrefillAttentionConfig {
+    struct_size: u32,
+    reserved0: u32,
+    batch_count: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    scale: f32,
+    deterministic: u32,
+    max_cublas_workspace_bytes: u64,
+    reserved: [u64; 4],
+}
+
+impl RawHfPrefillAttentionConfig {
+    const fn new(
+        batch_count: u64,
+        token_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        head_size: u64,
+        scale: f32,
+        max_cublas_workspace_bytes: u64,
+    ) -> Self {
+        Self {
+            struct_size: HF_PREFILL_ATTENTION_CONFIG_SIZE,
+            reserved0: 0,
+            batch_count,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            scale,
+            deterministic: GEMM_DETERMINISTIC_REQUIRED,
+            max_cublas_workspace_bytes,
+            reserved: [0; 4],
+        }
+    }
+}
+
+#[repr(C)]
+struct RawHfPrefillAttentionPlanInfo {
+    struct_size: u32,
+    backend: u32,
+    qk_algorithm_id: i32,
+    qk_tile_id: u32,
+    qk_stages_id: u32,
+    qk_split_k: u32,
+    qk_reduction_scheme: u32,
+    qk_cta_swizzling: u32,
+    qk_custom_option: u32,
+    qk_reserved0: u32,
+    qk_workspace_bytes: u64,
+    qk_numerical_implementation_flags: u64,
+    av_algorithm_id: i32,
+    av_tile_id: u32,
+    av_stages_id: u32,
+    av_split_k: u32,
+    av_reduction_scheme: u32,
+    av_cta_swizzling: u32,
+    av_custom_option: u32,
+    av_reserved0: u32,
+    av_workspace_bytes: u64,
+    av_numerical_implementation_flags: u64,
+    deterministic: u32,
+    compute_capability_major: u32,
+    compute_capability_minor: u32,
+    runtime_version: i32,
+    cublaslt_version: i32,
+    reserved0: u32,
+    workspace_bytes: u64,
+    score_bytes: u64,
+    repeated_key_value_bytes: u64,
+    layout_copy_bytes: u64,
+    batch_count: u64,
+    token_count: u64,
+    query_head_count: u64,
+    key_value_head_count: u64,
+    head_size: u64,
+    reserved: [u64; 2],
+}
+
+impl RawHfPrefillAttentionPlanInfo {
+    const fn new() -> Self {
+        Self {
+            struct_size: HF_PREFILL_ATTENTION_PLAN_INFO_SIZE,
+            backend: 0,
+            qk_algorithm_id: 0,
+            qk_tile_id: 0,
+            qk_stages_id: 0,
+            qk_split_k: 0,
+            qk_reduction_scheme: 0,
+            qk_cta_swizzling: 0,
+            qk_custom_option: 0,
+            qk_reserved0: 0,
+            qk_workspace_bytes: 0,
+            qk_numerical_implementation_flags: 0,
+            av_algorithm_id: 0,
+            av_tile_id: 0,
+            av_stages_id: 0,
+            av_split_k: 0,
+            av_reduction_scheme: 0,
+            av_cta_swizzling: 0,
+            av_custom_option: 0,
+            av_reserved0: 0,
+            av_workspace_bytes: 0,
+            av_numerical_implementation_flags: 0,
+            deterministic: 0,
+            compute_capability_major: 0,
+            compute_capability_minor: 0,
+            runtime_version: 0,
+            cublaslt_version: 0,
+            reserved0: 0,
+            workspace_bytes: 0,
+            score_bytes: 0,
+            repeated_key_value_bytes: 0,
+            layout_copy_bytes: 0,
+            batch_count: 0,
+            token_count: 0,
+            query_head_count: 0,
+            key_value_head_count: 0,
+            head_size: 0,
+            reserved: [0; 2],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct NativeHfPrefillAttentionPlanInfo {
+    pub(super) backend: u32,
+    pub(super) qk_algorithm_id: i32,
+    pub(super) qk_tile_id: u32,
+    pub(super) qk_stages_id: u32,
+    pub(super) qk_split_k: u32,
+    pub(super) qk_reduction_scheme: u32,
+    pub(super) qk_cta_swizzling: u32,
+    pub(super) qk_custom_option: u32,
+    pub(super) qk_workspace_bytes: u64,
+    pub(super) qk_numerical_implementation_flags: u64,
+    pub(super) av_algorithm_id: i32,
+    pub(super) av_tile_id: u32,
+    pub(super) av_stages_id: u32,
+    pub(super) av_split_k: u32,
+    pub(super) av_reduction_scheme: u32,
+    pub(super) av_cta_swizzling: u32,
+    pub(super) av_custom_option: u32,
+    pub(super) av_workspace_bytes: u64,
+    pub(super) av_numerical_implementation_flags: u64,
+    pub(super) deterministic: u32,
+    pub(super) compute_capability_major: u32,
+    pub(super) compute_capability_minor: u32,
+    pub(super) runtime_version: i32,
+    pub(super) cublaslt_version: i32,
+    pub(super) workspace_bytes: u64,
+    pub(super) score_bytes: u64,
+    pub(super) repeated_key_value_bytes: u64,
+    pub(super) layout_copy_bytes: u64,
+    pub(super) batch_count: u64,
+    pub(super) token_count: u64,
+    pub(super) query_head_count: u64,
+    pub(super) key_value_head_count: u64,
+    pub(super) head_size: u64,
 }
 
 #[repr(C)]
@@ -1386,6 +1559,31 @@ unsafe extern "C" {
     fn rustinfer_cuda_ragged_paged_attention_execute(
         params: *const RawRaggedPagedAttentionParams,
         stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_hf_prefill_attention_plan_create(
+        context: *mut RawContext,
+        config: *const RawHfPrefillAttentionConfig,
+        out_plan: *mut *mut RawHfPrefillAttentionPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_hf_prefill_attention_plan_info(
+        plan: *mut RawHfPrefillAttentionPlan,
+        out_info: *mut RawHfPrefillAttentionPlanInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_hf_prefill_attention_plan_execute(
+        plan: *mut RawHfPrefillAttentionPlan,
+        query: *const RawBufferSpan,
+        key: *const RawBufferSpan,
+        value: *const RawBufferSpan,
+        output: *const RawBufferSpan,
+        workspace: *const RawBufferSpan,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_hf_prefill_attention_plan_close(
+        plan: *mut *mut RawHfPrefillAttentionPlan,
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_fixed37_ragged_paged_attention_two_pass_execute(
@@ -3902,6 +4100,171 @@ fn primitive_status(
     status_result(status, operation, &error)
 }
 
+pub(super) struct HfPrefillAttentionPlanHandle {
+    pointer: Option<NonNull<RawHfPrefillAttentionPlan>>,
+}
+
+// SAFETY: native calls restore the retained CUDA context and serialize plan
+// use. The safe owner requires `&mut self` for execution and remains !Sync.
+unsafe impl Send for HfPrefillAttentionPlanHandle {}
+
+impl HfPrefillAttentionPlanHandle {
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn create(
+        context: &ContextHandle,
+        batch_count: u64,
+        token_count: u64,
+        query_head_count: u64,
+        key_value_head_count: u64,
+        head_size: u64,
+        scale: f32,
+        max_cublas_workspace_bytes: u64,
+    ) -> CudaResult<Self> {
+        let config = RawHfPrefillAttentionConfig::new(
+            batch_count,
+            token_count,
+            query_head_count,
+            key_value_head_count,
+            head_size,
+            scale,
+            max_cublas_workspace_bytes,
+        );
+        let mut pointer = ptr::null_mut();
+        let mut error = ErrorInfo::new();
+        // SAFETY: native copies the fixed-layout config synchronously and
+        // retains the context iff it returns a non-null owning plan.
+        let status = unsafe {
+            rustinfer_cuda_hf_prefill_attention_plan_create(
+                context.as_ptr(),
+                &config,
+                &mut pointer,
+                &mut error,
+            )
+        };
+        status_result(status, "prepare HF cuBLASLt prefill attention", &error)?;
+        let pointer = NonNull::new(pointer).ok_or_else(|| {
+            missing_output(
+                "prepare HF cuBLASLt prefill attention",
+                "native attention plan handle is null",
+            )
+        })?;
+        Ok(Self {
+            pointer: Some(pointer),
+        })
+    }
+
+    fn as_ptr(&self) -> *mut RawHfPrefillAttentionPlan {
+        self.pointer.map_or(ptr::null_mut(), NonNull::as_ptr)
+    }
+
+    pub(super) fn info(&self) -> CudaResult<NativeHfPrefillAttentionPlanInfo> {
+        let mut info = RawHfPrefillAttentionPlanInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the plan remains owned and the output is correctly sized.
+        let status = unsafe {
+            rustinfer_cuda_hf_prefill_attention_plan_info(self.as_ptr(), &mut info, &mut error)
+        };
+        status_result(status, "query HF prefill attention plan", &error)?;
+        if info.struct_size != HF_PREFILL_ATTENTION_PLAN_INFO_SIZE
+            || info.reserved0 != 0
+            || info.qk_reserved0 != 0
+            || info.av_reserved0 != 0
+            || info.reserved != [0; 2]
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "query HF prefill attention plan",
+                "native attention metadata violates its ABI contract",
+            ));
+        }
+        Ok(NativeHfPrefillAttentionPlanInfo {
+            backend: info.backend,
+            qk_algorithm_id: info.qk_algorithm_id,
+            qk_tile_id: info.qk_tile_id,
+            qk_stages_id: info.qk_stages_id,
+            qk_split_k: info.qk_split_k,
+            qk_reduction_scheme: info.qk_reduction_scheme,
+            qk_cta_swizzling: info.qk_cta_swizzling,
+            qk_custom_option: info.qk_custom_option,
+            qk_workspace_bytes: info.qk_workspace_bytes,
+            qk_numerical_implementation_flags: info.qk_numerical_implementation_flags,
+            av_algorithm_id: info.av_algorithm_id,
+            av_tile_id: info.av_tile_id,
+            av_stages_id: info.av_stages_id,
+            av_split_k: info.av_split_k,
+            av_reduction_scheme: info.av_reduction_scheme,
+            av_cta_swizzling: info.av_cta_swizzling,
+            av_custom_option: info.av_custom_option,
+            av_workspace_bytes: info.av_workspace_bytes,
+            av_numerical_implementation_flags: info.av_numerical_implementation_flags,
+            deterministic: info.deterministic,
+            compute_capability_major: info.compute_capability_major,
+            compute_capability_minor: info.compute_capability_minor,
+            runtime_version: info.runtime_version,
+            cublaslt_version: info.cublaslt_version,
+            workspace_bytes: info.workspace_bytes,
+            score_bytes: info.score_bytes,
+            repeated_key_value_bytes: info.repeated_key_value_bytes,
+            layout_copy_bytes: info.layout_copy_bytes,
+            batch_count: info.batch_count,
+            token_count: info.token_count,
+            query_head_count: info.query_head_count,
+            key_value_head_count: info.key_value_head_count,
+            head_size: info.head_size,
+        })
+    }
+
+    pub(super) fn execute(
+        &mut self,
+        query: RawBufferSpan,
+        key: RawBufferSpan,
+        value: RawBufferSpan,
+        output: RawBufferSpan,
+        workspace: RawBufferSpan,
+        stream: &mut StreamHandle,
+    ) -> CudaResult<()> {
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe layer uniquely borrows writable spans, plan, and
+        // stream until native confirms synchronous completion.
+        let status = unsafe {
+            rustinfer_cuda_hf_prefill_attention_plan_execute(
+                self.as_ptr(),
+                &query,
+                &key,
+                &value,
+                &output,
+                &workspace,
+                stream.as_ptr(),
+                &mut error,
+            )
+        };
+        status_result(status, "execute HF cuBLASLt prefill attention", &error)
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        let Some(pointer) = self.pointer else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut error = ErrorInfo::new();
+        // SAFETY: raw uniquely owns the plan. Native nulls it only after all
+        // descriptors and the retained context lease are cleanly released.
+        let status =
+            unsafe { rustinfer_cuda_hf_prefill_attention_plan_close(&mut raw, &mut error) };
+        self.pointer = NonNull::new(raw);
+        status_result(status, "close HF cuBLASLt prefill attention", &error)
+    }
+}
+
+impl Drop for HfPrefillAttentionPlanHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
 pub(super) struct GemmPlanHandle {
     pointer: Option<NonNull<RawGemmPlan>>,
 }
@@ -4447,6 +4810,14 @@ const _: () = assert!(offset_of!(RawPrefillAttentionParams, batch_size) == 200);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, scale) == 240);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, local_window) == 248);
 const _: () = assert!(offset_of!(RawPrefillAttentionParams, reserved) == 256);
+const _: () = assert!(size_of::<RawHfPrefillAttentionConfig>() == 96);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionConfig, batch_count) == 8);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionConfig, max_cublas_workspace_bytes) == 56);
+const _: () = assert!(size_of::<RawHfPrefillAttentionPlanInfo>() == 216);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionPlanInfo, qk_workspace_bytes) == 40);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionPlanInfo, av_workspace_bytes) == 88);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionPlanInfo, workspace_bytes) == 128);
+const _: () = assert!(offset_of!(RawHfPrefillAttentionPlanInfo, batch_count) == 160);
 const _: () = assert!(size_of::<RawKvCacheWriteParams>() == 272);
 const _: () = assert!(offset_of!(RawKvCacheWriteParams, key_source) == 8);
 const _: () = assert!(offset_of!(RawKvCacheWriteParams, source_token_count) == 200);

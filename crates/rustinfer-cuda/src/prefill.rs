@@ -2,16 +2,28 @@
 
 use std::error;
 use std::fmt;
+use std::ptr;
 use std::sync::Arc;
+
+#[cfg(feature = "cuda")]
+use std::sync::Mutex;
 
 use crate::CUDA_COMPILED_ARCHITECTURES;
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 use crate::gemm::{
     FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION,
 };
+#[cfg(any(feature = "cuda", test))]
+use crate::hf_eager_allowlist::{
+    HfEagerReviewedAlgorithm, REVIEWED_CUBLASLT_VERSION, REVIEWED_RUNTIME_VERSION,
+    reviewed_algorithm,
+};
 use crate::memory::CudaDeviceBuffer;
 use crate::primitives::{CudaBufferSpan, CudaBufferSpanMut, CudaDType};
-use crate::runtime::{ContextInner, CudaContext, CudaStream, ensure_same_context};
+use crate::runtime::{
+    ContextInner, CudaContext, CudaExecutionStream, CudaStream, ensure_same_context,
+    execution_stream_mut,
+};
 
 #[cfg(feature = "cuda")]
 use crate::ffi;
@@ -21,6 +33,16 @@ const MINIMUM_HARDWARE_COMPUTE_CAPABILITY: (u32, u32) = (8, 0);
 const ONLINE_HEAD_SIZE: u64 = 64;
 const REFERENCE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.materialized-gqa-prefill.bf16";
 const ONLINE_IMPLEMENTATION_ID: &str = "rustinfer.cuda.online-gqa-prefill.bf16.d64";
+const HF_EAGER_IMPLEMENTATION_ID: &str = "rustinfer.cuda.hf-eager-cublaslt-gqa-prefill.bf16";
+#[cfg(feature = "cuda")]
+const HF_EAGER_CUBLASLT_WORKSPACE_CAP_BYTES: u64 = 8_519_680;
+#[cfg(feature = "cuda")]
+const HF_EAGER_BACKEND_ID: u32 = 3;
+const HF_EAGER_REQUIRED_ALIGNMENT: u64 = 256;
+const HF_EAGER_QUERY_HEAD_COUNT: u64 = 9;
+const HF_EAGER_KEY_VALUE_HEAD_COUNT: u64 = 3;
+const HF_EAGER_HEAD_SIZE: u64 = 64;
+const HF_EAGER_MAX_SEQUENCE: u64 = 8192;
 const FIXED37_MATERIALIZED_IMPLEMENTATION_ID: &str =
     "rustinfer.cuda.fixed37.materialized-gqa-prefill.bf16";
 const FIXED37_TWO_PASS_IMPLEMENTATION_ID: &str =
@@ -29,6 +51,65 @@ const FIXED37_MAX_TWO_PASS_SEQUENCE: u64 = 8192;
 const MAXIMUM_ONLINE_GRID_BATCH: u64 = 65_535;
 const MAXIMUM_ONLINE_GRID_HEADS: u64 = 65_535;
 const MAXIMUM_ONLINE_SEQUENCE_TILES: u64 = i32::MAX as u64;
+
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HfEagerMatmulProvenance {
+    algorithm_id: i32,
+    tile_id: u32,
+    stages_id: u32,
+    split_k: u32,
+    reduction_scheme: u32,
+    cta_swizzling: u32,
+    custom_option: u32,
+    workspace_bytes: u64,
+    numerical_implementation_flags: u64,
+}
+
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HfEagerPlanProvenance {
+    token_count: u64,
+    compute_capability: (u32, u32),
+    runtime_version: i32,
+    cublaslt_version: i32,
+    qk: HfEagerMatmulProvenance,
+    av: HfEagerMatmulProvenance,
+}
+
+#[cfg(feature = "cuda")]
+impl From<&ffi::NativeHfPrefillAttentionPlanInfo> for HfEagerPlanProvenance {
+    fn from(info: &ffi::NativeHfPrefillAttentionPlanInfo) -> Self {
+        Self {
+            token_count: info.token_count,
+            compute_capability: (info.compute_capability_major, info.compute_capability_minor),
+            runtime_version: info.runtime_version,
+            cublaslt_version: info.cublaslt_version,
+            qk: HfEagerMatmulProvenance {
+                algorithm_id: info.qk_algorithm_id,
+                tile_id: info.qk_tile_id,
+                stages_id: info.qk_stages_id,
+                split_k: info.qk_split_k,
+                reduction_scheme: info.qk_reduction_scheme,
+                cta_swizzling: info.qk_cta_swizzling,
+                custom_option: info.qk_custom_option,
+                workspace_bytes: info.qk_workspace_bytes,
+                numerical_implementation_flags: info.qk_numerical_implementation_flags,
+            },
+            av: HfEagerMatmulProvenance {
+                algorithm_id: info.av_algorithm_id,
+                tile_id: info.av_tile_id,
+                stages_id: info.av_stages_id,
+                split_k: info.av_split_k,
+                reduction_scheme: info.av_reduction_scheme,
+                cta_swizzling: info.av_cta_swizzling,
+                custom_option: info.av_custom_option,
+                workspace_bytes: info.av_workspace_bytes,
+                numerical_implementation_flags: info.av_numerical_implementation_flags,
+            },
+        }
+    }
+}
 const IMPLEMENTATION_VERSION: &str = "1";
 const ONLINE_IMPLEMENTATION_VERSION: &str = "3";
 const NATIVE_DEPENDENCY: &str = concat!(
@@ -88,6 +169,8 @@ pub enum AttentionPreference {
     Reference,
     /// Prefer the no-HBM native backend and fall back cold.
     Optimized,
+    /// Require the prepared Hugging Face eager-equivalent cuBLASLt backend.
+    HuggingFaceEager,
 }
 
 /// Native implementation fixed into a prepared prefill plan.
@@ -98,6 +181,8 @@ pub enum AttentionBackend {
     /// No-HBM canonical backend: materialized-order exact for full causal and
     /// an online F32 normalizer for causal-local.
     Online,
+    /// Prepared repeat-kv plus strided-batched cuBLASLt QK/AV.
+    HuggingFaceEager,
     /// Materialized fixed37 QK, softmax, and AV with canonical score staging.
     Fixed37Materialized,
     /// No-HBM two-score-pass fixed37 attention for `D=64`, `S<=8192`.
@@ -110,6 +195,8 @@ pub enum AttentionBackend {
 pub enum AttentionSelectionReason {
     /// The caller explicitly required the reference backend.
     ExplicitReference,
+    /// The caller explicitly required Hugging Face eager-equivalent attention.
+    ExplicitHuggingFaceEager,
     /// The optimized backend was available and satisfied every capability.
     OptimizedCapabilityMatch,
     /// The optimized backend was not present in the supplied availability set.
@@ -335,6 +422,7 @@ impl AttentionCapability {
 pub struct AttentionBackendAvailability {
     reference: bool,
     online: bool,
+    hf_eager: bool,
     fixed37_materialized: bool,
     fixed37_two_pass: bool,
 }
@@ -346,6 +434,7 @@ impl AttentionBackendAvailability {
         Self {
             reference,
             online,
+            hf_eager: false,
             fixed37_materialized: false,
             fixed37_two_pass: false,
         }
@@ -359,10 +448,18 @@ impl AttentionBackendAvailability {
         self
     }
 
+    /// Adds the independently prepared HF-eager cuBLASLt path.
+    #[must_use]
+    pub const fn with_hf_eager(mut self, available: bool) -> Self {
+        self.hf_eager = available;
+        self
+    }
+
     /// Backends linked into the current crate feature set.
     #[must_use]
     pub const fn linked() -> Self {
         Self::new(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
+            .with_hf_eager(cfg!(feature = "cuda"))
             .with_fixed37(cfg!(feature = "cuda"), cfg!(feature = "cuda"))
     }
 
@@ -376,6 +473,12 @@ impl AttentionBackendAvailability {
     #[must_use]
     pub const fn online(self) -> bool {
         self.online
+    }
+
+    /// Whether the prepared HF-eager cuBLASLt implementation is linked.
+    #[must_use]
+    pub const fn hf_eager(self) -> bool {
+        self.hf_eager
     }
 
     /// Whether the materialized fixed37 sibling set is linked.
@@ -631,12 +734,20 @@ pub struct PrefillAttentionParams<'a> {
 /// One backend and execution contract fixed before any hot execution.
 #[derive(Clone)]
 pub struct PreparedPrefillAttention {
+    #[cfg(feature = "cuda")]
+    hf_eager_plan: Option<Arc<Mutex<HfEagerPlanState>>>,
     context: Arc<ContextInner>,
     request: PrefillAttentionRequest,
     backend: AttentionBackend,
     capability: AttentionCapability,
     trace: AttentionSelectionTrace,
     reduction_profile: AttentionReductionProfile,
+}
+
+#[cfg(feature = "cuda")]
+struct HfEagerPlanState {
+    plan: ffi::HfPrefillAttentionPlanHandle,
+    poisoned: bool,
 }
 
 impl fmt::Debug for PreparedPrefillAttention {
@@ -649,7 +760,8 @@ impl fmt::Debug for PreparedPrefillAttention {
             .field("capability", &self.capability)
             .field("trace", &self.trace)
             .field("reduction_profile", &self.reduction_profile)
-            .finish()
+            .field("poisoned", &self.is_poisoned())
+            .finish_non_exhaustive()
     }
 }
 
@@ -829,6 +941,23 @@ impl PreparedPrefillAttention {
                     AttentionReductionProfile::CanonicalV1,
                 )
             }
+            AttentionPreference::HuggingFaceEager => {
+                if !availability.hf_eager {
+                    return Err(not_supported(
+                        "select_prefill_attention",
+                        "the explicitly requested HF-eager cuBLASLt backend is unavailable",
+                    ));
+                }
+                require_hf_eager_support(request, compute_capability)?;
+                prepare_selection(
+                    context,
+                    compute_capability,
+                    request,
+                    AttentionBackend::HuggingFaceEager,
+                    AttentionSelectionReason::ExplicitHuggingFaceEager,
+                    AttentionReductionProfile::CanonicalV1,
+                )
+            }
         }
     }
 
@@ -915,6 +1044,10 @@ impl PreparedPrefillAttention {
                     PROFILE,
                 )
             }
+            AttentionPreference::HuggingFaceEager => Err(not_supported(
+                "select_prefill_attention",
+                "HF-eager cuBLASLt attention belongs to canonical-v1; fixed37 cross-profile fallback is forbidden",
+            )),
         }
     }
 
@@ -954,26 +1087,45 @@ impl PreparedPrefillAttention {
         self.reduction_profile
     }
 
+    /// Whether a prior native execution failure disabled safe plan reuse.
+    #[must_use]
+    pub fn is_poisoned(&self) -> bool {
+        #[cfg(feature = "cuda")]
+        {
+            self.hf_eager_plan
+                .as_ref()
+                .is_some_and(|owner| owner.lock().map_or(true, |state| state.poisoned))
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            false
+        }
+    }
+
     /// Executes exactly the backend selected during [`Self::select`].
     ///
-    /// Native launch or synchronization failure is returned directly. The
-    /// method deliberately performs no post-launch fallback.
+    /// Direct-stream launch or completion failure is returned directly. When
+    /// called through a command-batch proxy, completion diagnostics are
+    /// reported by [`crate::CudaCommandBatch::finish`]. The method deliberately
+    /// performs no post-launch fallback in either mode.
     ///
     /// # Errors
     ///
-    /// Returns for dtype, capacity, context, workspace, launch, or completion
-    /// failure.
-    pub fn execute(
+    /// Returns for dtype, capacity, context, workspace, or submission failure,
+    /// plus completion failure for direct-stream execution.
+    #[allow(clippy::too_many_lines)]
+    pub fn execute<S: CudaExecutionStream + ?Sized>(
         &self,
         params: &mut PrefillAttentionParams<'_>,
-        stream: &mut CudaStream,
+        stream: &mut S,
     ) -> CudaResult<()> {
         const OPERATION: &str = "prefill_attention";
+        let stream = execution_stream_mut(stream);
         ensure_same_context(&self.context, &stream.context, OPERATION)?;
         validate_execute_params(self, params, stream)?;
 
         #[cfg(feature = "cuda")]
-        match self.backend {
+        let result = match self.backend {
             AttentionBackend::MaterializedReference => {
                 let workspace = params.workspace.as_mut().ok_or_else(|| {
                     CudaError::invalid_argument(OPERATION, "reference workspace is missing")
@@ -1008,6 +1160,35 @@ impl PreparedPrefillAttention {
                 local_window(self.request.mask),
                 &mut stream.native,
             ),
+            AttentionBackend::HuggingFaceEager => {
+                let workspace = params.workspace.as_mut().ok_or_else(|| {
+                    CudaError::invalid_argument(OPERATION, "HF-eager workspace is missing")
+                })?;
+                let owner = self.hf_eager_plan.as_ref().ok_or_else(|| {
+                    CudaError::invalid_state(OPERATION, "HF-eager native plan is missing")
+                })?;
+                let mut state = owner.lock().map_err(|_| {
+                    CudaError::invalid_state(OPERATION, "HF-eager plan mutex is poisoned")
+                })?;
+                if state.poisoned {
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the HF-eager plan was poisoned by a prior native failure",
+                    ));
+                }
+                let result = state.plan.execute(
+                    params.query.raw(),
+                    params.key.raw(),
+                    params.value.raw(),
+                    params.output.raw(),
+                    workspace.raw(),
+                    &mut stream.native,
+                );
+                if result.is_err() {
+                    state.poisoned = true;
+                }
+                result
+            }
             AttentionBackend::Fixed37Materialized => {
                 let workspace = params.workspace.as_mut().ok_or_else(|| {
                     CudaError::invalid_argument(
@@ -1045,11 +1226,57 @@ impl PreparedPrefillAttention {
                 local_window(self.request.mask),
                 &mut stream.native,
             ),
+        };
+        #[cfg(feature = "cuda")]
+        {
+            result
         }
         #[cfg(not(feature = "cuda"))]
         {
             let _ = params;
             Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Explicitly closes an owned native plan, if this backend has one.
+    ///
+    /// # Errors
+    ///
+    /// A poisoned owner cannot be reported as cleanly closed. Drop still
+    /// performs the native fail-closed best-effort cleanup.
+    pub fn close(self) -> CudaResult<()> {
+        #[cfg(feature = "cuda")]
+        {
+            if let Some(owner) = self.hf_eager_plan {
+                let state = Arc::try_unwrap(owner)
+                    .map_err(|_| {
+                        CudaError::invalid_state(
+                            "PreparedPrefillAttention::close",
+                            "cloned HF-eager plan owners must be dropped before explicit close",
+                        )
+                    })?
+                    .into_inner()
+                    .map_err(|_| {
+                        CudaError::invalid_state(
+                            "PreparedPrefillAttention::close",
+                            "HF-eager plan mutex is poisoned",
+                        )
+                    })?;
+                if state.poisoned {
+                    return Err(CudaError::invalid_state(
+                        "PreparedPrefillAttention::close",
+                        "a poisoned HF-eager plan cannot be reported as cleanly closed",
+                    ));
+                }
+                let mut plan = state.plan;
+                plan.close()?;
+            }
+            Ok(())
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = self;
+            Ok(())
         }
     }
 }
@@ -1356,6 +1583,33 @@ const ONLINE_LOCAL_CAPABILITY: AttentionCapability = AttentionCapability {
     ..ONLINE_CAUSAL_CAPABILITY
 };
 
+const HF_EAGER_CAPABILITY: AttentionCapability = AttentionCapability {
+    implementation_id: HF_EAGER_IMPLEMENTATION_ID,
+    implementation_version: IMPLEMENTATION_VERSION,
+    native_dependency: NATIVE_DEPENDENCY,
+    mode: AttentionMode::Prefill,
+    layout: AttentionLayout::DenseBshd,
+    input_dtype: CudaDType::BF16,
+    accumulator_dtype: CudaDType::F32,
+    output_dtype: CudaDType::BF16,
+    minimum_hardware_compute_capability: MINIMUM_HARDWARE_COMPUTE_CAPABILITY,
+    compiled_architectures: CUDA_COMPILED_ARCHITECTURES,
+    head_size: Some(HF_EAGER_HEAD_SIZE),
+    causal: true,
+    causal_local: false,
+    minimum_local_window_size: None,
+    variable_sequence: true,
+    non_contiguous: false,
+    cuda_graph_capture: false,
+    online_reduction: false,
+    partial_state_merge: false,
+    score_materialization: AttentionScoreMaterialization::FullStagedBf16,
+    reduction_profile: AttentionReductionProfile::CanonicalV1,
+    reduction_version: None,
+    reduction_chunk_elements: None,
+    maximum_reduction_elements: Some(HF_EAGER_MAX_SEQUENCE),
+};
+
 const FIXED37_MATERIALIZED_CAPABILITY: AttentionCapability = AttentionCapability {
     implementation_id: FIXED37_MATERIALIZED_IMPLEMENTATION_ID,
     implementation_version: IMPLEMENTATION_VERSION,
@@ -1411,6 +1665,66 @@ const FIXED37_TWO_PASS_CAPABILITY: AttentionCapability = AttentionCapability {
     maximum_reduction_elements: Some(FIXED37_MAX_TWO_PASS_SEQUENCE),
 };
 
+#[cfg(any(feature = "cuda", test))]
+fn hf_eager_qk_provenance_matches(
+    actual: HfEagerMatmulProvenance,
+    expected: HfEagerReviewedAlgorithm,
+) -> bool {
+    actual.algorithm_id == expected.qk_algorithm_id
+        && actual.tile_id == expected.qk_tile_id
+        && actual.stages_id == expected.qk_stages_id
+        && actual.split_k == 1
+        && actual.reduction_scheme == 0
+        && actual.cta_swizzling == expected.qk_cta_swizzling
+        && actual.custom_option == expected.qk_custom_option
+        && actual.workspace_bytes == 0
+        && actual.numerical_implementation_flags == expected.qk_numerical_implementation_flags
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn hf_eager_av_provenance_matches(
+    actual: HfEagerMatmulProvenance,
+    expected: HfEagerReviewedAlgorithm,
+) -> bool {
+    actual.algorithm_id == expected.av_algorithm_id
+        && actual.tile_id == expected.av_tile_id
+        && actual.stages_id == expected.av_stages_id
+        && actual.split_k == 1
+        && actual.reduction_scheme == 0
+        && actual.cta_swizzling == expected.av_cta_swizzling
+        && actual.custom_option == expected.av_custom_option
+        && actual.workspace_bytes == 0
+        && actual.numerical_implementation_flags == expected.av_numerical_implementation_flags
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn validate_hf_eager_reviewed_provenance(actual: HfEagerPlanProvenance) -> CudaResult<()> {
+    let expected = reviewed_algorithm(actual.token_count).ok_or_else(|| {
+        not_supported(
+            "select_prefill_attention",
+            format!(
+                "HF-eager token count {} is outside the reviewed S=1..8192 algorithm classes",
+                actual.token_count
+            ),
+        )
+    })?;
+    if actual.compute_capability != (8, 9)
+        || actual.runtime_version != REVIEWED_RUNTIME_VERSION
+        || actual.cublaslt_version != REVIEWED_CUBLASLT_VERSION
+        || !hf_eager_qk_provenance_matches(actual.qk, expected)
+        || !hf_eager_av_provenance_matches(actual.av, expected)
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            format!(
+                "native HF-eager provenance is outside the reviewed cc89/runtime-{REVIEWED_RUNTIME_VERSION}/cuBLASLt-{REVIEWED_CUBLASLT_VERSION} exact algorithm class: {actual:?}"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_lines)]
 fn prepare_selection(
     context: &CudaContext,
     compute_capability: (u32, u32),
@@ -1425,6 +1739,7 @@ fn prepare_selection(
             AttentionMask::Causal => ONLINE_CAUSAL_CAPABILITY,
             AttentionMask::CausalLocal { .. } => ONLINE_LOCAL_CAPABILITY,
         },
+        AttentionBackend::HuggingFaceEager => HF_EAGER_CAPABILITY,
         AttentionBackend::Fixed37Materialized => FIXED37_MATERIALIZED_CAPABILITY,
         AttentionBackend::Fixed37TwoPass => FIXED37_TWO_PASS_CAPABILITY,
     };
@@ -1432,28 +1747,106 @@ fn prepare_selection(
         AttentionBackend::MaterializedReference | AttentionBackend::Fixed37Materialized => {
             reference_workspace_bytes(request)?
         }
+        AttentionBackend::HuggingFaceEager => hf_eager_workspace_bytes(request)?,
+        AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => 0,
+    };
+    let score_bytes = match backend {
+        AttentionBackend::MaterializedReference
+        | AttentionBackend::HuggingFaceEager
+        | AttentionBackend::Fixed37Materialized => reference_workspace_bytes(request)?,
         AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => 0,
     };
     let materialized_score_bytes = match backend {
-        AttentionBackend::MaterializedReference | AttentionBackend::Fixed37Materialized => request
-            .batch_size
-            .checked_mul(workspace_bytes)
-            .ok_or_else(|| {
+        AttentionBackend::MaterializedReference
+        | AttentionBackend::HuggingFaceEager
+        | AttentionBackend::Fixed37Materialized => {
+            request.batch_size.checked_mul(score_bytes).ok_or_else(|| {
                 CudaError::out_of_range(
                     "select_prefill_attention",
                     "materialized attention byte count overflows u64",
                 )
-            })?,
+            })?
+        }
         AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => 0,
     };
     let dynamic_shared_memory_bytes = match backend {
-        AttentionBackend::MaterializedReference | AttentionBackend::Online => 0,
+        AttentionBackend::MaterializedReference
+        | AttentionBackend::Online
+        | AttentionBackend::HuggingFaceEager => 0,
         AttentionBackend::Fixed37Materialized => {
             fixed37_reduction_shared_bytes(request.head_size.max(request.sequence_length))?
         }
         AttentionBackend::Fixed37TwoPass => fixed37_two_pass_shared_bytes(request.sequence_length)?,
     };
+    let layout_copy_bytes = if backend == AttentionBackend::HuggingFaceEager {
+        hf_eager_repeated_bytes(request)?
+            .checked_mul(2)
+            .ok_or_else(|| {
+                CudaError::out_of_range(
+                    "select_prefill_attention",
+                    "HF-eager layout-copy byte count overflows u64",
+                )
+            })?
+    } else {
+        0
+    };
+    #[cfg(feature = "cuda")]
+    let hf_eager_plan = if backend == AttentionBackend::HuggingFaceEager {
+        let plan = ffi::HfPrefillAttentionPlanHandle::create(
+            &context.inner.native,
+            request.batch_size,
+            request.sequence_length,
+            request.query_head_count,
+            request.key_value_head_count,
+            request.head_size,
+            request.scale,
+            HF_EAGER_CUBLASLT_WORKSPACE_CAP_BYTES,
+        )?;
+        let info = plan.info()?;
+        validate_hf_eager_reviewed_provenance(HfEagerPlanProvenance::from(&info))?;
+        if info.backend != HF_EAGER_BACKEND_ID
+            || info.deterministic != 1
+            || info.qk_split_k > 1
+            || info.qk_reduction_scheme != 0
+            || info.av_split_k > 1
+            || info.av_reduction_scheme != 0
+            || info.workspace_bytes != workspace_bytes
+            || info.score_bytes != score_bytes
+            || info.repeated_key_value_bytes != hf_eager_repeated_bytes(request)?
+            || info.layout_copy_bytes != layout_copy_bytes
+            || (
+                info.batch_count,
+                info.token_count,
+                info.query_head_count,
+                info.key_value_head_count,
+                info.head_size,
+            ) != (
+                request.batch_size,
+                request.sequence_length,
+                request.query_head_count,
+                request.key_value_head_count,
+                request.head_size,
+            )
+        {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                "select_prefill_attention",
+                format!("native HF-eager metadata violates the prepared contract: {info:?}"),
+            ));
+        }
+        Some(Arc::new(Mutex::new(HfEagerPlanState {
+            plan,
+            poisoned: false,
+        })))
+    } else {
+        None
+    };
     Ok(PreparedPrefillAttention {
+        #[cfg(feature = "cuda")]
+        hf_eager_plan,
         context: Arc::clone(&context.inner),
         request,
         backend,
@@ -1469,7 +1862,7 @@ fn prepare_selection(
             score_materialization: capability.score_materialization,
             materialized_score_bytes,
             workspace_bytes,
-            layout_copy_bytes: 0,
+            layout_copy_bytes,
             reduction_profile,
             dynamic_shared_memory_bytes,
         },
@@ -1580,6 +1973,58 @@ fn require_reference_support(
     Ok(())
 }
 
+fn require_hf_eager_support(
+    request: PrefillAttentionRequest,
+    compute_capability: (u32, u32),
+) -> CudaResult<()> {
+    if compute_capability != (8, 9)
+        || !HF_EAGER_CAPABILITY.supports_compute_capability(compute_capability)
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            format!(
+                "the reviewed HF-eager backend requires compute capability 8.9; got {}.{} with CUDA targets {CUDA_COMPILED_ARCHITECTURES}",
+                compute_capability.0, compute_capability.1
+            ),
+        ));
+    }
+    if request.batch_size != 1 {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "the first exact HF-eager backend supports batch_size=1 only",
+        ));
+    }
+    if request.query_head_count != HF_EAGER_QUERY_HEAD_COUNT
+        || request.key_value_head_count != HF_EAGER_KEY_VALUE_HEAD_COUNT
+        || request.head_size != HF_EAGER_HEAD_SIZE
+        || request.sequence_length > HF_EAGER_MAX_SEQUENCE
+    {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "the reviewed HF-eager backend requires QH=9, KVH=3, D=64, and S<=8192",
+        ));
+    }
+    if !matches!(request.mask, AttentionMask::Causal) {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "HF-eager cuBLASLt attention supports full causal masking only",
+        ));
+    }
+    if request.graph_capture {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "HF-eager attention synchronizes its stream and cannot be graph captured",
+        ));
+    }
+    if request.key_partition_count != 1 {
+        return Err(not_supported(
+            "select_prefill_attention",
+            "HF-eager attention does not support partial-state merge",
+        ));
+    }
+    Ok(())
+}
+
 fn require_fixed37_materialized_support(
     request: PrefillAttentionRequest,
     compute_capability: (u32, u32),
@@ -1666,7 +2111,9 @@ fn validate_execute_params(
     validate_resource(OPERATION, stream, params.output.buffer())?;
 
     match prepared.backend {
-        AttentionBackend::MaterializedReference | AttentionBackend::Fixed37Materialized => {
+        AttentionBackend::MaterializedReference
+        | AttentionBackend::HuggingFaceEager
+        | AttentionBackend::Fixed37Materialized => {
             let workspace = params.workspace.as_ref().ok_or_else(|| {
                 CudaError::invalid_argument(
                     OPERATION,
@@ -1686,6 +2133,21 @@ fn validate_execute_params(
                 prepared.workspace_bytes(),
             )?;
             validate_resource(OPERATION, stream, workspace.buffer())?;
+            if prepared.backend == AttentionBackend::HuggingFaceEager
+                && (params.query.byte_len() != query_bytes
+                    || params.key.byte_len() != key_value_bytes
+                    || params.value.byte_len() != key_value_bytes
+                    || params.output.byte_len() != query_bytes
+                    || workspace.byte_len() != prepared.workspace_bytes())
+            {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    "HF-eager spans must exactly match the prepared byte lengths",
+                ));
+            }
+            if prepared.backend == AttentionBackend::HuggingFaceEager {
+                validate_hf_eager_span_layout(params, workspace)?;
+            }
         }
         AttentionBackend::Online | AttentionBackend::Fixed37TwoPass => {
             if params.workspace.is_some() {
@@ -1697,6 +2159,84 @@ fn validate_execute_params(
         }
     }
     Ok(())
+}
+
+fn validate_hf_eager_span_layout(
+    params: &PrefillAttentionParams<'_>,
+    workspace: &CudaBufferSpanMut<'_>,
+) -> CudaResult<()> {
+    const OPERATION: &str = "prefill_attention";
+    let spans = [
+        (
+            "query",
+            params.query.buffer(),
+            params.query.byte_offset(),
+            params.query.byte_len(),
+        ),
+        (
+            "key",
+            params.key.buffer(),
+            params.key.byte_offset(),
+            params.key.byte_len(),
+        ),
+        (
+            "value",
+            params.value.buffer(),
+            params.value.byte_offset(),
+            params.value.byte_len(),
+        ),
+        (
+            "output",
+            params.output.buffer(),
+            params.output.byte_offset(),
+            params.output.byte_len(),
+        ),
+        (
+            "workspace",
+            workspace.buffer(),
+            workspace.byte_offset(),
+            workspace.byte_len(),
+        ),
+    ];
+    for (name, _, offset, _) in spans {
+        if offset % HF_EAGER_REQUIRED_ALIGNMENT != 0 {
+            return Err(CudaError::invalid_argument(
+                OPERATION,
+                format!(
+                    "HF-eager {name} byte offset {offset} is not {HF_EAGER_REQUIRED_ALIGNMENT}-byte aligned"
+                ),
+            ));
+        }
+    }
+    for left_index in 0..spans.len() {
+        for right_index in left_index + 1..spans.len() {
+            let (left_name, left_buffer, left_offset, left_len) = spans[left_index];
+            let (right_name, right_buffer, right_offset, right_len) = spans[right_index];
+            if ptr::eq(left_buffer, right_buffer)
+                && byte_ranges_overlap(left_offset, left_len, right_offset, right_len)
+            {
+                return Err(CudaError::invalid_argument(
+                    OPERATION,
+                    format!(
+                        "HF-eager {left_name} and {right_name} ranges overlap in one device buffer; read-only Q/K/V aliasing is also forbidden"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+const fn byte_ranges_overlap(
+    left_offset: u64,
+    left_len: u64,
+    right_offset: u64,
+    right_len: u64,
+) -> bool {
+    left_len != 0
+        && right_len != 0
+        && left_offset < right_offset.saturating_add(right_len)
+        && right_offset < left_offset.saturating_add(left_len)
 }
 
 fn validate_resource(
@@ -1747,6 +2287,40 @@ fn reference_workspace_bytes(request: PrefillAttentionRequest) -> CudaResult<u64
             BF16_BYTES,
         ],
     )
+}
+
+fn hf_eager_repeated_bytes(request: PrefillAttentionRequest) -> CudaResult<u64> {
+    checked_product(
+        "select_prefill_attention",
+        &[
+            request.query_head_count,
+            request.sequence_length,
+            request.head_size,
+            BF16_BYTES,
+        ],
+    )
+}
+
+fn hf_eager_workspace_bytes(request: PrefillAttentionRequest) -> CudaResult<u64> {
+    let score_bytes = reference_workspace_bytes(request)?;
+    let aligned_scores = score_bytes
+        .checked_add(HF_EAGER_REQUIRED_ALIGNMENT - 1)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                "select_prefill_attention",
+                "HF-eager workspace alignment overflows u64",
+            )
+        })?
+        / HF_EAGER_REQUIRED_ALIGNMENT
+        * HF_EAGER_REQUIRED_ALIGNMENT;
+    aligned_scores
+        .checked_add(hf_eager_repeated_bytes(request)?)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                "select_prefill_attention",
+                "HF-eager workspace byte length overflows u64",
+            )
+        })
 }
 
 fn checked_product(operation: &'static str, factors: &[u64]) -> CudaResult<u64> {
@@ -1907,6 +2481,38 @@ mod tests {
         }
     }
 
+    fn reviewed_hf_provenance(token_count: u64) -> HfEagerPlanProvenance {
+        let algorithm = reviewed_algorithm(token_count).expect("reviewed token count");
+        HfEagerPlanProvenance {
+            token_count,
+            compute_capability: (8, 9),
+            runtime_version: REVIEWED_RUNTIME_VERSION,
+            cublaslt_version: REVIEWED_CUBLASLT_VERSION,
+            qk: HfEagerMatmulProvenance {
+                algorithm_id: algorithm.qk_algorithm_id,
+                tile_id: algorithm.qk_tile_id,
+                stages_id: algorithm.qk_stages_id,
+                split_k: 1,
+                reduction_scheme: 0,
+                cta_swizzling: algorithm.qk_cta_swizzling,
+                custom_option: algorithm.qk_custom_option,
+                workspace_bytes: 0,
+                numerical_implementation_flags: algorithm.qk_numerical_implementation_flags,
+            },
+            av: HfEagerMatmulProvenance {
+                algorithm_id: algorithm.av_algorithm_id,
+                tile_id: algorithm.av_tile_id,
+                stages_id: algorithm.av_stages_id,
+                split_k: 1,
+                reduction_scheme: 0,
+                cta_swizzling: algorithm.av_cta_swizzling,
+                custom_option: algorithm.av_custom_option,
+                workspace_bytes: 0,
+                numerical_implementation_flags: algorithm.av_numerical_implementation_flags,
+            },
+        }
+    }
+
     #[test]
     fn compiled_architecture_compatibility_distinguishes_real_and_virtual_code() {
         assert!(architecture_set_supports("80-real", (8, 0)));
@@ -1922,6 +2528,96 @@ mod tests {
             ONLINE_CAUSAL_CAPABILITY.minimum_compute_capability(),
             MINIMUM_HARDWARE_COMPUTE_CAPABILITY
         ));
+    }
+
+    #[test]
+    fn hf_eager_reviewed_provenance_covers_every_sequence_length() {
+        for token_count in 1..=HF_EAGER_MAX_SEQUENCE {
+            validate_hf_eager_reviewed_provenance(reviewed_hf_provenance(token_count))
+                .unwrap_or_else(|error| panic!("S={token_count}: {error}"));
+        }
+    }
+
+    #[test]
+    fn hf_eager_reviewed_provenance_rejects_every_mutable_component() {
+        let baseline = reviewed_hf_provenance(HF_EAGER_MAX_SEQUENCE);
+        let mut rejected = Vec::new();
+
+        let mut mutation = baseline;
+        mutation.token_count = 0;
+        rejected.push(("token_count", mutation));
+        let mut mutation = baseline;
+        mutation.compute_capability = (9, 0);
+        rejected.push(("compute_capability", mutation));
+        let mut mutation = baseline;
+        mutation.runtime_version += 1;
+        rejected.push(("runtime_version", mutation));
+        let mut mutation = baseline;
+        mutation.cublaslt_version += 1;
+        rejected.push(("cublaslt_version", mutation));
+
+        let mut mutation = baseline;
+        mutation.qk.algorithm_id += 1;
+        rejected.push(("qk_algorithm_id", mutation));
+        let mut mutation = baseline;
+        mutation.qk.tile_id += 1;
+        rejected.push(("qk_tile_id", mutation));
+        let mut mutation = baseline;
+        mutation.qk.stages_id += 1;
+        rejected.push(("qk_stages_id", mutation));
+        let mut mutation = baseline;
+        mutation.qk.split_k = 2;
+        rejected.push(("qk_split_k", mutation));
+        let mut mutation = baseline;
+        mutation.qk.reduction_scheme = 1;
+        rejected.push(("qk_reduction_scheme", mutation));
+        let mut mutation = baseline;
+        mutation.qk.cta_swizzling ^= 1;
+        rejected.push(("qk_cta_swizzling", mutation));
+        let mut mutation = baseline;
+        mutation.qk.custom_option += 1;
+        rejected.push(("qk_custom_option", mutation));
+        let mut mutation = baseline;
+        mutation.qk.workspace_bytes = 1;
+        rejected.push(("qk_workspace_bytes", mutation));
+        let mut mutation = baseline;
+        mutation.qk.numerical_implementation_flags ^= 1;
+        rejected.push(("qk_numerical_implementation_flags", mutation));
+
+        let mut mutation = baseline;
+        mutation.av.algorithm_id += 1;
+        rejected.push(("av_algorithm_id", mutation));
+        let mut mutation = baseline;
+        mutation.av.tile_id += 1;
+        rejected.push(("av_tile_id", mutation));
+        let mut mutation = baseline;
+        mutation.av.stages_id += 1;
+        rejected.push(("av_stages_id", mutation));
+        let mut mutation = baseline;
+        mutation.av.split_k = 2;
+        rejected.push(("av_split_k", mutation));
+        let mut mutation = baseline;
+        mutation.av.reduction_scheme = 1;
+        rejected.push(("av_reduction_scheme", mutation));
+        let mut mutation = baseline;
+        mutation.av.cta_swizzling ^= 1;
+        rejected.push(("av_cta_swizzling", mutation));
+        let mut mutation = baseline;
+        mutation.av.custom_option += 1;
+        rejected.push(("av_custom_option", mutation));
+        let mut mutation = baseline;
+        mutation.av.workspace_bytes = 1;
+        rejected.push(("av_workspace_bytes", mutation));
+        let mut mutation = baseline;
+        mutation.av.numerical_implementation_flags ^= 1;
+        rejected.push(("av_numerical_implementation_flags", mutation));
+
+        for (component, provenance) in rejected {
+            let error = validate_hf_eager_reviewed_provenance(provenance)
+                .expect_err("mutated HF provenance must fail closed");
+            assert_eq!(error.kind(), CudaErrorKind::NotSupported, "{component}");
+            assert_eq!(error.stage(), CudaErrorStage::Prepare, "{component}");
+        }
     }
 
     #[test]
@@ -2383,6 +3079,43 @@ mod tests {
             .expect_err("a fixed37 reduction axis over the limit must fail at selection");
             assert_eq!(error.kind(), CudaErrorKind::NotSupported);
         }
+    }
+
+    #[test]
+    #[cfg(feature = "cuda")]
+    #[ignore = "requires the reviewed remote RTX 4090 CUDA environment"]
+    fn hf_eager_canonical_plan_provenance_sweep() -> CudaResult<()> {
+        let runtime = crate::CudaRuntime::initialize()?;
+        let device = runtime.device(0)?;
+        let context = device.create_context()?;
+        assert_eq!(context.compute_capability(), (8, 9));
+
+        for token_count in 1..=HF_EAGER_MAX_SEQUENCE {
+            let request = PrefillAttentionRequest::new(
+                1,
+                token_count,
+                HF_EAGER_QUERY_HEAD_COUNT,
+                HF_EAGER_KEY_VALUE_HEAD_COUNT,
+                HF_EAGER_HEAD_SIZE,
+                0.125,
+                AttentionMask::Causal,
+            );
+            let prepared = PreparedPrefillAttention::select(
+                &context,
+                request,
+                AttentionPreference::HuggingFaceEager,
+                AttentionBackendAvailability::linked(),
+            )?;
+            assert_eq!(prepared.backend(), AttentionBackend::HuggingFaceEager);
+            prepared.close()?;
+        }
+
+        println!(
+            "hf-eager-plan-provenance-sweep token_count_min=1 token_count_max={} native_and_rust=passed",
+            HF_EAGER_MAX_SEQUENCE
+        );
+        context.synchronize()?;
+        context.close()
     }
 
     #[test]

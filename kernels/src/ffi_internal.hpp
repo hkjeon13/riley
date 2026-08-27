@@ -208,6 +208,27 @@ static_assert(sizeof(RustInferCudaAvGqaParams) == 216,
               "AV GQA params ABI size changed");
 static_assert(sizeof(RustInferCudaPrefillAttentionParams) == 288,
               "prefill attention params ABI size changed");
+static_assert(sizeof(RustInferCudaHfPrefillAttentionConfig) == 96,
+              "HF prefill attention config ABI size changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionConfig, batch_count) == 8,
+              "HF prefill attention config dimension layout changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionConfig,
+                       max_cublas_workspace_bytes) == 56,
+              "HF prefill attention config workspace layout changed");
+static_assert(sizeof(RustInferCudaHfPrefillAttentionPlanInfo) == 216,
+              "HF prefill attention plan info ABI size changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionPlanInfo,
+                       qk_workspace_bytes) == 40,
+              "HF prefill attention plan QK workspace layout changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionPlanInfo,
+                       av_workspace_bytes) == 88,
+              "HF prefill attention plan AV workspace layout changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionPlanInfo,
+                       workspace_bytes) == 128,
+              "HF prefill attention plan memory layout changed");
+static_assert(offsetof(RustInferCudaHfPrefillAttentionPlanInfo,
+                       batch_count) == 160,
+              "HF prefill attention plan dimension layout changed");
 static_assert(sizeof(RustInferCudaEmbeddingErrorReport) == 32,
               "RustInferCudaEmbeddingErrorReport ABI size changed");
 static_assert(offsetof(RustInferCudaEmbeddingErrorReport, token_position) == 8,

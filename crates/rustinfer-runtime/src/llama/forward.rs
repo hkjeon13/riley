@@ -20,7 +20,10 @@ use rustinfer_cuda::{
 use rustinfer_model::LoadedModel;
 
 use super::decode::PrefillKvCacheSink;
-use super::gemm_policy::{LlamaGemmReductionPolicies, canonical_gemm_reduction_policies};
+use super::gemm_policy::{
+    LlamaGemmReductionPolicies, canonical_gemm_reduction_policies,
+    canonical_prefill_attention_preference,
+};
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError,
     LlamaReductionProfile, PhysicalWeightId,
@@ -30,7 +33,7 @@ use crate::cuda_weights::{CudaUploadedWeights, CudaWeightUploadError};
 const DEFAULT_UPLOAD_STAGING_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_IO_STAGING_BYTES: u64 = 4 * 1024 * 1024;
 const DEFAULT_GEMM_WORKSPACE_CAP_BYTES: u64 = 16 * 1024 * 1024;
-const DEFAULT_ATTENTION_BUDGET_BYTES: u64 = 512 * 1024 * 1024;
+const DEFAULT_ATTENTION_BUDGET_BYTES: u64 = 1_342_177_280;
 const BF16_BYTES: u64 = 2;
 // Token IDs + 5 hidden + 3 key/value + 4 intermediate + 2 RoPE tables +
 // logits + embedding-error scratch. Attention and GEMM workspaces are optional.
@@ -294,7 +297,7 @@ impl PreparedLlamaForward {
             plan: _,
             weights,
             gemms,
-            attention: _,
+            attention,
             reduction_profile: _,
             gemm_reduction_policies: _,
             buffers,
@@ -350,6 +353,11 @@ impl PreparedLlamaForward {
             &mut first,
             LlamaForwardResource::LmHeadGemm,
             lm_head.close(),
+        );
+        record_close(
+            &mut first,
+            LlamaForwardResource::Attention,
+            attention.close(),
         );
         for (resource, result) in [
             (LlamaForwardResource::TokenIds, token_ids.close()),
@@ -956,6 +964,15 @@ impl PreparedLlamaForwardConfig {
         self
     }
 
+    /// Requires the reviewed Hugging Face eager-compatible attention backend.
+    /// Unsupported model, device, or sequence geometry fails during cold
+    /// preparation instead of falling back.
+    #[must_use]
+    pub const fn with_hugging_face_eager_attention(mut self) -> Self {
+        self.attention_preference = AttentionPreference::HuggingFaceEager;
+        self
+    }
+
     /// Selects one whole-runtime reduction contract for GEMM, `RMSNorm`, and
     /// prefill attention. Preparation never falls back across profiles.
     #[must_use]
@@ -1165,6 +1182,7 @@ impl PreparedLlamaForward {
     /// Returns for an invalid plan/configuration, failed weight upload, attention
     /// budget violation, host reservation, GEMM preparation, CUDA allocation, or
     /// RoPE-table upload failure.
+    #[allow(clippy::too_many_lines)]
     pub fn prepare(
         model: &LoadedModel,
         context: &CudaContext,
@@ -1194,10 +1212,17 @@ impl PreparedLlamaForward {
         .map_err(|source| LlamaForwardError::Weight { site: None, source })?;
         let plan = LlamaExecutionPlan::prepare(model.spec(), &weights, sequence_length)?;
         let workspace = plan.workspace_spec();
+        let attention_preference = canonical_prefill_attention_preference(
+            model.config(),
+            model.spec(),
+            sequence_length,
+            config.attention_preference,
+            config.reduction_profile,
+        );
         let attention = prepare_attention(
             context,
             &plan,
-            config.attention_preference,
+            attention_preference,
             config.reduction_profile,
         )?;
         let attention_workspace_bytes = attention.workspace_bytes();
@@ -1311,7 +1336,7 @@ impl PreparedLlamaForward {
     /// arithmetic/reservation fails. Online attention has no probability
     /// matrix to capture, so callers must prepare a reference-attention owner.
     pub fn prepare_trace(&self) -> LlamaForwardResult<PreparedLlamaTrace> {
-        if self.attention.backend() != AttentionBackend::MaterializedReference {
+        if !attention_probabilities_available(self.attention.backend()) {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
         PreparedLlamaTrace::prepare(&self.plan, &LlamaTracePoint::ALL)
@@ -1335,7 +1360,7 @@ impl PreparedLlamaForward {
         points: &[LlamaTracePoint],
     ) -> LlamaForwardResult<PreparedLlamaTrace> {
         if points.contains(&LlamaTracePoint::Layer0AttentionProbabilities)
-            && self.attention.backend() != AttentionBackend::MaterializedReference
+            && !attention_probabilities_available(self.attention.backend())
         {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
@@ -1514,7 +1539,7 @@ impl PreparedLlamaForward {
             return Err(LlamaForwardError::TokensNotUploaded);
         }
         if trace.requests(LlamaTracePoint::Layer0AttentionProbabilities)
-            && self.attention.backend() != AttentionBackend::MaterializedReference
+            && !attention_probabilities_available(self.attention.backend())
         {
             return Err(LlamaForwardError::TraceRequiresReferenceAttention);
         }
@@ -2379,6 +2404,13 @@ impl PreparedLlamaForward {
         Ok(())
     }
     // HOT_EXECUTE_END
+}
+
+const fn attention_probabilities_available(backend: AttentionBackend) -> bool {
+    matches!(
+        backend,
+        AttentionBackend::MaterializedReference | AttentionBackend::HuggingFaceEager
+    )
 }
 
 #[allow(clippy::cast_precision_loss)]

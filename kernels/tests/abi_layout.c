@@ -164,6 +164,37 @@ _Static_assert(offsetof(RustInferCudaPrefillAttentionParams,
                "prefill attention local-window offset changed");
 _Static_assert(offsetof(RustInferCudaPrefillAttentionParams, reserved) == 256,
                "prefill attention reserved tail changed");
+_Static_assert(RUSTINFER_CUDA_ATTENTION_BACKEND_HF_CUBLASLT == 3,
+               "HF prefill attention backend discriminant changed");
+_Static_assert(sizeof(RustInferCudaHfPrefillAttentionConfig) == 96,
+               "HF prefill attention config ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionConfig, batch_count) == 8,
+    "HF prefill attention config batch offset changed");
+_Static_assert(offsetof(RustInferCudaHfPrefillAttentionConfig,
+                        max_cublas_workspace_bytes) == 56,
+               "HF prefill attention config workspace cap offset changed");
+_Static_assert(offsetof(RustInferCudaHfPrefillAttentionConfig, reserved) == 64,
+               "HF prefill attention config reserved tail changed");
+_Static_assert(sizeof(RustInferCudaHfPrefillAttentionPlanInfo) == 216,
+               "HF prefill attention plan-info ABI size changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionPlanInfo, qk_workspace_bytes) ==
+        40,
+    "HF prefill attention plan-info QK workspace offset changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionPlanInfo, av_workspace_bytes) ==
+        88,
+    "HF prefill attention plan-info AV workspace offset changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionPlanInfo, workspace_bytes) == 128,
+    "HF prefill attention plan-info workspace offset changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionPlanInfo, batch_count) == 160,
+    "HF prefill attention plan-info batch offset changed");
+_Static_assert(
+    offsetof(RustInferCudaHfPrefillAttentionPlanInfo, reserved) == 200,
+    "HF prefill attention plan-info reserved tail changed");
 _Static_assert(sizeof(RustInferCudaKvCacheWriteParams) == 272,
                "KV cache write params ABI size changed");
 _Static_assert(offsetof(RustInferCudaKvCacheWriteParams, key_source) == 8,
@@ -493,6 +524,23 @@ static RustInferCudaStatus (*const fixed37_prefill_attention_symbol)(
     const RustInferCudaPrefillAttentionParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) =
     rustinfer_cuda_fixed37_prefill_attention_execute;
+static RustInferCudaStatus (*const hf_prefill_attention_plan_create_symbol)(
+    RustInferCudaContext*, const RustInferCudaHfPrefillAttentionConfig*,
+    RustInferCudaHfPrefillAttentionPlan**, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hf_prefill_attention_plan_create;
+static RustInferCudaStatus (*const hf_prefill_attention_plan_info_symbol)(
+    RustInferCudaHfPrefillAttentionPlan*,
+    RustInferCudaHfPrefillAttentionPlanInfo*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hf_prefill_attention_plan_info;
+static RustInferCudaStatus (*const hf_prefill_attention_plan_execute_symbol)(
+    RustInferCudaHfPrefillAttentionPlan*, const RustInferCudaBufferSpan*,
+    const RustInferCudaBufferSpan*, const RustInferCudaBufferSpan*,
+    const RustInferCudaBufferSpan*, const RustInferCudaBufferSpan*,
+    RustInferCudaStream*, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hf_prefill_attention_plan_execute;
+static RustInferCudaStatus (*const hf_prefill_attention_plan_close_symbol)(
+    RustInferCudaHfPrefillAttentionPlan**, RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hf_prefill_attention_plan_close;
 static RustInferCudaStatus (*const kv_cache_write_symbol)(
     const RustInferCudaKvCacheWriteParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_kv_cache_write_execute;
@@ -601,6 +649,10 @@ const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&av_gqa_symbol, (const void*)&fixed37_av_gqa_symbol,
     (const void*)&prefill_attention_symbol,
     (const void*)&fixed37_prefill_attention_symbol,
+    (const void*)&hf_prefill_attention_plan_create_symbol,
+    (const void*)&hf_prefill_attention_plan_info_symbol,
+    (const void*)&hf_prefill_attention_plan_execute_symbol,
+    (const void*)&hf_prefill_attention_plan_close_symbol,
     (const void*)&kv_cache_write_symbol,
     (const void*)&decode_attention_reference_symbol,
     (const void*)&fixed37_decode_attention_reference_symbol,
