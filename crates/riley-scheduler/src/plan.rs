@@ -488,6 +488,7 @@ impl IterationPlan {
                 reason: "output slots must be dense and zero-based",
             });
         }
+        output_slots.sort_unstable_by_key(|slot| slot.get());
 
         Ok(Self {
             schema_version,
@@ -536,7 +537,7 @@ impl IterationPlan {
         &self.block_tables
     }
 
-    /// Stable slots for outputs expected from this iteration.
+    /// Dense zero-based slots in canonical ascending sampling order.
     #[must_use]
     pub fn output_slots(&self) -> &[OutputSlot] {
         &self.output_slots
@@ -966,6 +967,52 @@ mod tests {
                 field: "output_slots",
                 reason: "output slots must be dense and zero-based",
             }
+        );
+    }
+
+    #[test]
+    fn mixed_stage_output_slots_are_canonicalized_for_sampling() {
+        let prefill_with_output = WorkItem::new(
+            RequestId::new(5).unwrap(),
+            WorkKind::Prefill,
+            vec![5],
+            1,
+            0,
+            Some(OutputSlot::new(4)),
+        )
+        .unwrap();
+        let plan = IterationPlan::new(
+            IterationId::new(1).unwrap(),
+            vec![prefill_with_output],
+            vec![
+                decode(1, 1, Some(0)),
+                decode(2, 2, Some(1)),
+                decode(3, 3, Some(2)),
+                decode(4, 4, Some(3)),
+            ],
+            vec![
+                table(5, 5),
+                table(1, 1),
+                table(2, 2),
+                table(3, 3),
+                table(4, 4),
+            ],
+        )
+        .unwrap();
+
+        assert_eq!(
+            plan.output_slots(),
+            &[
+                OutputSlot::new(0),
+                OutputSlot::new(1),
+                OutputSlot::new(2),
+                OutputSlot::new(3),
+                OutputSlot::new(4),
+            ]
+        );
+        assert_eq!(
+            plan.prefill_items()[0].output_slot(),
+            Some(OutputSlot::new(4))
         );
     }
 }
