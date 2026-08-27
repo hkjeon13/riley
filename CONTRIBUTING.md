@@ -1,6 +1,6 @@
-# rustinfer 기여 계약
+# Riley 기여 계약
 
-`rustinfer`는 [단계별 실행 계획](deploy/README.md)을 번호 순서대로 구현한다. 각 PR의 선행 조건과 완료 기준은 선택적인 참고사항이 아니라 merge gate다. 공통 계약의 원문은 [PR 00](deploy/00-pr-contract.md)에 있다.
+`riley`는 [단계별 실행 계획](deploy/README.md)을 번호 순서대로 구현한다. 각 PR의 선행 조건과 완료 기준은 선택적인 참고사항이 아니라 merge gate다. 공통 계약의 원문은 [PR 00](deploy/00-pr-contract.md)에 있다.
 
 ## PR 범위
 

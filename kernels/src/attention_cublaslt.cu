@@ -28,21 +28,21 @@ constexpr uint64_t kReviewedKeyValueHeads = 3;
 constexpr uint64_t kReviewedHeadSize = 64;
 constexpr uint64_t kReviewedMaximumSequence = 8192;
 
-using rustinfer_cuda_internal::CurrentContext;
-using rustinfer_cuda_internal::clear_error;
-using rustinfer_cuda_internal::command_batch_is_active;
-using rustinfer_cuda_internal::command_batch_is_owned_by_current_thread;
-using rustinfer_cuda_internal::command_batch_register_use;
-using rustinfer_cuda_internal::driver_error;
-using rustinfer_cuda_internal::internal_error;
-using rustinfer_cuda_internal::release_child;
-using rustinfer_cuda_internal::release_exclusive_use;
-using rustinfer_cuda_internal::retain_child;
-using rustinfer_cuda_internal::runtime_error;
-using rustinfer_cuda_internal::same_context;
-using rustinfer_cuda_internal::set_error;
-using rustinfer_cuda_internal::try_acquire_exclusive_use;
-using rustinfer_cuda_internal::validation_error;
+using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::clear_error;
+using riley_cuda_internal::command_batch_is_active;
+using riley_cuda_internal::command_batch_is_owned_by_current_thread;
+using riley_cuda_internal::command_batch_register_use;
+using riley_cuda_internal::driver_error;
+using riley_cuda_internal::internal_error;
+using riley_cuda_internal::release_child;
+using riley_cuda_internal::release_exclusive_use;
+using riley_cuda_internal::retain_child;
+using riley_cuda_internal::runtime_error;
+using riley_cuda_internal::same_context;
+using riley_cuda_internal::set_error;
+using riley_cuda_internal::try_acquire_exclusive_use;
+using riley_cuda_internal::validation_error;
 
 struct MatmulState {
   cublasLtMatmulDesc_t operation;
@@ -78,7 +78,7 @@ struct ByteCounts {
 };
 
 struct ResolvedSpan {
-  RustInferCudaDeviceBuffer* buffer;
+  RileyCudaDeviceBuffer* buffer;
   uint8_t* data;
   uint64_t byte_offset;
   uint64_t byte_len;
@@ -126,30 +126,30 @@ bool reserved_is_zero(const uint64_t* reserved, size_t count) noexcept {
   return true;
 }
 
-RustInferCudaStatus cublaslt_error(cublasStatus_t result,
-                                   RustInferCudaErrorInfo* error,
+RileyCudaStatus cublaslt_error(cublasStatus_t result,
+                                   RileyCudaErrorInfo* error,
                                    uint32_t stage,
                                    const char* operation) noexcept {
   if (result == CUBLAS_STATUS_SUCCESS) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_CUBLASLT_ERROR;
   if (result == CUBLAS_STATUS_INVALID_VALUE) {
-    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+    status = RILEY_CUDA_STATUS_INVALID_ARGUMENT;
   } else if (result == CUBLAS_STATUS_ALLOC_FAILED) {
-    status = RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY;
+    status = RILEY_CUDA_STATUS_OUT_OF_MEMORY;
   } else if (result == CUBLAS_STATUS_ARCH_MISMATCH ||
              result == CUBLAS_STATUS_NOT_SUPPORTED) {
-    status = RUSTINFER_CUDA_STATUS_NOT_SUPPORTED;
+    status = RILEY_CUDA_STATUS_NOT_SUPPORTED;
   }
   return set_error(error, status, static_cast<int32_t>(result),
-                   RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT, stage, operation,
+                   RILEY_CUDA_ERROR_DOMAIN_CUBLASLT, stage, operation,
                    "cuBLASLt attention operation failed");
 }
 
-RustInferCudaStatus compute_byte_counts(
-    const RustInferCudaHfPrefillAttentionConfig& config, ByteCounts* output,
-    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+RileyCudaStatus compute_byte_counts(
+    const RileyCudaHfPrefillAttentionConfig& config, ByteCounts* output,
+    RileyCudaErrorInfo* error, const char* operation) noexcept {
   const uint64_t query_factors[] = {
       config.batch_count, config.token_count, config.query_head_count,
       config.head_size, kBfloat16Bytes};
@@ -167,56 +167,56 @@ RustInferCudaStatus compute_byte_counts(
       !checked_product(score_factors, 4, &output->score) ||
       !checked_product(repeated_factors, 4,
                        &output->repeated_key_value)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "HF attention byte-length arithmetic overflow");
   }
   uint64_t aligned = 0;
   if (!checked_add(output->score, kRequiredAlignment - 1, &aligned)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "HF attention workspace alignment overflow");
   }
   output->repeated_offset =
       (aligned / kRequiredAlignment) * kRequiredAlignment;
   if (!checked_add(output->repeated_offset, output->repeated_key_value,
                    &output->workspace)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "HF attention workspace byte length overflows");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus validate_config(
-    const RustInferCudaHfPrefillAttentionConfig* config, ByteCounts* bytes,
-    RustInferCudaErrorInfo* error) noexcept {
+RileyCudaStatus validate_config(
+    const RileyCudaHfPrefillAttentionConfig* config, ByteCounts* bytes,
+    RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "prepare HF cuBLASLt prefill attention";
   if (config == nullptr || bytes == nullptr ||
       config->struct_size < sizeof(*config)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "config is null or has an incompatible struct_size");
   }
   if (config->reserved0 != 0 || !reserved_is_zero(config->reserved, 4)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "config reserved fields must be zero");
   }
   if (config->batch_count != 1) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "the exact HF backend currently supports batch_count=1");
   }
   if (config->token_count == 0 || config->query_head_count == 0 ||
       config->key_value_head_count == 0 || config->head_size == 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "all attention dimensions must be non-zero");
   }
   if (config->query_head_count % config->key_value_head_count != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "key_value_head_count must divide query_head_count");
   }
   if (config->query_head_count != kReviewedQueryHeads ||
@@ -224,8 +224,8 @@ RustInferCudaStatus validate_config(
       config->head_size != kReviewedHeadSize ||
       config->token_count > kReviewedMaximumSequence) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
         "the reviewed HF backend requires QH=9, KVH=3, D=64, and S<=8192");
   }
   if (config->query_head_count >
@@ -234,25 +234,25 @@ RustInferCudaStatus validate_config(
           static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) ||
       config->head_size >
           static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "attention dimensions exceed cuBLASLt limits");
   }
   if (!std::isfinite(config->scale) || config->scale <= 0.0F) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "scale must be finite and greater than zero");
   }
   if (config->deterministic !=
-      RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+      RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "deterministic execution must be required");
   }
   if (config->max_cublas_workspace_bytes >
       static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "cuBLASLt workspace cap exceeds size_t");
   }
   return compute_byte_counts(*config, bytes, error, kOperation);
@@ -307,35 +307,35 @@ bool algorithm_has_supported_alignment(
   return true;
 }
 
-RustInferCudaStatus set_layout_attribute(
+RileyCudaStatus set_layout_attribute(
     cublasLtMatrixLayout_t layout, cublasLtMatrixLayoutAttribute_t attribute,
-    const void* value, size_t size, RustInferCudaErrorInfo* error) noexcept {
+    const void* value, size_t size, RileyCudaErrorInfo* error) noexcept {
   return cublaslt_error(
       cublasLtMatrixLayoutSetAttribute(layout, attribute, value, size), error,
-      RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare HF cuBLASLt prefill attention");
 }
 
-RustInferCudaStatus prepare_layout(
+RileyCudaStatus prepare_layout(
     cublasLtMatrixLayout_t* layout, uint64_t rows, uint64_t columns,
     int64_t leading_dimension, int32_t batch_count, int64_t batch_stride,
-    RustInferCudaErrorInfo* error) noexcept {
-  RustInferCudaStatus status = cublaslt_error(
+    RileyCudaErrorInfo* error) noexcept {
+  RileyCudaStatus status = cublaslt_error(
       cublasLtMatrixLayoutCreate(layout, CUDA_R_16BF, rows, columns,
                                  leading_dimension),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare HF cuBLASLt prefill attention");
   const cublasLtOrder_t order = CUBLASLT_ORDER_COL;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = set_layout_attribute(*layout, CUBLASLT_MATRIX_LAYOUT_ORDER,
                                   &order, sizeof(order), error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = set_layout_attribute(*layout,
                                   CUBLASLT_MATRIX_LAYOUT_BATCH_COUNT,
                                   &batch_count, sizeof(batch_count), error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = set_layout_attribute(*layout,
                                   CUBLASLT_MATRIX_LAYOUT_STRIDED_BATCH_OFFSET,
                                   &batch_stride, sizeof(batch_stride), error);
@@ -343,39 +343,39 @@ RustInferCudaStatus prepare_layout(
   return status;
 }
 
-RustInferCudaStatus select_first_exact_algorithm(
+RileyCudaStatus select_first_exact_algorithm(
     cublasLtHandle_t handle, MatmulState* matmul,
     SelectedAlgorithmProvenance* provenance,
-    RustInferCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error) noexcept {
   if (provenance == nullptr) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare HF cuBLASLt prefill attention",
                           "algorithm provenance output is null");
   }
   cublasLtMatmulHeuristicResult_t candidates[kHeuristicResults]{};
   int returned = 0;
-  RustInferCudaStatus status = cublaslt_error(
+  RileyCudaStatus status = cublaslt_error(
       cublasLtMatmulAlgoGetHeuristic(
           handle, matmul->operation, matmul->a_layout, matmul->b_layout,
           matmul->c_layout, matmul->c_layout, matmul->preference,
           kHeuristicResults, candidates, &returned),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare HF cuBLASLt prefill attention");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   if (returned <= 0 || candidates[0].state != CUBLAS_STATUS_SUCCESS) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT,
-                     RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
                      "prepare HF cuBLASLt prefill attention",
                      "the first cuBLASLt heuristic is unavailable");
   }
   matmul->algorithm = candidates[0].algo;
   if (!algorithm_has_supported_alignment(&matmul->algorithm)) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT,
-                     RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
                      "prepare HF cuBLASLt prefill attention",
                      "the first heuristic violates the 256-byte pointer alignment contract");
   }
@@ -385,9 +385,9 @@ RustInferCudaStatus select_first_exact_algorithm(
           matmul->c_layout, matmul->c_layout, &matmul->algorithm,
           &checked) != CUBLAS_STATUS_SUCCESS ||
       checked.state != CUBLAS_STATUS_SUCCESS) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT,
-                     RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
                      "prepare HF cuBLASLt prefill attention",
                      "the first cuBLASLt heuristic failed algoCheck");
   }
@@ -415,7 +415,7 @@ RustInferCudaStatus select_first_exact_algorithm(
       !algorithm_capability_value(
           &matmul->algorithm, CUBLASLT_ALGO_CAP_NUMERICAL_IMPL_FLAGS,
           &provenance->numerical_implementation_flags)) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare HF cuBLASLt prefill attention",
                           "cuBLASLt algorithm metadata query failed");
   }
@@ -425,22 +425,22 @@ RustInferCudaStatus select_first_exact_algorithm(
       provenance->split_k > 1 ||
       provenance->reduction_scheme !=
           static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_NONE)) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT,
-                     RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return set_error(error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+                     RILEY_CUDA_ERROR_STAGE_PREPARE,
                      "prepare HF cuBLASLt prefill attention",
                      "the first heuristic violates the zero-workspace no-split contract");
   }
   matmul->algorithm_ready = true;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 }  // namespace
 
-struct RustInferCudaHfPrefillAttentionPlan {
-  RustInferCudaHfPrefillAttentionPlan(
-      RustInferCudaContext* context,
-      const RustInferCudaHfPrefillAttentionConfig& plan_config,
+struct RileyCudaHfPrefillAttentionPlan {
+  RileyCudaHfPrefillAttentionPlan(
+      RileyCudaContext* context,
+      const RileyCudaHfPrefillAttentionConfig& plan_config,
       const ByteCounts& plan_bytes) noexcept
       : owner(context),
         config(plan_config),
@@ -453,9 +453,9 @@ struct RustInferCudaHfPrefillAttentionPlan {
     info.struct_size = sizeof(info);
   }
 
-  RustInferCudaContext* owner;
-  RustInferCudaHfPrefillAttentionConfig config;
-  RustInferCudaHfPrefillAttentionPlanInfo info;
+  RileyCudaContext* owner;
+  RileyCudaHfPrefillAttentionConfig config;
+  RileyCudaHfPrefillAttentionPlanInfo info;
   cublasLtHandle_t handle;
   MatmulState qk;
   MatmulState av;
@@ -483,7 +483,7 @@ const ReviewedAttentionAlgorithm* reviewed_algorithm_for_token_count(
 }
 
 bool reviewed_algorithms_match(
-    const RustInferCudaHfPrefillAttentionPlanInfo& actual,
+    const RileyCudaHfPrefillAttentionPlanInfo& actual,
     const ReviewedAttentionAlgorithm& expected) noexcept {
   return actual.qk_algorithm_id == expected.qk_algorithm_id &&
          actual.qk_tile_id == expected.qk_tile_id &&
@@ -509,9 +509,9 @@ bool reviewed_algorithms_match(
              expected.av_numerical_implementation_flags;
 }
 
-RustInferCudaStatus validate_reviewed_plan_provenance(
-    const RustInferCudaHfPrefillAttentionPlan* plan,
-    RustInferCudaErrorInfo* error) noexcept {
+RileyCudaStatus validate_reviewed_plan_provenance(
+    const RileyCudaHfPrefillAttentionPlan* plan,
+    RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation =
       "prepare HF cuBLASLt prefill attention";
   if (plan->info.compute_capability_major != 8 ||
@@ -519,8 +519,8 @@ RustInferCudaStatus validate_reviewed_plan_provenance(
       plan->info.runtime_version != kReviewedRuntimeVersion ||
       plan->info.cublaslt_version != kReviewedCublasLtVersion) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_PREPARE, kOperation,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_PREPARE, kOperation,
         "CUDA environment is outside the reviewed cc89/runtime-12080/cuBLASLt-120804 contract");
   }
   const ReviewedAttentionAlgorithm* expected =
@@ -528,89 +528,89 @@ RustInferCudaStatus validate_reviewed_plan_provenance(
   if (expected == nullptr ||
       !reviewed_algorithms_match(plan->info, *expected)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_PREPARE, kOperation,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_PREPARE, kOperation,
         "the first QK/AV heuristics are outside the reviewed exact algorithm class");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus prepare_operation(
-    RustInferCudaHfPrefillAttentionPlan* plan, MatmulState* matmul,
-    bool qk, RustInferCudaErrorInfo* error) noexcept {
-  RustInferCudaStatus status = cublaslt_error(
+RileyCudaStatus prepare_operation(
+    RileyCudaHfPrefillAttentionPlan* plan, MatmulState* matmul,
+    bool qk, RileyCudaErrorInfo* error) noexcept {
+  RileyCudaStatus status = cublaslt_error(
       cublasLtMatmulDescCreate(&matmul->operation, CUBLAS_COMPUTE_32F,
                                CUDA_R_32F),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare HF cuBLASLt prefill attention");
   const cublasOperation_t transpose_a = qk ? CUBLAS_OP_T : CUBLAS_OP_N;
   const cublasOperation_t transpose_b = CUBLAS_OP_N;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulDescSetAttribute(
             matmul->operation, CUBLASLT_MATMUL_DESC_TRANSA, &transpose_a,
             sizeof(transpose_a)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare HF cuBLASLt prefill attention");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulDescSetAttribute(
             matmul->operation, CUBLASLT_MATMUL_DESC_TRANSB, &transpose_b,
             sizeof(transpose_b)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare HF cuBLASLt prefill attention");
   }
   const uint64_t s = plan->config.token_count;
   const uint64_t qh = plan->config.query_head_count;
   const uint64_t d = plan->config.head_size;
   const int32_t batch = static_cast<int32_t>(qh);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_layout(&matmul->a_layout, d, s,
                             static_cast<int64_t>(d), batch,
                             static_cast<int64_t>(s * d), error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && qk) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && qk) {
     status = prepare_layout(&matmul->b_layout, d, s,
                             static_cast<int64_t>(qh * d), batch,
                             static_cast<int64_t>(d), error);
-  } else if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  } else if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_layout(&matmul->b_layout, s, s,
                             static_cast<int64_t>(s), batch,
                             static_cast<int64_t>(s * s), error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && qk) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && qk) {
     status = prepare_layout(&matmul->c_layout, s, s,
                             static_cast<int64_t>(s), batch,
                             static_cast<int64_t>(s * s), error);
-  } else if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  } else if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_layout(&matmul->c_layout, d, s,
                             static_cast<int64_t>(qh * d), batch,
                             static_cast<int64_t>(d), error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulPreferenceCreate(&matmul->preference), error,
-        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare HF cuBLASLt prefill attention");
   }
   const size_t cap =
       static_cast<size_t>(plan->config.max_cublas_workspace_bytes);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulPreferenceSetAttribute(
             matmul->preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
             &cap, sizeof(cap)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare HF cuBLASLt prefill attention");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   SelectedAlgorithmProvenance provenance{};
   status = select_first_exact_algorithm(plan->handle, matmul, &provenance,
                                         error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   if (qk) {
@@ -636,23 +636,23 @@ RustInferCudaStatus prepare_operation(
     plan->info.av_numerical_implementation_flags =
         provenance.numerical_implementation_flags;
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus prepare_plan(
-    RustInferCudaHfPrefillAttentionPlan* plan,
-    RustInferCudaErrorInfo* error) noexcept {
-  RustInferCudaStatus status = cublaslt_error(
+RileyCudaStatus prepare_plan(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    RileyCudaErrorInfo* error) noexcept {
+  RileyCudaStatus status = cublaslt_error(
       cublasLtCreate(&plan->handle), error,
-      RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare HF cuBLASLt prefill attention");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_operation(plan, &plan->qk, true, error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_operation(plan, &plan->av, false, error);
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
@@ -662,7 +662,7 @@ RustInferCudaStatus prepare_plan(
       plan->owner->device);
   if (driver_result != CUDA_SUCCESS) {
     return driver_error(driver_result, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                        RILEY_CUDA_ERROR_STAGE_PREPARE,
                         "prepare HF cuBLASLt prefill attention");
   }
   int capability_minor = 0;
@@ -671,33 +671,33 @@ RustInferCudaStatus prepare_plan(
       plan->owner->device);
   if (driver_result != CUDA_SUCCESS) {
     return driver_error(driver_result, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                        RILEY_CUDA_ERROR_STAGE_PREPARE,
                         "prepare HF cuBLASLt prefill attention");
   }
   int runtime_version = 0;
   const cudaError_t runtime_result = cudaRuntimeGetVersion(&runtime_version);
   if (runtime_result != cudaSuccess) {
     return runtime_error(runtime_result, error,
-                         RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                         RILEY_CUDA_ERROR_STAGE_PREPARE,
                          "prepare HF cuBLASLt prefill attention");
   }
   const size_t cublaslt_version = cublasLtGetVersion();
   if (capability_major < 0 || capability_minor < 0 ||
       cublaslt_version >
           static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare HF cuBLASLt prefill attention",
                           "invalid environment metadata");
   }
   if (capability_major != 8 || capability_minor != 9) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare HF cuBLASLt prefill attention",
         "the reviewed HF backend requires compute capability 8.9");
   }
-  plan->info.backend = RUSTINFER_CUDA_ATTENTION_BACKEND_HF_CUBLASLT;
-  plan->info.deterministic = RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED;
+  plan->info.backend = RILEY_CUDA_ATTENTION_BACKEND_HF_CUBLASLT;
+  plan->info.deterministic = RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED;
   plan->info.compute_capability_major =
       static_cast<uint32_t>(capability_major);
   plan->info.compute_capability_minor =
@@ -716,8 +716,8 @@ RustInferCudaStatus prepare_plan(
   return validate_reviewed_plan_provenance(plan, error);
 }
 
-RustInferCudaStatus destroy_matmul(
-    MatmulState* matmul, RustInferCudaErrorInfo* error, uint32_t stage,
+RileyCudaStatus destroy_matmul(
+    MatmulState* matmul, RileyCudaErrorInfo* error, uint32_t stage,
     const char* operation) noexcept {
   if (matmul->preference != nullptr) {
     const cublasStatus_t result =
@@ -759,22 +759,22 @@ RustInferCudaStatus destroy_matmul(
     }
     matmul->operation = nullptr;
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus destroy_plan_resources(
-    RustInferCudaHfPrefillAttentionPlan* plan,
-    RustInferCudaErrorInfo* error, uint32_t stage,
+RileyCudaStatus destroy_plan_resources(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    RileyCudaErrorInfo* error, uint32_t stage,
     const char* operation) noexcept {
-  RustInferCudaStatus status =
+  RileyCudaStatus status =
       destroy_matmul(&plan->av, error, stage, operation);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = destroy_matmul(&plan->qk, error, stage, operation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && plan->handle != nullptr) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && plan->handle != nullptr) {
     status = cublaslt_error(cublasLtDestroy(plan->handle), error, stage,
                             operation);
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       plan->handle = nullptr;
     }
   }
@@ -788,38 +788,38 @@ bool matmul_destroyed(const MatmulState& matmul) noexcept {
 }
 
 bool plan_resources_destroyed(
-    const RustInferCudaHfPrefillAttentionPlan* plan) noexcept {
+    const RileyCudaHfPrefillAttentionPlan* plan) noexcept {
   return plan->handle == nullptr && matmul_destroyed(plan->qk) &&
          matmul_destroyed(plan->av);
 }
 
-RustInferCudaStatus resolve_span(
-    const RustInferCudaBufferSpan* span, uint64_t required_bytes,
-    ResolvedSpan* output, RustInferCudaErrorInfo* error,
+RileyCudaStatus resolve_span(
+    const RileyCudaBufferSpan* span, uint64_t required_bytes,
+    ResolvedSpan* output, RileyCudaErrorInfo* error,
     const char* operation) noexcept {
   if (span == nullptr || output == nullptr ||
       span->struct_size < sizeof(*span)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "a span is null or has an incompatible struct_size");
   }
   if (!reserved_is_zero(span->reserved, 2) ||
-      span->dtype != RUSTINFER_CUDA_DTYPE_BF16 || span->buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+      span->dtype != RILEY_CUDA_DTYPE_BF16 || span->buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "all HF attention spans must be valid BF16 spans");
   }
   if (span->byte_offset % kRequiredAlignment != 0 ||
       span->byte_len != required_bytes) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "span offset or exact byte length violates the prepared contract");
   }
   if (span->byte_offset > span->buffer->byte_len ||
       span->byte_len > span->buffer->byte_len - span->byte_offset ||
       span->buffer->device_data == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, operation,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, operation,
                             "span exceeds its device allocation");
   }
   *output = ResolvedSpan{
@@ -827,7 +827,7 @@ RustInferCudaStatus resolve_span(
       static_cast<uint8_t*>(span->buffer->device_data) +
           static_cast<size_t>(span->byte_offset),
       span->byte_offset, span->byte_len};
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 bool spans_overlap(const ResolvedSpan& left,
@@ -842,13 +842,13 @@ bool spans_overlap(const ResolvedSpan& left,
 
 class ExclusiveUses final {
  public:
-  ExclusiveUses(RustInferCudaHfPrefillAttentionPlan* plan,
-                RustInferCudaStream* stream) noexcept
+  ExclusiveUses(RileyCudaHfPrefillAttentionPlan* plan,
+                RileyCudaStream* stream) noexcept
       : plan_(plan), stream_(stream), buffers_{}, buffer_count_(0),
         acquired_buffers_(0), plan_acquired_(false),
         stream_acquired_(false), command_batch_(false) {}
 
-  bool add(RustInferCudaDeviceBuffer* buffer) noexcept {
+  bool add(RileyCudaDeviceBuffer* buffer) noexcept {
     for (size_t index = 0; index < buffer_count_; ++index) {
       if (buffers_[index] == buffer) {
         return true;
@@ -861,21 +861,21 @@ class ExclusiveUses final {
     return true;
   }
 
-  RustInferCudaStatus acquire(RustInferCudaErrorInfo* error,
+  RileyCudaStatus acquire(RileyCudaErrorInfo* error,
                               const char* operation) noexcept {
     if (command_batch_is_active(stream_)) {
       if (!command_batch_is_owned_by_current_thread(stream_)) {
-        return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                 operation,
                                 "active command batch belongs to another thread");
       }
       command_batch_ = true;
-      RustInferCudaStatus status = command_batch_register_use(
+      RileyCudaStatus status = command_batch_register_use(
           stream_, &plan_->active_uses, error, operation,
           "HF attention plan already has an active use");
       for (size_t index = 0;
-           status == RUSTINFER_CUDA_STATUS_SUCCESS && index < buffer_count_;
+           status == RILEY_CUDA_STATUS_SUCCESS && index < buffer_count_;
            ++index) {
         status = command_batch_register_use(
             stream_, &buffers_[index]->active_uses, error, operation,
@@ -884,8 +884,8 @@ class ExclusiveUses final {
       return status;
     }
     if (!try_acquire_exclusive_use(plan_->active_uses)) {
-      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               operation,
                               "HF attention plan already has an active use");
     }
@@ -894,12 +894,12 @@ class ExclusiveUses final {
       if (!try_acquire_exclusive_use(buffers_[index]->active_uses)) {
         if (!release_acquired()) {
           return internal_error(error,
-                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                 operation,
                                 "exclusive-use rollback was corrupted");
         }
-        return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                 operation,
                                 "HF attention buffer already has an active use");
       }
@@ -907,17 +907,17 @@ class ExclusiveUses final {
     }
     if (!try_acquire_exclusive_use(stream_->active_uses)) {
       if (!release_acquired()) {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               operation,
                               "exclusive-use rollback was corrupted");
       }
-      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               operation,
                               "HF attention stream already has an active use");
     }
     stream_acquired_ = true;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   bool command_batch() const noexcept { return command_batch_; }
@@ -945,9 +945,9 @@ class ExclusiveUses final {
     return valid;
   }
 
-  RustInferCudaHfPrefillAttentionPlan* plan_;
-  RustInferCudaStream* stream_;
-  RustInferCudaDeviceBuffer* buffers_[kMaximumBuffers];
+  RileyCudaHfPrefillAttentionPlan* plan_;
+  RileyCudaStream* stream_;
+  RileyCudaDeviceBuffer* buffers_[kMaximumBuffers];
   size_t buffer_count_;
   size_t acquired_buffers_;
   bool plan_acquired_;
@@ -1287,38 +1287,38 @@ bool launch_hf_regular_softmax(__nv_bfloat16* scores, uint64_t row_count,
   }
 }
 
-RustInferCudaStatus launch_status(RustInferCudaErrorInfo* error,
+RileyCudaStatus launch_status(RileyCudaErrorInfo* error,
                                   const char* operation) noexcept {
   return runtime_error(cudaGetLastError(), error,
-                       RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, operation);
+                       RILEY_CUDA_ERROR_STAGE_LAUNCH, operation);
 }
 
-RustInferCudaStatus complete_execution(
-    ExclusiveUses* uses, CurrentContext* scope, RustInferCudaStream* stream,
-    RustInferCudaStatus operation_status, bool launch_attempted,
-    RustInferCudaErrorInfo* error, const char* operation) noexcept {
+RileyCudaStatus complete_execution(
+    ExclusiveUses* uses, CurrentContext* scope, RileyCudaStream* stream,
+    RileyCudaStatus operation_status, bool launch_attempted,
+    RileyCudaErrorInfo* error, const char* operation) noexcept {
   if (uses->command_batch()) {
     return scope->leave(operation_status, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
+                        RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
   }
   bool completion_confirmed = !launch_attempted;
-  RustInferCudaStatus status = operation_status;
+  RileyCudaStatus status = operation_status;
   if (launch_attempted) {
     const cudaError_t result = cudaStreamSynchronize(stream->stream);
     completion_confirmed = result == cudaSuccess;
     if (!completion_confirmed) {
       status = runtime_error(result, error,
-                             RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                             RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                              operation);
     }
   }
   status = scope->leave(status, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
+                        RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, operation);
   const bool restoration_confirmed =
       !stream->owner->restoration_failed.load(std::memory_order_acquire);
   if (completion_confirmed && restoration_confirmed &&
       !uses->release_completed()) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                           operation,
                           "exclusive-use accounting was corrupted");
   }
@@ -1327,72 +1327,72 @@ RustInferCudaStatus complete_execution(
 
 }  // namespace
 
-extern "C" RustInferCudaStatus
-rustinfer_cuda_hf_prefill_attention_plan_create(
-    RustInferCudaContext* context,
-    const RustInferCudaHfPrefillAttentionConfig* config,
-    RustInferCudaHfPrefillAttentionPlan** out_plan,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_create(
+    RileyCudaContext* context,
+    const RileyCudaHfPrefillAttentionConfig* config,
+    RileyCudaHfPrefillAttentionPlan** out_plan,
+    RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "prepare HF cuBLASLt prefill attention";
   clear_error(error);
   if (out_plan == nullptr || context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "context or out_plan is null");
   }
   *out_plan = nullptr;
   if (context->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
         "a prior CUDA context-stack restoration failed");
   }
   ByteCounts bytes{};
-  RustInferCudaStatus status = validate_config(config, &bytes, error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = validate_config(config, &bytes, error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
-  RustInferCudaHfPrefillAttentionConfig normalized = *config;
+  RileyCudaHfPrefillAttentionConfig normalized = *config;
   normalized.struct_size = sizeof(normalized);
-  void* storage = std::calloc(1, sizeof(RustInferCudaHfPrefillAttentionPlan));
+  void* storage = std::calloc(1, sizeof(RileyCudaHfPrefillAttentionPlan));
   if (storage == nullptr) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE, kOperation,
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, kOperation,
                      "host plan allocation failed");
   }
   auto* plan = new (storage)
-      RustInferCudaHfPrefillAttentionPlan(context, normalized, bytes);
+      RileyCudaHfPrefillAttentionPlan(context, normalized, bytes);
   if (!retain_child(context)) {
-    plan->~RustInferCudaHfPrefillAttentionPlan();
+    plan->~RileyCudaHfPrefillAttentionPlan();
     std::free(plan);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           kOperation,
                           "context child-resource counter overflow");
   }
   CurrentContext scope(context);
-  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE, kOperation);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE, kOperation);
   bool prepare_attempted = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     prepare_attempted = true;
     status = prepare_plan(plan, error);
   }
   const bool entry_rejected_without_context_change =
       !prepare_attempted &&
-      status == RUSTINFER_CUDA_STATUS_INVALID_STATE && !scope.active();
-  if (prepare_attempted && status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      status == RILEY_CUDA_STATUS_INVALID_STATE && !scope.active();
+  if (prepare_attempted && status != RILEY_CUDA_STATUS_SUCCESS) {
     (void)destroy_plan_resources(plan, nullptr,
-                                 RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                                 RILEY_CUDA_ERROR_STAGE_PREPARE,
                                  "cleanup failed HF attention plan");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                        kOperation);
   if (entry_rejected_without_context_change) {
     const bool released = release_child(context);
-    plan->~RustInferCudaHfPrefillAttentionPlan();
+    plan->~RileyCudaHfPrefillAttentionPlan();
     std::free(plan);
     if (!released) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                             kOperation,
                             "context child-resource counter underflow");
     }
@@ -1400,135 +1400,135 @@ rustinfer_cuda_hf_prefill_attention_plan_create(
   }
   const bool restored =
       !context->restoration_failed.load(std::memory_order_acquire);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && restored) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && restored) {
     *out_plan = plan;
     return status;
   }
   if (plan_resources_destroyed(plan) && restored) {
     (void)release_child(context);
-    plan->~RustInferCudaHfPrefillAttentionPlan();
+    plan->~RileyCudaHfPrefillAttentionPlan();
     std::free(plan);
   }
   return status;
 }
 
-extern "C" RustInferCudaStatus
-rustinfer_cuda_hf_prefill_attention_plan_info(
-    RustInferCudaHfPrefillAttentionPlan* plan,
-    RustInferCudaHfPrefillAttentionPlanInfo* out_info,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_info(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    RileyCudaHfPrefillAttentionPlanInfo* out_info,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (plan == nullptr || out_info == nullptr ||
       out_info->struct_size < sizeof(*out_info)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query HF attention plan",
                             "plan or out_info is incompatible");
   }
   if (plan->owner == nullptr ||
       plan->owner->restoration_failed.load(std::memory_order_acquire)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query HF attention plan",
                             "the retained CUDA context cannot be restored");
   }
   if (!try_acquire_exclusive_use(plan->active_uses)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query HF attention plan",
                             "plan already has an active use");
   }
   std::memset(out_info, 0, sizeof(*out_info));
   *out_info = plan->info;
   if (!release_exclusive_use(plan->active_uses)) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query HF attention plan",
                           "plan use accounting was corrupted");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus
-rustinfer_cuda_hf_prefill_attention_plan_execute(
-    RustInferCudaHfPrefillAttentionPlan* plan,
-    const RustInferCudaBufferSpan* query_span,
-    const RustInferCudaBufferSpan* key_span,
-    const RustInferCudaBufferSpan* value_span,
-    const RustInferCudaBufferSpan* output_span,
-    const RustInferCudaBufferSpan* workspace_span,
-    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_execute(
+    RileyCudaHfPrefillAttentionPlan* plan,
+    const RileyCudaBufferSpan* query_span,
+    const RileyCudaBufferSpan* key_span,
+    const RileyCudaBufferSpan* value_span,
+    const RileyCudaBufferSpan* output_span,
+    const RileyCudaBufferSpan* workspace_span,
+    RileyCudaStream* stream, RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "execute HF cuBLASLt prefill attention";
   clear_error(error);
   if (plan == nullptr || stream == nullptr || !plan->qk.algorithm_ready ||
       !plan->av.algorithm_ready || plan->owner == nullptr ||
       !same_context(plan->owner, stream->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "plan or stream is invalid or belongs to another context");
   }
   if (plan->owner->restoration_failed.load(std::memory_order_acquire)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "the retained CUDA context cannot be restored");
   }
   ResolvedSpan spans[kMaximumBuffers]{};
-  RustInferCudaStatus status = resolve_span(
+  RileyCudaStatus status = resolve_span(
       query_span, plan->bytes.query, &spans[0], error, kOperation);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_span(key_span, plan->bytes.key_value, &spans[1], error,
                           kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_span(value_span, plan->bytes.key_value, &spans[2], error,
                           kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_span(output_span, plan->bytes.query, &spans[3], error,
                           kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_span(workspace_span, plan->bytes.workspace, &spans[4],
                           error, kOperation);
   }
   for (size_t index = 0;
-       status == RUSTINFER_CUDA_STATUS_SUCCESS && index < kMaximumBuffers;
+       status == RILEY_CUDA_STATUS_SUCCESS && index < kMaximumBuffers;
        ++index) {
     if (!same_context(plan->owner, spans[index].buffer->owner)) {
-      status = validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      status = validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                 kOperation,
                                 "span belongs to another CUDA context");
     }
     for (size_t other = index + 1;
-         status == RUSTINFER_CUDA_STATUS_SUCCESS && other < kMaximumBuffers;
+         status == RILEY_CUDA_STATUS_SUCCESS && other < kMaximumBuffers;
          ++other) {
       if (spans_overlap(spans[index], spans[other])) {
         status = validation_error(error,
-                                  RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                                  RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                  RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                                  RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                   kOperation,
                                   "HF attention spans must not overlap");
       }
     }
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   ExclusiveUses uses(plan, stream);
   for (const ResolvedSpan& span : spans) {
     if (!uses.add(span.buffer)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kOperation, "attention buffer set overflow");
     }
   }
   status = uses.acquire(error, kOperation);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   CurrentContext scope(plan->owner);
-  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   bool launch_attempted = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = launch_status(error, kOperation);
   }
   auto* scores = reinterpret_cast<__nv_bfloat16*>(spans[4].data);
@@ -1536,7 +1536,7 @@ rustinfer_cuda_hf_prefill_attention_plan_execute(
       spans[4].data + static_cast<size_t>(plan->bytes.repeated_offset));
   const uint64_t repeated_elements = plan->bytes.repeated_key_value / 2;
   const uint64_t score_elements = plan->bytes.score / 2;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
     repeat_kv_kernel<<<block_count(repeated_elements), kThreads, 0,
                        stream->stream>>>(
@@ -1548,23 +1548,23 @@ rustinfer_cuda_hf_prefill_attention_plan_execute(
   }
   const float alpha = 1.0F;
   const float beta = 0.0F;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmul(
             plan->handle, plan->qk.operation, &alpha, repeated,
             plan->qk.a_layout, spans[0].data, plan->qk.b_layout, &beta,
             scores, plan->qk.c_layout, scores, plan->qk.c_layout,
             &plan->qk.algorithm, nullptr, 0, stream->stream),
-        error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     scale_causal_mask_kernel
         <<<block_count(score_elements), kThreads, 0, stream->stream>>>(
             scores, plan->config.token_count, plan->config.scale,
             score_elements);
     status = launch_status(error, kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const uint64_t rows =
         plan->config.query_head_count * plan->config.token_count;
     const bool softmax_launched =
@@ -1574,14 +1574,14 @@ rustinfer_cuda_hf_prefill_attention_plan_execute(
         launch_hf_regular_softmax(scores, rows, plan->config.token_count,
                                   stream->stream);
     if (!softmax_launched) {
-      status = internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH,
+      status = internal_error(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
                               kOperation,
                               "prepared HF softmax dispatch is unavailable");
     } else {
       status = launch_status(error, kOperation);
     }
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     repeat_kv_kernel<<<block_count(repeated_elements), kThreads, 0,
                        stream->stream>>>(
         reinterpret_cast<const __nv_bfloat16*>(spans[2].data), repeated,
@@ -1590,7 +1590,7 @@ rustinfer_cuda_hf_prefill_attention_plan_execute(
         repeated_elements);
     status = launch_status(error, kOperation);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmul(
             plan->handle, plan->av.operation, &alpha, repeated,
@@ -1598,54 +1598,54 @@ rustinfer_cuda_hf_prefill_attention_plan_execute(
             spans[3].data, plan->av.c_layout, spans[3].data,
             plan->av.c_layout, &plan->av.algorithm, nullptr, 0,
             stream->stream),
-        error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH, kOperation);
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kOperation);
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
 }
 
-extern "C" RustInferCudaStatus
-rustinfer_cuda_hf_prefill_attention_plan_close(
-    RustInferCudaHfPrefillAttentionPlan** plan,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_close(
+    RileyCudaHfPrefillAttentionPlan** plan,
+    RileyCudaErrorInfo* error) noexcept {
   constexpr const char* kOperation = "close HF cuBLASLt prefill attention";
   clear_error(error);
   if (plan == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "plan pointer is null");
   }
   if (*plan == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  RustInferCudaHfPrefillAttentionPlan* value = *plan;
+  RileyCudaHfPrefillAttentionPlan* value = *plan;
   if (!try_acquire_exclusive_use(value->active_uses)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE, kOperation,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "plan has an active or permanent use guard");
   }
   CurrentContext scope(value->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
   bool destruction_attempted = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destruction_attempted = true;
     status = destroy_plan_resources(value, error,
-                                    RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                                    RILEY_CUDA_ERROR_STAGE_CLOSE,
                                     kOperation);
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                        kOperation);
   const bool restored =
       !value->owner->restoration_failed.load(std::memory_order_acquire);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
       plan_resources_destroyed(value) && restored) {
-    RustInferCudaContext* owner = value->owner;
-    value->~RustInferCudaHfPrefillAttentionPlan();
+    RileyCudaContext* owner = value->owner;
+    value->~RileyCudaHfPrefillAttentionPlan();
     std::free(value);
     *plan = nullptr;
     if (!release_child(owner)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             kOperation,
                             "context child-resource counter underflow");
     }

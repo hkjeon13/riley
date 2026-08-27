@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/reliability-soak-run-v1.schema.json",
-  "title": "rustinfer source-bound reliability soak run",
+  "$id": "https://riley.dev/schemas/reliability-soak-run-v1.schema.json",
+  "title": "riley source-bound reliability soak run",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "run_id", "manifest_sha256", "binding_sha256", "source", "target", "started_at_utc"],
   "properties": {
-    "schema_version": {"const": "rustinfer.reliability-soak-run.v1"},
+    "schema_version": {"const": "riley.reliability-soak-run.v1"},
     "run_id": {
       "type": "string",
       "pattern": "^soak-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{12}$"

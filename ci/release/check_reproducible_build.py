@@ -90,9 +90,9 @@ RELATIVE_DIRECTORIES = {
 }
 RELATIVE_FILES = {
     "SHA256SUMS",
-    "bin/rustinfer",
-    "bin/rustinfer-profile",
-    "bundle/rustinfer.tar.gz",
+    "bin/riley",
+    "bin/riley-profile",
+    "bundle/riley.tar.gz",
     "logs/bundle-build.log",
     "logs/bundle-verify.log",
     "logs/build-completion.json",
@@ -110,9 +110,9 @@ RELATIVE_FILES = {
 }
 
 COMPLETION_OUTPUTS = {
-    "binary": ("artifacts/rustinfer", "bin/rustinfer"),
-    "profile_binary": ("artifacts/rustinfer-profile", "bin/rustinfer-profile"),
-    "bundle": ("artifacts/rustinfer.tar.gz", "bundle/rustinfer.tar.gz"),
+    "binary": ("artifacts/riley", "bin/riley"),
+    "profile_binary": ("artifacts/riley-profile", "bin/riley-profile"),
+    "bundle": ("artifacts/riley.tar.gz", "bundle/riley.tar.gz"),
     "native_manifest": (
         "artifacts/native-dependencies.txt",
         "manifest/native-dependencies.txt",
@@ -346,16 +346,16 @@ def expected_commands(source_revision: str, source_date_epoch: int) -> dict[str,
             "--features",
             "bench,cuda",
             "--bin",
-            "rustinfer-profile",
+            "riley-profile",
         ],
         "bundle": [
             "python3",
             "ci/release/run_release_python.py",
             "ci/release/build_release_bundle.py",
             "--binary",
-            "target/release/rustinfer",
+            "target/release/riley",
             "--output",
-            "/workspace/release/rustinfer.tar.gz",
+            "/workspace/release/riley.tar.gz",
             "--source-revision",
             source_revision,
             "--source-date-epoch",
@@ -365,7 +365,7 @@ def expected_commands(source_revision: str, source_date_epoch: int) -> dict[str,
             "python3",
             "ci/release/run_release_python.py",
             "ci/release/verify_release_bundle.py",
-            "/workspace/release/rustinfer.tar.gz",
+            "/workspace/release/riley.tar.gz",
         ],
     }
 
@@ -471,9 +471,9 @@ def _validate_manifest(
     )
     expected_artifacts: dict[str, Any] = {}
     for key, relative in (
-        ("binary", "bin/rustinfer"),
-        ("profile_binary", "bin/rustinfer-profile"),
-        ("bundle", "bundle/rustinfer.tar.gz"),
+        ("binary", "bin/riley"),
+        ("profile_binary", "bin/riley-profile"),
+        ("bundle", "bundle/riley.tar.gz"),
         ("native_manifest", "manifest/native-dependencies.txt"),
     ):
         path = file_paths[relative]
@@ -514,9 +514,9 @@ def _validate_logs(evidence: Evidence, build_image_id: str) -> None:
     _validate_toolchain_log(read("logs/toolchain.txt", 4096))
     if read("logs/preflight.log", 4096) != b"release preflight passed\n":
         _fail("release preflight log is not the exact success output")
-    if read("logs/bundle-build.log", 4096) != b"/workspace/release/rustinfer.tar.gz\n":
+    if read("logs/bundle-build.log", 4096) != b"/workspace/release/riley.tar.gz\n":
         _fail("release bundle build log is not the exact success output")
-    if read("logs/bundle-verify.log", 4096) != b"verified /workspace/release/rustinfer.tar.gz\n":
+    if read("logs/bundle-verify.log", 4096) != b"verified /workspace/release/riley.tar.gz\n":
         _fail("release bundle verification log is not the exact success output")
     for relative, label in (
         ("logs/cargo-build.log", "production Cargo build"),
@@ -527,8 +527,8 @@ def _validate_logs(evidence: Evidence, build_image_id: str) -> None:
             cargo_text = cargo_log.decode("utf-8")
         except UnicodeDecodeError as error:
             raise ReleaseContractError(f"{label} log is not UTF-8") from error
-        if "Compiling rustinfer-server" not in cargo_text:
-            _fail(f"{label} log does not contain the rustinfer-server compilation")
+        if "Compiling riley-server" not in cargo_text:
+            _fail(f"{label} log does not contain the riley-server compilation")
         release_completions = re.findall(
             r"^[ \t]*Finished [`']release[`'] profile [^\r\n]*$",
             cargo_text,
@@ -597,7 +597,7 @@ def _validate_builder_image_inspect(contents: bytes, build_image_id: str) -> dic
         "RUSTUP_TOOLCHAIN": RUSTUP_TOOLCHAIN,
         "CUDA_HOME": "/usr/local/cuda",
         "CUDAToolkit_ROOT": "/usr/local/cuda",
-        "RUSTINFER_CUDA_ARCHITECTURES": "89",
+        "RILEY_CUDA_ARCHITECTURES": "89",
         "CARGO_INCREMENTAL": "0",
         "CARGO_NET_OFFLINE": "true",
         "CUDA_VERSION": CUDA_TOOLKIT,
@@ -716,10 +716,10 @@ def _validate_container_inspect(
 
     parsed_environment = _parse_environment(config.get("Env"), "Docker container environment")
     required_environment = {
-        "RUSTINFER_REPRO_BUILD_ID": build_id,
-        "RUSTINFER_SOURCE_REVISION": source_revision,
-        "RUSTINFER_SOURCE_ARCHIVE_SHA256": source_archive_sha256,
-        "RUSTINFER_BUILD_IMAGE_ID": build_image_id,
+        "RILEY_REPRO_BUILD_ID": build_id,
+        "RILEY_SOURCE_REVISION": source_revision,
+        "RILEY_SOURCE_ARCHIVE_SHA256": source_archive_sha256,
+        "RILEY_BUILD_IMAGE_ID": build_image_id,
         "SOURCE_DATE_EPOCH": str(source_date_epoch),
     }
     expected_container_environment = dict(builder_environment)
@@ -1043,7 +1043,7 @@ def _bundle_details(path: Path) -> BundleDetails:
     manifest_contents: bytes | None = None
     with tarfile.open(path, mode="r:gz") as archive:
         for member in archive:
-            if member.name.endswith("/bin/rustinfer"):
+            if member.name.endswith("/bin/riley"):
                 binary = _read_tar_member(archive, member, MAX_EVIDENCE_MEMBER_SIZE)
             elif member.name.endswith("/manifest/native-dependencies.txt"):
                 native = _read_tar_member(archive, member, 1024 * 1024)
@@ -1078,7 +1078,7 @@ def _load_evidence(
         _fail("reproducibility evidence archive exceeds its size bound")
     extraction_root = temporary_root / expected_build_id.lower()
     extraction_root.mkdir()
-    expected_root = f"rustinfer-repro-build-{expected_build_id.lower()}"
+    expected_root = f"riley-repro-build-{expected_build_id.lower()}"
     names: list[str] = []
     member_types: dict[str, str] = {}
     member_modes: dict[str, int] = {}
@@ -1175,7 +1175,7 @@ def _load_evidence(
             _fail(f"evidence archive member type is invalid: {name}")
         expected_mode = (
             0o755
-            if expected_directory or relative in {"bin/rustinfer", "bin/rustinfer-profile"}
+            if expected_directory or relative in {"bin/riley", "bin/riley-profile"}
             else 0o644
         )
         if member_modes[name] != expected_mode:
@@ -1266,8 +1266,8 @@ def _load_evidence(
     if _sha256_file(file_paths["source.tar"]) != source_archive_sha256:
         _fail(f"build {expected_build_id} source archive digest differs from provenance")
 
-    binary_path = file_paths["bin/rustinfer"]
-    profile_binary_path = file_paths["bin/rustinfer-profile"]
+    binary_path = file_paths["bin/riley"]
+    profile_binary_path = file_paths["bin/riley-profile"]
     native_path = file_paths["manifest/native-dependencies.txt"]
     if binary_path.stat().st_size > MAX_BINARY_SIZE:
         _fail(f"build {expected_build_id} binary exceeds its size bound")
@@ -1281,7 +1281,7 @@ def _load_evidence(
     validate_binary(binary)
     validate_binary(profile_binary)
     parse_native_manifest(native)
-    details = _bundle_details(file_paths["bundle/rustinfer.tar.gz"])
+    details = _bundle_details(file_paths["bundle/riley.tar.gz"])
     if details.source_revision != source_revision or details.source_date_epoch != source_date_epoch:
         _fail(f"build {expected_build_id} bundle provenance differs from canonical source")
     if details.binary != binary:
@@ -1310,7 +1310,7 @@ def validate_single_evidence(
         _fail("SOURCE_DATE_EPOCH must fit an unsigned 32-bit timestamp")
     _validate_source_archive(source_archive, source_revision, source_date_epoch)
     source_digest = _sha256_file(source_archive)
-    with tempfile.TemporaryDirectory(prefix="rustinfer-repro-check-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="riley-repro-check-") as temporary:
         _load_evidence(
             evidence_archive,
             Path(temporary),
@@ -1374,7 +1374,7 @@ def check_reproducible_build(
     if final_details.native_manifest != final_native_bytes:
         _fail("final release bundle native manifest differs from the explicit final manifest")
 
-    with tempfile.TemporaryDirectory(prefix="rustinfer-repro-check-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="riley-repro-check-") as temporary:
         temporary_root = Path(temporary)
         build_a = _load_evidence(
             evidence_a,
@@ -1411,13 +1411,13 @@ def check_reproducible_build(
             build_a.files["logs/builder-image-inspect.json"]
         )
         for relative, final, label in (
-            ("bin/rustinfer", final_binary, "release binary A/B/final"),
+            ("bin/riley", final_binary, "release binary A/B/final"),
             (
-                "bin/rustinfer-profile",
+                "bin/riley-profile",
                 final_profile_binary,
                 "release profile binary A/B/final",
             ),
-            ("bundle/rustinfer.tar.gz", final_bundle, "deterministic bundle A/B/final"),
+            ("bundle/riley.tar.gz", final_bundle, "deterministic bundle A/B/final"),
             (
                 "manifest/native-dependencies.txt",
                 final_native_manifest,

@@ -2,7 +2,7 @@
 
 This workflow creates two Hugging Face oracle artifacts, produces a Python-free
 native candidate under the explicit CUDA feature, and compares its
-release-qualified `rustinfer-native` execution against the oracles with
+release-qualified `riley-native` execution against the oracles with
 separate Python comparison and raw-replay commands. It is not the PR 01 golden
 fixture and the HF BF16 run must never be presented as a native E0 candidate.
 
@@ -35,9 +35,9 @@ must be new sibling files outside the repository. Run FP32 and BF16 in separate
 fresh processes so they cannot share model state or retain device memory:
 
 ```sh
-mkdir -p /var/tmp/rustinfer-calibration
+mkdir -p /var/tmp/riley-calibration
 UV_BIN=/absolute/path/to/pinned/uv
-export UV_PROJECT_ENVIRONMENT=/var/tmp/rustinfer-project-envs/reference-calibration-001
+export UV_PROJECT_ENVIRONMENT=/var/tmp/riley-project-envs/reference-calibration-001
 test ! -e "$UV_PROJECT_ENVIRONMENT"
 test "$("$UV_BIN" --version)" = 'uv 0.12.5 (x86_64-unknown-linux-gnu)'
 test "$(sha256sum "$UV_BIN" | awk '{print $1}')" = \
@@ -48,20 +48,20 @@ test "$(sha256sum "$MANAGED_PYTHON" | awk '{print $1}')" = \
 UV_PYTHON=3.13.15 UV_PYTHON_DOWNLOADS=never \
   "$UV_BIN" sync --frozen --offline --project tools/python/reference
 
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference \
   calibrate-produce \
   --role fp32 \
   --prompts benchmarks/prompts.jsonl \
-  --manifest /var/tmp/rustinfer-calibration/fp32-manifest.json \
-  --sidecar /var/tmp/rustinfer-calibration/fp32.safetensors \
+  --manifest /var/tmp/riley-calibration/fp32-manifest.json \
+  --sidecar /var/tmp/riley-calibration/fp32.safetensors \
   --repo-root .
 
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference \
   calibrate-produce \
   --role bf16 \
   --prompts benchmarks/prompts.jsonl \
-  --manifest /var/tmp/rustinfer-calibration/bf16-manifest.json \
-  --sidecar /var/tmp/rustinfer-calibration/bf16.safetensors \
+  --manifest /var/tmp/riley-calibration/bf16-manifest.json \
+  --sidecar /var/tmp/riley-calibration/bf16.safetensors \
   --repo-root .
 ```
 
@@ -109,18 +109,18 @@ Any later data-dependent adjustment requires another gate version. Only an
 independent, passing, raw-sidecar-replayed full-31 v2 report can activate v2:
 
 ```sh
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference \
   calibrate-oracles \
-  --fp32-manifest /var/tmp/rustinfer-calibration/fp32-manifest.json \
-  --bf16-manifest /var/tmp/rustinfer-calibration/bf16-manifest.json \
-  --output /var/tmp/rustinfer-calibration/oracle-calibration-report.json \
+  --fp32-manifest /var/tmp/riley-calibration/fp32-manifest.json \
+  --bf16-manifest /var/tmp/riley-calibration/bf16-manifest.json \
+  --output /var/tmp/riley-calibration/oracle-calibration-report.json \
   --repo-root .
 
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference \
   calibrate-validate-oracles \
-  /var/tmp/rustinfer-calibration/oracle-calibration-report.json \
-  --fp32-manifest /var/tmp/rustinfer-calibration/fp32-manifest.json \
-  --bf16-manifest /var/tmp/rustinfer-calibration/bf16-manifest.json \
+  /var/tmp/riley-calibration/oracle-calibration-report.json \
+  --fp32-manifest /var/tmp/riley-calibration/fp32-manifest.json \
+  --bf16-manifest /var/tmp/riley-calibration/bf16-manifest.json \
   --repo-root .
 ```
 
@@ -142,8 +142,8 @@ report always contains `e0_candidate_evidence=false`.
 ## Native candidate contract
 
 Native candidate contract v3 is owned by the non-default development workspace
-member `crates/rustinfer-native`. The crate owns both its library and the
-`rustinfer-native` binary. Its default feature set is empty, and the binary
+member `crates/riley-native`. The crate owns both its library and the
+`riley-native` binary. Its default feature set is empty, and the binary
 declares `required-features = ["cuda"]`; the producer and native runtime
 dependencies are selected only by the explicit `cuda` feature. The feature-off
 library retains the side-effect-free strict ABI parser, while evidence
@@ -152,18 +152,18 @@ production requires defaults disabled and exactly `cuda` enabled.
 The exact locked build argv bound into candidate evidence is:
 
 ```sh
-cargo build --locked --release --package rustinfer-native \
-  --no-default-features --features cuda --bin rustinfer-native
+cargo build --locked --release --package riley-native \
+  --no-default-features --features cuda --bin riley-native
 ```
 
-Adding `--package` is mandatory because `rustinfer-native` is not a root
+Adding `--package` is mandatory because `riley-native` is not a root
 default member. Keeping CUDA explicit also preserves the CUDA-free
 `--workspace --no-default-features` CPU gate. An excluded `tools/native`
 package or a server-owned calibration binary would not satisfy the root
 `Cargo.lock`, non-default ownership, and release-artifact boundaries.
 
 A candidate manifest has runtime dependency class `native-production`, uses
-the `rustinfer-native-v3` lane and `Cargo.lock`, and records a clean candidate
+the `riley-native-v3` lane and `Cargo.lock`, and records a clean candidate
 Git revision independently of the older oracle revision. The producer requires a
 clean, revision-bound release build and a clean runtime checkout at the exact
 Git revision embedded at build time, then rechecks repository provenance and
@@ -173,14 +173,14 @@ revision, configuration, weights, tokenizer files, and aggregate tokenizer
 hash.
 
 The producer emits a create-only manifest, safetensors sidecar, and bundled
-`rustinfer-native` executable as sibling files outside the repository. It
+`riley-native` executable as sibling files outside the repository. It
 refuses to overwrite any of them, hashes the bundled executable and sidecar,
 echoes the locked release build argv above, and records the native calibration
 capture argv. Its exact ordered contract-v3 shape is:
 
 ```sh
-rustinfer-native calibrate \
-  --repository-root /workspace/rustinfer \
+riley-native calibrate \
+  --repository-root /workspace/riley \
   --model /models/smollm2 \
   --gate-manifest benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json \
   --prompts benchmarks/prompts.jsonl \
@@ -219,13 +219,13 @@ Candidate production does not run the comparator. The separate Python
 comparison command is:
 
 ```sh
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference \
   calibrate-compare \
-  --fp32-manifest /var/tmp/rustinfer-calibration/fp32-manifest.json \
-  --bf16-manifest /var/tmp/rustinfer-calibration/bf16-manifest.json \
-  --oracle-report /var/tmp/rustinfer-calibration/oracle-calibration-report.json \
-  --candidate-manifest /var/tmp/rustinfer-calibration/candidate-manifest.json \
-  --output /var/tmp/rustinfer-calibration/correctness-report.json \
+  --fp32-manifest /var/tmp/riley-calibration/fp32-manifest.json \
+  --bf16-manifest /var/tmp/riley-calibration/bf16-manifest.json \
+  --oracle-report /var/tmp/riley-calibration/oracle-calibration-report.json \
+  --candidate-manifest /var/tmp/riley-calibration/candidate-manifest.json \
+  --output /var/tmp/riley-calibration/correctness-report.json \
   --repo-root .
 ```
 

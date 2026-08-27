@@ -117,7 +117,7 @@ fault backend는 공유 primary context와 leak gate를 오염시키지 않도�
   허용한다. mutable layout은 non-overlap을 보수적으로 증명해야 한다. async 안전은
   Rust borrow와 native active-use token을 함께 사용하고 모호한 실패에서는 leak을
   선택해 fail closed한다.
-- **롤백:** `rustinfer-tensor`의 `cuda` feature를 끄면 metadata는 host storage만으로
+- **롤백:** `riley-tensor`의 `cuda` feature를 끄면 metadata는 host storage만으로
   동작하고 native CUDA를 build/link하지 않는다. PR 04 전체는 PR 03 evidence commit
   `9428af8` 위의 독립 snapshot으로 되돌릴 수 있다.
 
@@ -134,8 +134,8 @@ cargo fmt --all -- --check
 python3 ci/check_workspace_boundaries.py --locked
 cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
 cargo test --locked --workspace --all-targets --no-default-features   # 25 passed
-cargo test --locked -p rustinfer-cuda --doc --no-default-features     # 9 compile-fail passed
-cargo test --locked -p rustinfer-tensor --doc --no-default-features   # 3 compile-fail passed
+cargo test --locked -p riley-cuda --doc --no-default-features     # 9 compile-fail passed
+cargo test --locked -p riley-tensor --doc --no-default-features   # 3 compile-fail passed
 RUSTDOCFLAGS='-D warnings' cargo doc --locked --workspace --no-deps --no-default-features
 ci/check_feature_matrix.sh                         # CUDA 외 8개 조합
 ci/check_workspace_without_research_tools.sh       # 연구 도구 없는 fresh copy
@@ -145,7 +145,7 @@ C11/C++17 public header syntax와 workflow YAML parse
 
 CUDA compile/link와 GPU 실행은 `server-4096`에서만 수행했다. Compile image build에는
 GPU를 전달하지 않았고, 실제 GPU gate는 `--gpus all --network none`으로 분리했다.
-Compile gate는 CUDA feature를 켠 `rustinfer-cuda`와 `rustinfer-tensor`의 all-target
+Compile gate는 CUDA feature를 켠 `riley-cuda`와 `riley-tensor`의 all-target
 Clippy, 두 GPU test binary와 tensor CUDA surface의 no-run build를 포함한다. Runtime
 gate는 Python이 없는 동일 immutable image에서 PR 03의 일곱 host-runtime test와 PR
 04의 다섯 memory test를 각각 정확한 inventory로 실행하며 model, cuBLAS, CUTLASS,

@@ -31,12 +31,12 @@ class ReliabilitySoakDockerfileTests(unittest.TestCase):
         mutations = {
             "mutable-syntax-frontend": "# syntax=docker/dockerfile:latest\n" + original,
             "default-base": original.replace(
-                "ARG RUSTINFER_RELEASE_IMAGE_REF\n",
-                "ARG RUSTINFER_RELEASE_IMAGE_REF=ubuntu:22.04\n",
+                "ARG RILEY_RELEASE_IMAGE_REF\n",
+                "ARG RILEY_RELEASE_IMAGE_REF=ubuntu:22.04\n",
                 1,
             ),
             "fixed-untrusted-base": original.replace(
-                "FROM ${RUSTINFER_RELEASE_IMAGE_REF} AS reliability-soak-test-layer",
+                "FROM ${RILEY_RELEASE_IMAGE_REF} AS reliability-soak-test-layer",
                 "FROM ubuntu:22.04 AS reliability-soak-test-layer",
                 1,
             ),
@@ -85,19 +85,19 @@ class ReliabilitySoakDockerfileTests(unittest.TestCase):
             ),
             "binary-substitution": original.replace(
                 "COPY ci/run_release_soak.sh",
-                "COPY target/release/rustinfer /opt/rustinfer/bin/rustinfer\n"
+                "COPY target/release/riley /opt/riley/bin/riley\n"
                 "COPY ci/run_release_soak.sh",
                 1,
             ),
             "missing-release-label": original.replace(
-                'org.rustinfer.reliability-soak.release-image-id="${RUSTINFER_RELEASE_IMAGE_ID}" \\\n      ',
+                'org.riley.reliability-soak.release-image-id="${RILEY_RELEASE_IMAGE_ID}" \\\n      ',
                 "",
                 1,
             ),
             "root-runtime": original.replace("USER 65532:65532", "USER 0:0", 1),
             "production-entrypoint": original.replace(
-                '["/opt/rustinfer-soak/ci/run_release_soak.sh"]',
-                '["/opt/rustinfer/bin/rustinfer"]',
+                '["/opt/riley-soak/ci/run_release_soak.sh"]',
+                '["/opt/riley/bin/riley"]',
                 1,
             ),
             "reordered-environment": original.replace(
@@ -112,7 +112,7 @@ class ReliabilitySoakDockerfileTests(unittest.TestCase):
             ),
             "duplicate-final-entrypoint": original.replace(
                 "CMD []",
-                'ENTRYPOINT ["/opt/rustinfer-soak/ci/run_release_soak.sh"]\nCMD []',
+                'ENTRYPOINT ["/opt/riley-soak/ci/run_release_soak.sh"]\nCMD []',
                 1,
             ),
             "duplicate-final-cmd": original.replace("CMD []", "CMD []\nCMD []", 1),
@@ -219,8 +219,8 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
                 '-exec "$CHMOD_BIN" 0444', "-exec chmod 0444", 1
             ),
             "closure-receipt-not-from-created-container": original.replace(
-                '"$container_name:/opt/rustinfer-soak/release-runtime-closure.tsv"',
-                '"$test_image_tag:/opt/rustinfer-soak/release-runtime-closure.tsv"',
+                '"$container_name:/opt/riley-soak/release-runtime-closure.tsv"',
+                '"$test_image_tag:/opt/riley-soak/release-runtime-closure.tsv"',
                 1,
             ),
             "closure-receipt-not-canonical": original.replace(
@@ -316,7 +316,7 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
                 1,
             ),
             "forged-supervisor-environment": original.replace(
-                'test "$PPID" = "$RUSTINFER_SOAK_SUPERVISOR_PID"',
+                'test "$PPID" = "$RILEY_SOAK_SUPERVISOR_PID"',
                 "true",
                 1,
             ),
@@ -404,8 +404,8 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
                 1,
             ),
             "digest-free-base-tag": original.replace(
-                'base_image_tag="rustinfer-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"',
-                'base_image_tag="rustinfer-soak-release-base:${resolved_revision}"',
+                'base_image_tag="riley-soak-release-base:${resolved_revision}-${release_image_id#sha256:}"',
+                'base_image_tag="riley-soak-release-base:${resolved_revision}"',
                 1,
             ),
             "unverified-base-after-build": original.replace(
@@ -477,7 +477,7 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
                 '$container.Config.Healthcheck == {Test:["NONE"]}', "true", 1
             ),
             "missing-container-path": original.replace(
-                '$container.Path == "/opt/rustinfer-soak/ci/run_release_soak.sh"',
+                '$container.Path == "/opt/riley-soak/ci/run_release_soak.sh"',
                 "true",
                 1,
             ),
@@ -532,12 +532,12 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
                 1,
             ),
             "completed-before-checksum": original.replace(
-                'printf \'%s\\n\' rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"',
+                'printf \'%s\\n\' riley.remote-release-soak.completed.v1 >"$output_dir/completed"',
                 "true",
                 1,
             ).replace(
                 "(\n    cd \"$output_dir\"",
-                'printf \'%s\\n\' rustinfer.remote-release-soak.completed.v1 >"$output_dir/completed"\n(\n    cd "$output_dir"',
+                'printf \'%s\\n\' riley.remote-release-soak.completed.v1 >"$output_dir/completed"\n(\n    cd "$output_dir"',
                 1,
             ),
             "ephemeral-container": original.replace(

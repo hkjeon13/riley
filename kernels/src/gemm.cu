@@ -24,7 +24,7 @@ struct GemmByteLengths {
 };
 
 struct ResolvedSpan {
-  RustInferCudaDeviceBuffer* buffer;
+  RileyCudaDeviceBuffer* buffer;
   void* data;
   uint64_t byte_offset;
   uint64_t byte_len;
@@ -32,9 +32,9 @@ struct ResolvedSpan {
 
 }  // namespace
 
-struct RustInferCudaGemmPlan {
-  RustInferCudaGemmPlan(RustInferCudaContext* owning_context,
-                        const RustInferCudaGemmConfig& plan_config,
+struct RileyCudaGemmPlan {
+  RileyCudaGemmPlan(RileyCudaContext* owning_context,
+                        const RileyCudaGemmConfig& plan_config,
                         const GemmByteLengths& lengths) noexcept
       : owner(owning_context),
         config(plan_config),
@@ -54,9 +54,9 @@ struct RustInferCudaGemmPlan {
     algorithm_info.struct_size = sizeof(algorithm_info);
   }
 
-  RustInferCudaContext* owner;
-  RustInferCudaGemmConfig config;
-  RustInferCudaGemmAlgorithmInfo algorithm_info;
+  RileyCudaContext* owner;
+  RileyCudaGemmConfig config;
+  RileyCudaGemmAlgorithmInfo algorithm_info;
   cublasLtHandle_t handle;
   cublasLtMatmulDesc_t operation;
   cublasLtMatrixLayout_t weight_layout;
@@ -73,21 +73,21 @@ struct RustInferCudaGemmPlan {
 
 namespace {
 
-using rustinfer_cuda_internal::CurrentContext;
-using rustinfer_cuda_internal::clear_error;
-using rustinfer_cuda_internal::command_batch_is_active;
-using rustinfer_cuda_internal::command_batch_is_owned_by_current_thread;
-using rustinfer_cuda_internal::command_batch_register_use;
-using rustinfer_cuda_internal::driver_error;
-using rustinfer_cuda_internal::internal_error;
-using rustinfer_cuda_internal::release_child;
-using rustinfer_cuda_internal::release_exclusive_use;
-using rustinfer_cuda_internal::retain_child;
-using rustinfer_cuda_internal::runtime_error;
-using rustinfer_cuda_internal::same_context;
-using rustinfer_cuda_internal::set_error;
-using rustinfer_cuda_internal::try_acquire_exclusive_use;
-using rustinfer_cuda_internal::validation_error;
+using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::clear_error;
+using riley_cuda_internal::command_batch_is_active;
+using riley_cuda_internal::command_batch_is_owned_by_current_thread;
+using riley_cuda_internal::command_batch_register_use;
+using riley_cuda_internal::driver_error;
+using riley_cuda_internal::internal_error;
+using riley_cuda_internal::release_child;
+using riley_cuda_internal::release_exclusive_use;
+using riley_cuda_internal::retain_child;
+using riley_cuda_internal::runtime_error;
+using riley_cuda_internal::same_context;
+using riley_cuda_internal::set_error;
+using riley_cuda_internal::try_acquire_exclusive_use;
+using riley_cuda_internal::validation_error;
 
 const char* cublaslt_status_detail(cublasStatus_t status) noexcept {
   switch (status) {
@@ -114,24 +114,24 @@ const char* cublaslt_status_detail(cublasStatus_t status) noexcept {
   }
 }
 
-RustInferCudaStatus cublaslt_error(cublasStatus_t result,
-                                   RustInferCudaErrorInfo* error,
+RileyCudaStatus cublaslt_error(cublasStatus_t result,
+                                   RileyCudaErrorInfo* error,
                                    uint32_t stage,
                                    const char* operation) noexcept {
   if (result == CUBLAS_STATUS_SUCCESS) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_CUBLASLT_ERROR;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_CUBLASLT_ERROR;
   if (result == CUBLAS_STATUS_INVALID_VALUE) {
-    status = RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT;
+    status = RILEY_CUDA_STATUS_INVALID_ARGUMENT;
   } else if (result == CUBLAS_STATUS_ALLOC_FAILED) {
-    status = RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY;
+    status = RILEY_CUDA_STATUS_OUT_OF_MEMORY;
   } else if (result == CUBLAS_STATUS_ARCH_MISMATCH ||
              result == CUBLAS_STATUS_NOT_SUPPORTED) {
-    status = RUSTINFER_CUDA_STATUS_NOT_SUPPORTED;
+    status = RILEY_CUDA_STATUS_NOT_SUPPORTED;
   }
   return set_error(error, status, static_cast<int32_t>(result),
-                   RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT, stage, operation,
+                   RILEY_CUDA_ERROR_DOMAIN_CUBLASLT, stage, operation,
                    cublaslt_status_detail(result));
 }
 
@@ -157,45 +157,45 @@ bool reserved_is_zero(const uint64_t* reserved, size_t count) noexcept {
   return true;
 }
 
-RustInferCudaStatus matrix_bytes(uint64_t rows, uint64_t columns,
+RileyCudaStatus matrix_bytes(uint64_t rows, uint64_t columns,
                                  uint64_t* output,
-                                 RustInferCudaErrorInfo* error) noexcept {
+                                 RileyCudaErrorInfo* error) noexcept {
   uint64_t elements = 0;
   if (!checked_multiply(rows, columns, &elements) ||
       !checked_multiply(elements, kBfloat16Bytes, output)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
                             "matrix byte length overflows uint64_t");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus validate_config(const RustInferCudaGemmConfig* config,
+RileyCudaStatus validate_config(const RileyCudaGemmConfig* config,
                                     GemmByteLengths* lengths,
-                                    RustInferCudaErrorInfo* error) noexcept {
+                                    RileyCudaErrorInfo* error) noexcept {
   if (config == nullptr || lengths == nullptr ||
       config->struct_size < sizeof(*config)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
         "validate cuBLASLt GEMM config",
         "config is null or has an incompatible struct_size");
   }
   constexpr uint32_t kKnownGemmFlags =
-      RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
-      RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
+      RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K |
+      RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K;
   if ((config->flags & ~kKnownGemmFlags) != 0 ||
       config->reserved0 != 0 ||
       !reserved_is_zero(config->reserved, 3)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
                             "unknown flags and reserved fields must be zero");
   }
   if (config->m == 0 || config->n == 0 || config->k == 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
                             "M, N, and K must all be non-zero");
   }
@@ -203,49 +203,49 @@ RustInferCudaStatus validate_config(const RustInferCudaGemmConfig* config,
       static_cast<uint64_t>(std::numeric_limits<int32_t>::max());
   if (config->m > maximum_dimension || config->n > maximum_dimension ||
       config->k > maximum_dimension) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
                             "M, N, and K must fit cuBLASLt int32 dimensions");
   }
-  if (config->input_dtype != RUSTINFER_CUDA_DTYPE_BF16 ||
-      config->weight_dtype != RUSTINFER_CUDA_DTYPE_BF16 ||
-      config->accumulator_dtype != RUSTINFER_CUDA_DTYPE_F32 ||
-      config->output_dtype != RUSTINFER_CUDA_DTYPE_BF16) {
+  if (config->input_dtype != RILEY_CUDA_DTYPE_BF16 ||
+      config->weight_dtype != RILEY_CUDA_DTYPE_BF16 ||
+      config->accumulator_dtype != RILEY_CUDA_DTYPE_F32 ||
+      config->output_dtype != RILEY_CUDA_DTYPE_BF16) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
         "validate cuBLASLt GEMM config",
         "only BF16 input/weight/output with F32 accumulation is supported");
   }
-  if (config->input_transpose != RUSTINFER_CUDA_GEMM_TRANSPOSE_N ||
-      config->weight_transpose != RUSTINFER_CUDA_GEMM_TRANSPOSE_T ||
-      config->input_layout != RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
-      config->weight_layout != RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
-      config->output_layout != RUSTINFER_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
-      config->epilogue != RUSTINFER_CUDA_GEMM_EPILOGUE_NONE ||
+  if (config->input_transpose != RILEY_CUDA_GEMM_TRANSPOSE_N ||
+      config->weight_transpose != RILEY_CUDA_GEMM_TRANSPOSE_T ||
+      config->input_layout != RILEY_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
+      config->weight_layout != RILEY_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
+      config->output_layout != RILEY_CUDA_GEMM_LAYOUT_ROW_MAJOR ||
+      config->epilogue != RILEY_CUDA_GEMM_EPILOGUE_NONE ||
       config->deterministic !=
-          RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED) {
+          RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        error, RILEY_CUDA_STATUS_NOT_SUPPORTED,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
         "validate cuBLASLt GEMM config",
         "only row-major X=N/W=T, epilogue-none, deterministic GEMM is supported");
   }
   if (config->max_workspace_bytes >
       static_cast<uint64_t>(std::numeric_limits<size_t>::max())) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "validate cuBLASLt GEMM config",
                             "workspace cap exceeds native size_t");
   }
 
-  RustInferCudaStatus status =
+  RileyCudaStatus status =
       matrix_bytes(config->m, config->k, &lengths->input, error);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = matrix_bytes(config->n, config->k, &lengths->weight, error);
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = matrix_bytes(config->m, config->n, &lengths->output, error);
   }
   return status;
@@ -307,7 +307,7 @@ bool algorithm_has_supported_alignment(
 }
 
 bool deterministic_reduction_configuration(
-    const RustInferCudaGemmConfig& config, uint32_t split_k,
+    const RileyCudaGemmConfig& config, uint32_t split_k,
     uint32_t scheme) noexcept {
   if (split_k <= 1) {
     return scheme ==
@@ -316,17 +316,17 @@ bool deterministic_reduction_configuration(
   if (scheme ==
       static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_OUTPUT_TYPE)) {
     return (config.flags &
-            RUSTINFER_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0;
+            RILEY_CUDA_GEMM_FLAG_ALLOW_OUTPUT_TYPE_SPLIT_K) != 0;
   }
   if (scheme == static_cast<uint32_t>(CUBLASLT_REDUCTION_SCHEME_INPLACE)) {
     return (config.flags &
-            RUSTINFER_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0;
+            RILEY_CUDA_GEMM_FLAG_ALLOW_INPLACE_SPLIT_K) != 0;
   }
   return false;
 }
 
 bool deterministic_candidate(
-    RustInferCudaGemmPlan* plan,
+    RileyCudaGemmPlan* plan,
     const cublasLtMatmulHeuristicResult_t& candidate,
     cublasLtMatmulAlgo_t* algorithm, size_t* workspace_bytes) noexcept {
   if (plan == nullptr || algorithm == nullptr || workspace_bytes == nullptr ||
@@ -377,15 +377,15 @@ bool deterministic_candidate(
   return true;
 }
 
-RustInferCudaStatus query_plan_environment(
-    RustInferCudaGemmPlan* plan, RustInferCudaErrorInfo* error) noexcept {
+RileyCudaStatus query_plan_environment(
+    RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error) noexcept {
   int capability_major = 0;
   CUresult driver_result = cuDeviceGetAttribute(
       &capability_major, CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
       plan->owner->device);
   if (driver_result != CUDA_SUCCESS) {
     return driver_error(driver_result, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                        RILEY_CUDA_ERROR_STAGE_PREPARE,
                         "prepare cuBLASLt GEMM plan");
   }
   int capability_minor = 0;
@@ -394,11 +394,11 @@ RustInferCudaStatus query_plan_environment(
       plan->owner->device);
   if (driver_result != CUDA_SUCCESS) {
     return driver_error(driver_result, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                        RILEY_CUDA_ERROR_STAGE_PREPARE,
                         "prepare cuBLASLt GEMM plan");
   }
   if (capability_major < 0 || capability_minor < 0) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare cuBLASLt GEMM plan",
                           "CUDA returned a negative compute capability");
   }
@@ -407,20 +407,20 @@ RustInferCudaStatus query_plan_environment(
   const cudaError_t runtime_result = cudaRuntimeGetVersion(&runtime_version);
   if (runtime_result != cudaSuccess) {
     return runtime_error(runtime_result, error,
-                         RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                         RILEY_CUDA_ERROR_STAGE_PREPARE,
                          "prepare cuBLASLt GEMM plan");
   }
   const size_t cublaslt_version = cublasLtGetVersion();
   if (cublaslt_version >
       static_cast<size_t>(std::numeric_limits<int32_t>::max())) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare cuBLASLt GEMM plan",
                           "cuBLASLt version exceeds ABI metadata range");
   }
 
-  plan->algorithm_info.backend = RUSTINFER_CUDA_GEMM_BACKEND_CUBLASLT;
+  plan->algorithm_info.backend = RILEY_CUDA_GEMM_BACKEND_CUBLASLT;
   plan->algorithm_info.deterministic =
-      RUSTINFER_CUDA_GEMM_DETERMINISTIC_REQUIRED;
+      RILEY_CUDA_GEMM_DETERMINISTIC_REQUIRED;
   plan->algorithm_info.compute_capability_major =
       static_cast<uint32_t>(capability_major);
   plan->algorithm_info.compute_capability_minor =
@@ -431,28 +431,28 @@ RustInferCudaStatus query_plan_environment(
   plan->algorithm_info.m = plan->config.m;
   plan->algorithm_info.n = plan->config.n;
   plan->algorithm_info.k = plan->config.k;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-RustInferCudaStatus select_deterministic_algorithm(
-    RustInferCudaGemmPlan* plan, RustInferCudaErrorInfo* error) noexcept {
+RileyCudaStatus select_deterministic_algorithm(
+    RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error) noexcept {
   cublasLtMatmulHeuristicResult_t
       candidates[kMaximumHeuristicResults]{};
   int returned_results = 0;
-  RustInferCudaStatus status = cublaslt_error(
+  RileyCudaStatus status = cublaslt_error(
       cublasLtMatmulAlgoGetHeuristic(
           plan->handle, plan->operation, plan->weight_layout,
           plan->input_layout, plan->output_layout, plan->output_layout,
           plan->preference, kMaximumHeuristicResults, candidates,
           &returned_results),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   if (returned_results < 0 ||
       returned_results > kMaximumHeuristicResults) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                           "prepare cuBLASLt GEMM plan",
                           "cuBLASLt returned an invalid heuristic count");
   }
@@ -517,33 +517,33 @@ RustInferCudaStatus select_deterministic_algorithm(
         static_cast<uint64_t>(workspace_bytes);
     plan->algorithm_info.numerical_implementation_flags = numerical_flags;
     plan->algorithm_ready = true;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   return set_error(
-      error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
-      RUSTINFER_CUDA_ERROR_DOMAIN_CUBLASLT,
-      RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_STATUS_NOT_SUPPORTED, 0,
+      RILEY_CUDA_ERROR_DOMAIN_CUBLASLT,
+      RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan",
       "no deterministic algorithm satisfies the workspace and 256-byte alignment contract");
 }
 
-RustInferCudaStatus prepare_plan(RustInferCudaGemmPlan* plan,
-                                 RustInferCudaErrorInfo* error) noexcept {
-  RustInferCudaStatus status = cublaslt_error(
+RileyCudaStatus prepare_plan(RileyCudaGemmPlan* plan,
+                                 RileyCudaErrorInfo* error) noexcept {
+  RileyCudaStatus status = cublaslt_error(
       cublasLtCreate(&plan->handle), error,
-      RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
   status = cublaslt_error(
       cublasLtMatmulDescCreate(&plan->operation, CUBLAS_COMPUTE_32F,
                                CUDA_R_32F),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   const cublasOperation_t transpose_weight = CUBLAS_OP_T;
@@ -554,33 +554,33 @@ RustInferCudaStatus prepare_plan(RustInferCudaGemmPlan* plan,
       cublasLtMatmulDescSetAttribute(
           plan->operation, CUBLASLT_MATMUL_DESC_TRANSA, &transpose_weight,
           sizeof(transpose_weight)),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulDescSetAttribute(
             plan->operation, CUBLASLT_MATMUL_DESC_TRANSB, &transpose_input,
             sizeof(transpose_input)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulDescSetAttribute(
             plan->operation, CUBLASLT_MATMUL_DESC_EPILOGUE, &epilogue,
             sizeof(epilogue)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatmulDescSetAttribute(
             plan->operation, CUBLASLT_MATMUL_DESC_POINTER_MODE,
             &pointer_mode, sizeof(pointer_mode)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
@@ -591,25 +591,25 @@ RustInferCudaStatus prepare_plan(RustInferCudaGemmPlan* plan,
       cublasLtMatrixLayoutCreate(&plan->weight_layout, CUDA_R_16BF,
                                  plan->config.k, plan->config.n,
                                  plan->config.k),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatrixLayoutCreate(&plan->input_layout, CUDA_R_16BF,
                                    plan->config.k, plan->config.m,
                                    plan->config.k),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = cublaslt_error(
         cublasLtMatrixLayoutCreate(&plan->output_layout, CUDA_R_16BF,
                                    plan->config.n, plan->config.m,
                                    plan->config.n),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
@@ -620,18 +620,18 @@ RustInferCudaStatus prepare_plan(RustInferCudaGemmPlan* plan,
     status = cublaslt_error(
         cublasLtMatrixLayoutSetAttribute(
             layout, CUBLASLT_MATRIX_LAYOUT_ORDER, &order, sizeof(order)),
-        error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+        error, RILEY_CUDA_ERROR_STAGE_PREPARE,
         "prepare cuBLASLt GEMM plan");
-    if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status != RILEY_CUDA_STATUS_SUCCESS) {
       return status;
     }
   }
 
   status = cublaslt_error(
       cublasLtMatmulPreferenceCreate(&plan->preference), error,
-      RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   const size_t max_workspace =
@@ -640,21 +640,21 @@ RustInferCudaStatus prepare_plan(RustInferCudaGemmPlan* plan,
       cublasLtMatmulPreferenceSetAttribute(
           plan->preference, CUBLASLT_MATMUL_PREF_MAX_WORKSPACE_BYTES,
           &max_workspace, sizeof(max_workspace)),
-      error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
       "prepare cuBLASLt GEMM plan");
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
   status = query_plan_environment(plan, error);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = select_deterministic_algorithm(plan, error);
   }
   return status;
 }
 
-RustInferCudaStatus destroy_plan_resources(
-    RustInferCudaGemmPlan* plan, RustInferCudaErrorInfo* error,
+RileyCudaStatus destroy_plan_resources(
+    RileyCudaGemmPlan* plan, RileyCudaErrorInfo* error,
     uint32_t stage, const char* operation) noexcept {
   if (plan->preference != nullptr) {
     const cublasStatus_t result =
@@ -702,66 +702,66 @@ RustInferCudaStatus destroy_plan_resources(
     }
     plan->handle = nullptr;
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-bool plan_resources_destroyed(const RustInferCudaGemmPlan* plan) noexcept {
+bool plan_resources_destroyed(const RileyCudaGemmPlan* plan) noexcept {
   return plan->preference == nullptr && plan->output_layout == nullptr &&
          plan->input_layout == nullptr && plan->weight_layout == nullptr &&
          plan->operation == nullptr && plan->handle == nullptr;
 }
 
-RustInferCudaStatus resolve_exact_span(
-    const RustInferCudaBufferSpan* span, RustInferCudaDType required_dtype,
+RileyCudaStatus resolve_exact_span(
+    const RileyCudaBufferSpan* span, RileyCudaDType required_dtype,
     uint64_t required_bytes, ResolvedSpan* output,
-    RustInferCudaErrorInfo* error, const char* name) noexcept {
+    RileyCudaErrorInfo* error, const char* name) noexcept {
   if (span == nullptr || output == nullptr ||
       span->struct_size < sizeof(*span)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "a span is null or has an incompatible struct_size");
   }
   if (!reserved_is_zero(span->reserved, 2)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "span reserved fields must be zero");
   }
   if (span->dtype != required_dtype) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_VALIDATION,
-                     RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return set_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_VALIDATION,
+                     RILEY_CUDA_ERROR_STAGE_VALIDATION,
                      "execute cuBLASLt GEMM", name);
   }
   if (span->buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "a span buffer handle is null");
   }
   if (span->byte_offset % kRequiredAlignment != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "every span byte_offset must be 256-byte aligned");
   }
   if (span->byte_len != required_bytes) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "a span byte_len does not exactly match the prepared requirement");
   }
   if (span->byte_offset > span->buffer->byte_len ||
       span->byte_len > span->buffer->byte_len - span->byte_offset) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "a declared span exceeds its opaque allocation");
   }
   if (required_bytes != 0 && span->buffer->device_data == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "a non-empty span refers to a zero-byte allocation");
   }
@@ -774,7 +774,7 @@ RustInferCudaStatus resolve_exact_span(
   }
   *output = ResolvedSpan{span->buffer, data, span->byte_offset,
                          required_bytes};
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 bool spans_overlap(const ResolvedSpan& left,
@@ -788,47 +788,47 @@ bool spans_overlap(const ResolvedSpan& left,
   return left.byte_offset < right_end && right.byte_offset < left_end;
 }
 
-RustInferCudaStatus validate_span_relationships(
-    RustInferCudaGemmPlan* plan, RustInferCudaStream* stream,
+RileyCudaStatus validate_span_relationships(
+    RileyCudaGemmPlan* plan, RileyCudaStream* stream,
     const ResolvedSpan* spans, size_t count,
-    RustInferCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error) noexcept {
   if (plan->owner == nullptr || stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "plan owner or stream is null");
   }
   if (!same_context(plan->owner, stream->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "plan and stream belong to different context owners");
   }
   for (size_t index = 0; index < count; ++index) {
     if (!same_context(plan->owner, spans[index].buffer->owner)) {
       return validation_error(
-          error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-          RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
           "execute cuBLASLt GEMM",
           "plan and device spans belong to different context owners");
     }
     for (size_t other = index + 1; other < count; ++other) {
       if (spans_overlap(spans[index], spans[other])) {
         return validation_error(
-            error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+            error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
             "execute cuBLASLt GEMM",
             "input, weight, output, and workspace spans must not overlap");
       }
     }
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 class ExclusiveGemmUses final {
  public:
-  ExclusiveGemmUses(RustInferCudaGemmPlan* plan,
-                    RustInferCudaStream* stream) noexcept
+  ExclusiveGemmUses(RileyCudaGemmPlan* plan,
+                    RileyCudaStream* stream) noexcept
       : plan_(plan),
         stream_(stream),
         buffers_{},
@@ -841,7 +841,7 @@ class ExclusiveGemmUses final {
   ExclusiveGemmUses(const ExclusiveGemmUses&) = delete;
   ExclusiveGemmUses& operator=(const ExclusiveGemmUses&) = delete;
 
-  bool add(RustInferCudaDeviceBuffer* buffer) noexcept {
+  bool add(RileyCudaDeviceBuffer* buffer) noexcept {
     for (size_t index = 0; index < buffer_count_; ++index) {
       if (buffers_[index] == buffer) {
         return true;
@@ -854,20 +854,20 @@ class ExclusiveGemmUses final {
     return true;
   }
 
-  RustInferCudaStatus acquire(RustInferCudaErrorInfo* error) noexcept {
+  RileyCudaStatus acquire(RileyCudaErrorInfo* error) noexcept {
     if (command_batch_is_active(stream_)) {
       if (!command_batch_is_owned_by_current_thread(stream_)) {
         return validation_error(
-            error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+            error, RILEY_CUDA_STATUS_INVALID_STATE,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
             "execute cuBLASLt GEMM",
             "an active stream command batch is owned by another thread");
       }
       command_batch_ = true;
-      RustInferCudaStatus status = command_batch_register_use(
+      RileyCudaStatus status = command_batch_register_use(
           stream_, &plan_->active_uses, error, "execute cuBLASLt GEMM",
           "the GEMM plan already has an active use");
-      if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+      if (status != RILEY_CUDA_STATUS_SUCCESS) {
         return status;
       }
       for (size_t index = 0; index < buffer_count_; ++index) {
@@ -875,15 +875,15 @@ class ExclusiveGemmUses final {
             stream_, &buffers_[index]->active_uses, error,
             "execute cuBLASLt GEMM",
             "a GEMM device buffer already has an active use");
-        if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+        if (status != RILEY_CUDA_STATUS_SUCCESS) {
           return status;
         }
       }
-      return RUSTINFER_CUDA_STATUS_SUCCESS;
+      return RILEY_CUDA_STATUS_SUCCESS;
     }
     if (!try_acquire_exclusive_use(plan_->active_uses)) {
-      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               "execute cuBLASLt GEMM",
                               "the GEMM plan already has an active use");
     }
@@ -892,13 +892,13 @@ class ExclusiveGemmUses final {
       if (!try_acquire_exclusive_use(buffers_[index]->active_uses)) {
         if (!release_acquired()) {
           return internal_error(error,
-                                RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+                                RILEY_CUDA_ERROR_STAGE_VALIDATION,
                                 "execute cuBLASLt GEMM",
                                 "exclusive-use rollback was corrupted");
         }
         return validation_error(
-            error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+            error, RILEY_CUDA_STATUS_INVALID_STATE,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
             "execute cuBLASLt GEMM",
             "a GEMM device buffer already has an active use");
       }
@@ -906,17 +906,17 @@ class ExclusiveGemmUses final {
     }
     if (!try_acquire_exclusive_use(stream_->active_uses)) {
       if (!release_acquired()) {
-        return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               "execute cuBLASLt GEMM",
                               "exclusive-use rollback was corrupted");
       }
-      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               "execute cuBLASLt GEMM",
                               "the stream already has an active use");
     }
     stream_acquired_ = true;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   bool release_completed() noexcept { return release_acquired(); }
@@ -946,9 +946,9 @@ class ExclusiveGemmUses final {
     return valid;
   }
 
-  RustInferCudaGemmPlan* plan_;
-  RustInferCudaStream* stream_;
-  RustInferCudaDeviceBuffer* buffers_[kMaximumGemmBuffers];
+  RileyCudaGemmPlan* plan_;
+  RileyCudaStream* stream_;
+  RileyCudaDeviceBuffer* buffers_[kMaximumGemmBuffers];
   size_t buffer_count_;
   size_t acquired_buffers_;
   bool plan_acquired_;
@@ -956,36 +956,36 @@ class ExclusiveGemmUses final {
   bool command_batch_;
 };
 
-RustInferCudaStatus complete_execution(
+RileyCudaStatus complete_execution(
     ExclusiveGemmUses* uses, CurrentContext* scope,
-    RustInferCudaStream* stream, RustInferCudaStatus operation_status,
-    bool matmul_attempted, RustInferCudaErrorInfo* error) noexcept {
+    RileyCudaStream* stream, RileyCudaStatus operation_status,
+    bool matmul_attempted, RileyCudaErrorInfo* error) noexcept {
   if (uses->command_batch()) {
     return scope->leave(operation_status, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                        RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                         "execute cuBLASLt GEMM");
   }
   bool completion_confirmed = !matmul_attempted;
-  RustInferCudaStatus status = operation_status;
+  RileyCudaStatus status = operation_status;
   if (matmul_attempted) {
     const cudaError_t synchronize_result =
         cudaStreamSynchronize(stream->stream);
     completion_confirmed = synchronize_result == cudaSuccess;
     if (!completion_confirmed) {
       status = runtime_error(synchronize_result, error,
-                             RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                             RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                              "execute cuBLASLt GEMM");
     }
   }
   status = scope->leave(status, error,
-                        RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                        RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                         "execute cuBLASLt GEMM");
 
   const bool restoration_confirmed =
       !stream->owner->restoration_failed.load(std::memory_order_acquire);
   if (completion_confirmed && restoration_confirmed) {
     if (!uses->release_completed()) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                             "execute cuBLASLt GEMM",
                             "exclusive-use accounting was corrupted");
     }
@@ -995,78 +995,78 @@ RustInferCudaStatus complete_execution(
 
 }  // namespace
 
-extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_create(
-    RustInferCudaContext* context, const RustInferCudaGemmConfig* config,
-    RustInferCudaGemmPlan** out_plan,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_create(
+    RileyCudaContext* context, const RileyCudaGemmConfig* config,
+    RileyCudaGemmPlan** out_plan,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_plan == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create cuBLASLt GEMM plan",
                             "out_plan is null");
   }
   *out_plan = nullptr;
   if (context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create cuBLASLt GEMM plan",
                             "context is null");
   }
 
   GemmByteLengths lengths{};
-  RustInferCudaStatus status = validate_config(config, &lengths, error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  RileyCudaStatus status = validate_config(config, &lengths, error);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
-  RustInferCudaGemmConfig normalized_config = *config;
+  RileyCudaGemmConfig normalized_config = *config;
   normalized_config.struct_size = sizeof(normalized_config);
 
-  void* storage = std::calloc(1, sizeof(RustInferCudaGemmPlan));
+  void* storage = std::calloc(1, sizeof(RileyCudaGemmPlan));
   if (storage == nullptr) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
                      "create cuBLASLt GEMM plan",
                      "host plan allocation failed");
   }
   auto* plan = new (storage)
-      RustInferCudaGemmPlan(context, normalized_config, lengths);
+      RileyCudaGemmPlan(context, normalized_config, lengths);
   if (!retain_child(context)) {
-    plan->~RustInferCudaGemmPlan();
+    plan->~RileyCudaGemmPlan();
     std::free(plan);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create cuBLASLt GEMM plan",
                           "context child-resource counter overflow");
   }
 
   CurrentContext scope(context);
-  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                        "prepare cuBLASLt GEMM plan");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = prepare_plan(plan, error);
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     (void)destroy_plan_resources(plan, nullptr,
-                                 RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+                                 RILEY_CUDA_ERROR_STAGE_PREPARE,
                                  "cleanup failed cuBLASLt GEMM plan");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                        "prepare cuBLASLt GEMM plan");
 
   const bool restoration_confirmed =
       !context->restoration_failed.load(std::memory_order_acquire);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS && restoration_confirmed) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS && restoration_confirmed) {
     *out_plan = plan;
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if (plan_resources_destroyed(plan) && restoration_confirmed) {
     if (!release_child(context)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_PREPARE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
                             "cleanup failed cuBLASLt GEMM plan",
                             "context child-resource counter underflow");
     }
-    plan->~RustInferCudaGemmPlan();
+    plan->~RileyCudaGemmPlan();
     std::free(plan);
   }
   // Any ambiguous descriptor destruction or context restoration deliberately
@@ -1074,102 +1074,102 @@ extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_create(
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_info(
-    RustInferCudaGemmPlan* plan, RustInferCudaGemmAlgorithmInfo* out_info,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_info(
+    RileyCudaGemmPlan* plan, RileyCudaGemmAlgorithmInfo* out_info,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (plan == nullptr || out_info == nullptr ||
       out_info->struct_size < sizeof(*out_info)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
         "query cuBLASLt GEMM plan",
         "plan or out_info is null, or struct_size is incompatible");
   }
   std::memset(out_info, 0, sizeof(*out_info));
   out_info->struct_size = sizeof(*out_info);
   if (!try_acquire_exclusive_use(plan->active_uses)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_QUERY,
                             "query cuBLASLt GEMM plan",
                             "the GEMM plan already has an active use");
   }
   *out_info = plan->algorithm_info;
   if (!release_exclusive_use(plan->active_uses)) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query cuBLASLt GEMM plan",
                           "plan use accounting was corrupted");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_execute(
-    RustInferCudaGemmPlan* plan, const RustInferCudaBufferSpan* input,
-    const RustInferCudaBufferSpan* weight,
-    const RustInferCudaBufferSpan* output,
-    const RustInferCudaBufferSpan* workspace, RustInferCudaStream* stream,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_execute(
+    RileyCudaGemmPlan* plan, const RileyCudaBufferSpan* input,
+    const RileyCudaBufferSpan* weight,
+    const RileyCudaBufferSpan* output,
+    const RileyCudaBufferSpan* workspace, RileyCudaStream* stream,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (plan == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "the GEMM plan is null");
   }
   if (!plan->algorithm_ready) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "the GEMM plan is not prepared");
   }
 
   ResolvedSpan spans[kMaximumGemmBuffers]{};
-  RustInferCudaStatus status = resolve_exact_span(
-      input, RUSTINFER_CUDA_DTYPE_BF16, plan->input_bytes, &spans[0], error,
+  RileyCudaStatus status = resolve_exact_span(
+      input, RILEY_CUDA_DTYPE_BF16, plan->input_bytes, &spans[0], error,
       "input span dtype must be BF16");
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_exact_span(
-        weight, RUSTINFER_CUDA_DTYPE_BF16, plan->weight_bytes, &spans[1],
+        weight, RILEY_CUDA_DTYPE_BF16, plan->weight_bytes, &spans[1],
         error, "weight span dtype must be BF16");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_exact_span(
-        output, RUSTINFER_CUDA_DTYPE_BF16, plan->output_bytes, &spans[2],
+        output, RILEY_CUDA_DTYPE_BF16, plan->output_bytes, &spans[2],
         error, "output span dtype must be BF16");
   }
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     status = resolve_exact_span(
-        workspace, RUSTINFER_CUDA_DTYPE_U8,
+        workspace, RILEY_CUDA_DTYPE_U8,
         plan->algorithm_info.workspace_bytes, &spans[3], error,
         "workspace span dtype must be U8");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   status = validate_span_relationships(plan, stream, spans,
                                        kMaximumGemmBuffers, error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
   ExclusiveGemmUses uses(plan, stream);
   for (const ResolvedSpan& span : spans) {
     if (!uses.add(span.buffer)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "execute cuBLASLt GEMM",
                             "too many unique GEMM device buffers");
     }
   }
   status = uses.acquire(error);
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
 
   CurrentContext scope(plan->owner);
-  status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH,
+  status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
                        "execute cuBLASLt GEMM");
   bool matmul_attempted = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const float alpha = 1.0F;
     const float beta = 0.0F;
     void* workspace_data = plan->algorithm_info.workspace_bytes == 0
@@ -1184,73 +1184,73 @@ extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_execute(
             plan->output_layout, &plan->algorithm, workspace_data,
             static_cast<size_t>(plan->algorithm_info.workspace_bytes),
             stream->stream),
-        error, RUSTINFER_CUDA_ERROR_STAGE_LAUNCH,
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
         "execute cuBLASLt GEMM");
   }
   return complete_execution(&uses, &scope, stream, status,
                             matmul_attempted, error);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_gemm_plan_close(
-    RustInferCudaGemmPlan** plan,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
+    RileyCudaGemmPlan** plan,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (plan == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "close cuBLASLt GEMM plan",
                             "plan pointer is null");
   }
   if (*plan == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  RustInferCudaGemmPlan* value = *plan;
+  RileyCudaGemmPlan* value = *plan;
   if (value->owner == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close cuBLASLt GEMM plan",
                             "plan context owner is null");
   }
   if (!try_acquire_exclusive_use(value->active_uses)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close cuBLASLt GEMM plan",
                             "the GEMM plan has an active or permanent use guard");
   }
 
   CurrentContext scope(value->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_CLOSE,
       "close cuBLASLt GEMM plan");
   bool destruction_attempted = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destruction_attempted = true;
     status = destroy_plan_resources(value, error,
-                                    RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                                    RILEY_CUDA_ERROR_STAGE_CLOSE,
                                     "close cuBLASLt GEMM plan");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                        "close cuBLASLt GEMM plan");
 
   const bool restoration_confirmed =
       !value->owner->restoration_failed.load(std::memory_order_acquire);
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+  if (status == RILEY_CUDA_STATUS_SUCCESS &&
       plan_resources_destroyed(value) && restoration_confirmed) {
-    RustInferCudaContext* owner = value->owner;
-    value->~RustInferCudaGemmPlan();
+    RileyCudaContext* owner = value->owner;
+    value->~RileyCudaGemmPlan();
     std::free(value);
     *plan = nullptr;
     if (!release_child(owner)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close cuBLASLt GEMM plan",
                             "context child-resource counter underflow");
     }
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   if (!destruction_attempted && restoration_confirmed) {
     if (!release_exclusive_use(value->active_uses)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close cuBLASLt GEMM plan",
                             "plan use accounting was corrupted");
     }

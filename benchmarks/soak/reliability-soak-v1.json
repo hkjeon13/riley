@@ -1,9 +1,9 @@
 {
-  "schema_version": "rustinfer.reliability-soak-manifest.v1",
+  "schema_version": "riley.reliability-soak-manifest.v1",
   "contract_id": "pr16-release-soak-v1",
   "target": {
     "kind": "process",
-    "binary": "/opt/rustinfer/bin/rustinfer",
+    "binary": "/opt/riley/bin/riley",
     "model_path": "/models/SmolLM2-135M-Instruct",
     "bind": "127.0.0.1:18080",
     "completion_path": "/v1/completions",

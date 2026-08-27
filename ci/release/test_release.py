@@ -204,7 +204,7 @@ class ReleaseBundleTests(unittest.TestCase):
         )
         (self.repository / "LICENSE").write_bytes(MIT_LICENSE_BYTES)
         self.install_server_defaults_source()
-        self.binary = self.root / "rustinfer"
+        self.binary = self.root / "riley"
         self.binary.write_bytes(fixture_elf())
         self.binary.chmod(0o755)
 
@@ -407,7 +407,7 @@ class ReleaseBundleTests(unittest.TestCase):
             "Qwen/Qwen2.5-0.5B-Instruct",
         )
         self.assertIn(
-            "first stable release candidate has no preceding stable rustinfer bundle",
+            "first stable release candidate has no preceding stable riley bundle",
             " ".join(manifest["known_limitations"]),
         )
         self.assertIn(
@@ -644,7 +644,7 @@ class ReleaseBundleTests(unittest.TestCase):
 
         def replace_binary(entries: list[tuple[tarfile.TarInfo, bytes | None]]) -> None:
             for index, (member, _) in enumerate(entries):
-                if member.name.endswith("/bin/rustinfer"):
+                if member.name.endswith("/bin/riley"):
                     member.type = tarfile.SYMTYPE
                     member.linkname = "/bin/true"
                     member.size = 0
@@ -678,12 +678,12 @@ class ReleaseBundleTests(unittest.TestCase):
             binary = next(
                 contents
                 for member, contents in entries
-                if member.name.endswith("/bin/rustinfer")
+                if member.name.endswith("/bin/riley")
             )
             assert binary is not None
             replace_archive_file(
                 entries,
-                "bin/rustinfer",
+                "bin/riley",
                 binary + b"tampered\n",
                 update_checksum=False,
             )
@@ -698,7 +698,7 @@ class ReleaseBundleTests(unittest.TestCase):
 
         def tamper_license(entries: list[tuple[tarfile.TarInfo, bytes | None]]) -> None:
             replacement = MIT_LICENSE_BYTES.replace(
-                b"rustinfer contributors", b"different contributors", 1
+                b"Riley contributors", b"different contributors", 1
             )
             replace_archive_file(
                 entries,

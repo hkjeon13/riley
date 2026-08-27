@@ -30,7 +30,7 @@ from release_common import (
 from verify_release_bundle import verify_bundle
 
 
-ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
+ATTESTATION_VERSION = "riley.release-gate-attestation.v1"
 GATE = "cuda-fault-injection"
 CHECK_IDS = (
     "test_inventory_exact",
@@ -127,7 +127,7 @@ DRIVER_VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+(?:\.[0-9]+)?$")
 COMPUTE_CAPABILITY_RE = re.compile(r"^[0-9]+\.[0-9]+$")
 EXPECTED_GPU_NAME = "NVIDIA GeForce RTX 4090"
 EXPECTED_COMPUTE_CAPABILITY = "8.9"
-FAULT_PREFIX = "rustinfer_cuda_test_memory_fault_"
+FAULT_PREFIX = "riley_cuda_test_memory_fault_"
 FORBIDDEN_DEPENDENCY_RE = re.compile(
     r"(?:libpython|pytorch|python|torch|transformers|triton|pickle)", re.IGNORECASE
 )
@@ -135,7 +135,7 @@ SUMMARY = (
     "test result: ok. 1 passed; 0 failed; 0 ignored; "
     "0 measured; 1 filtered out;"
 )
-MARKER_PREFIX = "rustinfer-cuda-memory-fault-case"
+MARKER_PREFIX = "riley-cuda-memory-fault-case"
 MARKER_RE = re.compile(
     rf"{MARKER_PREFIX} case=(?P<case>[a-z-]+) event=(?P<event>spawn|start|passed|joined) "
     r"(?:(?:parent_pid=(?P<parent>[1-9][0-9]*) )?)"
@@ -251,7 +251,7 @@ def _parse_environment(contents: bytes) -> dict[str, str]:
         "pinned Cargo toolchain": r"(?m)^cargo 1\.85\.0(?: |$)",
         "CUDA 12.8 compiler": r"(?m)^Cuda compilation tools, release 12\.8, V12\.8\.[0-9]+$",
         "release executable version": (
-            r"(?m)^rustinfer 0\.1\.0 "
+            r"(?m)^riley 0\.1\.0 "
             r"\(server=true, cuda=true, cuda_abi=1\)$"
         ),
     }
@@ -665,7 +665,7 @@ def _validate_host_runtime_log(
         HOST_RUNTIME_TESTS,
     )
     metadata_re = re.compile(
-        r"(?m)rustinfer-cuda-device-metadata "
+        r"(?m)riley-cuda-device-metadata "
         r"ordinal=(?P<ordinal>[0-9]+) "
         r"name=(?P<name>.+?) "
         r"compute_capability=(?P<capability>[0-9]+\.[0-9]+) "
@@ -696,7 +696,7 @@ def _validate_host_runtime_log(
         )
 
     leak_re = re.compile(
-        r"(?m)rustinfer-cuda-leak-smoke "
+        r"(?m)riley-cuda-leak-smoke "
         r"iterations=(?P<iterations>[0-9]+) "
         r"before_free_bytes=(?P<before>[1-9][0-9]*) "
         r"after_free_bytes=(?P<after>[1-9][0-9]*)\r?$"
@@ -716,7 +716,7 @@ def _validate_host_runtime_log(
 def _validate_memory_log(contents: bytes, label: str = "memory-tests.log") -> None:
     text = _validate_test_execution_log(contents, label, MEMORY_TESTS)
     accounting = (
-        "rustinfer-cuda-memory-accounting device_live_bytes=0 "
+        "riley-cuda-memory-accounting device_live_bytes=0 "
         "device_live_allocations=0 pinned_host_live_bytes=0 "
         "pinned_host_live_allocations=0"
     )
@@ -732,7 +732,7 @@ def _validate_release_logs(
     _validate_test_elf_logs(
         files,
         prefix="release",
-        artifact_path="target/release/rustinfer",
+        artifact_path="target/release/riley",
         binary_sha256=binary_sha256,
         dependencies=dependencies,
     )
@@ -961,7 +961,7 @@ def _validate_release_bundle(
         with tarfile.open(bundle, "r:gz") as archive:
             binaries = [
                 member for member in archive.getmembers()
-                if member.name.endswith("/bin/rustinfer")
+                if member.name.endswith("/bin/riley")
             ]
             manifests = [
                 member for member in archive.getmembers()
@@ -1078,8 +1078,8 @@ def _validate_bound_evidence(
             host_digest,
             host_path,
             HOST_RUNTIME_TESTS | {
-                "rustinfer-cuda-device-metadata",
-                "rustinfer-cuda-leak-smoke",
+                "riley-cuda-device-metadata",
+                "riley-cuda-leak-smoke",
             },
             "host-runtime",
             False,
@@ -1090,7 +1090,7 @@ def _validate_bound_evidence(
             "memory-test-binary",
             memory_digest,
             memory_path,
-            MEMORY_TESTS | {"rustinfer-cuda-memory-accounting"},
+            MEMORY_TESTS | {"riley-cuda-memory-accounting"},
             "memory",
             False,
             "memory-test-list.txt",
@@ -1102,7 +1102,7 @@ def _validate_bound_evidence(
             fault_path,
             FAULT_TESTS
             | set(FAULT_CASES)
-            | {MARKER_PREFIX, "RUSTINFER_CUDA_MEMORY_FAULT_CHILD"},
+            | {MARKER_PREFIX, "RILEY_CUDA_MEMORY_FAULT_CHILD"},
             "memory-fault",
             True,
             "memory-fault-test-list.txt",
@@ -1151,7 +1151,7 @@ def _validate_bound_evidence(
     release_checksum = _text(
         files["release-binary.sha256"], "release-binary.sha256", ascii_only=True
     )
-    expected_release_checksum = f"{release_binary_sha256}  target/release/rustinfer\n"
+    expected_release_checksum = f"{release_binary_sha256}  target/release/riley\n"
     if release_checksum != expected_release_checksum:
         _fail(
             "release-binary.sha256",

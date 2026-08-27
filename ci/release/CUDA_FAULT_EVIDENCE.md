@@ -17,7 +17,7 @@ memory GPU evidence it contains:
   each of the four reviewed cases and a distinct child PID for each case;
 - `host-runtime-*`, `memory-*`, and `memory-fault-*` `ldd`, `readelf`, and `nm`
   output whose two-line header binds the original artifact path and ELF digest;
-- `release-binary.sha256` for `target/release/rustinfer`; and
+- `release-binary.sha256` for `target/release/riley`; and
 - `release-ldd.txt`, `release-readelf.txt`, and `release-nm.txt` for that exact
   production binary.
 
@@ -35,8 +35,8 @@ python3 ci/release/check_cuda_fault_evidence.py \
   --source-revision "$SOURCE_REVISION" \
   --source-archive /absolute/path/to/source.tar \
   --build-image-id "$CUDA_BUILD_IMAGE_ID" \
-  --release-binary /absolute/path/to/rustinfer \
-  --release-bundle /absolute/path/to/rustinfer.tar.gz \
+  --release-binary /absolute/path/to/riley \
+  --release-bundle /absolute/path/to/riley.tar.gz \
   --release-image-id "$RELEASE_IMAGE_ID" \
   --raw-evidence /absolute/path/to/cuda-fault-evidence.tar \
   --report /absolute/path/to/cuda-fault-report.json
@@ -75,7 +75,7 @@ its PAX `comment` must equal the supplied full Git revision. The build image ID
 must likewise match the immutable `gpu_image_id` captured by the remote runner.
 
 Only after all raw checks pass does the tool create a deterministic tar and a
-`rustinfer.release-gate-attestation.v1` report with the exact
+`riley.release-gate-attestation.v1` report with the exact
 `cuda-fault-injection` check set consumed by the final candidate gate. The
 attestation's `raw_evidence_sha256` is computed from the newly created tar; a
 caller-supplied passing JSON file is never accepted as evidence.

@@ -1,3 +1,3 @@
-from .rustinfer_reference.cli import main
+from .riley_reference.cli import main
 
 raise SystemExit(main())

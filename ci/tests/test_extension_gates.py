@@ -130,7 +130,7 @@ class ExtensionGateTests(unittest.TestCase):
             shutil.copy2(ROOT / relative, destination)
         self.registry: dict[str, object] = {
             "$schema": "registry.schema.json",
-            "schema_version": "rustinfer.extension-registry.v1",
+            "schema_version": "riley.extension-registry.v1",
             "extensions": [],
         }
         self._write_registry()
@@ -230,7 +230,7 @@ class ExtensionGateTests(unittest.TestCase):
         }
         proposal: dict[str, object] = {
             "$schema": "../proposal.schema.json",
-            "schema_version": "rustinfer.extension-proposal.v1",
+            "schema_version": "riley.extension-proposal.v1",
             "extension_id": extension_id,
             "status": entry["status"],
             "track": entry["track"],
@@ -245,7 +245,7 @@ class ExtensionGateTests(unittest.TestCase):
             "primary_metric": "metrics.output_tokens_per_second",
             "required_metrics": sorted(TRACK_REQUIRED_METRICS[track]),
             "quality_or_error_metric": quality_metric,
-            "runtime_flag": f"RUSTINFER_EXPERIMENTAL_{extension_id.upper().replace('-', '_')}",
+            "runtime_flag": f"RILEY_EXPERIMENTAL_{extension_id.upper().replace('-', '_')}",
             "default_enabled": False,
             "stable_default": False,
             "result_disclosure": "Every result records whether the extension ran.",
@@ -271,7 +271,7 @@ class ExtensionGateTests(unittest.TestCase):
         }
         contract: dict[str, object] = {
             "$schema": "../benchmark-contract.schema.json",
-            "schema_version": "rustinfer.extension-benchmark-contract.v1",
+            "schema_version": "riley.extension-benchmark-contract.v1",
             "extension_id": extension_id,
             "status": entry["status"],
             "track": entry["track"],
@@ -397,7 +397,7 @@ class ExtensionGateTests(unittest.TestCase):
         implementation_path = f"deploy/extensions/implementations/{extension_id}.json"
         implementation: dict[str, object] = {
             "$schema": "../implementation.schema.json",
-            "schema_version": "rustinfer.extension-implementation.v1",
+            "schema_version": "riley.extension-implementation.v1",
             "extension_id": extension_id,
             "status": "experimental-implementation",
             "proposal_path": entry["proposal_path"],
@@ -450,8 +450,8 @@ class ExtensionGateTests(unittest.TestCase):
         path = self.root / "deploy/extensions/registry.json"
         path.write_text(
             '{"$schema":"registry.schema.json",'
-            '"schema_version":"rustinfer.extension-registry.v1",'
-            '"schema_version":"rustinfer.extension-registry.v1","extensions":[]}\n',
+            '"schema_version":"riley.extension-registry.v1",'
+            '"schema_version":"riley.extension-registry.v1","extensions":[]}\n',
             encoding="utf-8",
         )
         with self.assertRaisesRegex(ExtensionGateError, "duplicate JSON key"):
@@ -845,7 +845,7 @@ class ExtensionGateTests(unittest.TestCase):
         base_revision = self._commit("empty registry with an existing crate")
 
         source.write_text(
-            'pub const FLAG: &str = "RUSTINFER_EXPERIMENTAL_BYPASS";\n',
+            'pub const FLAG: &str = "RILEY_EXPERIMENTAL_BYPASS";\n',
             encoding="utf-8",
         )
         self._track_all()
@@ -880,7 +880,7 @@ class ExtensionGateTests(unittest.TestCase):
 
     def test_cross_file_mismatch_is_rejected(self) -> None:
         entry, _, contract = self._add_extension()
-        contract["runtime_flag"] = "RUSTINFER_EXPERIMENTAL_DIFFERENT"
+        contract["runtime_flag"] = "RILEY_EXPERIMENTAL_DIFFERENT"
         _write_json(self.root / str(entry["benchmark_contract_path"]), contract)
         with self.assertRaisesRegex(ExtensionGateError, "proposal mismatch"):
             validate_repository(self.root)

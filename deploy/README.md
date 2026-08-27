@@ -1,6 +1,6 @@
-# rustinfer 단계별 실행 계획
+# Riley 단계별 실행 계획
 
-이 폴더는 `rustinfer`의 방대한 설계 문서를 **한 번에 하나씩 검토·구현·검증할 수 있는 PR 단위**로 분해한다.
+이 폴더는 `riley`의 방대한 설계 문서를 **한 번에 하나씩 검토·구현·검증할 수 있는 PR 단위**로 분해한다.
 
 기준 문서:
 
@@ -44,8 +44,13 @@
 PR 17 admission 장치의 bootstrap/default 상태는 빈 registry이며, 이후의 현재 승인
 집합은 문구에 고정한 숫자가 아니라
 [`extensions/registry.json`](extensions/registry.json)이 결정한다. 이는 PR 16의
-이번 soak waiver에 따라 구현 순서만 진행한 결과로, 첫 release의 soak 통과나
-release/tag qualification을 뜻하지 않는다. Gate E의 실제 soak 조건은 그대로다.
+이번 soak waiver에 따라 구현 순서만 진행한 결과다. 이후 release owner가 이전 soak를
+근거로 prerelease를 명시적으로 승인했지만, 이는 현재 Riley revision의 soak 통과나
+Gate E qualification을 뜻하지 않는다. Gate E의 실제 조건은 그대로다.
+
+PR 02~15에 기록된 일부 원격 artifact 경로, container tag와 checked-in result
+directory는 Riley rename 이전에 생성된 immutable provenance다. 해당 식별자의
+`rustinfer` 문자열은 실제 보존 위치와 hash를 가리키므로 이름을 바꾸지 않는다.
 
 ## Production 기술 경계
 

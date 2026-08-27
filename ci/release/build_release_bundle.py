@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the deterministic, fail-closed rustinfer release bundle."""
+"""Build the deterministic, fail-closed riley release bundle."""
 
 from __future__ import annotations
 
@@ -68,7 +68,7 @@ def _tar_info(path: Path, archive_name: str, source_date_epoch: int) -> tarfile.
         info.size = 0
     else:
         info.type = tarfile.REGTYPE
-        info.mode = 0o755 if archive_name.endswith("/bin/rustinfer") else 0o644
+        info.mode = 0o755 if archive_name.endswith("/bin/riley") else 0o644
         info.size = path.stat().st_size
     return info
 
@@ -132,9 +132,9 @@ def build_bundle(
     dependencies = validate_binary(binary_contents)
 
     manifest = release_manifest(version, source_revision, source_date_epoch)
-    with tempfile.TemporaryDirectory(prefix="rustinfer-release-") as temporary_directory:
+    with tempfile.TemporaryDirectory(prefix="riley-release-") as temporary_directory:
         staging_root = Path(temporary_directory) / root_name
-        _write(staging_root / "bin/rustinfer", binary_contents, 0o755)
+        _write(staging_root / "bin/riley", binary_contents, 0o755)
         _write(
             staging_root / "manifest/native-dependencies.txt",
             native_manifest_bytes(dependencies),

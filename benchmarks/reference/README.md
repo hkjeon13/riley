@@ -35,7 +35,7 @@ probe 값, addressable tokenizer domain으로 masking한 cache on/off 8-token gr
 parity를 기록한다. 파일 SHA-256은
 `42cc7f3fd04098bc4d70836ee9d18dbf919f158a010da3da6fdaa3d9deeceab7`이다.
 생성과 standard-library-only 정적 검증은
-`rustinfer_reference.qwen2_compat` 모듈을 사용하며, 모델/CUDA 생성 명령은
+`riley_reference.qwen2_compat` 모듈을 사용하며, 모델/CUDA 생성 명령은
 반드시 `server-4096`에서만 실행한다.
 
 생성과 검증 명령은 `tools/python/reference/README.md`를 따른다.

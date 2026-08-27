@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/correctness-calibration-manifest.schema.json",
-  "title": "rustinfer numeric/semantic calibration sidecar manifest",
+  "$id": "https://riley.invalid/schemas/correctness-calibration-manifest.schema.json",
+  "title": "riley numeric/semantic calibration sidecar manifest",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "artifact_kind", "created_at", "producer", "candidate_execution", "contract", "provenance", "corpus", "sidecar", "cases"],
@@ -206,8 +206,8 @@
       "additionalProperties": false,
       "required": ["implementation_id", "engine_revision", "runtime_dependency_class", "python_version", "python_executable_sha256", "python_platform_system", "python_platform_machine", "torch_version", "transformers_version", "safetensors_version"],
       "properties": {
-        "implementation_id": { "const": "rustinfer-native" },
-        "engine_revision": { "const": "rustinfer-native-contract-v2" },
+        "implementation_id": { "const": "riley-native" },
+        "engine_revision": { "const": "riley-native-contract-v2" },
         "runtime_dependency_class": { "const": "native-production" },
         "python_version": { "type": "null" },
         "python_executable_sha256": { "type": "null" },
@@ -228,17 +228,17 @@
           "additionalProperties": false,
           "required": ["path", "sha256"],
           "properties": {
-            "path": { "const": "rustinfer-native" },
+            "path": { "const": "riley-native" },
             "sha256": { "$ref": "#/$defs/sha256" }
           }
         },
-        "build_argv": { "const": ["cargo", "build", "--locked", "--release", "--package", "rustinfer-native", "--no-default-features", "--features", "cuda", "--bin", "rustinfer-native"] },
+        "build_argv": { "const": ["cargo", "build", "--locked", "--release", "--package", "riley-native", "--no-default-features", "--features", "cuda", "--bin", "riley-native"] },
         "capture_argv": {
           "type": "array",
           "minItems": 18,
           "maxItems": 18,
           "prefixItems": [
-            { "const": "rustinfer-native" },
+            { "const": "riley-native" },
             { "const": "calibrate" },
             { "const": "--repository-root" },
             { "type": "string", "pattern": "^/(?!/)(?!\\.{1,2}(?:/|$))(?!.*//)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^\\\\\\u0000]*[^/\\\\\\u0000]$" },

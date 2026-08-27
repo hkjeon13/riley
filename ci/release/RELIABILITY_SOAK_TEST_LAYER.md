@@ -1,7 +1,7 @@
 # Python-free reliability-soak test layer
 
 `ReliabilitySoak.Dockerfile` is an evidence-only derivative of an already
-reviewed release image. It does not build or replace `rustinfer`. The caller
+reviewed release image. It does not build or replace `riley`. The caller
 must pass the release image's local immutable `sha256:...` ID to the launcher;
 there is no default or registry fallback. The layer adds only the direct observation/client packages needed by
 `ci/run_release_soak.sh`: Bash, coreutils, curl, findutils, gawk, grep, jq,
@@ -10,7 +10,7 @@ runtime. Python-family runtimes and artifacts, compilers, and build tools are
 rejected while the layer is built.
 
 Before `apt-get` runs, the source-bound Dockerfile asks the image's loader to
-resolve `/opt/rustinfer/bin/rustinfer` and writes a canonical, bytewise-sorted
+resolve `/opt/riley/bin/riley` and writes a canonical, bytewise-sorted
 TSV of dependency name, resolved absolute path, canonical regular-file target,
 and target SHA-256. Exactly one build-time unresolved dependency is allowed:
 `libcuda.so.1<TAB>NOT_FOUND<TAB>-<TAB>-`, because NVIDIA injects the driver at
@@ -19,7 +19,7 @@ row, fails the build and replay. The row must have the same unresolved state
 before and after package installation. Loader ASLR addresses are excluded.
 Installation uses `--no-upgrade`; after installation the same closure is
 recomputed and the build fails unless it is byte-for-byte identical. The pre-install closure is retained
-read-only at `/opt/rustinfer-soak/release-runtime-closure.tsv` for audit. This
+read-only at `/opt/riley-soak/release-runtime-closure.tsv` for audit. This
 receipt does not authorize itself: the remote launcher builds the exact
 Dockerfile bytes extracted from the independently hashed source archive, and
 the static test-layer verifier pins the capture-before/install/capture-after/
@@ -99,7 +99,7 @@ the derived production runtime layer.
   --source-revision <full-40-character-candidate-revision> \
   --source-archive /artifacts/source.tar \
   --expected-source-archive-sha256 <reviewed-sha256> \
-  --release-binary /artifacts/rustinfer \
+  --release-binary /artifacts/riley \
   --expected-release-binary-sha256 <reviewed-sha256> \
   --model-dir /models/SmolLM2-135M-Instruct \
   --expected-model-tree-sha256 <reviewed-sha256> \
@@ -109,7 +109,7 @@ the derived production runtime layer.
   --expected-correctness-golden-sha256 <independently-reviewed-sha256> \
   --native-correctness-report /artifacts/native-e0-correctness-report.json \
   --expected-native-correctness-report-sha256 <independently-reviewed-sha256> \
-  --test-image-tag rustinfer-soak-test:<unique-candidate-run> \
+  --test-image-tag riley-soak-test:<unique-candidate-run> \
   --output-dir /append-only-evidence/pr16-soak-<unique-run>
 ```
 
@@ -133,7 +133,7 @@ hashes the E2E golden and native correctness report and requires:
 - the golden and passing native report to bind the candidate revision, model
   ID/revision, config, weights, tokenizer aggregate, and tokenizer JSON, while
   requiring a lowercase SHA-256 for the report's separate development-only
-  `rustinfer-native calibrate` executable (it is not the production server
+  `riley-native calibrate` executable (it is not the production server
   binary); and
 - the manifest's greedy request to bind the golden prompt and token count.
 
@@ -168,7 +168,7 @@ values. `HOME`, `CURL_HOME`, `XDG_CONFIG_HOME`, every other `LD_*` variable, and
 the existing shell/loader injection controls must be absent.
 
 The container deliberately uses `--pid host`. NVML/`nvidia-smi` reports host
-PIDs, so the driver, its child `rustinfer` server, `/proc`, and `nvidia-smi`
+PIDs, so the driver, its child `riley` server, `/proc`, and `nvidia-smi`
 must share that PID namespace for exact process/VRAM attribution. The launcher
 records and rechecks `PidMode=host`; this is why the run is restricted to the
 designated, idle evidence host. PID sharing does not grant host networking or

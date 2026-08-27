@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/extension-implementation-v1.schema.json",
-  "title": "rustinfer experimental extension implementation link",
+  "$id": "https://riley.invalid/schemas/extension-implementation-v1.schema.json",
+  "title": "riley experimental extension implementation link",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -21,7 +21,7 @@
   ],
   "properties": {
     "$schema": {"const": "../implementation.schema.json"},
-    "schema_version": {"const": "rustinfer.extension-implementation.v1"},
+    "schema_version": {"const": "riley.extension-implementation.v1"},
     "extension_id": {"$ref": "#/$defs/extensionId"},
     "status": {"const": "experimental-implementation"},
     "proposal_path": {
@@ -38,7 +38,7 @@
     },
     "runtime_flag": {
       "type": "string",
-      "pattern": "^RUSTINFER_EXPERIMENTAL_[A-Z0-9_]+$"
+      "pattern": "^RILEY_EXPERIMENTAL_[A-Z0-9_]+$"
     },
     "runtime_flag_source_path": {"$ref": "#/$defs/repositoryPath"},
     "implementation_paths": {

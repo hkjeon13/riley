@@ -526,7 +526,7 @@ __global__ __launch_bounds__(kThreadsPerBlock) void online_bf16_gqa_prefill(
 
 }  // namespace
 
-cudaError_t rustinfer_cuda_attention_online::launch_bf16_gqa_prefill(
+cudaError_t riley_cuda_attention_online::launch_bf16_gqa_prefill(
     const void* query, const void* key, const void* value, void* output,
     uint64_t batch_count, uint64_t token_count, uint64_t query_head_count,
     uint64_t key_value_head_count, float scale, bool causal_local,

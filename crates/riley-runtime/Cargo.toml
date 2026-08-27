@@ -1,0 +1,53 @@
+[package]
+name = "riley-runtime"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Model and backend orchestration boundary for Riley"
+
+[features]
+default = []
+cuda = ["dep:riley-cuda", "riley-cuda/cuda", "riley-tensor/cuda"]
+
+[dependencies]
+riley-core = { path = "../riley-core" }
+riley-cuda = { path = "../riley-cuda", optional = true }
+riley-model = { path = "../riley-model" }
+riley-tensor = { path = "../riley-tensor" }
+sha2 = { version = "=0.11.0", default-features = false }
+
+[dev-dependencies]
+riley-cuda = { path = "../riley-cuda" }
+serde_json = "=1.0.145"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "cuda_weights_gpu"
+path = "tests/cuda_weights_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "llama_forward_gpu"
+path = "tests/llama_forward_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "llama_decode_gpu"
+path = "tests/llama_decode_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "llama_generation_gpu"
+path = "tests/llama_generation_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
+name = "llama_batch_gpu"
+path = "tests/llama_batch_gpu.rs"
+required-features = ["cuda"]

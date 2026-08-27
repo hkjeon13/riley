@@ -134,7 +134,7 @@ process 없음” 조건이 계측 정의의 일부다.
 
 SGLang 또는 TensorRT-LLM은 선택적인 세 번째 baseline이다. PR 01의 최소 비교 계약은 Transformers와 vLLM으로 고정하고, 다른 engine은 동일 schema를 만족하는 별도 lane으로만 추가한다.
 
-### rustinfer production
+### riley production
 
 - 역할: PR 11 이후 실제 native benchmark 대상
 - dependency class: `native-production`

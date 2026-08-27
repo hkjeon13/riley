@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/correctness-gate-v3.schema.json",
-  "title": "rustinfer E0 correctness gate contract v3",
+  "$id": "https://riley.invalid/schemas/correctness-gate-v3.schema.json",
+  "title": "riley E0 correctness gate contract v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -282,7 +282,7 @@
             "candidate-manifest-sidecar-and-executable",
             "correctness-report"
           ],
-          "approval_command": "rustinfer-reference calibrate-validate-report"
+          "approval_command": "riley-reference calibrate-validate-report"
         },
         "result_correctness_report_sha256": "sha256-of-raw-report-file-bytes"
       }

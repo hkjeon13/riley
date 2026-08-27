@@ -6,10 +6,10 @@ import struct
 import weakref
 import unittest
 
-from rustinfer_reference.constants import GOLDEN_GREEDY_MAX_NEW_TOKENS
-from rustinfer_reference.cli import _build_parser
-from rustinfer_reference.fixture import FixtureError, PromptRecord, generate_fixture
-from rustinfer_reference.hf_backend import HuggingFaceBackend
+from riley_reference.constants import GOLDEN_GREEDY_MAX_NEW_TOKENS
+from riley_reference.cli import _build_parser
+from riley_reference.fixture import FixtureError, PromptRecord, generate_fixture
+from riley_reference.hf_backend import HuggingFaceBackend
 
 from .support import FakeBackend, fixture_provenance
 

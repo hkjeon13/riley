@@ -1,0 +1,229 @@
+# riley-cuda
+
+This crate is the narrow Rust boundary for the production CUDA C ABI. Its
+`cuda` feature AOT-compiles the sources under `../../kernels` with `nvcc`,
+links the native static archive plus the shared CUDA Runtime and Driver
+libraries, and exposes a safe host-runtime API.
+
+The host runtime supports device metadata, retained primary-context ownership,
+non-default streams, timing events, explicit query/synchronize/close paths,
+opaque device and pinned-host byte buffers, coherent allocation accounting,
+and stream-ordered asynchronous H2D/D2H copies. The diagnostic fill kernel is
+only a lifecycle and ordering smoke test; model loading, tensor execution, and
+inference remain out of scope. The stable C contract and ownership rules are
+documented in [`../../docs/cuda-abi-v1.md`](../../docs/cuda-abi-v1.md).
+
+## Build configuration
+
+- Toolkit discovery order: an explicit `CUDAToolkit_ROOT`, `CUDA_HOME`, or
+  `CUDA_PATH`; then `NVCC`/`CUDACXX`; then `nvcc` on `PATH`.
+- Multiple explicit toolkit variables must resolve to the same directory.
+- `RILEY_CUDA_ARCHITECTURES` accepts numeric CMake AOT targets separated by
+  commas or semicolons, for example `80;89`. It defaults to `89` and is printed
+  in the Cargo build log. Runtime-dependent `native` is intentionally rejected.
+- `CMAKE` may select a non-default CMake executable.
+- The native archive deliberately links the toolkit-selected shared CUDA
+  Runtime (`cudart`). CMake writes the exact linker-file location and the Cargo
+  build validates that it resolves beneath the same toolkit as `nvcc`; no
+  toolkit library path is hardcoded. A release environment must provide the
+  matching shared CUDA Runtime, such as an NVIDIA CUDA runtime container.
+- Driver symbols are linked through CMake's selected `CUDA::cuda_driver`
+  development linker file. The deployed process resolves the host driver's
+  `libcuda.so.1`; the build does not embed a toolkit-stub runtime path.
+- The development-only `nvml` feature includes `cuda` and adds the safe
+  in-process `probe_nvidia_environment` preflight plus a direct shared NVML
+  dependency. Ordinary `cuda` builds keep their existing dynamic dependency
+  inventory; no subprocess or `nvidia-smi` fallback exists.
+
+The host-only ABI/link smoke is:
+
+```text
+cargo test --locked -p riley-cuda --features cuda --test abi_link
+```
+
+It calls only the host ABI/version symbols. It does not require or touch a CUDA
+device, though compilation requires a complete CUDA toolkit.
+
+Feature-off CPU checks are safe on any development host:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features
+```
+
+The `host_runtime_gpu` integration target contains exactly eight tests marked
+`#[ignore = "remote GPU"]`. Run them only in an explicitly authorized remote
+NVIDIA GPU environment; ordinary Cargo test invocations do not execute device
+work:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test host_runtime_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+The repository's Python-free GPU evidence workflow, sanitizer mode, and
+required environment variables are described in
+[`../../ci/README.md`](../../ci/README.md). None of these tests loads a model or
+runs inference.
+
+The separate NVML target is also remote-only and does not alter the fixed
+eight-test host-runtime evidence contract:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features --features nvml \
+  --test nvml_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+## Query-length-one decode
+
+`PreparedDecodeAttention` cold-selects either a materialized BF16 reference or
+the D64 chunked-online implementation. Selection fixes the backend, workspace
+dtype and byte size, partition capacity, and provenance trace before the hot
+path. `execute` never allocates and never changes backend. Both implementations
+consume a BF16 query `[QH,D]` and head-major BF16 caches `[KVH,max_seq,D]`, and
+write BF16 `[QH,D]`; GQA requires `KVH` to divide `QH`.
+
+The reference workspace reserves `QH*max_seq*2` bytes once. For a call with
+logical length `T`, its active prefix is densely packed BF16 `[QH,T]`; callers
+must treat the remaining capacity as opaque scratch rather than a strided
+`[QH,max_seq]` tensor.
+
+The online workspace is packed F32
+`[partition_capacity,QH,D+2]`. Implementation version 2 for the reviewed
+9QH/3KVH/D64 production geometry is an explicit hybrid: for logical `T<=32`,
+the aligned workspace prefix is reused as dense BF16 `[QH,T]` scores and
+HF-eager's short AV warp reduction is used; `T>=33`, all other geometries
+(including Qwen), and fixed37 profiles retain their existing backends. The
+selection trace records the hybrid implementation id, implementation version,
+32-token boundary, and 576-byte maximum score prefix. No additional allocation
+is made. The packed partial-state storage contract remains version 1.
+
+For the ordinary online path, each row is version-1 `(m,l,n[D])`: `m` is the
+range maximum, `l` is the unnormalized exponential sum, and `n` is the
+unnormalized weighted-value sum. Empty rows use `m=-inf`, `l=0`, and zero `n`.
+Reducers merge logical slots in an explicit ascending or descending order and
+normalize once at the end. The public CPU `DecodePartialState` follows the same
+contract so producer/reducer arithmetic can be checked without CUDA.
+
+`kv_cache_append` performs one validated, bit-preserving paired scatter from
+token-major K/V `[T,KVH,D]` into cache positions of head-major
+`[KVH,max_seq,D]`. It synchronizes before returning; callers should advance
+their logical cache length only after every layer append succeeds.
+
+The decode GPU integration target is remote-only and ignored by default. It
+covers exact cache placement and sentinels, MHA/GQA reference-versus-online
+comparisons across partition boundaries, allocation stability, and standalone
+reducer order/empty-state behavior:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test decode_attention_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+## Exact paged KV decode
+
+`PagedKvBlockTableHostV1` validates the version-1 logical table once, including
+fixed 16-token block validity, unique in-range physical IDs, and the final
+partial block. `PagedKvBlockTableV1` binds that immutable mirror to U32 block-ID
+and U16 valid-token device arrays. K/V pools use separate BF16
+`[physical_block,KVH,16,D]` layouts; shuffled physical IDs do not change logical
+attention order.
+
+`paged_kv_cache_append` performs a bit-preserving logical-to-physical scatter.
+`PreparedPagedDecodeAttention` exposes the same backend/capability/selection
+trace facade as contiguous decode. Its materialized reference uses four staged
+BF16 kernels, while the D64 online path produces one PR 09 F32 partial state per
+logical block and reuses the existing reducer. Both paths scan every valid
+logical token, require no optional metadata sidecar, and allocate nothing in
+`execute`.
+
+The remote-only paged target covers lengths around every block boundary,
+shuffled physical IDs, sentinel preservation, exact paged-versus-contiguous
+reference output, reference-versus-online tolerance, workspace capacity tails,
+and allocation stability:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test paged_decode_attention_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+The additive PR 04 memory boundary has a separate five-test remote target. All
+five tests are ignored by default and cover logical zero-byte handles,
+allocation accounting returning to zero, pinned-host/device round trips,
+range/owner validation, and an explicit two-stream completion handoff:
+
+```text
+cargo test --locked -p riley-cuda --no-default-features --features cuda \
+  --test memory_gpu -- --ignored --test-threads=1 --nocapture
+```
+
+`CudaPendingH2D` and `CudaPendingD2H` borrow their stream, device buffer, and
+pinned host buffer until completion. Native active-use tokens independently
+reject early access, reuse, and close. Forgetting a pending token therefore
+causes a permanent busy/accounted leak instead of exposing a pointer or
+allowing storage to be freed during DMA. Device and pinned buffers are `Send`,
+deliberately `!Sync`, non-cloneable opaque owners; no raw device or host pointer
+is part of the safe API.
+
+## Memory round-trip lifecycle
+
+Run this only on an authorized CUDA host. The completion value retains mutable
+borrows of the stream and both buffers through each asynchronous copy. Explicit
+close keeps free and context-release errors observable, while the accounting
+snapshot proves the logical allocations returned to zero.
+
+```rust,no_run
+use riley_cuda::{CudaResult, CudaRuntime};
+
+fn main() -> CudaResult<()> {
+    let runtime = CudaRuntime::initialize()?;
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let mut stream = context.create_stream()?;
+    let mut device_buffer = context.allocate_device_buffer(4)?;
+    let mut pinned = context.allocate_pinned_host_buffer(4)?;
+
+    pinned.write(0, &[1, 2, 3, 4])?;
+    device_buffer
+        .copy_from_pinned_async(0, &mut pinned, 0, 4, &mut stream)?
+        .synchronize()?;
+    pinned.write(0, &[0; 4])?;
+    device_buffer
+        .copy_to_pinned_async(0, &mut pinned, 0, 4, &mut stream)?
+        .synchronize()?;
+    assert_eq!(pinned.to_vec()?, [1, 2, 3, 4]);
+
+    device_buffer.close()?;
+    pinned.close()?;
+    stream.close()?;
+    assert!(context.allocation_stats()?.is_zero());
+    context.close()?;
+    Ok(())
+}
+```
+
+## Diagnostic-kernel lifecycle
+
+Build this example with the `cuda` feature and run it only on an authorized
+CUDA host. `finish` synchronizes the originating stream before copying results
+to host. Close child resources before explicitly closing the retained context
+lease so every destruction error remains observable.
+
+```rust,no_run
+use riley_cuda::{CudaResult, CudaRuntime};
+
+fn main() -> CudaResult<()> {
+    let runtime = CudaRuntime::initialize()?;
+    let device = runtime.device(0)?;
+    let context = device.create_context()?;
+    let kernel = context.kernel();
+    let mut stream = context.create_stream()?;
+
+    let values = kernel.launch_fill(&mut stream, 1_024, 1.25)?.finish()?;
+    assert_eq!(values.len(), 1_024);
+
+    stream.close()?;
+    drop(kernel);
+    context.close()?;
+    Ok(())
+}
+```

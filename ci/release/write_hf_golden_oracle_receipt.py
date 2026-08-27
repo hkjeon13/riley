@@ -2,7 +2,7 @@
 """Create one remote-only PR16 Hugging Face golden-oracle receipt.
 
 This development tool is intentionally separate from the release candidate.
-It loads only a caller-supplied local checkpoint and never imports rustinfer.
+It loads only a caller-supplied local checkpoint and never imports riley.
 Run it twice in two fresh pinned Python processes; each process proves exact
 greedy parity between the Transformers cache-on and cache-off paths.
 """
@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, NoReturn, Protocol, Sequence
 
 
-SCHEMA_VERSION = "rustinfer.hf-golden-oracle-receipt.v1"
+SCHEMA_VERSION = "riley.hf-golden-oracle-receipt.v1"
 GATE_ID = "pr16-hf-bf16-eager-golden-oracle-v1"
 PROMPT = "Explain why deterministic benchmarks need immutable inputs."
 PROMPT_SHA256 = "4bc5a3f851d466e92f931bcd16540019311b6930fdad3a9ccb4aa6d11fc3d9f4"

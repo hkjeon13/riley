@@ -1,5 +1,5 @@
-"""Repository-local launcher for the rustinfer Python reference lane."""
+"""Repository-local launcher for the riley Python reference lane."""
 
-from .rustinfer_reference.cli import main
+from .riley_reference.cli import main
 
 __all__ = ["main"]

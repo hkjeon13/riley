@@ -4,11 +4,11 @@ The release package is a deterministic `tar.gz` containing exactly one
 versioned directory:
 
 ```text
-rustinfer-VERSION-linux-x86_64-cuda12.8/
+riley-VERSION-linux-x86_64-cuda12.8/
 ├── LICENSE
 ├── NOTICE                         # optional, only when the repository has one
 ├── SHA256SUMS
-├── bin/rustinfer
+├── bin/riley
 └── manifest/
     ├── native-dependencies.txt
     └── release.json
@@ -24,7 +24,7 @@ entries and is limited to the reviewed Linux/CUDA runtime allowlist.
 ## Reviewed project license
 
 The project uses the standard MIT license with
-`Copyright (c) 2026 rustinfer contributors`. Release preflight and bundle
+`Copyright (c) 2026 Riley contributors`. Release preflight and bundle
 production require the root `LICENSE` bytes to match that reviewed text,
 `workspace.package.license` to equal `MIT`, and every workspace package to use
 `license.workspace = true`. Bundle verification independently requires the
@@ -42,12 +42,12 @@ python3 ci/release/check_release_preflight.py \
   --source-date-epoch UNIX_TIMESTAMP
 
 python3 ci/release/build_release_bundle.py \
-  --binary target/release/rustinfer \
-  --output dist/rustinfer.tar.gz \
+  --binary target/release/riley \
+  --output dist/riley.tar.gz \
   --source-revision FULL_40_CHARACTER_GIT_SHA \
   --source-date-epoch UNIX_TIMESTAMP
 
-python3 ci/release/verify_release_bundle.py dist/rustinfer.tar.gz
+python3 ci/release/verify_release_bundle.py dist/riley.tar.gz
 ```
 
 The producer fixes archive order, gzip/tar timestamp, uid/gid, owner names,
@@ -72,10 +72,10 @@ stages:
 ```sh
 docker build \
   --file ci/release/Dockerfile \
-  --build-arg RUSTINFER_CUDA_ARCHITECTURES=89 \
-  --build-arg RUSTINFER_SOURCE_REVISION=FULL_40_CHARACTER_GIT_SHA \
+  --build-arg RILEY_CUDA_ARCHITECTURES=89 \
+  --build-arg RILEY_SOURCE_REVISION=FULL_40_CHARACTER_GIT_SHA \
   --build-arg SOURCE_DATE_EPOCH=UNIX_TIMESTAMP \
-  --tag rustinfer:VERSION-cuda12.8 \
+  --tag riley:VERSION-cuda12.8 \
   .
 ```
 
@@ -83,7 +83,7 @@ The builder selects the already installed exact
 `1.85.0-x86_64-unknown-linux-gnu` Rust toolchain, preventing checkout-local
 rustup reconciliation or downloads. The final stage is a digest-pinned NVIDIA
 CUDA 12.8.1 runtime image. It copies only the already verified bundle payload
-to `/opt/rustinfer`, does not inherit the rustup environment or toolchain, runs
+to `/opt/riley`, does not inherit the rustup environment or toolchain, runs
 as numeric user `65532:65532`, and contains no repository source, Rust/CUDA
 compiler, build system, Python/Pip executable, or Python-family package
 artifact. Model, tokenizer, and configuration files remain operator-mounted
@@ -124,7 +124,7 @@ The strict config and safetensors parsers accept BF16 and FP16 metadata and
 tensor payloads. The production CUDA execution plan is BF16-only; an FP16
 checkpoint therefore fails before execution rather than being converted or
 silently reinterpreted. Checkpoints must be local, covered by an exact
-`rustinfer-checkpoint.json`, and use either `model.safetensors` or a declared
+`riley-checkpoint.json`, and use either `model.safetensors` or a declared
 `model.safetensors.index.json` shard set. No checkpoint transform is accepted.
 
 Configs are closed and duplicate-free. They require dense SiLU gated MLPs
@@ -187,7 +187,7 @@ documented `canonical-v1` default; the fixed37 selector remains only for
 development compatibility.
 
 The three stable selector defaults are also bound to the exact reviewed bytes
-of `crates/rustinfer-server/src/main.rs`. Release preflight rejects any source
+of `crates/riley-server/src/main.rs`. Release preflight rejects any source
 digest change until this contract is deliberately reviewed and updated. The
 Python-free E2E invocation omits all three selectors and checks the embedded
 release defaults/source binding, so it exercises the Rust resolver rather than
@@ -217,10 +217,10 @@ The pinned PR16 soak manifest executes this exact combination in its
 conservative restart path without relying on any of the three defaults. It
 does not manufacture a preceding stable binary.
 
-For binary release rollback, restart a preceding checksummed stable rustinfer
+For binary release rollback, restart a preceding checksummed stable Riley
 bundle with the same model/configuration only when such a release actually
 exists, verify `/v1/models`, then restore traffic. The first stable release
-candidate has no preceding stable rustinfer bundle, so only the current-bundle
+candidate has no preceding stable Riley bundle, so only the current-bundle
 conservative E0 restart is available at that point. Rollback never reuses an
 unverified executable or edits a published bundle in place.
 
@@ -232,7 +232,7 @@ admission, interrupts incomplete HTTP framing, drains bounded active work,
 closes scheduler/CUDA resources, and exits with status zero only when the
 global shutdown deadline and native close contract succeed.
 
-Release/soak automation may set `RUSTINFER_SHUTDOWN_METRICS_PATH` to a new
+Release/soak automation may set `RILEY_SHUTDOWN_METRICS_PATH` to a new
 absolute path. After successful native close, the CLI atomically requests a
 backend-captured allocation snapshot and creates that file with the same
 fixed, prompt-free JSON shape as `GET /metrics`. Existing paths are never

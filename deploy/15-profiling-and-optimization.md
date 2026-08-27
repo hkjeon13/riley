@@ -98,7 +98,7 @@ SmolLM2-135M, concurrency 1, prompt 128, output 32, greedy다.
 
 Closed checker status는 `passed`이고 report SHA-256은
 `804f6ee39d3aada4bfb8853eaa4772941b7dfc545c9def7816c9d711a894e060`다.
-이에 따라 `rustinfer serve`의 production CLI 기본값을 `iteration-batch`로 승격했다.
+이에 따라 `riley serve`의 production CLI 기본값을 `iteration-batch`로 승격했다.
 저수준 executor config의 보수적 기본값과 명시 rollback path는 `per-operation`으로
 유지한다. Rejected fused residual path를 사용할 때도 `per-operation`을 명시해야 한다.
 

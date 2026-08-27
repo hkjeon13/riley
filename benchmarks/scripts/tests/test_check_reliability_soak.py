@@ -106,7 +106,7 @@ class SoakFixture:
         self.test_image_id = "sha256:" + digest("soak test layer")
         self.container_id = digest("soak container")
         self.container_name = (
-            f"rustinfer-soak-{self.source['git_commit'][:12]}-20260826T000000Z"
+            f"riley-soak-{self.source['git_commit'][:12]}-20260826T000000Z"
         )
         self.release_layers = ["sha256:" + digest("release layer")]
         self.test_layers = [
@@ -148,7 +148,7 @@ class SoakFixture:
 
     def _correctness_golden(self) -> dict[str, object]:
         return {
-            "schema_version": "rustinfer.python-free-release-e2e-golden.v1",
+            "schema_version": "riley.python-free-release-e2e-golden.v1",
             "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v3",
             "correctness_report_sha256": self.native_correctness_report_sha256,
             "source_revision": self.source["git_commit"],
@@ -182,10 +182,10 @@ class SoakFixture:
                 scenario["secondary_request_profile"] = "long"
             scenarios.append(scenario)
         return {
-            "schema_version": "rustinfer.reliability-soak-manifest.v1",
+            "schema_version": "riley.reliability-soak-manifest.v1",
             "contract_id": "fixture",
             "target": {
-                "kind": "process", "binary": "/bin/rustinfer", "model_path": "/models/fixture",
+                "kind": "process", "binary": "/bin/riley", "model_path": "/models/fixture",
                 "bind": "127.0.0.1:18080", "completion_path": "/v1/completions",
                 "health_path": "/readyz", "metrics_path": "/metrics",
                 "shutdown_signal": "TERM",
@@ -222,7 +222,7 @@ class SoakFixture:
 
     def _event(self, kind: str, scenario_id: str | None, **values: object) -> None:
         self.events.append({
-            "schema_version": "rustinfer.reliability-soak-event.v1",
+            "schema_version": "riley.reliability-soak-event.v1",
             "sequence": len(self.events) + 1,
             "monotonic_ns": (len(self.events) + 1) * 1_000_000_000,
             "kind": kind, "scenario_id": scenario_id,
@@ -336,7 +336,7 @@ class SoakFixture:
         self.manifest_path.write_text(json.dumps(self.manifest, sort_keys=True) + "\n")
         manifest_sha = hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()
         run = {
-            "schema_version": "rustinfer.reliability-soak-run.v1",
+            "schema_version": "riley.reliability-soak-run.v1",
             "run_id": "soak-20260826T000004Z-aaaaaaaaaaaa",
             "manifest_sha256": manifest_sha, "binding_sha256": self.binding, "source": self.source,
             "target": {"kind": "process", "pid": 123, "image_id": "sha256:" + "d" * 64, "command_sha256": "1" * 64},
@@ -350,21 +350,21 @@ class SoakFixture:
         environment = dict(item.split("=", 1) for item in self.test_image_environment)
         environment.update(
             {
-                "RUSTINFER_SOAK_MANIFEST": "/run-input/reliability-soak-v1.json",
-                "RUSTINFER_SOAK_OUTPUT": "/evidence/run",
-                "RUSTINFER_SOURCE_REVISION": self.source["git_commit"],
-                "RUSTINFER_SOURCE_ARCHIVE_SHA256": self.source[
+                "RILEY_SOAK_MANIFEST": "/run-input/reliability-soak-v1.json",
+                "RILEY_SOAK_OUTPUT": "/evidence/run",
+                "RILEY_SOURCE_REVISION": self.source["git_commit"],
+                "RILEY_SOURCE_ARCHIVE_SHA256": self.source[
                     "source_archive_sha256"
                 ],
-                "RUSTINFER_BINARY_SHA256": self.source["binary_sha256"],
-                "RUSTINFER_IMAGE_SHA256": self.source["image_sha256"],
-                "RUSTINFER_MODEL_SHA256": self.source["model_sha256"],
-                "RUSTINFER_MODEL_ID": self.source["model_id"],
-                "RUSTINFER_MODEL_REVISION": self.source["model_revision"],
-                "RUSTINFER_SOAK_FINAL_METRICS_JSON": "/evidence/final-metrics.json",
-                "RUSTINFER_SOAK_BINARY": "/opt/rustinfer/bin/rustinfer",
-                "RUSTINFER_SOAK_MODEL_PATH": "/model",
-                "RUSTINFER_SOAK_BIND": "127.0.0.1:18080",
+                "RILEY_BINARY_SHA256": self.source["binary_sha256"],
+                "RILEY_IMAGE_SHA256": self.source["image_sha256"],
+                "RILEY_MODEL_SHA256": self.source["model_sha256"],
+                "RILEY_MODEL_ID": self.source["model_id"],
+                "RILEY_MODEL_REVISION": self.source["model_revision"],
+                "RILEY_SOAK_FINAL_METRICS_JSON": "/evidence/final-metrics.json",
+                "RILEY_SOAK_BINARY": "/opt/riley/bin/riley",
+                "RILEY_SOAK_MODEL_PATH": "/model",
+                "RILEY_SOAK_BIND": "127.0.0.1:18080",
                 "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
                 "ALL_PROXY": "",
                 "FTP_PROXY": "",
@@ -398,16 +398,16 @@ class SoakFixture:
 
     def _test_image_labels(self) -> dict[str, str]:
         return {
-            "org.rustinfer.reliability-soak.release-image-id": (
+            "org.riley.reliability-soak.release-image-id": (
                 self.release_image_id
             ),
-            "org.rustinfer.reliability-soak.source-revision": self.source[
+            "org.riley.reliability-soak.source-revision": self.source[
                 "git_commit"
             ],
-            "org.rustinfer.reliability-soak.source-archive-sha256": self.source[
+            "org.riley.reliability-soak.source-archive-sha256": self.source[
                 "source_archive_sha256"
             ],
-            "org.rustinfer.reliability-soak.release-binary-sha256": self.source[
+            "org.riley.reliability-soak.release-binary-sha256": self.source[
                 "binary_sha256"
             ],
         }
@@ -418,13 +418,13 @@ class SoakFixture:
                 "Id": self.container_id,
                 "Name": "/" + self.container_name,
                 "Image": self.test_image_id,
-                "Path": "/opt/rustinfer-soak/ci/run_release_soak.sh",
+                "Path": "/opt/riley-soak/ci/run_release_soak.sh",
                 "Args": [],
                 "Created": "2026-08-26T00:00:02.123456789Z",
                 "Config": {
                     "Image": self.test_image_id,
                     "User": "65532:65532",
-                    "Entrypoint": ["/opt/rustinfer-soak/ci/run_release_soak.sh"],
+                    "Entrypoint": ["/opt/riley-soak/ci/run_release_soak.sh"],
                     "Cmd": [],
                     "WorkingDir": "",
                     "Healthcheck": {"Test": ["NONE"]},
@@ -589,7 +589,7 @@ class SoakFixture:
                 "Architecture": "amd64",
                 "Config": {
                     "User": "65532:65532",
-                    "Entrypoint": ["/opt/rustinfer-soak/ci/run_release_soak.sh"],
+                    "Entrypoint": ["/opt/riley-soak/ci/run_release_soak.sh"],
                     "Cmd": [],
                     "WorkingDir": "",
                     "Env": self.test_image_environment,
@@ -720,7 +720,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertEqual(
             report["schema_version"],
-            "rustinfer.reliability-soak-report.v2",
+            "riley.reliability-soak-report.v2",
         )
         self.assertEqual(len(report["scenario_summaries"]), 10)
         self.assertEqual(
@@ -820,7 +820,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
                 "launcher-receipt.json",
                 lambda value: value.__setitem__(
                     "schema_version",
-                    "rustinfer.reliability-soak-launcher-receipt.v1",
+                    "riley.reliability-soak-launcher-receipt.v1",
                 ),
             )
         )
@@ -947,9 +947,9 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
 
     def test_container_name_stamp_is_strict_and_immediately_precedes_create(self) -> None:
         names = {
-            "invalid date": "rustinfer-soak-aaaaaaaaaaaa-20260230T000000Z",
-            "after create": "rustinfer-soak-aaaaaaaaaaaa-20260826T000003Z",
-            "too early": "rustinfer-soak-aaaaaaaaaaaa-20260825T230000Z",
+            "invalid date": "riley-soak-aaaaaaaaaaaa-20260230T000000Z",
+            "after create": "riley-soak-aaaaaaaaaaaa-20260826T000003Z",
+            "too early": "riley-soak-aaaaaaaaaaaa-20260825T230000Z",
         }
         for name, container_name in names.items():
             with self.subTest(name=name):
@@ -1022,7 +1022,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
             "wrong labels": lambda fixture: fixture.mutate_receipt(
                 "test-layer-image-inspect.json",
                 lambda value: value[0]["Config"]["Labels"].__setitem__(
-                    "org.rustinfer.reliability-soak.source-revision", "9" * 40
+                    "org.riley.reliability-soak.source-revision", "9" * 40
                 ),
             ),
             "wrong source": lambda fixture: fixture.mutate_receipt(
@@ -1404,7 +1404,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
     def test_failure_event_fails(self) -> None:
         def mutate(fixture: SoakFixture) -> None:
             fixture.events.insert(-1, {
-                "schema_version": "rustinfer.reliability-soak-event.v1", "sequence": 0,
+                "schema_version": "riley.reliability-soak-event.v1", "sequence": 0,
                 "monotonic_ns": 0, "kind": "failure", "scenario_id": None,
                 "binding_sha256": fixture.binding, "stage": "fixture", "message": "forced",
             })
@@ -1534,7 +1534,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         for field, value in (
             ("process.pid", 123),
             ("process.rss_bytes", 4096),
-            ("process.children", [{"pid": 77, "comm": "rustinfer", "executable": "/opt/rustinfer/bin/rustinfer"}]),
+            ("process.children", [{"pid": 77, "comm": "riley", "executable": "/opt/riley/bin/riley"}]),
             ("gpu.vram_bytes", 4096),
         ):
             with self.subTest(field=field):
@@ -1796,7 +1796,7 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
 
         def common_event(kind: str, scenario_id: str | None) -> dict[str, object]:
             return {
-                "schema_version": "rustinfer.reliability-soak-event.v1",
+                "schema_version": "riley.reliability-soak-event.v1",
                 "sequence": 1,
                 "monotonic_ns": 1,
                 "kind": kind,
@@ -2264,7 +2264,7 @@ class SoakRunnerStaticTests(unittest.TestCase):
         self.assertIn("-type f -print0 | sort -z", runner)
         self.assertIn("printf '%s  %s\\n'", runner)
         self.assertIn(
-            'test "$computed_model_sha256" = "$RUSTINFER_MODEL_SHA256"',
+            'test "$computed_model_sha256" = "$RILEY_MODEL_SHA256"',
             runner,
         )
 

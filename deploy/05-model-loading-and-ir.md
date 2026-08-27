@@ -133,7 +133,7 @@ Manifest 예시:
 
 ```json
 {
-  "format": "rustinfer-checkpoint-v1",
+  "format": "riley-checkpoint-v1",
   "source_model": "org/model",
   "source_revision": "immutable-revision",
   "converter_revision": "git-sha",

@@ -49,7 +49,7 @@ PROMPT_CATEGORIES = {
     "minimal",
     "early-eos",
 }
-LANE_IDS = {"hf-transformers", "vllm", "rustinfer-native"}
+LANE_IDS = {"hf-transformers", "vllm", "riley-native"}
 SINGLE_CELL_BENCHMARK_FLAGS = {
     "--matrix",
     "--prompts",
@@ -73,11 +73,11 @@ REFERENCE_FIXTURE_SOURCE_PATHS = {
     "dependency_manifest": "tools/python/reference/pyproject.toml",
     "dependency_lock": "tools/python/reference/uv.lock",
     "python_version_file": "tools/python/reference/.python-version",
-    "constants": "tools/python/reference/rustinfer_reference/constants.py",
-    "environment_probe": "tools/python/reference/rustinfer_reference/environment.py",
-    "fixture_generator": "tools/python/reference/rustinfer_reference/fixture.py",
-    "hf_backend": "tools/python/reference/rustinfer_reference/hf_backend.py",
-    "cli": "tools/python/reference/rustinfer_reference/cli.py",
+    "constants": "tools/python/reference/riley_reference/constants.py",
+    "environment_probe": "tools/python/reference/riley_reference/environment.py",
+    "fixture_generator": "tools/python/reference/riley_reference/fixture.py",
+    "hf_backend": "tools/python/reference/riley_reference/hf_backend.py",
+    "cli": "tools/python/reference/riley_reference/cli.py",
 }
 NATIVE_E0_APPROVAL_INDEX_PATH = (
     "benchmarks/correctness/evidence/native-e0-approvals.json"
@@ -87,14 +87,14 @@ CORRECTNESS_REPORT_SCHEMA_PATH = "benchmarks/schemas/correctness-report.schema.j
 RELEASE_V3_GATE_PATH = (
     "benchmarks/correctness/smollm2-fp32-bf16-native-e0-v3.json"
 )
-RELEASE_V3_LANE_PATH = "benchmarks/lanes/rustinfer-native-v3.json"
+RELEASE_V3_LANE_PATH = "benchmarks/lanes/riley-native-v3.json"
 RELEASE_V3_SCHEMA_PATHS = (
     "benchmarks/schemas/correctness-gate-v3.schema.json",
     "benchmarks/schemas/correctness-calibration-manifest-v3.schema.json",
     "benchmarks/schemas/correctness-report-v3.schema.json",
 )
 RELEASE_V3_GATE_SHA256 = (
-    "e038d4ede9b637423afe2f69bc25021c4153ae1fd4c36e9e9ba8eef37af7bb72"
+    "aa95e5425aa98cebe8f43f00e52024db1e3f03030b89cb4488804b66be1b49e8"
 )
 NATIVE_E0_VARIANT_IDS = (
     "canonical-v1",
@@ -106,8 +106,17 @@ NATIVE_E0_TENSOR_NAMES = (
     "final_log_probs",
 )
 EMPTY_GIT_STATUS_SHA256 = hashlib.sha256(b"").hexdigest()
+IMMUTABLE_RESULTS_MATRIX_SHA256 = (
+    "a979659ef9d7b3c5a7a85e423347eb6f06ccbd3ae5a370056bd056d3137c7e87"
+)
+IMMUTABLE_RESULTS_LANE_SHA256 = {
+    "hf-transformers-eager": (
+        "e84ddc2ee30d5734b7490b36d95350b4c51379a57580d9665987ffa7fdabe645"
+    ),
+    "vllm": "002bab2b7dae587c78339131e5057a7cf4e9fc6d0d83432f514a6db59e89469b",
+}
 NATIVE_CORRECTNESS_RAW_EVIDENCE_SCHEMA_VERSION = (
-    "rustinfer.native-correctness-raw-evidence.v1"
+    "riley.native-correctness-raw-evidence.v1"
 )
 PORTABLE_F32_METRIC_CONTRACT_ID = "portable-f32-metrics-v1"
 PRODUCTION_ORACLE_GIT_REVISION = "2d22ca061f601389fad7f45708497daad14d9297"
@@ -258,7 +267,7 @@ def _validate_native_e0_report_bindings(
         {
             "fp32": _sha256(root / "benchmarks/lanes/hf-transformers.json"),
             "bf16": _sha256(root / "benchmarks/lanes/hf-transformers.json"),
-            "candidate": _sha256(root / "benchmarks/lanes/rustinfer-native.json"),
+            "candidate": _sha256(root / "benchmarks/lanes/riley-native.json"),
         },
         f"{path}.bindings.lane_manifests",
     )
@@ -1127,7 +1136,7 @@ def validate_matrix(matrix: Any, root: Path) -> dict[str, Any]:
     expected_lane_paths = [
         "benchmarks/lanes/hf-transformers.json",
         "benchmarks/lanes/vllm.json",
-        "benchmarks/lanes/rustinfer-native.json",
+        "benchmarks/lanes/riley-native.json",
     ]
     _expect(lane_paths, expected_lane_paths, f"{path}.lane_manifests")
     for relative in lane_paths:
@@ -1469,7 +1478,7 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
             ("--repo-root", "."),
             (
                 "--output",
-                "/var/tmp/rustinfer-reference/smollm2-135m-bf16.json",
+                "/var/tmp/riley-reference/smollm2-135m-bf16.json",
             ),
         ):
             if golden_argv.count(flag) != 1:
@@ -1483,7 +1492,7 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
             argv[:8] if argv else None,
             [
                 "uv", "run", "--frozen", "--offline", "--no-sync", "--project",
-                "tools/python/reference", "rustinfer-reference",
+                "tools/python/reference", "riley-reference",
             ],
             f"{path}.commands.benchmark.argv",
         )
@@ -1550,7 +1559,7 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
             "--no-sync",
             "--project",
             "benchmarks/lanes/vllm",
-            "rustinfer-vllm-benchmark",
+            "riley-vllm-benchmark",
         ]
         _expect(benchmark["argv"][:8], expected_prefix, path)
         if not SINGLE_CELL_BENCHMARK_FLAGS.issubset(benchmark["argv"]):
@@ -1560,7 +1569,7 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
         _expect(lane["runtime_dependency_class"], "native-production", path)
         _expect(lane["availability"], "contract-only", path)
         _expect(lane["semantic_class"], "E0", path)
-        _expect(engine["name"], "rustinfer", path)
+        _expect(engine["name"], "riley", path)
         _expect(engine["version"], None, path)
         required_forbidden = {
             "python",
@@ -1577,7 +1586,7 @@ def validate_lane_manifest(lane: Any, matrix: dict[str, Any], path: str) -> dict
         for command_name in ("serve", "benchmark"):
             command = commands[command_name]
             _expect(command["status"], "contract-only", path)
-            _expect(command["argv"][0], "rustinfer", path)
+            _expect(command["argv"][0], "riley", path)
         if not SINGLE_CELL_BENCHMARK_FLAGS.issubset(commands["benchmark"]["argv"]):
             _error(path, "native benchmark command lacks a required single-cell flag")
     return lane
@@ -1645,9 +1654,9 @@ def validate_release_v3_contract(root: Path, matrix: dict[str, Any]) -> None:
 
     lane_path = root / RELEASE_V3_LANE_PATH
     lane = validate_lane_manifest(_read_json(lane_path), matrix, str(lane_path))
-    legacy_lane = _read_json(root / "benchmarks/lanes/rustinfer-native.json")
+    legacy_lane = _read_json(root / "benchmarks/lanes/riley-native.json")
     expected_lane = json.loads(json.dumps(legacy_lane))
-    expected_lane["engine"]["revision"] = "rustinfer-native-contract-v3"
+    expected_lane["engine"]["revision"] = "riley-native-contract-v3"
     _expect(lane, expected_lane, str(lane_path))
 
     candidate_schema = schema_documents[RELEASE_V3_SCHEMA_PATHS[1]]
@@ -1743,8 +1752,8 @@ def validate_dependency_project(root: Path, lane: Mapping[str, Any]) -> None:
         if isinstance(name, str):
             packages_by_name.setdefault(name, []).append(package)
     project_names = {
-        "hf-transformers": "rustinfer-reference",
-        "vllm": "rustinfer-vllm-benchmark-lane",
+        "hf-transformers": "riley-reference",
+        "vllm": "riley-vllm-benchmark-lane",
     }
     project_name = project_names[lane["lane_id"]]
     project_packages = packages_by_name.get(project_name, [])
@@ -1790,7 +1799,7 @@ def validate_dependency_project(root: Path, lane: Mapping[str, Any]) -> None:
     if lane["lane_id"] == "vllm":
         scripts = project.get("scripts")
         if scripts != {
-            "rustinfer-vllm-benchmark": "rustinfer_vllm_benchmark.cli:main"
+            "riley-vllm-benchmark": "riley_vllm_benchmark.cli:main"
         }:
             _error(str(manifest_path), "vLLM project does not expose the adapter console script")
 
@@ -1862,6 +1871,63 @@ def _fixture_git(root: Path, arguments: list[str]) -> bytes:
         )
 
 
+def _fixture_source_at_revision(
+    root: Path,
+    revision: str,
+    relative: str,
+    source_path: str,
+) -> bytes:
+    """Replay a source across a package-directory rename.
+
+    Golden fixtures retain their immutable producer revision, while their
+    logical source paths follow the active package name.  If that logical path
+    did not yet exist at the recorded revision, resolve exactly one historical
+    sibling by basename inside the same reference-tool boundary.
+    """
+
+    try:
+        return subprocess.run(
+            ["git", "show", f"{revision}:{relative}"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        package_prefix = "tools/python/reference/riley_reference/"
+        if not relative.startswith(package_prefix):
+            _error(
+                source_path,
+                f"cannot replay source at recorded revision: {revision}:{relative}",
+            )
+        names = _fixture_git(
+            root,
+            [
+                "ls-tree",
+                "-r",
+                "--name-only",
+                revision,
+                "--",
+                "tools/python/reference",
+            ],
+        )
+        try:
+            candidates = [
+                candidate
+                for candidate in names.decode("utf-8").splitlines()
+                if candidate.startswith("tools/python/reference/")
+                and Path(candidate).name == Path(relative).name
+            ]
+        except UnicodeDecodeError:
+            _error(source_path, "Git returned non-UTF-8 reference source paths")
+        if len(candidates) != 1:
+            _error(
+                source_path,
+                "renamed historical source must resolve to exactly one reference "
+                f"file by basename, found {candidates!r}",
+            )
+        return _fixture_git(root, ["show", f"{revision}:{candidates[0]}"])
+
+
 def validate_reference_fixture(
     root: Path,
     fixture_path: Path,
@@ -1930,7 +1996,12 @@ def validate_reference_fixture(
         # immutable revision. Later additive producer changes must not require
         # rewriting historical provenance or pretending that they generated
         # the old fixture; replay the exact Git object below instead.
-        committed = _fixture_git(root, ["show", f"{revision}:{relative}"])
+        committed = _fixture_source_at_revision(
+            root,
+            revision,
+            relative,
+            f"{fixture_path}.provenance.sources.{name}.recorded_commit",
+        )
         _expect(
             hashlib.sha256(committed).hexdigest(),
             digest,
@@ -2044,6 +2115,8 @@ def validate_result_file(
     lane_paths: dict[str, Path],
     lanes_by_implementation: dict[str, dict[str, Any]],
     native_e0_approvals: dict[tuple[str, str], dict[str, Any]] | None = None,
+    *,
+    immutable_historical: bool = False,
 ) -> int:
     count = 0
     expected_matrix_hash = _sha256(matrix_path)
@@ -2060,9 +2133,15 @@ def validate_result_file(
         _expect_comparable(
             row["matrix_id"], matrix["matrix_id"], f"{row_path}.matrix_id"
         )
-        _expect_comparable(
-            row["matrix_sha256"], expected_matrix_hash, f"{row_path}.matrix_sha256"
-        )
+        allowed_matrix_hashes = {expected_matrix_hash}
+        if immutable_historical:
+            allowed_matrix_hashes.add(IMMUTABLE_RESULTS_MATRIX_SHA256)
+        if row["matrix_sha256"] not in allowed_matrix_hashes:
+            _comparison_error(
+                f"{row_path}.matrix_sha256",
+                f"expected one of {sorted(allowed_matrix_hashes)!r}, "
+                f"got {row['matrix_sha256']!r}",
+            )
         if expected_prompts_hash is not None:
             _expect_comparable(
                 row["prompts_sha256"],
@@ -2182,9 +2261,17 @@ def validate_result_file(
             row["engine_revision"], lane["engine"]["revision"], row_path
         )
         lane_path = lane_paths[lane["lane_id"]]
-        _expect_comparable(
-            row["lane_manifest_sha256"], _sha256(lane_path), row_path
-        )
+        allowed_lane_hashes = {_sha256(lane_path)}
+        if immutable_historical:
+            historical_lane_hash = IMMUTABLE_RESULTS_LANE_SHA256.get(implementation)
+            if historical_lane_hash is not None:
+                allowed_lane_hashes.add(historical_lane_hash)
+        if row["lane_manifest_sha256"] not in allowed_lane_hashes:
+            _comparison_error(
+                f"{row_path}.lane_manifest_sha256",
+                f"expected one of {sorted(allowed_lane_hashes)!r}, "
+                f"got {row['lane_manifest_sha256']!r}",
+            )
 
         requests = row["requests"]
         if len(requests) != workload["concurrency"]:
@@ -2390,7 +2477,11 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
         prompts_path,
     )
     result_paths = {path.resolve() for path in explicit_results}
-    result_paths.update((root / "benchmarks/results").glob("**/raw.jsonl"))
+    historical_result_paths = {
+        path.resolve()
+        for path in (root / "benchmarks/results").glob("**/raw.jsonl")
+    }
+    result_paths.update(historical_result_paths)
     result_count = 0
     for result_path in sorted(result_paths):
         result_count += validate_result_file(
@@ -2402,6 +2493,7 @@ def validate_contract(root: Path, explicit_results: Iterable[Path] = ()) -> dict
             lane_paths,
             lanes_by_implementation,
             native_e0_approvals,
+            immutable_historical=result_path in historical_result_paths,
         )
     return {
         "lanes": len(lane_paths),

@@ -24,9 +24,9 @@ from typing import Any, Mapping, NoReturn, Sequence
 
 GATE_ID = "pr15-iteration-command-batch-exact-v1"
 FIXED37_PRODUCTION_BATCH_GATE_ID = "pr16-fixed37-production-batch-e0-v1"
-RECEIPT_VERSION = "rustinfer.optimizer-execution-receipt.v3"
-COMMAND_RECORD_VERSION = "rustinfer.optimizer-command-log.v2"
-SUBJECT_RECORD_VERSION = "rustinfer.optimizer-subjects.v2"
+RECEIPT_VERSION = "riley.optimizer-execution-receipt.v3"
+COMMAND_RECORD_VERSION = "riley.optimizer-command-log.v2"
+SUBJECT_RECORD_VERSION = "riley.optimizer-subjects.v2"
 
 MODEL_ID = "HuggingFaceTB/SmolLM2-135M"
 MODEL_REVISION = "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
@@ -83,7 +83,7 @@ BASE_ENVIRONMENT = {
     "CARGO_TERM_COLOR": "never",
     "CUDA_HOME": "/usr/local/cuda",
     "CUDAToolkit_ROOT": "/usr/local/cuda",
-    "RUSTINFER_CUDA_ARCHITECTURES": "89",
+    "RILEY_CUDA_ARCHITECTURES": "89",
     "RUSTUP_TOOLCHAIN": "1.85.0-x86_64-unknown-linux-gnu",
 }
 
@@ -116,7 +116,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-command-batch-lifecycle",
         "execute_command_id": "command-batch-lifecycle",
         "compile_log": COMPILE_LOG_FILES["compile-command-batch-lifecycle"],
-        "package": "rustinfer-cuda",
+        "package": "riley-cuda",
         "target_dir": "/workspace/target/optimizer-evidence/command-batch-lifecycle",
         "test_name": "command_batch_proxy_is_one_shot_and_drop_restores_stream_use",
     },
@@ -125,7 +125,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-command-batch-resource-ledger",
         "execute_command_id": "command-batch-resource-ledger",
         "compile_log": COMPILE_LOG_FILES["compile-command-batch-resource-ledger"],
-        "package": "rustinfer-cuda",
+        "package": "riley-cuda",
         "target_dir": "/workspace/target/optimizer-evidence/command-batch-resource-ledger",
         "test_name": "command_batch_releases_multi_primitive_resource_ledger_after_validation_error",
     },
@@ -134,7 +134,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-smollm2-multi-step-greedy-exact",
         "execute_command_id": "smollm2-multi-step-greedy-exact",
         "compile_log": COMPILE_LOG_FILES["compile-smollm2-multi-step-greedy-exact"],
-        "package": "rustinfer-runtime",
+        "package": "riley-runtime",
         "target_dir": "/workspace/target/optimizer-evidence/smollm2-multi-step-greedy-exact",
         "test_name": "iteration_batch_completion_matches_per_operation_multi_step_greedy_exactly",
     },
@@ -143,7 +143,7 @@ TEST_SUBJECTS: dict[str, dict[str, str]] = {
         "compile_command_id": "compile-fixed37-production-batch-e0",
         "execute_command_id": "fixed37-production-batch-e0",
         "compile_log": COMPILE_LOG_FILES["compile-fixed37-production-batch-e0"],
-        "package": "rustinfer-runtime",
+        "package": "riley-runtime",
         "target_dir": "/workspace/target/optimizer-evidence/fixed37-production-batch-e0",
         "test_name": "fixed37_production_batch_growing_prefix_matches_golden_exactly",
     },
@@ -364,7 +364,7 @@ def parse_command_records(path: Path) -> list[dict[str, Any]]:
             "smollm2-multi-step-greedy-exact",
             "fixed37-production-batch-e0",
         }:
-            expected_environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
+            expected_environment["RILEY_REAL_CHECKPOINT"] = "/model"
         if command != {
             "id": command["id"],
             "argv": expected["argv"],

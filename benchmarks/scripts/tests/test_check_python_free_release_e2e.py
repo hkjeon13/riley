@@ -123,8 +123,8 @@ class E2EFixture:
         self.revision = "a" * 40
         self.image_id = "sha256:" + "b" * 64
         self.source_archive = root / "source.tar"
-        self.release_binary = root / "rustinfer"
-        self.release_bundle = root / "rustinfer.tar.gz"
+        self.release_binary = root / "riley"
+        self.release_bundle = root / "riley.tar.gz"
         self.model_dir = root / "model"
         self.model_dir.mkdir()
         self.config = self.model_dir / "config.json"
@@ -153,7 +153,7 @@ class E2EFixture:
         }
         for name, contents in tokenizer_contents.items():
             (self.model_dir / name).write_bytes(contents)
-        (self.model_dir / "rustinfer-checkpoint.json").write_bytes(b'{"format":"rustinfer-checkpoint-v1"}\n')
+        (self.model_dir / "riley-checkpoint.json").write_bytes(b'{"format":"riley-checkpoint-v1"}\n')
         self.model_id = checker.MODEL_ID
         self.model_revision = checker.MODEL_REVISION
         self.expected_text = "fixture completion"
@@ -241,7 +241,7 @@ class E2EFixture:
         }
 
     def _processes(self, pid: int) -> list[dict[str, object]]:
-        return [{"pid": pid, "ppid": 1, "comm": "rustinfer", "args": "/opt/rustinfer/bin/rustinfer serve --model /models/checkpoint"}]
+        return [{"pid": pid, "ppid": 1, "comm": "riley", "args": "/opt/riley/bin/riley serve --model /models/checkpoint"}]
 
     def _raw(self) -> dict[str, object]:
         ldd_lines = [f"{dependency} => /usr/lib/{dependency} (0x00000001)" for dependency in DEPENDENCIES]
@@ -302,7 +302,7 @@ class E2EFixture:
             "FinishedAt": "0001-01-01T00:00:00Z" if running else f"2026-08-26T12:1{ordinal}:00Z",
         }
         value = [{
-            "Id": container_id, "Image": self.image_id, "Path": "/opt/rustinfer/bin/rustinfer",
+            "Id": container_id, "Image": self.image_id, "Path": "/opt/riley/bin/riley",
             "Args": ["serve", "--model", "/models/checkpoint", "--model-id", self.model_id, "--bind", "127.0.0.1:8080", "--max-output-tokens", "1024"],
             "Created": f"2026-08-26T12:0{ordinal}:00Z", "Config": {"Image": self.image_id},
             "HostConfig": {"NetworkMode": "none", "ReadonlyRootfs": True, "DeviceRequests": [{"Driver": "nvidia", "Capabilities": [["gpu"]]}]},
@@ -324,14 +324,14 @@ class E2EFixture:
         files["image-python-scan.txt"] = b"[forbidden-executables]\n[forbidden-artifacts]\n"
         files["image-inspect.json"] = json_bytes([{
             "Id": self.image_id, "Architecture": "amd64", "Os": "linux",
-            "Config": {"Entrypoint": ["/opt/rustinfer/bin/rustinfer"], "Cmd": ["--help"], "User": "65532:65532", "Env": ["PATH=/opt/rustinfer/bin:/usr/bin"]},
+            "Config": {"Entrypoint": ["/opt/riley/bin/riley"], "Cmd": ["--help"], "User": "65532:65532", "Env": ["PATH=/opt/riley/bin:/usr/bin"]},
             "RootFS": {"Type": "layers", "Layers": ["sha256:" + "d" * 64]},
         }])
         for ordinal, container_id, pid, digit in (("first", "c" * 64, 101, "1"), ("second", "e" * 64, 202, "2")):
             files[f"container-{ordinal}-pre.json"] = self._container(container_id, pid, True, digit)
             files[f"container-{ordinal}-runtime.json"] = self._container(container_id, pid, True, digit)
             files[f"container-{ordinal}-post.json"] = self._container(container_id, pid, False, digit)
-            process = f"PID PPID COMMAND COMMAND\n{pid} 1 rustinfer /opt/rustinfer/bin/rustinfer serve --model /models/checkpoint\n".encode()
+            process = f"PID PPID COMMAND COMMAND\n{pid} 1 riley /opt/riley/bin/riley serve --model /models/checkpoint\n".encode()
             files[f"process-{ordinal}-pre.txt"] = process
             files[f"process-{ordinal}-runtime.txt"] = process
         greedy_request = {"model": self.model_id, "prompt": "A bounded release probe", "max_tokens": 8, "temperature": 0, "top_p": 1, "stream": False}
@@ -484,7 +484,7 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             payloads = {
-                "raw-evidence.json": b'{"schema_version":"rustinfer.python-free-release-e2e-raw.v1"}\n',
+                "raw-evidence.json": b'{"schema_version":"riley.python-free-release-e2e-raw.v1"}\n',
                 "correctness-golden.json": b"{}\n", "model-SHA256SUMS": b"0" * 64 + b"  config.json\n",
                 "shutdown-metrics.json": b"{}\n", "repeat-shutdown-metrics.json": b"{}\n",
             }
@@ -666,7 +666,7 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
     def test_remote_driver_preserves_v2_raw_observations(self) -> None:
         source = DRIVER.read_text(encoding="utf-8")
         for required in (
-            "rustinfer.python-free-release-e2e-raw.v2", "docker image inspect", "docker cp",
+            "riley.python-free-release-e2e-raw.v2", "docker image inspect", "docker cp",
             "readelf --file-header --program-headers --dynamic", "container-first-pre",
             "container-first-runtime", "container-first-post", "process-first-runtime",
             "cancellation-request", "cancellation-response-prefix", "--model-dir",
@@ -680,11 +680,11 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
         match = re.search(r"(?ms)^launch_container\(\) \{\n(?P<body>.*?)^\}", source)
         self.assertIsNotNone(match)
         body = match.group("body")
-        marker = '"$RUSTINFER_E2E_IMAGE_ID" \\\n'
+        marker = '"$RILEY_E2E_IMAGE_ID" \\\n'
         self.assertIn(marker, body)
         command = body.split(marker, 1)[1].replace("\\\n", " ")
         command = command.replace('"$model_id"', shlex.quote(checker.MODEL_ID))
-        command = command.replace('"$RUSTINFER_E2E_BIND"', "127.0.0.1:8080")
+        command = command.replace('"$RILEY_E2E_BIND"', "127.0.0.1:8080")
         runner_args = shlex.split(command)
         literal_default_args = [
             "serve", "--model", "/models/checkpoint", "--model-id", checker.MODEL_ID,

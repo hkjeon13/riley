@@ -31,7 +31,7 @@ _PERFORMANCE_CHECKER_PATH = (
     / "benchmarks/scripts/check_release_performance.py"
 )
 _PERFORMANCE_SPEC = importlib.util.spec_from_file_location(
-    "rustinfer_final_candidate_performance_contract",
+    "riley_final_candidate_performance_contract",
     _PERFORMANCE_CHECKER_PATH,
 )
 if _PERFORMANCE_SPEC is None or _PERFORMANCE_SPEC.loader is None:  # pragma: no cover
@@ -45,7 +45,7 @@ _PYTHON_FREE_E2E_PATH = (
     / "benchmarks/scripts/check_python_free_release_e2e.py"
 )
 _PYTHON_FREE_E2E_SPEC = importlib.util.spec_from_file_location(
-    "rustinfer_final_candidate_python_free_e2e_contract",
+    "riley_final_candidate_python_free_e2e_contract",
     _PYTHON_FREE_E2E_PATH,
 )
 if _PYTHON_FREE_E2E_SPEC is None or _PYTHON_FREE_E2E_SPEC.loader is None:  # pragma: no cover
@@ -59,7 +59,7 @@ _RELIABILITY_SOAK_PATH = (
     / "benchmarks/scripts/check_reliability_soak.py"
 )
 _RELIABILITY_SOAK_SPEC = importlib.util.spec_from_file_location(
-    "rustinfer_final_candidate_reliability_soak_contract",
+    "riley_final_candidate_reliability_soak_contract",
     _RELIABILITY_SOAK_PATH,
 )
 if _RELIABILITY_SOAK_SPEC is None or _RELIABILITY_SOAK_SPEC.loader is None:  # pragma: no cover
@@ -69,11 +69,11 @@ sys.modules[_RELIABILITY_SOAK_SPEC.name] = reliability_soak
 _RELIABILITY_SOAK_SPEC.loader.exec_module(reliability_soak)
 
 
-MANIFEST_VERSION = "rustinfer.release-candidate-manifest.v2"
-ATTESTATION_VERSION = "rustinfer.release-gate-attestation.v1"
-REPORT_VERSION = "rustinfer.release-candidate-report.v2"
-PERFORMANCE_VERSION = "rustinfer.release-performance-report.v1"
-SOAK_VERSION = "rustinfer.reliability-soak-report.v2"
+MANIFEST_VERSION = "riley.release-candidate-manifest.v2"
+ATTESTATION_VERSION = "riley.release-gate-attestation.v1"
+REPORT_VERSION = "riley.release-candidate-report.v2"
+PERFORMANCE_VERSION = "riley.release-performance-report.v1"
+SOAK_VERSION = "riley.reliability-soak-report.v2"
 CORRECTNESS_VERSION = "1.0.0"
 CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v3"
 OPTIMIZATION_GATE = "pr15-iteration-command-batch-exact-v1"
@@ -81,7 +81,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 GIT_RE = re.compile(r"^[0-9a-f]{40}$")
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 CANDIDATE_ID_RE = re.compile(
-    r"^rustinfer-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
+    r"^riley-((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\."
     r"(?:0|[1-9][0-9]*))-rc([1-9][0-9]*)$"
 )
 PLACEHOLDER_RE = re.compile(
@@ -361,7 +361,7 @@ def _candidate_id(value: Any, path: str) -> tuple[str, str]:
     candidate_id = _string(value, path)
     match = CANDIDATE_ID_RE.fullmatch(candidate_id)
     if match is None:
-        _fail(path, "must be rustinfer-<major>.<minor>.<patch>-rc<positive integer>")
+        _fail(path, "must be riley-<major>.<minor>.<patch>-rc<positive integer>")
     return candidate_id, match.group(1)
 
 
@@ -1484,7 +1484,7 @@ def _validate_soak(
         f"{path}.bindings.runtime_provenance.container_name",
     )
     if re.fullmatch(
-        rf"rustinfer-soak-{re.escape(revision[:12])}-[0-9]{{8}}T[0-9]{{6}}Z",
+        rf"riley-soak-{re.escape(revision[:12])}-[0-9]{{8}}T[0-9]{{6}}Z",
         container_name,
     ) is None:
         _fail(
@@ -1667,7 +1667,7 @@ def _verify_bundle_binding(bundle: Path, binary_sha256: str, revision: str) -> s
         with tarfile.open(bundle, "r:gz") as archive:
             members = archive.getmembers()
             release_members = [member for member in members if member.name.endswith("/manifest/release.json")]
-            binary_members = [member for member in members if member.name.endswith("/bin/rustinfer")]
+            binary_members = [member for member in members if member.name.endswith("/bin/riley")]
             if len(release_members) != 1 or len(binary_members) != 1:
                 _fail("manifest.release.bundle", "cannot locate unique manifest and binary")
             release_file = archive.extractfile(release_members[0])
@@ -1906,7 +1906,7 @@ def evaluate(
         ):
             _fail("--evidence-root", "directory changed while it was opened")
         snapshot_temporary = tempfile.TemporaryDirectory(
-            prefix="rustinfer-candidate-snapshot-"
+            prefix="riley-candidate-snapshot-"
         )
         snapshot_root = _ArtifactSnapshotContext(
             directory=Path(snapshot_temporary.name),

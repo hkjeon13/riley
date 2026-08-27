@@ -22,8 +22,8 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, NoReturn, Sequence
 
 
-RECEIPT_SCHEMA = "rustinfer.hf-golden-oracle-receipt.v1"
-APPROVAL_SCHEMA = "rustinfer.hf-golden-oracle-approval.v1"
+RECEIPT_SCHEMA = "riley.hf-golden-oracle-receipt.v1"
+APPROVAL_SCHEMA = "riley.hf-golden-oracle-approval.v1"
 GATE_ID = "pr16-hf-bf16-eager-golden-oracle-v1"
 PROMPT = "Explain why deterministic benchmarks need immutable inputs."
 PROMPT_SHA256 = "4bc5a3f851d466e92f931bcd16540019311b6930fdad3a9ccb4aa6d11fc3d9f4"

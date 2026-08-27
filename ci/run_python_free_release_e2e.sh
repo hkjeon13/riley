@@ -9,31 +9,31 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 checker="$repo_root/benchmarks/scripts/check_python_free_release_e2e.py"
 packager="$repo_root/ci/release/package_python_free_e2e_evidence.py"
 
-: "${RUSTINFER_E2E_OUTPUT:?set a new absolute evidence directory}"
-: "${RUSTINFER_E2E_IMAGE_ID:?set the immutable sha256: release image ID}"
-: "${RUSTINFER_E2E_SOURCE_REVISION:?set the exact clean 40-character revision}"
-: "${RUSTINFER_E2E_SOURCE_ARCHIVE:?set the source archive path}"
-: "${RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_RELEASE_BINARY:?set the standalone release binary path}"
-: "${RUSTINFER_E2E_RELEASE_BINARY_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_RELEASE_BUNDLE:?set the release bundle path}"
-: "${RUSTINFER_E2E_RELEASE_BUNDLE_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_MODEL_DIR:?set the real checkpoint directory}"
-: "${RUSTINFER_E2E_MODEL_TREE_SHA256:?set its reviewed canonical tree SHA-256}"
-: "${RUSTINFER_E2E_MODEL_REVISION:?set the immutable model revision}"
-: "${RUSTINFER_E2E_CONFIG_SHA256:?set the reviewed config.json SHA-256}"
-: "${RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH:?set the primary weights path below the model directory}"
-: "${RUSTINFER_E2E_WEIGHTS_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH:?set the tokenizer path below the model directory}"
-: "${RUSTINFER_E2E_TOKENIZER_JSON_SHA256:?set the reviewed tokenizer.json SHA-256}"
-: "${RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256:?set the native correctness tokenizer aggregate SHA-256}"
-: "${RUSTINFER_E2E_CORRECTNESS_GOLDEN:?set the approved E2E golden JSON path}"
-: "${RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_CORRECTNESS_REPORT:?set the passing native E0 correctness report}"
-: "${RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256:?set its reviewed SHA-256}"
-: "${RUSTINFER_E2E_DEVICE:=0}"
-: "${RUSTINFER_E2E_BIND:=127.0.0.1:8080}"
-: "${RUSTINFER_E2E_CANCEL_TOKENS:=512}"
+: "${RILEY_E2E_OUTPUT:?set a new absolute evidence directory}"
+: "${RILEY_E2E_IMAGE_ID:?set the immutable sha256: release image ID}"
+: "${RILEY_E2E_SOURCE_REVISION:?set the exact clean 40-character revision}"
+: "${RILEY_E2E_SOURCE_ARCHIVE:?set the source archive path}"
+: "${RILEY_E2E_SOURCE_ARCHIVE_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_RELEASE_BINARY:?set the standalone release binary path}"
+: "${RILEY_E2E_RELEASE_BINARY_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_RELEASE_BUNDLE:?set the release bundle path}"
+: "${RILEY_E2E_RELEASE_BUNDLE_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_MODEL_DIR:?set the real checkpoint directory}"
+: "${RILEY_E2E_MODEL_TREE_SHA256:?set its reviewed canonical tree SHA-256}"
+: "${RILEY_E2E_MODEL_REVISION:?set the immutable model revision}"
+: "${RILEY_E2E_CONFIG_SHA256:?set the reviewed config.json SHA-256}"
+: "${RILEY_E2E_WEIGHTS_RELATIVE_PATH:?set the primary weights path below the model directory}"
+: "${RILEY_E2E_WEIGHTS_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_TOKENIZER_RELATIVE_PATH:?set the tokenizer path below the model directory}"
+: "${RILEY_E2E_TOKENIZER_JSON_SHA256:?set the reviewed tokenizer.json SHA-256}"
+: "${RILEY_E2E_TOKENIZER_AGGREGATE_SHA256:?set the native correctness tokenizer aggregate SHA-256}"
+: "${RILEY_E2E_CORRECTNESS_GOLDEN:?set the approved E2E golden JSON path}"
+: "${RILEY_E2E_CORRECTNESS_GOLDEN_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_CORRECTNESS_REPORT:?set the passing native E0 correctness report}"
+: "${RILEY_E2E_CORRECTNESS_REPORT_SHA256:?set its reviewed SHA-256}"
+: "${RILEY_E2E_DEVICE:=0}"
+: "${RILEY_E2E_BIND:=127.0.0.1:8080}"
+: "${RILEY_E2E_CANCEL_TOKENS:=512}"
 
 for tool in bash docker jq python3 sha256sum find sort awk sed grep tail date mktemp readelf wc; do
     command -v "$tool" >/dev/null 2>&1 || {
@@ -44,66 +44,66 @@ done
 
 sha_re='^[0-9a-f]{64}$'
 git_re='^[0-9a-f]{40}$'
-[[ $RUSTINFER_E2E_SOURCE_REVISION =~ $git_re ]] || { echo "invalid source revision" >&2; exit 2; }
-[[ $RUSTINFER_E2E_IMAGE_ID =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "image must be immutable sha256:<digest>" >&2; exit 2; }
+[[ $RILEY_E2E_SOURCE_REVISION =~ $git_re ]] || { echo "invalid source revision" >&2; exit 2; }
+[[ $RILEY_E2E_IMAGE_ID =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "image must be immutable sha256:<digest>" >&2; exit 2; }
 for digest in \
-    "$RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256" \
-    "$RUSTINFER_E2E_RELEASE_BINARY_SHA256" \
-    "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256" \
-    "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
-    "$RUSTINFER_E2E_CONFIG_SHA256" \
-    "$RUSTINFER_E2E_WEIGHTS_SHA256" \
-    "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
-    "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
-    "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
-    "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
+    "$RILEY_E2E_SOURCE_ARCHIVE_SHA256" \
+    "$RILEY_E2E_RELEASE_BINARY_SHA256" \
+    "$RILEY_E2E_RELEASE_BUNDLE_SHA256" \
+    "$RILEY_E2E_MODEL_TREE_SHA256" \
+    "$RILEY_E2E_CONFIG_SHA256" \
+    "$RILEY_E2E_WEIGHTS_SHA256" \
+    "$RILEY_E2E_TOKENIZER_JSON_SHA256" \
+    "$RILEY_E2E_TOKENIZER_AGGREGATE_SHA256" \
+    "$RILEY_E2E_CORRECTNESS_GOLDEN_SHA256" \
+    "$RILEY_E2E_CORRECTNESS_REPORT_SHA256"
 do
     [[ $digest =~ $sha_re ]] || { echo "invalid reviewed SHA-256 binding" >&2; exit 2; }
 done
-[[ $RUSTINFER_E2E_DEVICE =~ ^[0-9]+$ ]] || { echo "device must be an ordinal" >&2; exit 2; }
-test "$RUSTINFER_E2E_BIND" = 127.0.0.1:8080 || { echo "network-none probe bind must be 127.0.0.1:8080" >&2; exit 2; }
-[[ $RUSTINFER_E2E_CANCEL_TOKENS =~ ^[0-9]+$ ]] || { echo "cancel token bound must be numeric" >&2; exit 2; }
-if [ "$RUSTINFER_E2E_CANCEL_TOKENS" -lt 32 ] || [ "$RUSTINFER_E2E_CANCEL_TOKENS" -gt 1024 ]; then
+[[ $RILEY_E2E_DEVICE =~ ^[0-9]+$ ]] || { echo "device must be an ordinal" >&2; exit 2; }
+test "$RILEY_E2E_BIND" = 127.0.0.1:8080 || { echo "network-none probe bind must be 127.0.0.1:8080" >&2; exit 2; }
+[[ $RILEY_E2E_CANCEL_TOKENS =~ ^[0-9]+$ ]] || { echo "cancel token bound must be numeric" >&2; exit 2; }
+if [ "$RILEY_E2E_CANCEL_TOKENS" -lt 32 ] || [ "$RILEY_E2E_CANCEL_TOKENS" -gt 1024 ]; then
     echo "cancel token bound must be from 32 through 1024" >&2
     exit 2
 fi
-case "$RUSTINFER_E2E_OUTPUT" in /*) ;; *) echo "output must be absolute" >&2; exit 2 ;; esac
-case "$RUSTINFER_E2E_MODEL_DIR" in /*) ;; *) echo "model directory must be absolute" >&2; exit 2 ;; esac
-for relative_artifact in "$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH" "$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH"; do
+case "$RILEY_E2E_OUTPUT" in /*) ;; *) echo "output must be absolute" >&2; exit 2 ;; esac
+case "$RILEY_E2E_MODEL_DIR" in /*) ;; *) echo "model directory must be absolute" >&2; exit 2 ;; esac
+for relative_artifact in "$RILEY_E2E_WEIGHTS_RELATIVE_PATH" "$RILEY_E2E_TOKENIZER_RELATIVE_PATH"; do
 case "$relative_artifact" in
     /*|..|../*|*/../*|*/..) echo "model artifact paths must remain below the model directory" >&2; exit 2 ;;
 esac
 done
-for path in "$RUSTINFER_E2E_OUTPUT" "$RUSTINFER_E2E_MODEL_DIR"; do
+for path in "$RILEY_E2E_OUTPUT" "$RILEY_E2E_MODEL_DIR"; do
     [[ $path != *$'\n'* && $path != *','* ]] || { echo "paths must not contain newlines or commas" >&2; exit 2; }
 done
-test ! -e "$RUSTINFER_E2E_OUTPUT"
-test -d "$RUSTINFER_E2E_MODEL_DIR"
-test -f "$RUSTINFER_E2E_MODEL_DIR/config.json" && test ! -L "$RUSTINFER_E2E_MODEL_DIR/config.json"
-test -f "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH"
-test ! -L "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH"
-test -f "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH"
-test ! -L "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH"
+test ! -e "$RILEY_E2E_OUTPUT"
+test -d "$RILEY_E2E_MODEL_DIR"
+test -f "$RILEY_E2E_MODEL_DIR/config.json" && test ! -L "$RILEY_E2E_MODEL_DIR/config.json"
+test -f "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_WEIGHTS_RELATIVE_PATH"
+test ! -L "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_WEIGHTS_RELATIVE_PATH"
+test -f "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_TOKENIZER_RELATIVE_PATH"
+test ! -L "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_TOKENIZER_RELATIVE_PATH"
 for artifact in \
-    "$RUSTINFER_E2E_SOURCE_ARCHIVE" \
-    "$RUSTINFER_E2E_RELEASE_BINARY" \
-    "$RUSTINFER_E2E_RELEASE_BUNDLE" \
-    "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
-    "$RUSTINFER_E2E_CORRECTNESS_REPORT"
+    "$RILEY_E2E_SOURCE_ARCHIVE" \
+    "$RILEY_E2E_RELEASE_BINARY" \
+    "$RILEY_E2E_RELEASE_BUNDLE" \
+    "$RILEY_E2E_CORRECTNESS_GOLDEN" \
+    "$RILEY_E2E_CORRECTNESS_REPORT"
 do
     test -f "$artifact" && test ! -L "$artifact"
 done
 
 sha_file() { sha256sum "$1" | awk '{print $1}'; }
-test "$(sha_file "$RUSTINFER_E2E_SOURCE_ARCHIVE")" = "$RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_RELEASE_BINARY")" = "$RUSTINFER_E2E_RELEASE_BINARY_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_RELEASE_BUNDLE")" = "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/config.json")" = "$RUSTINFER_E2E_CONFIG_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256"
-test "$(sha_file "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
-python3 "$repo_root/ci/release/verify_release_bundle.py" "$RUSTINFER_E2E_RELEASE_BUNDLE" >/dev/null
+test "$(sha_file "$RILEY_E2E_SOURCE_ARCHIVE")" = "$RILEY_E2E_SOURCE_ARCHIVE_SHA256"
+test "$(sha_file "$RILEY_E2E_RELEASE_BINARY")" = "$RILEY_E2E_RELEASE_BINARY_SHA256"
+test "$(sha_file "$RILEY_E2E_RELEASE_BUNDLE")" = "$RILEY_E2E_RELEASE_BUNDLE_SHA256"
+test "$(sha_file "$RILEY_E2E_MODEL_DIR/config.json")" = "$RILEY_E2E_CONFIG_SHA256"
+test "$(sha_file "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_WEIGHTS_RELATIVE_PATH")" = "$RILEY_E2E_WEIGHTS_SHA256"
+test "$(sha_file "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_TOKENIZER_RELATIVE_PATH")" = "$RILEY_E2E_TOKENIZER_JSON_SHA256"
+test "$(sha_file "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_CORRECTNESS_GOLDEN_SHA256"
+test "$(sha_file "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_CORRECTNESS_REPORT_SHA256"
+python3 "$repo_root/ci/release/verify_release_bundle.py" "$RILEY_E2E_RELEASE_BUNDLE" >/dev/null
 
 scratch=$(mktemp -d)
 container_id=
@@ -119,72 +119,72 @@ trap cleanup EXIT
 
 model_manifest="$scratch/model.SHA256SUMS"
 : >"$model_manifest"
-if find "$RUSTINFER_E2E_MODEL_DIR" -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
+if find "$RILEY_E2E_MODEL_DIR" -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
     echo "model tree contains a symlink or non-regular entry" >&2
     exit 2
 fi
 model_file_count=0
 while IFS= read -r -d '' model_file; do
-    relative=${model_file#"$RUSTINFER_E2E_MODEL_DIR"/}
+    relative=${model_file#"$RILEY_E2E_MODEL_DIR"/}
     [[ $relative =~ ^[A-Za-z0-9._/+@=-]+$ ]] || {
         echo "model paths must use the safe ASCII path alphabet" >&2
         exit 2
     }
     printf '%s  %s\n' "$(sha_file "$model_file")" "$relative" >>"$model_manifest"
     model_file_count=$((model_file_count + 1))
-done < <(find "$RUSTINFER_E2E_MODEL_DIR" -type f -print0 | sort -z)
+done < <(find "$RILEY_E2E_MODEL_DIR" -type f -print0 | sort -z)
 test "$model_file_count" -gt 0
-test "$(sha_file "$model_manifest")" = "$RUSTINFER_E2E_MODEL_TREE_SHA256"
+test "$(sha_file "$model_manifest")" = "$RILEY_E2E_MODEL_TREE_SHA256"
 
-golden_schema=$(jq -er '.schema_version' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
-test "$golden_schema" = rustinfer.python-free-release-e2e-golden.v1
+golden_schema=$(jq -er '.schema_version' "$RILEY_E2E_CORRECTNESS_GOLDEN")
+test "$golden_schema" = riley.python-free-release-e2e-golden.v1
 jq -e 'keys == ["config_sha256","correctness_gate_id","correctness_report_sha256","expected_greedy_text_sha256","max_tokens","model_id","model_revision","prompt","schema_version","source_revision","tokenizer_aggregate_sha256","tokenizer_json_sha256","weights_sha256"]' \
-    "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" >/dev/null
-test "$(jq -er '.correctness_gate_id' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v3
-test "$(jq -er '.correctness_report_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256"
-test "$(jq -er '.source_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_SOURCE_REVISION"
-test "$(jq -er '.model_revision' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_MODEL_REVISION"
-test "$(jq -er '.config_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_CONFIG_SHA256"
-test "$(jq -er '.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(jq -er '.tokenizer_json_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256"
-test "$(jq -er '.tokenizer_aggregate_sha256' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
-test "$(jq -er '.gate_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = smollm2-fp32-bf16-native-e0-v3
-test "$(jq -er '.status' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = pass
-test "$(jq -er '.bindings.candidate_git_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_SOURCE_REVISION"
-test "$(jq -er '.bindings.candidate_git_status_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$(printf '' | sha256sum | awk '{print $1}')"
-test "$(jq -er '.bindings.model_revision' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_MODEL_REVISION"
-test "$(jq -er '.bindings.config_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_CONFIG_SHA256"
-test "$(jq -er '.bindings.weights_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_WEIGHTS_SHA256"
-test "$(jq -er '.bindings.tokenizer_sha256' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256"
-model_id=$(jq -er '.model_id | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"))' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
-test "$(jq -er '.bindings.model_id' "$RUSTINFER_E2E_CORRECTNESS_REPORT")" = "$model_id"
-golden_prompt=$(jq -er '.prompt | select(type == "string" and length > 0)' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
+    "$RILEY_E2E_CORRECTNESS_GOLDEN" >/dev/null
+test "$(jq -er '.correctness_gate_id' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = smollm2-fp32-bf16-native-e0-v3
+test "$(jq -er '.correctness_report_sha256' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_CORRECTNESS_REPORT_SHA256"
+test "$(jq -er '.source_revision' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_SOURCE_REVISION"
+test "$(jq -er '.model_revision' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_MODEL_REVISION"
+test "$(jq -er '.config_sha256' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_CONFIG_SHA256"
+test "$(jq -er '.weights_sha256' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_WEIGHTS_SHA256"
+test "$(jq -er '.tokenizer_json_sha256' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_TOKENIZER_JSON_SHA256"
+test "$(jq -er '.tokenizer_aggregate_sha256' "$RILEY_E2E_CORRECTNESS_GOLDEN")" = "$RILEY_E2E_TOKENIZER_AGGREGATE_SHA256"
+test "$(jq -er '.gate_id' "$RILEY_E2E_CORRECTNESS_REPORT")" = smollm2-fp32-bf16-native-e0-v3
+test "$(jq -er '.status' "$RILEY_E2E_CORRECTNESS_REPORT")" = pass
+test "$(jq -er '.bindings.candidate_git_revision' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_SOURCE_REVISION"
+test "$(jq -er '.bindings.candidate_git_status_sha256' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$(printf '' | sha256sum | awk '{print $1}')"
+test "$(jq -er '.bindings.model_revision' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_MODEL_REVISION"
+test "$(jq -er '.bindings.config_sha256' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_CONFIG_SHA256"
+test "$(jq -er '.bindings.weights_sha256' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_WEIGHTS_SHA256"
+test "$(jq -er '.bindings.tokenizer_sha256' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$RILEY_E2E_TOKENIZER_AGGREGATE_SHA256"
+model_id=$(jq -er '.model_id | select(test("^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$"))' "$RILEY_E2E_CORRECTNESS_GOLDEN")
+test "$(jq -er '.bindings.model_id' "$RILEY_E2E_CORRECTNESS_REPORT")" = "$model_id"
+golden_prompt=$(jq -er '.prompt | select(type == "string" and length > 0)' "$RILEY_E2E_CORRECTNESS_GOLDEN")
 [[ $golden_prompt != *$'\n'* && $golden_prompt != *$'\r'* ]] || { echo "golden prompt must be one line" >&2; exit 2; }
-golden_max_tokens=$(jq -er '.max_tokens | select(type == "number" and floor == . and . >= 2 and . <= 1024)' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
-approved_text_sha256=$(jq -er '.expected_greedy_text_sha256 | select(test("^[0-9a-f]{64}$"))' "$RUSTINFER_E2E_CORRECTNESS_GOLDEN")
+golden_max_tokens=$(jq -er '.max_tokens | select(type == "number" and floor == . and . >= 2 and . <= 1024)' "$RILEY_E2E_CORRECTNESS_GOLDEN")
+approved_text_sha256=$(jq -er '.expected_greedy_text_sha256 | select(test("^[0-9a-f]{64}$"))' "$RILEY_E2E_CORRECTNESS_GOLDEN")
 prompt_sha256=$(printf '%s' "$golden_prompt" | sha256sum | awk '{print $1}')
 
-resolved_image=$(docker image inspect --format '{{.Id}}' "$RUSTINFER_E2E_IMAGE_ID")
-test "$resolved_image" = "$RUSTINFER_E2E_IMAGE_ID"
-mkdir -m 0700 "$RUSTINFER_E2E_OUTPUT"
-mkdir -m 0777 "$RUSTINFER_E2E_OUTPUT/container-evidence"
-shutdown_metrics="$RUSTINFER_E2E_OUTPUT/container-evidence/shutdown-metrics.json"
-repeat_shutdown_metrics="$RUSTINFER_E2E_OUTPUT/container-evidence/repeat-shutdown-metrics.json"
+resolved_image=$(docker image inspect --format '{{.Id}}' "$RILEY_E2E_IMAGE_ID")
+test "$resolved_image" = "$RILEY_E2E_IMAGE_ID"
+mkdir -m 0700 "$RILEY_E2E_OUTPUT"
+mkdir -m 0777 "$RILEY_E2E_OUTPUT/container-evidence"
+shutdown_metrics="$RILEY_E2E_OUTPUT/container-evidence/shutdown-metrics.json"
+repeat_shutdown_metrics="$RILEY_E2E_OUTPUT/container-evidence/repeat-shutdown-metrics.json"
 image_inspect="$scratch/image-inspect.json"
-docker image inspect "$RUSTINFER_E2E_IMAGE_ID" >"$image_inspect"
+docker image inspect "$RILEY_E2E_IMAGE_ID" >"$image_inspect"
 
 launch_container() {
     local metrics_name=$1
     docker run --detach \
         --network none \
-        --gpus "device=$RUSTINFER_E2E_DEVICE" \
+        --gpus "device=$RILEY_E2E_DEVICE" \
         --read-only \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m \
-        --mount "type=bind,src=$RUSTINFER_E2E_MODEL_DIR,dst=/models/checkpoint,readonly" \
-        --mount "type=bind,src=$RUSTINFER_E2E_OUTPUT/container-evidence,dst=/evidence" \
-        --env "RUSTINFER_SHUTDOWN_METRICS_PATH=/evidence/$metrics_name" \
-        "$RUSTINFER_E2E_IMAGE_ID" \
-        serve --model /models/checkpoint --model-id "$model_id" --bind "$RUSTINFER_E2E_BIND" \
+        --mount "type=bind,src=$RILEY_E2E_MODEL_DIR,dst=/models/checkpoint,readonly" \
+        --mount "type=bind,src=$RILEY_E2E_OUTPUT/container-evidence,dst=/evidence" \
+        --env "RILEY_SHUTDOWN_METRICS_PATH=/evidence/$metrics_name" \
+        "$RILEY_E2E_IMAGE_ID" \
+        serve --model /models/checkpoint --model-id "$model_id" --bind "$RILEY_E2E_BIND" \
         --max-output-tokens 1024
 }
 
@@ -201,19 +201,19 @@ docker top "$container_id" -eo pid,ppid,comm,args >"$process_first_pre"
 container_http() {
     local method=$1 target=$2 body=$3 output=$4
     docker exec \
-        --env "RUSTINFER_HTTP_METHOD=$method" \
-        --env "RUSTINFER_HTTP_TARGET=$target" \
-        --env "RUSTINFER_HTTP_BODY=$body" \
+        --env "RILEY_HTTP_METHOD=$method" \
+        --env "RILEY_HTTP_TARGET=$target" \
+        --env "RILEY_HTTP_BODY=$body" \
         "$container_id" /bin/bash -c '
             set -euo pipefail
             export LC_ALL=C
             exec 3<>/dev/tcp/127.0.0.1/8080
-            if [ "$RUSTINFER_HTTP_METHOD" = POST ]; then
+            if [ "$RILEY_HTTP_METHOD" = POST ]; then
                 printf "%s %s HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: %s\r\nConnection: close\r\n\r\n%s" \
-                    "$RUSTINFER_HTTP_METHOD" "$RUSTINFER_HTTP_TARGET" "${#RUSTINFER_HTTP_BODY}" "$RUSTINFER_HTTP_BODY" >&3
+                    "$RILEY_HTTP_METHOD" "$RILEY_HTTP_TARGET" "${#RILEY_HTTP_BODY}" "$RILEY_HTTP_BODY" >&3
             else
                 printf "%s %s HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" \
-                    "$RUSTINFER_HTTP_METHOD" "$RUSTINFER_HTTP_TARGET" >&3
+                    "$RILEY_HTTP_METHOD" "$RILEY_HTTP_TARGET" >&3
             fi
             cat <&3
         ' >"$output"
@@ -312,7 +312,7 @@ http_body "$metrics_before_raw" >"$metrics_before_body"
 cancellations_before=$(jq -er '.counters.cancellations' "$metrics_before_body")
 disconnects_before=$(jq -er '.counters.disconnects' "$metrics_before_body")
 cancel_request=$(jq -cn --arg model "$model_id" --arg prompt "$golden_prompt" \
-    --argjson max_tokens "$RUSTINFER_E2E_CANCEL_TOKENS" \
+    --argjson max_tokens "$RILEY_E2E_CANCEL_TOKENS" \
     '{model:$model,prompt:$prompt,max_tokens:$max_tokens,temperature:0,top_p:1,stream:true}')
 cancellation_request="$scratch/cancellation-request.raw"
 cancellation_response_prefix="$scratch/cancellation-response-prefix.raw"
@@ -351,12 +351,12 @@ image_native_dependencies="$scratch/image-native-dependencies.txt"
 image_ldd="$scratch/image-ldd.txt"
 image_readelf="$scratch/image-readelf.txt"
 image_python_scan="$scratch/image-python-scan.txt"
-docker cp "$container_id:/opt/rustinfer/bin/rustinfer" "$image_binary"
-docker cp "$container_id:/opt/rustinfer/manifest/native-dependencies.txt" "$image_native_dependencies"
+docker cp "$container_id:/opt/riley/bin/riley" "$image_binary"
+docker cp "$container_id:/opt/riley/manifest/native-dependencies.txt" "$image_native_dependencies"
 image_binary_sha256=$(sha_file "$image_binary")
-test "$image_binary_sha256" = "$RUSTINFER_E2E_RELEASE_BINARY_SHA256"
+test "$image_binary_sha256" = "$RILEY_E2E_RELEASE_BINARY_SHA256"
 readelf --file-header --program-headers --dynamic "$image_binary" >"$image_readelf"
-docker exec "$container_id" ldd /opt/rustinfer/bin/rustinfer >"$image_ldd"
+docker exec "$container_id" ldd /opt/riley/bin/riley >"$image_ldd"
 {
     printf '[forbidden-executables]\n'
     docker exec --user 0 "$container_id" /bin/bash -c '
@@ -397,7 +397,7 @@ docker top "$container_id" -eo pid,ppid,comm,args >"$process_first_runtime"
 processes_json=$(tail -n +2 "$process_first_runtime" | jq -Rsc '
     split("\n") | map(select(length > 0) | capture("^\\s*(?<pid>[0-9]+)\\s+(?<ppid>[0-9]+)\\s+(?<comm>[^ ]+)\\s+(?<args>.+)$") |
     {pid:(.pid|tonumber),ppid:(.ppid|tonumber),comm:.comm,args:.args})')
-jq -e 'length >= 1 and any(.comm == "rustinfer") and all((.comm + " " + .args) | test("python|pip|pytorch|torch|transformers|triton|pickle"; "i") | not)' \
+jq -e 'length >= 1 and any(.comm == "riley") and all((.comm + " " + .args) | test("python|pip|pytorch|torch|transformers|triton|pickle"; "i") | not)' \
     <<<"$processes_json" >/dev/null
 
 docker kill --signal TERM "$container_id" >/dev/null
@@ -461,28 +461,28 @@ repeat_shutdown_metrics_json=$(jq -c . "$repeat_shutdown_metrics")
 repeat_shutdown_metrics_sha256=$(sha_file "$repeat_shutdown_metrics")
 second_container_id=$container_id
 
-raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
+raw_evidence="$RILEY_E2E_OUTPUT/raw-evidence.json"
 ( set -o noclobber
   jq -nS \
-    --arg run_id "python-free-e2e-$(date -u +%Y%m%dT%H%M%SZ)-${RUSTINFER_E2E_SOURCE_REVISION:0:12}" \
+    --arg run_id "python-free-e2e-$(date -u +%Y%m%dT%H%M%SZ)-${RILEY_E2E_SOURCE_REVISION:0:12}" \
     --arg recorded_at_utc "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-    --arg git_revision "$RUSTINFER_E2E_SOURCE_REVISION" \
-    --arg source_archive_sha256 "$RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256" \
-    --arg binary_sha256 "$RUSTINFER_E2E_RELEASE_BINARY_SHA256" \
-    --arg bundle_sha256 "$RUSTINFER_E2E_RELEASE_BUNDLE_SHA256" \
-    --arg image_sha256 "${RUSTINFER_E2E_IMAGE_ID#sha256:}" \
+    --arg git_revision "$RILEY_E2E_SOURCE_REVISION" \
+    --arg source_archive_sha256 "$RILEY_E2E_SOURCE_ARCHIVE_SHA256" \
+    --arg binary_sha256 "$RILEY_E2E_RELEASE_BINARY_SHA256" \
+    --arg bundle_sha256 "$RILEY_E2E_RELEASE_BUNDLE_SHA256" \
+    --arg image_sha256 "${RILEY_E2E_IMAGE_ID#sha256:}" \
     --arg model_id "$model_id" \
-    --arg model_revision "$RUSTINFER_E2E_MODEL_REVISION" \
-    --arg model_tree_sha256 "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
-    --arg config_sha256 "$RUSTINFER_E2E_CONFIG_SHA256" \
-    --arg weights_sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
-    --arg tokenizer_aggregate_sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
-    --arg tokenizer_json_sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
+    --arg model_revision "$RILEY_E2E_MODEL_REVISION" \
+    --arg model_tree_sha256 "$RILEY_E2E_MODEL_TREE_SHA256" \
+    --arg config_sha256 "$RILEY_E2E_CONFIG_SHA256" \
+    --arg weights_sha256 "$RILEY_E2E_WEIGHTS_SHA256" \
+    --arg tokenizer_aggregate_sha256 "$RILEY_E2E_TOKENIZER_AGGREGATE_SHA256" \
+    --arg tokenizer_json_sha256 "$RILEY_E2E_TOKENIZER_JSON_SHA256" \
     --arg correctness_gate_id smollm2-fp32-bf16-native-e0-v3 \
-    --arg correctness_report_sha256 "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256" \
-    --arg correctness_golden_sha256 "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
+    --arg correctness_report_sha256 "$RILEY_E2E_CORRECTNESS_REPORT_SHA256" \
+    --arg correctness_golden_sha256 "$RILEY_E2E_CORRECTNESS_GOLDEN_SHA256" \
     --arg first_container_id "$first_container_id" --arg second_container_id "$second_container_id" \
-    --arg image_id "$RUSTINFER_E2E_IMAGE_ID" \
+    --arg image_id "$RILEY_E2E_IMAGE_ID" \
     --arg image_binary_sha256 "$image_binary_sha256" \
     --arg model_ids "$models_json" \
     --arg prompt_sha256 "$prompt_sha256" --argjson max_tokens "$golden_max_tokens" \
@@ -511,7 +511,7 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     --arg shutdown_metrics_sha256 "$shutdown_metrics_sha256" \
     --arg repeat_shutdown_metrics_sha256 "$repeat_shutdown_metrics_sha256" \
     '{
-      schema_version:"rustinfer.python-free-release-e2e-raw.v2",run_id:$run_id,
+      schema_version:"riley.python-free-release-e2e-raw.v2",run_id:$run_id,
       recorded_at_utc:$recorded_at_utc,status:"success",
       source:{git_revision:$git_revision,git_dirty:false,source_archive_sha256:$source_archive_sha256},
       release:{binary_sha256:$binary_sha256,bundle_sha256:$bundle_sha256,image_sha256:$image_sha256},
@@ -528,12 +528,12 @@ raw_evidence="$RUSTINFER_E2E_OUTPUT/raw-evidence.json"
     }' >"$raw_evidence"
 )
 
-raw_archive="$RUSTINFER_E2E_OUTPUT/python-free-evidence.tar"
+raw_archive="$RILEY_E2E_OUTPUT/python-free-evidence.tar"
 python3 "$packager" \
     --output "$raw_archive" \
-    --model-dir "$RUSTINFER_E2E_MODEL_DIR" \
+    --model-dir "$RILEY_E2E_MODEL_DIR" \
     --raw-evidence "$raw_evidence" \
-    --correctness-golden "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
+    --correctness-golden "$RILEY_E2E_CORRECTNESS_GOLDEN" \
     --model-manifest "$model_manifest" \
     --shutdown-metrics "$shutdown_metrics" \
     --repeat-shutdown-metrics "$repeat_shutdown_metrics" \
@@ -570,28 +570,28 @@ python3 "$packager" \
 python3 "$checker" \
     --evidence "$raw_evidence" \
     --raw-archive "$raw_archive" \
-    --source-revision "$RUSTINFER_E2E_SOURCE_REVISION" \
-    --source-archive "$RUSTINFER_E2E_SOURCE_ARCHIVE" \
-    --release-binary "$RUSTINFER_E2E_RELEASE_BINARY" \
-    --release-bundle "$RUSTINFER_E2E_RELEASE_BUNDLE" \
-    --image-id "$RUSTINFER_E2E_IMAGE_ID" \
-    --model-dir "$RUSTINFER_E2E_MODEL_DIR" \
-    --model-tree-sha256 "$RUSTINFER_E2E_MODEL_TREE_SHA256" \
-    --weights "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH" \
-    --weights-sha256 "$RUSTINFER_E2E_WEIGHTS_SHA256" \
-    --tokenizer "$RUSTINFER_E2E_MODEL_DIR/$RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH" \
-    --tokenizer-json-sha256 "$RUSTINFER_E2E_TOKENIZER_JSON_SHA256" \
-    --tokenizer-aggregate-sha256 "$RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256" \
-    --correctness-golden "$RUSTINFER_E2E_CORRECTNESS_GOLDEN" \
-    --correctness-golden-sha256 "$RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256" \
-    --correctness-report "$RUSTINFER_E2E_CORRECTNESS_REPORT" \
-    --correctness-report-sha256 "$RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256" \
+    --source-revision "$RILEY_E2E_SOURCE_REVISION" \
+    --source-archive "$RILEY_E2E_SOURCE_ARCHIVE" \
+    --release-binary "$RILEY_E2E_RELEASE_BINARY" \
+    --release-bundle "$RILEY_E2E_RELEASE_BUNDLE" \
+    --image-id "$RILEY_E2E_IMAGE_ID" \
+    --model-dir "$RILEY_E2E_MODEL_DIR" \
+    --model-tree-sha256 "$RILEY_E2E_MODEL_TREE_SHA256" \
+    --weights "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_WEIGHTS_RELATIVE_PATH" \
+    --weights-sha256 "$RILEY_E2E_WEIGHTS_SHA256" \
+    --tokenizer "$RILEY_E2E_MODEL_DIR/$RILEY_E2E_TOKENIZER_RELATIVE_PATH" \
+    --tokenizer-json-sha256 "$RILEY_E2E_TOKENIZER_JSON_SHA256" \
+    --tokenizer-aggregate-sha256 "$RILEY_E2E_TOKENIZER_AGGREGATE_SHA256" \
+    --correctness-golden "$RILEY_E2E_CORRECTNESS_GOLDEN" \
+    --correctness-golden-sha256 "$RILEY_E2E_CORRECTNESS_GOLDEN_SHA256" \
+    --correctness-report "$RILEY_E2E_CORRECTNESS_REPORT" \
+    --correctness-report-sha256 "$RILEY_E2E_CORRECTNESS_REPORT_SHA256" \
     --shutdown-metrics "$shutdown_metrics" \
     --repeat-shutdown-metrics "$repeat_shutdown_metrics" \
-    --report "$RUSTINFER_E2E_OUTPUT/attestation.json"
+    --report "$RILEY_E2E_OUTPUT/attestation.json"
 
 ( set -o noclobber
-  cd "$RUSTINFER_E2E_OUTPUT"
+  cd "$RILEY_E2E_OUTPUT"
   sha256sum attestation.json python-free-evidence.tar >SHA256SUMS
 )
-echo "Python-free real-model release E2E gate passed: $RUSTINFER_E2E_OUTPUT"
+echo "Python-free real-model release E2E gate passed: $RILEY_E2E_OUTPUT"

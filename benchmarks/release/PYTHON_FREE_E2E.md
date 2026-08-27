@@ -12,7 +12,7 @@ file with this closed schema:
 
 ```json
 {
-  "schema_version": "rustinfer.python-free-release-e2e-golden.v1",
+  "schema_version": "riley.python-free-release-e2e-golden.v1",
   "correctness_gate_id": "smollm2-fp32-bf16-native-e0-v3",
   "correctness_report_sha256": "reviewed-lowercase-sha256",
   "source_revision": "clean-40-character-candidate-revision",
@@ -38,28 +38,28 @@ and other names fail.
 Set all reviewed bindings before invoking the driver on the remote GPU host:
 
 ```sh
-export RUSTINFER_E2E_OUTPUT=/append-only-evidence/pr16-python-free-e2e
-export RUSTINFER_E2E_IMAGE_ID=sha256:<immutable-image-id>
-export RUSTINFER_E2E_SOURCE_REVISION=<clean-40-character-revision>
-export RUSTINFER_E2E_SOURCE_ARCHIVE=/artifacts/source.tar
-export RUSTINFER_E2E_SOURCE_ARCHIVE_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_RELEASE_BINARY=/artifacts/rustinfer
-export RUSTINFER_E2E_RELEASE_BINARY_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_RELEASE_BUNDLE=/artifacts/rustinfer.tar.gz
-export RUSTINFER_E2E_RELEASE_BUNDLE_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_MODEL_DIR=/models/reviewed-checkpoint
-export RUSTINFER_E2E_MODEL_TREE_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_MODEL_REVISION=<immutable-model-revision>
-export RUSTINFER_E2E_CONFIG_SHA256=1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843
-export RUSTINFER_E2E_WEIGHTS_RELATIVE_PATH=model.safetensors
-export RUSTINFER_E2E_WEIGHTS_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_TOKENIZER_RELATIVE_PATH=tokenizer.json
-export RUSTINFER_E2E_TOKENIZER_JSON_SHA256=9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c
-export RUSTINFER_E2E_TOKENIZER_AGGREGATE_SHA256=51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db
-export RUSTINFER_E2E_CORRECTNESS_GOLDEN=/artifacts/python-free-e2e-golden.json
-export RUSTINFER_E2E_CORRECTNESS_GOLDEN_SHA256=<reviewed-digest>
-export RUSTINFER_E2E_CORRECTNESS_REPORT=/artifacts/native-e0-correctness-report.json
-export RUSTINFER_E2E_CORRECTNESS_REPORT_SHA256=<reviewed-digest>
+export RILEY_E2E_OUTPUT=/append-only-evidence/pr16-python-free-e2e
+export RILEY_E2E_IMAGE_ID=sha256:<immutable-image-id>
+export RILEY_E2E_SOURCE_REVISION=<clean-40-character-revision>
+export RILEY_E2E_SOURCE_ARCHIVE=/artifacts/source.tar
+export RILEY_E2E_SOURCE_ARCHIVE_SHA256=<reviewed-digest>
+export RILEY_E2E_RELEASE_BINARY=/artifacts/riley
+export RILEY_E2E_RELEASE_BINARY_SHA256=<reviewed-digest>
+export RILEY_E2E_RELEASE_BUNDLE=/artifacts/riley.tar.gz
+export RILEY_E2E_RELEASE_BUNDLE_SHA256=<reviewed-digest>
+export RILEY_E2E_MODEL_DIR=/models/reviewed-checkpoint
+export RILEY_E2E_MODEL_TREE_SHA256=<reviewed-digest>
+export RILEY_E2E_MODEL_REVISION=<immutable-model-revision>
+export RILEY_E2E_CONFIG_SHA256=1d556eab73b69c7f11f64c557a2f9c6f440bd4c6b89bb2584a6b498c92603843
+export RILEY_E2E_WEIGHTS_RELATIVE_PATH=model.safetensors
+export RILEY_E2E_WEIGHTS_SHA256=<reviewed-digest>
+export RILEY_E2E_TOKENIZER_RELATIVE_PATH=tokenizer.json
+export RILEY_E2E_TOKENIZER_JSON_SHA256=9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c
+export RILEY_E2E_TOKENIZER_AGGREGATE_SHA256=51666963fa4cef6fbd450fc7ec5f70e483717757e0fcc2a5956f097d3915c4db
+export RILEY_E2E_CORRECTNESS_GOLDEN=/artifacts/python-free-e2e-golden.json
+export RILEY_E2E_CORRECTNESS_GOLDEN_SHA256=<reviewed-digest>
+export RILEY_E2E_CORRECTNESS_REPORT=/artifacts/native-e0-correctness-report.json
+export RILEY_E2E_CORRECTNESS_REPORT_SHA256=<reviewed-digest>
 ci/run_python_free_release_e2e.sh
 ```
 
@@ -91,7 +91,7 @@ their current values on the command line. The checker requires the archived
 Docker `Args` array to match that exact default-path invocation and rejects
 evidence containing any of those three selectors.
 The embedded release manifest must name the same three stable defaults and the
-reviewed SHA-256 of `crates/rustinfer-server/src/main.rs`; release preflight
+reviewed SHA-256 of `crates/riley-server/src/main.rs`; release preflight
 fails if that resolver source drifts. This closes the default-path gate over
 the Rust implementation rather than only the launcher/checker argument lists.
 
@@ -105,7 +105,7 @@ the completion/cancellation claims from those transcripts. It re-hashes the
 source archive, standalone binary, release bundle, every archived and supplied
 model file, native E0 correctness report, golden, shutdown files, and raw
 evidence; validates the closed schemas; and emits
-the exact `rustinfer.release-gate-attestation.v1` check set consumed by the
+the exact `riley.release-gate-attestation.v1` check set consumed by the
 final release-candidate gate.
 
 The golden cannot self-authorize a new output: it must bind the exact passing

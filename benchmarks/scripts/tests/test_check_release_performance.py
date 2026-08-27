@@ -68,8 +68,8 @@ class ReleaseFixture:
         self.root = root
         self.paths = {
             "source_archive": root / "source.tar",
-            "profile_binary": root / "rustinfer-profile",
-            "release_binary": root / "rustinfer",
+            "profile_binary": root / "riley-profile",
+            "release_binary": root / "riley",
             "weights": root / "model.safetensors",
             "tokenizer": root / "tokenizer.json",
             "correctness_report": root / "correctness.json",
@@ -164,9 +164,9 @@ class ReleaseFixture:
             raise AssertionError("native profile fixture request identity drifted")
 
         self.candidate = {
-            "schema_version": "rustinfer.release-performance-candidate.v1",
+            "schema_version": "riley.release-performance-candidate.v1",
             "baseline_sha256": checker.BASELINE_SHA256,
-            "candidate_id": "rustinfer-0.1.0-rc1",
+            "candidate_id": "riley-0.1.0-rc1",
             "recorded_at_utc": "2026-08-26T12:34:56Z",
             "status": "success",
             "source": {
@@ -384,18 +384,18 @@ class ReleaseFixture:
             "org.opencontainers.image.version": "22.04",
         }
         overrides = {
-            "RUSTINFER_PERF_SOURCE_REVISION": revision,
-            "RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256": self.digests["source_archive"],
-            "RUSTINFER_PERF_PROFILE_BINARY_SHA256": self.digests["profile_binary"],
-            "RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256": self.digests["correctness_report"],
-            "RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256": self.profile_image_digest,
-            "RUSTINFER_PERF_MODEL_TREE_SHA256": digest("model manifest"),
+            "RILEY_PERF_SOURCE_REVISION": revision,
+            "RILEY_PERF_SOURCE_ARCHIVE_SHA256": self.digests["source_archive"],
+            "RILEY_PERF_PROFILE_BINARY_SHA256": self.digests["profile_binary"],
+            "RILEY_PERF_OPTIMIZER_REPORT_SHA256": self.digests["correctness_report"],
+            "RILEY_PERF_OPTIMIZER_IMAGE_SHA256": self.profile_image_digest,
+            "RILEY_PERF_MODEL_TREE_SHA256": digest("model manifest"),
             "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
             **checker.RUNNER_PROXY_ENV,
         }
         read_only_sources = {
             "/input/source.tar": str(self.paths["source_archive"].resolve()),
-            "/input/rustinfer-profile": str(self.paths["profile_binary"].resolve()),
+            "/input/riley-profile": str(self.paths["profile_binary"].resolve()),
             "/input/optimizer-correctness-report.json": str(
                 self.paths["correctness_report"].resolve()
             ),
@@ -406,8 +406,8 @@ class ReleaseFixture:
         repository = checker.Path(checker.__file__).resolve().parents[2]
         tools = copy.deepcopy(checker.RUNNER_REVIEWED_TOOLS)
         manifest_environment = {**image_environment, **overrides}
-        manifest_environment["RUSTINFER_PERF_PAIR_INDEX"] = "{pair_index}"
-        manifest_environment["RUSTINFER_PERF_CAPTURE_ID"] = "{capture_id}"
+        manifest_environment["RILEY_PERF_PAIR_INDEX"] = "{pair_index}"
+        manifest_environment["RILEY_PERF_CAPTURE_ID"] = "{capture_id}"
         manifest = {
             "schema_version": checker.RUNNER_MANIFEST_SCHEMA,
             "candidate": {
@@ -489,8 +489,8 @@ class ReleaseFixture:
                 self.supervisor_token, pair_index
             )
             environment = {**image_environment, **overrides}
-            environment["RUSTINFER_PERF_PAIR_INDEX"] = str(pair_index)
-            environment["RUSTINFER_PERF_CAPTURE_ID"] = capture_id
+            environment["RILEY_PERF_PAIR_INDEX"] = str(pair_index)
+            environment["RILEY_PERF_CAPTURE_ID"] = capture_id
             mounts = [
                 {
                     "Type": "bind",
@@ -1092,7 +1092,7 @@ class ReleasePerformanceTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             manifest["candidate"]["model_tree_sha256"] = alternate
             manifest["container"]["environment"][
-                "RUSTINFER_PERF_MODEL_TREE_SHA256"
+                "RILEY_PERF_MODEL_TREE_SHA256"
             ] = alternate
             fixture.replace_runner_receipt(
                 "runner-manifest.json", checker._json_document_bytes(manifest)
@@ -1105,8 +1105,8 @@ class ReleasePerformanceTests(unittest.TestCase):
                     environment = document[0]["Config"]["Env"]
                     environment[:] = [
                         (
-                            f"RUSTINFER_PERF_MODEL_TREE_SHA256={alternate}"
-                            if value.startswith("RUSTINFER_PERF_MODEL_TREE_SHA256=")
+                            f"RILEY_PERF_MODEL_TREE_SHA256={alternate}"
+                            if value.startswith("RILEY_PERF_MODEL_TREE_SHA256=")
                             else value
                         )
                         for value in environment
@@ -1214,7 +1214,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
         fixture: ReleaseFixture,
         output: Path,
         *,
-        candidate_id: str = "rustinfer-0.1.0-rc1",
+        candidate_id: str = "riley-0.1.0-rc1",
     ) -> dict[str, object]:
         with mock.patch.object(
             checker, "_digest_file", side_effect=fixture.digest_for_package
@@ -1241,7 +1241,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
         fixture: ReleaseFixture,
         output: Path,
         *,
-        candidate_id: str = "rustinfer-0.1.0-rc1",
+        candidate_id: str = "riley-0.1.0-rc1",
     ) -> list[str]:
         return [
             "--baseline", str(BASELINE),
@@ -1308,7 +1308,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 members = archive.getmembers()
                 self.assertEqual(
                     checker.RUNNER_MANIFEST_SCHEMA,
-                    "rustinfer.release-performance-runner-manifest.v3",
+                    "riley.release-performance-runner-manifest.v3",
                 )
                 self.assertEqual(
                     [
@@ -1892,10 +1892,10 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
             for index, candidate_id in enumerate(
                 (
                     "pr16-candidate",
-                    "rustinfer-00.1.0-rc1",
-                    "rustinfer-0.01.0-rc1",
-                    "rustinfer-0.1.00-rc1",
-                    "rustinfer-0.1.0-rc01",
+                    "riley-00.1.0-rc1",
+                    "riley-0.01.0-rc1",
+                    "riley-0.1.00-rc1",
+                    "riley-0.1.0-rc01",
                 )
             ):
                 with self.subTest(candidate_id=candidate_id):

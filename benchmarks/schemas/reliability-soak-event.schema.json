@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/reliability-soak-event-v1.schema.json",
-  "title": "rustinfer append-only reliability soak event",
+  "$id": "https://riley.dev/schemas/reliability-soak-event-v1.schema.json",
+  "title": "riley append-only reliability soak event",
   "type": "object",
   "oneOf": [
     {"$ref": "#/$defs/runStartEvent"},
@@ -14,7 +14,7 @@
     {"$ref": "#/$defs/runEndEvent"}
   ],
   "$defs": {
-    "schemaVersion": {"const": "rustinfer.reliability-soak-event.v1"},
+    "schemaVersion": {"const": "riley.reliability-soak-event.v1"},
     "sequence": {"type": "integer", "minimum": 1},
     "monotonicNs": {"type": "integer", "minimum": 0},
     "scenarioId": {"type": "string", "minLength": 1},

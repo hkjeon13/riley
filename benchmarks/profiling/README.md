@@ -35,8 +35,8 @@ has no Python runtime dependency):
 ```bash
 cargo build --release --locked \
   --features bench,cuda \
-  --bin rustinfer-profile
-target/release/rustinfer-profile --help
+  --bin riley-profile
+target/release/riley-profile --help
 ```
 
 Every source, GPU, host, software, and workload provenance field is a required
@@ -97,14 +97,14 @@ path is created exclusively and is never overwritten.
 The remote-only `benchmarks/scripts/profile_http_one_token.sh` sentinel records
 kernel attribution for each arm. It requires the exact source revision, source
 archive SHA-256, container image SHA-256, and correctness-report SHA-256 through
-the corresponding `RUSTINFER_PROFILE_*` environment variables. Both
-`RUSTINFER_PROFILE_RESIDUAL_RMSNORM` and
-`RUSTINFER_PROFILE_EXECUTION_COMPLETION` are recorded and passed explicitly.
+the corresponding `RILEY_PROFILE_*` environment variables. Both
+`RILEY_PROFILE_RESIDUAL_RMSNORM` and
+`RILEY_PROFILE_EXECUTION_COMPLETION` are recorded and passed explicitly.
 Its final `SHA256SUMS` binds the executable, runtime flags, source/container provenance,
 checkpoint file digests, GPU/toolkit environment, NCU CSV, the validated
 fixed-token HTTP response, and server logs. It refuses to overwrite an evidence file and
 uses bounded response and process-shutdown waits.
-Run it once with `RUSTINFER_PROFILE_OUTPUT_TOKENS=1` and once with `=2` for
+Run it once with `RILEY_PROFILE_OUTPUT_TOKENS=1` and once with `=2` for
 each arm. The first trace isolates prefill-to-first-token work; the incremental
 kernel inventory in the two-token trace contains one decode iteration and is
 the decode/TPOT attribution sentinel. Each trace collects kernel duration,

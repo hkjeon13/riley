@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/extension-benchmark-contract-v1.schema.json",
-  "title": "rustinfer extension benchmark contract",
+  "$id": "https://riley.invalid/schemas/extension-benchmark-contract-v1.schema.json",
+  "title": "riley extension benchmark contract",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -31,7 +31,7 @@
       "const": "../benchmark-contract.schema.json"
     },
     "schema_version": {
-      "const": "rustinfer.extension-benchmark-contract.v1"
+      "const": "riley.extension-benchmark-contract.v1"
     },
     "extension_id": {
       "$ref": "#/$defs/extensionId"
@@ -67,7 +67,7 @@
     },
     "runtime_flag": {
       "type": "string",
-      "pattern": "^RUSTINFER_EXPERIMENTAL_[A-Z0-9_]+$"
+      "pattern": "^RILEY_EXPERIMENTAL_[A-Z0-9_]+$"
     },
     "primary_metric": {
       "$ref": "#/$defs/performanceMetricPath"

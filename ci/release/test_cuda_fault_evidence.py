@@ -58,8 +58,8 @@ class Fixture:
         self.evidence = root / "gpu-evidence"
         self.evidence.mkdir()
         self.source_archive = root / "source.tar"
-        self.release_binary = root / "rustinfer"
-        self.release_bundle = root / "rustinfer.tar.gz"
+        self.release_binary = root / "riley"
+        self.release_bundle = root / "riley.tar.gz"
         self.host_path = "target/debug/deps/host_runtime_gpu-0123456789abcdef"
         self.memory_path = "target/debug/deps/memory_gpu-1234567890abcdef"
         self.fault_path = (
@@ -129,7 +129,7 @@ class Fixture:
             if name == "device_metadata_is_reported":
                 lines.extend(
                     [
-                        f"test {name} ... rustinfer-cuda-device-metadata ordinal=0 "
+                        f"test {name} ... riley-cuda-device-metadata ordinal=0 "
                         "name=NVIDIA GeForce RTX 4090 compute_capability=8.9 "
                         "total_memory_bytes=25250627584 multiprocessor_count=128 "
                         "driver_version=13000 runtime_version=12080",
@@ -139,7 +139,7 @@ class Fixture:
             elif name == "repeated_create_drop_has_no_resource_leak":
                 lines.extend(
                     [
-                        f"test {name} ... rustinfer-cuda-leak-smoke iterations=128 "
+                        f"test {name} ... riley-cuda-leak-smoke iterations=128 "
                         "before_free_bytes=24594284544 after_free_bytes=24594284544",
                         "ok",
                     ]
@@ -168,7 +168,7 @@ class Fixture:
                 lines.extend(
                     [
                         f"test {name} ...",
-                        "rustinfer-cuda-memory-accounting device_live_bytes=0 "
+                        "riley-cuda-memory-accounting device_live_bytes=0 "
                         "device_live_allocations=0 pinned_host_live_bytes=0 "
                         "pinned_host_live_allocations=0",
                         "ok",
@@ -197,16 +197,16 @@ class Fixture:
             child_pid = 4100 + index
             lines.extend(
                 [
-                    f"rustinfer-cuda-memory-fault-case case={case} event=spawn "
+                    f"riley-cuda-memory-fault-case case={case} event=spawn "
                     f"parent_pid={parent_pid} child_pid={child_pid}",
-                    f"rustinfer-cuda-memory-fault-case case={case} event=start "
+                    f"riley-cuda-memory-fault-case case={case} event=start "
                     f"child_pid={child_pid}",
                     "running 1 test",
-                    f"rustinfer-cuda-memory-fault-case case={case} event=passed "
+                    f"riley-cuda-memory-fault-case case={case} event=passed "
                     f"child_pid={child_pid}",
                     "test memory_fault_subprocess ... ok",
                     SUMMARY,
-                    f"rustinfer-cuda-memory-fault-case case={case} event=joined "
+                    f"riley-cuda-memory-fault-case case={case} event=joined "
                     f"parent_pid={parent_pid} child_pid={child_pid} exit_code=0",
                 ]
             )
@@ -238,7 +238,7 @@ class Fixture:
             for dependency in DEPENDENCIES
         )
         nm_symbol = (
-            "0000000000002000 T rustinfer_cuda_test_memory_fault_arm\n"
+            "0000000000002000 T riley_cuda_test_memory_fault_arm\n"
             if fault
             else "                 U cudaGetDeviceCount\n"
         )
@@ -266,7 +266,7 @@ class Fixture:
             "rustc 1.85.0 (4d91de4e4 2025-02-17)\n"
             "cargo 1.85.0 (d73d2caf9 2024-12-31)\n"
             "Cuda compilation tools, release 12.8, V12.8.93\n"
-            "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
+            "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
         ).encode()
 
     def _write_base_evidence(self) -> None:
@@ -308,15 +308,15 @@ class Fixture:
 
         host_binary = self._test_elf(
             HOST_RUNTIME_TESTS
-            | {"rustinfer-cuda-device-metadata", "rustinfer-cuda-leak-smoke"}
+            | {"riley-cuda-device-metadata", "riley-cuda-leak-smoke"}
         )
         memory_binary = self._test_elf(
-            MEMORY_TESTS | {"rustinfer-cuda-memory-accounting"}
+            MEMORY_TESTS | {"riley-cuda-memory-accounting"}
         )
         fault_binary = self._test_elf(
             {"memory_fault_cases_are_subprocess_isolated", "memory_fault_subprocess"}
             | set(FAULT_CASES)
-            | {MARKER_PREFIX, "RUSTINFER_CUDA_MEMORY_FAULT_CHILD"},
+            | {MARKER_PREFIX, "RILEY_CUDA_MEMORY_FAULT_CHILD"},
             fault=True,
         )
         (self.evidence / "host-runtime-test-binary").write_bytes(host_binary)
@@ -344,10 +344,10 @@ class Fixture:
         )
         binary_sha256 = digest(self.release_binary.read_bytes())
         (self.evidence / "release-binary.sha256").write_text(
-            f"{binary_sha256}  target/release/rustinfer\n",
+            f"{binary_sha256}  target/release/riley\n",
             encoding="ascii",
         )
-        self._elf_evidence("release", "target/release/rustinfer", binary_sha256)
+        self._elf_evidence("release", "target/release/riley", binary_sha256)
         self.refresh_checksums()
 
     def refresh_checksums(self) -> None:
@@ -569,8 +569,8 @@ class CudaFaultEvidenceTests(unittest.TestCase):
     def test_preserved_test_binary_must_contain_reviewed_marker_strings(self) -> None:
         path = self.fixture.evidence / "host-runtime-test-binary"
         contents = path.read_bytes().replace(
-            b"rustinfer-cuda-leak-smoke",
-            b"rustinfer-cuda-leak-smokf",
+            b"riley-cuda-leak-smoke",
+            b"riley-cuda-leak-smokf",
             1,
         )
         self.fixture.replace_test_binary(
@@ -674,7 +674,7 @@ class CudaFaultEvidenceTests(unittest.TestCase):
     def test_missing_case_marker_is_rejected(self) -> None:
         log = (self.fixture.evidence / "memory-fault-tests.log").read_text()
         line = (
-            "rustinfer-cuda-memory-fault-case case=explicit-close-ambiguous "
+            "riley-cuda-memory-fault-case case=explicit-close-ambiguous "
             "event=passed child_pid=4101\n"
         )
         (self.fixture.evidence / "memory-fault-tests.log").write_text(log.replace(line, ""))
@@ -705,21 +705,21 @@ class CudaFaultEvidenceTests(unittest.TestCase):
 
     def test_production_checksum_must_match_supplied_binary(self) -> None:
         path = self.fixture.evidence / "release-binary.sha256"
-        path.write_text(f"{'f' * 64}  target/release/rustinfer\n")
+        path.write_text(f"{'f' * 64}  target/release/riley\n")
         self.fixture.refresh_checksums()
         with self.assertRaisesRegex(CudaFaultEvidenceError, "inspected production release binary"):
             self.fixture.validate()
 
     def test_production_nm_fault_symbol_is_rejected(self) -> None:
         path = self.fixture.evidence / "release-nm.txt"
-        path.write_text(path.read_text() + "0000000000002000 T rustinfer_cuda_test_memory_fault_arm\n")
+        path.write_text(path.read_text() + "0000000000002000 T riley_cuda_test_memory_fault_arm\n")
         self.fixture.refresh_checksums()
         with self.assertRaisesRegex(CudaFaultEvidenceError, "fault-injection symbol"):
             self.fixture.validate()
 
     def test_supplied_production_binary_fault_symbol_is_rejected(self) -> None:
-        binary = self.fixture.root / "faulty-rustinfer"
-        binary.write_bytes(self.fixture.release_binary.read_bytes() + b"rustinfer_cuda_test_memory_fault_arm\0")
+        binary = self.fixture.root / "faulty-riley"
+        binary.write_bytes(self.fixture.release_binary.read_bytes() + b"riley_cuda_test_memory_fault_arm\0")
         with self.assertRaisesRegex(CudaFaultEvidenceError, "fault-injection symbol"):
             self.fixture.validate(release_binary=binary)
 
@@ -777,7 +777,7 @@ class CudaFaultRunnerStaticTests(unittest.TestCase):
         )
         self.assertIn("nm -a --defined-only \"$release_binary\"", runner)
         self.assertIn(
-            "grep -aFq 'rustinfer_cuda_test_memory_fault_' \"$release_binary\"",
+            "grep -aFq 'riley_cuda_test_memory_fault_' \"$release_binary\"",
             runner,
         )
 
@@ -785,7 +785,7 @@ class CudaFaultRunnerStaticTests(unittest.TestCase):
         repository = Path(__file__).resolve().parents[2]
         harness = (
             repository
-            / "crates/rustinfer-cuda/tests/memory_fault_injection_gpu.rs"
+            / "crates/riley-cuda/tests/memory_fault_injection_gpu.rs"
         ).read_text()
         self.assertIn(".spawn()?", harness)
         self.assertIn("let child_pid = child.id();", harness)

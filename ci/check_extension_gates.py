@@ -33,10 +33,10 @@ PROPOSAL_SCHEMA = "deploy/extensions/proposal.schema.json"
 CONTRACT_SCHEMA = "benchmarks/extensions/benchmark-contract.schema.json"
 IMPLEMENTATION_SCHEMA = "deploy/extensions/implementation.schema.json"
 SCHEMA_SEMANTIC_SHA256 = {
-    REGISTRY_SCHEMA: "15f156ddd4b2c61c9e046a544fa3b29bc3c2c73567dddb42d5e62563d0925420",
-    PROPOSAL_SCHEMA: "26c11c0cef3f3191fc6d662f0389051b98eefe97a7d1ded75b4e0eef38c83a9c",
-    CONTRACT_SCHEMA: "5b266c54d02318f5730175330bfbe303cc7e6ec8636fc9b588ae98ade2994436",
-    IMPLEMENTATION_SCHEMA: "d05763a3f593c3273618818b2ea034ac3d65087073cff5a7db8cc00a349c4223",
+    REGISTRY_SCHEMA: "c66d72df9782b6733ddfc5050c1e77da547007f058f1fba98aa1cc60d5e0a0eb",
+    PROPOSAL_SCHEMA: "497b119e0da7521d921e4ab52ec68026dfcfafc22385e1a48749c5b0c627b986",
+    CONTRACT_SCHEMA: "69897cb86aa847c21e56e340ca3c7709dee7c016c3ad67182ad3eb4c92153b24",
+    IMPLEMENTATION_SCHEMA: "11f77429ffa7eea134cd8fd2e0db2e1a8c99bb208061879d6e159f3ff2e8caff",
 }
 
 SEMANTIC_CLASSES = {"reference", "E0", "E1", "A1", "M1"}
@@ -67,8 +67,8 @@ TRACK_SEMANTIC_CLASSES = {
     "jacobi-lookahead": {"E0", "A1", "M1"},
 }
 EXTENSION_ID = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
-RUNTIME_FLAG = re.compile(r"^RUSTINFER_EXPERIMENTAL_[A-Z0-9_]+$")
-RUNTIME_FLAG_BYTES = re.compile(rb"RUSTINFER_EXPERIMENTAL_[A-Z0-9_]+")
+RUNTIME_FLAG = re.compile(r"^RILEY_EXPERIMENTAL_[A-Z0-9_]+$")
+RUNTIME_FLAG_BYTES = re.compile(rb"RILEY_EXPERIMENTAL_[A-Z0-9_]+")
 RUST_TEST_ID = re.compile(r"^[a-z_][a-z0-9_]{0,127}$")
 REPOSITORY_PATH = re.compile(
     r"^(?!/)(?!.*\\)(?!(?:.*/)?\.{1,2}(?:/|$))"
@@ -822,10 +822,10 @@ def _inventory(root: Path, directory: str, suffix: str) -> set[str]:
 
 def _validate_schema_files(root: Path) -> None:
     expected = {
-        REGISTRY_SCHEMA: "https://rustinfer.invalid/schemas/extension-registry-v1.schema.json",
-        PROPOSAL_SCHEMA: "https://rustinfer.invalid/schemas/extension-proposal-v1.schema.json",
-        CONTRACT_SCHEMA: "https://rustinfer.invalid/schemas/extension-benchmark-contract-v1.schema.json",
-        IMPLEMENTATION_SCHEMA: "https://rustinfer.invalid/schemas/extension-implementation-v1.schema.json",
+        REGISTRY_SCHEMA: "https://riley.invalid/schemas/extension-registry-v1.schema.json",
+        PROPOSAL_SCHEMA: "https://riley.invalid/schemas/extension-proposal-v1.schema.json",
+        CONTRACT_SCHEMA: "https://riley.invalid/schemas/extension-benchmark-contract-v1.schema.json",
+        IMPLEMENTATION_SCHEMA: "https://riley.invalid/schemas/extension-implementation-v1.schema.json",
     }
     for relative, schema_id in expected.items():
         _, resolved = _checked_file(root, relative, relative)
@@ -987,7 +987,7 @@ def _validate_proposal(
 ) -> dict[str, Any]:
     proposal = _closed_object(_load_json(path, label), PROPOSAL_KEYS, label)
     _constant(proposal["$schema"], "../proposal.schema.json", f"{label}.$schema")
-    _constant(proposal["schema_version"], "rustinfer.extension-proposal.v1", f"{label}.schema_version")
+    _constant(proposal["schema_version"], "riley.extension-proposal.v1", f"{label}.schema_version")
     extension_id = _identifier(proposal["extension_id"], f"{label}.extension_id")
     if extension_id != entry["extension_id"]:
         raise ExtensionGateError(f"{label}.extension_id: registry mismatch")
@@ -1088,7 +1088,7 @@ def _validate_proposal(
         )
     runtime_flag = _string(proposal["runtime_flag"], f"{label}.runtime_flag")
     if not RUNTIME_FLAG.fullmatch(runtime_flag):
-        raise ExtensionGateError(f"{label}.runtime_flag: must use RUSTINFER_EXPERIMENTAL_* namespace")
+        raise ExtensionGateError(f"{label}.runtime_flag: must use RILEY_EXPERIMENTAL_* namespace")
     _constant(proposal["default_enabled"], False, f"{label}.default_enabled")
     _constant(proposal["stable_default"], False, f"{label}.stable_default")
     _string(proposal["result_disclosure"], f"{label}.result_disclosure")
@@ -1255,7 +1255,7 @@ def _validate_contract(
 ) -> dict[str, Any]:
     contract = _closed_object(_load_json(path, label), CONTRACT_KEYS, label)
     _constant(contract["$schema"], "../benchmark-contract.schema.json", f"{label}.$schema")
-    _constant(contract["schema_version"], "rustinfer.extension-benchmark-contract.v1", f"{label}.schema_version")
+    _constant(contract["schema_version"], "riley.extension-benchmark-contract.v1", f"{label}.schema_version")
     _validate_class_gate(
         contract["class_gate"],
         proposal["semantic_class"],
@@ -1338,7 +1338,7 @@ def _validate_implementation(
     )
     _constant(
         implementation["schema_version"],
-        "rustinfer.extension-implementation.v1",
+        "riley.extension-implementation.v1",
         f"{label}.schema_version",
     )
     _constant(
@@ -1692,7 +1692,7 @@ def validate_repository(root: Path, base_revision: str | None = None) -> int:
     _, registry_file = _checked_file(root, REGISTRY_PATH, REGISTRY_PATH)
     registry = _closed_object(_load_json(registry_file, REGISTRY_PATH), REGISTRY_KEYS, REGISTRY_PATH)
     _constant(registry["$schema"], "registry.schema.json", f"{REGISTRY_PATH}.$schema")
-    _constant(registry["schema_version"], "rustinfer.extension-registry.v1", f"{REGISTRY_PATH}.schema_version")
+    _constant(registry["schema_version"], "riley.extension-registry.v1", f"{REGISTRY_PATH}.schema_version")
     raw_entries = registry["extensions"]
     if not isinstance(raw_entries, list):
         raise ExtensionGateError(f"{REGISTRY_PATH}.extensions: expected a list")

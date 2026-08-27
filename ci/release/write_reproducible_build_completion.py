@@ -20,9 +20,9 @@ SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
 CONTAINER_ID_PATTERN = re.compile(r"[0-9a-f]{64}")
 
 OUTPUT_PATHS = {
-    "binary": "artifacts/rustinfer",
-    "profile_binary": "artifacts/rustinfer-profile",
-    "bundle": "artifacts/rustinfer.tar.gz",
+    "binary": "artifacts/riley",
+    "profile_binary": "artifacts/riley-profile",
+    "bundle": "artifacts/riley.tar.gz",
     "native_manifest": "artifacts/native-dependencies.txt",
     "toolchain_log": "logs/toolchain.txt",
     "preflight_log": "logs/preflight.log",
@@ -148,7 +148,7 @@ def write_completion_receipt(
                 "--features",
                 "bench,cuda",
                 "--bin",
-                "rustinfer-profile",
+                "riley-profile",
             ],
         },
         "outputs": output_records,

@@ -26,7 +26,7 @@ identity, source revision과 aggregate metrics를 직접 교차검증한다.
 - v2 gate SHA-256: `eb97b2011bd77e6b2bfdb039c846484e281b35108ba6b357cdd1aba7033479e9`
 
 Raw replay bundle은
-`server-4096:/home/psyche/rustinfer-artifacts/pr01/2d22ca061f601389fad7f45708497daad14d9297/oracles/`
+`server-4096:/home/psyche/riley-artifacts/pr01/2d22ca061f601389fad7f45708497daad14d9297/oracles/`
 에 보존한다.
 
 | Artifact | Bytes | SHA-256 |

@@ -2,18 +2,18 @@
 # launcher therefore creates a collision-closed local alias from the reviewed
 # candidate revision and full image ID, verifies it before and after this
 # build, and verifies the resulting RootFS prefix. There is no default base.
-ARG RUSTINFER_RELEASE_IMAGE_REF
-FROM ${RUSTINFER_RELEASE_IMAGE_REF} AS reliability-soak-test-layer
+ARG RILEY_RELEASE_IMAGE_REF
+FROM ${RILEY_RELEASE_IMAGE_REF} AS reliability-soak-test-layer
 
-ARG RUSTINFER_RELEASE_IMAGE_ID
-ARG RUSTINFER_SOURCE_REVISION
-ARG RUSTINFER_SOURCE_ARCHIVE_SHA256
-ARG RUSTINFER_RELEASE_BINARY_SHA256
+ARG RILEY_RELEASE_IMAGE_ID
+ARG RILEY_SOURCE_REVISION
+ARG RILEY_SOURCE_ARCHIVE_SHA256
+ARG RILEY_RELEASE_BINARY_SHA256
 
-LABEL org.rustinfer.reliability-soak.release-image-id="${RUSTINFER_RELEASE_IMAGE_ID}" \
-      org.rustinfer.reliability-soak.source-revision="${RUSTINFER_SOURCE_REVISION}" \
-      org.rustinfer.reliability-soak.source-archive-sha256="${RUSTINFER_SOURCE_ARCHIVE_SHA256}" \
-      org.rustinfer.reliability-soak.release-binary-sha256="${RUSTINFER_RELEASE_BINARY_SHA256}"
+LABEL org.riley.reliability-soak.release-image-id="${RILEY_RELEASE_IMAGE_ID}" \
+      org.riley.reliability-soak.source-revision="${RILEY_SOURCE_REVISION}" \
+      org.riley.reliability-soak.source-archive-sha256="${RILEY_SOURCE_ARCHIVE_SHA256}" \
+      org.riley.reliability-soak.release-binary-sha256="${RILEY_RELEASE_BINARY_SHA256}"
 
 USER 0:0
 ENV DEBIAN_FRONTEND=noninteractive
@@ -25,8 +25,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # are retained as NAME/NOT_FOUND/-/- rows. Address tokens emitted by ldd are
 # deliberately ignored. The retained TSV is an auditable build receipt.
 RUN set -eu; \
-    release_binary_path=/opt/rustinfer/bin/rustinfer; \
-    closure_before=/opt/rustinfer-soak/release-runtime-closure.tsv; \
+    release_binary_path=/opt/riley/bin/riley; \
+    closure_before=/opt/riley-soak/release-runtime-closure.tsv; \
     closure_after=/tmp/release-runtime-closure.after.tsv; \
     capture_runtime_closure() { \
         closure_output=$1; \
@@ -82,7 +82,7 @@ RUN set -eu; \
             exit 1; \
         }; \
     done; \
-    mkdir -p /opt/rustinfer-soak; \
+    mkdir -p /opt/riley-soak; \
     capture_runtime_closure "$closure_before"; \
     apt-get update; \
     apt-get install -y --no-install-recommends --no-upgrade \
@@ -104,15 +104,15 @@ RUN set -eu; \
     rm -f "$closure_after"; \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /opt/rustinfer-soak/ci \
-        /opt/rustinfer-soak/benchmarks/soak \
+RUN mkdir -p /opt/riley-soak/ci \
+        /opt/riley-soak/benchmarks/soak \
         /evidence \
         /model \
         /run-input
-COPY ci/run_release_soak.sh /opt/rustinfer-soak/ci/run_release_soak.sh
-COPY benchmarks/soak/reliability-soak-v1.json /opt/rustinfer-soak/benchmarks/soak/reliability-soak-v1.json
-RUN chmod 0555 /opt/rustinfer-soak/ci/run_release_soak.sh \
-    && chmod 0444 /opt/rustinfer-soak/benchmarks/soak/reliability-soak-v1.json
+COPY ci/run_release_soak.sh /opt/riley-soak/ci/run_release_soak.sh
+COPY benchmarks/soak/reliability-soak-v1.json /opt/riley-soak/benchmarks/soak/reliability-soak-v1.json
+RUN chmod 0555 /opt/riley-soak/ci/run_release_soak.sh \
+    && chmod 0444 /opt/riley-soak/benchmarks/soak/reliability-soak-v1.json
 
 ENV LC_ALL=C
 ENV TZ=UTC
@@ -120,8 +120,8 @@ ENV TZ=UTC
 # The derivative may add observation tools, but it must preserve the release
 # binary byte-for-byte and remain Python-free. The materialized manifest and
 # model are supplied later as read-only mounts.
-RUN test -x /opt/rustinfer/bin/rustinfer \
-    && test "$(sha256sum /opt/rustinfer/bin/rustinfer | awk '{print $1}')" = "${RUSTINFER_RELEASE_BINARY_SHA256}" \
+RUN test -x /opt/riley/bin/riley \
+    && test "$(sha256sum /opt/riley/bin/riley | awk '{print $1}')" = "${RILEY_RELEASE_BINARY_SHA256}" \
     && for command_name in python python3 pip pip3 cargo rustc nvcc cmake make cc c++; do \
         if command -v "${command_name}" >/dev/null 2>&1; then \
             echo "forbidden reliability soak executable: ${command_name}" >&2; \
@@ -142,5 +142,5 @@ RUN test -x /opt/rustinfer/bin/rustinfer \
     fi
 
 USER 65532:65532
-ENTRYPOINT ["/opt/rustinfer-soak/ci/run_release_soak.sh"]
+ENTRYPOINT ["/opt/riley-soak/ci/run_release_soak.sh"]
 CMD []

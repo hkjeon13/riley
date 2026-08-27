@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/extension-registry-v1.schema.json",
-  "title": "rustinfer approved extension registry",
+  "$id": "https://riley.invalid/schemas/extension-registry-v1.schema.json",
+  "title": "riley approved extension registry",
   "description": "The closed allowlist of extensions admitted to implementation work. An empty registry is valid and means that no extension is approved.",
   "type": "object",
   "additionalProperties": false,
@@ -11,7 +11,7 @@
       "const": "registry.schema.json"
     },
     "schema_version": {
-      "const": "rustinfer.extension-registry.v1"
+      "const": "riley.extension-registry.v1"
     },
     "extensions": {
       "type": "array",

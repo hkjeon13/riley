@@ -150,9 +150,9 @@ class PreflightTests(unittest.TestCase):
                 "FAKE_MEMORY_TOTAL_MIB": str(memory_total_mib),
                 "FAKE_KERNEL_RELEASE": kernel_release,
                 "FAKE_COMPUTE_QUERY_OK": "yes" if compute_query_ok else "no",
-                "RUSTINFER_CPU_GOVERNOR_ROOT": str(governor_root),
-                "RUSTINFER_HOST_ROOT": str(host_root),
-                "RUSTINFER_PREFLIGHT_OUTPUT_ROOT": str(staging),
+                "RILEY_CPU_GOVERNOR_ROOT": str(governor_root),
+                "RILEY_HOST_ROOT": str(host_root),
+                "RILEY_PREFLIGHT_OUTPUT_ROOT": str(staging),
             }
         )
         return subprocess.run(

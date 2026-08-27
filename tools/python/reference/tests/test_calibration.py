@@ -14,7 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 from unittest import mock
 
-from rustinfer_reference.calibration import (
+from riley_reference.calibration import (
     ALTERNATE_CANDIDATE_REDUCTION_VARIANT,
     BF16_ORACLE_KIND,
     CALIBRATION_GATE_ID,
@@ -46,8 +46,8 @@ from rustinfer_reference.calibration import (
     validate_calibration_manifest,
     verify_calibration_artifact,
 )
-from rustinfer_reference.cli import _build_parser, main
-from rustinfer_reference.constants import (
+from riley_reference.cli import _build_parser, main
+from riley_reference.constants import (
     MODEL_CONFIG_SHA256,
     MODEL_ID,
     MODEL_REVISION,
@@ -62,16 +62,16 @@ from rustinfer_reference.constants import (
     TOKENIZER_SHA256,
     TRANSFORMERS_VERSION,
 )
-from rustinfer_reference.oracle_calibration import (
+from riley_reference.oracle_calibration import (
     compare_hf_oracles,
     replay_validate_oracle_report,
 )
-from rustinfer_reference.hf_calibration import (
+from riley_reference.hf_calibration import (
     CapturedOracleCase,
     OracleArtifactMetadata,
     produce_hf_oracle,
 )
-from rustinfer_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
+from riley_reference.environment import PRIMARY_ENVIRONMENT_SNAPSHOT
 
 
 FIXED_TIME = datetime(2026, 8, 24, 2, 3, 4, tzinfo=timezone.utc)
@@ -297,7 +297,7 @@ class CalibrationFixture:
         )
         self._write("benchmarks/environment.md", b"environment-v1\n")
         self._write(
-            "tools/python/reference/rustinfer_reference/environment.py",
+            "tools/python/reference/riley_reference/environment.py",
             b"environment-probe-v1\n",
         )
         self._write("tools/python/reference/uv.lock", b"python-lock-v1\n")
@@ -315,22 +315,22 @@ class CalibrationFixture:
             ).encode("utf-8"),
         )
         self._write(
-            "benchmarks/lanes/rustinfer-native.json",
+            "benchmarks/lanes/riley-native.json",
             json.dumps(
                 {
-                    "lane_id": "rustinfer-native",
-                    "implementation_id": "rustinfer-native",
+                    "lane_id": "riley-native",
+                    "implementation_id": "riley-native",
                     "runtime_dependency_class": "native-production",
                     "engine": {"revision": LEGACY_NATIVE_ENGINE_REVISION},
                 }
             ).encode("utf-8"),
         )
         self._write(
-            "benchmarks/lanes/rustinfer-native-v3.json",
+            "benchmarks/lanes/riley-native-v3.json",
             json.dumps(
                 {
-                    "lane_id": "rustinfer-native",
-                    "implementation_id": "rustinfer-native",
+                    "lane_id": "riley-native",
+                    "implementation_id": "riley-native",
                     "runtime_dependency_class": "native-production",
                     "engine": {"revision": NATIVE_ENGINE_REVISION},
                 }
@@ -494,7 +494,7 @@ class CalibrationFixture:
         self.sidecars[sidecar_name] = tensor_map
         producer = (
             {
-                "implementation_id": "rustinfer-native",
+                "implementation_id": "riley-native",
                 "engine_revision": (
                     LEGACY_NATIVE_ENGINE_REVISION
                     if gate_id == ORACLE_MANIFEST_GATE_ID
@@ -562,7 +562,7 @@ class CalibrationFixture:
         }
         if kind == CANDIDATE_KIND:
             executable_path = self.root / NATIVE_EXECUTABLE_FILENAME
-            executable_path.write_bytes(b"fake-rustinfer-native\n")
+            executable_path.write_bytes(b"fake-riley-native\n")
             manifest["candidate_execution"] = {
                 "executable": {
                     "path": NATIVE_EXECUTABLE_FILENAME,
@@ -573,7 +573,7 @@ class CalibrationFixture:
                     NATIVE_EXECUTABLE_FILENAME,
                     "calibrate",
                     "--repository-root",
-                    "/workspace/rustinfer",
+                    "/workspace/riley",
                     "--model",
                     "/models/smollm2",
                     "--gate-manifest",
@@ -844,9 +844,9 @@ class CalibrationTests(unittest.TestCase):
                 )
 
     def test_native_contract_build_and_versioned_engines_are_exact(self) -> None:
-        self.assertEqual(NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v3")
+        self.assertEqual(NATIVE_ENGINE_REVISION, "riley-native-contract-v3")
         self.assertEqual(
-            LEGACY_NATIVE_ENGINE_REVISION, "rustinfer-native-contract-v2"
+            LEGACY_NATIVE_ENGINE_REVISION, "riley-native-contract-v2"
         )
         self.assertEqual(
             NATIVE_BUILD_ARGV,
@@ -856,19 +856,19 @@ class CalibrationTests(unittest.TestCase):
                 "--locked",
                 "--release",
                 "--package",
-                "rustinfer-native",
+                "riley-native",
                 "--no-default-features",
                 "--features",
                 "cuda",
                 "--bin",
-                "rustinfer-native",
+                "riley-native",
             ),
         )
         with tempfile.TemporaryDirectory() as directory:
             fixture = CalibrationFixture(Path(directory))
             candidate, _ = fixture.make(CANDIDATE_KIND)
             changed = copy.deepcopy(candidate)
-            changed["producer"]["engine_revision"] = "rustinfer-native-contract-v1"
+            changed["producer"]["engine_revision"] = "riley-native-contract-v1"
             with self.assertRaisesRegex(CalibrationError, "native-production"):
                 validate_calibration_manifest(changed)
 
@@ -898,7 +898,7 @@ class CalibrationTests(unittest.TestCase):
                 path.write_bytes(b"fake-safetensors")
 
             with mock.patch(
-                "rustinfer_reference.hf_calibration.repository_provenance",
+                "riley_reference.hf_calibration.repository_provenance",
                 return_value=provenance,
             ):
                 manifest = produce_hf_oracle(
@@ -1262,7 +1262,7 @@ class CalibrationTests(unittest.TestCase):
             ]
             stdout = io.StringIO()
             with mock.patch(
-                "rustinfer_reference.calibration._default_sidecar_loader",
+                "riley_reference.calibration._default_sidecar_loader",
                 fixture.loader,
             ), contextlib.redirect_stdout(stdout):
                 self.assertEqual(main(arguments, now=lambda: FIXED_TIME), 0)
@@ -1284,7 +1284,7 @@ class CalibrationTests(unittest.TestCase):
                 str(fixture.root),
             ]
             with mock.patch(
-                "rustinfer_reference.calibration._default_sidecar_loader",
+                "riley_reference.calibration._default_sidecar_loader",
                 fixture.loader,
             ), contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main(validate_arguments), 0)
@@ -1297,7 +1297,7 @@ class CalibrationTests(unittest.TestCase):
             ]["metrics"]["max_abs"] = 0.2
             output.write_text(json.dumps(report, sort_keys=True) + "\n", encoding="utf-8")
             with mock.patch(
-                "rustinfer_reference.calibration._default_sidecar_loader",
+                "riley_reference.calibration._default_sidecar_loader",
                 fixture.loader,
             ), contextlib.redirect_stderr(io.StringIO()):
                 self.assertEqual(main(validate_arguments), 2)
@@ -1318,7 +1318,7 @@ class CalibrationTests(unittest.TestCase):
             "cases": [{} for _ in range(31)],
         }
         with tempfile.TemporaryDirectory() as directory, mock.patch(
-            "rustinfer_reference.hf_calibration.produce_hf_oracle",
+            "riley_reference.hf_calibration.produce_hf_oracle",
             return_value=fake_manifest,
         ) as producer, contextlib.redirect_stdout(io.StringIO()):
             base = Path(directory)

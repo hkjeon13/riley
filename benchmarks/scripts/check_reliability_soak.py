@@ -22,11 +22,11 @@ from pathlib import Path
 from typing import Any, Mapping, NoReturn, Sequence
 
 
-MANIFEST_VERSION = "rustinfer.reliability-soak-manifest.v1"
-RUN_VERSION = "rustinfer.reliability-soak-run.v1"
-EVENT_VERSION = "rustinfer.reliability-soak-event.v1"
-REPORT_VERSION = "rustinfer.reliability-soak-report.v2"
-E2E_GOLDEN_VERSION = "rustinfer.python-free-release-e2e-golden.v1"
+MANIFEST_VERSION = "riley.reliability-soak-manifest.v1"
+RUN_VERSION = "riley.reliability-soak-run.v1"
+EVENT_VERSION = "riley.reliability-soak-event.v1"
+REPORT_VERSION = "riley.reliability-soak-report.v2"
+E2E_GOLDEN_VERSION = "riley.python-free-release-e2e-golden.v1"
 NATIVE_CORRECTNESS_VERSION = "1.0.0"
 NATIVE_CORRECTNESS_GATE = "smollm2-fp32-bf16-native-e0-v3"
 REQUIRED_KINDS = {
@@ -80,7 +80,7 @@ CURL_WRITE_ERROR_EXIT_CODE = 23
 DISCONNECT_RESPONSE_BYTES = 1024
 EMPTY_SHA256 = hashlib.sha256(b"").hexdigest()
 REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256 = (
-    "ef8d50d07aba2e7b8c0c3f3f157bf242452ac62be9dc22080baff8023278e0f3"
+    "45166193094802629b1f2d1c57fa4d6d71094802b0f28d6f2f5304531b4c5775"
 )
 EXPECTED_LAUNCH_ARGUMENTS = [
     "serve",
@@ -95,7 +95,7 @@ EXPECTED_LAUNCH_ARGUMENTS = [
     "--residual-rmsnorm",
     "separate",
 ]
-LAUNCHER_RECEIPT_VERSION = "rustinfer.reliability-soak-launcher-receipt.v3"
+LAUNCHER_RECEIPT_VERSION = "riley.reliability-soak-launcher-receipt.v3"
 DESIGNATED_HOSTNAME = "psyche-MS-7D91"
 DESIGNATED_GPU = {
     "gpu_name": "NVIDIA GeForce RTX 4090",
@@ -105,7 +105,7 @@ DESIGNATED_GPU = {
     "driver_version": "580.173.02",
 }
 SOAK_USER = "65532:65532"
-SOAK_ENTRYPOINT = ["/opt/rustinfer-soak/ci/run_release_soak.sh"]
+SOAK_ENTRYPOINT = ["/opt/riley-soak/ci/run_release_soak.sh"]
 SOAK_CMD: list[str] = []
 SOAK_MANIFEST_DESTINATION = "/run-input/reliability-soak-v1.json"
 SOAK_MODEL_DESTINATION = "/model"
@@ -118,13 +118,13 @@ SOAK_TMPFS_OPTIONS = {
     "size=67108864",
 }
 SOAK_IMAGE_LABELS = {
-    "release_image_id": "org.rustinfer.reliability-soak.release-image-id",
-    "source_revision": "org.rustinfer.reliability-soak.source-revision",
+    "release_image_id": "org.riley.reliability-soak.release-image-id",
+    "source_revision": "org.riley.reliability-soak.source-revision",
     "source_archive_sha256": (
-        "org.rustinfer.reliability-soak.source-archive-sha256"
+        "org.riley.reliability-soak.source-archive-sha256"
     ),
     "release_binary_sha256": (
-        "org.rustinfer.reliability-soak.release-binary-sha256"
+        "org.riley.reliability-soak.release-binary-sha256"
     ),
 }
 SOAK_IMAGE_ENVIRONMENT_OVERRIDES = {
@@ -134,7 +134,7 @@ SOAK_IMAGE_ENVIRONMENT_OVERRIDES = {
 }
 SOAK_RELEASE_ENVIRONMENT = {
     "PATH": (
-        "/opt/rustinfer/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:"
+        "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:"
         "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
     ),
     "LD_LIBRARY_PATH": "/usr/local/cuda/lib64",
@@ -166,7 +166,7 @@ FORBIDDEN_RUNTIME_ENVIRONMENT = {
 }
 FORBIDDEN_RUNTIME_ENVIRONMENT_PREFIXES = ("BASH_FUNC_", "LD_")
 SOAK_HEALTHCHECK = {"Test": ["NONE"]}
-SOAK_CONTAINER_PATH = "/opt/rustinfer-soak/ci/run_release_soak.sh"
+SOAK_CONTAINER_PATH = "/opt/riley-soak/ci/run_release_soak.sh"
 SOAK_CONTAINER_ARGS: list[str] = []
 MINIMUM_SOAK_RUNTIME_SECONDS = 26_100
 MAXIMUM_CONTAINER_NAME_LEAD_SECONDS = 300
@@ -1626,7 +1626,7 @@ def _validate_runtime_receipts(
     )
     container_name = _string(container["name"], "launcher-receipt.json.container.name")
     expected_name = re.compile(
-        rf"rustinfer-soak-{re.escape(run_source['git_commit'][:12])}-"
+        rf"riley-soak-{re.escape(run_source['git_commit'][:12])}-"
         rf"(?P<stamp>[0-9]{{8}}T[0-9]{{6}}Z)"
     )
     container_name_match = expected_name.fullmatch(container_name)
@@ -1747,21 +1747,21 @@ def _validate_runtime_receipts(
     expected_environment = dict(image_environment)
     expected_environment.update(
         {
-            "RUSTINFER_SOAK_MANIFEST": SOAK_MANIFEST_DESTINATION,
-            "RUSTINFER_SOAK_OUTPUT": "/evidence/run",
-            "RUSTINFER_SOURCE_REVISION": run_source["git_commit"],
-            "RUSTINFER_SOURCE_ARCHIVE_SHA256": run_source[
+            "RILEY_SOAK_MANIFEST": SOAK_MANIFEST_DESTINATION,
+            "RILEY_SOAK_OUTPUT": "/evidence/run",
+            "RILEY_SOURCE_REVISION": run_source["git_commit"],
+            "RILEY_SOURCE_ARCHIVE_SHA256": run_source[
                 "source_archive_sha256"
             ],
-            "RUSTINFER_BINARY_SHA256": run_source["binary_sha256"],
-            "RUSTINFER_IMAGE_SHA256": run_source["image_sha256"],
-            "RUSTINFER_MODEL_SHA256": run_source["model_sha256"],
-            "RUSTINFER_MODEL_ID": run_source["model_id"],
-            "RUSTINFER_MODEL_REVISION": run_source["model_revision"],
-            "RUSTINFER_SOAK_FINAL_METRICS_JSON": "/evidence/final-metrics.json",
-            "RUSTINFER_SOAK_BINARY": "/opt/rustinfer/bin/rustinfer",
-            "RUSTINFER_SOAK_MODEL_PATH": SOAK_MODEL_DESTINATION,
-            "RUSTINFER_SOAK_BIND": "127.0.0.1:18080",
+            "RILEY_BINARY_SHA256": run_source["binary_sha256"],
+            "RILEY_IMAGE_SHA256": run_source["image_sha256"],
+            "RILEY_MODEL_SHA256": run_source["model_sha256"],
+            "RILEY_MODEL_ID": run_source["model_id"],
+            "RILEY_MODEL_REVISION": run_source["model_revision"],
+            "RILEY_SOAK_FINAL_METRICS_JSON": "/evidence/final-metrics.json",
+            "RILEY_SOAK_BINARY": "/opt/riley/bin/riley",
+            "RILEY_SOAK_MODEL_PATH": SOAK_MODEL_DESTINATION,
+            "RILEY_SOAK_BIND": "127.0.0.1:18080",
             "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
             "ALL_PROXY": "",
             "FTP_PROXY": "",
@@ -2622,7 +2622,7 @@ def replay_raw_evidence_archive(
 ) -> dict[str, Any]:
     """Rebuild a soak report only from a canonical raw evidence archive."""
 
-    with tempfile.TemporaryDirectory(prefix="rustinfer-soak-replay-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="riley-soak-replay-") as temporary:
         directory = Path(temporary)
         bindings = _materialize_raw_evidence_archive(Path(path), directory)
         report = evaluate(

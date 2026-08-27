@@ -3,14 +3,14 @@ set -eu
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 scratch_parent=$(CDPATH= cd -- "${TMPDIR:-/tmp}" && pwd)
-scratch=$(mktemp -d "$scratch_parent/rustinfer-python-free-model.XXXXXX")
+scratch=$(mktemp -d "$scratch_parent/riley-python-free-model.XXXXXX")
 target_dir=$scratch/target
 empty_path=$scratch/empty-path
 mkdir -p "$empty_path"
 
 cleanup() {
     case "$scratch" in
-        "$scratch_parent"/rustinfer-python-free-model.*) rm -rf -- "$scratch" ;;
+        "$scratch_parent"/riley-python-free-model.*) rm -rf -- "$scratch" ;;
         *) echo "refusing to remove unexpected scratch path: $scratch" >&2 ;;
     esac
 }
@@ -18,7 +18,7 @@ trap cleanup EXIT HUP INT TERM
 
 if grep -ERn \
     'std::process|process::Command|Command[[:space:]]*::[[:space:]]*new' \
-    "$repo_root/crates/rustinfer-model/src"; then
+    "$repo_root/crates/riley-model/src"; then
     echo "production model loader must not invoke subprocesses" >&2
     exit 1
 fi
@@ -28,7 +28,7 @@ fi
     CARGO_TARGET_DIR=$target_dir cargo test \
         --locked \
         --no-default-features \
-        -p rustinfer-model \
+        -p riley-model \
         --test python_free_loading \
         --no-run
 )
@@ -70,7 +70,7 @@ fi
 /usr/bin/env -i \
     PATH="$empty_path" \
     RUST_BACKTRACE=1 \
-    RUSTINFER_REQUIRE_EMPTY_PATH=1 \
+    RILEY_REQUIRE_EMPTY_PATH=1 \
     "$test_binary" \
     --exact python_free_process_loads_complete_checkpoint \
     --nocapture

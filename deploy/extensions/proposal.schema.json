@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.invalid/schemas/extension-proposal-v1.schema.json",
-  "title": "rustinfer extension admission proposal",
+  "$id": "https://riley.invalid/schemas/extension-proposal-v1.schema.json",
+  "title": "riley extension admission proposal",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,7 +36,7 @@
       "const": "../proposal.schema.json"
     },
     "schema_version": {
-      "const": "rustinfer.extension-proposal.v1"
+      "const": "riley.extension-proposal.v1"
     },
     "extension_id": {
       "$ref": "#/$defs/extensionId"
@@ -85,7 +85,7 @@
     },
     "runtime_flag": {
       "type": "string",
-      "pattern": "^RUSTINFER_EXPERIMENTAL_[A-Z0-9_]+$"
+      "pattern": "^RILEY_EXPERIMENTAL_[A-Z0-9_]+$"
     },
     "default_enabled": {
       "const": false

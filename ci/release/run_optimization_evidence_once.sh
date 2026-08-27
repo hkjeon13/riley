@@ -4,10 +4,10 @@
 set -euo pipefail
 umask 022
 
-: "${RUSTINFER_SOURCE_REVISION:?missing source revision}"
-: "${RUSTINFER_SOURCE_ARCHIVE_SHA256:?missing source archive digest}"
-: "${RUSTINFER_BUILD_IMAGE_ID:?missing immutable build image ID}"
-: "${RUSTINFER_MODEL_TREE_SHA256:?missing model tree digest}"
+: "${RILEY_SOURCE_REVISION:?missing source revision}"
+: "${RILEY_SOURCE_ARCHIVE_SHA256:?missing source archive digest}"
+: "${RILEY_BUILD_IMAGE_ID:?missing immutable build image ID}"
+: "${RILEY_MODEL_TREE_SHA256:?missing model tree digest}"
 
 test "$(pwd -P)" = /workspace
 test -d /evidence
@@ -28,14 +28,14 @@ export CARGO_NET_OFFLINE=true
 export CARGO_TERM_COLOR=never
 export CUDA_HOME=/usr/local/cuda
 export CUDAToolkit_ROOT=/usr/local/cuda
-export RUSTINFER_CUDA_ARCHITECTURES=89
+export RILEY_CUDA_ARCHITECTURES=89
 export RUSTUP_TOOLCHAIN=1.85.0-x86_64-unknown-linux-gnu
-unset RUSTINFER_GROWING_PREFIX_PROMPT_ID
+unset RILEY_GROWING_PREFIX_PROMPT_ID
 
 command_records=/runner-output/commands.v2
 subject_records=/runner-output/subjects.v2
-printf '%s\n' 'rustinfer.optimizer-command-log.v2' >"${command_records}"
-printf '%s\n' 'rustinfer.optimizer-subjects.v2' >"${subject_records}"
+printf '%s\n' 'riley.optimizer-command-log.v2' >"${command_records}"
+printf '%s\n' 'riley.optimizer-subjects.v2' >"${subject_records}"
 
 encode_record() {
     printf '%s' "$1" | base64 -w0
@@ -49,7 +49,7 @@ record_environment() {
         CARGO_TERM_COLOR \
         CUDA_HOME \
         CUDAToolkit_ROOT \
-        RUSTINFER_CUDA_ARCHITECTURES \
+        RILEY_CUDA_ARCHITECTURES \
         RUSTUP_TOOLCHAIN
     do
         value=${!key}
@@ -58,7 +58,7 @@ record_environment() {
     done
     if [[ "${model_environment}" == model ]]; then
         printf 'ENV %s %s\n' \
-            "$(encode_record RUSTINFER_REAL_CHECKPOINT)" \
+            "$(encode_record RILEY_REAL_CHECKPOINT)" \
             "$(encode_record /model)" >>"${command_records}"
     fi
 }
@@ -81,10 +81,10 @@ run_recorded() {
 
     set +e
     if [[ "${model_environment}" == model ]]; then
-        RUSTINFER_REAL_CHECKPOINT=/model "$@" >"/evidence/${log_name}" 2>&1
+        RILEY_REAL_CHECKPOINT=/model "$@" >"/evidence/${log_name}" 2>&1
         status=$?
     else
-        env -u RUSTINFER_REAL_CHECKPOINT "$@" >"/evidence/${log_name}" 2>&1
+        env -u RILEY_REAL_CHECKPOINT "$@" >"/evidence/${log_name}" 2>&1
         status=$?
     fi
     set -e
@@ -163,7 +163,7 @@ while IFS= read -r -d '' model_file; do
     model_count=$((model_count + 1))
 done < <(find /model -type f -print0 | sort -z)
 test "${model_count}" -gt 0
-test "$(sha256sum "${model_manifest}" | awk '{print $1}')" = "${RUSTINFER_MODEL_TREE_SHA256}"
+test "$(sha256sum "${model_manifest}" | awk '{print $1}')" = "${RILEY_MODEL_TREE_SHA256}"
 test "$(sha256sum /model/model.safetensors | awk '{print $1}')" = \
     80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1
 test "$(sha256sum /model/tokenizer.json | awk '{print $1}')" = \
@@ -181,7 +181,7 @@ run_recorded \
     - \
     none \
     /bin/sh ci/verify_python_free_cuda.sh
-install -m 0755 -- target/release/rustinfer-profile /runner-output/rustinfer-profile
+install -m 0755 -- target/release/riley-profile /runner-output/riley-profile
 
 run_recorded \
     workspace-all-features-all-targets \
@@ -196,7 +196,7 @@ run_recorded \
     command-batch-lifecycle-build.log \
     host-runtime-gpu-test \
     none \
-    cargo test --locked --offline --package rustinfer-cuda --no-default-features \
+    cargo test --locked --offline --package riley-cuda --no-default-features \
         --features cuda --test host_runtime_gpu --no-run \
         --message-format=json-render-diagnostics --color never \
         --target-dir "${lifecycle_target}"
@@ -222,7 +222,7 @@ run_recorded \
     command-batch-resource-ledger-build.log \
     primitives-gpu-test \
     none \
-    cargo test --locked --offline --package rustinfer-cuda --no-default-features \
+    cargo test --locked --offline --package riley-cuda --no-default-features \
         --features cuda --test primitives_gpu --no-run \
         --message-format=json-render-diagnostics --color never \
         --target-dir "${ledger_target}"
@@ -248,7 +248,7 @@ run_recorded \
     smollm2-multi-step-greedy-exact-build.log \
     llama-batch-gpu-test \
     none \
-    cargo test --locked --offline --package rustinfer-runtime --no-default-features \
+    cargo test --locked --offline --package riley-runtime --no-default-features \
         --features cuda --test llama_batch_gpu --no-run \
         --message-format=json-render-diagnostics --color never \
         --target-dir "${parity_target}"
@@ -274,7 +274,7 @@ run_recorded \
     fixed37-production-batch-e0-build.log \
     fixed37-production-batch-gpu-test \
     none \
-    cargo test --locked --offline --package rustinfer-runtime --no-default-features \
+    cargo test --locked --offline --package riley-runtime --no-default-features \
         --features cuda --test llama_batch_gpu --no-run \
         --message-format=json-render-diagnostics --color never \
         --target-dir "${fixed37_batch_target}"
@@ -294,4 +294,4 @@ run_recorded \
         fixed37_production_batch_growing_prefix_matches_golden_exactly \
         --ignored --exact --nocapture --test-threads=1 --color never
 
-printf '%s\n' rustinfer.optimizer-remote-run.completed.v3 > /runner-output/completed
+printf '%s\n' riley.optimizer-remote-run.completed.v3 > /runner-output/completed

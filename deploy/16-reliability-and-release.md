@@ -233,14 +233,19 @@ regression, Python-free, reproducible build, performance 및 soak evidence를 �
 전체 native correctness와 Qwen regression은 soak와 독립적인 단기 gate이며, soak
 실행 여부와 무관하게 판정한다.
 
-## 이번 순차 구현 실행의 Soak Waiver
+## 이번 순차 구현 실행의 Release-owner Soak 예외
 
-2026-08-27 사용자 지시에 따라 실제 7시간 15분 soak 실행은 생략한다. Soak launcher,
-raw-evidence packaging, replay checker와 final-candidate binding 구현 및 CPU contract test는
-유지하지만, 이 실행에서는 soak pass artifact를 만들거나 통과했다고 표시하지 않는다.
-따라서 구현 순서를 PR 17로 진행할 수는 있어도 이 revision은
-`soak-qualified release candidate` 또는 tag 생성 가능 상태가 아니다. 실제 release/tag
-승인 전에는 동일 candidate revision으로 원래 soak gate를 별도 실행해야 한다.
+2026-08-27 사용자는 이번 7시간 15분 soak 재실행을 생략하도록 지시한 뒤, 이전 soak를
+한 차례 수행했다는 운영 판단을 근거로 첫 Riley 릴리스를 명시적으로 승인했다. 이전
+실행은 최종 Riley revision, source archive, binary와 v2 raw evidence로 교차 결합된
+artifact가 아니므로 이 저장소의 fail-closed checker에서는 `Gate E passed` 또는
+`soak-qualified` 증거로 간주하지 않는다.
+
+따라서 이 승인은 checker나 threshold를 완화하지 않는 **release-owner prerelease
+예외**다. 태그와 release notes는 candidate-bound soak 및 final candidate report가
+없다는 사실을 공개해야 한다. Soak launcher, raw-evidence packaging, replay checker와
+동일-revision gate는 그대로 유지하며, 정식 Gate E qualification에는 원래 계약의
+전체 evidence를 다시 실행해야 한다.
 
 ## 비범위
 

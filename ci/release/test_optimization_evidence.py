@@ -75,7 +75,7 @@ class Fixture:
         self.evidence = root / "evidence"
         self.evidence.mkdir()
         self.report_path = root / "report.json"
-        self.profile_binary = root / "rustinfer-profile"
+        self.profile_binary = root / "riley-profile"
         self.counter = 0
 
         self.profile_binary.write_bytes(
@@ -171,16 +171,16 @@ class Fixture:
             "Finished `release` profile [optimized + debuginfo]\n"
             "test native_symbols_link_without_device_initialization ... ok\n"
             + SUMMARY.format(passed=1, ignored=0, filtered=0)
-            + "rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
-            "error: failed to run custom build command for `rustinfer-cuda v0.1.0`\n"
+            + "riley 0.1.0 (server=true, cuda=true, cuda_abi=1)\n"
+            "error: failed to run custom build command for `riley-cuda v0.1.0`\n"
             "Caused by:\n"
             "  process didn't exit successfully: "
-            "`/tmp/rustinfer-invalid-cuda-target/debug/build/"
-            "rustinfer-cuda-fixture/build-script-build` (exit status: 1)\n"
-            "error: rustinfer-cuda native build failed: "
-            "CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda is not a directory\n"
-            "artifact=target/release/rustinfer\n"
-            "artifact=target/release/rustinfer-profile\n"
+            "`/tmp/riley-invalid-cuda-target/debug/build/"
+            "riley-cuda-fixture/build-script-build` (exit status: 1)\n"
+            "error: riley-cuda native build failed: "
+            "CUDAToolkit_ROOT=/definitely/missing/riley-cuda is not a directory\n"
+            "artifact=target/release/riley\n"
+            "artifact=target/release/riley-profile\n"
             "Python-free CUDA production/profile compile, C ABI link, tensor memory, "
             "version, and dependency smoke passed\n"
         ).encode()
@@ -401,7 +401,7 @@ class Fixture:
                 "smollm2-multi-step-greedy-exact",
                 "fixed37-production-batch-e0",
             }:
-                environment["RUSTINFER_REAL_CHECKPOINT"] = "/model"
+                environment["RILEY_REAL_CHECKPOINT"] = "/model"
             commands.append(
                 {
                     "id": command_id,

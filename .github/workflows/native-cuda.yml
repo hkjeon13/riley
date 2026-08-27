@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
-      RUSTINFER_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures || '89' }}
+      RILEY_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures || '89' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,27 +43,29 @@ jobs:
         run: |
           docker build \
             --file ci/cuda/Dockerfile \
-            --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
-            --build-arg "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
+            --build-arg "RILEY_CUDA_ARCHITECTURES=${RILEY_CUDA_ARCHITECTURES}" \
+            --build-arg "RILEY_SOURCE_REVISION=${GITHUB_SHA}" \
             --progress plain \
-            --tag rustinfer-native-cuda:ci \
+            --tag riley-native-cuda:ci \
             .
 
   host-runtime-gpu:
     name: Python-free CUDA host-runtime and memory GPU smoke
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gpu_tests }}
     needs: python-free-build
+    # Legacy infrastructure label; rename it on the registered runner before
+    # changing this selector or GPU CI will remain queued.
     runs-on: [self-hosted, linux, x64, rustinfer-gpu]
     timeout-minutes: 60
     env:
-      RUSTINFER_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures }}
-      RUSTINFER_CUDA_LEAK_ITERATIONS: ${{ inputs.leak_iterations }}
+      RILEY_CUDA_ARCHITECTURES: ${{ inputs.cuda_architectures }}
+      RILEY_CUDA_LEAK_ITERATIONS: ${{ inputs.leak_iterations }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Prepare unique GPU evidence directory
         run: |
-          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/rustinfer-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/riley-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           mkdir -p "${GPU_EVIDENCE_DIR}"
           test -z "$(find "${GPU_EVIDENCE_DIR}" -mindepth 1 -print -quit)"
 
@@ -71,32 +73,32 @@ jobs:
         run: |
           docker build \
             --file ci/cuda/Dockerfile \
-            --build-arg "RUSTINFER_CUDA_ARCHITECTURES=${RUSTINFER_CUDA_ARCHITECTURES}" \
-            --build-arg "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
+            --build-arg "RILEY_CUDA_ARCHITECTURES=${RILEY_CUDA_ARCHITECTURES}" \
+            --build-arg "RILEY_SOURCE_REVISION=${GITHUB_SHA}" \
             --progress plain \
-            --tag rustinfer-native-cuda:gpu-ci \
+            --tag riley-native-cuda:gpu-ci \
             .
 
       - name: Run serial host-runtime and memory tests on the GPU
         run: |
-          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/rustinfer-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          SOURCE_ARCHIVE_PATH="${RUNNER_TEMP}/rustinfer-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar"
+          GPU_EVIDENCE_DIR="${RUNNER_TEMP}/riley-gpu-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          SOURCE_ARCHIVE_PATH="${RUNNER_TEMP}/riley-source-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.tar"
           git archive --format=tar --output="${SOURCE_ARCHIVE_PATH}" HEAD
           SOURCE_ARCHIVE_SHA256=$(sha256sum "${SOURCE_ARCHIVE_PATH}" | cut -d ' ' -f 1)
-          GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' rustinfer-native-cuda:gpu-ci)
+          GPU_IMAGE_ID=$(docker image inspect --format '{{.Id}}' riley-native-cuda:gpu-ci)
           docker run --rm \
             --network none \
             --gpus all \
             --env NVIDIA_VISIBLE_DEVICES=all \
             --env NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-            --env "RUSTINFER_CUDA_LEAK_ITERATIONS=${RUSTINFER_CUDA_LEAK_ITERATIONS}" \
-            --env "RUSTINFER_CUDA_COMPUTE_SANITIZER=${{ inputs.run_compute_sanitizer }}" \
-            --env RUSTINFER_GPU_EVIDENCE_DIR=/evidence \
-            --env "RUSTINFER_SOURCE_REVISION=${GITHUB_SHA}" \
-            --env "RUSTINFER_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
-            --env "RUSTINFER_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
+            --env "RILEY_CUDA_LEAK_ITERATIONS=${RILEY_CUDA_LEAK_ITERATIONS}" \
+            --env "RILEY_CUDA_COMPUTE_SANITIZER=${{ inputs.run_compute_sanitizer }}" \
+            --env RILEY_GPU_EVIDENCE_DIR=/evidence \
+            --env "RILEY_SOURCE_REVISION=${GITHUB_SHA}" \
+            --env "RILEY_SOURCE_ARCHIVE_SHA256=${SOURCE_ARCHIVE_SHA256}" \
+            --env "RILEY_GPU_IMAGE_ID=${GPU_IMAGE_ID}" \
             --volume "${GPU_EVIDENCE_DIR}:/evidence" \
-            rustinfer-native-cuda:gpu-ci \
+            riley-native-cuda:gpu-ci \
             ci/verify_python_free_gpu_runtime.sh
 
       - name: Upload GPU verification evidence
@@ -104,6 +106,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pr04-cuda-memory-gpu-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/rustinfer-gpu-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/riley-gpu-${{ github.run_id }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 14

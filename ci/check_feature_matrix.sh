@@ -17,10 +17,10 @@ for features in \
     bench,experimental \
     server,bench,experimental
 do
-    echo "checking rustinfer-server features: $features"
+    echo "checking riley-server features: $features"
     cargo check \
         --locked \
-        --package rustinfer-server \
+        --package riley-server \
         --all-targets \
         --no-default-features \
         --features "$features"

@@ -1,12 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/reliability-soak-report-v2.schema.json",
-  "title": "rustinfer reliability soak checker report",
+  "$id": "https://riley.dev/schemas/reliability-soak-report-v2.schema.json",
+  "title": "riley reliability soak checker report",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "status", "passed", "bindings", "scenario_summaries", "observations", "checks", "errors"],
   "properties": {
-    "schema_version": {"const": "rustinfer.reliability-soak-report.v2"},
+    "schema_version": {"const": "riley.reliability-soak-report.v2"},
     "status": {"enum": ["passed", "failed", "error"]},
     "passed": {"type": "boolean"},
     "bindings": {
@@ -112,7 +112,7 @@
         "container_id": {"$ref": "#/$defs/sha256"},
         "container_name": {
           "type": "string",
-          "pattern": "^rustinfer-soak-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z$"
+          "pattern": "^riley-soak-[0-9a-f]{12}-[0-9]{8}T[0-9]{6}Z$"
         }
       }
     },

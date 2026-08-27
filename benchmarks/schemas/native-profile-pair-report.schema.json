@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rustinfer.dev/schemas/native-profile-pair-report-v1.schema.json",
-  "title": "rustinfer native paired-profile checker report",
+  "$id": "https://riley.dev/schemas/native-profile-pair-report-v1.schema.json",
+  "title": "riley native paired-profile checker report",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -18,7 +18,7 @@
     "errors"
   ],
   "properties": {
-    "schema_version": { "const": "rustinfer.native-profile-pair-report.v1" },
+    "schema_version": { "const": "riley.native-profile-pair-report.v1" },
     "status": { "enum": ["passed", "failed", "incomparable", "error"] },
     "passed": { "type": "boolean" },
     "primary_metric": {

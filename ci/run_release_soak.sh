@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Run the PR-16 soak against the production rustinfer CLI.  This driver uses
+# Run the PR-16 soak against the production riley CLI.  This driver uses
 # host tools only; it never installs Python or a reference runtime in the
 # production image.  Evidence files are create-only or append-only.
 export PATH=/usr/bin:/bin
@@ -7,30 +7,30 @@ export HOME=/nonexistent CURL_HOME=/nonexistent LC_ALL=C TZ=UTC
 set -euo pipefail
 
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-: "${RUSTINFER_SOAK_MANIFEST:=$repo_root/benchmarks/soak/reliability-soak-v1.json}"
-: "${RUSTINFER_SOAK_OUTPUT:?set a new absolute evidence directory}"
-: "${RUSTINFER_SOURCE_REVISION:?set the full clean source revision}"
-: "${RUSTINFER_SOURCE_ARCHIVE_SHA256:?set the git archive SHA-256}"
-: "${RUSTINFER_BINARY_SHA256:?set the production binary SHA-256}"
-: "${RUSTINFER_IMAGE_SHA256:?set the immutable release image SHA-256}"
-: "${RUSTINFER_MODEL_SHA256:?set the immutable model artifact SHA-256}"
-: "${RUSTINFER_MODEL_ID:?set the model identifier}"
-: "${RUSTINFER_MODEL_REVISION:?set the immutable model revision}"
-: "${RUSTINFER_SOAK_FINAL_METRICS_JSON:?set the shutdown metrics artifact path}"
+: "${RILEY_SOAK_MANIFEST:=$repo_root/benchmarks/soak/reliability-soak-v1.json}"
+: "${RILEY_SOAK_OUTPUT:?set a new absolute evidence directory}"
+: "${RILEY_SOURCE_REVISION:?set the full clean source revision}"
+: "${RILEY_SOURCE_ARCHIVE_SHA256:?set the git archive SHA-256}"
+: "${RILEY_BINARY_SHA256:?set the production binary SHA-256}"
+: "${RILEY_IMAGE_SHA256:?set the immutable release image SHA-256}"
+: "${RILEY_MODEL_SHA256:?set the immutable model artifact SHA-256}"
+: "${RILEY_MODEL_ID:?set the model identifier}"
+: "${RILEY_MODEL_REVISION:?set the immutable model revision}"
+: "${RILEY_SOAK_FINAL_METRICS_JSON:?set the shutdown metrics artifact path}"
 
 for tool in bash jq curl sha256sum awk ps flock nvidia-smi readlink find sort grep wc head date env; do
     command -v "$tool" >/dev/null 2>&1 || { echo "required host tool is unavailable: $tool" >&2; exit 2; }
 done
-case "$RUSTINFER_SOAK_OUTPUT" in /*) ;; *) echo "RUSTINFER_SOAK_OUTPUT must be absolute" >&2; exit 2 ;; esac
-case "$RUSTINFER_SOAK_FINAL_METRICS_JSON" in /*) ;; *) echo "RUSTINFER_SOAK_FINAL_METRICS_JSON must be absolute" >&2; exit 2 ;; esac
-test ! -e "$RUSTINFER_SOAK_OUTPUT"
-test ! -e "$RUSTINFER_SOAK_FINAL_METRICS_JSON"
-mkdir -m 0700 "$RUSTINFER_SOAK_OUTPUT"
-events="$RUSTINFER_SOAK_OUTPUT/events.jsonl"
-sequence_file="$RUSTINFER_SOAK_OUTPUT/.sequence"
-monotonic_file="$RUSTINFER_SOAK_OUTPUT/.monotonic"
-lock_file="$RUSTINFER_SOAK_OUTPUT/.append.lock"
-run_file="$RUSTINFER_SOAK_OUTPUT/run.json"
+case "$RILEY_SOAK_OUTPUT" in /*) ;; *) echo "RILEY_SOAK_OUTPUT must be absolute" >&2; exit 2 ;; esac
+case "$RILEY_SOAK_FINAL_METRICS_JSON" in /*) ;; *) echo "RILEY_SOAK_FINAL_METRICS_JSON must be absolute" >&2; exit 2 ;; esac
+test ! -e "$RILEY_SOAK_OUTPUT"
+test ! -e "$RILEY_SOAK_FINAL_METRICS_JSON"
+mkdir -m 0700 "$RILEY_SOAK_OUTPUT"
+events="$RILEY_SOAK_OUTPUT/events.jsonl"
+sequence_file="$RILEY_SOAK_OUTPUT/.sequence"
+monotonic_file="$RILEY_SOAK_OUTPUT/.monotonic"
+lock_file="$RILEY_SOAK_OUTPUT/.append.lock"
+run_file="$RILEY_SOAK_OUTPUT/run.json"
 : >"$events"
 printf '0\n' >"$sequence_file"
 printf '0\n' >"$monotonic_file"
@@ -38,22 +38,22 @@ printf '0\n' >"$monotonic_file"
 
 sha_re='^[0-9a-f]{64}$'
 git_re='^[0-9a-f]{40}([0-9a-f]{24})?$'
-[[ $RUSTINFER_SOURCE_REVISION =~ $git_re ]] || { echo "invalid source revision" >&2; exit 2; }
-for value in "$RUSTINFER_SOURCE_ARCHIVE_SHA256" "$RUSTINFER_BINARY_SHA256" "$RUSTINFER_IMAGE_SHA256" "$RUSTINFER_MODEL_SHA256"; do
+[[ $RILEY_SOURCE_REVISION =~ $git_re ]] || { echo "invalid source revision" >&2; exit 2; }
+for value in "$RILEY_SOURCE_ARCHIVE_SHA256" "$RILEY_BINARY_SHA256" "$RILEY_IMAGE_SHA256" "$RILEY_MODEL_SHA256"; do
     [[ $value =~ $sha_re ]] || { echo "invalid SHA-256 binding" >&2; exit 2; }
 done
-jq -e '.schema_version == "rustinfer.reliability-soak-manifest.v1"' "$RUSTINFER_SOAK_MANIFEST" >/dev/null
-golden_generated_sha256=$(jq -er '.golden.generated_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RUSTINFER_SOAK_MANIFEST")
-golden_provenance_sha256=$(jq -er '.golden.provenance_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RUSTINFER_SOAK_MANIFEST")
-golden_profile=$(jq -er '.golden.request_profile | select(type == "string" and length > 0)' "$RUSTINFER_SOAK_MANIFEST")
+jq -e '.schema_version == "riley.reliability-soak-manifest.v1"' "$RILEY_SOAK_MANIFEST" >/dev/null
+golden_generated_sha256=$(jq -er '.golden.generated_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RILEY_SOAK_MANIFEST")
+golden_provenance_sha256=$(jq -er '.golden.provenance_sha256 | select(test("^[0-9a-f]{64}$") and . != ("0" * 64))' "$RILEY_SOAK_MANIFEST")
+golden_profile=$(jq -er '.golden.request_profile | select(type == "string" and length > 0)' "$RILEY_SOAK_MANIFEST")
 test -n "$golden_generated_sha256" && test -n "$golden_provenance_sha256"
 
-binary=${RUSTINFER_SOAK_BINARY:-$(jq -er '.target.binary' "$RUSTINFER_SOAK_MANIFEST")}
-model_path=${RUSTINFER_SOAK_MODEL_PATH:-$(jq -er '.target.model_path' "$RUSTINFER_SOAK_MANIFEST")}
-bind=${RUSTINFER_SOAK_BIND:-$(jq -er '.target.bind' "$RUSTINFER_SOAK_MANIFEST")}
-target_kind=$(jq -er '.target.kind' "$RUSTINFER_SOAK_MANIFEST")
+binary=${RILEY_SOAK_BINARY:-$(jq -er '.target.binary' "$RILEY_SOAK_MANIFEST")}
+model_path=${RILEY_SOAK_MODEL_PATH:-$(jq -er '.target.model_path' "$RILEY_SOAK_MANIFEST")}
+bind=${RILEY_SOAK_BIND:-$(jq -er '.target.bind' "$RILEY_SOAK_MANIFEST")}
+target_kind=$(jq -er '.target.kind' "$RILEY_SOAK_MANIFEST")
 test -x "$binary"
-test "$(sha256sum "$binary" | awk '{print $1}')" = "$RUSTINFER_BINARY_SHA256"
+test "$(sha256sum "$binary" | awk '{print $1}')" = "$RILEY_BINARY_SHA256"
 test -d "$model_path"
 test ! -L "$model_path"
 if find "$model_path" -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
@@ -72,27 +72,27 @@ model_manifest=$(
 )
 test -n "$model_manifest"
 computed_model_sha256=$(printf '%s\n' "$model_manifest" | sha256sum | awk '{print $1}')
-test "$computed_model_sha256" = "$RUSTINFER_MODEL_SHA256" || {
-    echo "model tree differs from RUSTINFER_MODEL_SHA256" >&2
+test "$computed_model_sha256" = "$RILEY_MODEL_SHA256" || {
+    echo "model tree differs from RILEY_MODEL_SHA256" >&2
     exit 2
 }
-manifest_sha=$(sha256sum "$RUSTINFER_SOAK_MANIFEST" | awk '{print $1}')
+manifest_sha=$(sha256sum "$RILEY_SOAK_MANIFEST" | awk '{print $1}')
 source_json=$(jq -cnS \
-    --arg git_commit "$RUSTINFER_SOURCE_REVISION" \
-    --arg source_archive_sha256 "$RUSTINFER_SOURCE_ARCHIVE_SHA256" \
-    --arg binary_sha256 "$RUSTINFER_BINARY_SHA256" \
-    --arg image_sha256 "$RUSTINFER_IMAGE_SHA256" \
-    --arg model_sha256 "$RUSTINFER_MODEL_SHA256" \
-    --arg model_id "$RUSTINFER_MODEL_ID" \
-    --arg model_revision "$RUSTINFER_MODEL_REVISION" \
+    --arg git_commit "$RILEY_SOURCE_REVISION" \
+    --arg source_archive_sha256 "$RILEY_SOURCE_ARCHIVE_SHA256" \
+    --arg binary_sha256 "$RILEY_BINARY_SHA256" \
+    --arg image_sha256 "$RILEY_IMAGE_SHA256" \
+    --arg model_sha256 "$RILEY_MODEL_SHA256" \
+    --arg model_id "$RILEY_MODEL_ID" \
+    --arg model_revision "$RILEY_MODEL_REVISION" \
     '{git_commit:$git_commit,git_dirty:false,source_archive_sha256:$source_archive_sha256,binary_sha256:$binary_sha256,image_sha256:$image_sha256,model_sha256:$model_sha256,model_id:$model_id,model_revision:$model_revision}')
 binding_sha=$(printf '%s' "$source_json" | sha256sum | awk '{print $1}')
 base_url="http://$bind"
-health_path=$(jq -er '.target.health_path' "$RUSTINFER_SOAK_MANIFEST")
-completion_path=$(jq -er '.target.completion_path' "$RUSTINFER_SOAK_MANIFEST")
-metrics_path=$(jq -er '.target.metrics_path' "$RUSTINFER_SOAK_MANIFEST")
-sample_interval_ms=$(jq -er '.thresholds.sample_interval_ms' "$RUSTINFER_SOAK_MANIFEST")
-shutdown_deadline_ms=$(jq -er '.thresholds.graceful_shutdown_deadline_ms' "$RUSTINFER_SOAK_MANIFEST")
+health_path=$(jq -er '.target.health_path' "$RILEY_SOAK_MANIFEST")
+completion_path=$(jq -er '.target.completion_path' "$RILEY_SOAK_MANIFEST")
+metrics_path=$(jq -er '.target.metrics_path' "$RILEY_SOAK_MANIFEST")
+sample_interval_ms=$(jq -er '.thresholds.sample_interval_ms' "$RILEY_SOAK_MANIFEST")
+shutdown_deadline_ms=$(jq -er '.thresholds.graceful_shutdown_deadline_ms' "$RILEY_SOAK_MANIFEST")
 target_pid=0
 sampler_pid=
 emit_shutdown_metrics=0
@@ -143,7 +143,7 @@ append_event() {
         --argjson sequence "$sequence" \
         --argjson monotonic_ns "$now" \
         --arg binding_sha256 "$binding_sha" \
-        '$payload + {schema_version:"rustinfer.reliability-soak-event.v1",sequence:$sequence,monotonic_ns:$monotonic_ns,binding_sha256:$binding_sha256}' >>"$events"
+        '$payload + {schema_version:"riley.reliability-soak-event.v1",sequence:$sequence,monotonic_ns:$monotonic_ns,binding_sha256:$binding_sha256}' >>"$events"
     flock -u 8
     exec 8>&-
 }
@@ -157,28 +157,28 @@ launch_target() {
         replaced=${replaced//\{bind\}/$bind}
         replaced=${replaced//\{execution_completion\}/$mode}
         arguments+=("$replaced")
-    done < <(jq -er '.target.launch_arguments[]' "$RUSTINFER_SOAK_MANIFEST")
+    done < <(jq -er '.target.launch_arguments[]' "$RILEY_SOAK_MANIFEST")
     command_sha=$( { printf '%s\0' "$binary"; printf '%s\0' "${arguments[@]}"; } | sha256sum | awk '{print $1}')
     if [ "$emit_shutdown_metrics" -eq 1 ]; then
-        RUSTINFER_SHUTDOWN_METRICS_PATH="$RUSTINFER_SOAK_FINAL_METRICS_JSON" \
-            "$binary" "${arguments[@]}" </dev/null >>"$RUSTINFER_SOAK_OUTPUT/server.stdout.log" 2>>"$RUSTINFER_SOAK_OUTPUT/server.stderr.log" &
+        RILEY_SHUTDOWN_METRICS_PATH="$RILEY_SOAK_FINAL_METRICS_JSON" \
+            "$binary" "${arguments[@]}" </dev/null >>"$RILEY_SOAK_OUTPUT/server.stdout.log" 2>>"$RILEY_SOAK_OUTPUT/server.stderr.log" &
     else
-        env -u RUSTINFER_SHUTDOWN_METRICS_PATH \
-            "$binary" "${arguments[@]}" </dev/null >>"$RUSTINFER_SOAK_OUTPUT/server.stdout.log" 2>>"$RUSTINFER_SOAK_OUTPUT/server.stderr.log" &
+        env -u RILEY_SHUTDOWN_METRICS_PATH \
+            "$binary" "${arguments[@]}" </dev/null >>"$RILEY_SOAK_OUTPUT/server.stdout.log" 2>>"$RILEY_SOAK_OUTPUT/server.stderr.log" &
     fi
     target_pid=$!
     if [ ! -e "$run_file" ]; then
         started_at_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)
         run_stamp=${started_at_utc//-/}
         run_stamp=${run_stamp//:/}
-        run_id="soak-${run_stamp}-${RUSTINFER_SOURCE_REVISION:0:12}"
+        run_id="soak-${run_stamp}-${RILEY_SOURCE_REVISION:0:12}"
         jq -nS \
             --arg run_id "$run_id" --arg manifest_sha256 "$manifest_sha" \
             --arg binding_sha256 "$binding_sha" --argjson source "$source_json" \
             --arg kind "$target_kind" --argjson pid "$target_pid" \
-            --arg image_id "sha256:$RUSTINFER_IMAGE_SHA256" --arg command_sha256 "$command_sha" \
+            --arg image_id "sha256:$RILEY_IMAGE_SHA256" --arg command_sha256 "$command_sha" \
             --arg started_at_utc "$started_at_utc" \
-            '{schema_version:"rustinfer.reliability-soak-run.v1",run_id:$run_id,manifest_sha256:$manifest_sha256,binding_sha256:$binding_sha256,source:$source,target:{kind:$kind,pid:$pid,image_id:$image_id,command_sha256:$command_sha256},started_at_utc:$started_at_utc}' >"$run_file"
+            '{schema_version:"riley.reliability-soak-run.v1",run_id:$run_id,manifest_sha256:$manifest_sha256,binding_sha256:$binding_sha256,source:$source,target:{kind:$kind,pid:$pid,image_id:$image_id,command_sha256:$command_sha256},started_at_utc:$started_at_utc}' >"$run_file"
     fi
     ready_deadline=$(( $(monotonic_ns) + 120000000000 ))
     until curl --disable --fail --silent --show-error --max-time 2 "$base_url$health_path" >/dev/null; do
@@ -321,10 +321,10 @@ run_request() {
         disconnect) request_stream=true ;;
         *) echo "unknown soak client action: $action" >&2; return 1 ;;
     esac
-    body=$(jq -cS --arg profile "$profile" --argjson request_stream "$request_stream" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end | .stream = $request_stream' "$RUSTINFER_SOAK_MANIFEST")
+    body=$(jq -cS --arg profile "$profile" --argjson request_stream "$request_stream" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end | .stream = $request_stream' "$RILEY_SOAK_MANIFEST")
     request_body_sha256=$(printf '%s' "$body" | sha256sum | awk '{print $1}')
-    output="$RUSTINFER_SOAK_OUTPUT/request-$request_id.body"
-    curl_status="$RUSTINFER_SOAK_OUTPUT/request-$request_id.curl-status"
+    output="$RILEY_SOAK_OUTPUT/request-$request_id.body"
+    curl_status="$RILEY_SOAK_OUTPUT/request-$request_id.curl-status"
     : >"$output"
     start=$(monotonic_ns)
     curl_code=0
@@ -332,14 +332,14 @@ run_request() {
         http_status=$(curl --disable --silent --show-error --max-time 0.05 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
     elif [ "$action" = disconnect ]; then
         : >"$curl_status"
-        if curl --disable --silent --show-error --no-buffer --max-time 300 --limit-rate 1K --write-out '%{stderr}\nRUSTINFER_HTTP_STATUS:%{http_code}\n' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path" 2>"$curl_status" | head -c 1024 >"$output"; then
+        if curl --disable --silent --show-error --no-buffer --max-time 300 --limit-rate 1K --write-out '%{stderr}\nRILEY_HTTP_STATUS:%{http_code}\n' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path" 2>"$curl_status" | head -c 1024 >"$output"; then
             pipeline_codes=("${PIPESTATUS[@]}")
         else
             pipeline_codes=("${PIPESTATUS[@]}")
         fi
         curl_code=${pipeline_codes[0]}
         head_code=${pipeline_codes[1]}
-        http_status=$(awk -F: '$1 == "RUSTINFER_HTTP_STATUS" {value=$2} END {print value}' "$curl_status")
+        http_status=$(awk -F: '$1 == "RILEY_HTTP_STATUS" {value=$2} END {print value}' "$curl_status")
     else
         http_status=$(curl --disable --silent --show-error --max-time 300 -o "$output" -w '%{http_code}' -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path") || curl_code=$?
     fi
@@ -376,7 +376,7 @@ run_request() {
 
 probe_hash() {
     local profile=$1 body output
-    body=$(jq -c --arg profile "$profile" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end' "$RUSTINFER_SOAK_MANIFEST")
+    body=$(jq -c --arg profile "$profile" '.requests[$profile] | if has("prompt_repeat") then .prompt = (.prompt * .prompt_repeat) | del(.prompt_repeat) else . end' "$RILEY_SOAK_MANIFEST")
     output=$(curl --disable --fail --silent --show-error --max-time 300 -H 'content-type: application/json' --data-binary "$body" "$base_url$completion_path")
     jq -jr '[.choices[].text] | join("")' <<<"$output" | sha256sum | awk '{print $1}'
 }
@@ -442,13 +442,13 @@ run_scenario() {
 }
 
 append_event '{"kind":"run_start","scenario_id":null}'
-scenario_count=$(jq -er '.scenarios | length' "$RUSTINFER_SOAK_MANIFEST")
+scenario_count=$(jq -er '.scenarios | length' "$RILEY_SOAK_MANIFEST")
 scenario_index=0
 while IFS= read -r scenario; do
     scenario_index=$((scenario_index + 1))
     if [ "$scenario_index" -eq "$scenario_count" ]; then emit_shutdown_metrics=1; fi
     run_scenario "$scenario"
-done < <(jq -c '.scenarios[]' "$RUSTINFER_SOAK_MANIFEST")
+done < <(jq -c '.scenarios[]' "$RILEY_SOAK_MANIFEST")
 
 require_post_shutdown_gpu_idle() {
     local gpu_pids
@@ -464,11 +464,11 @@ require_post_shutdown_gpu_idle() {
 
 # The server writes this post-shutdown snapshot only after native allocation
 # counters have observed all close operations.  Synthesizing zeros is forbidden.
-jq -e '.active_requests == 0 and .waiting_requests == 0 and .kv_allocated_blocks == 0 and ([.allocation[]] | all(. == 0))' "$RUSTINFER_SOAK_FINAL_METRICS_JSON" >/dev/null
+jq -e '.active_requests == 0 and .waiting_requests == 0 and .kv_allocated_blocks == 0 and ([.allocation[]] | all(. == 0))' "$RILEY_SOAK_FINAL_METRICS_JSON" >/dev/null
 require_post_shutdown_gpu_idle
-final_metrics=$(jq -c '.' "$RUSTINFER_SOAK_FINAL_METRICS_JSON")
+final_metrics=$(jq -c '.' "$RILEY_SOAK_FINAL_METRICS_JSON")
 append_event "$(jq -cn --argjson metrics "$final_metrics" '{kind:"sample",scenario_id:null,process:{pid:0,rss_bytes:0,hwm_bytes:0,fd_count:0,thread_count:0,children:[]},gpu:{vram_bytes:0},metrics:$metrics,sample_dropped:false}')"
 append_event '{"kind":"run_end","scenario_id":null,"status":"success"}'
 rm -f "$sequence_file" "$monotonic_file" "$lock_file"
 trap - EXIT USR1
-echo "soak evidence complete: $RUSTINFER_SOAK_OUTPUT"
+echo "soak evidence complete: $RILEY_SOAK_OUTPUT"

@@ -33,7 +33,7 @@ paths, so moving pre-existing files cannot masquerade as the four-file diff.
 ## Closed contract
 
 Every proposal declares `approved-for-implementation`, a closed roadmap track,
-an allowed semantic class, an `RUSTINFER_EXPERIMENTAL_*` flag, both defaults
+an allowed semantic class, an `RILEY_EXPERIMENTAL_*` flag, both defaults
 `false`, disclosure and rollback text, and structured answers to all ten PR 17
 questions. `expected_resource_reduction` is a non-empty unique subset of
 `flops`, `serial-depth`, and `hbm-traffic`; there is no `none` escape hatch.
@@ -109,7 +109,7 @@ cannot disable the test harness or require a feature. The standard CPU
 identifier naming exactly one direct top-level `#[test] fn`; hidden targets,
 comments/string literals, `cfg`/`cfg_attr`, and `ignore` cannot satisfy it.
 
-After the registry bootstrap, adding a new `RUSTINFER_EXPERIMENTAL_*` literal
+After the registry bootstrap, adding a new `RILEY_EXPERIMENTAL_*` literal
 under production `crates/` requires exactly one null-to-manifest implementation
 link, and the new literal must equal that extension's approved flag. This closes
 the mechanically identifiable namespace bypass; reviewers still classify code

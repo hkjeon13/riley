@@ -48,7 +48,7 @@ CANONICAL_PYTHON_VERSION = "3.13.15"
 CANONICAL_PYTHON_LINUX_X86_64_SHA256 = (
     "ce20f82411f2b0ccdf3e2212ca62303519521d73d25178588f1a9c8d4935c866"
 )
-REPORT_CONTRACT_VERSION = "rustinfer.repeatability.v2"
+REPORT_CONTRACT_VERSION = "riley.repeatability.v2"
 
 
 class InputError(ValueError):
@@ -287,7 +287,7 @@ def _load_trials(paths: Sequence[Path]) -> tuple[list[dict[str, Any]], list[str]
 def _load_contract_validator() -> Any:
     path = Path(__file__).with_name("validate_contract.py")
     spec = importlib.util.spec_from_file_location(
-        "rustinfer_repeatability_contract_validator", path
+        "riley_repeatability_contract_validator", path
     )
     if spec is None or spec.loader is None:
         raise InputError(f"cannot load benchmark contract validator {path}")

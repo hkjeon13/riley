@@ -222,7 +222,7 @@ with Path(os.environ["FAKE_EVENT_LOG"]).open("a", encoding="utf-8") as stream:
 passed = os.environ.get("FAKE_CHECKER_PASS", "1") == "1"
 output.write_text(json.dumps({
     "contract_version": os.environ.get(
-        "FAKE_CHECKER_CONTRACT_VERSION", "rustinfer.repeatability.v2"
+        "FAKE_CHECKER_CONTRACT_VERSION", "riley.repeatability.v2"
     ),
     "status": "passed" if passed else "failed",
     "passed": passed,
@@ -333,7 +333,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
             "CUDA_VISIBLE_DEVICES": "0",
             "OMP_NUM_THREADS": "32",
-            "RUSTINFER_MAX_IDLE_MEMORY_MIB": "999999",
+            "RILEY_MAX_IDLE_MEMORY_MIB": "999999",
             "TRITON_HOME": "/tmp/untracked-triton-home",
             "UV_PROJECT_ENVIRONMENT": "/tmp/untracked-project-env",
         }
@@ -343,7 +343,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
         message = str(captured.exception)
         self.assertIn("CUDA_VISIBLE_DEVICES", message)
         self.assertIn("OMP_NUM_THREADS", message)
-        self.assertIn("RUSTINFER_MAX_IDLE_MEMORY_MIB", message)
+        self.assertIn("RILEY_MAX_IDLE_MEMORY_MIB", message)
         self.assertIn("TRITON_HOME", message)
         self.assertIn("UV_PROJECT_ENVIRONMENT", message)
 
@@ -614,7 +614,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
                 with gzip.open(inventory_path, "rt", encoding="utf-8") as stream:
                     inventory = json.load(stream)
                 self.assertEqual(
-                    inventory["contract_version"], "rustinfer.cache-inventory.v1"
+                    inventory["contract_version"], "riley.cache-inventory.v1"
                 )
             self.assertEqual(
                 plan["reproducibility_environment"]["allowlisted_values"]
@@ -886,7 +886,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             self.assertEqual(
                 report,
                 {
-                    "contract_version": "rustinfer.repeatability.v2",
+                    "contract_version": "riley.repeatability.v2",
                     "status": "failed",
                     "passed": False,
                 },
@@ -901,7 +901,7 @@ class RepeatabilityRunnerTests(unittest.TestCase):
             fakes = FakePrograms(root)
             output = root / "artifacts"
             environment = fakes.environment(
-                FAKE_CHECKER_CONTRACT_VERSION="rustinfer.repeatability.v1"
+                FAKE_CHECKER_CONTRACT_VERSION="riley.repeatability.v1"
             )
             with mock.patch.dict(os.environ, environment, clear=False):
                 returncode = runner.main(fakes.argv(output))

@@ -27,7 +27,7 @@ from test_release import (  # noqa: E402
 
 
 REVISION = "1a2b3c4d5e6f78901234567890abcdef12345678"
-CANDIDATE_ID = "rustinfer-0.1.0-rc1"
+CANDIDATE_ID = "riley-0.1.0-rc1"
 
 
 def _digest(contents: bytes) -> str:
@@ -367,7 +367,7 @@ class ManifestWriterTests(unittest.TestCase):
 
     def test_candidate_base_version_must_match_verified_bundle(self) -> None:
         anchors = self.fixture.anchors
-        anchors["expected_candidate_id"] = "rustinfer-0.2.0-rc1"
+        anchors["expected_candidate_id"] = "riley-0.2.0-rc1"
         output = self.base / "candidate.json"
         with mock.patch.object(writer.candidate_checker, "evaluate") as checker:
             with self.assertRaisesRegex(

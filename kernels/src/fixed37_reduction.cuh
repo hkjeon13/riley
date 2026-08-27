@@ -1,19 +1,19 @@
-#ifndef RUSTINFER_CUDA_FIXED37_REDUCTION_CUH_
-#define RUSTINFER_CUDA_FIXED37_REDUCTION_CUH_
+#ifndef RILEY_CUDA_FIXED37_REDUCTION_CUH_
+#define RILEY_CUDA_FIXED37_REDUCTION_CUH_
 
-#include "rustinfer_cuda.h"
+#include "riley_cuda.h"
 
 #include <cuda_runtime.h>
 
 #include <cstddef>
 #include <cstdint>
 
-namespace rustinfer_cuda_fixed37 {
+namespace riley_cuda_fixed37 {
 
 constexpr uint64_t kChunkElements =
-    RUSTINFER_CUDA_FIXED37_CHUNK_ELEMENTS;
+    RILEY_CUDA_FIXED37_CHUNK_ELEMENTS;
 constexpr uint64_t kMaximumChunkCount =
-    RUSTINFER_CUDA_FIXED37_MAX_CHUNK_COUNT;
+    RILEY_CUDA_FIXED37_MAX_CHUNK_COUNT;
 constexpr uint32_t kThreadsPerBlock = 256;
 constexpr uint32_t kMaximumBlocks = 65535;
 
@@ -88,6 +88,6 @@ __device__ __forceinline__ float balanced_max(float* first, float* second,
   return source[0];
 }
 
-}  // namespace rustinfer_cuda_fixed37
+}  // namespace riley_cuda_fixed37
 
-#endif  // RUSTINFER_CUDA_FIXED37_REDUCTION_CUH_
+#endif  // RILEY_CUDA_FIXED37_REDUCTION_CUH_

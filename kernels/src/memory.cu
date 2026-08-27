@@ -5,20 +5,20 @@
 
 namespace {
 
-using rustinfer_cuda_internal::AllocationStatsGuard;
-using rustinfer_cuda_internal::CurrentContext;
-using rustinfer_cuda_internal::clear_error;
-using rustinfer_cuda_internal::internal_error;
-using rustinfer_cuda_internal::release_child;
-using rustinfer_cuda_internal::retain_child;
-using rustinfer_cuda_internal::runtime_error;
-using rustinfer_cuda_internal::same_context;
-using rustinfer_cuda_internal::set_error;
-using rustinfer_cuda_internal::validation_error;
+using riley_cuda_internal::AllocationStatsGuard;
+using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::clear_error;
+using riley_cuda_internal::internal_error;
+using riley_cuda_internal::release_child;
+using riley_cuda_internal::retain_child;
+using riley_cuda_internal::runtime_error;
+using riley_cuda_internal::same_context;
+using riley_cuda_internal::set_error;
+using riley_cuda_internal::validation_error;
 
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
 struct MemoryFaultInjector final {
-  std::atomic<RustInferCudaContext*> owner{nullptr};
+  std::atomic<RileyCudaContext*> owner{nullptr};
   std::atomic<uint32_t> armed{0};
   std::atomic<uint64_t> faults_fired{0};
   std::atomic<uint64_t> device_free_attempts{0};
@@ -26,21 +26,21 @@ struct MemoryFaultInjector final {
   std::atomic<uint64_t> copy_use_release_attempts{0};
 };
 
-static_assert(sizeof(RustInferCudaTestMemoryFaultStats) == 64,
+static_assert(sizeof(RileyCudaTestMemoryFaultStats) == 64,
               "test memory fault stats ABI drift");
 
 MemoryFaultInjector g_memory_faults;
 
-bool injector_owns(RustInferCudaContext* context) noexcept {
+bool injector_owns(RileyCudaContext* context) noexcept {
   return g_memory_faults.owner.load(std::memory_order_acquire) == context;
 }
 
-bool fault_is_armed(RustInferCudaContext* context, uint32_t fault) noexcept {
+bool fault_is_armed(RileyCudaContext* context, uint32_t fault) noexcept {
   return injector_owns(context) &&
          g_memory_faults.armed.load(std::memory_order_acquire) == fault;
 }
 
-bool consume_fault(RustInferCudaContext* context, uint32_t fault) noexcept {
+bool consume_fault(RileyCudaContext* context, uint32_t fault) noexcept {
   if (!injector_owns(context)) {
     return false;
   }
@@ -53,12 +53,12 @@ bool consume_fault(RustInferCudaContext* context, uint32_t fault) noexcept {
   return true;
 }
 
-RustInferCudaStatus injected_runtime_error(RustInferCudaErrorInfo* error,
+RileyCudaStatus injected_runtime_error(RileyCudaErrorInfo* error,
                                            uint32_t stage,
                                            const char* operation) noexcept {
-  return set_error(error, RUSTINFER_CUDA_STATUS_RUNTIME_ERROR,
+  return set_error(error, RILEY_CUDA_STATUS_RUNTIME_ERROR,
                    static_cast<int32_t>(cudaErrorUnknown),
-                   RUSTINFER_CUDA_ERROR_DOMAIN_RUNTIME, stage, operation,
+                   RILEY_CUDA_ERROR_DOMAIN_RUNTIME, stage, operation,
                    "test-injected ambiguous CUDA result");
 }
 #endif
@@ -67,8 +67,8 @@ bool valid_range(uint64_t total, uint64_t offset, uint64_t length) noexcept {
   return offset <= total && length <= total - offset;
 }
 
-void publish_error(RustInferCudaErrorInfo* destination,
-                   const RustInferCudaErrorInfo& source) noexcept {
+void publish_error(RileyCudaErrorInfo* destination,
+                   const RileyCudaErrorInfo& source) noexcept {
   if (destination == nullptr || destination->struct_size < sizeof(*destination)) {
     return;
   }
@@ -77,7 +77,7 @@ void publish_error(RustInferCudaErrorInfo* destination,
   destination->struct_size = struct_size;
 }
 
-bool account_allocation(RustInferCudaContext* context,
+bool account_allocation(RileyCudaContext* context,
                         std::atomic<uint64_t>& live_bytes,
                         std::atomic<uint64_t>& live_allocations,
                         uint64_t byte_len) noexcept {
@@ -94,7 +94,7 @@ bool account_allocation(RustInferCudaContext* context,
   return true;
 }
 
-bool release_allocation(RustInferCudaContext* context,
+bool release_allocation(RileyCudaContext* context,
                         std::atomic<uint64_t>& live_bytes,
                         std::atomic<uint64_t>& live_allocations,
                         uint64_t byte_len) noexcept {
@@ -122,20 +122,20 @@ bool release_copy(std::atomic<uint32_t>& active) noexcept {
                                         std::memory_order_relaxed);
 }
 
-bool free_device_after_failed_create(RustInferCudaContext* context,
+bool free_device_after_failed_create(RileyCudaContext* context,
                                      void* allocation) noexcept {
   if (allocation == nullptr) {
     return true;
   }
   CurrentContext cleanup(context);
-  RustInferCudaErrorInfo ignored{};
+  RileyCudaErrorInfo ignored{};
   ignored.struct_size = sizeof(ignored);
-  RustInferCudaStatus status = cleanup.enter(
-      &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  RileyCudaStatus status = cleanup.enter(
+      &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
       "cleanup device allocation after create");
   bool free_confirmed = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
     if (injector_owns(context)) {
       g_memory_faults.device_free_attempts.fetch_add(1,
                                                       std::memory_order_relaxed);
@@ -144,38 +144,38 @@ bool free_device_after_failed_create(RustInferCudaContext* context,
     const cudaError_t result = cudaFree(allocation);
     free_confirmed = result == cudaSuccess;
     status = runtime_error(result, &ignored,
-                           RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE,
                            "cleanup device allocation after create");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
     if (consume_fault(
             context,
-            RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
+            RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
       free_confirmed = false;
       status = injected_runtime_error(
-          &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+          &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
           "cleanup device allocation after injected create failure");
     }
 #endif
   }
-  (void)cleanup.leave(status, &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  (void)cleanup.leave(status, &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
                       "cleanup device allocation after create");
   return free_confirmed;
 }
 
-bool free_pinned_after_failed_create(RustInferCudaContext* context,
+bool free_pinned_after_failed_create(RileyCudaContext* context,
                                      void* allocation) noexcept {
   if (allocation == nullptr) {
     return true;
   }
   CurrentContext cleanup(context);
-  RustInferCudaErrorInfo ignored{};
+  RileyCudaErrorInfo ignored{};
   ignored.struct_size = sizeof(ignored);
-  RustInferCudaStatus status = cleanup.enter(
-      &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  RileyCudaStatus status = cleanup.enter(
+      &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
       "cleanup pinned allocation after create");
   bool free_confirmed = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
     if (injector_owns(context)) {
       g_memory_faults.pinned_free_attempts.fetch_add(1,
                                                       std::memory_order_relaxed);
@@ -184,26 +184,26 @@ bool free_pinned_after_failed_create(RustInferCudaContext* context,
     const cudaError_t result = cudaFreeHost(allocation);
     free_confirmed = result == cudaSuccess;
     status = runtime_error(result, &ignored,
-                           RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE,
                            "cleanup pinned allocation after create");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
     if (consume_fault(
             context,
-            RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
+            RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
       free_confirmed = false;
       status = injected_runtime_error(
-          &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+          &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
           "cleanup pinned allocation after injected create failure");
     }
 #endif
   }
-  (void)cleanup.leave(status, &ignored, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+  (void)cleanup.leave(status, &ignored, RILEY_CUDA_ERROR_STAGE_CLOSE,
                       "cleanup pinned allocation after create");
   return free_confirmed;
 }
 
 void preserve_unresolved_allocation(
-    RustInferCudaContext* context, std::atomic<uint64_t>& live_bytes,
+    RileyCudaContext* context, std::atomic<uint64_t>& live_bytes,
     std::atomic<uint64_t>& live_allocations, uint64_t byte_len) noexcept {
   // No caller-visible handle exists on a failed create, so an allocation whose
   // rollback cannot be confirmed must remain permanently accounted. Either
@@ -213,7 +213,7 @@ void preserve_unresolved_allocation(
   (void)retain_child(context);
 }
 
-bool release_copy_uses(RustInferCudaCopy* copy) noexcept {
+bool release_copy_uses(RileyCudaCopy* copy) noexcept {
   if (copy->completed) {
     return true;
   }
@@ -222,7 +222,7 @@ bool release_copy_uses(RustInferCudaCopy* copy) noexcept {
       copy->host->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
   }
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
   if (injector_owns(copy->owner)) {
     g_memory_faults.copy_use_release_attempts.fetch_add(
         1, std::memory_order_relaxed);
@@ -237,52 +237,52 @@ bool release_copy_uses(RustInferCudaCopy* copy) noexcept {
   return true;
 }
 
-RustInferCudaStatus deferred_status(RustInferCudaCopy* copy,
-                                    RustInferCudaErrorInfo* error) noexcept {
-  if (copy->deferred_status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+RileyCudaStatus deferred_status(RileyCudaCopy* copy,
+                                    RileyCudaErrorInfo* error) noexcept {
+  if (copy->deferred_status != RILEY_CUDA_STATUS_SUCCESS) {
     publish_error(error, copy->deferred_error);
   }
   return copy->deferred_status;
 }
 
-RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
+RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
                                 uint64_t device_offset,
-                                RustInferCudaPinnedHostBuffer* host,
+                                RileyCudaPinnedHostBuffer* host,
                                 uint64_t host_offset, uint64_t byte_len,
-                                RustInferCudaStream* stream,
+                                RileyCudaStream* stream,
                                 cudaMemcpyKind direction,
-                                RustInferCudaCopy** out_copy,
-                                RustInferCudaErrorInfo* error) noexcept {
+                                RileyCudaCopy** out_copy,
+                                RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_copy == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy", "out_copy is null");
   }
   *out_copy = nullptr;
   if (device == nullptr || host == nullptr || stream == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "device, host, or stream handle is null");
   }
   if (!same_context(device->owner, host->owner) ||
       !same_context(device->owner, stream->owner)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "copy resources belong to different context owners");
   }
   if (device->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(
-        error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, "submit CUDA copy",
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "submit CUDA copy",
         "CUDA context is poisoned by a prior restoration failure");
   }
   if (!valid_range(device->byte_len, device_offset, byte_len) ||
       !valid_range(host->byte_len, host_offset, byte_len)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "copy offset and length exceed a buffer range");
   }
@@ -290,33 +290,33 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
     if (device->active_uses.load(std::memory_order_acquire) != 0 ||
         host->active_uses.load(std::memory_order_acquire) != 0 ||
         stream->active_uses.load(std::memory_order_acquire) != 0) {
-      return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                              RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+      return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                              RILEY_CUDA_ERROR_STAGE_VALIDATION,
                               "submit CUDA copy",
                               "copy resource already has an active copy token");
     }
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
-  void* copy_storage = std::calloc(1, sizeof(RustInferCudaCopy));
+  void* copy_storage = std::calloc(1, sizeof(RileyCudaCopy));
   if (copy_storage == nullptr) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE, "submit CUDA copy",
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, "submit CUDA copy",
                      "host copy-token allocation failed");
   }
   if (!try_acquire_copy(device->active_uses)) {
     std::free(copy_storage);
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "device buffer already has an active copy token");
   }
   if (!try_acquire_copy(host->active_uses)) {
     (void)release_copy(device->active_uses);
     std::free(copy_storage);
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "pinned host buffer already has an active copy token");
   }
@@ -324,8 +324,8 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
     (void)release_copy(host->active_uses);
     (void)release_copy(device->active_uses);
     std::free(copy_storage);
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "submit CUDA copy",
                             "stream already has an active copy token");
   }
@@ -334,22 +334,22 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
     (void)release_copy(host->active_uses);
     (void)release_copy(device->active_uses);
     std::free(copy_storage);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "submit CUDA copy",
                           "context child-resource counter overflow");
   }
 
   auto* copy = new (copy_storage)
-      RustInferCudaCopy(device->owner, stream, device, host);
-  RustInferCudaErrorInfo operation_error{};
+      RileyCudaCopy(device->owner, stream, device, host);
+  RileyCudaErrorInfo operation_error{};
   operation_error.struct_size = sizeof(operation_error);
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   bool copy_attempted = false;
   {
     CurrentContext scope(device->owner);
-    status = scope.enter(&operation_error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
+    status = scope.enter(&operation_error, RILEY_CUDA_ERROR_STAGE_COPY,
                          "submit CUDA copy");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       auto* device_bytes = static_cast<uint8_t*>(device->device_data);
       auto* host_bytes = static_cast<uint8_t*>(host->host_data);
       const size_t native_device_offset = static_cast<size_t>(device_offset);
@@ -367,27 +367,27 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
       status = runtime_error(
           cudaMemcpyAsync(destination, source, static_cast<size_t>(byte_len),
                           direction, stream->stream),
-          &operation_error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
+          &operation_error, RILEY_CUDA_ERROR_STAGE_COPY,
           direction == cudaMemcpyHostToDevice ? "enqueue pinned host-to-device copy"
                                                : "enqueue device-to-pinned-host copy");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RILEY_CUDA_STATUS_SUCCESS &&
           consume_fault(
               device->owner,
-              RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR)) {
+              RILEY_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR)) {
         status = injected_runtime_error(
-            &operation_error, RUSTINFER_CUDA_ERROR_STAGE_COPY,
+            &operation_error, RILEY_CUDA_ERROR_STAGE_COPY,
             "enqueue test-injected deferred CUDA copy error");
       }
 #endif
     }
     status = scope.leave(status, &operation_error,
-                         RUSTINFER_CUDA_ERROR_STAGE_COPY,
+                         RILEY_CUDA_ERROR_STAGE_COPY,
                          "submit CUDA copy");
   }
 
   if (!copy_attempted) {
-    copy->~RustInferCudaCopy();
+    copy->~RileyCudaCopy();
     std::free(copy);
     (void)release_child(device->owner);
     (void)release_copy(stream->active_uses);
@@ -397,73 +397,73 @@ RustInferCudaStatus submit_copy(RustInferCudaDeviceBuffer* device,
     return status;
   }
 
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     copy->deferred_status = status;
     copy->deferred_error = operation_error;
   }
   clear_error(error);
   *out_copy = copy;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
 }  // namespace
 
-extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_create(
-    RustInferCudaContext* context, uint64_t byte_len,
-    RustInferCudaDeviceBuffer** out_buffer,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_device_buffer_create(
+    RileyCudaContext* context, uint64_t byte_len,
+    RileyCudaDeviceBuffer** out_buffer,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA device buffer", "out_buffer is null");
   }
   *out_buffer = nullptr;
   if (context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA device buffer", "context is null");
   }
   if (byte_len > SIZE_MAX) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create CUDA device buffer",
                             "byte_len does not fit host size_t");
   }
-  void* storage = std::calloc(1, sizeof(RustInferCudaDeviceBuffer));
+  void* storage = std::calloc(1, sizeof(RileyCudaDeviceBuffer));
   if (storage == nullptr) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
                      "create CUDA device buffer", "host allocation failed");
   }
 
   void* allocation = nullptr;
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   if (byte_len != 0) {
     CurrentContext scope(context);
-    status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                          "create CUDA device buffer");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       const cudaError_t result =
           cudaMalloc(&allocation, static_cast<size_t>(byte_len));
-      status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                              "allocate CUDA device buffer");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RILEY_CUDA_STATUS_SUCCESS &&
           fault_is_armed(
               context,
-              RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
+              RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS)) {
         status = injected_runtime_error(
-            error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+            error, RILEY_CUDA_ERROR_STAGE_CREATE,
             "create test-injected CUDA device buffer failure");
       }
 #endif
     }
-    status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                          "create CUDA device buffer");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     if (!free_device_after_failed_create(context, allocation)) {
       preserve_unresolved_allocation(
           context, context->device_live_bytes,
@@ -480,7 +480,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_create(
           context->device_live_allocations, byte_len);
     }
     std::free(storage);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create CUDA device buffer",
                           "device allocation accounting overflow");
   }
@@ -490,45 +490,45 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_create(
                                context->device_live_allocations, byte_len);
     }
     std::free(storage);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create CUDA device buffer",
                           "context child-resource counter overflow");
   }
   auto* buffer =
-      new (storage) RustInferCudaDeviceBuffer(context, allocation, byte_len);
+      new (storage) RileyCudaDeviceBuffer(context, allocation, byte_len);
   *out_buffer = buffer;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
-    RustInferCudaDeviceBuffer** buffer,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_device_buffer_close(
+    RileyCudaDeviceBuffer** buffer,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA device buffer", "buffer pointer is null");
   }
   if (*buffer == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA device buffer",
                             "device buffer still has an active asynchronous use");
   }
 
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   bool free_attempted = false;
   bool free_confirmed = (*buffer)->device_data == nullptr;
   if ((*buffer)->device_data != nullptr) {
     CurrentContext scope((*buffer)->owner);
-    status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                          "close CUDA device buffer");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       free_attempted = true;
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
       if (injector_owns((*buffer)->owner)) {
         g_memory_faults.device_free_attempts.fetch_add(
             1, std::memory_order_relaxed);
@@ -536,15 +536,15 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
 #endif
       const cudaError_t result = cudaFree((*buffer)->device_data);
       free_confirmed = result == cudaSuccess;
-      status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                              "free CUDA device buffer");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
       if (consume_fault(
               (*buffer)->owner,
-              RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS)) {
+              RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS)) {
         free_confirmed = false;
         status = injected_runtime_error(
-            error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
             "close test-injected CUDA device buffer");
       }
 #endif
@@ -552,12 +552,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
       // its destructive side effect. Never retry an attempted free.
       (*buffer)->device_data = nullptr;
     }
-    status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                          "close CUDA device buffer");
   }
   const bool consume = free_confirmed || free_attempted;
   if (consume) {
-    RustInferCudaContext* owner = (*buffer)->owner;
+    RileyCudaContext* owner = (*buffer)->owner;
     const uint64_t byte_len = (*buffer)->byte_len;
     bool accounted = true;
     bool released = true;
@@ -566,14 +566,14 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
                                      owner->device_live_allocations, byte_len);
       released = release_child(owner);
     }
-    (*buffer)->~RustInferCudaDeviceBuffer();
+    (*buffer)->~RileyCudaDeviceBuffer();
     std::free(*buffer);
     *buffer = nullptr;
     // An ambiguous failed free intentionally leaves allocation accounting and
     // the native context-child lease live. That fail-closed leak prevents the
     // primary context from being released around possibly live device memory.
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA device buffer",
                             "allocation or context accounting underflow");
     }
@@ -581,62 +581,62 @@ extern "C" RustInferCudaStatus rustinfer_cuda_device_buffer_close(
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
-    RustInferCudaContext* context, uint64_t byte_len,
-    RustInferCudaPinnedHostBuffer** out_buffer,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_create(
+    RileyCudaContext* context, uint64_t byte_len,
+    RileyCudaPinnedHostBuffer** out_buffer,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (out_buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create pinned host buffer", "out_buffer is null");
   }
   *out_buffer = nullptr;
   if (context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create pinned host buffer", "context is null");
   }
   if (byte_len > SIZE_MAX) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "create pinned host buffer",
                             "byte_len does not fit host size_t");
   }
-  void* storage = std::calloc(1, sizeof(RustInferCudaPinnedHostBuffer));
+  void* storage = std::calloc(1, sizeof(RileyCudaPinnedHostBuffer));
   if (storage == nullptr) {
-    return set_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_MEMORY, 0,
-                     RUSTINFER_CUDA_ERROR_DOMAIN_INTERNAL,
-                     RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE,
                      "create pinned host buffer", "host allocation failed");
   }
 
   void* allocation = nullptr;
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   if (byte_len != 0) {
     CurrentContext scope(context);
-    status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                          "create pinned host buffer");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       const cudaError_t result = cudaHostAlloc(
           &allocation, static_cast<size_t>(byte_len), cudaHostAllocDefault);
-      status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                              "allocate pinned host buffer");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (status == RILEY_CUDA_STATUS_SUCCESS &&
           fault_is_armed(
               context,
-              RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
+              RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CREATE_ROLLBACK_AMBIGUOUS)) {
         status = injected_runtime_error(
-            error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+            error, RILEY_CUDA_ERROR_STAGE_CREATE,
             "create test-injected CUDA pinned host buffer failure");
       }
 #endif
     }
-    status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                          "create pinned host buffer");
   }
-  if (status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
     if (!free_pinned_after_failed_create(context, allocation)) {
       preserve_unresolved_allocation(
           context, context->pinned_host_live_bytes,
@@ -653,7 +653,7 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
           context->pinned_host_live_allocations, byte_len);
     }
     std::free(storage);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create pinned host buffer",
                           "pinned allocation accounting overflow");
   }
@@ -663,36 +663,36 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_create(
                                context->pinned_host_live_allocations, byte_len);
     }
     std::free(storage);
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CREATE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "create pinned host buffer",
                           "context child-resource counter overflow");
   }
   auto* buffer =
-      new (storage) RustInferCudaPinnedHostBuffer(context, allocation, byte_len);
+      new (storage) RileyCudaPinnedHostBuffer(context, allocation, byte_len);
   *out_buffer = buffer;
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_write(
-    RustInferCudaPinnedHostBuffer* buffer, uint64_t destination_offset,
+extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_write(
+    RileyCudaPinnedHostBuffer* buffer, uint64_t destination_offset,
     const uint8_t* source, uint64_t source_len,
-    RustInferCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (buffer == nullptr || (source_len != 0 && source == nullptr)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "write pinned host buffer",
                             "buffer or non-empty source is null");
   }
   if (!valid_range(buffer->byte_len, destination_offset, source_len)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "write pinned host buffer",
                             "write exceeds pinned host buffer range");
   }
   if (buffer->active_uses.load(std::memory_order_acquire) != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "write pinned host buffer",
                             "pinned host buffer has an active copy token");
   }
@@ -701,29 +701,29 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_write(
     std::memcpy(destination + destination_offset, source,
                 static_cast<size_t>(source_len));
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_read(
-    RustInferCudaPinnedHostBuffer* buffer, uint64_t source_offset,
+extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_read(
+    RileyCudaPinnedHostBuffer* buffer, uint64_t source_offset,
     uint8_t* destination, uint64_t destination_len,
-    RustInferCudaErrorInfo* error) noexcept {
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (buffer == nullptr || (destination_len != 0 && destination == nullptr)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "read pinned host buffer",
                             "buffer or non-empty destination is null");
   }
   if (!valid_range(buffer->byte_len, source_offset, destination_len)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_OUT_OF_RANGE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "read pinned host buffer",
                             "read exceeds pinned host buffer range");
   }
   if (buffer->active_uses.load(std::memory_order_acquire) != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "read pinned host buffer",
                             "pinned host buffer has an active copy token");
   }
@@ -732,38 +732,38 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_read(
     std::memcpy(destination, source + source_offset,
                 static_cast<size_t>(destination_len));
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
-    RustInferCudaPinnedHostBuffer** buffer,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_close(
+    RileyCudaPinnedHostBuffer** buffer,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (buffer == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close pinned host buffer", "buffer pointer is null");
   }
   if (*buffer == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
   if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close pinned host buffer",
                             "pinned host buffer still has an active copy token");
   }
 
-  RustInferCudaStatus status = RUSTINFER_CUDA_STATUS_SUCCESS;
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   bool free_attempted = false;
   bool free_confirmed = (*buffer)->host_data == nullptr;
   if ((*buffer)->host_data != nullptr) {
     CurrentContext scope((*buffer)->owner);
-    status = scope.enter(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                          "close pinned host buffer");
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
       free_attempted = true;
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
       if (injector_owns((*buffer)->owner)) {
         g_memory_faults.pinned_free_attempts.fetch_add(
             1, std::memory_order_relaxed);
@@ -771,15 +771,15 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
 #endif
       const cudaError_t result = cudaFreeHost((*buffer)->host_data);
       free_confirmed = result == cudaSuccess;
-      status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                              "free pinned host buffer");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
       if (consume_fault(
               (*buffer)->owner,
-              RUSTINFER_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS)) {
+              RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS)) {
         free_confirmed = false;
         status = injected_runtime_error(
-            error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
             "close test-injected CUDA pinned host buffer");
       }
 #endif
@@ -787,12 +787,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
       // deferred from earlier work.
       (*buffer)->host_data = nullptr;
     }
-    status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                          "close pinned host buffer");
   }
   const bool consume = free_confirmed || free_attempted;
   if (consume) {
-    RustInferCudaContext* owner = (*buffer)->owner;
+    RileyCudaContext* owner = (*buffer)->owner;
     const uint64_t byte_len = (*buffer)->byte_len;
     bool accounted = true;
     bool released = true;
@@ -802,13 +802,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
                                      byte_len);
       released = release_child(owner);
     }
-    (*buffer)->~RustInferCudaPinnedHostBuffer();
+    (*buffer)->~RileyCudaPinnedHostBuffer();
     std::free(*buffer);
     *buffer = nullptr;
     // Preserve non-zero logical accounting and the context lease if the
     // destructive result was ambiguous; reporting zero would be unsafe.
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close pinned host buffer",
                             "allocation or context accounting underflow");
     }
@@ -816,31 +816,31 @@ extern "C" RustInferCudaStatus rustinfer_cuda_pinned_host_buffer_close(
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_copy_h2d_async(
-    RustInferCudaDeviceBuffer* destination, uint64_t destination_offset,
-    RustInferCudaPinnedHostBuffer* source, uint64_t source_offset,
-    uint64_t byte_len, RustInferCudaStream* stream,
-    RustInferCudaCopy** out_copy, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_copy_h2d_async(
+    RileyCudaDeviceBuffer* destination, uint64_t destination_offset,
+    RileyCudaPinnedHostBuffer* source, uint64_t source_offset,
+    uint64_t byte_len, RileyCudaStream* stream,
+    RileyCudaCopy** out_copy, RileyCudaErrorInfo* error) noexcept {
   return submit_copy(destination, destination_offset, source, source_offset,
                      byte_len, stream, cudaMemcpyHostToDevice, out_copy, error);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_copy_d2h_async(
-    RustInferCudaPinnedHostBuffer* destination, uint64_t destination_offset,
-    RustInferCudaDeviceBuffer* source, uint64_t source_offset,
-    uint64_t byte_len, RustInferCudaStream* stream,
-    RustInferCudaCopy** out_copy, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_copy_d2h_async(
+    RileyCudaPinnedHostBuffer* destination, uint64_t destination_offset,
+    RileyCudaDeviceBuffer* source, uint64_t source_offset,
+    uint64_t byte_len, RileyCudaStream* stream,
+    RileyCudaCopy** out_copy, RileyCudaErrorInfo* error) noexcept {
   return submit_copy(source, source_offset, destination, destination_offset,
                      byte_len, stream, cudaMemcpyDeviceToHost, out_copy, error);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_copy_query(
-    RustInferCudaCopy* copy, uint8_t* out_complete,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_copy_query(
+    RileyCudaCopy* copy, uint8_t* out_complete,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (copy == nullptr || out_complete == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query CUDA copy",
                             "copy or out_complete is null");
   }
@@ -850,23 +850,23 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_query(
   }
 
   CurrentContext scope(copy->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_QUERY, "query CUDA copy");
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA copy");
   bool completion_observed = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t result = cudaStreamQuery(copy->stream->stream);
     completion_observed = result == cudaSuccess;
-    status = runtime_error(result, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                            "query CUDA copy stream");
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_QUERY,
                        "query CUDA copy");
-  if (!completion_observed || status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (!completion_observed || status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   const bool released = release_copy_uses(copy);
   if (!released) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_QUERY,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_QUERY,
                           "query CUDA copy",
                           "copy active-use counter underflow");
   }
@@ -874,13 +874,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_query(
   return deferred_status(copy, error);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_copy_synchronize(
-    RustInferCudaCopy* copy, uint8_t* out_complete,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_copy_synchronize(
+    RileyCudaCopy* copy, uint8_t* out_complete,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (copy == nullptr || out_complete == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "synchronize CUDA copy",
                             "copy or out_complete is null");
   }
@@ -890,40 +890,40 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_synchronize(
   }
 
   CurrentContext scope(copy->owner);
-  RustInferCudaStatus status = scope.enter(
-      error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
       "synchronize CUDA copy");
   bool completion_observed = false;
-  if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
     const cudaError_t result = cudaStreamSynchronize(copy->stream->stream);
     completion_observed = result == cudaSuccess;
     status = runtime_error(result, error,
-                           RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                           RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                            "synchronize CUDA copy stream");
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
-    if (status == RUSTINFER_CUDA_STATUS_SUCCESS &&
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+    if (status == RILEY_CUDA_STATUS_SUCCESS &&
         consume_fault(
             copy->owner,
-            RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS)) {
+            RILEY_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS)) {
       // Model an unconfirmable current-context restoration after the device work
       // has completed. Completion is deliberately not published: resources and
       // the context remain poisoned/busy rather than risking early reuse.
       copy->owner->restoration_failed.store(true, std::memory_order_release);
       completion_observed = false;
       status = injected_runtime_error(
-          error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+          error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
           "synchronize test-injected CUDA copy with ambiguous restoration");
     }
 #endif
   }
-  status = scope.leave(status, error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                        "synchronize CUDA copy");
-  if (!completion_observed || status != RUSTINFER_CUDA_STATUS_SUCCESS) {
+  if (!completion_observed || status != RILEY_CUDA_STATUS_SUCCESS) {
     return status;
   }
   const bool released = release_copy_uses(copy);
   if (!released) {
-    return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_SYNCHRONIZE,
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                           "synchronize CUDA copy",
                           "copy active-use counter underflow");
   }
@@ -931,32 +931,32 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_synchronize(
   return deferred_status(copy, error);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_copy_close(
-    RustInferCudaCopy** copy, RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_copy_close(
+    RileyCudaCopy** copy, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (copy == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA copy", "copy pointer is null");
   }
   if (*copy == nullptr) {
-    return RUSTINFER_CUDA_STATUS_SUCCESS;
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
 
   uint8_t complete = (*copy)->completed ? 1 : 0;
-  RustInferCudaStatus status = complete != 0
+  RileyCudaStatus status = complete != 0
                                    ? deferred_status(*copy, error)
-                                   : RUSTINFER_CUDA_STATUS_SUCCESS;
+                                   : RILEY_CUDA_STATUS_SUCCESS;
   if (complete == 0) {
-    status = rustinfer_cuda_copy_synchronize(*copy, &complete, error);
+    status = riley_cuda_copy_synchronize(*copy, &complete, error);
   }
   if (complete != 0) {
-    RustInferCudaContext* owner = (*copy)->owner;
-    (*copy)->~RustInferCudaCopy();
+    RileyCudaContext* owner = (*copy)->owner;
+    (*copy)->~RileyCudaCopy();
     std::free(*copy);
     *copy = nullptr;
-    if (!release_child(owner) && status == RUSTINFER_CUDA_STATUS_SUCCESS) {
-      return internal_error(error, RUSTINFER_CUDA_ERROR_STAGE_CLOSE,
+    if (!release_child(owner) && status == RILEY_CUDA_STATUS_SUCCESS) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA copy",
                             "context child-resource counter underflow");
     }
@@ -964,13 +964,13 @@ extern "C" RustInferCudaStatus rustinfer_cuda_copy_close(
   return status;
 }
 
-#if defined(RUSTINFER_CUDA_ENABLE_TEST_FAULT_INJECTION)
-extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_reset(
-    RustInferCudaContext* context, RustInferCudaErrorInfo* error) noexcept {
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+extern "C" RileyCudaStatus riley_cuda_test_memory_fault_reset(
+    RileyCudaContext* context, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (context == nullptr) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "reset CUDA memory fault injector",
                             "context is null");
   }
@@ -981,25 +981,25 @@ extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_reset(
   g_memory_faults.copy_use_release_attempts.store(0,
                                                    std::memory_order_relaxed);
   g_memory_faults.owner.store(context, std::memory_order_release);
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_arm(
-    RustInferCudaContext* context, uint32_t fault,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_test_memory_fault_arm(
+    RileyCudaContext* context, uint32_t fault,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (context == nullptr || !injector_owns(context)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "arm CUDA memory fault injector",
                             "injector is not reset for this context");
   }
   if (fault <
-          RUSTINFER_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS ||
+          RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS ||
       fault >
-          RUSTINFER_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+          RILEY_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "arm CUDA memory fault injector",
                             "unknown fault identifier");
   }
@@ -1007,22 +1007,22 @@ extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_arm(
   if (!g_memory_faults.armed.compare_exchange_strong(
           expected, fault, std::memory_order_acq_rel,
           std::memory_order_acquire)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_STATE,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "arm CUDA memory fault injector",
                             "another one-shot fault is still armed");
   }
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_stats(
-    RustInferCudaContext* context, RustInferCudaTestMemoryFaultStats* out_stats,
-    RustInferCudaErrorInfo* error) noexcept {
+extern "C" RileyCudaStatus riley_cuda_test_memory_fault_stats(
+    RileyCudaContext* context, RileyCudaTestMemoryFaultStats* out_stats,
+    RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
   if (context == nullptr || !injector_owns(context) || out_stats == nullptr ||
       out_stats->struct_size < sizeof(*out_stats)) {
-    return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
-                            RUSTINFER_CUDA_ERROR_STAGE_VALIDATION,
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query CUDA memory fault injector",
                             "context/session/output is invalid");
   }
@@ -1039,6 +1039,6 @@ extern "C" RustInferCudaStatus rustinfer_cuda_test_memory_fault_stats(
       g_memory_faults.pinned_free_attempts.load(std::memory_order_relaxed);
   out_stats->copy_use_release_attempts =
       g_memory_faults.copy_use_release_attempts.load(std::memory_order_relaxed);
-  return RUSTINFER_CUDA_STATUS_SUCCESS;
+  return RILEY_CUDA_STATUS_SUCCESS;
 }
 #endif

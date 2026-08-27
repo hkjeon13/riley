@@ -44,7 +44,7 @@ cancellation과 backpressure에 연결한다.
   capability로 연결된다.
 - Engine submission/live request, scheduler waiting/active sequence, prompt/output/context,
   KV block, connection/request/event queue와 observation memory가 모두 설정된 상한을 가진다.
-- `rustinfer serve --model PATH` CLI를 추가했다. Bind address, device, active/waiting,
+- `riley serve --model PATH` CLI를 추가했다. Bind address, device, active/waiting,
   context/output, batch/prefill와 KV/weight bound를 명시적으로 설정할 수 있고,
   `--shutdown-on-stdin`으로 portable graceful shutdown을 수행한다.
 

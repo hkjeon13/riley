@@ -11,7 +11,7 @@
 
 코드를 쓰기 전에 비교 대상, 하드웨어, 모델, 입력 corpus, 정확도 기준과 성능 지표를 고정한다. 이후 추가되는 exact 변환, 분포 보존 알고리즘과 근사 최적화가 같은 기준선에서 평가되도록 결과 schema도 먼저 정의한다.
 
-이 단계에서는 Python/PyTorch/Transformers를 **외부 reference lane**으로 사용할 수 있다. 그러나 `rustinfer` benchmark 대상은 별도의 Python-free production lane에서 실행해 reference 환경과 운영 dependency를 혼동하지 않는다.
+이 단계에서는 Python/PyTorch/Transformers를 **외부 reference lane**으로 사용할 수 있다. 그러나 `riley` benchmark 대상은 별도의 Python-free production lane에서 실행해 reference 환경과 운영 dependency를 혼동하지 않는다.
 
 ## 핵심 결정
 
@@ -67,7 +67,7 @@ Qwen-compatible checkpoint는 PR 12에서 추가한다.
 - checkpoint와 tokenizer 분석
 - baseline engine 실행
 
-### rustinfer production lane
+### Riley production lane
 
 허용 dependency:
 
@@ -269,7 +269,7 @@ tools/python/reference/
 
 ## 비범위
 
-- rustinfer 구현
+- riley 구현
 - custom CUDA kernel
 - 최적화 주장
 - multi-GPU
@@ -282,7 +282,7 @@ tools/python/reference/
 
 - [x] primary GPU, dtype, checkpoint 고정
 - [x] Python reference lane의 dependency와 실행 명령 고정
-- [x] Python-free rustinfer production lane의 dependency와 실행 명령 고정
+- [x] Python-free riley production lane의 dependency와 실행 명령 고정
 - [x] baseline 실행 명령 재현 가능
 - [x] benchmark matrix 파일화
 - [x] golden corpus와 reference 생성 절차 문서화

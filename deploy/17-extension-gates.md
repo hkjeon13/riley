@@ -1,6 +1,6 @@
 # PR 17 — 후속 확장 진입 Gate
 
-**상태:** Active — fail-closed metadata/transition gate; bootstrap은 empty-by-default
+**상태:** Complete — fail-closed metadata/transition gate; bootstrap은 empty-by-default
 
 **선행 조건:** [PR 16](16-reliability-and-release.md)  
 **다음:** 없음
@@ -16,9 +16,10 @@ allowlist**다. v1 bootstrap artifact는 빈 registry로 landing하며, 이후 �
 집합은 [`extensions/registry.json`](extensions/registry.json)이 유일하게 결정한다.
 아래 로드맵에 이름이 있다는 사실만으로 구현을 시작할 수 없다.
 
-PR 16의 이번 순차 구현은 명시적인 soak waiver로 다음 단계 진행만 허용했다. 이
-gate의 구현은 PR 16 soak 통과, release qualification, release tag 승인을 의미하지
-않으며 기존 release checker나 공통 benchmark result schema를 변경하지 않는다.
+PR 16의 이번 순차 구현은 명시적인 soak waiver로 다음 단계 진행만 허용했다. 이후
+release owner가 별도 prerelease 예외를 승인했지만, 이 gate의 구현 자체는 PR 16 soak
+통과나 release qualification을 의미하지 않으며 기존 release checker나 공통 benchmark
+result schema를 변경하지 않는다.
 
 ## 구현된 admission boundary
 
@@ -54,7 +55,7 @@ benchmarks/extensions/contracts/<extension-id>.json
 PR CI는 full base SHA를 전달한다. checker는 bootstrap-empty, v1 append-only,
 기존 registry entry와 proposal/plan/contract bytes 불변, 새 admission 한 개의 정확한
 four-file diff를 rename source까지 포함해 검사한다. bootstrap 이후 production
-crate에 새 `RUSTINFER_EXPERIMENTAL_*` flag를 넣으려면 정확히 한 approved
+crate에 새 `RILEY_EXPERIMENTAL_*` flag를 넣으려면 정확히 한 approved
 implementation link가 필요하다. Markdown plan의 의미는 PR template reviewer
 check로 닫는다.
 
@@ -74,7 +75,7 @@ check로 닫는다.
   "primary_metric": "closed common-result performance/resource path",
   "required_metrics": ["closed track-specific metric set"],
   "quality_or_error_metric": "closed class/track quality path",
-  "runtime_flag": "RUSTINFER_EXPERIMENTAL_*",
+  "runtime_flag": "RILEY_EXPERIMENTAL_*",
   "default_enabled": false,
   "stable_default": false
 }

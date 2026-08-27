@@ -13,11 +13,11 @@ done
 
 : "${CUDA_HOME:?CUDA_HOME must identify the pinned CUDA toolkit}"
 : "${CUDAToolkit_ROOT:?CUDAToolkit_ROOT must identify the pinned CUDA toolkit}"
-: "${RUSTINFER_CUDA_ARCHITECTURES:?RUSTINFER_CUDA_ARCHITECTURES must be explicit}"
-: "${RUSTINFER_SOURCE_REVISION:?RUSTINFER_SOURCE_REVISION must identify the exact source revision}"
+: "${RILEY_CUDA_ARCHITECTURES:?RILEY_CUDA_ARCHITECTURES must be explicit}"
+: "${RILEY_SOURCE_REVISION:?RILEY_SOURCE_REVISION must identify the exact source revision}"
 
-if ! printf '%s\n' "$RUSTINFER_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
-    echo "RUSTINFER_SOURCE_REVISION must be a full lowercase Git object ID" >&2
+if ! printf '%s\n' "$RILEY_SOURCE_REVISION" | grep -Eq '^[0-9a-f]{40}$'; then
+    echo "RILEY_SOURCE_REVISION must be a full lowercase Git object ID" >&2
     exit 1
 fi
 
@@ -41,7 +41,7 @@ driver_stub_runtime=$(mktemp -d)
 cleanup() {
     rm -f -- "$build_log" "$invalid_log" "$ldd_log" "$readelf_log" "$nm_log"
     rm -rf -- "$driver_stub_runtime"
-    rm -rf -- /tmp/rustinfer-invalid-cuda-target
+    rm -rf -- /tmp/riley-invalid-cuda-target
 }
 trap cleanup EXIT HUP INT TERM
 
@@ -77,17 +77,17 @@ cargo build --locked --offline --release --features cuda,server
 cargo build \
     --locked \
     --release \
-    --package rustinfer-server \
+    --package riley-server \
     --no-default-features \
     --features bench,cuda \
-    --bin rustinfer-profile
+    --bin riley-profile
 
 cargo test \
     --locked \
-    --package rustinfer-server \
+    --package riley-server \
     --no-default-features \
     --features bench,cuda \
-    --bin rustinfer-profile \
+    --bin riley-profile \
     --no-run
 
 # Build the Python-free calibration producer exactly once as a locked release
@@ -96,18 +96,18 @@ cargo test \
 cargo build \
     --locked \
     --release \
-    --package rustinfer-native \
+    --package riley-native \
     --no-default-features \
     --features cuda \
-    --bin rustinfer-native
+    --bin riley-native
 
 grep -Eiq \
-    "CUDA.*architectures[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}|CUDA arch[^0-9]*${RUSTINFER_CUDA_ARCHITECTURES}" \
+    "CUDA.*architectures[^0-9]*${RILEY_CUDA_ARCHITECTURES}|CUDA arch[^0-9]*${RILEY_CUDA_ARCHITECTURES}" \
     "$build_log"
 
 run_host_metadata cargo test \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test abi_link \
@@ -131,7 +131,7 @@ fi
 # reserved for verify_python_free_gpu_runtime.sh.
 cargo test \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test host_runtime_gpu \
@@ -139,7 +139,7 @@ cargo test \
 
 cargo test \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda \
     --test memory_gpu \
@@ -149,7 +149,7 @@ cargo test \
 # building the reusable image. Its native symbols exist only for this feature.
 cargo test \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --no-default-features \
     --features cuda-test-fault-injection \
     --test memory_fault_injection_gpu \
@@ -159,7 +159,7 @@ cargo test \
 # executing any GPU target or model operation.
 cargo test \
     --locked \
-    --package rustinfer-tensor \
+    --package riley-tensor \
     --no-default-features \
     --features cuda \
     --no-run
@@ -168,7 +168,7 @@ cargo test \
 # targets, without executing a device operation in this compile-only image.
 cargo clippy \
     --locked \
-    --package rustinfer-cuda \
+    --package riley-cuda \
     --all-targets \
     --no-default-features \
     --features cuda \
@@ -176,7 +176,7 @@ cargo clippy \
 
 cargo clippy \
     --locked \
-    --package rustinfer-tensor \
+    --package riley-tensor \
     --all-targets \
     --no-default-features \
     --features cuda \
@@ -184,7 +184,7 @@ cargo clippy \
 
 cargo clippy \
     --locked \
-    --package rustinfer-server \
+    --package riley-server \
     --all-targets \
     --no-default-features \
     --features server,bench,cuda \
@@ -192,24 +192,24 @@ cargo clippy \
 
 cargo clippy \
     --locked \
-    --package rustinfer-native \
+    --package riley-native \
     --all-targets \
     --no-default-features \
     --features cuda \
     -- -D warnings
 
-version_output=$(run_host_metadata target/release/rustinfer --version)
+version_output=$(run_host_metadata target/release/riley --version)
 printf '%s\n' "$version_output"
-printf '%s\n' "$version_output" | grep -Eiq 'rustinfer.*0\.1\.0'
+printf '%s\n' "$version_output" | grep -Eiq 'riley.*0\.1\.0'
 printf '%s\n' "$version_output" | grep -Eiq 'cuda.*abi.*1'
 
 # An explicit invalid root must fail clearly even when a valid nvcc is on PATH.
 if env \
-    CARGO_TARGET_DIR=/tmp/rustinfer-invalid-cuda-target \
-    CUDA_HOME=/definitely/missing/rustinfer-cuda \
-    CUDAToolkit_ROOT=/definitely/missing/rustinfer-cuda \
-    RUSTINFER_CUDA_ARCHITECTURES="$RUSTINFER_CUDA_ARCHITECTURES" \
-    cargo check --locked --package rustinfer-cuda --no-default-features --features cuda \
+    CARGO_TARGET_DIR=/tmp/riley-invalid-cuda-target \
+    CUDA_HOME=/definitely/missing/riley-cuda \
+    CUDAToolkit_ROOT=/definitely/missing/riley-cuda \
+    RILEY_CUDA_ARCHITECTURES="$RILEY_CUDA_ARCHITECTURES" \
+    cargo check --locked --package riley-cuda --no-default-features --features cuda \
     >"$invalid_log" 2>&1
 then
     echo "invalid CUDA toolkit root unexpectedly succeeded" >&2
@@ -221,39 +221,39 @@ grep -Eiq \
     "$invalid_log"
 
 {
-    printf 'artifact=%s\n' target/release/rustinfer
-    run_host_metadata ldd target/release/rustinfer
-    printf 'artifact=%s\n' target/release/rustinfer-profile
-    run_host_metadata ldd target/release/rustinfer-profile
-    printf 'artifact=%s\n' target/release/rustinfer-native
-    run_host_metadata ldd target/release/rustinfer-native
+    printf 'artifact=%s\n' target/release/riley
+    run_host_metadata ldd target/release/riley
+    printf 'artifact=%s\n' target/release/riley-profile
+    run_host_metadata ldd target/release/riley-profile
+    printf 'artifact=%s\n' target/release/riley-native
+    run_host_metadata ldd target/release/riley-native
     printf 'artifact=%s\n' "$abi_link_binary"
     run_host_metadata ldd "$abi_link_binary"
 } >"$ldd_log"
 cat "$ldd_log"
 {
-    printf 'artifact=%s\n' target/release/rustinfer
-    readelf -d target/release/rustinfer
-    printf 'artifact=%s\n' target/release/rustinfer-profile
-    readelf -d target/release/rustinfer-profile
-    printf 'artifact=%s\n' target/release/rustinfer-native
-    readelf -d target/release/rustinfer-native
+    printf 'artifact=%s\n' target/release/riley
+    readelf -d target/release/riley
+    printf 'artifact=%s\n' target/release/riley-profile
+    readelf -d target/release/riley-profile
+    printf 'artifact=%s\n' target/release/riley-native
+    readelf -d target/release/riley-native
     printf 'artifact=%s\n' "$abi_link_binary"
     readelf -d "$abi_link_binary"
 } >"$readelf_log"
 cat "$readelf_log"
 {
-    printf 'artifact=%s\n' target/release/rustinfer
-    nm -D --undefined-only target/release/rustinfer
-    printf 'artifact=%s\n' target/release/rustinfer-profile
-    nm -D --undefined-only target/release/rustinfer-profile
-    printf 'artifact=%s\n' target/release/rustinfer-native
-    nm -D --undefined-only target/release/rustinfer-native
+    printf 'artifact=%s\n' target/release/riley
+    nm -D --undefined-only target/release/riley
+    printf 'artifact=%s\n' target/release/riley-profile
+    nm -D --undefined-only target/release/riley-profile
+    printf 'artifact=%s\n' target/release/riley-native
+    nm -D --undefined-only target/release/riley-native
     printf 'artifact=%s\n' "$abi_link_binary"
     nm -D --undefined-only "$abi_link_binary"
 } >"$nm_log"
 cat "$nm_log"
-if grep -Fq 'rustinfer_cuda_test_memory_fault_' "$nm_log"; then
+if grep -Fq 'riley_cuda_test_memory_fault_' "$nm_log"; then
     echo "production artifact unexpectedly exposes CUDA test fault injection" >&2
     exit 1
 fi
@@ -273,13 +273,13 @@ fi
 # NVML is a development-only calibration dependency. The native producer must
 # declare and use it, while both shipped production/profile binaries must stay
 # free of an NVML DT_NEEDED entry and undefined NVML symbols.
-run_host_metadata ldd target/release/rustinfer-native \
+run_host_metadata ldd target/release/riley-native \
     | grep -F "libnvidia-ml.so.1 => $driver_stub_runtime/libnvidia-ml.so.1"
-readelf -d target/release/rustinfer-native \
+readelf -d target/release/riley-native \
     | grep -Eq 'NEEDED.*libnvidia-ml\.so\.1'
-nm -D --undefined-only target/release/rustinfer-native \
+nm -D --undefined-only target/release/riley-native \
     | grep -Eq '[[:space:]]U[[:space:]]+nvml[A-Za-z0-9_]+'
-for production_artifact in target/release/rustinfer target/release/rustinfer-profile; do
+for production_artifact in target/release/riley target/release/riley-profile; do
     if readelf -d "$production_artifact" | grep -Eq 'NEEDED.*libnvidia-ml\.so\.1'; then
         echo "$production_artifact unexpectedly depends on NVML" >&2
         exit 1

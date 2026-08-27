@@ -10,15 +10,15 @@ from types import SimpleNamespace
 from pathlib import Path
 
 from benchmarks.scripts.validate_contract import ContractError, validate_instance
-from rustinfer_reference.calibration import FP32_ORACLE_KIND, CalibrationError
-from rustinfer_reference.cli import main
-from rustinfer_reference.environment import (
+from riley_reference.calibration import FP32_ORACLE_KIND, CalibrationError
+from riley_reference.cli import main
+from riley_reference.environment import (
     PRIMARY_ENVIRONMENT_SNAPSHOT,
     EnvironmentContractError,
     probe_primary_environment,
     validate_environment_snapshot,
 )
-from rustinfer_reference.hf_calibration import produce_hf_oracle
+from riley_reference.hf_calibration import produce_hf_oracle
 
 from .support import fixture_provenance, write_prompts
 

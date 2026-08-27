@@ -1,7 +1,7 @@
 # Python reference lane
 
 This project creates correctness fixtures and end-to-end baseline rows for the
-Python-only reference lane. It is never a production fallback for `rustinfer`.
+Python-only reference lane. It is never a production fallback for `riley`.
 
 The executable contract is intentionally narrow:
 
@@ -44,7 +44,7 @@ but the project environment itself must not preexist:
 
 ```sh
 UV_BIN=/absolute/path/to/pinned/uv
-export UV_PROJECT_ENVIRONMENT=/var/tmp/rustinfer-project-envs/reference-golden-001
+export UV_PROJECT_ENVIRONMENT=/var/tmp/riley-project-envs/reference-golden-001
 test ! -e "$UV_PROJECT_ENVIRONMENT"
 test "$("$UV_BIN" --version)" = 'uv 0.12.5 (x86_64-unknown-linux-gnu)'
 test "$(sha256sum "$UV_BIN" | awk '{print $1}')" = \
@@ -59,12 +59,12 @@ UV_PYTHON=3.13.15 UV_PYTHON_DOWNLOADS=never \
 Generation is cache-only/offline by default after that explicit sync:
 
 ```sh
-mkdir -p /var/tmp/rustinfer-reference
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference generate \
+mkdir -p /var/tmp/riley-reference
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference generate \
   --prompts benchmarks/prompts.jsonl \
   --repo-root . \
   --max-new-tokens 16 \
-  --output /var/tmp/rustinfer-reference/smollm2-135m-bf16.json
+  --output /var/tmp/riley-reference/smollm2-135m-bf16.json
 ```
 
 Use `--allow-download` only for an explicit immutable-revision cache fill.
@@ -72,8 +72,8 @@ Neither mode replaces an existing output path. Validation has no PyTorch or
 Transformers import:
 
 ```sh
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference validate \
-  /var/tmp/rustinfer-reference/smollm2-135m-bf16.json \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference validate \
+  /var/tmp/riley-reference/smollm2-135m-bf16.json \
   --prompts benchmarks/prompts.jsonl \
   --repo-root .
 ```
@@ -98,7 +98,7 @@ For every prompt, the fixture records:
 - an independent FP32 `log_softmax` summary under pipeline
   `log-softmax-fp32-v1`;
 - exact cache-on/cache-off greedy tokens (generation aborts on divergence);
-- a request-isolated `rustinfer.philox4x32-10.v1` initial snapshot derived from
+- a request-isolated `riley.philox4x32-10.v1` initial snapshot derived from
   `(master_seed, prompt_id, "token-sampling")`; greedy consumes zero words.
 
 Generation refuses a dirty checkout, including untracked files. The fixture
@@ -122,7 +122,7 @@ This limit does not change the 32/128-token cache-on performance matrix.
 
 ## PR 12 Qwen2 compatibility golden
 
-`rustinfer_reference.qwen2_compat` is a separate, deliberately narrow producer
+`riley_reference.qwen2_compat` is a separate, deliberately narrow producer
 for `benchmarks/reference/qwen2.5-0.5b-instruct-bf16.json`. It does not change
 the SmolLM2 lane contract above. The producer binds
 `Qwen/Qwen2.5-0.5B-Instruct` revision
@@ -137,13 +137,13 @@ environment. The output remains outside the checkout and is never overwritten:
 
 ```sh
 ssh server-4096
-cd /absolute/path/to/clean/rustinfer-checkout
-QWEN_PYTHON=/tmp/rustinfer-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-0c690f8a782a/bin/python
-QWEN_CHECKPOINT=/tmp/rustinfer-pr12-qwen2.5-0.5b-instruct-7ae557604adf67be50417f59c2c2f167def9a775
-QWEN_OUTPUT=/home/psyche/rustinfer-artifacts/pr12/reference-hf-v1/qwen2-compat-golden-regenerated.json
+cd /absolute/path/to/clean/riley-checkout
+QWEN_PYTHON=/tmp/riley-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-0c690f8a782a/bin/python
+QWEN_CHECKPOINT=/tmp/riley-pr12-qwen2.5-0.5b-instruct-7ae557604adf67be50417f59c2c2f167def9a775
+QWEN_OUTPUT=/home/psyche/riley-artifacts/pr12/reference-hf-v1/qwen2-compat-golden-regenerated.json
 test ! -e "$QWEN_OUTPUT"
 CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=tools/python/reference \
-  "$QWEN_PYTHON" -m rustinfer_reference.qwen2_compat generate \
+  "$QWEN_PYTHON" -m riley_reference.qwen2_compat generate \
   --checkpoint "$QWEN_CHECKPOINT" \
   --output "$QWEN_OUTPUT" \
   --device cuda:0
@@ -163,7 +163,7 @@ model-free CPU checkout:
 
 ```sh
 PYTHONPATH=tools/python/reference \
-  python3 -m rustinfer_reference.qwen2_compat validate \
+  python3 -m riley_reference.qwen2_compat validate \
   benchmarks/reference/qwen2.5-0.5b-instruct-bf16.json
 ```
 
@@ -173,10 +173,10 @@ One invocation represents one independent process run and writes a new result
 artifact directory:
 
 ```sh
-"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference rustinfer-reference benchmark \
+"$UV_BIN" run --frozen --offline --no-sync --project tools/python/reference riley-reference benchmark \
   --matrix benchmarks/matrix.yaml \
   --prompts benchmarks/prompts.jsonl \
-  --result-dir /var/tmp/rustinfer-hf-staging/run1-warm-c1-p128-o32 \
+  --result-dir /var/tmp/riley-hf-staging/run1-warm-c1-p128-o32 \
   --run-index 1 \
   --run-id hf-transformers-run-1 \
   --warm-state warm \
@@ -248,15 +248,15 @@ currently pinned remote Python environment, run:
 
 ```sh
 ssh server-4096
-cd /absolute/path/to/clean/rustinfer-checkout
-PYTHON=/tmp/rustinfer-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-55a397313acd/bin/python
+cd /absolute/path/to/clean/riley-checkout
+PYTHON=/tmp/riley-pr01-lock-20260824/python/project-environments/hf-transformers-101d21486780e574-55a397313acd/bin/python
 REVISION=$(git rev-parse HEAD)
-OUTPUT=/home/psyche/rustinfer-artifacts/pr07/$REVISION/golden
+OUTPUT=/home/psyche/riley-artifacts/pr07/$REVISION/golden
 test ! -e "$OUTPUT/hf-bf16-s7-manifest.json"
 test ! -e "$OUTPUT/hf-bf16-s7.safetensors"
 mkdir -p "$OUTPUT"
 CUBLAS_WORKSPACE_CONFIG=:4096:8 PYTHONPATH=tools/python/reference \
-  "$PYTHON" -m rustinfer_reference pr07-trace-produce \
+  "$PYTHON" -m riley_reference pr07-trace-produce \
   --repo-root . \
   --manifest "$OUTPUT/hf-bf16-s7-manifest.json" \
   --sidecar "$OUTPUT/hf-bf16-s7.safetensors" \

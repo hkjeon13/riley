@@ -33,23 +33,23 @@ def _reviewed_packages() -> dict[str, dict[str, object]]:
         }
         for name, features in EXPECTED_FEATURES.items()
     }
-    packages["rustinfer-server"]["targets"] = [
+    packages["riley-server"]["targets"] = [
         {
-            "name": "rustinfer",
+            "name": "riley",
             "kind": ["bin"],
             "required-features": ["server"],
         },
         {
-            "name": "rustinfer-profile",
+            "name": "riley-profile",
             "kind": ["bin"],
             "required-features": ["bench", "cuda"],
         },
-        {"name": "rustinfer_server", "kind": ["lib"]},
+        {"name": "riley_server", "kind": ["lib"]},
     ]
-    packages["rustinfer-native"]["targets"] = [
-        {"name": "rustinfer_native", "kind": ["lib"]},
+    packages["riley-native"]["targets"] = [
+        {"name": "riley_native", "kind": ["lib"]},
         {
-            "name": "rustinfer-native",
+            "name": "riley-native",
             "kind": ["bin"],
             "required-features": ["cuda"],
         },
@@ -67,16 +67,16 @@ class WorkspaceRoleContractTests(unittest.TestCase):
         production = set(EXPECTED_PRODUCTION_CRATES.values())
         development = set(EXPECTED_DEVELOPMENT_CRATES.values())
         self.assertEqual(len(production), 7)
-        self.assertEqual(development, {"rustinfer-native"})
+        self.assertEqual(development, {"riley-native"})
         self.assertTrue(production.isdisjoint(development))
-        self.assertEqual(EXPECTED_FEATURES["rustinfer-native"]["default"], [])
+        self.assertEqual(EXPECTED_FEATURES["riley-native"]["default"], [])
 
     def test_cuda_gated_native_calibration_target_passes(self) -> None:
         validate_features(_reviewed_packages())
 
     def test_native_calibration_binary_must_be_cuda_gated(self) -> None:
         packages = _reviewed_packages()
-        packages["rustinfer-native"]["targets"][1]["required-features"] = []
+        packages["riley-native"]["targets"][1]["required-features"] = []
         with self.assertRaisesRegex(BoundaryError, "require exactly `cuda`"):
             validate_features(packages)
 
@@ -89,17 +89,17 @@ class WorkspaceRoleContractTests(unittest.TestCase):
         for source in forbidden:
             with self.subTest(source=source):
                 with self.assertRaisesRegex(BoundaryError, "external processes"):
-                    validate_runtime_source_text(source, "rustinfer-native/src/main.rs")
+                    validate_runtime_source_text(source, "riley-native/src/main.rs")
         validate_runtime_source_text(
             "use std::process::ExitCode;\nfn main() -> ExitCode { ExitCode::SUCCESS }",
-            "rustinfer-native/src/main.rs",
+            "riley-native/src/main.rs",
         )
 
     def test_license_text_fails_closed(self) -> None:
         mutations = {
             "missing": "",
             "wrong-owner": EXPECTED_LICENSE_TEXT.replace(
-                "rustinfer contributors", "another owner", 1
+                "Riley contributors", "another owner", 1
             ),
             "wrong-license": EXPECTED_LICENSE_TEXT.replace("MIT License", "Other", 1),
             "trailing-data": EXPECTED_LICENSE_TEXT + "NOTICE\n",

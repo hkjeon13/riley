@@ -160,7 +160,7 @@ SENSITIVE_RUNTIME_ENVIRONMENT_PREFIXES = (
     "NVIDIA_",
     "OMP_",
     "PYTORCH_",
-    "RUSTINFER_",
+    "RILEY_",
     "TOKENIZERS_",
     "TORCH_",
     "TRANSFORMERS_",
@@ -184,10 +184,10 @@ EXPECTED_THRESHOLDS = {
     "peak_vram_relative_range_max": 0.01,
     "failure_count_max": 0,
 }
-EXPECTED_REPEATABILITY_REPORT_CONTRACT = "rustinfer.repeatability.v2"
-RUNNER_CONTRACT_VERSION = "rustinfer.repeatability-runner.v2"
-PREPARATION_CONTRACT_VERSION = "rustinfer.repeatability-preparation.v2"
-CACHE_INVENTORY_ARTIFACT_CONTRACT = "rustinfer.cache-inventory-artifact.v1"
+EXPECTED_REPEATABILITY_REPORT_CONTRACT = "riley.repeatability.v2"
+RUNNER_CONTRACT_VERSION = "riley.repeatability-runner.v2"
+PREPARATION_CONTRACT_VERSION = "riley.repeatability-preparation.v2"
+CACHE_INVENTORY_ARTIFACT_CONTRACT = "riley.cache-inventory-artifact.v1"
 PRIME_CELLS = EXPECTED_CELLS[:3]
 LANE_PRIME_CELLS = {
     lane_id: PRIME_CELLS for lane_id in SUPPORTED_LANES
@@ -736,7 +736,7 @@ def _git_revision() -> str:
 def _load_contract_validator() -> Any:
     path = REPOSITORY_ROOT / "benchmarks/scripts/validate_contract.py"
     spec = importlib.util.spec_from_file_location(
-        "rustinfer_repeatability_runner_contract_validator", path
+        "riley_repeatability_runner_contract_validator", path
     )
     if spec is None or spec.loader is None:
         raise RunnerError(f"cannot load benchmark contract validator {path}")
@@ -1088,7 +1088,7 @@ def _cache_inventory(
         separators=(",", ":"),
     ).encode("utf-8")
     return {
-        "contract_version": "rustinfer.cache-inventory.v1",
+        "contract_version": "riley.cache-inventory.v1",
         "captured_at_utc": _utc_now(),
         "aggregate_sha256": hashlib.sha256(aggregate_encoded).hexdigest(),
         "roots": roots,
@@ -1402,7 +1402,7 @@ def _build_plan(args: argparse.Namespace, output_root: Path) -> dict[str, Any]:
             raw_path = result_dir / "raw.jsonl"
             raw_results.append(str(raw_path))
             preflight_environment = dict(child_base_environment)
-            preflight_environment["RUSTINFER_PREFLIGHT_OUTPUT_ROOT"] = str(output_root)
+            preflight_environment["RILEY_PREFLIGHT_OUTPUT_ROOT"] = str(output_root)
             invocations.append(
                 {
                     "ordinal": ordinal,
@@ -2020,7 +2020,7 @@ def _execute_preparation(plan: Mapping[str, Any]) -> dict[str, Any]:
             "project interpreter binary differs from the uv-resolved managed Python"
         )
     python_evidence = {
-        "contract_version": "rustinfer.python-runtime-evidence.v1",
+        "contract_version": "riley.python-runtime-evidence.v1",
         "uv_python_find": {
             "argv": python_find["argv"],
             "started_at_utc": python_find_started,
@@ -2277,7 +2277,7 @@ def _execute_plan(plan: Mapping[str, Any]) -> int:
             _write_new_json(
                 output_root / "preflight-baseline.json",
                 {
-                    "contract_version": "rustinfer.preflight-baseline.v1",
+                    "contract_version": "riley.preflight-baseline.v1",
                     "source_ordinal": invocation["ordinal"],
                     "comparability": snapshot,
                 },
@@ -2591,7 +2591,7 @@ def _prepare_finalize_artifacts(
     raw_sha256 = _sha256(combined_raw)
     raw_bytes = combined_raw.stat().st_size
     metadata = {
-        "contract_version": "rustinfer.benchmark-result.v1",
+        "contract_version": "riley.benchmark-result.v1",
         "status": "passed",
         "lane_id": plan["lane_id"],
         "git_revision": plan["git_revision"],
@@ -2676,7 +2676,7 @@ def _finalize_staging(
     _write_new_json(
         manifest_path,
         {
-            "contract_version": "rustinfer.benchmark-finalize.v1",
+            "contract_version": "riley.benchmark-finalize.v1",
             "created_at_utc": _utc_now(),
             "source_staging_root": str(staging_root),
             "destination": str(destination),

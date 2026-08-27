@@ -65,7 +65,7 @@ class ProfilePairFixture:
                 }
             )
         return {
-            "schema_version": "rustinfer.native-profile-run.v1",
+            "schema_version": "riley.native-profile-run.v1",
             "role": role,
             "pair_index": pair_index,
             "run_id": f"{role}-run-{pair_index}",
@@ -195,7 +195,7 @@ class NativeProfilePairTests(unittest.TestCase):
             self.assertEqual(report["status"], "passed")
             self.assertEqual(
                 report["schema_version"],
-                "rustinfer.native-profile-pair-report.v1",
+                "riley.native-profile-pair-report.v1",
             )
             self.assertEqual(report["run_counts"], {"required": 5, "baseline": 5, "candidate": 5})
             self.assertEqual(len(report["run_pairs"]), 5)
@@ -430,8 +430,8 @@ class NativeProfilePairTests(unittest.TestCase):
             path = fixture.candidate_paths[0]
             raw = path.read_text(encoding="utf-8")
             raw = raw.replace(
-                '  "schema_version": "rustinfer.native-profile-run.v1",',
-                '  "schema_version": "rustinfer.native-profile-run.v1",\n  "schema_version": "rustinfer.native-profile-run.v1",',
+                '  "schema_version": "riley.native-profile-run.v1",',
+                '  "schema_version": "riley.native-profile-run.v1",\n  "schema_version": "riley.native-profile-run.v1",',
                 1,
             )
             path.write_text(raw, encoding="utf-8")
@@ -616,12 +616,12 @@ class NativeProfilePairTests(unittest.TestCase):
         self.assertFalse(run_schema["$defs"]["request"]["additionalProperties"])
         self.assertEqual(
             run_schema["properties"]["schema_version"]["const"],
-            "rustinfer.native-profile-run.v1",
+            "riley.native-profile-run.v1",
         )
         self.assertFalse(report_schema["additionalProperties"])
         self.assertEqual(
             report_schema["properties"]["schema_version"]["const"],
-            "rustinfer.native-profile-pair-report.v1",
+            "riley.native-profile-pair-report.v1",
         )
         self.assertEqual(
             report_schema["properties"]["primary_metric"]["oneOf"][0]["$ref"],

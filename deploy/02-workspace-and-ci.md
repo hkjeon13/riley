@@ -17,13 +17,13 @@
 ```text
 Cargo.toml
 crates/
-├── rustinfer-core/
-├── rustinfer-cuda/
-├── rustinfer-tensor/
-├── rustinfer-model/
-├── rustinfer-runtime/
-├── rustinfer-scheduler/
-└── rustinfer-server/
+├── riley-core/
+├── riley-cuda/
+├── riley-tensor/
+├── riley-model/
+├── riley-runtime/
+├── riley-scheduler/
+└── riley-server/
 
 kernels/
 ├── CMakeLists.txt
@@ -145,8 +145,8 @@ bench = [serde, serde_json]
 experimental = []
 ```
 
-PR 15부터 `bench`는 `cuda`와 함께 non-default `rustinfer-profile` evidence
-producer를 compile한다. Production `rustinfer` binary는 계속 `server`만 요구한다.
+PR 15부터 `bench`는 `cuda`와 함께 non-default `riley-profile` evidence
+producer를 compile한다. Production `riley` binary는 계속 `server`만 요구한다.
 
 `python` 또는 `triton`을 production Cargo feature로 추가하지 않는다. Python/Triton 도구는 독립 환경과 manifest를 사용한다.
 
@@ -221,7 +221,7 @@ rustc / cargo:       1.85.0 / 1.85.0
 nvcc:                12.8.93
 AOT architecture:    89
 native ABI test:     1 passed, 0 failed
-version:             rustinfer 0.1.0 (server=true, cuda=true, cuda_abi=1)
+version:             riley 0.1.0 (server=true, cuda=true, cuda_abi=1)
 runtime dependency:  libcudart.so.12 resolved; no Python/PyTorch/Transformers/Triton
 invalid toolkit:     failed closed with `CUDAToolkit_ROOT=... is not a directory`
 image id:            sha256:695dc59e85c63a973106de67bdec8ee4ecc55bd87a7e970c3ad510f453e95477

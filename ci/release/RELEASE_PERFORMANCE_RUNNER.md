@@ -15,7 +15,7 @@ Do not derive an expected digest from the file that this run happens to find:
 - the frozen 40-character source revision and its canonical uncompressed
   `git archive` SHA-256;
 - the immutable optimizer image ID in `sha256:<64 lowercase hex>` form;
-- the `final/rustinfer-profile` ELF selected by reproducible-build evidence
+- the `final/riley-profile` ELF selected by reproducible-build evidence
   and its externally reviewed SHA-256;
 - the pinned SmolLM2 model directory and canonical model-tree SHA-256;
 - the passed optimizer correctness report and its externally reviewed
@@ -81,7 +81,7 @@ exact server-4096 bytes:
 | wc | `/usr/bin/wc` | `504463c7a12780b7439321be6e67f43ab61a3ff429cbf916c0722d19f98692a8` |
 
 The capture holds the same host-wide lock as the soak runner:
-`/var/tmp/rustinfer-server-4096-gpu-evidence.lock`. A pinned Python supervisor
+`/var/tmp/riley-server-4096-gpu-evidence.lock`. A pinned Python supervisor
 opens an existing or new mode-`0600`, regular, single-link, owner-controlled
 inode with `O_NOFOLLOW|O_APPEND|O_NONBLOCK|O_CLOEXEC`, then takes a
 non-blocking exclusive `flock` before any GPU work. The child Bash authenticates
@@ -105,13 +105,13 @@ monitor, or candidate descendant inherits the lock.
   --optimizer-image sha256:<optimizer-image-digest> \
   --source-revision <frozen-40-character-revision> \
   --expected-source-archive-sha256 <reviewed-source-archive-sha256> \
-  --profile-binary /artifacts/reproducible/final/rustinfer-profile \
+  --profile-binary /artifacts/reproducible/final/riley-profile \
   --expected-profile-binary-sha256 <reviewed-profile-sha256> \
   --model-dir /models/smollm2-135m-93efa2f0 \
   --expected-model-tree-sha256 <reviewed-model-tree-sha256> \
   --optimizer-correctness-report /artifacts/optimizer/optimization-correctness-report.json \
   --expected-optimizer-correctness-report-sha256 <reviewed-optimizer-report-sha256> \
-  --output-dir /home/psyche/rustinfer-artifacts/pr16/performance-<revision>
+  --output-dir /home/psyche/riley-artifacts/pr16/performance-<revision>
 ```
 
 Before each independent run, the standard preflight captures and validates
@@ -143,7 +143,7 @@ On server-4096 Docker 28.3.2, the unset CLI `CapAdd` ListOpts canonicalizes in
 daemon inspection as exact `CapAdd=null`; `[]`, a missing field, or any
 non-null value is rejected, while `CapDrop` must be exact `["ALL"]`.
 `Config.Labels` must be exactly the immutable image's inspected label map plus the one
-`org.rustinfer.release-performance-supervisor=<token>` entry. The normalized
+`org.riley.release-performance-supervisor=<token>` entry. The normalized
 UUID device request must use `Driver=""`, `Count=0`, and `Options={}`; omitted,
 widened, extra-label, or alternate spellings are rejected.
 
@@ -173,14 +173,14 @@ candidate workload with 5 warmups and 30 measured iterations at concurrency
 The supervisor token and pair index derive a fresh 64-hex `capture_id`. That
 ID is embedded in every monitor row, the container environment, and the raw
 candidate `run_id`. After exit the validator emits one canonical
-`rustinfer.release-performance-execution-receipt.v1` per pair. It records the
+`riley.release-performance-execution-receipt.v1` per pair. It records the
 capture, full container ID, run ID, candidate `recorded_at_utc`, exact SHA-256
 of preflight/candidate/GPU-monitor/before-inspect/after-inspect bytes, and exact
 Docker `Created`, `StartedAt`, `FinishedAt`, exit code, and OOM flag. Acceptance
 requires `Created <= StartedAt <= candidate recorded_at <= FinishedAt`, no
 overlap between sequential pair timelines, exit code 0, and `OOMKilled=false`.
 The five receipt objects are copied exactly into
-`rustinfer.release-performance-runner-manifest.v3`; offline replay rejects a
+`riley.release-performance-runner-manifest.v3`; offline replay rejects a
 candidate, monitor, or inspect splice even when the replacement uses the same
 source revision and the outer checksum index is recomputed.
 
@@ -210,7 +210,7 @@ inputs/
   docker-config/
   model/
   optimization-correctness-report.json
-  rustinfer-profile
+  riley-profile
 gpu.csv
 optimizer-image-inspect-before.json
 optimizer-image-inspect-after.json
@@ -248,7 +248,7 @@ for each run (including `execution-receipt.json`), and `SHA256SUMS`, sorted and
 encoded as fixed-metadata USTAR.
 The checker replays those receipts before returning the five candidate
 payloads to any caller, including the final release-candidate gate.
-`source.tar` as `--source-archive`, `inputs/rustinfer-profile` as
+`source.tar` as `--source-archive`, `inputs/riley-profile` as
 `--profile-binary`, the model snapshot for weights/tokenizer, and the
 snapshotted correctness report. Continue with the command in
 `benchmarks/release/README.md`; packaging also requires the separately
@@ -274,7 +274,7 @@ ssh server-4096 /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TZ=UTC HOME=/home/ps
   /usr/bin/bash -s -- sha256:<optimizer-image-digest> <<'PERMISSION_PROBE'
 set -euo pipefail
 image=$1
-probe=$(/usr/bin/mktemp -d /var/tmp/rustinfer-permission-probe.XXXXXX)
+probe=$(/usr/bin/mktemp -d /var/tmp/riley-permission-probe.XXXXXX)
 cleanup() {
   /usr/bin/chmod -R u+w -- "${probe}" 2>/dev/null || true
   /usr/bin/find "${probe}" -depth -delete 2>/dev/null || true

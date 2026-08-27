@@ -203,7 +203,7 @@ Runtime은 계획을 실행하고 결과를 scheduler에 반환한다.
   stream quiescence를 요구하는 보수 계약을 사용한다.
 - GPU kernel을 즉시 중단하지 않는다. 실행 중 cancel은 iteration 종료와 stream
   quiescence 뒤에 정산한다.
-- Runtime allocation accounting은 rustinfer 소유 CUDA buffer 기준이며 process peak
+- Runtime allocation accounting은 riley 소유 CUDA buffer 기준이며 process peak
   VRAM이나 CUDA driver 내부 allocation을 의미하지 않는다.
 - Single GPU/sm89만 검증했다. multi-GPU routing, prefix cache, tenant priority,
   speculative decoding과 offload는 포함하지 않는다.

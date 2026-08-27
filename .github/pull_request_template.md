@@ -72,7 +72,7 @@
 - [ ] benchmark contract가 `gpu_count: 1`, GPU/driver/CUDA/model ID/full 40-hex model revision/dtype, positive concurrency/prompt/output 배열, 닫힌 sampling, cold/warm 상태를 실제 값으로 동결한다. 해당 없음: <!-- 이유 -->
 - [ ] primary metric이 exact track-required set에 포함되고, E0 tolerance는 비교 dtype과 일치하며, query-aware A1 budget은 `[0, 1)` fraction이다. 해당 없음: <!-- 이유 -->
 - [ ] PR 17 승인 질문 10개를 닫힌 `approval_answers`로 모두 답했다. 해당 없음: <!-- 이유 -->
-- [ ] reference와 exact fallback은 서로 다르고 runtime flag는 `RUSTINFER_EXPERIMENTAL_*`, 기본값은 off다. 해당 없음: <!-- 이유 -->
+- [ ] reference와 exact fallback은 서로 다르고 runtime flag는 `RILEY_EXPERIMENTAL_*`, 기본값은 off다. 해당 없음: <!-- 이유 -->
 - [ ] 별도 deploy plan의 scope·선행조건·후속 구현 PR·실패 처리·rollback을 reviewer가 확인했다. 해당 없음: <!-- 이유 -->
 - [ ] `python3 ci/check_extension_gates.py --base-revision <full-base-sha>`가 exact four-file admission diff로 통과했다. 해당 없음: <!-- 이유 -->
 - [ ] rename source를 포함한 다른 파일 변경이 없고 production crate에 새 experimental flag를 우회 추가하지 않았다. 해당 없음: <!-- 이유 -->

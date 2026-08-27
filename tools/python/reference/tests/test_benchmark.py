@@ -8,7 +8,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from rustinfer_reference.benchmark import _validate_matrix, run_benchmark
+from riley_reference.benchmark import _validate_matrix, run_benchmark
 
 from .support import FakeBackend, write_prompts
 

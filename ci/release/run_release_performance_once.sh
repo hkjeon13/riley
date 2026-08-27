@@ -5,14 +5,14 @@
 set -euo pipefail
 umask 022
 
-: "${RUSTINFER_PERF_PAIR_INDEX:?missing pair index}"
-: "${RUSTINFER_PERF_CAPTURE_ID:?missing capture ID}"
-: "${RUSTINFER_PERF_SOURCE_REVISION:?missing source revision}"
-: "${RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256:?missing source archive SHA-256}"
-: "${RUSTINFER_PERF_PROFILE_BINARY_SHA256:?missing profile binary SHA-256}"
-: "${RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256:?missing optimizer report SHA-256}"
-: "${RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256:?missing optimizer image SHA-256}"
-: "${RUSTINFER_PERF_MODEL_TREE_SHA256:?missing model tree SHA-256}"
+: "${RILEY_PERF_PAIR_INDEX:?missing pair index}"
+: "${RILEY_PERF_CAPTURE_ID:?missing capture ID}"
+: "${RILEY_PERF_SOURCE_REVISION:?missing source revision}"
+: "${RILEY_PERF_SOURCE_ARCHIVE_SHA256:?missing source archive SHA-256}"
+: "${RILEY_PERF_PROFILE_BINARY_SHA256:?missing profile binary SHA-256}"
+: "${RILEY_PERF_OPTIMIZER_REPORT_SHA256:?missing optimizer report SHA-256}"
+: "${RILEY_PERF_OPTIMIZER_IMAGE_SHA256:?missing optimizer image SHA-256}"
+: "${RILEY_PERF_MODEL_TREE_SHA256:?missing model tree SHA-256}"
 
 readonly expected_gpu_name='NVIDIA GeForce RTX 4090'
 readonly expected_gpu_uuid='GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0'
@@ -34,20 +34,20 @@ readonly expected_tokenizer_sha256='9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ff
 
 sha_re='^[0-9a-f]{64}$'
 revision_re='^[0-9a-f]{40}$'
-[[ ${RUSTINFER_PERF_PAIR_INDEX} =~ ^[1-5]$ ]] || {
+[[ ${RILEY_PERF_PAIR_INDEX} =~ ^[1-5]$ ]] || {
     echo 'release performance: pair index must be in 1..5' >&2
     exit 2
 }
-[[ ${RUSTINFER_PERF_SOURCE_REVISION} =~ ${revision_re} ]] || {
+[[ ${RILEY_PERF_SOURCE_REVISION} =~ ${revision_re} ]] || {
     echo 'release performance: invalid source revision' >&2
     exit 2
 }
 for digest in \
-    "${RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256}" \
-    "${RUSTINFER_PERF_PROFILE_BINARY_SHA256}" \
-    "${RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256}" \
-    "${RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256}" \
-    "${RUSTINFER_PERF_MODEL_TREE_SHA256}"
+    "${RILEY_PERF_SOURCE_ARCHIVE_SHA256}" \
+    "${RILEY_PERF_PROFILE_BINARY_SHA256}" \
+    "${RILEY_PERF_OPTIMIZER_REPORT_SHA256}" \
+    "${RILEY_PERF_OPTIMIZER_IMAGE_SHA256}" \
+    "${RILEY_PERF_MODEL_TREE_SHA256}"
 do
     [[ ${digest} =~ ${sha_re} ]] || {
         echo 'release performance: invalid SHA-256 binding' >&2
@@ -64,18 +64,18 @@ done
 
 test "$(pwd -P)" = /workspace
 test -r /input/source.tar
-test -x /input/rustinfer-profile
+test -x /input/riley-profile
 test -r /input/optimizer-correctness-report.json
 test -d /model
 test ! -L /model
 test -d /evidence
-test ! -e "/evidence/candidate-${RUSTINFER_PERF_PAIR_INDEX}.json"
+test ! -e "/evidence/candidate-${RILEY_PERF_PAIR_INDEX}.json"
 test "$(sha256sum /input/source.tar | awk '{print $1}')" = \
-    "${RUSTINFER_PERF_SOURCE_ARCHIVE_SHA256}"
-test "$(sha256sum /input/rustinfer-profile | awk '{print $1}')" = \
-    "${RUSTINFER_PERF_PROFILE_BINARY_SHA256}"
+    "${RILEY_PERF_SOURCE_ARCHIVE_SHA256}"
+test "$(sha256sum /input/riley-profile | awk '{print $1}')" = \
+    "${RILEY_PERF_PROFILE_BINARY_SHA256}"
 test "$(sha256sum /input/optimizer-correctness-report.json | awk '{print $1}')" = \
-    "${RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256}"
+    "${RILEY_PERF_OPTIMIZER_REPORT_SHA256}"
 test -r /workspace/benchmarks/prompts.jsonl
 test -r /workspace/ci/release/run_release_performance_once.sh
 
@@ -83,7 +83,7 @@ if find /model -mindepth 1 ! -type d ! -type f -print -quit | grep -q .; then
     echo 'release performance: model tree contains a link or special entry' >&2
     exit 2
 fi
-model_manifest=/tmp/rustinfer-release-performance-model-SHA256SUMS
+model_manifest=/tmp/riley-release-performance-model-SHA256SUMS
 test ! -e "${model_manifest}"
 : >"${model_manifest}"
 model_file_count=0
@@ -99,7 +99,7 @@ while IFS= read -r -d '' model_file; do
 done < <(find /model -type f -print0 | sort -z)
 test "${model_file_count}" -gt 0
 test "$(sha256sum "${model_manifest}" | awk '{print $1}')" = \
-    "${RUSTINFER_PERF_MODEL_TREE_SHA256}"
+    "${RILEY_PERF_MODEL_TREE_SHA256}"
 test "$(sha256sum /model/model.safetensors | awk '{print $1}')" = \
     "${expected_weights_sha256}"
 test "$(sha256sum /model/tokenizer.json | awk '{print $1}')" = \
@@ -155,7 +155,7 @@ ram_bytes=$((ram_kib * 1024))
 test "${physical_cores}" = "${expected_physical_cores}"
 test "${logical_cores}" = "${expected_logical_cores}"
 test "${ram_bytes}" = "${expected_ram_bytes}"
-[[ ${RUSTINFER_PERF_CAPTURE_ID:-} =~ ^[0-9a-f]{64}$ ]]
+[[ ${RILEY_PERF_CAPTURE_ID:-} =~ ^[0-9a-f]{64}$ ]]
 
 test "${CUDA_VERSION:-}" = "${expected_cuda_runtime}"
 nvcc_output=$(/usr/local/cuda/bin/nvcc --version)
@@ -170,27 +170,27 @@ cublas_version="${cublas_major}.${cublas_minor}.${cublas_patch}.${cublas_build}"
 test "${cublas_version}" = "${expected_cublas}"
 
 recorded_at_utc=$(/usr/bin/date -u +%Y-%m-%dT%H:%M:%S.%NZ)
-run_id="pr16-iteration-batch-${RUSTINFER_PERF_SOURCE_REVISION:0:12}-${RUSTINFER_PERF_CAPTURE_ID}-pair${RUSTINFER_PERF_PAIR_INDEX}"
+run_id="pr16-iteration-batch-${RILEY_PERF_SOURCE_REVISION:0:12}-${RILEY_PERF_CAPTURE_ID}-pair${RILEY_PERF_PAIR_INDEX}"
 gpu_vram_bytes=$((expected_gpu_memory_mib * 1024 * 1024))
-output="/evidence/candidate-${RUSTINFER_PERF_PAIR_INDEX}.json"
+output="/evidence/candidate-${RILEY_PERF_PAIR_INDEX}.json"
 
-/input/rustinfer-profile \
+/input/riley-profile \
     --model /model \
     --prompts /workspace/benchmarks/prompts.jsonl \
     --output "${output}" \
     --role candidate \
-    --pair-index "${RUSTINFER_PERF_PAIR_INDEX}" \
+    --pair-index "${RILEY_PERF_PAIR_INDEX}" \
     --run-id "${run_id}" \
     --recorded-at-utc "${recorded_at_utc}" \
-    --git-commit "${RUSTINFER_PERF_SOURCE_REVISION}" \
+    --git-commit "${RILEY_PERF_SOURCE_REVISION}" \
     --git-dirty false \
-    --executable-sha256 "${RUSTINFER_PERF_PROFILE_BINARY_SHA256}" \
+    --executable-sha256 "${RILEY_PERF_PROFILE_BINARY_SHA256}" \
     --implementation-id native-iteration-command-batch \
     --runtime-flag-name execution_completion \
     --runtime-flag-value iteration-batch \
     --semantic-class E0 \
     --correctness-gate-id pr15-iteration-command-batch-exact-v1 \
-    --correctness-report-sha256 "${RUSTINFER_PERF_OPTIMIZER_REPORT_SHA256}" \
+    --correctness-report-sha256 "${RILEY_PERF_OPTIMIZER_REPORT_SHA256}" \
     --gpu-model "${gpu_name}" \
     --gpu-uuid "${gpu_uuid}" \
     --device-index 0 \
@@ -209,7 +209,7 @@ output="/evidence/candidate-${RUSTINFER_PERF_PAIR_INDEX}.json"
     --cuda-runtime-version "${expected_cuda_runtime}" \
     --cuda-toolkit-version "${expected_cuda_toolkit}" \
     --cublas-version "${cublas_version}" \
-    --container-image-sha256 "${RUSTINFER_PERF_OPTIMIZER_IMAGE_SHA256}" \
+    --container-image-sha256 "${RILEY_PERF_OPTIMIZER_IMAGE_SHA256}" \
     --workload-id smollm2-c1-p128-o32-greedy-v1 \
     --model-id HuggingFaceTB/SmolLM2-135M \
     --model-revision 93efa2f097d58c2a74874c7e644dbc9b0cee75a2 \

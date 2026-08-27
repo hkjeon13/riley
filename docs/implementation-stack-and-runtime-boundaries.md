@@ -1,4 +1,4 @@
-# rustinfer 구현 언어·라이브러리와 Runtime Dependency 경계
+# Riley 구현 언어·라이브러리와 Runtime Dependency 경계
 
 > 상태: Architecture decision  
 > 적용 범위: production server, inference runtime, CUDA kernels, 개발·분석 도구  
@@ -6,7 +6,7 @@
 
 ## 1. 최종 결정
 
-`rustinfer`의 **production runtime과 inference path는 Python-free**로 구성한다.
+Riley의 **production runtime과 inference path는 Python-free**로 구성한다.
 
 ```text
 Production Runtime
@@ -40,7 +40,7 @@ NumPy / SciPy
 
 핵심 문장은 다음과 같다.
 
-> Python은 `rustinfer`가 맞는지 비교하고 모델을 분석·변환하기 위해 사용할 수 있지만, 요청을 처리하고 모델을 추론하는 모듈에는 필요하지 않다.
+> Python은 Riley가 맞는지 비교하고 모델을 분석·변환하기 위해 사용할 수 있지만, 요청을 처리하고 모델을 추론하는 모듈에는 필요하지 않다.
 
 ---
 
@@ -89,14 +89,14 @@ cuBLASLt / CUTLASS / custom CUDA kernel
 허용하는 dependency 방향은 다음과 같다.
 
 ```text
-rustinfer-server
+riley-server
       ↓
-rustinfer-scheduler
+riley-scheduler
       ↓
-rustinfer-runtime
-      ├─ rustinfer-model
-      ├─ rustinfer-tensor
-      └─ rustinfer-cuda
+riley-runtime
+      ├─ riley-model
+      ├─ riley-tensor
+      └─ riley-cuda
               ↓ C ABI
        native CUDA library
               ├─ CUDA Runtime/Driver
@@ -108,12 +108,12 @@ rustinfer-runtime
 금지하는 runtime dependency:
 
 ```text
-rustinfer runtime → Python interpreter
-rustinfer runtime → PyTorch
-rustinfer runtime → Transformers
-rustinfer runtime → Python subprocess
-rustinfer runtime → pickle artifact
-rustinfer runtime → runtime Triton Python compiler
+riley runtime → Python interpreter
+riley runtime → PyTorch
+riley runtime → Transformers
+riley runtime → Python subprocess
+riley runtime → pickle artifact
+riley runtime → runtime Triton Python compiler
 ```
 
 Rust server가 실패했을 때 Python Transformers를 운영 fallback으로 호출하지 않는다. 실패는 명확한 오류 또는 native exact fallback으로 처리한다.
@@ -230,7 +230,7 @@ Python/offline tool과 Rust runtime 사이에는 언어 객체가 아니라 명�
 
 ```json
 {
-  "format": "rustinfer-checkpoint-v1",
+  "format": "riley-checkpoint-v1",
   "source_model": "org/model",
   "source_revision": "immutable-revision",
   "converter_revision": "git-sha",
@@ -311,15 +311,15 @@ CUTLASS는 다음 중 하나가 측정된 경우에만 도입한다.
 ## 8. 권장 저장소 구조
 
 ```text
-rustinfer/
+riley/
 ├── crates/                       # production Rust
-│   ├── rustinfer-core/
-│   ├── rustinfer-cuda/
-│   ├── rustinfer-tensor/
-│   ├── rustinfer-model/
-│   ├── rustinfer-runtime/
-│   ├── rustinfer-scheduler/
-│   └── rustinfer-server/
+│   ├── riley-core/
+│   ├── riley-cuda/
+│   ├── riley-tensor/
+│   ├── riley-model/
+│   ├── riley-runtime/
+│   ├── riley-scheduler/
+│   └── riley-server/
 │
 ├── kernels/                      # production native GPU code
 │   ├── CMakeLists.txt
@@ -367,7 +367,7 @@ cargo build --release --features cuda,server
 다음 동작 중 Python subprocess를 생성하거나 Python module을 import하지 않아야 한다.
 
 ```bash
-rustinfer serve --model /models/example
+riley serve --model /models/example
 ```
 
 ### 9.3 Python-free runtime test
@@ -375,7 +375,7 @@ rustinfer serve --model /models/example
 CI 또는 release container에서 다음을 검증한다.
 
 - Python이 설치되지 않은 이미지에서 server 시작
-- 표준 HF artifact 또는 rustinfer 변환 artifact 로딩
+- 표준 HF artifact 또는 Riley 변환 artifact 로딩
 - tokenizer encode/decode
 - prefill와 decode
 - streaming response
@@ -411,7 +411,7 @@ Python virtual environment, PyTorch wheel, Transformers package는 production pa
 
 | 단계 | 기술 경계 |
 |---|---|
-| PR 01 | Python reference 환경과 Python-free rustinfer benchmark 환경 분리 |
+| PR 01 | Python reference 환경과 Python-free Riley benchmark 환경 분리 |
 | PR 02 | Rust/CUDA production workspace와 optional `tools/python`, `experiments/triton` 분리 |
 | PR 03 | Rust host runtime + C ABI + CUDA C++ smoke kernel |
 | PR 05 | Rust-native config/safetensors/tokenizer loader; Python fallback 금지 |
