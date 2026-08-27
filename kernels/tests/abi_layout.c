@@ -456,6 +456,10 @@ static RustInferCudaStatus (*const embedding_symbol)(
 static RustInferCudaStatus (*const rms_norm_symbol)(
     const RustInferCudaRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_rms_norm_execute;
+static RustInferCudaStatus (*const hugging_face_smollm2_rms_norm_symbol)(
+    const RustInferCudaRmsNormParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hugging_face_smollm2_rms_norm_execute;
 static RustInferCudaStatus (*const fixed37_rms_norm_symbol)(
     const RustInferCudaRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_fixed37_rms_norm_execute;
@@ -465,6 +469,11 @@ static RustInferCudaStatus (*const residual_add_symbol)(
 static RustInferCudaStatus (*const residual_rms_norm_symbol)(
     const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) = rustinfer_cuda_residual_rms_norm_execute;
+static RustInferCudaStatus (*const
+                                hugging_face_smollm2_residual_rms_norm_symbol)(
+    const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
+    RustInferCudaErrorInfo*) =
+    rustinfer_cuda_hugging_face_smollm2_residual_rms_norm_execute;
 static RustInferCudaStatus (*const fixed37_residual_rms_norm_symbol)(
     const RustInferCudaResidualRmsNormParams*, RustInferCudaStream*,
     RustInferCudaErrorInfo*) =
@@ -632,9 +641,11 @@ static RustInferCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 const void* rustinfer_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
+    (const void*)&hugging_face_smollm2_rms_norm_symbol,
     (const void*)&fixed37_rms_norm_symbol,
     (const void*)&residual_add_symbol,
     (const void*)&residual_rms_norm_symbol,
+    (const void*)&hugging_face_smollm2_residual_rms_norm_symbol,
     (const void*)&fixed37_residual_rms_norm_symbol,
     (const void*)&fixed37_log_softmax_symbol,
     (const void*)&silu_symbol,

@@ -12,6 +12,7 @@ const REVIEWED_KEY_VALUE_HEADS: usize = 3;
 const REVIEWED_HEAD_DIMENSION: usize = 64;
 const REVIEWED_LAYER_COUNT: usize = 30;
 const REVIEWED_MAX_SEQUENCE_LENGTH: usize = 8_192;
+const REVIEWED_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
 
 /// Cold, per-plan cuBLASLt reduction policy resolved from validated source
 /// semantics before an execution graph is prepared.
@@ -114,7 +115,7 @@ pub(super) fn canonical_prefill_attention_preference(
     }
 }
 
-fn is_reviewed_llama_geometry(spec: &ModelSpec) -> bool {
+pub(super) fn is_reviewed_llama_geometry(spec: &ModelSpec) -> bool {
     let embedding = spec.embedding();
     let lm_head = spec.lm_head();
     spec.dtype() == DType::BF16
@@ -139,6 +140,25 @@ fn is_reviewed_llama_geometry(spec: &ModelSpec) -> bool {
         })
 }
 
+pub(super) fn is_reviewed_smollm2_rms_norm_geometry(spec: &ModelSpec) -> bool {
+    let reviewed_norm = |norm: &rustinfer_model::NormSpec| {
+        norm.hidden_size() == REVIEWED_HIDDEN_SIZE
+            && execution_epsilon_bits(norm.epsilon()) == REVIEWED_RMS_NORM_EPSILON_BITS
+    };
+    is_reviewed_llama_geometry(spec)
+        && reviewed_norm(spec.final_norm())
+        && spec.blocks().iter().all(|block| {
+            reviewed_norm(block.input_norm()) && reviewed_norm(block.post_attention_norm())
+        })
+}
+
+#[allow(clippy::cast_possible_truncation)]
+fn execution_epsilon_bits(epsilon: f64) -> u32 {
+    // Llama plan preparation performs this same validated finite-positive
+    // narrowing before passing epsilon to CUDA. Gate on the execution value.
+    (epsilon as f32).to_bits()
+}
+
 #[cfg(test)]
 mod tests {
     use rustinfer_cuda::{
@@ -147,7 +167,10 @@ mod tests {
     };
     use rustinfer_model::ModelConfig;
 
-    use super::{canonical_gemm_reduction_policies, canonical_prefill_attention_preference};
+    use super::{
+        canonical_gemm_reduction_policies, canonical_prefill_attention_preference,
+        is_reviewed_smollm2_rms_norm_geometry,
+    };
     use crate::llama::LlamaReductionProfile;
 
     const LLAMA_CONFIG: &str = r#"{
@@ -322,5 +345,29 @@ mod tests {
                 configured
             );
         }
+    }
+
+    #[test]
+    fn smollm2_rms_norm_geometry_requires_bf16_hidden576_and_exact_epsilon() {
+        let llama = ModelConfig::from_json_slice(LLAMA_CONFIG.as_bytes()).unwrap();
+        assert!(is_reviewed_smollm2_rms_norm_geometry(
+            &llama.to_model_spec()
+        ));
+
+        let different_epsilon =
+            LLAMA_CONFIG.replace("\"rms_norm_eps\":1e-5", "\"rms_norm_eps\":0.000001");
+        let different_epsilon = ModelConfig::from_json_slice(different_epsilon.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rms_norm_geometry(
+            &different_epsilon.to_model_spec()
+        ));
+
+        let f16 = LLAMA_CONFIG.replace("\"bfloat16\"", "\"float16\"");
+        let f16 = ModelConfig::from_json_slice(f16.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rms_norm_geometry(&f16.to_model_spec()));
+
+        let qwen = ModelConfig::from_json_slice(QWEN2_CONFIG.as_bytes()).unwrap();
+        assert!(!is_reviewed_smollm2_rms_norm_geometry(
+            &qwen.to_model_spec()
+        ));
     }
 }

@@ -3111,8 +3111,7 @@ mod tests {
         }
 
         println!(
-            "hf-eager-plan-provenance-sweep token_count_min=1 token_count_max={} native_and_rust=passed",
-            HF_EAGER_MAX_SEQUENCE
+            "hf-eager-plan-provenance-sweep token_count_min=1 token_count_max={HF_EAGER_MAX_SEQUENCE} native_and_rust=passed"
         );
         context.synchronize()?;
         context.close()

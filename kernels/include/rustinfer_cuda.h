@@ -1174,6 +1174,14 @@ RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
 
+// Additive byte-exact sibling for the reviewed Hugging Face SmolLM2 BF16
+// contract. It accepts only hidden_size=576, row_count<=8192, and epsilon=1e-5
+// exactly; unsupported descriptors fail closed instead of falling back.
+RustInferCudaStatus rustinfer_cuda_hugging_face_smollm2_rms_norm_execute(
+    const RustInferCudaRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
 // Alternate RMSNorm entry point for fixed-contiguous-37-balanced-v1. The
 // storage, alias, exceptional-value, and synchronous-completion contract is
 // identical to rustinfer_cuda_rms_norm_execute; only the sum-of-squares
@@ -1192,6 +1200,14 @@ RustInferCudaStatus rustinfer_cuda_residual_add_execute(
 // Exact fused equivalent of residual_add followed by RMSNorm. This is an
 // additive ABI-v1 entry point; the standalone functions remain the fallback.
 RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;
+
+// Fused sibling of the reviewed SmolLM2 path. The residual sum is materialized
+// in BF16 before its square enters the Hugging Face reduction topology.
+RustInferCudaStatus
+rustinfer_cuda_hugging_face_smollm2_residual_rms_norm_execute(
     const RustInferCudaResidualRmsNormParams* params,
     RustInferCudaStream* stream,
     RustInferCudaErrorInfo* error) RUSTINFER_CUDA_NOEXCEPT;

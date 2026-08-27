@@ -11,6 +11,12 @@ use crate::ffi;
 const EMBEDDING_ERROR_SCRATCH_BYTES: u64 = 32;
 #[cfg(feature = "cuda")]
 const EMBEDDING_ERROR_TOKEN_OUT_OF_RANGE: u32 = 1;
+/// Hidden width certified against Hugging Face `SmolLM2` `RMSNorm`.
+pub const HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE: u64 = 576;
+/// Largest reviewed row count for the `SmolLM2` `RMSNorm` topology.
+pub const HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS: u64 = 8_192;
+/// Exact FP32 epsilon bits required by the reviewed `SmolLM2` model.
+pub const HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS: u32 = 0x3727_c5ac;
 
 /// Scalar storage types accepted by the PR 06 CUDA primitive boundary.
 ///
@@ -461,6 +467,73 @@ pub fn rms_norm<S: CudaExecutionStream + ?Sized>(
     }
 }
 
+/// Executes the byte-exact Hugging Face `SmolLM2` BF16 `RMSNorm` topology.
+///
+/// This additive entry point is intentionally closed over the reviewed
+/// `hidden_size=576`, `epsilon=1e-5`, and at most 8192 rows contract. It never
+/// selects the generic `RMSNorm` implementation as a fallback.
+///
+/// # Errors
+///
+/// Returns not-supported outside the reviewed contract, or a descriptor,
+/// shape, overlap, launch, or synchronization error.
+pub fn hugging_face_smollm2_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut RmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "hugging_face_smollm2_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_smollm2_rms_norm_contract(
+        OPERATION,
+        params.input.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    require_dtype(OPERATION, "weight", params.weight.dtype, params.input.dtype)?;
+    require_dtype(OPERATION, "output", params.output.dtype, params.input.dtype)?;
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.input.dtype,
+    )?;
+    require_capacity(OPERATION, "input", params.input.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(OPERATION, "output", params.output.byte_len, matrix_bytes)?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.input.buffer,
+            params.weight.buffer,
+            params.output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::hugging_face_smollm2_rms_norm_execute(
+            params.input.raw(),
+            params.weight.raw(),
+            params.output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
 /// Executes `RMSNorm` with the fixed-contiguous-37-balanced-v1 sum-of-squares
 /// order.
 ///
@@ -682,6 +755,95 @@ pub fn residual_rms_norm<S: CudaExecutionStream + ?Sized>(
     #[cfg(feature = "cuda")]
     {
         ffi::residual_rms_norm_execute(
+            params.left.raw(),
+            params.right.raw(),
+            params.weight.raw(),
+            params.residual_output.raw(),
+            params.normalized_output.raw(),
+            params.row_count,
+            params.hidden_size,
+            params.epsilon,
+            &mut stream.native,
+        )
+    }
+    #[cfg(not(feature = "cuda"))]
+    {
+        let _ = params;
+        Err(CudaError::unavailable(OPERATION))
+    }
+}
+
+/// Executes fused residual add plus the reviewed Hugging Face `SmolLM2`
+/// `RMSNorm` topology.
+///
+/// The residual sum is rounded and stored as BF16 before any square is
+/// accumulated, matching the standalone Hugging Face staging boundary.
+///
+/// # Errors
+///
+/// Returns not-supported outside the reviewed contract, or a descriptor,
+/// shape, overlap, launch, or synchronization error.
+pub fn hugging_face_smollm2_residual_rms_norm<S: CudaExecutionStream + ?Sized>(
+    params: &mut ResidualRmsNormParams<'_>,
+    stream: &mut S,
+) -> CudaResult<()> {
+    const OPERATION: &str = "hugging_face_smollm2_residual_rms_norm";
+    let stream = execution_stream_mut(stream);
+    validate_hugging_face_smollm2_rms_norm_contract(
+        OPERATION,
+        params.left.dtype,
+        params.row_count,
+        params.hidden_size,
+        params.epsilon,
+    )?;
+    for (field, dtype) in [
+        ("right", params.right.dtype),
+        ("weight", params.weight.dtype),
+        ("residual_output", params.residual_output.dtype),
+        ("normalized_output", params.normalized_output.dtype),
+    ] {
+        require_dtype(OPERATION, field, dtype, params.left.dtype)?;
+    }
+    let matrix_bytes = required_matrix_bytes(
+        OPERATION,
+        params.row_count,
+        params.hidden_size,
+        params.left.dtype,
+    )?;
+    require_capacity(OPERATION, "left", params.left.byte_len, matrix_bytes)?;
+    require_capacity(OPERATION, "right", params.right.byte_len, matrix_bytes)?;
+    require_capacity(
+        OPERATION,
+        "weight",
+        params.weight.byte_len,
+        required_vector_bytes(OPERATION, params.hidden_size, params.weight.dtype)?,
+    )?;
+    require_capacity(
+        OPERATION,
+        "residual_output",
+        params.residual_output.byte_len,
+        matrix_bytes,
+    )?;
+    require_capacity(
+        OPERATION,
+        "normalized_output",
+        params.normalized_output.byte_len,
+        matrix_bytes,
+    )?;
+    validate_resources(
+        OPERATION,
+        stream,
+        &[
+            params.left.buffer,
+            params.right.buffer,
+            params.weight.buffer,
+            params.residual_output.buffer,
+            params.normalized_output.buffer,
+        ],
+    )?;
+    #[cfg(feature = "cuda")]
+    {
+        ffi::hugging_face_smollm2_residual_rms_norm_execute(
             params.left.raw(),
             params.right.raw(),
             params.weight.raw(),
@@ -1426,6 +1588,30 @@ fn validate_fixed37_axis(operation: &'static str, element_count: u64) -> CudaRes
         ));
     }
     Ok(())
+}
+
+fn validate_hugging_face_smollm2_rms_norm_contract(
+    operation: &'static str,
+    dtype: CudaDType,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+) -> CudaResult<()> {
+    if dtype == CudaDType::BF16
+        && row_count <= HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS
+        && hidden_size == HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE
+        && epsilon.to_bits() == HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS
+    {
+        return Ok(());
+    }
+    Err(CudaError::new(
+        CudaErrorKind::NotSupported,
+        CudaErrorDomain::Rust,
+        CudaErrorStage::Validation,
+        0,
+        operation,
+        "the reviewed path requires BF16, hidden_size=576, row_count<=8192, and epsilon=1e-5 exactly",
+    ))
 }
 
 #[cfg(feature = "cuda")]

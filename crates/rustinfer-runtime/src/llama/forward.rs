@@ -14,15 +14,16 @@ use rustinfer_cuda::{
     EmbeddingParams, Fixed37GemmParams, GatedMultiplyParams, GemmParams, PrefillAttentionParams,
     PrefillAttentionRequest, PreparedPrefillAttention, ResidualAddParams, ResidualRmsNormParams,
     RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, embedding,
-    fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply, residual_add, residual_rms_norm,
-    rms_norm, rope, row_bias_add_in_place, silu,
+    fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply,
+    hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm, residual_add,
+    residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
 };
-use rustinfer_model::LoadedModel;
+use rustinfer_model::{LoadedModel, ModelConfig};
 
 use super::decode::PrefillKvCacheSink;
 use super::gemm_policy::{
     LlamaGemmReductionPolicies, canonical_gemm_reduction_policies,
-    canonical_prefill_attention_preference,
+    canonical_prefill_attention_preference, is_reviewed_smollm2_rms_norm_geometry,
 };
 use super::{
     ExecutionSite, LlamaDimensions, LlamaExecutionPlan, LlamaOp, LlamaPlanError,
@@ -299,6 +300,7 @@ impl PreparedLlamaForward {
             gemms,
             attention,
             reduction_profile: _,
+            rms_norm_profile: _,
             gemm_reduction_policies: _,
             buffers,
             io_staging,
@@ -523,27 +525,54 @@ pub(super) fn execute_gemm<S: CudaExecutionStream + ?Sized>(
         .map_err(|source| LlamaForwardError::cuda(site, source))
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum LlamaRmsNormProfile {
+    Canonical,
+    HuggingFaceSmolLm2,
+    FixedContiguous37Balanced,
+}
+
+fn resolve_rms_norm_profile(
+    model: &LoadedModel,
+    reduction_profile: LlamaReductionProfile,
+) -> LlamaRmsNormProfile {
+    match reduction_profile {
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => {
+            LlamaRmsNormProfile::FixedContiguous37Balanced
+        }
+        LlamaReductionProfile::CanonicalV1
+            if matches!(model.config(), ModelConfig::Llama(_))
+                && is_reviewed_smollm2_rms_norm_geometry(model.spec()) =>
+        {
+            LlamaRmsNormProfile::HuggingFaceSmolLm2
+        }
+        LlamaReductionProfile::CanonicalV1 => LlamaRmsNormProfile::Canonical,
+    }
+}
+
 pub(super) fn execute_profile_rms_norm<S: CudaExecutionStream + ?Sized>(
-    profile: LlamaReductionProfile,
+    profile: LlamaRmsNormProfile,
     params: &mut RmsNormParams<'_>,
     stream: &mut S,
 ) -> Result<(), CudaError> {
     match profile {
-        LlamaReductionProfile::CanonicalV1 => rms_norm(params, stream),
-        LlamaReductionProfile::FixedContiguous37BalancedV1 => fixed37_rms_norm(params, stream),
+        LlamaRmsNormProfile::Canonical => rms_norm(params, stream),
+        LlamaRmsNormProfile::HuggingFaceSmolLm2 => hugging_face_smollm2_rms_norm(params, stream),
+        LlamaRmsNormProfile::FixedContiguous37Balanced => fixed37_rms_norm(params, stream),
     }
 }
 
 pub(super) fn execute_profile_residual_rms_norm<S: CudaExecutionStream + ?Sized>(
-    profile: LlamaReductionProfile,
+    profile: LlamaRmsNormProfile,
     params: &mut ResidualRmsNormParams<'_>,
     stream: &mut S,
 ) -> Result<(), CudaError> {
     match profile {
-        LlamaReductionProfile::CanonicalV1 => residual_rms_norm(params, stream),
-        LlamaReductionProfile::FixedContiguous37BalancedV1 => {
-            fixed37_residual_rms_norm(params, stream)
+        LlamaRmsNormProfile::Canonical => residual_rms_norm(params, stream),
+        LlamaRmsNormProfile::HuggingFaceSmolLm2 => {
+            hugging_face_smollm2_residual_rms_norm(params, stream)
         }
+        LlamaRmsNormProfile::FixedContiguous37Balanced => fixed37_residual_rms_norm(params, stream),
     }
 }
 
@@ -1144,6 +1173,7 @@ pub struct PreparedLlamaForward {
     pub(super) gemms: GemmPlans,
     attention: PreparedPrefillAttention,
     reduction_profile: LlamaReductionProfile,
+    rms_norm_profile: LlamaRmsNormProfile,
     gemm_reduction_policies: LlamaGemmReductionPolicies,
     pub(super) buffers: ForwardBuffers,
     pub(super) io_staging: CudaPinnedHostBuffer,
@@ -1161,6 +1191,7 @@ impl fmt::Debug for PreparedLlamaForward {
             .field("plan", &self.plan)
             .field("attention_selection", &self.attention.selection_trace())
             .field("reduction_profile", &self.reduction_profile)
+            .field("rms_norm_profile", &self.rms_norm_profile)
             .field("gemm_reduction_policies", &self.gemm_reduction_policies)
             .field("allocation_report", &self.allocation_report)
             .field("tokens_ready", &self.tokens_ready)
@@ -1202,6 +1233,7 @@ impl PreparedLlamaForward {
 
         let gemm_reduction_policies =
             resolve_gemm_reduction_policies(model, config.reduction_profile);
+        let rms_norm_profile = resolve_rms_norm_profile(model, config.reduction_profile);
 
         let weights = CudaUploadedWeights::upload(
             model.weights(),
@@ -1292,6 +1324,7 @@ impl PreparedLlamaForward {
             gemms,
             attention,
             reduction_profile: config.reduction_profile,
+            rms_norm_profile,
             gemm_reduction_policies,
             buffers,
             io_staging,
@@ -1325,6 +1358,10 @@ impl PreparedLlamaForward {
     #[must_use]
     pub const fn reduction_profile(&self) -> LlamaReductionProfile {
         self.reduction_profile
+    }
+
+    pub(super) const fn rms_norm_profile(&self) -> LlamaRmsNormProfile {
+        self.rms_norm_profile
     }
 
     /// Allocates reusable caller-owned host storage for the canonical PR07
@@ -1693,7 +1730,7 @@ impl PreparedLlamaForward {
         let weights = &self.weights;
         let gemms = &mut self.gemms;
         let attention = &self.attention;
-        let reduction_profile = self.reduction_profile;
+        let rms_norm_profile = self.rms_norm_profile;
         let buffers = &mut self.buffers;
         let io_staging = &mut self.io_staging;
         let sequence = to_u64(plan.sequence_length(), LlamaForwardResource::HiddenCurrent)?;
@@ -1781,7 +1818,7 @@ impl PreparedLlamaForward {
                     hidden_size: hidden,
                     epsilon: layer.input_norm_epsilon(),
                 };
-                execute_profile_rms_norm(reduction_profile, &mut params, stream)
+                execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(input_norm_site, source))?;
             }
             if layer_index == 0 {
@@ -2143,7 +2180,7 @@ impl PreparedLlamaForward {
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                execute_profile_rms_norm(reduction_profile, &mut params, stream)
+                execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaForwardError::cuda(post_norm_site, source))?;
             }
             if layer_index == 0 {
@@ -2361,7 +2398,7 @@ impl PreparedLlamaForward {
                 hidden_size: hidden,
                 epsilon: plan.final_norm_epsilon(),
             };
-            execute_profile_rms_norm(reduction_profile, &mut params, stream)
+            execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                 .map_err(|source| LlamaForwardError::cuda(final_norm_site, source))?;
         }
         capture_trace(

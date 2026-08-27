@@ -28,7 +28,7 @@ use super::batch::{
     LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
 };
 use super::forward::{
-    LlamaForwardError, PreparedLlamaAllocationReport, PreparedLlamaForward,
+    LlamaForwardError, LlamaRmsNormProfile, PreparedLlamaAllocationReport, PreparedLlamaForward,
     PreparedLlamaForwardConfig, execute_gemm, execute_profile_residual_rms_norm,
     execute_profile_rms_norm, execute_projection_bias, poison_for_cuda_error,
     poison_for_forward_error, span, span_mut, weight_span,
@@ -1200,10 +1200,11 @@ fn execute_packed(
 
     let mut execute_iteration_body =
         |stream: &mut dyn CudaExecutionStream| -> LlamaBatchExecutorResult<()> {
+            let rms_norm_profile = forward.rms_norm_profile();
             execute_fixed_graph(
                 forward,
                 config.residual_norm,
-                config.reduction_profile(),
+                rms_norm_profile,
                 config.ragged_attention_reduction_profile,
                 layout,
                 key_cache,
@@ -1299,7 +1300,7 @@ fn execute_packed(
 fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
     forward: &mut PreparedLlamaForward,
     residual_norm_implementation: ResidualNormImplementation,
-    reduction_profile: LlamaReductionProfile,
+    rms_norm_profile: LlamaRmsNormProfile,
     attention_reduction_profile: AttentionReductionProfile,
     layout: KvLayout,
     key_cache: &mut CudaDeviceBuffer,
@@ -1404,7 +1405,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                 hidden_size: hidden,
                 epsilon: layer.input_norm_epsilon(),
             };
-            execute_profile_rms_norm(reduction_profile, &mut params, stream)
+            execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                 .map_err(|source| batch_cuda(input_norm_site, source))?;
         }
 
@@ -1683,7 +1684,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                execute_profile_rms_norm(reduction_profile, &mut norm, stream)
+                execute_profile_rms_norm(rms_norm_profile, &mut norm, stream)
                     .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
             ResidualNormImplementation::Fused => {
@@ -1721,7 +1722,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                execute_profile_residual_rms_norm(reduction_profile, &mut fused, stream)
+                execute_profile_residual_rms_norm(rms_norm_profile, &mut fused, stream)
                     .map_err(|source| batch_cuda(post_norm_site, source))?;
             }
         }
@@ -1848,7 +1849,7 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
             hidden_size: hidden,
             epsilon: plan.final_norm_epsilon(),
         };
-        execute_profile_rms_norm(reduction_profile, &mut params, stream)
+        execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
             .map_err(|source| batch_cuda(final_norm_site, source))?;
     }
     let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);

@@ -107,6 +107,7 @@ fn run_fixture(case: &str, token_count: u64) -> TestResult {
     run_fixture_with_completion(case, token_count, false)
 }
 
+#[allow(clippy::too_many_lines)]
 fn run_fixture_with_completion(case: &str, token_count: u64, iteration_batch: bool) -> TestResult {
     let root = fixture_root()?;
     assert!(root.is_dir(), "missing fixture root {}", root.display());

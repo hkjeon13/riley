@@ -26,6 +26,9 @@ using rustinfer_cuda_internal::validation_error;
 constexpr uint32_t kThreads = 256;
 constexpr uint32_t kMaximumBlocks = 65535;
 constexpr size_t kMaximumPrimitiveBuffers = 5;
+constexpr uint64_t kHuggingFaceSmolLm2HiddenSize = 576;
+constexpr uint64_t kHuggingFaceSmolLm2MaximumRows = 8192;
+constexpr uint32_t kHuggingFaceSmolLm2EpsilonBits = 0x3727c5acU;
 
 struct ResolvedSpan {
   RustInferCudaDeviceBuffer* buffer;
@@ -52,6 +55,18 @@ bool checked_add(uint64_t left, uint64_t right, uint64_t* output) noexcept {
   }
   *output = left + right;
   return true;
+}
+
+bool is_hugging_face_smollm2_rms_norm_contract(
+    RustInferCudaDType dtype, uint64_t row_count, uint64_t hidden_size,
+    float epsilon) noexcept {
+  uint32_t epsilon_bits = 0;
+  static_assert(sizeof(epsilon_bits) == sizeof(epsilon));
+  std::memcpy(&epsilon_bits, &epsilon, sizeof(epsilon_bits));
+  return dtype == RUSTINFER_CUDA_DTYPE_BF16 &&
+         row_count <= kHuggingFaceSmolLm2MaximumRows &&
+         hidden_size == kHuggingFaceSmolLm2HiddenSize &&
+         epsilon_bits == kHuggingFaceSmolLm2EpsilonBits;
 }
 
 bool reserved_is_zero(const uint64_t* reserved, size_t count) noexcept {
@@ -518,6 +533,90 @@ __global__ void rms_norm_kernel(const T* input, const T* weight, T* output,
   }
 }
 
+template <bool kResidual>
+__global__ void hugging_face_smollm2_rms_norm_kernel(
+    const __nv_bfloat16* left, const __nv_bfloat16* right,
+    const __nv_bfloat16* weight, __nv_bfloat16* residual_output,
+    __nv_bfloat16* normalized_output, uint64_t row_count) {
+  extern __shared__ float partial_sums[];
+  __shared__ float inverse_rms_by_row[16];
+  const uint64_t row = static_cast<uint64_t>(blockIdx.x) * blockDim.y +
+                       threadIdx.y;
+  const bool valid_row = row < row_count;
+  const uint64_t base = row * kHuggingFaceSmolLm2HiddenSize;
+
+  float accumulators[4] = {0.0F, 0.0F, 0.0F, 0.0F};
+  if (valid_row) {
+    for (uint32_t vector_index = threadIdx.x;
+         vector_index < kHuggingFaceSmolLm2HiddenSize / 4;
+         vector_index += blockDim.x) {
+      const uint64_t column = static_cast<uint64_t>(vector_index) * 4;
+      float values[4];
+#pragma unroll
+      for (uint32_t component = 0; component < 4; ++component) {
+        const uint64_t index = base + column + component;
+        float value = __bfloat162float(left[index]);
+        if constexpr (kResidual) {
+          value = __bfloat162float(__float2bfloat16_rn(
+              __fadd_rn(value, __bfloat162float(right[index]))));
+          residual_output[index] = __float2bfloat16_rn(value);
+        }
+        values[component] = value;
+      }
+#pragma unroll
+      for (uint32_t component = 0; component < 4; ++component) {
+        accumulators[component] = __fadd_rn(
+            accumulators[component],
+            __fmul_rn(values[component], values[component]));
+      }
+    }
+  }
+
+  float sum = __fadd_rn(accumulators[0], accumulators[1]);
+  sum = __fadd_rn(sum, accumulators[2]);
+  sum = __fadd_rn(sum, accumulators[3]);
+  const uint32_t shared_index =
+      threadIdx.x + threadIdx.y * blockDim.x;
+  partial_sums[shared_index] = sum;
+  for (uint32_t offset = blockDim.x / 2; offset >= 32; offset >>= 1) {
+    __syncthreads();
+    if (threadIdx.x < offset) {
+      sum = __fadd_rn(sum, partial_sums[shared_index + offset]);
+      partial_sums[shared_index] = sum;
+    }
+  }
+  __syncthreads();
+  for (uint32_t offset = 16; offset != 0; offset >>= 1) {
+    sum = __fadd_rn(
+        sum, __shfl_down_sync(0xffffffffU, sum, static_cast<int>(offset)));
+  }
+  if (threadIdx.x == 0) {
+    const float mean = __fmul_rn(sum, 1.0F / 576.0F);
+    inverse_rms_by_row[threadIdx.y] =
+        rsqrtf(__fadd_rn(mean, 1.0e-5F));
+  }
+  __syncthreads();
+  if (!valid_row) {
+    return;
+  }
+
+  const float inverse_rms = inverse_rms_by_row[threadIdx.y];
+  for (uint64_t column = threadIdx.x;
+       column < kHuggingFaceSmolLm2HiddenSize; column += blockDim.x) {
+    const uint64_t index = base + column;
+    float value = 0.0F;
+    if constexpr (kResidual) {
+      value = __bfloat162float(residual_output[index]);
+    } else {
+      value = __bfloat162float(left[index]);
+    }
+    const __nv_bfloat16 staged =
+        __float2bfloat16_rn(__fmul_rn(value, inverse_rms));
+    normalized_output[index] = __float2bfloat16_rn(__fmul_rn(
+        __bfloat162float(weight[column]), __bfloat162float(staged)));
+  }
+}
+
 template <typename T>
 __global__ void residual_add_kernel(const T* left, const T* right, T* output,
                                     uint64_t element_count) {
@@ -716,6 +815,32 @@ void launch_rms_norm(const ResolvedSpan& input, const ResolvedSpan& weight,
       reinterpret_cast<T*>(output.data), row_count, hidden_size, epsilon);
 }
 
+dim3 hugging_face_smollm2_rms_norm_block(uint64_t row_count) noexcept {
+  uint32_t block_height = 1;
+  while (block_height < 16 &&
+         static_cast<uint64_t>(block_height) * 2 <= row_count) {
+    block_height *= 2;
+  }
+  const uint32_t block_width =
+      block_height <= 4 ? 128 : (block_height == 8 ? 64 : 32);
+  return dim3(block_width, block_height, 1);
+}
+
+void launch_hugging_face_smollm2_rms_norm(
+    const ResolvedSpan& input, const ResolvedSpan& weight,
+    const ResolvedSpan& output, uint64_t row_count, cudaStream_t stream) {
+  const dim3 block = hugging_face_smollm2_rms_norm_block(row_count);
+  const uint32_t blocks = static_cast<uint32_t>(
+      (row_count + block.y - 1) / block.y);
+  const size_t shared_bytes =
+      static_cast<size_t>(block.x) * block.y * sizeof(float);
+  hugging_face_smollm2_rms_norm_kernel<false>
+      <<<blocks, block, shared_bytes, stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(input.data), nullptr,
+          reinterpret_cast<const __nv_bfloat16*>(weight.data), nullptr,
+          reinterpret_cast<__nv_bfloat16*>(output.data), row_count);
+}
+
 template <typename T>
 void launch_residual_add(const ResolvedSpan& left, const ResolvedSpan& right,
                          const ResolvedSpan& output, uint64_t element_count,
@@ -742,6 +867,25 @@ void launch_residual_rms_norm(
           reinterpret_cast<T*>(residual_output.data),
           reinterpret_cast<T*>(normalized_output.data), row_count, hidden_size,
           epsilon);
+}
+
+void launch_hugging_face_smollm2_residual_rms_norm(
+    const ResolvedSpan& left, const ResolvedSpan& right,
+    const ResolvedSpan& weight, const ResolvedSpan& residual_output,
+    const ResolvedSpan& normalized_output, uint64_t row_count,
+    cudaStream_t stream) {
+  const dim3 block = hugging_face_smollm2_rms_norm_block(row_count);
+  const uint32_t blocks = static_cast<uint32_t>(
+      (row_count + block.y - 1) / block.y);
+  const size_t shared_bytes =
+      static_cast<size_t>(block.x) * block.y * sizeof(float);
+  hugging_face_smollm2_rms_norm_kernel<true>
+      <<<blocks, block, shared_bytes, stream>>>(
+          reinterpret_cast<const __nv_bfloat16*>(left.data),
+          reinterpret_cast<const __nv_bfloat16*>(right.data),
+          reinterpret_cast<const __nv_bfloat16*>(weight.data),
+          reinterpret_cast<__nv_bfloat16*>(residual_output.data),
+          reinterpret_cast<__nv_bfloat16*>(normalized_output.data), row_count);
 }
 
 void launch_row_bias_add_in_place(const ResolvedSpan& matrix,
@@ -1036,11 +1180,12 @@ extern "C" RustInferCudaStatus rustinfer_cuda_embedding_execute(
   return status;
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
+RustInferCudaStatus execute_rms_norm_impl(
     const RustInferCudaRmsNormParams* params, RustInferCudaStream* stream,
-    RustInferCudaErrorInfo* error) noexcept {
-  constexpr const char* kOperation = "execute RMSNorm";
-  clear_error(error);
+    RustInferCudaErrorInfo* error, bool hugging_face_smollm2) noexcept {
+  const char* kOperation = hugging_face_smollm2
+                               ? "execute Hugging Face SmolLM2 RMSNorm"
+                               : "execute RMSNorm";
   if (params == nullptr || params->struct_size < sizeof(*params)) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
@@ -1064,6 +1209,17 @@ extern "C" RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "hidden_size and finite positive epsilon are required");
+  }
+  if (hugging_face_smollm2 &&
+      !is_hugging_face_smollm2_rms_norm_contract(
+          params->input.dtype, params->row_count, params->hidden_size,
+          params->epsilon)) {
+    return set_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
+        RUSTINFER_CUDA_ERROR_DOMAIN_VALIDATION,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "the Hugging Face SmolLM2 path requires BF16, hidden_size=576, "
+        "row_count<=8192, and epsilon=1e-5 exactly");
   }
   uint64_t element_count = 0;
   if (!checked_multiply(params->row_count, params->hidden_size,
@@ -1136,7 +1292,10 @@ extern "C" RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
   }
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (params->input.dtype == RUSTINFER_CUDA_DTYPE_F32) {
+    if (hugging_face_smollm2) {
+      launch_hugging_face_smollm2_rms_norm(
+          input, weight, output, params->row_count, stream->stream);
+    } else if (params->input.dtype == RUSTINFER_CUDA_DTYPE_F32) {
       launch_rms_norm<float>(input, weight, output, params->row_count,
                              params->hidden_size, params->epsilon,
                              stream->stream);
@@ -1149,6 +1308,21 @@ extern "C" RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_rms_norm_execute(
+    const RustInferCudaRmsNormParams* params, RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(params, stream, error, false);
+}
+
+extern "C" RustInferCudaStatus
+rustinfer_cuda_hugging_face_smollm2_rms_norm_execute(
+    const RustInferCudaRmsNormParams* params, RustInferCudaStream* stream,
+    RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_rms_norm_impl(params, stream, error, true);
 }
 
 extern "C" RustInferCudaStatus rustinfer_cuda_residual_add_execute(
@@ -1244,11 +1418,14 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_add_execute(
                             error, kOperation);
 }
 
-extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
+RustInferCudaStatus execute_residual_rms_norm_impl(
     const RustInferCudaResidualRmsNormParams* params,
-    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
-  constexpr const char* kOperation = "execute fused residual RMSNorm";
-  clear_error(error);
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error,
+    bool hugging_face_smollm2) noexcept {
+  const char* kOperation =
+      hugging_face_smollm2
+          ? "execute Hugging Face SmolLM2 fused residual RMSNorm"
+          : "execute fused residual RMSNorm";
   if (params == nullptr || params->struct_size < sizeof(*params)) {
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
@@ -1275,6 +1452,17 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
     return validation_error(error, RUSTINFER_CUDA_STATUS_INVALID_ARGUMENT,
                             RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "hidden_size and finite positive epsilon are required");
+  }
+  if (hugging_face_smollm2 &&
+      !is_hugging_face_smollm2_rms_norm_contract(
+          params->left.dtype, params->row_count, params->hidden_size,
+          params->epsilon)) {
+    return set_error(
+        error, RUSTINFER_CUDA_STATUS_NOT_SUPPORTED, 0,
+        RUSTINFER_CUDA_ERROR_DOMAIN_VALIDATION,
+        RUSTINFER_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "the Hugging Face SmolLM2 fused path requires BF16, "
+        "hidden_size=576, row_count<=8192, and epsilon=1e-5 exactly");
   }
   uint64_t element_count = 0;
   if (!checked_multiply(params->row_count, params->hidden_size,
@@ -1376,7 +1564,11 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
   }
   if (status == RUSTINFER_CUDA_STATUS_SUCCESS) {
     launch_attempted = true;
-    if (params->left.dtype == RUSTINFER_CUDA_DTYPE_F32) {
+    if (hugging_face_smollm2) {
+      launch_hugging_face_smollm2_residual_rms_norm(
+          left, right, weight, residual_output, normalized_output,
+          params->row_count, stream->stream);
+    } else if (params->left.dtype == RUSTINFER_CUDA_DTYPE_F32) {
       launch_residual_rms_norm<float>(
           left, right, weight, residual_output, normalized_output,
           params->row_count, params->hidden_size, params->epsilon,
@@ -1391,6 +1583,21 @@ extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
   }
   return complete_execution(&uses, &scope, stream, status, launch_attempted,
                             error, kOperation);
+}
+
+extern "C" RustInferCudaStatus rustinfer_cuda_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_residual_rms_norm_impl(params, stream, error, false);
+}
+
+extern "C" RustInferCudaStatus
+rustinfer_cuda_hugging_face_smollm2_residual_rms_norm_execute(
+    const RustInferCudaResidualRmsNormParams* params,
+    RustInferCudaStream* stream, RustInferCudaErrorInfo* error) noexcept {
+  clear_error(error);
+  return execute_residual_rms_norm_impl(params, stream, error, true);
 }
 
 extern "C" RustInferCudaStatus rustinfer_cuda_row_bias_add_in_place_execute(

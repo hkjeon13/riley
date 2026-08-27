@@ -67,10 +67,12 @@ pub use prefill::{
 };
 pub use primitives::{
     CastParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, EmbeddingError, EmbeddingParams,
-    Fixed37LogSoftmaxParams, GatedMultiplyParams, ResidualAddParams, ResidualRmsNormParams,
-    RmsNormParams, RopeParams, RowBiasAddInPlaceParams, SiluParams, cast, embedding,
-    fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm, gated_multiply, residual_add,
-    residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
+    Fixed37LogSoftmaxParams, GatedMultiplyParams, HUGGING_FACE_SMOLLM2_RMS_NORM_EPSILON_BITS,
+    HUGGING_FACE_SMOLLM2_RMS_NORM_HIDDEN_SIZE, HUGGING_FACE_SMOLLM2_RMS_NORM_MAX_ROWS,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeParams, RowBiasAddInPlaceParams,
+    SiluParams, cast, embedding, fixed37_log_softmax, fixed37_residual_rms_norm, fixed37_rms_norm,
+    gated_multiply, hugging_face_smollm2_residual_rms_norm, hugging_face_smollm2_rms_norm,
+    residual_add, residual_rms_norm, rms_norm, rope, row_bias_add_in_place, silu,
 };
 pub use runtime::{
     CudaCommandBatch, CudaCommandStream, CudaContext, CudaDevice, CudaEvent, CudaExecutionStream,

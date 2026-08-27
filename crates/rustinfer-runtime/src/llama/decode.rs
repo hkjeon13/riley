@@ -1926,7 +1926,7 @@ impl PreparedLlamaDecode {
         stream: &mut CudaStream,
     ) -> LlamaDecodeResult<()> {
         let forward = &mut self.forward;
-        let reduction_profile = forward.reduction_profile();
+        let rms_norm_profile = forward.rms_norm_profile();
         let plan = &forward.plan;
         let weights = &forward.weights;
         let buffers = &mut forward.buffers;
@@ -2045,7 +2045,7 @@ impl PreparedLlamaDecode {
                     hidden_size: hidden,
                     epsilon: layer.input_norm_epsilon(),
                 };
-                execute_profile_rms_norm(reduction_profile, &mut params, stream)
+                execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(input_norm_site, source))?;
             }
 
@@ -2348,7 +2348,7 @@ impl PreparedLlamaDecode {
                     hidden_size: hidden,
                     epsilon: layer.post_attention_norm_epsilon(),
                 };
-                execute_profile_rms_norm(reduction_profile, &mut params, stream)
+                execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                     .map_err(|source| LlamaDecodeError::cuda(post_norm_site, source))?;
             }
 
@@ -2482,7 +2482,7 @@ impl PreparedLlamaDecode {
                 hidden_size: hidden,
                 epsilon: plan.final_norm_epsilon(),
             };
-            execute_profile_rms_norm(reduction_profile, &mut params, stream)
+            execute_profile_rms_norm(rms_norm_profile, &mut params, stream)
                 .map_err(|source| LlamaDecodeError::cuda(final_norm_site, source))?;
         }
         let lm_head_site = ExecutionSite::global(LlamaOp::LmHead);

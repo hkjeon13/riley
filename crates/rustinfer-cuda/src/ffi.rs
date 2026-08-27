@@ -1391,6 +1391,11 @@ unsafe extern "C" {
         stream: *mut RawStream,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn rustinfer_cuda_hugging_face_smollm2_rms_norm_execute(
+        params: *const RawRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn rustinfer_cuda_fixed37_rms_norm_execute(
         params: *const RawRmsNormParams,
         stream: *mut RawStream,
@@ -1402,6 +1407,11 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn rustinfer_cuda_residual_rms_norm_execute(
+        params: *const RawResidualRmsNormParams,
+        stream: *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn rustinfer_cuda_hugging_face_smollm2_residual_rms_norm_execute(
         params: *const RawResidualRmsNormParams,
         stream: *mut RawStream,
         error: *mut ErrorInfo,
@@ -2572,6 +2582,38 @@ pub(super) fn rms_norm_execute(
     })
 }
 
+pub(super) fn hugging_face_smollm2_rms_norm_execute(
+    input: RawBufferSpan,
+    weight: RawBufferSpan,
+    output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawRmsNormParams {
+        struct_size: RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        input,
+        weight,
+        output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face SmolLM2 CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the reviewed descriptor and every borrowed opaque
+            // resource remain live through synchronous native completion.
+            unsafe { rustinfer_cuda_hugging_face_smollm2_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
 pub(super) fn fixed37_rms_norm_execute(
     input: RawBufferSpan,
     weight: RawBufferSpan,
@@ -2656,6 +2698,47 @@ pub(super) fn residual_rms_norm_execute(
             // SAFETY: the descriptor and all exclusively borrowed opaque
             // resources outlive this synchronously completing native call.
             unsafe { rustinfer_cuda_residual_rms_norm_execute(&params, stream, error) }
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn hugging_face_smollm2_residual_rms_norm_execute(
+    left: RawBufferSpan,
+    right: RawBufferSpan,
+    weight: RawBufferSpan,
+    residual_output: RawBufferSpan,
+    normalized_output: RawBufferSpan,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    stream: &mut StreamHandle,
+) -> CudaResult<()> {
+    let params = RawResidualRmsNormParams {
+        struct_size: RESIDUAL_RMS_NORM_PARAMS_SIZE,
+        reserved0: 0,
+        left,
+        right,
+        weight,
+        residual_output,
+        normalized_output,
+        row_count,
+        hidden_size,
+        epsilon,
+        reserved1: 0,
+        reserved: [0; 4],
+    };
+    primitive_status(
+        "execute Hugging Face SmolLM2 fused residual CUDA RMSNorm",
+        stream,
+        |stream, error| {
+            // SAFETY: the reviewed descriptor and all exclusively borrowed
+            // resources outlive this synchronously completing native call.
+            unsafe {
+                rustinfer_cuda_hugging_face_smollm2_residual_rms_norm_execute(
+                    &params, stream, error,
+                )
+            }
         },
     )
 }
