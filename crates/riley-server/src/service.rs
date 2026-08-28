@@ -331,7 +331,7 @@ impl Drop for SubmittedRequest {
     }
 }
 
-/// Resource and timeout bounds for [`start_server`].
+/// Resource and timeout bounds for [`start_server_with_runtime_config`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ServerConfig {
     /// Listener address. Port zero is allowed for loopback tests.
@@ -803,15 +803,20 @@ impl Drop for ServerHandle {
     }
 }
 
-/// Starts a bounded HTTP service on `config.bind_address`.
+/// Starts a bounded HTTP service on `config.bind_address` with an optional
+/// immutable runtime-configuration endpoint.
+///
+/// When present, `runtime_config_body` is returned verbatim by
+/// `GET /v1/config`. The service does not parse or reserialize these bytes.
 ///
 /// # Errors
 ///
 /// Returns an error for invalid bounds, invalid public model metadata, a cold
 /// host-allocation failure, or a listener bind/setup failure.
-pub fn start_server(
+pub fn start_server_with_runtime_config(
     config: ServerConfig,
     backend: Arc<dyn CompletionBackend>,
+    runtime_config_body: Option<Arc<[u8]>>,
 ) -> Result<ServerHandle, ServerStartError> {
     let config = config.validate()?;
     backend
@@ -849,6 +854,7 @@ pub fn start_server(
         let worker_observations = Arc::clone(&observations);
         let worker_metrics = Arc::clone(&metrics);
         let worker_connections = Arc::clone(&connections);
+        let worker_runtime_config_body = runtime_config_body.clone();
         worker_threads.push(
             thread::Builder::new()
                 .name(format!("riley-http-{worker_index}"))
@@ -860,6 +866,7 @@ pub fn start_server(
                         &worker_connections,
                         &worker_observations,
                         &worker_metrics,
+                        worker_runtime_config_body.as_deref(),
                         config,
                     );
                 })?,
@@ -894,6 +901,18 @@ pub fn start_server(
         metrics,
         joined: false,
     })
+}
+
+/// Starts a bounded HTTP service without a runtime-configuration body.
+///
+/// # Errors
+///
+/// See [`start_server_with_runtime_config`].
+pub fn start_server(
+    config: ServerConfig,
+    backend: Arc<dyn CompletionBackend>,
+) -> Result<ServerHandle, ServerStartError> {
+    start_server_with_runtime_config(config, backend, None)
 }
 
 fn listener_loop(
@@ -958,6 +977,7 @@ fn worker_loop(
     connections: &ConnectionRegistry,
     observations: &Arc<ObservationBuffer>,
     metrics: &Arc<ServiceMetrics>,
+    runtime_config_body: Option<&[u8]>,
     config: ServerConfig,
 ) {
     loop {
@@ -977,6 +997,7 @@ fn worker_loop(
                         connections,
                         observations,
                         metrics,
+                        runtime_config_body,
                         config,
                     };
                     handle_connection(&mut job.stream, job.registry_slot, &context);
@@ -996,6 +1017,7 @@ struct ConnectionContext<'a> {
     connections: &'a ConnectionRegistry,
     observations: &'a Arc<ObservationBuffer>,
     metrics: &'a Arc<ServiceMetrics>,
+    runtime_config_body: Option<&'a [u8]>,
     config: ServerConfig,
 }
 
@@ -1037,6 +1059,7 @@ fn handle_connection(
         context.stopping,
         context.observations,
         context.metrics,
+        context.runtime_config_body,
         context.config,
         &request,
     );
@@ -1072,6 +1095,7 @@ fn route_request(
     stopping: &AtomicBool,
     observations: &Arc<ObservationBuffer>,
     metrics: &Arc<ServiceMetrics>,
+    runtime_config_body: Option<&[u8]>,
     config: ServerConfig,
     request: &HttpRequest,
 ) {
@@ -1082,6 +1106,7 @@ fn route_request(
         (HttpMethod::Get, "/metrics") => {
             write_operational_metrics(stream, backend, metrics, observations);
         }
+        (HttpMethod::Get, "/v1/config") => write_runtime_config(stream, runtime_config_body),
         (HttpMethod::Get, "/v1/models") => write_model_list(stream, backend),
         (HttpMethod::Get, path) if path.starts_with("/v1/models/") => {
             write_model(stream, backend, &path["/v1/models/".len()..]);
@@ -1098,7 +1123,7 @@ fn route_request(
             );
         }
         (HttpMethod::Get, "/v1/completions")
-        | (HttpMethod::Post, "/healthz" | "/readyz" | "/metrics" | "/v1/models") => {
+        | (HttpMethod::Post, "/healthz" | "/readyz" | "/metrics" | "/v1/config" | "/v1/models") => {
             let _ = write_public_error(
                 stream,
                 405,
@@ -1324,6 +1349,23 @@ fn write_operational_metrics(
                 503,
                 "metrics_unavailable",
                 "operational metrics are temporarily unavailable",
+                None,
+            );
+        }
+    }
+}
+
+fn write_runtime_config(stream: &mut TcpStream, body: Option<&[u8]>) {
+    match body {
+        Some(body) => {
+            let _ = write_response(stream, 200, JSON_CONTENT_TYPE, body);
+        }
+        None => {
+            let _ = write_public_error(
+                stream,
+                503,
+                "config_unavailable",
+                "runtime configuration is unavailable",
                 None,
             );
         }
@@ -2058,7 +2100,7 @@ mod tests {
         BackendStatus, CompletionBackend, EngineMetricsSnapshot, ObservationBuffer,
         OperationalMetricsSnapshot, RequestCancellation, RequestObservation,
         RequestObservationStatus, ServerConfig, ServerShutdownError, SubmittedRequest,
-        start_server,
+        start_server, start_server_with_runtime_config,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
@@ -2543,6 +2585,51 @@ mod tests {
         );
         assert_eq!(response_status(&missing), 404);
         server.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn runtime_config_endpoint_is_immutable_and_fails_closed() {
+        let unavailable_backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let unavailable = start_server(test_config(), unavailable_backend)
+            .expect("start server without runtime config");
+        let response = send_request(
+            unavailable.local_address(),
+            b"GET /v1/config HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 503);
+        let error: Value = serde_json::from_slice(response_body(&response))
+            .expect("sanitized unavailable response JSON");
+        assert_eq!(error["error"]["code"], "config_unavailable");
+        assert_eq!(error["error"]["param"], Value::Null);
+        unavailable.shutdown().expect("graceful shutdown");
+
+        let exact_body: Arc<[u8]> = Arc::from(
+            &b"{\"candidate_id\":\"riley-1.0.0-rc1\",\"schema_version\":\"riley.effective-runtime-config.v1\"}"[..],
+        );
+        let configured_backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let configured = start_server_with_runtime_config(
+            test_config(),
+            configured_backend,
+            Some(Arc::clone(&exact_body)),
+        )
+        .expect("start server with runtime config");
+        for _ in 0..2 {
+            let response = send_request(
+                configured.local_address(),
+                b"GET /v1/config HTTP/1.1\r\nHost: localhost\r\n\r\n",
+            );
+            assert_eq!(response_status(&response), 200);
+            assert_eq!(response_body(&response), exact_body.as_ref());
+        }
+        let post = send_request(
+            configured.local_address(),
+            b"POST /v1/config HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 0\r\n\r\n",
+        );
+        assert_eq!(response_status(&post), 405);
+        let post_error: Value =
+            serde_json::from_slice(response_body(&post)).expect("method rejection JSON");
+        assert_eq!(post_error["error"]["code"], "method_not_allowed");
+        configured.shutdown().expect("graceful shutdown");
     }
 
     #[test]

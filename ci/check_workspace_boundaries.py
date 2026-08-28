@@ -89,7 +89,7 @@ EXPECTED_FEATURES = {
         "cuda": ["riley-runtime/cuda", "riley-scheduler/cuda"],
         "default": [],
         "experimental": [],
-        "server": ["dep:libc", "dep:serde", "dep:serde_json"],
+        "server": ["dep:libc", "dep:serde", "dep:serde_json", "dep:sha2"],
     },
     "riley-native": {
         "cuda": [
@@ -111,7 +111,7 @@ EXPECTED_OPTIONAL_DEPENDENCIES = {
     "riley-model": set(),
     "riley-runtime": {"riley-cuda"},
     "riley-scheduler": set(),
-    "riley-server": {"libc", "serde", "serde_json"},
+    "riley-server": {"libc", "serde", "serde_json", "sha2"},
     "riley-native": {"riley-cuda", "riley-model", "riley-runtime"},
 }
 
@@ -169,6 +169,11 @@ EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES = {
     ("riley-server", "serde_json"): {
         "version": "1.0.145",
         "default_features": True,
+        "features": [],
+    },
+    ("riley-server", "sha2"): {
+        "version": "0.11.0",
+        "default_features": False,
         "features": [],
     },
 }
@@ -406,7 +411,7 @@ def load_dependency_policy(root: Path) -> dict[str, Any]:
         raise BoundaryError(
             f"{policy_path}: direct external dependencies must be exactly "
             "riley-model -> serde, serde_json, sha2, and unicode-normalization plus "
-            "riley-runtime -> sha2 plus riley-server -> serde and serde_json"
+            "riley-runtime -> sha2 plus riley-server -> serde, serde_json, and sha2"
         )
     for dependency in direct_dependencies:
         expected = EXPECTED_EXTERNAL_DIRECT_DEPENDENCIES[

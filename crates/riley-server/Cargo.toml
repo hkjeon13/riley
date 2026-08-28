@@ -12,7 +12,7 @@ description = "Binary and server feature owner for Riley"
 [features]
 default = []
 cuda = ["riley-runtime/cuda", "riley-scheduler/cuda"]
-server = ["dep:libc", "dep:serde", "dep:serde_json"]
+server = ["dep:libc", "dep:serde", "dep:serde_json", "dep:sha2"]
 bench = ["dep:serde", "dep:serde_json"]
 experimental = []
 
@@ -24,6 +24,7 @@ riley-scheduler = { path = "../riley-scheduler" }
 libc = { version = "=0.2.189", optional = true }
 serde = { version = "=1.0.228", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.145", optional = true }
+sha2 = { version = "=0.11.0", default-features = false, optional = true }
 
 [lints]
 workspace = true

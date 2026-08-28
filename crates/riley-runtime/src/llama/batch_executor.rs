@@ -53,6 +53,12 @@ const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
 const GREEDY_RESULT_BYTES: usize = 2 * U32_BYTES;
 const PACKED_ITERATION_ALIGNMENT: usize = U32_BYTES;
 const ACTIVE_ROW_BUCKETS: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
+const RAGGED_PAGED_ATTENTION_LEGACY_D64_V1: &str =
+    "riley.cuda.ragged-paged-attention.legacy-d64-v1";
+const RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1: &str =
+    "riley.cuda.ragged-paged-attention.grouped-heads-d64-v1";
+const RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1: &str =
+    "riley.cuda.ragged-paged-attention.fixed37-two-pass-d64-s8192-v1";
 /// Maximum number of cold-prepared dense-row shapes, including the configured
 /// maximum catch-all shape.
 pub const MAX_LLAMA_BATCH_SHAPE_BUCKETS: usize = ACTIVE_ROW_BUCKETS.len() + 1;
@@ -324,6 +330,62 @@ pub enum RaggedAttentionImplementation {
     /// Reuse staged K/V tiles across the canonical query-head warps of a GQA
     /// key/value head, with a bounded grouped-head fallback for other shapes.
     GroupedHeads,
+}
+
+const fn execution_completion_implementation_id(
+    implementation: ExecutionCompletionImplementation,
+) -> &'static str {
+    match implementation {
+        ExecutionCompletionImplementation::PerOperation => "per-operation",
+        ExecutionCompletionImplementation::IterationBatch => "iteration-batch",
+    }
+}
+
+const fn batch_metadata_transport_id(transport: BatchMetadataTransport) -> &'static str {
+    match transport {
+        BatchMetadataTransport::Synchronous => "synchronous",
+        BatchMetadataTransport::PackedAsync => "packed-async",
+    }
+}
+
+const fn batch_shape_policy_id(policy: LlamaBatchShapePolicy) -> &'static str {
+    match policy {
+        LlamaBatchShapePolicy::FixedMaximum => "fixed-max",
+        LlamaBatchShapePolicy::ActiveRowBuckets => "power-of-two",
+    }
+}
+
+const fn residual_norm_implementation_id(
+    implementation: ResidualNormImplementation,
+) -> &'static str {
+    match implementation {
+        ResidualNormImplementation::Separate => "separate",
+        ResidualNormImplementation::Fused => "fused",
+    }
+}
+
+const fn ragged_attention_implementation_id(
+    profile: AttentionReductionProfile,
+    implementation: RaggedAttentionImplementation,
+) -> &'static str {
+    match (profile, implementation) {
+        (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::Legacy) => {
+            RAGGED_PAGED_ATTENTION_LEGACY_D64_V1
+        }
+        (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::GroupedHeads) => {
+            RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1
+        }
+        (AttentionReductionProfile::FixedContiguous37BalancedV1, _) => {
+            RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
+        }
+    }
+}
+
+const fn runtime_selection_policy_id(profile: LlamaReductionProfile) -> &'static str {
+    match profile {
+        LlamaReductionProfile::CanonicalV1 => "exact-fallback-allowed",
+        LlamaReductionProfile::FixedContiguous37BalancedV1 => "fail-closed",
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1512,6 +1574,80 @@ impl PreparedLlamaBatchExecutor {
     #[must_use]
     pub const fn config(&self) -> PreparedLlamaBatchExecutorConfig {
         self.config
+    }
+
+    /// Stable C02 identifier for the completion boundary frozen during cold
+    /// preparation. This reads the normalized prepared configuration, not a
+    /// caller's requested CLI setting.
+    #[must_use]
+    pub const fn execution_completion_mode_id(&self) -> &'static str {
+        execution_completion_implementation_id(self.config.execution_completion_implementation())
+    }
+
+    /// Stable C02 identifier for the cold-prepared metadata transport.
+    #[must_use]
+    pub const fn metadata_transport_id(&self) -> &'static str {
+        batch_metadata_transport_id(self.config.metadata_transport())
+    }
+
+    /// Stable C02 identifier for the prepared dense-row shape policy.
+    #[must_use]
+    pub const fn batch_shape_policy_id(&self) -> &'static str {
+        batch_shape_policy_id(self.config.shape_policy())
+    }
+
+    /// Exact maximum dense-row budget prepared for this executor.
+    ///
+    /// The server verifies this equals the scheduler iteration budget before
+    /// publishing C02 facts.
+    #[must_use]
+    pub const fn batch_token_budget(&self) -> usize {
+        self.config.metadata().max_input_tokens()
+    }
+
+    /// Stable ID of the prefill backend selected during cold preparation.
+    ///
+    /// The returned value is the prepared forward owner's actual selection
+    /// trace, after normalization and capability fallback, not an attention
+    /// preference requested by the caller.
+    #[must_use]
+    pub fn prefill_attention_implementation_id(&self) -> &'static str {
+        self.forward.attention_selection().implementation_id()
+    }
+
+    /// Stable ID of the ragged paged-attention implementation bound to this
+    /// prepared continuous-batch executor.
+    #[must_use]
+    pub const fn decode_attention_implementation_id(&self) -> &'static str {
+        ragged_attention_implementation_id(
+            self.config.ragged_attention_reduction_profile(),
+            self.config.ragged_attention_implementation(),
+        )
+    }
+
+    /// Stable aggregate ID for the role-specific prepared GEMM reduction
+    /// policy vector.
+    ///
+    /// The forward owner resolves the role vector during preparation. Its
+    /// whole-profile ID is the compact C02 aggregate: `canonical-v1` can
+    /// contain the reviewed heterogeneous role vector, while fixed37 resolves
+    /// its own fail-closed aggregate. Individual requested CLI values are not
+    /// exposed here.
+    #[must_use]
+    pub const fn gemm_reduction_policy_aggregate_id(&self) -> &'static str {
+        self.forward.reduction_profile().id()
+    }
+
+    /// Stable C02 value for the residual-plus-RMSNorm implementation.
+    #[must_use]
+    pub const fn residual_rmsnorm_implementation_id(&self) -> &'static str {
+        residual_norm_implementation_id(self.config.residual_norm_implementation())
+    }
+
+    /// Runtime selection contract bound to the prepared reduction profile.
+    #[must_use]
+    pub const fn runtime_selection_policy_id(&self) -> &'static str {
+        runtime_selection_policy_id(self.forward.reduction_profile())
     }
 
     /// Number of exact dense-row plans owned by this executor, including the
@@ -4199,6 +4335,70 @@ mod tests {
             normalize_prepared_config(defaults.with_grouped_ragged_attention_heads())
                 .ragged_attention_implementation(),
             RaggedAttentionImplementation::GroupedHeads
+        );
+    }
+
+    #[test]
+    fn c02_runtime_fact_ids_follow_normalized_prepared_policy() {
+        let metadata =
+            LlamaBatchMetadataConfig::new(2, 64, 8, 2, 8).expect("valid metadata bounds");
+        let normalized = normalize_prepared_config(
+            PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default())
+                .with_iteration_batch_completion()
+                .with_packed_async_metadata()
+                .with_active_row_buckets()
+                .with_grouped_ragged_attention_heads(),
+        );
+
+        assert_eq!(
+            execution_completion_implementation_id(
+                normalized.execution_completion_implementation()
+            ),
+            "iteration-batch"
+        );
+        assert_eq!(
+            batch_metadata_transport_id(normalized.metadata_transport()),
+            "packed-async"
+        );
+        assert_eq!(
+            batch_shape_policy_id(normalized.shape_policy()),
+            "power-of-two"
+        );
+        assert_eq!(
+            residual_norm_implementation_id(normalized.residual_norm_implementation()),
+            "separate"
+        );
+        assert_eq!(
+            ragged_attention_implementation_id(
+                normalized.ragged_attention_reduction_profile(),
+                normalized.ragged_attention_implementation(),
+            ),
+            RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1
+        );
+        assert_eq!(
+            runtime_selection_policy_id(normalized.reduction_profile()),
+            "exact-fallback-allowed"
+        );
+
+        let fixed = normalized.with_fixed37_reductions();
+        assert_eq!(
+            ragged_attention_implementation_id(
+                fixed.ragged_attention_reduction_profile(),
+                fixed.ragged_attention_implementation(),
+            ),
+            RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
+        );
+        assert_eq!(
+            runtime_selection_policy_id(fixed.reduction_profile()),
+            "fail-closed"
+        );
+        assert_eq!(
+            fixed.reduction_profile().id(),
+            "fixed-contiguous-37-balanced-v1"
+        );
+        assert_eq!(
+            residual_norm_implementation_id(ResidualNormImplementation::Fused),
+            "fused"
         );
     }
 

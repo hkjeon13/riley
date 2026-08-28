@@ -1538,6 +1538,174 @@ mod cuda_backend {
         pub gpu_greedy: bool,
     }
 
+    /// Immutable C02 effective-configuration facts captured after CUDA and
+    /// scheduler preparation but before ownership moves to the worker.
+    ///
+    /// Every value is copied from a prepared owner or the constructed
+    /// scheduler. The type deliberately contains no requested CLI values and
+    /// no mutable runtime counters, making it safe to serialize once as the
+    /// canonical `/v1/config` payload.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+    pub struct CudaEffectiveRuntimeFacts {
+        execution_completion_mode: &'static str,
+        batch_shape_policy: &'static str,
+        batch_shape_buckets: [usize; MAX_LLAMA_BATCH_SHAPE_BUCKETS],
+        batch_shape_bucket_count: usize,
+        metadata_transport: &'static str,
+        sampling_backend: &'static str,
+        attention_prefill: &'static str,
+        attention_decode: &'static str,
+        gemm_reduction_policy: &'static str,
+        residual_rmsnorm: &'static str,
+        cross_profile_fallback: &'static str,
+        runtime_selection: &'static str,
+        batch_token_budget: usize,
+        kv_layout: &'static str,
+        kv_block_tokens: usize,
+        kv_physical_blocks: usize,
+    }
+
+    impl CudaEffectiveRuntimeFacts {
+        fn from_prepared(
+            executor: &PreparedLlamaBatchExecutor,
+            scheduler: &Scheduler,
+            sampling_backend: &'static str,
+        ) -> Self {
+            let prepared_buckets = executor.shape_bucket_hits();
+            debug_assert!(!prepared_buckets.is_empty());
+            debug_assert!(prepared_buckets.len() <= MAX_LLAMA_BATCH_SHAPE_BUCKETS);
+
+            let mut batch_shape_buckets = [0; MAX_LLAMA_BATCH_SHAPE_BUCKETS];
+            for (destination, source) in batch_shape_buckets.iter_mut().zip(prepared_buckets) {
+                *destination = source.dense_rows();
+            }
+
+            let layout = executor.kv_layout();
+            let pool = scheduler.pool_stats();
+            debug_assert_eq!(
+                scheduler.config().iteration_token_budget,
+                executor.batch_token_budget()
+            );
+            debug_assert_eq!(
+                prepared_buckets.last().map(|bucket| bucket.dense_rows()),
+                Some(scheduler.config().iteration_token_budget)
+            );
+            debug_assert_eq!(pool.physical_block_count(), layout.physical_block_count());
+
+            Self {
+                execution_completion_mode: executor.execution_completion_mode_id(),
+                batch_shape_policy: executor.batch_shape_policy_id(),
+                batch_shape_buckets,
+                batch_shape_bucket_count: prepared_buckets.len(),
+                metadata_transport: executor.metadata_transport_id(),
+                sampling_backend,
+                attention_prefill: executor.prefill_attention_implementation_id(),
+                attention_decode: executor.decode_attention_implementation_id(),
+                gemm_reduction_policy: executor.gemm_reduction_policy_aggregate_id(),
+                residual_rmsnorm: executor.residual_rmsnorm_implementation_id(),
+                cross_profile_fallback: "forbidden",
+                runtime_selection: executor.runtime_selection_policy_id(),
+                batch_token_budget: scheduler.config().iteration_token_budget,
+                kv_layout: "paged",
+                kv_block_tokens: layout.block_size(),
+                kv_physical_blocks: pool.physical_block_count(),
+            }
+        }
+
+        /// Prepared completion boundary.
+        #[must_use]
+        pub const fn execution_completion_mode(&self) -> &'static str {
+            self.execution_completion_mode
+        }
+
+        /// Prepared dense-row shape policy.
+        #[must_use]
+        pub const fn batch_shape_policy(&self) -> &'static str {
+            self.batch_shape_policy
+        }
+
+        /// Exact cold-prepared bucket list in ascending dense-row order.
+        ///
+        /// A fixed-maximum executor exposes exactly its one effective maximum
+        /// bucket; configured but unprepared active-row shapes never appear.
+        #[must_use]
+        pub fn batch_shape_buckets(&self) -> &[usize] {
+            &self.batch_shape_buckets[..self.batch_shape_bucket_count]
+        }
+
+        /// Prepared host-to-device metadata transport.
+        #[must_use]
+        pub const fn metadata_transport(&self) -> &'static str {
+            self.metadata_transport
+        }
+
+        /// Effective cold sampling capability.
+        #[must_use]
+        pub const fn sampling_backend(&self) -> &'static str {
+            self.sampling_backend
+        }
+
+        /// Selected prefill attention implementation ID.
+        #[must_use]
+        pub const fn attention_prefill(&self) -> &'static str {
+            self.attention_prefill
+        }
+
+        /// Selected continuous-batch decode attention implementation ID.
+        #[must_use]
+        pub const fn attention_decode(&self) -> &'static str {
+            self.attention_decode
+        }
+
+        /// Stable aggregate of the prepared role-specific GEMM policy vector.
+        #[must_use]
+        pub const fn gemm_reduction_policy(&self) -> &'static str {
+            self.gemm_reduction_policy
+        }
+
+        /// Prepared residual-plus-RMSNorm mode for the C02 experimental flag map.
+        #[must_use]
+        pub const fn residual_rmsnorm(&self) -> &'static str {
+            self.residual_rmsnorm
+        }
+
+        /// Cross-profile fallback invariant for the prepared owner.
+        #[must_use]
+        pub const fn cross_profile_fallback(&self) -> &'static str {
+            self.cross_profile_fallback
+        }
+
+        /// Runtime selection fallback contract of the prepared profile.
+        #[must_use]
+        pub const fn runtime_selection(&self) -> &'static str {
+            self.runtime_selection
+        }
+
+        /// Scheduler iteration token budget, verified against executor capacity.
+        #[must_use]
+        pub const fn batch_token_budget(&self) -> usize {
+            self.batch_token_budget
+        }
+
+        /// Effective KV storage layout.
+        #[must_use]
+        pub const fn kv_layout(&self) -> &'static str {
+            self.kv_layout
+        }
+
+        /// Tokens in one physical paged-KV block.
+        #[must_use]
+        pub const fn kv_block_tokens(&self) -> usize {
+            self.kv_block_tokens
+        }
+
+        /// Number of physical blocks actually allocated by the scheduler pool.
+        #[must_use]
+        pub const fn kv_physical_blocks(&self) -> usize {
+            self.kv_physical_blocks
+        }
+    }
+
     /// Fully prepared ownership bundle transferred into the engine worker.
     pub struct CudaEngineResources {
         metadata: ModelMetadata,
@@ -1602,6 +1770,14 @@ mod cuda_backend {
                     .map_err(|source| {
                         internal(format!("batch executor preparation failed: {source}"))
                     })?;
+            let batch_token_budget = executor.batch_token_budget();
+            if config.scheduler.iteration_token_budget != batch_token_budget {
+                let scheduler_budget = config.scheduler.iteration_token_budget;
+                let _ = executor.close();
+                return Err(internal(format!(
+                    "scheduler iteration token budget {scheduler_budget} differs from prepared executor batch token budget {batch_token_budget}"
+                )));
+            }
             let scheduler = Scheduler::new(config.scheduler, executor.kv_layout())
                 .map_err(|source| internal(format!("scheduler preparation failed: {source}")))?;
             let timer = LlamaIterationCudaTimer::prepare(&context)
@@ -1622,6 +1798,31 @@ mod cuda_backend {
         #[must_use]
         pub const fn metadata(&self) -> &ModelMetadata {
             &self.metadata
+        }
+
+        /// Captures C02 facts from the cold-prepared executor and scheduler.
+        ///
+        /// GPU greedy sampling is reported only when the configured mode can
+        /// address every executor vocabulary token. Request-specific sampling
+        /// constraints can still choose the established CPU path per iteration.
+        #[must_use]
+        pub fn effective_runtime_facts(&self) -> CudaEffectiveRuntimeFacts {
+            CudaEffectiveRuntimeFacts::from_prepared(
+                &self.executor,
+                &self.scheduler,
+                self.effective_sampling_backend(),
+            )
+        }
+
+        fn effective_sampling_backend(&self) -> &'static str {
+            if self.gpu_greedy
+                && self.model.tokenizer().addressable_token_count()
+                    == self.executor.vocabulary_size()
+            {
+                "gpu-greedy"
+            } else {
+                "cpu"
+            }
         }
     }
 
@@ -2496,7 +2697,7 @@ mod cuda_backend {
 }
 
 #[cfg(feature = "cuda")]
-pub use cuda_backend::{CudaBackendConfig, CudaEngineResources};
+pub use cuda_backend::{CudaBackendConfig, CudaEffectiveRuntimeFacts, CudaEngineResources};
 
 #[cfg(test)]
 mod tests {

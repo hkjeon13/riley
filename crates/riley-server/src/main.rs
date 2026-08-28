@@ -1,7 +1,12 @@
+#[cfg(any(feature = "cuda", test))]
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
 use std::process::ExitCode;
+
+#[cfg(any(feature = "cuda", test))]
+use sha2::Digest;
 
 #[cfg(all(feature = "server", unix, any(feature = "cuda", test)))]
 #[allow(unsafe_code)]
@@ -41,9 +46,13 @@ serve options:
   --sampling-backend MODE        cpu or gpu-greedy (default: cpu)
   --reduction-profile ID         canonical-v1 or fixed-contiguous-37-balanced-v1 (default: canonical-v1)
   --max-weight-bytes N           checkpoint resident-byte bound (default: 2147483648)
+  --c02-candidate-id ID          release candidate identity for C02 evidence mode
+  --c02-configuration-profile ID stable-default or max-performance-exact
+  --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
 
+#[allow(clippy::large_enum_variant)] // Parsed once at process startup; avoid an extra heap allocation.
 #[derive(Debug, Eq, PartialEq)]
 enum CliCommand {
     Help,
@@ -73,6 +82,7 @@ struct ServeOptions {
     reduction_profile: ReductionProfileMode,
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
+    c02_runtime_config: Option<C02RuntimeConfigOptions>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,25 +121,62 @@ enum ReductionProfileMode {
     FixedContiguous37BalancedV1,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum C02ConfigurationProfile {
+    StableDefault,
+    MaxPerformanceExact,
+}
+
+impl C02ConfigurationProfile {
+    #[cfg(any(feature = "cuda", test))]
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::StableDefault => "stable-default",
+            Self::MaxPerformanceExact => "max-performance-exact",
+        }
+    }
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct C02RuntimeConfigOptions {
+    candidate_id: String,
+    configuration_profile: C02ConfigurationProfile,
+    startup_artifact: PathBuf,
+}
+
 fn main() -> ExitCode {
-    match parse_arguments(env::args_os().skip(1)) {
+    let launch_arguments: Vec<OsString> = env::args_os().skip(1).collect();
+    match parse_arguments(launch_arguments.iter().cloned()) {
         Ok(CliCommand::Help) => {
-            print!("{USAGE}");
+            print_usage();
             ExitCode::SUCCESS
         }
         Ok(CliCommand::Version) => print_version(),
-        Ok(CliCommand::Serve(options)) => match run_serve(options) {
-            Ok(()) => ExitCode::SUCCESS,
-            Err(error) => {
-                eprintln!("riley: {error}");
-                ExitCode::FAILURE
+        Ok(CliCommand::Serve(options)) => {
+            // The receipt hashes the exact validated serve launch identity.
+            let launch_environment: Vec<(OsString, OsString)> = env::vars_os().collect();
+            match run_serve(options, &launch_arguments, &launch_environment) {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(error) => {
+                    eprintln!("riley: {error}");
+                    ExitCode::FAILURE
+                }
             }
-        },
+        }
         Err(error) => {
-            eprintln!("riley: {error}\n\n{USAGE}");
+            eprintln!("riley: {error}\n");
+            print_usage_to_stderr();
             ExitCode::from(2)
         }
     }
+}
+
+fn print_usage() {
+    print!("{USAGE}");
+}
+
+fn print_usage_to_stderr() {
+    eprint!("{USAGE}");
 }
 
 fn print_version() -> ExitCode {
@@ -183,6 +230,9 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut reduction_profile = None;
     let mut max_weight_bytes = None;
     let mut shutdown_on_stdin = false;
+    let mut c02_candidate_id = None;
+    let mut c02_configuration_profile = None;
+    let mut c02_startup_artifact = None;
 
     while let Some(flag) = arguments.next() {
         let Some(flag_text) = flag.to_str() else {
@@ -309,6 +359,30 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 )?,
                 "--max-weight-bytes",
             )?,
+            "--c02-candidate-id" => set_once(
+                &mut c02_candidate_id,
+                parse_utf8(
+                    next_value(&mut arguments, "--c02-candidate-id")?,
+                    "--c02-candidate-id",
+                )?,
+                "--c02-candidate-id",
+            )?,
+            "--c02-configuration-profile" => set_once(
+                &mut c02_configuration_profile,
+                parse_c02_configuration_profile(next_value(
+                    &mut arguments,
+                    "--c02-configuration-profile",
+                )?)?,
+                "--c02-configuration-profile",
+            )?,
+            "--c02-startup-artifact" => set_once(
+                &mut c02_startup_artifact,
+                PathBuf::from(parse_utf8(
+                    next_value(&mut arguments, "--c02-startup-artifact")?,
+                    "--c02-startup-artifact",
+                )?),
+                "--c02-startup-artifact",
+            )?,
             "--shutdown-on-stdin" => {
                 if shutdown_on_stdin {
                     return Err("--shutdown-on-stdin may occur only once".to_owned());
@@ -345,11 +419,17 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     if let Some(buckets) = batch_shape_buckets.as_deref() {
         validate_batch_shape_buckets(buckets, batch_token_budget)?;
     }
+    let c02_runtime_config = parse_c02_runtime_config_options(
+        c02_candidate_id,
+        c02_configuration_profile,
+        c02_startup_artifact,
+    )?;
+    let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     Ok(CliCommand::Serve(ServeOptions {
         model_path: model_path.ok_or_else(|| "serve requires --model PATH".to_owned())?,
         model_id,
-        bind_address: bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned()),
+        bind_address,
         device_ordinal: device_ordinal.unwrap_or(0),
         max_active_sequences: max_active_sequences.unwrap_or(8),
         max_waiting_requests: max_waiting_requests.unwrap_or(64),
@@ -367,6 +447,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         reduction_profile: reduction_profile.unwrap_or(ReductionProfileMode::CanonicalV1),
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
+        c02_runtime_config,
     }))
 }
 
@@ -456,6 +537,79 @@ fn parse_reduction_profile(value: OsString) -> Result<ReductionProfileMode, Stri
     }
 }
 
+fn parse_c02_configuration_profile(value: OsString) -> Result<C02ConfigurationProfile, String> {
+    match parse_utf8(value, "--c02-configuration-profile")?.as_str() {
+        "stable-default" => Ok(C02ConfigurationProfile::StableDefault),
+        "max-performance-exact" => Ok(C02ConfigurationProfile::MaxPerformanceExact),
+        _ => Err(
+            "--c02-configuration-profile requires stable-default or max-performance-exact"
+                .to_owned(),
+        ),
+    }
+}
+
+fn parse_c02_runtime_config_options(
+    candidate_id: Option<String>,
+    configuration_profile: Option<C02ConfigurationProfile>,
+    startup_artifact: Option<PathBuf>,
+) -> Result<Option<C02RuntimeConfigOptions>, String> {
+    if candidate_id.is_none() && configuration_profile.is_none() && startup_artifact.is_none() {
+        return Ok(None);
+    }
+    let (Some(candidate_id), Some(configuration_profile), Some(startup_artifact)) =
+        (candidate_id, configuration_profile, startup_artifact)
+    else {
+        return Err("--c02-candidate-id, --c02-configuration-profile, and \
+--c02-startup-artifact must be supplied together"
+            .to_owned());
+    };
+    validate_c02_candidate_id(&candidate_id)?;
+    if startup_artifact.as_os_str().is_empty() || !startup_artifact.is_absolute() {
+        return Err("--c02-startup-artifact must be an absolute non-empty path".to_owned());
+    }
+    Ok(Some(C02RuntimeConfigOptions {
+        candidate_id,
+        configuration_profile,
+        startup_artifact,
+    }))
+}
+
+fn validate_c02_candidate_id(candidate_id: &str) -> Result<(), String> {
+    let Some(version_and_rc) = candidate_id.strip_prefix("riley-") else {
+        return Err(c02_candidate_id_error());
+    };
+    let Some((version, rc)) = version_and_rc.rsplit_once("-rc") else {
+        return Err(c02_candidate_id_error());
+    };
+    let mut parts = version.split('.');
+    let (Some(major), Some(minor), Some(patch)) = (parts.next(), parts.next(), parts.next()) else {
+        return Err(c02_candidate_id_error());
+    };
+    if parts.next().is_some()
+        || !is_canonical_non_negative_decimal(major)
+        || !is_canonical_non_negative_decimal(minor)
+        || !is_canonical_non_negative_decimal(patch)
+        || !is_canonical_positive_decimal(rc)
+    {
+        return Err(c02_candidate_id_error());
+    }
+    Ok(())
+}
+
+fn is_canonical_non_negative_decimal(value: &str) -> bool {
+    !value.is_empty()
+        && value.bytes().all(|byte| byte.is_ascii_digit())
+        && (value == "0" || !value.starts_with('0'))
+}
+
+fn is_canonical_positive_decimal(value: &str) -> bool {
+    is_canonical_non_negative_decimal(value) && value != "0"
+}
+
+fn c02_candidate_id_error() -> String {
+    "--c02-candidate-id must match riley-X.Y.Z-rcN with canonical decimal components".to_owned()
+}
+
 #[cfg(any(feature = "cuda", test))]
 fn validate_reduction_profile_context(
     profile: ReductionProfileMode,
@@ -517,7 +671,11 @@ fn display_argument(argument: &OsStr) -> String {
 }
 
 #[cfg(not(feature = "cuda"))]
-fn run_serve(options: ServeOptions) -> Result<(), String> {
+fn run_serve(
+    options: ServeOptions,
+    _launch_arguments: &[OsString],
+    _launch_environment: &[(OsString, OsString)],
+) -> Result<(), String> {
     let _ = (
         options.model_path,
         options.model_id,
@@ -539,13 +697,18 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         options.reduction_profile,
         options.max_weight_bytes,
         options.shutdown_on_stdin,
+        options.c02_runtime_config,
     );
     Err("serve requires a build with --features server,cuda".to_owned())
 }
 
 #[cfg(feature = "cuda")]
 #[allow(clippy::too_many_lines)]
-fn run_serve(options: ServeOptions) -> Result<(), String> {
+fn run_serve(
+    options: ServeOptions,
+    launch_arguments: &[OsString],
+    launch_environment: &[(OsString, OsString)],
+) -> Result<(), String> {
     use std::net::SocketAddr;
     use std::sync::Arc;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -561,7 +724,9 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
     use riley_server::engine::{
         CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
     };
-    use riley_server::service::{CompletionBackend, ServerConfig, start_server};
+    use riley_server::service::{
+        CompletionBackend, ServerConfig, start_server_with_runtime_config,
+    };
 
     #[cfg(not(unix))]
     return Err("serve currently requires POSIX SIGINT/SIGTERM support".to_owned());
@@ -571,6 +736,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
             .map_err(|error| format!("could not block shutdown signals: {error}"))?,
     );
     let shutdown_metrics_path = shutdown_metrics_path_from_env()?;
+    let c02_runtime_config = options.c02_runtime_config;
 
     validate_positive("--max-active-sequences", options.max_active_sequences)?;
     validate_positive("--max-waiting-requests", options.max_waiting_requests)?;
@@ -706,6 +872,20 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         },
     )
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?;
+    let c02_receipt = match c02_runtime_config.as_ref() {
+        Some(c02) => {
+            let facts = resources.effective_runtime_facts();
+            let effective_config = c02_effective_config_from_facts(&facts)?;
+            let runtime_identity = c02_runtime_identity(
+                c02.configuration_profile,
+                launch_arguments,
+                launch_environment,
+            )?;
+            let receipt = c02_endpoint_receipt(c02, &runtime_identity, &effective_config)?;
+            Some(receipt)
+        }
+        None => None,
+    };
     let engine = Arc::new(
         InferenceEngine::start_cuda(
             resources,
@@ -719,6 +899,14 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         )
         .map_err(|error| format!("inference engine startup failed: {error}"))?,
     );
+    let runtime_config_body = match (c02_runtime_config.as_ref(), c02_receipt) {
+        (Some(c02), Some(receipt)) => {
+            write_c02_startup_artifact(&c02.startup_artifact, c02, &receipt)?;
+            Some(Arc::<[u8]>::from(receipt.bytes))
+        }
+        (None, None) => None,
+        _ => return Err("internal C02 runtime configuration state mismatch".to_owned()),
+    };
 
     let request_limits = RequestLimits {
         max_output_tokens,
@@ -730,7 +918,7 @@ fn run_serve(options: ServeOptions) -> Result<(), String> {
         ..ServerConfig::default()
     };
     let backend: Arc<dyn CompletionBackend> = engine;
-    let server = start_server(server_config, backend)
+    let server = start_server_with_runtime_config(server_config, backend, runtime_config_body)
         .map_err(|error| format!("HTTP server startup failed: {error}"))?;
     println!(
         "riley listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
@@ -813,6 +1001,450 @@ fn write_shutdown_metrics(
     })
 }
 
+#[cfg(any(feature = "cuda", test))]
+const C02_RUNTIME_CONFIG_SCHEMA_VERSION: &str = "riley.effective-runtime-config.v1";
+#[cfg(any(feature = "cuda", test))]
+const C02_STARTUP_ARTIFACT_SCHEMA_VERSION: &str =
+    "riley.effective-runtime-config-startup-artifact.v1";
+#[cfg(any(feature = "cuda", test))]
+const C02_FORBIDDEN_ENVIRONMENT_KEYS: [&str; 4] = [
+    "RILEY_FREEZE_SHA",
+    "RILEY_GATE_E_REPORT_SHA",
+    "RILEY_CONFIGURATION_SHA",
+    "RILEY_BASE_RELEASE_CANDIDATE_REPORT_SHA",
+];
+
+#[cfg(any(feature = "cuda", test))]
+#[derive(Debug, Eq, PartialEq)]
+struct C02RuntimeIdentity {
+    configuration_profile: C02ConfigurationProfile,
+    configuration_sha256: String,
+}
+
+#[cfg(any(feature = "cuda", test))]
+#[derive(Debug)]
+struct C02EndpointReceipt {
+    document: BTreeMap<String, serde_json::Value>,
+    bytes: Vec<u8>,
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_runtime_identity(
+    configuration_profile: C02ConfigurationProfile,
+    launch_arguments: &[OsString],
+    launch_environment: &[(OsString, OsString)],
+) -> Result<C02RuntimeIdentity, String> {
+    let mut argv = Vec::with_capacity(launch_arguments.len());
+    for argument in launch_arguments {
+        let argument = c02_utf8(argument, "launch argv")?;
+        if argument.is_empty() || argument.trim() != argument || argument.contains(['\r', '\n']) {
+            return Err(
+                "C02 launch argv must contain non-empty trimmed single-line UTF-8 values"
+                    .to_owned(),
+            );
+        }
+        argv.push(argument);
+    }
+    if argv.first().is_none_or(|argument| argument != "serve") {
+        return Err("C02 launch argv must exclude the executable and begin with serve".to_owned());
+    }
+
+    let mut environment = BTreeMap::new();
+    for (key, value) in launch_environment {
+        let key = c02_utf8(key, "launch environment key")?;
+        let value = c02_utf8(value, "launch environment value")?;
+        if !c02_environment_key_is_valid(&key) {
+            return Err(
+                "C02 launch environment keys must be uppercase ASCII names beginning with A-Z or _"
+                    .to_owned(),
+            );
+        }
+        if value.contains(['\r', '\n']) {
+            return Err("C02 launch environment values must be single-line UTF-8".to_owned());
+        }
+        if C02_FORBIDDEN_ENVIRONMENT_KEYS.contains(&key.as_str()) {
+            return Err(format!(
+                "C02 launch environment must not contain self-referential attestation key {key}"
+            ));
+        }
+        if environment.insert(key.clone(), value).is_some() {
+            return Err(format!(
+                "C02 launch environment contains duplicate key {key}"
+            ));
+        }
+    }
+
+    let mut launch_document = BTreeMap::new();
+    launch_document.insert(
+        "argv".to_owned(),
+        serde_json::Value::Array(argv.into_iter().map(serde_json::Value::String).collect()),
+    );
+    launch_document.insert("environment".to_owned(), c02_json_value(&environment)?);
+    let encoded = c02_canonical_json_bytes(&launch_document)?;
+    Ok(C02RuntimeIdentity {
+        configuration_profile,
+        configuration_sha256: c02_sha256_hex(&encoded),
+    })
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_endpoint_receipt(
+    c02: &C02RuntimeConfigOptions,
+    runtime_identity: &C02RuntimeIdentity,
+    effective_config: &BTreeMap<String, serde_json::Value>,
+) -> Result<C02EndpointReceipt, String> {
+    if c02.configuration_profile != runtime_identity.configuration_profile {
+        return Err("C02 runtime identity profile drifted from parsed launch profile".to_owned());
+    }
+    let effective_config_sha256 = c02_sha256_hex(&c02_canonical_json_bytes(effective_config)?);
+    let runtime_identity = c02_json_object([
+        (
+            "configuration_profile".to_owned(),
+            serde_json::Value::String(c02.configuration_profile.as_str().to_owned()),
+        ),
+        (
+            "configuration_sha256".to_owned(),
+            serde_json::Value::String(runtime_identity.configuration_sha256.clone()),
+        ),
+    ])?;
+    let mut document = BTreeMap::new();
+    document.insert(
+        "schema_version".to_owned(),
+        serde_json::Value::String(C02_RUNTIME_CONFIG_SCHEMA_VERSION.to_owned()),
+    );
+    document.insert(
+        "candidate_id".to_owned(),
+        serde_json::Value::String(c02.candidate_id.clone()),
+    );
+    document.insert("runtime_identity".to_owned(), runtime_identity);
+    document.insert(
+        "effective_config".to_owned(),
+        c02_json_value(effective_config)?,
+    );
+    document.insert(
+        "effective_config_sha256".to_owned(),
+        serde_json::Value::String(effective_config_sha256),
+    );
+    let bytes = c02_canonical_json_bytes(&document)?;
+    Ok(C02EndpointReceipt { document, bytes })
+}
+
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_lines)] // Closed ten-dimension receipt mapping is easier to audit as one unit.
+fn c02_effective_config_from_facts(
+    facts: &riley_server::engine::CudaEffectiveRuntimeFacts,
+) -> Result<BTreeMap<String, serde_json::Value>, String> {
+    let batch_token_budget = facts.batch_token_budget();
+    let batch_shape_buckets = facts.batch_shape_buckets();
+    if batch_token_budget == 0
+        || batch_shape_buckets.is_empty()
+        || batch_shape_buckets.last().copied() != Some(batch_token_budget)
+        || batch_shape_buckets.iter().any(|bucket| *bucket == 0)
+        || batch_shape_buckets
+            .windows(2)
+            .any(|pair| pair[0] >= pair[1])
+    {
+        return Err("prepared C02 batch-shape facts are invalid".to_owned());
+    }
+    match facts.batch_shape_policy() {
+        "fixed-max" if batch_shape_buckets == [batch_token_budget] => {}
+        "power-of-two" if batch_shape_buckets.first().copied() == Some(1) => {}
+        _ => return Err("prepared C02 batch-shape policy and buckets disagree".to_owned()),
+    }
+    if !matches!(
+        facts.execution_completion_mode(),
+        "per-operation" | "iteration-batch"
+    ) || !matches!(facts.metadata_transport(), "synchronous" | "packed-async")
+        || !matches!(facts.sampling_backend(), "cpu" | "gpu-greedy")
+        || facts.metadata_transport() == "packed-async"
+            && facts.execution_completion_mode() != "iteration-batch"
+        || facts.cross_profile_fallback() != "forbidden"
+        || !matches!(
+            facts.runtime_selection(),
+            "exact-fallback-allowed" | "fail-closed"
+        )
+        || facts.kv_layout() != "paged"
+        || facts.kv_block_tokens() == 0
+        || facts.kv_physical_blocks() == 0
+        || !c02_implementation_id(facts.attention_prefill())
+        || !c02_implementation_id(facts.attention_decode())
+        || !c02_implementation_id(facts.gemm_reduction_policy())
+        || !matches!(facts.residual_rmsnorm(), "fused" | "separate")
+    {
+        return Err(
+            "prepared C02 effective runtime facts violate the closed receipt contract".to_owned(),
+        );
+    }
+
+    let bucket_values = batch_shape_buckets
+        .iter()
+        .copied()
+        .map(serde_json::Number::from)
+        .map(serde_json::Value::Number)
+        .collect();
+    let experimental_flags = c02_json_object([(
+        "residual_rmsnorm".to_owned(),
+        serde_json::Value::String(facts.residual_rmsnorm().to_owned()),
+    )])?;
+    let mut effective_config = BTreeMap::new();
+    effective_config.insert(
+        "execution_completion_mode".to_owned(),
+        serde_json::Value::String(facts.execution_completion_mode().to_owned()),
+    );
+    effective_config.insert(
+        "batch_shape".to_owned(),
+        c02_json_object([
+            (
+                "policy".to_owned(),
+                serde_json::Value::String(facts.batch_shape_policy().to_owned()),
+            ),
+            (
+                "buckets".to_owned(),
+                serde_json::Value::Array(bucket_values),
+            ),
+        ])?,
+    );
+    effective_config.insert(
+        "metadata_transport".to_owned(),
+        serde_json::Value::String(facts.metadata_transport().to_owned()),
+    );
+    effective_config.insert(
+        "sampling_backend".to_owned(),
+        serde_json::Value::String(facts.sampling_backend().to_owned()),
+    );
+    effective_config.insert(
+        "attention_backend".to_owned(),
+        c02_json_object([
+            (
+                "prefill".to_owned(),
+                serde_json::Value::String(facts.attention_prefill().to_owned()),
+            ),
+            (
+                "decode".to_owned(),
+                serde_json::Value::String(facts.attention_decode().to_owned()),
+            ),
+        ])?,
+    );
+    effective_config.insert(
+        "gemm_reduction_policy".to_owned(),
+        serde_json::Value::String(facts.gemm_reduction_policy().to_owned()),
+    );
+    effective_config.insert("experimental_flags".to_owned(), experimental_flags);
+    effective_config.insert(
+        "fallback_policy".to_owned(),
+        c02_json_object([
+            (
+                "cross_profile_fallback".to_owned(),
+                serde_json::Value::String(facts.cross_profile_fallback().to_owned()),
+            ),
+            (
+                "runtime_selection".to_owned(),
+                serde_json::Value::String(facts.runtime_selection().to_owned()),
+            ),
+        ])?,
+    );
+    effective_config.insert(
+        "batch_token_budget".to_owned(),
+        serde_json::Value::Number(serde_json::Number::from(batch_token_budget)),
+    );
+    effective_config.insert(
+        "kv_geometry".to_owned(),
+        c02_json_object([
+            (
+                "layout".to_owned(),
+                serde_json::Value::String(facts.kv_layout().to_owned()),
+            ),
+            (
+                "block_tokens".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(facts.kv_block_tokens())),
+            ),
+            (
+                "physical_blocks".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(facts.kv_physical_blocks())),
+            ),
+        ])?,
+    );
+    Ok(effective_config)
+}
+
+#[cfg(feature = "cuda")]
+fn c02_implementation_id(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let Some(first) = bytes.first() else {
+        return false;
+    };
+    (first.is_ascii_lowercase() || first.is_ascii_digit())
+        && bytes.len() <= 256
+        && bytes[1..].iter().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'_' | b'-')
+        })
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_environment_key_is_valid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    let Some(first) = bytes.first() else {
+        return false;
+    };
+    (first.is_ascii_uppercase() || *first == b'_')
+        && bytes[1..]
+            .iter()
+            .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || *byte == b'_')
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn write_c02_startup_artifact(
+    path: &std::path::Path,
+    c02: &C02RuntimeConfigOptions,
+    endpoint: &C02EndpointReceipt,
+) -> Result<(), String> {
+    use std::io::Write;
+
+    let mut document = BTreeMap::new();
+    document.insert(
+        "schema_version".to_owned(),
+        serde_json::Value::String(C02_STARTUP_ARTIFACT_SCHEMA_VERSION.to_owned()),
+    );
+    document.insert(
+        "created_at_utc".to_owned(),
+        serde_json::Value::String(c02_utc_timestamp(std::time::SystemTime::now())?),
+    );
+    document.insert(
+        "candidate_id".to_owned(),
+        serde_json::Value::String(c02.candidate_id.clone()),
+    );
+    document.insert(
+        "endpoint_path".to_owned(),
+        serde_json::Value::String("/v1/config".to_owned()),
+    );
+    document.insert(
+        "runtime_identity".to_owned(),
+        endpoint
+            .document
+            .get("runtime_identity")
+            .cloned()
+            .ok_or_else(|| "C02 endpoint receipt omitted runtime identity".to_owned())?,
+    );
+    document.insert(
+        "endpoint_payload_sha256".to_owned(),
+        serde_json::Value::String(c02_sha256_hex(&endpoint.bytes)),
+    );
+    document.insert(
+        "endpoint_payload".to_owned(),
+        c02_json_value(&endpoint.document)?,
+    );
+    let encoded = c02_canonical_json_bytes(&document)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| {
+            format!(
+                "could not create C02 startup artifact {} without replacement: {error}",
+                path.display()
+            )
+        })?;
+    file.write_all(&encoded).map_err(|error| {
+        format!(
+            "could not write C02 startup artifact {}: {error}",
+            path.display()
+        )
+    })?;
+    file.sync_all().map_err(|error| {
+        format!(
+            "could not sync C02 startup artifact {}: {error}",
+            path.display()
+        )
+    })
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_json_object(
+    values: impl IntoIterator<Item = (String, serde_json::Value)>,
+) -> Result<serde_json::Value, String> {
+    c02_json_value(&values.into_iter().collect::<BTreeMap<_, _>>())
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_json_value<T: serde::Serialize>(value: &T) -> Result<serde_json::Value, String> {
+    serde_json::to_value(value)
+        .map_err(|error| format!("could not construct canonical C02 JSON value: {error}"))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_canonical_json_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(value)
+        .map_err(|error| format!("could not serialize canonical C02 JSON: {error}"))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_sha256_hex(value: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+
+    let digest = sha2::Sha256::digest(value);
+    let mut encoded = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+        encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+    }
+    encoded
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_utf8(value: &OsStr, label: &str) -> Result<String, String> {
+    value
+        .to_str()
+        .map(str::to_owned)
+        .ok_or_else(|| format!("C02 {label} must be UTF-8"))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_utc_timestamp(now: std::time::SystemTime) -> Result<String, String> {
+    let seconds = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "C02 startup artifact timestamp predates Unix epoch".to_owned())?
+        .as_secs();
+    c02_utc_timestamp_from_unix_seconds(seconds)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_utc_timestamp_from_unix_seconds(seconds: u64) -> Result<String, String> {
+    let seconds = i64::try_from(seconds)
+        .map_err(|_| "C02 startup artifact timestamp is out of range".to_owned())?;
+    let days = seconds.div_euclid(86_400);
+    let seconds_of_day = seconds.rem_euclid(86_400);
+    let (year, month, day) = c02_civil_from_unix_days(days);
+    if !(0..=9_999).contains(&year) {
+        return Err("C02 startup artifact timestamp year is out of range".to_owned());
+    }
+    let hour = seconds_of_day / 3_600;
+    let minute = seconds_of_day.rem_euclid(3_600) / 60;
+    let second = seconds_of_day.rem_euclid(60);
+    Ok(format!(
+        "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z"
+    ))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_civil_from_unix_days(days: i64) -> (i64, i64, i64) {
+    let shifted = days + 719_468;
+    let era = (if shifted >= 0 {
+        shifted
+    } else {
+        shifted - 146_096
+    }) / 146_097;
+    let day_of_era = shifted - era * 146_097;
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let mut year = year_of_era + era * 400;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_prime = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_prime + 2) / 5 + 1;
+    let month = month_prime + if month_prime < 10 { 3 } else { -9 };
+    year += i64::from(month <= 2);
+    (year, month, day)
+}
+
 #[cfg(all(feature = "cuda", unix))]
 fn wait_for_shutdown(
     signals: std::sync::Arc<signal::ShutdownSignals>,
@@ -879,10 +1511,13 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        BatchShapePolicyMode, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
-        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
-        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, parse_arguments,
-        validate_reduction_profile_context, validate_shutdown_metrics_path, write_shutdown_metrics,
+        BatchShapePolicyMode, C02ConfigurationProfile, C02RuntimeConfigOptions, CliCommand,
+        DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
+        MetadataTransportMode, ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode,
+        ServeOptions, USAGE, c02_canonical_json_bytes, c02_endpoint_receipt, c02_runtime_identity,
+        c02_sha256_hex, c02_utc_timestamp_from_unix_seconds, parse_arguments,
+        validate_reduction_profile_context, validate_shutdown_metrics_path,
+        write_c02_startup_artifact, write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -907,6 +1542,9 @@ mod tests {
         assert!(USAGE.contains("(default: synchronous)"));
         assert!(USAGE.contains("--sampling-backend MODE"));
         assert!(USAGE.contains("(default: cpu)"));
+        assert!(USAGE.contains("--c02-candidate-id ID"));
+        assert!(USAGE.contains("--c02-configuration-profile ID"));
+        assert!(USAGE.contains("--c02-startup-artifact PATH"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -936,9 +1574,192 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
+                c02_runtime_config: None,
             }))
         );
         assert!(parse_arguments(args(&["serve"])).is_err());
+    }
+
+    #[test]
+    fn c02_runtime_identity_is_all_or_none_and_fail_closed() {
+        let parsed = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/models/fixture",
+            "--c02-candidate-id",
+            "riley-1.2.3-rc4",
+            "--c02-configuration-profile",
+            "stable-default",
+            "--c02-startup-artifact",
+            "/tmp/riley-c02-startup.json",
+        ]));
+        let Ok(CliCommand::Serve(options)) = parsed else {
+            panic!("valid C02 identity must parse");
+        };
+        let c02 = options
+            .c02_runtime_config
+            .expect("all C02 inputs must enable evidence mode");
+        assert_eq!(c02.candidate_id, "riley-1.2.3-rc4");
+        assert_eq!(
+            c02.configuration_profile,
+            C02ConfigurationProfile::StableDefault
+        );
+        assert_eq!(c02.configuration_profile.as_str(), "stable-default");
+        assert_eq!(
+            c02.startup_artifact,
+            PathBuf::from("/tmp/riley-c02-startup.json")
+        );
+
+        for invalid in [
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-01.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc0",
+                "--c02-configuration-profile",
+                "max-performance-exact",
+                "--c02-startup-artifact",
+                "relative.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "unexpected",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+            ],
+        ] {
+            assert!(
+                parse_arguments(args(&invalid)).is_err(),
+                "invalid C02 inputs: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c02_receipt_bytes_and_startup_artifact_are_canonical_and_create_only() {
+        use std::collections::BTreeMap;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_PATH: AtomicU64 = AtomicU64::new(0);
+        let c02 = C02RuntimeConfigOptions {
+            candidate_id: "riley-1.2.3-rc4".to_owned(),
+            configuration_profile: C02ConfigurationProfile::StableDefault,
+            startup_artifact: std::env::temp_dir().join(format!(
+                "riley-c02-runtime-config-{}-{}",
+                std::process::id(),
+                NEXT_PATH.fetch_add(1, Ordering::AcqRel),
+            )),
+        };
+        let launch_arguments = vec![
+            OsString::from("serve"),
+            OsString::from("--model"),
+            OsString::from("/model"),
+        ];
+        let launch_environment = vec![
+            (OsString::from("BETA"), OsString::from("two")),
+            (OsString::from("ALPHA"), OsString::from("one")),
+        ];
+        let identity = c02_runtime_identity(
+            c02.configuration_profile,
+            &launch_arguments,
+            &launch_environment,
+        )
+        .expect("canonical launch identity");
+        assert_eq!(
+            identity.configuration_sha256,
+            c02_sha256_hex(
+                b"{\"argv\":[\"serve\",\"--model\",\"/model\"],\"environment\":{\"ALPHA\":\"one\",\"BETA\":\"two\"}}"
+            )
+        );
+        assert!(
+            c02_runtime_identity(
+                c02.configuration_profile,
+                &launch_arguments,
+                &[(
+                    OsString::from("RILEY_FREEZE_SHA"),
+                    OsString::from("forbidden"),
+                )],
+            )
+            .is_err()
+        );
+        assert!(
+            c02_runtime_identity(
+                c02.configuration_profile,
+                &launch_arguments,
+                &[(OsString::from("lowercase"), OsString::from("rejected"))],
+            )
+            .is_err()
+        );
+
+        let effective_config = BTreeMap::from([(
+            "batch_token_budget".to_owned(),
+            serde_json::Value::Number(serde_json::Number::from(8_usize)),
+        )]);
+        let receipt = c02_endpoint_receipt(&c02, &identity, &effective_config)
+            .expect("canonical endpoint receipt");
+        assert!(!receipt.bytes.ends_with(b"\n"));
+        assert_eq!(
+            receipt.bytes,
+            c02_canonical_json_bytes(&receipt.document).expect("canonical endpoint bytes")
+        );
+        let endpoint: serde_json::Value =
+            serde_json::from_slice(&receipt.bytes).expect("decode endpoint receipt");
+        assert_eq!(endpoint["candidate_id"], c02.candidate_id);
+        assert_eq!(
+            endpoint["runtime_identity"]["configuration_sha256"],
+            identity.configuration_sha256
+        );
+
+        write_c02_startup_artifact(&c02.startup_artifact, &c02, &receipt)
+            .expect("write create-only C02 artifact");
+        assert!(write_c02_startup_artifact(&c02.startup_artifact, &c02, &receipt).is_err());
+        let artifact_raw = std::fs::read(&c02.startup_artifact).expect("read C02 artifact");
+        assert!(!artifact_raw.ends_with(b"\n"));
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&artifact_raw).expect("decode C02 artifact");
+        assert_eq!(artifact["endpoint_path"], "/v1/config");
+        assert_eq!(
+            artifact["endpoint_payload_sha256"],
+            c02_sha256_hex(&receipt.bytes)
+        );
+        assert_eq!(
+            artifact["endpoint_payload"],
+            serde_json::to_value(&receipt.document).expect("encode endpoint document")
+        );
+        std::fs::remove_file(&c02.startup_artifact).expect("remove exact test artifact");
+
+        assert_eq!(
+            c02_utc_timestamp_from_unix_seconds(0).expect("epoch timestamp"),
+            "1970-01-01T00:00:00Z"
+        );
+        assert_eq!(
+            c02_utc_timestamp_from_unix_seconds(1_709_164_800).expect("leap timestamp"),
+            "2024-02-29T00:00:00Z"
+        );
     }
 
     #[test]
@@ -1009,6 +1830,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::FixedContiguous37BalancedV1,
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
+                c02_runtime_config: None,
             }))
         );
         assert!(parse_arguments(args(&["serve", "--model", "/a", "--model", "/b"])).is_err());
@@ -1158,6 +1980,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
+                c02_runtime_config: None,
             }))
         );
 
@@ -1274,6 +2097,7 @@ mod tests {
                 reduction_profile: ReductionProfileMode::CanonicalV1,
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
+                c02_runtime_config: None,
             }))
         );
         assert!(

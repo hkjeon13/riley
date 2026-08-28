@@ -84,6 +84,35 @@ active shutdown과 engine drain을 재검증했다.
 | `GET` | `/v1/models/{id}` | exact configured model metadata |
 | `POST` | `/v1/completions` | streaming SSE 또는 aggregate completion |
 
+### C02-P0 보완 계약 — 소스 구현됨, nonqualifying 원격 two-profile raw smoke 완료
+
+C02 candidate qualification에는 CLI 요청값이 아니라 cold prepare 뒤 실제 선택된
+runtime 구성을 재현 가능한 증적으로 남겨야 한다. 현재 C02-P0 변경은 아래 endpoint와
+create-only artifact 경로를 구현한다. RTX 4090 원격 환경에서 `riley-0.1.0-rc99`의 두
+profile을 cold-prepare로 독립 기동해 endpoint/artifact raw bytes를 capture했고, raw
+validator가 각 arm의 canonical binding을 확인했다. 이 capture는 frozen candidate와
+replayed Gate E report에 결합되지 않은 nonqualifying smoke이므로, C02 candidate freeze,
+actual C02 qualification, 또는 release promotion을 뜻하지 않는다.
+
+| Method | Endpoint | C02-P0 계약 |
+|---|---|---|
+| `GET` | `/v1/config` | cold prepare 성공 후 생성한 canonical effective-runtime-config bytes를 그대로 반환 |
+| non-`GET` | `/v1/config` | 공통 HTTP framing/validation을 통과한 요청은 `405` |
+
+증적을 만들지 않은 일반 서버는 fabricated default를 반환하지 않고 sanitized `503
+config_unavailable`을 반환한다. C02-P0 mode에서는 candidate ID, configuration profile,
+absolute startup-artifact path를 all-or-none launch input으로 받고, configuration SHA는
+server가 실제 launch argv/environment에서 직접 계산한다. successful engine start 뒤
+HTTP listener를 열기 전에 같은 canonical bytes를 `O_EXCL` create-only artifact로
+기록하고, service worker는 그 미리 생성된 bytes를 그대로 공유한다. endpoint와 artifact에는
+self-referential freeze/Gate-E hash를 넣지 않으며, 이 값들의 결합은 raw capture 뒤 C02
+semantic checker가 담당한다. 세부 순서와 schema는
+[`C02-P0 runtime configuration receipt`](../benchmarks/release/candidates/c02-p0-runtime-config-receipt.md)를
+따른다. 원격 raw capture는 `ci/release/run_remote_c02_runtime_config_capture.sh`가 담당하며,
+두 explicit `env -i` arm과 loopback-only `/v1/config` body/artifact를 create-only evidence
+root에 남긴다. 이 runner는 GPU `<=256MiB` preflight를 우회하거나 C02 qualification을
+판정하지 않는다.
+
 ## Layering
 
 ```text
@@ -109,6 +138,7 @@ prepared Runtime/CUDA executor
 | request/admission timeout or cancellation before response | 408 |
 | connection/backend overload | 429 |
 | model unavailable/server shutdown | 503 |
+| C02-P0 config evidence unavailable | sanitized `503 config_unavailable` |
 | internal CUDA/model/encoding failure | sanitized 500 |
 
 내부 pointer, filesystem path, tokenizer input, CUDA stack detail은 외부 응답에 노출하지

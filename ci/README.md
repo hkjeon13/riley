@@ -41,10 +41,10 @@ and it is not part of a production artifact. The checker fails closed unless:
 - every crate inherits the exact workspace `MIT` SPDX expression and the root
   `LICENSE` remains the reviewed MIT text for `Riley contributors`;
 - the only direct third-party Cargo dependencies are exact-version `serde`,
-  `serde_json`, and `sha2` requirements owned by `riley-model`, the same
-  reviewed `sha2` package used directly by `riley-runtime`, and optional
-  `libc` owned by `riley-server` solely for synchronous POSIX shutdown
-  signal handling;
+  `serde_json`, and `sha2` requirements owned by `riley-model`; the same
+  reviewed `sha2` package used directly by `riley-runtime` and
+  `riley-server`; and optional `libc` owned by `riley-server` solely for
+  synchronous POSIX shutdown signal handling;
 - development-only dependency declarations match their own exact allowlist and
   do not count as production edges, while their resolved registry packages
   remain inside the exact lockfile closure below;
