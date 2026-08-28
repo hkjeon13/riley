@@ -40,6 +40,8 @@ SOAK_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v3"
 SOAK_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v3"
 SOAK_V4_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v4"
 SOAK_V4_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v4"
+SOAK_V5_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v5"
+SOAK_V5_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v5"
 CONFIG_ENDPOINT_OBSERVATION_VERSION = "riley.c02-config-endpoint-observation.v1"
 ROLLBACK_MANIFEST_VERSION = "riley.rc3-rollback-raw-provenance.v2"
 OBSERVATION_SESSION_VERSION = "riley.c02-raw-observation-session.v2"
@@ -50,6 +52,7 @@ SHUTDOWN_VERSION = "riley.c02-shutdown-quiescence.v2"
 SHUTDOWN_MARKER_VERSION = "riley.c02-shutdown-quiescence-complete.v2"
 SOAK_REPORT_VERSION = "riley.soak-v2-provenance-check.v3"
 SOAK_V4_REPORT_VERSION = "riley.soak-v2-provenance-check.v4"
+SOAK_V5_REPORT_VERSION = "riley.soak-v2-provenance-check.v5"
 ROLLBACK_REPORT_VERSION = "riley.rc3-rollback-provenance-check.v2"
 STABLE_DEFAULT_PROFILE = "stable-default"
 MAX_PERFORMANCE_EXACT_PROFILE = "max-performance-exact"
@@ -81,6 +84,13 @@ SCENARIO_CAPTURE_LEDGER_VERSION = "riley.c02-raw-request-ledger.v1"
 SCENARIO_CAPTURE_AUDIT_INDEX_VERSION = "riley.c02-generation-audit-index.v1"
 SCENARIO_CAPTURE_AUDIT_VERSION = "riley.c02-generation-audit.v2"
 SCENARIO_CAPTURE_AUDIT_MARKER_VERSION = "riley.c02-generation-audit-completion.v2"
+SCENARIO_FALLBACK_CAPTURE_SESSION_VERSION = "riley.c02-raw-scenario-capture.v2"
+SCENARIO_FALLBACK_CAPTURE_CONTRACT_VERSION = "riley.c02-raw-soak-runner-contract.v2"
+SCENARIO_FALLBACK_CAPTURE_AUDIT_INDEX_VERSION = "riley.c02-generation-audit-index.v2"
+SCENARIO_FALLBACK_EVENT_VERSION = "riley.c02-native-fallback-event.v1"
+SCENARIO_FALLBACK_EVENT_MARKER_VERSION = "riley.c02-native-fallback-event-completion.v1"
+FALLBACK_SCENARIO_ID = "exact-backend-fallback"
+MAX_NATIVE_FALLBACK_SELECTIONS = 65_536
 SERIAL_CAPTURE_V1_OPAQUE_SCHEMA_VERSIONS = frozenset(
     (
         SCENARIO_CAPTURE_CONTRACT_VERSION,
@@ -977,6 +987,7 @@ def _load_soak_configuration_evidence(
     bindings: Mapping[str, str],
     used_paths: set[str],
     require_direct_observation_session: bool = False,
+    require_gpu_greedy: bool = False,
 ) -> ObservedTarget:
     """Bind raw config facts and return their observed process/listener tuple.
 
@@ -1070,6 +1081,11 @@ def _load_soak_configuration_evidence(
         _fail(
             "runtime-config-sha256-mismatch",
             "soak configuration SHA-256 differs from the bound runtime identity",
+        )
+    if require_gpu_greedy and endpoint.effective_config["sampling_backend"] != "gpu-greedy":
+        _fail(
+            "effective-sampling-backend-mismatch",
+            "native fallback provenance requires effective_config.sampling_backend gpu-greedy",
         )
     return _load_config_endpoint_observation(
         root_fd,
@@ -1574,6 +1590,31 @@ class ReplayedScenarioCapture:
     audit_directory: str
 
 
+@dataclass(frozen=True)
+class ReplayedFallbackScenario:
+    """One replayed native fallback scenario from the closed capture-v2 arm."""
+
+    scenario_id: str
+    target: ScenarioCaptureTarget
+    request_ledger: common.EvidenceDescriptor
+    runtime_event_log: common.EvidenceDescriptor
+    generation_audit_index: common.EvidenceDescriptor
+    fallback_event_log: common.EvidenceDescriptor
+    request_id: str
+    audit_directory: str
+
+
+@dataclass(frozen=True)
+class ReplayedFallbackScenarioCapture:
+    """The separate, closed v2 native-fallback source capture."""
+
+    session: common.EvidenceDescriptor
+    contract: common.EvidenceDescriptor
+    target: ScenarioCaptureTarget
+    scenarios: tuple[ReplayedFallbackScenario, ...]
+    audit_directory: str
+
+
 def _capture_target(value: Any, label: str) -> ScenarioCaptureTarget:
     row = _exact(
         value,
@@ -1712,6 +1753,112 @@ def _completion_request_contract(value: Any, label: str) -> dict[str, Any]:
     if len(common.canonical_json_bytes(row)) > MAX_RAW_BYTES:
         _fail("invalid-completion-contract", f"{label} exceeds the bounded completion request size")
     return row
+
+
+def _fallback_completion_request_contract(value: Any, label: str) -> dict[str, Any]:
+    """Close the v2 fallback arm to the one reviewed public request shape.
+
+    In particular, the literal nonzero temperature is pinned to one so a
+    decimal value cannot silently become zero when Riley decodes it as f32.
+    This is evidence replay only; it does not infer a fallback from policy.
+    """
+
+    row = _completion_request_contract(value, label)
+    if row["max_tokens"] != 1:
+        _fail(
+            "invalid-fallback-completion-contract",
+            f"{label}.max_tokens must be exactly 1",
+        )
+    if float(row["temperature"]) != 1.0:
+        _fail(
+            "invalid-fallback-completion-contract",
+            f"{label}.temperature must be exactly 1",
+        )
+    if float(row["top_p"]) != 1.0:
+        _fail(
+            "invalid-fallback-completion-contract",
+            f"{label}.top_p must be exactly 1",
+        )
+    return row
+
+
+def _replay_fallback_capture_contract(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    capture_name: str,
+    candidate_id: str,
+    configuration_profile: str,
+    used_paths: set[str],
+) -> list[tuple[str, dict[str, Any]]]:
+    """Replay only the closed single-scenario capture-v2 contract."""
+
+    _capture_raw_path(
+        descriptor,
+        capture_name,
+        "scenario-contract.json",
+        "native fallback scenario capture contract",
+    )
+    _reserve(
+        descriptor,
+        label="native fallback scenario capture contract",
+        used_paths=used_paths,
+    )
+    _raw, document = _read_json(
+        root_fd,
+        descriptor,
+        "native fallback scenario capture contract",
+    )
+    row = _exact(
+        document,
+        {"schema_version", "candidate_id", "configuration_profile", "scenarios"},
+        "native fallback scenario capture contract",
+    )
+    if row["schema_version"] != SCENARIO_FALLBACK_CAPTURE_CONTRACT_VERSION:
+        _fail(
+            "historical-fallback-scenario-contract-version-rejected",
+            "native fallback scenario contract has an unsupported version",
+        )
+    if _candidate_id(
+        row["candidate_id"], "native fallback scenario capture contract.candidate_id"
+    ) != candidate_id:
+        _fail(
+            "scenario-contract-candidate-mismatch",
+            "native fallback scenario contract candidate drifted",
+        )
+    if (
+        row["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE
+        or configuration_profile != MAX_PERFORMANCE_EXACT_PROFILE
+    ):
+        _fail(
+            "fallback-profile-mismatch",
+            "native fallback scenario contract requires max-performance-exact",
+        )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != 1:
+        _fail(
+            "invalid-scenario-inventory",
+            "native fallback scenario contract must contain exactly one scenario",
+        )
+    scenario = _exact(
+        scenarios[0],
+        {"scenario_id", "completion_request"},
+        "native fallback scenario capture contract.scenarios[0]",
+    )
+    if scenario["scenario_id"] != FALLBACK_SCENARIO_ID:
+        _fail(
+            "invalid-scenario-inventory",
+            "native fallback scenario contract must contain exact-backend-fallback",
+        )
+    return [
+        (
+            FALLBACK_SCENARIO_ID,
+            _fallback_completion_request_contract(
+                scenario["completion_request"],
+                "native fallback scenario capture contract.scenarios[0].completion_request",
+            ),
+        )
+    ]
 
 
 def _replay_capture_contract(
@@ -1910,6 +2057,223 @@ def _replay_source_audit(
     return audit_directory
 
 
+def _fallback_source_process_identity(value: Any, label: str) -> tuple[int, int]:
+    """Parse the source's stricter u32 PID/start-tick representation."""
+
+    process = _exact(value, {"pid", "start_ticks"}, label)
+    pid = process["pid"]
+    start_ticks = process["start_ticks"]
+    if type(pid) is not int or not 1 <= pid <= (1 << 32) - 1:
+        _fail("invalid-source-process-identity", f"{label}.pid must be a positive u32 integer")
+    if type(start_ticks) is not int or start_ticks < 1:
+        _fail(
+            "invalid-source-process-identity",
+            f"{label}.start_ticks must be a positive integer",
+        )
+    return pid, start_ticks
+
+
+def _replay_fallback_source_pair(
+    root_fd: int,
+    *,
+    audit_record: common.EvidenceDescriptor,
+    audit_directory: str,
+    fallback_event: common.EvidenceDescriptor,
+    fallback_marker: common.EvidenceDescriptor,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    target: ScenarioCaptureTarget,
+    request_id: str,
+    used_paths: set[str],
+    label: str,
+) -> None:
+    """Replay source-written fallback evidence derived from one public ID.
+
+    The source audit and fallback markers are ordinary one-link leaves.  The
+    separate paired-hardlink publication protocol is reserved for the v5
+    terminal manifest below the evidence root.
+    """
+
+    if configuration_profile != MAX_PERFORMANCE_EXACT_PROFILE:
+        _fail(
+            "fallback-profile-mismatch",
+            f"{label} native fallback source pair requires max-performance-exact",
+        )
+    audit_path = PurePosixPath(audit_record.path)
+    expected_event_path = f"{audit_directory}/{request_id}.fallback.json"
+    expected_marker_path = f"{expected_event_path}.complete"
+    if fallback_event.path != expected_event_path or fallback_marker.path != expected_marker_path:
+        _fail(
+            "source-fallback-layout-mismatch",
+            f"{label} fallback source pair is not derived from its response ID",
+        )
+    _reserve(fallback_event, label=f"{label} source fallback event", used_paths=used_paths)
+    _reserve(
+        fallback_marker,
+        label=f"{label} source fallback completion marker",
+        used_paths=used_paths,
+    )
+    audit_raw, audit_document = _read_json(root_fd, audit_record, f"{label} source audit")
+    audit_row = _exact(
+        audit_document,
+        {
+            "schema_version", "candidate_id", "runtime_identity", "process_identity",
+            "server_request_id", "delivery_mode", "prompt_token_ids",
+            "committed_output_tokens", "sampling_selections", "finish_reason", "usage",
+        },
+        f"{label} source audit",
+    )
+    if (
+        audit_row["schema_version"] != SCENARIO_CAPTURE_AUDIT_VERSION
+        or audit_row["candidate_id"] != candidate_id
+        or audit_row["server_request_id"] != request_id
+        or audit_row["delivery_mode"] != "non-stream"
+    ):
+        _fail(
+            "source-audit-request-mismatch",
+            f"{label} source audit identity drifted",
+        )
+    audit_identity = _exact(
+        audit_row["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        f"{label} source audit.runtime_identity",
+    )
+    if (
+        audit_identity["configuration_profile"] != configuration_profile
+        or _sha256(
+            audit_identity["configuration_sha256"],
+            f"{label} source audit.runtime_identity.configuration_sha256",
+        )
+        != configuration_sha256
+    ):
+        _fail("source-audit-runtime-identity-mismatch", f"{label} source audit identity drifted")
+    if _fallback_source_process_identity(
+        audit_row["process_identity"], f"{label} source audit.process_identity"
+    ) != (target.pid, target.start_ticks):
+        _fail("source-audit-process-mismatch", f"{label} source audit process tuple drifted")
+
+    event_raw, event_document = _read_json(
+        root_fd,
+        fallback_event,
+        f"{label} source native fallback event",
+    )
+    event = _exact(
+        event_document,
+        {
+            "schema_version", "candidate_id", "runtime_identity", "process_identity",
+            "server_request_id", "generation_audit", "fallback_selections",
+        },
+        f"{label} source native fallback event",
+    )
+    if (
+        event["schema_version"] != SCENARIO_FALLBACK_EVENT_VERSION
+        or event["candidate_id"] != candidate_id
+        or event["server_request_id"] != request_id
+    ):
+        _fail(
+            "source-fallback-event-identity-mismatch",
+            f"{label} source native fallback event identity drifted",
+        )
+    event_identity = _exact(
+        event["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        f"{label} source native fallback event.runtime_identity",
+    )
+    if (
+        event_identity["configuration_profile"] != configuration_profile
+        or _sha256(
+            event_identity["configuration_sha256"],
+            f"{label} source native fallback event.runtime_identity.configuration_sha256",
+        )
+        != configuration_sha256
+    ):
+        _fail(
+            "source-fallback-runtime-identity-mismatch",
+            f"{label} source native fallback event runtime identity drifted",
+        )
+    if _fallback_source_process_identity(
+        event["process_identity"],
+        f"{label} source native fallback event.process_identity",
+    ) != (target.pid, target.start_ticks):
+        _fail(
+            "source-fallback-process-mismatch",
+            f"{label} source native fallback event process tuple drifted",
+        )
+    generation_audit = _exact(
+        event["generation_audit"],
+        {"artifact_filename", "artifact_sha256"},
+        f"{label} source native fallback event.generation_audit",
+    )
+    if (
+        generation_audit["artifact_filename"] != audit_path.name
+        or _sha256(
+            generation_audit["artifact_sha256"],
+            f"{label} source native fallback event.generation_audit.artifact_sha256",
+        )
+        != hashlib.sha256(audit_raw).hexdigest()
+    ):
+        _fail(
+            "source-fallback-audit-binding-mismatch",
+            f"{label} source native fallback event does not bind exact audit bytes",
+        )
+    selections = event["fallback_selections"]
+    if (
+        not isinstance(selections, list)
+        or not 1 <= len(selections) <= MAX_NATIVE_FALLBACK_SELECTIONS
+        or selections != audit_row["sampling_selections"]
+    ):
+        _fail(
+            "source-fallback-selection-mismatch",
+            f"{label} source native fallback selections do not exactly replay the audit",
+        )
+    for index, value in enumerate(selections):
+        selection = _exact(
+            value,
+            {
+                "iteration_id", "configured_backend", "selected_backend",
+                "ineligibility_reason", "committed",
+            },
+            f"{label} source native fallback event.fallback_selections[{index}]",
+        )
+        if (
+            type(selection["iteration_id"]) is not int
+            or selection["iteration_id"] < 1
+            or selection["configured_backend"] != "gpu-greedy"
+            or selection["selected_backend"] != "cpu-normative"
+            or selection["ineligibility_reason"] != "nonzero-temperature"
+            or selection["committed"] is not True
+        ):
+            _fail(
+                "source-fallback-transition-mismatch",
+                f"{label} source native fallback event is not the reviewed nonzero-temperature transition",
+            )
+    marker_raw, marker_document = _read_json(
+        root_fd,
+        fallback_marker,
+        f"{label} source native fallback completion marker",
+    )
+    marker = _exact(
+        marker_document,
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        f"{label} source native fallback completion marker",
+    )
+    if (
+        marker["schema_version"] != SCENARIO_FALLBACK_EVENT_MARKER_VERSION
+        or marker["artifact_filename"] != PurePosixPath(fallback_event.path).name
+        or _sha256(
+            marker["artifact_sha256"],
+            f"{label} source native fallback completion marker.artifact_sha256",
+        )
+        != hashlib.sha256(event_raw).hexdigest()
+        or not marker_raw
+    ):
+        _fail(
+            "source-fallback-marker-mismatch",
+            f"{label} source native fallback completion marker does not bind exact event bytes",
+        )
+
+
 def _replay_capture_scenario(
     root_fd: int,
     value: Any,
@@ -2088,6 +2452,281 @@ def _replay_capture_scenario(
     )
 
 
+def _replay_fallback_capture_scenario(
+    root_fd: int,
+    value: Any,
+    *,
+    capture_name: str,
+    expected_target: ScenarioCaptureTarget,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    completion_request: dict[str, Any],
+    used_paths: set[str],
+) -> ReplayedFallbackScenario:
+    """Replay the one capture-v2 scenario and its four source-owned leaves."""
+
+    label = "native fallback scenario capture.scenarios[0]"
+    row = _exact(
+        value,
+        {
+            "scenario_id", "target", "process", "listener", "request_ledger",
+            "runtime_event_log", "generation_audit_index", "fallback_event_log",
+        },
+        label,
+    )
+    if row["scenario_id"] != FALLBACK_SCENARIO_ID:
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            f"{label} must preserve exact-backend-fallback",
+        )
+    target = _capture_target(row["target"], f"{label}.target")
+    if target != expected_target:
+        _fail(
+            "scenario-capture-target-drift",
+            f"{label} target differs from the capture session target",
+        )
+    prefix = "000000"
+    process = _exact(row["process"], {"pre_stat", "post_stat", "final_stat"}, f"{label}.process")
+    listener = _exact(
+        row["listener"],
+        {
+            "address", "port", "socket_inode", "pre_proc_net_tcp", "post_proc_net_tcp",
+            "pre_server_fd_sockets", "post_server_fd_sockets", "final_proc_net_tcp",
+            "final_server_fd_sockets",
+        },
+        f"{label}.listener",
+    )
+    if (
+        listener["address"] != "127.0.0.1"
+        or _unprivileged_listener_port(listener["port"], f"{label}.listener.port")
+        != target.listener_port
+        or _positive(listener["socket_inode"], f"{label}.listener.socket_inode")
+        != target.listener_inode
+    ):
+        _fail(
+            "scenario-capture-listener-mismatch",
+            f"{label} listener differs from its target tuple",
+        )
+    process_descriptors = {
+        key: _descriptor(process[key], f"{label}.process.{key}")
+        for key in ("pre_stat", "post_stat", "final_stat")
+    }
+    listener_descriptors = {
+        key: _descriptor(listener[key], f"{label}.listener.{key}")
+        for key in (
+            "pre_proc_net_tcp", "post_proc_net_tcp", "pre_server_fd_sockets",
+            "post_server_fd_sockets", "final_proc_net_tcp", "final_server_fd_sockets",
+        )
+    }
+    expected_names = {
+        "pre_stat": f"{prefix}.pre.proc-stat",
+        "post_stat": f"{prefix}.post.proc-stat",
+        "final_stat": f"{prefix}.final.proc-stat",
+        "pre_proc_net_tcp": f"{prefix}.pre.proc-net-tcp",
+        "post_proc_net_tcp": f"{prefix}.post.proc-net-tcp",
+        "pre_server_fd_sockets": f"{prefix}.pre.proc-fd-sockets.json",
+        "post_server_fd_sockets": f"{prefix}.post.proc-fd-sockets.json",
+        "final_proc_net_tcp": f"{prefix}.final.proc-net-tcp",
+        "final_server_fd_sockets": f"{prefix}.final.proc-fd-sockets.json",
+    }
+    all_raw = list(process_descriptors.values()) + list(listener_descriptors.values())
+    _common(lambda: common.require_unique_descriptors(all_raw, f"{label} process/listener leaves"))
+    for key, descriptor in {**process_descriptors, **listener_descriptors}.items():
+        _capture_raw_path(descriptor, capture_name, expected_names[key], f"{label}.{key}")
+        _reserve(descriptor, label=f"{label}.{key}", used_paths=used_paths)
+    expected_process = (target.pid, target.start_ticks)
+    for key, descriptor in process_descriptors.items():
+        if _parse_proc_stat(
+            _read_bytes(root_fd, descriptor, f"{label}.{key}"), f"{label}.{key}"
+        ) != expected_process:
+            _fail(
+                "scenario-capture-pid-start-tick-mismatch",
+                f"{label}.{key} differs from its target tuple",
+            )
+    socket_target = _capture_socket_target(target)
+    for key in ("pre_proc_net_tcp", "post_proc_net_tcp", "final_proc_net_tcp"):
+        if _parse_listener_inodes(
+            _read_bytes(root_fd, listener_descriptors[key], f"{label}.{key}"),
+            target.listener_port,
+            f"{label}.{key}",
+        ) != {target.listener_inode}:
+            _fail(
+                "scenario-capture-listener-proof-mismatch",
+                f"{label}.{key} does not bind one expected listener inode",
+            )
+    for key in ("pre_server_fd_sockets", "post_server_fd_sockets", "final_server_fd_sockets"):
+        sockets = _parse_socket_snapshot(
+            _read_bytes(root_fd, listener_descriptors[key], f"{label}.{key}"),
+            socket_target,
+            f"{label}.{key}",
+        )
+        if target.listener_inode not in sockets:
+            _fail(
+                "scenario-capture-listener-proof-mismatch",
+                f"{label}.{key} does not bind the listener to the target PID",
+            )
+
+    ledger = _descriptor(row["request_ledger"], f"{label}.request_ledger")
+    index = _descriptor(row["generation_audit_index"], f"{label}.generation_audit_index")
+    _capture_child_path(
+        ledger,
+        capture_name,
+        f"{prefix}-{FALLBACK_SCENARIO_ID}.request-ledger.json",
+        f"{label}.request_ledger",
+    )
+    _capture_child_path(
+        index,
+        capture_name,
+        f"{prefix}-{FALLBACK_SCENARIO_ID}.generation-audit-index.json",
+        f"{label}.generation_audit_index",
+    )
+    _reserve(ledger, label=f"{label}.request_ledger", used_paths=used_paths)
+    _reserve(index, label=f"{label}.generation_audit_index", used_paths=used_paths)
+    _ledger_raw, ledger_document = _read_json(root_fd, ledger, f"{label}.request_ledger")
+    ledger_row = _exact(
+        ledger_document,
+        {
+            "schema_version", "scenario_id", "delivery_mode", "server_request_id",
+            "request", "response_head", "response_body",
+        },
+        f"{label}.request_ledger",
+    )
+    if (
+        ledger_row["schema_version"] != SCENARIO_CAPTURE_LEDGER_VERSION
+        or ledger_row["scenario_id"] != FALLBACK_SCENARIO_ID
+        or ledger_row["delivery_mode"] != "non-stream"
+        or type(ledger_row["server_request_id"]) is not str
+        or COMPLETION_REQUEST_ID_RE.fullmatch(ledger_row["server_request_id"]) is None
+    ):
+        _fail("scenario-capture-ledger-mismatch", f"{label} ledger identity is invalid")
+    request_descriptor = _descriptor(ledger_row["request"], f"{label}.request_ledger.request")
+    head_descriptor = _descriptor(
+        ledger_row["response_head"], f"{label}.request_ledger.response_head"
+    )
+    body_descriptor = _descriptor(
+        ledger_row["response_body"], f"{label}.request_ledger.response_body"
+    )
+    _common(
+        lambda: common.require_unique_descriptors(
+            [request_descriptor, head_descriptor, body_descriptor], f"{label} ledger leaves"
+        )
+    )
+    for descriptor, name in (
+        (request_descriptor, f"{prefix}.request.http"),
+        (head_descriptor, f"{prefix}.response-head.http"),
+        (body_descriptor, f"{prefix}.response-body.json"),
+    ):
+        _capture_raw_path(descriptor, capture_name, name, f"{label} ledger raw leaf")
+        _reserve(descriptor, label=f"{label} ledger raw leaf", used_paths=used_paths)
+    expected_body = common.canonical_json_bytes(completion_request)
+    if _read_bytes(root_fd, request_descriptor, f"{label} completion request") != _completion_request_bytes(
+        target.listener_port, expected_body
+    ):
+        _fail(
+            "scenario-capture-request-mismatch",
+            f"{label} raw completion request differs from the contract",
+        )
+    response_head = _read_bytes(root_fd, head_descriptor, f"{label} completion response head")
+    response_body = _read_bytes(root_fd, body_descriptor, f"{label} completion response body")
+    if _completion_response_length(response_head, f"{label} completion response head") != len(response_body):
+        _fail(
+            "scenario-capture-response-length-mismatch",
+            f"{label} response body differs from Content-Length",
+        )
+    request_id = _source_request_id(response_body, f"{label} completion response body")
+    if request_id != ledger_row["server_request_id"]:
+        _fail(
+            "scenario-capture-response-id-mismatch",
+            f"{label} response ID differs from its ledger",
+        )
+
+    _index_raw, index_document = _read_json(root_fd, index, f"{label}.generation_audit_index")
+    index_row = _exact(
+        index_document,
+        {
+            "schema_version", "scenario_id", "server_request_id", "audit_record",
+            "audit_completion_marker", "fallback_event", "fallback_completion_marker",
+        },
+        f"{label}.generation_audit_index",
+    )
+    if (
+        index_row["schema_version"] != SCENARIO_FALLBACK_CAPTURE_AUDIT_INDEX_VERSION
+        or index_row["scenario_id"] != FALLBACK_SCENARIO_ID
+        or index_row["server_request_id"] != request_id
+    ):
+        _fail(
+            "scenario-capture-audit-index-mismatch",
+            f"{label} fallback audit index identity drifted",
+        )
+    audit_record = _descriptor(
+        index_row["audit_record"], f"{label}.generation_audit_index.audit_record"
+    )
+    audit_marker = _descriptor(
+        index_row["audit_completion_marker"],
+        f"{label}.generation_audit_index.audit_completion_marker",
+    )
+    fallback_event = _descriptor(
+        index_row["fallback_event"], f"{label}.generation_audit_index.fallback_event"
+    )
+    fallback_marker = _descriptor(
+        index_row["fallback_completion_marker"],
+        f"{label}.generation_audit_index.fallback_completion_marker",
+    )
+    runtime_event = _descriptor(row["runtime_event_log"], f"{label}.runtime_event_log")
+    session_fallback_event = _descriptor(
+        row["fallback_event_log"], f"{label}.fallback_event_log"
+    )
+    if runtime_event != audit_record:
+        _fail(
+            "scenario-capture-runtime-event-mismatch",
+            f"{label} runtime event must be the indexed source audit record",
+        )
+    if session_fallback_event != fallback_event:
+        _fail(
+            "scenario-capture-fallback-event-mismatch",
+            f"{label} fallback event must be the indexed source fallback event",
+        )
+    audit_directory = _replay_source_audit(
+        root_fd,
+        audit_record,
+        audit_marker,
+        capture_name=capture_name,
+        expected_audit_directory=None,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        configuration_sha256=configuration_sha256,
+        target=target,
+        request_id=request_id,
+        used_paths=used_paths,
+        label=label,
+    )
+    _replay_fallback_source_pair(
+        root_fd,
+        audit_record=audit_record,
+        audit_directory=audit_directory,
+        fallback_event=fallback_event,
+        fallback_marker=fallback_marker,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        configuration_sha256=configuration_sha256,
+        target=target,
+        request_id=request_id,
+        used_paths=used_paths,
+        label=label,
+    )
+    return ReplayedFallbackScenario(
+        scenario_id=FALLBACK_SCENARIO_ID,
+        target=target,
+        request_ledger=ledger,
+        runtime_event_log=runtime_event,
+        generation_audit_index=index,
+        fallback_event_log=session_fallback_event,
+        request_id=request_id,
+        audit_directory=audit_directory,
+    )
+
+
 def replay_raw_scenario_capture_v1_fd(
     root_fd: int,
     descriptor: common.EvidenceDescriptor,
@@ -2177,6 +2816,132 @@ def replay_raw_scenario_capture_v1_fd(
         target=target,
         scenarios=tuple(replayed),
         audit_directory=audit_directory,
+    )
+
+
+def replay_raw_scenario_capture_v2_fd(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    used_paths: set[str],
+) -> ReplayedFallbackScenarioCapture:
+    """Replay the closed v2 native-fallback capture through one held root FD.
+
+    This is deliberately separate from the retained v1 replay.  It accepts
+    exactly one source-issued fallback scenario and derives every audit/event
+    descriptor from the capture instead of treating source leaves as opaque.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "native fallback capture evidence root"
+        )
+    )
+    capture_name = _capture_parent(descriptor, "native fallback scenario capture session")
+    _assert_capture_marker_absent(
+        root_fd,
+        descriptor.path,
+        "native fallback scenario capture session",
+    )
+    _reserve(descriptor, label="native fallback scenario capture session", used_paths=used_paths)
+    _raw, document = _read_json(root_fd, descriptor, "native fallback scenario capture session")
+    row = _exact(
+        document,
+        {
+            "schema_version", "capture_status", "qualification_status", "endpoint",
+            "contract", "runtime_identity", "target", "scenarios",
+        },
+        "native fallback scenario capture session",
+    )
+    if row["schema_version"] != SCENARIO_FALLBACK_CAPTURE_SESSION_VERSION:
+        _fail(
+            "historical-fallback-scenario-capture-version-rejected",
+            "native fallback scenario capture has an unsupported version",
+        )
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail(
+            "invalid-capture-status",
+            "native fallback scenario capture must be captured/not-run",
+        )
+    if configuration_profile != MAX_PERFORMANCE_EXACT_PROFILE:
+        _fail(
+            "fallback-profile-mismatch",
+            "native fallback scenario capture requires max-performance-exact",
+        )
+    if type(row["endpoint"]) is not str:
+        _fail(
+            "invalid-completion-endpoint",
+            "native fallback scenario endpoint must be literal loopback completions",
+        )
+    endpoint_match = COMPLETION_ENDPOINT_RE.fullmatch(row["endpoint"])
+    if endpoint_match is None:
+        _fail(
+            "invalid-completion-endpoint",
+            "native fallback scenario endpoint must be literal loopback completions",
+        )
+    target = _capture_target(row["target"], "native fallback scenario capture session.target")
+    if int(endpoint_match.group(1)) != target.listener_port:
+        _fail(
+            "scenario-capture-endpoint-target-mismatch",
+            "native fallback endpoint port differs from its target tuple",
+        )
+    identity = _exact(
+        row["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        "native fallback scenario capture session.runtime_identity",
+    )
+    if (
+        identity["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE
+        or _sha256(
+            identity["configuration_sha256"],
+            "native fallback scenario capture session.runtime_identity.configuration_sha256",
+        )
+        != configuration_sha256
+    ):
+        _fail(
+            "scenario-capture-runtime-identity-mismatch",
+            "native fallback scenario capture runtime identity drifted",
+        )
+    contract = _descriptor(
+        row["contract"], "native fallback scenario capture session.contract"
+    )
+    contract_rows = _replay_fallback_capture_contract(
+        root_fd,
+        contract,
+        capture_name=capture_name,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        used_paths=used_paths,
+    )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != 1 or len(contract_rows) != 1:
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "native fallback scenario capture must preserve one contract scenario",
+        )
+    scenario_id, completion_request = contract_rows[0]
+    if scenario_id != FALLBACK_SCENARIO_ID:
+        _fail("invalid-scenario-inventory", "native fallback capture contract drifted")
+    scenario = _replay_fallback_capture_scenario(
+        root_fd,
+        scenarios[0],
+        capture_name=capture_name,
+        expected_target=target,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        configuration_sha256=configuration_sha256,
+        completion_request=completion_request,
+        used_paths=used_paths,
+    )
+    return ReplayedFallbackScenarioCapture(
+        session=descriptor,
+        contract=contract,
+        target=target,
+        scenarios=(scenario,),
+        audit_directory=scenario.audit_directory,
     )
 
 
@@ -2403,6 +3168,256 @@ def verify_completed_soak_provenance_v4(
         os.close(root_fd)
 
 
+def _read_soak_v5_completion_marker(
+    root_fd: int,
+    manifest: common.EvidenceDescriptor,
+) -> None:
+    manifest_name = _soak_terminal_manifest_name(
+        manifest.path, "completed v5 soak manifest path"
+    )
+    marker_name = f"{manifest_name}.complete"
+    intent_name = f"{manifest_name}.intent"
+    try:
+        marker_raw = _common(
+            lambda: common.read_bounded_paired_hardlink(
+                root_fd,
+                marker_name,
+                intent_name,
+                "v5 soak raw manifest completion marker",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+    except C02ProvenanceError as error:
+        if getattr(error, "reason_code", None) == "missing-input":
+            _fail(
+                "missing-soak-v5-completion-marker",
+                f"v5 soak raw manifest requires exact sibling marker pair "
+                f"{marker_name!r} and {intent_name!r}",
+            )
+        raise
+    marker = _common(
+        lambda: common.parse_canonical_json(
+            marker_raw,
+            "v5 soak raw manifest completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    assert isinstance(marker, dict)
+    row = _exact(
+        marker,
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        "v5 soak raw manifest completion marker",
+    )
+    if row["schema_version"] != SOAK_V5_COMPLETION_MARKER_VERSION:
+        _fail(
+            "historical-soak-v5-completion-version-rejected",
+            "v5 soak raw manifest completion marker has an unsupported schema version",
+        )
+    if row["artifact_filename"] != manifest_name or _sha256(
+        row["artifact_sha256"], "v5 soak raw manifest completion marker.artifact_sha256"
+    ) != manifest.sha256:
+        _fail(
+            "soak-v5-completion-marker-mismatch",
+            "v5 soak raw manifest completion marker does not bind exact manifest bytes",
+        )
+
+
+def verify_soak_provenance_v5_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
+    """Verify a raw v5 native-fallback manifest through one private root FD."""
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "v5 soak provenance evidence root"
+        )
+    )
+    manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "v5 soak raw manifest")
+    row = _exact(
+        document,
+        {
+            "schema_version", "capture_status", "qualification_status", "candidate_id",
+            "bindings", "configuration_evidence", "scenario_capture_session",
+            "scenario_contract", "scenarios",
+        },
+        "v5 soak raw manifest",
+    )
+    if row["schema_version"] != SOAK_V5_MANIFEST_VERSION:
+        _fail(
+            "historical-soak-v5-manifest-version-rejected",
+            f"v5 soak raw manifest must use {SOAK_V5_MANIFEST_VERSION}",
+        )
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail("invalid-capture-status", "v5 soak raw manifest must be captured/not-run")
+    candidate = _candidate_id(row["candidate_id"], "v5 soak raw manifest.candidate_id")
+    bindings = _bindings(
+        row["bindings"],
+        "v5 soak raw manifest.bindings",
+        allowed_profiles=frozenset((MAX_PERFORMANCE_EXACT_PROFILE,)),
+    )
+    if bindings["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE:
+        _fail(
+            "fallback-profile-mismatch",
+            "v5 native fallback manifest requires max-performance-exact",
+        )
+    used = {manifest_descriptor.path}
+    configuration_target = _load_soak_configuration_evidence(
+        root_fd,
+        row["configuration_evidence"],
+        candidate_id=candidate,
+        bindings=bindings,
+        used_paths=used,
+        require_direct_observation_session=True,
+        require_gpu_greedy=True,
+    )
+    capture_descriptor = _descriptor(
+        row["scenario_capture_session"], "v5 soak raw manifest.scenario_capture_session"
+    )
+    capture = replay_raw_scenario_capture_v2_fd(
+        root_fd,
+        capture_descriptor,
+        candidate_id=candidate,
+        configuration_profile=bindings["configuration_profile"],
+        configuration_sha256=bindings["configuration_sha256"],
+        used_paths=used,
+    )
+    if not _capture_matches_observed(capture.target, configuration_target):
+        _fail(
+            "configuration-scenario-capture-target-mismatch",
+            "native fallback capture does not share the configuration bridge PID/start-tick/listener tuple",
+        )
+    contract = _descriptor(row["scenario_contract"], "v5 soak raw manifest.scenario_contract")
+    if contract != capture.contract:
+        _fail(
+            "scenario-capture-contract-descriptor-mismatch",
+            "v5 manifest contract must be derived from its native fallback capture",
+        )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != 1 or len(capture.scenarios) != 1:
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "v5 manifest must preserve exactly one native fallback scenario",
+        )
+    captured = capture.scenarios[0]
+    scenario = _exact(
+        scenarios[0],
+        {
+            "scenario_id", "target", "observation_session", "request_ledger",
+            "runtime_event_log", "generation_audit_index", "fallback_event_log",
+        },
+        "v5 soak raw manifest.scenarios[0]",
+    )
+    if scenario["scenario_id"] != FALLBACK_SCENARIO_ID or captured.scenario_id != FALLBACK_SCENARIO_ID:
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "v5 manifest must preserve exact-backend-fallback",
+        )
+    declared_target = _target(scenario["target"], "v5 soak raw manifest.scenarios[0].target")
+    for key, expected in (
+        ("request_ledger", captured.request_ledger),
+        ("runtime_event_log", captured.runtime_event_log),
+        ("generation_audit_index", captured.generation_audit_index),
+        ("fallback_event_log", captured.fallback_event_log),
+    ):
+        if _descriptor(
+            scenario[key], f"v5 soak raw manifest.scenarios[0].{key}"
+        ) != expected:
+            _fail(
+                "scenario-capture-derived-leaf-mismatch",
+                f"v5 manifest {key} was not derived from the native fallback capture",
+            )
+    observation = _descriptor(
+        scenario["observation_session"], "v5 soak raw manifest.scenarios[0].observation_session"
+    )
+    _require_direct_v4_session_path(observation, "v5 soak raw manifest.scenarios[0].observation_session")
+    _reserve(observation, label="v5 soak raw manifest.scenarios[0].observation_session", used_paths=used)
+    observed_target = _load_session(
+        root_fd,
+        observation,
+        "v5 soak raw manifest.scenarios[0].observation_session",
+        used,
+    )
+    if declared_target != observed_target.target:
+        _fail(
+            "session-target-mismatch",
+            "v5 native fallback target differs from its C02 observation session",
+        )
+    if not _capture_matches_observed(captured.target, observed_target):
+        _fail(
+            "scenario-capture-observation-target-mismatch",
+            "v5 native fallback capture does not share the observation PID/start-tick/listener tuple",
+        )
+    if observed_target != configuration_target:
+        _fail(
+            "configuration-scenario-target-mismatch",
+            "v5 native fallback scenario does not share the configuration bridge PID/start-tick/listener/GPU tuple",
+        )
+    return _report(
+        schema_version=SOAK_V5_REPORT_VERSION,
+        manifest=manifest_descriptor,
+        candidate_id=candidate,
+        bindings=bindings,
+        targets=[{"scenario_id": FALLBACK_SCENARIO_ID, "target": declared_target.as_json()}],
+        check_names=(
+            "v5-version-only",
+            "canonical-descriptor-binding",
+            "capture-v2-incomplete-marker-closure",
+            "single-fallback-contract-request-response-replay",
+            "source-audit-and-fallback-marker-binding",
+            "ordered-native-fallback-transition-binding",
+            "effective-config-gpu-greedy-binding",
+            "configuration-serial-observation-process-gpu-bridge",
+        ),
+    )
+
+
+def verify_soak_provenance_v5(
+    evidence_root: Path,
+    manifest_path: str,
+) -> dict[str, Any]:
+    root_fd = _open_private_evidence_root(evidence_root, "evidence root")
+    try:
+        return verify_soak_provenance_v5_fd(root_fd, manifest_path)
+    finally:
+        os.close(root_fd)
+
+
+def verify_completed_soak_provenance_v5_fd(
+    root_fd: int,
+    manifest_path: str,
+) -> dict[str, Any]:
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "completed v5 soak provenance evidence root"
+        )
+    )
+    manifest_name = _soak_terminal_manifest_name(
+        manifest_path, "completed v5 soak manifest path"
+    )
+    report = verify_soak_provenance_v5_fd(root_fd, manifest_name)
+    manifest = _descriptor(report["raw_manifest"], "completed v5 soak manifest descriptor")
+    _read_soak_v5_completion_marker(root_fd, manifest)
+    final_manifest, _final_document = _read_manifest(
+        root_fd, manifest_name, "completed v5 soak manifest final revalidation"
+    )
+    if final_manifest != manifest:
+        _fail(
+            "soak-v5-manifest-changed-during-completion-verification",
+            "v5 soak manifest changed while its completion marker was verified",
+        )
+    _read_soak_v5_completion_marker(root_fd, final_manifest)
+    return report
+
+
+def verify_completed_soak_provenance_v5(
+    evidence_root: Path,
+    manifest_path: str,
+) -> dict[str, Any]:
+    root_fd = _open_private_evidence_root(evidence_root, "evidence root")
+    try:
+        return verify_completed_soak_provenance_v5_fd(root_fd, manifest_path)
+    finally:
+        os.close(root_fd)
+
+
 def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[str, Any]:
     """Bind v2 rollback raw leaves without trusting a self-authored timeline."""
 
@@ -2490,7 +3505,11 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-root", required=True, type=Path)
-    parser.add_argument("--kind", required=True, choices=("soak", "soak-v4", "rollback"))
+    parser.add_argument(
+        "--kind",
+        required=True,
+        choices=("soak", "soak-v4", "soak-v5", "rollback"),
+    )
     parser.add_argument("--manifest", required=True)
     return parser
 
@@ -2502,6 +3521,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = verify_completed_soak_provenance(args.evidence_root, args.manifest)
         elif args.kind == "soak-v4":
             report = verify_completed_soak_provenance_v4(args.evidence_root, args.manifest)
+        elif args.kind == "soak-v5":
+            report = verify_completed_soak_provenance_v5(args.evidence_root, args.manifest)
         else:
             report = verify_rollback_provenance(args.evidence_root, args.manifest)
     except (C02ProvenanceError, common.ProvenanceV2Error) as error:

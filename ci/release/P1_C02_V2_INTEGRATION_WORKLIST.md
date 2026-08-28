@@ -1,12 +1,12 @@
 # C02-P1 v2 raw-provenance integration worklist
 
 Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
-sampling fallback event/marker, and raw source-pair capture v2 are implemented
-with CPU/static hostile-path coverage; this worklist remains design and
-integration material, not a qualification report. No actual GPU capture,
-candidate freeze, terminal fallback binding, or semantic qualification has
-been performed, and this file must not be copied into a candidate result
-directory as evidence.
+sampling fallback event/marker, raw source-pair capture v2, and the separate
+terminal fallback binder v5 are implemented with CPU/static hostile-path
+coverage; this worklist remains design and integration material, not a
+qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
+receipt, or semantic qualification has been performed, and this file must not
+be copied into a candidate result directory as evidence.
 
 ## Boundary to preserve
 
@@ -84,10 +84,11 @@ a visible marker after that ambiguous result as lifecycle authority.
 The initial v4 subset rejects `exact-backend-fallback` entirely. Its
 source-owned distinct native fallback leaf/marker is now published by Rust.
 v1 capture, v4 binder, and the lifecycle runner/receipt still may not
-synthesize or consume it. The separate raw capture-v2 branch now records the
-two source marker pairs as descriptors, but remains `qualification_status:
-not-run`; terminal binder v5, semantic workload, and Gate E replay remain
-later work.
+synthesize or consume it. The separate raw capture-v2 branch records the two
+source marker pairs as descriptors, and the separate v5 terminal binder now
+replays them together with a bound effective `gpu-greedy` `/v1/config` arm.
+Both remain `qualification_status: not-run`; lifecycle-v5 receipt, semantic
+workload replay, Gate E, and candidate promotion remain later work.
 
 ### Landed initial lifecycle supervisor and receipt
 
@@ -162,6 +163,29 @@ the original source event descriptor. A missing, unsafe, mismatched, or
 nonterminal source leaf leaves `capture-incomplete.json` in place. This is raw
 source-pair capture only: it does not use GPU/SSH/Docker, does not change
 v1/v4/lifecycle acceptance, and does not bind `/v1/config`.
+
+### Landed native sampling fallback terminal binder v5
+
+`bind_raw_c02_soak_v5.py` is a separate path-only terminal binder, not a
+widening of v4. It accepts only one direct `capture/session.json` whose source
+session is `riley.c02-raw-scenario-capture.v2`, with exactly one
+`max-performance-exact` `exact-backend-fallback` request. Before creating a
+manifest it replays the canonical request/response ledger, the four
+response-ID-derived ordinary source leaves (audit/event and both markers),
+their candidate/runtime/PID/start-tick/request-ID/audit-SHA joins, and every
+ordered `gpu-greedy` → `cpu-normative`, `nonzero-temperature`, committed
+selection.
+
+The same held private root FD also replays the endpoint/startup/config-bridge
+and C02 observation tuple. The v5 branch explicitly requires the validated
+endpoint's `effective_config.sampling_backend == "gpu-greedy"`; a profile
+label or `fallback_policy` string cannot stand in for that proof. It then
+publishes only `riley.soak-v2-raw-provenance.v5` plus its durable v5
+`.intent`/`.complete` hardlink pair, and returns `bound`/`not-run`. Source
+markers remain ordinary one-link leaves; only this terminal output uses the
+paired-hardlink protocol. v1/v4 and the lifecycle-v4 receipt remain fallback
+rejecting, and v5 neither launches a service nor uses GPU/SSH/Docker nor makes
+a qualification decision.
 
 ## Required raw evidence inventory
 
@@ -337,8 +361,8 @@ runtime configuration field or a trace counter.
      contract/ledger/runtime/index leaves from one explicit capture session
    and admits only its serial non-stream scenarios; it rejects
    `exact-backend-fallback`. The separate capture-v2 branch preserves the
-   native source pair, while the later terminal binder v5 must replay it with
-   the config bridge.
+   native source pair, and the separate terminal binder v5 replays it with the
+   config bridge's effective `gpu-greedy` setting without widening v4.
    - Bind each declared scenario target to its raw observation session and the
      v4-derived request/runtime/generation leaves.  The raw soak binder accepts
      only `stable-default` or `max-performance-exact` and remains
@@ -381,6 +405,8 @@ runtime configuration field or a trace counter.
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
    `benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`,
    `benchmarks/release/candidates/soak-v2-receipt-v4.schema.json`,
+   `benchmarks/release/candidates/soak-v2-bind-request-v5.schema.json`, and
+   `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
@@ -403,9 +429,9 @@ runtime configuration field or a trace counter.
    the initial lifecycle runner.
 4. Land the one-scenario v2 observation/remote lifecycle runner and its
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
-5. Land raw capture v2 for the already-published native fallback source leaf
-   (complete), then add its separate terminal binder v5 and rollback raw
-   capture/binding.
+5. Land raw capture v2 and its separate terminal binder v5 for the
+   already-published native fallback source leaf (complete), then add rollback
+   raw capture/binding and a separately versioned lifecycle/semantic closure.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

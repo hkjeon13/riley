@@ -1156,6 +1156,8 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             "soak-v2-receipt-v3.schema.json",
             "soak-v2-receipt-v4.schema.json",
             "soak-v2-bind-request-v4.schema.json",
+            "soak-v2-receipt-v5.schema.json",
+            "soak-v2-bind-request-v5.schema.json",
             "c02-raw-scenario-capture-v1.schema.json",
             "c02-raw-soak-runner-contract-v2.schema.json",
             "c02-generation-audit-index-v2.schema.json",
@@ -1271,6 +1273,62 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             set(bind_request_v4_schema["$defs"]["scenario"]["required"]),
             {"scenario_id", "observation_session_path"},
         )
+
+        soak_v5_schema = json.loads(
+            (directory / "soak-v2-receipt-v5.schema.json").read_text(encoding="utf-8")
+        )
+        bind_request_v5_schema = json.loads(
+            (directory / "soak-v2-bind-request-v5.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            soak_v5_schema["$defs"]["rawManifest"]["properties"]["schema_version"],
+            {"const": checker.SOAK_V5_MANIFEST_VERSION},
+        )
+        self.assertEqual(
+            soak_v5_schema["$defs"]["completion"]["properties"]["schema_version"],
+            {"const": checker.SOAK_V5_COMPLETION_MARKER_VERSION},
+        )
+        self.assertEqual(
+            soak_v5_schema["$defs"]["scenario"]["required"],
+            [
+                "scenario_id",
+                "target",
+                "observation_session",
+                "request_ledger",
+                "runtime_event_log",
+                "generation_audit_index",
+                "fallback_event_log",
+            ],
+        )
+        self.assertEqual(
+            bind_request_v5_schema["properties"]["schema_version"],
+            {"const": "riley.soak-v2-bind-request.v5"},
+        )
+        self.assertEqual(
+            bind_request_v5_schema["$defs"]["bindings"]["properties"][
+                "configuration_profile"
+            ],
+            {"const": checker.MAX_PERFORMANCE_EXACT_PROFILE},
+        )
+        self.assertEqual(
+            bind_request_v5_schema["$defs"]["scenario"]["properties"]["scenario_id"],
+            {"const": checker.FALLBACK_SCENARIO_ID},
+        )
+
+    def test_cli_admits_versioned_v5_soak_kind(self) -> None:
+        args = checker._parser().parse_args(
+            [
+                "--evidence-root",
+                "/tmp/c02-private-evidence",
+                "--kind",
+                "soak-v5",
+                "--manifest",
+                "fallback-v5.json",
+            ]
+        )
+        self.assertEqual(args.kind, "soak-v5")
 
 
 if __name__ == "__main__":

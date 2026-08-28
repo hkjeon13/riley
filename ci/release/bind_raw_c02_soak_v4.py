@@ -283,6 +283,7 @@ def _configuration_evidence(
     binding_inputs: Mapping[str, str],
     declared_paths: set[str],
     replayed_paths: set[str],
+    require_gpu_greedy: bool = False,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str], checker.ObservedTarget]:
     row = _exact(
         value,
@@ -366,6 +367,11 @@ def _configuration_evidence(
         _fail(
             "runtime-config-profile-mismatch",
             "soak runtime identity profile differs from the bind request",
+        )
+    if require_gpu_greedy and endpoint.effective_config["sampling_backend"] != "gpu-greedy":
+        _fail(
+            "effective-sampling-backend-mismatch",
+            "native fallback binding requires effective_config.sampling_backend gpu-greedy",
         )
     observed_target = _checker(
         lambda: checker._load_config_endpoint_observation(  # noqa: SLF001 - pure held-FD replay

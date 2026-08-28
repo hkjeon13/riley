@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/soak-v2-bind-request-v5.schema.json",
+  "title": "Riley C02 native fallback raw-provenance bind request v5",
+  "description": "Closed path-only input for bind_raw_c02_soak_v5.py. v5 terminally consumes exactly one capture-v2 exact-backend-fallback session and verifies effective gpu-greedy configuration, but never requests service, GPU, or qualification operation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "candidate_id", "binding_inputs", "configuration_evidence", "scenario_capture_session_path", "scenarios"],
+  "properties": {
+    "schema_version": {"const": "riley.soak-v2-bind-request.v5"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "binding_inputs": {"$ref": "#/$defs/bindings"},
+    "configuration_evidence": {"$ref": "#/$defs/configurationEvidence"},
+    "scenario_capture_session_path": {"$ref": "#/$defs/sessionPath"},
+    "scenarios": {"type": "array", "minItems": 1, "maxItems": 1, "items": {"$ref": "#/$defs/scenario"}}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "relativePath": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+    "sessionPath": {"allOf": [{"$ref": "#/$defs/relativePath"}, {"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/session\\.json$"}]},
+    "candidateId": {"type": "string", "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"},
+    "bindings": {"type": "object", "additionalProperties": false, "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile"], "properties": {"freeze_sha256": {"$ref": "#/$defs/sha256"}, "base_release_candidate_report_sha256": {"$ref": "#/$defs/sha256"}, "configuration_profile": {"const": "max-performance-exact"}}},
+    "configurationEvidence": {"type": "object", "additionalProperties": false, "required": ["endpoint_path", "startup_artifact_path", "endpoint_observation_path"], "properties": {"endpoint_path": {"$ref": "#/$defs/relativePath"}, "startup_artifact_path": {"$ref": "#/$defs/relativePath"}, "endpoint_observation_path": {"$ref": "#/$defs/sessionPath"}}},
+    "scenario": {"type": "object", "additionalProperties": false, "required": ["scenario_id", "observation_session_path"], "properties": {"scenario_id": {"const": "exact-backend-fallback"}, "observation_session_path": {"$ref": "#/$defs/sessionPath"}}}
+  }
+}

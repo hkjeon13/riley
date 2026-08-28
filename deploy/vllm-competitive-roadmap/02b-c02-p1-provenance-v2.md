@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, 그리고 source pair raw capture v2는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, terminal binder v5·GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 그리고 별도 terminal binder v5는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -171,9 +171,14 @@ ordered selection을 재현할 때만 v2 raw session/index descriptor를 쓴다.
 wrapper fallback을 합성하지 않고 `qualification_status: "not-run"`만 남긴다.
 
 capture v2도 endpoint가 실제 GPU-greedy arm이었다는 사실이나 terminal fallback을
-증명하지 않는다. 이후 binder v5가 config bridge의 effective sampling backend와 두 source
-pair를 함께 replay한 뒤에만 해당 scenario를 terminally 열 수 있다. initial lifecycle
-runner는 config bridge → scenario producer → C02 observer
+증명하지 않는다. 별도 `bind_raw_c02_soak_v5.py`는 이제 canonical path-only request에서
+capture-v2의 단일 scenario와 두 source pair를 replay하고, held-FD `/v1/config` endpoint의
+validated `effective_config.sampling_backend == "gpu-greedy"`, config bridge, C02
+observation PID/start-tick/listener/GPU tuple까지 같을 때만 v5 raw terminal manifest를
+발행한다. v5의 source audit/fallback marker는 ordinary one-link evidence이고 terminal
+manifest의 `.intent`/`.complete`만 paired hardlink이다. v1/v4/lifecycle receipt는 계속
+fallback을 거부하며, v5도 `bound`/`not-run`만 반환하고 service/GPU/SSH를 조작하거나
+semantic/C02 qualification을 판정하지 않는다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
 → source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host
 lock 아래에서 연결한다. 첫 version은 **contract 1 scenario / observation 1회 / v4
 manifest 1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지
@@ -197,7 +202,7 @@ v4에서 쓰는 모든 `*_session_path`는 evidence root 바로 아래의 정확
 `<capture>/session.json` direct child여야 한다. source audit record/marker는 capture
 directory와 다른 하나의 direct-child audit directory에만 있어야 하며, scenario마다
 audit parent를 섞을 수 없다. private root의 nonblocking exclusive lock을 잡은 뒤
-`NAME.json`과 `NAME.json.complete`가 모두 없는 경우에만 terminal output을 생성한다.
+`NAME.json`, `NAME.json.complete`, `NAME.json.intent`가 모두 없는 경우에만 terminal output을 생성한다.
 
 v4 binder는 session descriptor, parent `capture-incomplete.json` 부재,
 contract inventory, request/response ID-to-source-audit marker, 그리고
@@ -220,12 +225,12 @@ marker를 만들지 않는다. final marker가 보인 뒤 parent-directory sync�
 finalizer는 이 ambiguous 결과 뒤의 visible marker만으로 lifecycle authority를 인정하지
 않고 runner supervisor의 성공 receipt를 추가로 요구한다.
 
-`bind_raw_c02_soak_v2.py` 계열은 runner를 대체하거나
+`bind_raw_c02_soak_v2.py` 계열과 별도 `bind_raw_c02_soak_v5.py`는 runner를 대체하거나
 service/GPU/SSH/container를 조작하지 않는다. v3 schema는 config bridge의
 historical closed shape로 남기고,
-`benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`가 v4의
-closed path-only shape를 publish한다. 어느 버전도 caller-supplied
-descriptor/hash를 받지 않는다.
+`benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`와
+`soak-v2-bind-request-v5.schema.json`가 각각 fallback-free v4와 closed native-fallback
+v5 path-only shape를 publish한다. 어느 버전도 caller-supplied descriptor/hash를 받지 않는다.
 
 raw soak provenance v4는 `stable-default`와 `max-performance-exact`만 수용하며,
 initial serial subset에서는 `exact-backend-fallback`을 수용하지 않는다. 이는 raw
