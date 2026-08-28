@@ -8,7 +8,7 @@
 //! every 16 deltas, bounding service-consumed work after disconnect to 16
 //! deltas plus the backend's bounded channel and current execution iteration.
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::error;
 use std::fmt;
 use std::io::{self, Read, Write};
@@ -25,7 +25,7 @@ use crate::domain::{
     FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
     RequestMetadata, ServiceErrorClass,
 };
-use crate::engine::{ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineMetricsSnapshot};
+use crate::engine::{C02CaptureMetrics, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineMetricsSnapshot};
 use crate::http::{
     HttpLimits, HttpMethod, HttpReadError, HttpRequest, read_request, write_response,
     write_sse_head,
@@ -235,6 +235,24 @@ pub trait CompletionBackend: Send + Sync {
     /// close. `None` means the backend cannot prove that close completed.
     #[must_use]
     fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
+        None
+    }
+
+    /// Returns the strictly source-owned C02 live metrics contract. Backends
+    /// that cannot provide all scheduler and allocation facts fail closed.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable public class when the backend cannot produce a
+    /// complete source-owned snapshot.
+    fn c02_metrics_snapshot(&self) -> Result<C02CaptureMetrics, ServiceErrorClass> {
+        Err(ServiceErrorClass::Internal)
+    }
+
+    /// Returns C02 metrics captured only after successful native resource
+    /// close. `None` means no shutdown artifact may be written.
+    #[must_use]
+    fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
         None
     }
 
@@ -490,6 +508,12 @@ pub enum ServerShutdownError {
     CoordinatorUnavailable,
     /// The backend closed but did not publish a verified final snapshot.
     FinalMetricsUnavailable,
+    /// The backend closed but did not publish a source-owned C02 snapshot.
+    FinalC02MetricsUnavailable,
+    /// The backend reported live or accepting state after its shutdown join.
+    C02FinalStateNotQuiescent,
+    /// The backend did not reach its stopped, non-accepting lifecycle state.
+    C02BackendStillLive,
 }
 
 impl fmt::Display for ServerShutdownError {
@@ -509,6 +533,15 @@ impl fmt::Display for ServerShutdownError {
             Self::FinalMetricsUnavailable => {
                 formatter.write_str("backend did not publish verified final metrics")
             }
+            Self::FinalC02MetricsUnavailable => {
+                formatter.write_str("backend did not publish verified final C02 metrics")
+            }
+            Self::C02FinalStateNotQuiescent => {
+                formatter.write_str("final C02 metrics retain live ownership or accepting state")
+            }
+            Self::C02BackendStillLive => {
+                formatter.write_str("backend remains live after shutdown coordination")
+            }
         }
     }
 }
@@ -527,6 +560,13 @@ pub struct ServerHandle {
     observations: Arc<ObservationBuffer>,
     metrics: Arc<ServiceMetrics>,
     joined: bool,
+}
+
+/// C02-only shutdown evidence returned after every service and backend thread
+/// has joined. The final metric is not a generic `/metrics` projection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct C02ShutdownEvidence {
+    pub final_metrics: C02CaptureMetrics,
 }
 
 #[derive(Debug)]
@@ -629,6 +669,14 @@ struct ConnectionJob {
     registry_slot: usize,
 }
 
+/// Immutable endpoint configuration cloned into each HTTP worker. Keeping the
+/// raw runtime body and C02 exposure policy together prevents a C02 request
+/// from accidentally using the generic runtime-configuration path.
+struct RuntimeEndpointConfig {
+    runtime_config_body: Option<Arc<[u8]>>,
+    c02_metrics_enabled: bool,
+}
+
 impl ServerHandle {
     /// Address selected by the operating system after binding.
     #[must_use]
@@ -683,6 +731,37 @@ impl ServerHandle {
             &self.metrics,
             &self.observations,
         ))
+    }
+
+    /// Gracefully stops the listener, every HTTP worker, and the backend,
+    /// then returns source-owned C02 evidence. Any missing final metric or
+    /// remaining ownership state fails closed before an artifact writer can
+    /// observe this result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a shutdown error or fails closed when the backend cannot prove
+    /// a stopped lifecycle and fully quiescent C02 final metrics.
+    pub fn shutdown_with_c02_evidence(
+        mut self,
+    ) -> Result<C02ShutdownEvidence, ServerShutdownError> {
+        self.shutdown_inner()?;
+        let status = self.backend.status();
+        if status.ready
+            || status.accepting
+            || status.active_requests != 0
+            || status.waiting_requests != 0
+        {
+            return Err(ServerShutdownError::C02BackendStillLive);
+        }
+        let final_metrics = self
+            .backend
+            .final_c02_metrics_snapshot()
+            .ok_or(ServerShutdownError::FinalC02MetricsUnavailable)?;
+        if !final_metrics.is_quiescent() {
+            return Err(ServerShutdownError::C02FinalStateNotQuiescent);
+        }
+        Ok(C02ShutdownEvidence { final_metrics })
     }
 
     fn shutdown_inner(&mut self) -> Result<(), ServerShutdownError> {
@@ -818,6 +897,25 @@ pub fn start_server_with_runtime_config(
     backend: Arc<dyn CompletionBackend>,
     runtime_config_body: Option<Arc<[u8]>>,
 ) -> Result<ServerHandle, ServerStartError> {
+    start_server_with_c02_metrics(config, backend, runtime_config_body, false)
+}
+
+/// Starts a bounded HTTP service with an optional immutable runtime
+/// configuration body and the narrow source-owned C02 metrics endpoint.
+///
+/// The endpoint is deliberately opt-in: ordinary deployments receive a 404
+/// for `/v1/c02/metrics` instead of an alternate generic metrics projection.
+///
+/// # Errors
+///
+/// Returns an error for invalid bounds, invalid public model metadata, a cold
+/// host-allocation failure, or a listener bind/setup failure.
+pub fn start_server_with_c02_metrics(
+    config: ServerConfig,
+    backend: Arc<dyn CompletionBackend>,
+    runtime_config_body: Option<Arc<[u8]>>,
+    c02_metrics_enabled: bool,
+) -> Result<ServerHandle, ServerStartError> {
     let config = config.validate()?;
     backend
         .model_metadata()
@@ -840,6 +938,10 @@ pub fn start_server_with_runtime_config(
     let connection_receiver = Arc::new(Mutex::new(connection_receiver));
     let observations = Arc::new(ObservationBuffer::try_new(config.observation_capacity)?);
     let metrics = Arc::new(ServiceMetrics::default());
+    let runtime_endpoints = Arc::new(RuntimeEndpointConfig {
+        runtime_config_body,
+        c02_metrics_enabled,
+    });
 
     let mut worker_threads = Vec::new();
     worker_threads
@@ -854,7 +956,7 @@ pub fn start_server_with_runtime_config(
         let worker_observations = Arc::clone(&observations);
         let worker_metrics = Arc::clone(&metrics);
         let worker_connections = Arc::clone(&connections);
-        let worker_runtime_config_body = runtime_config_body.clone();
+        let worker_runtime_endpoints = Arc::clone(&runtime_endpoints);
         worker_threads.push(
             thread::Builder::new()
                 .name(format!("riley-http-{worker_index}"))
@@ -866,7 +968,7 @@ pub fn start_server_with_runtime_config(
                         &worker_connections,
                         &worker_observations,
                         &worker_metrics,
-                        worker_runtime_config_body.as_deref(),
+                        worker_runtime_endpoints.as_ref(),
                         config,
                     );
                 })?,
@@ -970,6 +1072,7 @@ fn listener_loop(
     }
 }
 
+#[allow(clippy::too_many_arguments)] // The borrowed worker state mirrors one connection lifecycle.
 fn worker_loop(
     receiver: &Mutex<Receiver<ConnectionJob>>,
     backend: &dyn CompletionBackend,
@@ -977,7 +1080,7 @@ fn worker_loop(
     connections: &ConnectionRegistry,
     observations: &Arc<ObservationBuffer>,
     metrics: &Arc<ServiceMetrics>,
-    runtime_config_body: Option<&[u8]>,
+    runtime_endpoints: &RuntimeEndpointConfig,
     config: ServerConfig,
 ) {
     loop {
@@ -997,7 +1100,7 @@ fn worker_loop(
                         connections,
                         observations,
                         metrics,
-                        runtime_config_body,
+                        runtime_endpoints,
                         config,
                     };
                     handle_connection(&mut job.stream, job.registry_slot, &context);
@@ -1017,7 +1120,7 @@ struct ConnectionContext<'a> {
     connections: &'a ConnectionRegistry,
     observations: &'a Arc<ObservationBuffer>,
     metrics: &'a Arc<ServiceMetrics>,
-    runtime_config_body: Option<&'a [u8]>,
+    runtime_endpoints: &'a RuntimeEndpointConfig,
     config: ServerConfig,
 }
 
@@ -1059,7 +1162,7 @@ fn handle_connection(
         context.stopping,
         context.observations,
         context.metrics,
-        context.runtime_config_body,
+        context.runtime_endpoints,
         context.config,
         &request,
     );
@@ -1089,13 +1192,14 @@ impl Read for FramingReader<'_> {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // One request dispatch needs every bounded service owner.
 fn route_request(
     stream: &mut TcpStream,
     backend: &dyn CompletionBackend,
     stopping: &AtomicBool,
     observations: &Arc<ObservationBuffer>,
     metrics: &Arc<ServiceMetrics>,
-    runtime_config_body: Option<&[u8]>,
+    runtime_endpoints: &RuntimeEndpointConfig,
     config: ServerConfig,
     request: &HttpRequest,
 ) {
@@ -1106,7 +1210,12 @@ fn route_request(
         (HttpMethod::Get, "/metrics") => {
             write_operational_metrics(stream, backend, metrics, observations);
         }
-        (HttpMethod::Get, "/v1/config") => write_runtime_config(stream, runtime_config_body),
+        (HttpMethod::Get, "/v1/c02/metrics") if runtime_endpoints.c02_metrics_enabled => {
+            write_c02_metrics(stream, backend);
+        }
+        (HttpMethod::Get, "/v1/config") => {
+            write_runtime_config(stream, runtime_endpoints.runtime_config_body.as_deref());
+        }
         (HttpMethod::Get, "/v1/models") => write_model_list(stream, backend),
         (HttpMethod::Get, path) if path.starts_with("/v1/models/") => {
             write_model(stream, backend, &path["/v1/models/".len()..]);
@@ -1120,6 +1229,15 @@ fn route_request(
                 metrics,
                 config,
                 request.body(),
+            );
+        }
+        (HttpMethod::Post, "/v1/c02/metrics") if runtime_endpoints.c02_metrics_enabled => {
+            let _ = write_public_error(
+                stream,
+                405,
+                "method_not_allowed",
+                "the endpoint does not accept this method",
+                None,
             );
         }
         (HttpMethod::Get, "/v1/completions")
@@ -1333,6 +1451,135 @@ fn operational_batch_shapes(
     result
 }
 
+/// Exact schema label shared by the raw C02 live endpoint and shutdown
+/// artifact. The C02 producer serializes only the nested fields below; it
+/// never reuses the broader `/metrics` response.
+pub const C02_CAPTURE_METRICS_SCHEMA_VERSION: &str = "riley.c02-capture-metrics.v2";
+
+/// Builds the closed C02 metrics document with recursively sorted object
+/// keys. It contains no service counters, request text, or generic metrics.
+fn c02_capture_metrics_document(metrics: C02CaptureMetrics) -> BTreeMap<String, serde_json::Value> {
+    let request_states = c02_json_object([
+        (
+            "active",
+            serde_json::Value::from(metrics.request_states.active),
+        ),
+        (
+            "pending_requests",
+            serde_json::Value::from(metrics.request_states.pending_requests),
+        ),
+        (
+            "completed",
+            serde_json::Value::from(metrics.request_states.completed),
+        ),
+        (
+            "failed",
+            serde_json::Value::from(metrics.request_states.failed),
+        ),
+        (
+            "cancelled",
+            serde_json::Value::from(metrics.request_states.cancelled),
+        ),
+        (
+            "capacity_rejections",
+            serde_json::Value::from(metrics.request_states.capacity_rejections),
+        ),
+    ]);
+    let kv_blocks = c02_json_object([
+        ("free", serde_json::Value::from(metrics.kv_blocks.free)),
+        (
+            "reserved",
+            serde_json::Value::from(metrics.kv_blocks.reserved),
+        ),
+        ("active", serde_json::Value::from(metrics.kv_blocks.active)),
+    ]);
+    let allocation = c02_json_object([
+        (
+            "device_live_count",
+            serde_json::Value::from(metrics.allocation.device_live_count),
+        ),
+        (
+            "device_live_bytes",
+            serde_json::Value::from(metrics.allocation.device_live_bytes),
+        ),
+        (
+            "pinned_live_count",
+            serde_json::Value::from(metrics.allocation.pinned_live_count),
+        ),
+        (
+            "pinned_live_bytes",
+            serde_json::Value::from(metrics.allocation.pinned_live_bytes),
+        ),
+    ]);
+    let quiescence = c02_json_object([
+        (
+            "completion_outbox",
+            serde_json::Value::from(metrics.quiescence.completion_outbox),
+        ),
+        (
+            "outstanding_iterations",
+            serde_json::Value::from(metrics.quiescence.outstanding_iterations),
+        ),
+        (
+            "riley_owned_live_allocations",
+            serde_json::Value::from(metrics.quiescence.riley_owned_live_allocations),
+        ),
+        (
+            "worker_accepting",
+            serde_json::Value::from(metrics.quiescence.worker_accepting),
+        ),
+        (
+            "scheduler_accepting",
+            serde_json::Value::from(metrics.quiescence.scheduler_accepting),
+        ),
+    ]);
+    BTreeMap::from([
+        (
+            "schema_version".to_owned(),
+            serde_json::Value::String(C02_CAPTURE_METRICS_SCHEMA_VERSION.to_owned()),
+        ),
+        ("request_states".to_owned(), request_states),
+        ("kv_blocks".to_owned(), kv_blocks),
+        ("allocation".to_owned(), allocation),
+        ("quiescence".to_owned(), quiescence),
+    ])
+}
+
+fn c02_json_object(
+    values: impl IntoIterator<Item = (&'static str, serde_json::Value)>,
+) -> serde_json::Value {
+    let values: BTreeMap<_, _> = values
+        .into_iter()
+        .map(|(key, value)| (key.to_owned(), value))
+        .collect();
+    serde_json::Value::Object(values.into_iter().collect())
+}
+
+/// Serializes a C02 metrics document as canonical raw JSON: recursively
+/// sorted keys, compact separators, and no trailing newline.
+///
+/// # Errors
+///
+/// Returns only if JSON serialization cannot represent the closed metrics
+/// document.
+pub fn c02_capture_metrics_json_bytes(metrics: C02CaptureMetrics) -> Result<Vec<u8>, String> {
+    serde_json::to_vec(&c02_capture_metrics_document(metrics))
+        .map_err(|error| format!("could not serialize C02 metrics: {error}"))
+}
+
+/// Converts the same closed C02 metrics document into a JSON value for the
+/// surrounding shutdown artifact without adding or dropping any field.
+///
+/// # Errors
+///
+/// Returns only if JSON cannot construct the document value.
+pub fn c02_capture_metrics_json_value(
+    metrics: C02CaptureMetrics,
+) -> Result<serde_json::Value, String> {
+    serde_json::to_value(c02_capture_metrics_document(metrics))
+        .map_err(|error| format!("could not construct C02 metrics JSON: {error}"))
+}
+
 fn write_operational_metrics(
     stream: &mut TcpStream,
     backend: &dyn CompletionBackend,
@@ -1349,6 +1596,26 @@ fn write_operational_metrics(
                 503,
                 "metrics_unavailable",
                 "operational metrics are temporarily unavailable",
+                None,
+            );
+        }
+    }
+}
+
+fn write_c02_metrics(stream: &mut TcpStream, backend: &dyn CompletionBackend) {
+    let result = backend.c02_metrics_snapshot().and_then(|metrics| {
+        c02_capture_metrics_json_bytes(metrics).map_err(|_| ServiceErrorClass::Internal)
+    });
+    match result {
+        Ok(body) => {
+            let _ = write_response(stream, 200, JSON_CONTENT_TYPE, &body);
+        }
+        Err(_) => {
+            let _ = write_public_error(
+                stream,
+                503,
+                "metrics_unavailable",
+                "C02 metrics are temporarily unavailable",
                 None,
             );
         }
@@ -2097,17 +2364,19 @@ mod tests {
     use serde_json::{Value, json};
 
     use super::{
-        BackendStatus, CompletionBackend, EngineMetricsSnapshot, ObservationBuffer,
-        OperationalMetricsSnapshot, RequestCancellation, RequestObservation,
+        BackendStatus, C02ShutdownEvidence, CompletionBackend, EngineMetricsSnapshot,
+        ObservationBuffer, OperationalMetricsSnapshot, RequestCancellation, RequestObservation,
         RequestObservationStatus, ServerConfig, ServerShutdownError, SubmittedRequest,
-        start_server, start_server_with_runtime_config,
+        c02_capture_metrics_json_bytes, start_server, start_server_with_c02_metrics,
+        start_server_with_runtime_config,
     };
     use crate::domain::{
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestLimits,
         RequestMetadata, ServiceErrorClass, TokenUsage,
     };
     use crate::engine::{
-        ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineBatchShapeBucketMetrics,
+        C02AllocationMetrics, C02CaptureMetrics, C02KvBlockMetrics, C02QuiescenceMetrics,
+        C02RequestStateMetrics, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineBatchShapeBucketMetrics,
         EngineBatchShapeMetricsSnapshot, EngineBatchShapeObservation,
     };
 
@@ -2159,8 +2428,10 @@ mod tests {
         shutdown_signal: Arc<AtomicBool>,
         shutdown_called: AtomicBool,
         final_metrics_available: AtomicBool,
+        final_c02_metrics_available: AtomicBool,
         shutdown_delay: Mutex<Option<Duration>>,
         engine_metrics: Mutex<EngineMetricsSnapshot>,
+        c02_metrics: Mutex<C02CaptureMetrics>,
     }
 
     impl TestBackend {
@@ -2183,8 +2454,10 @@ mod tests {
                 shutdown_signal: Arc::new(AtomicBool::new(false)),
                 shutdown_called: AtomicBool::new(false),
                 final_metrics_available: AtomicBool::new(true),
+                final_c02_metrics_available: AtomicBool::new(true),
                 shutdown_delay: Mutex::new(None),
                 engine_metrics: Mutex::new(EngineMetricsSnapshot::default()),
+                c02_metrics: Mutex::new(C02CaptureMetrics::default()),
             })
         }
 
@@ -2204,6 +2477,13 @@ mod tests {
                 .engine_metrics
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner) = *snapshot;
+        }
+
+        fn set_c02_metrics(&self, snapshot: C02CaptureMetrics) {
+            *self
+                .c02_metrics
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = snapshot;
         }
     }
 
@@ -2234,6 +2514,29 @@ mod tests {
                 .then(|| {
                     *self
                         .engine_metrics
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                })
+        }
+
+        fn c02_metrics_snapshot(&self) -> Result<C02CaptureMetrics, ServiceErrorClass> {
+            self.final_c02_metrics_available
+                .load(Ordering::Acquire)
+                .then(|| {
+                    *self
+                        .c02_metrics
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                })
+                .ok_or(ServiceErrorClass::Internal)
+        }
+
+        fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
+            self.final_c02_metrics_available
+                .load(Ordering::Acquire)
+                .then(|| {
+                    *self
+                        .c02_metrics
                         .lock()
                         .unwrap_or_else(std::sync::PoisonError::into_inner)
                 })
@@ -2338,6 +2641,7 @@ mod tests {
                 }
                 thread::sleep(Duration::from_millis(2));
             }
+            self.ready.store(false, Ordering::Release);
             Ok(())
         }
     }
@@ -2403,6 +2707,26 @@ mod tests {
             .position(|bytes| bytes == b"\r\n\r\n")
             .expect("response head terminator");
         &response[head_end + 4..]
+    }
+
+    fn response_content_length(response: &[u8]) -> usize {
+        let head_end = response
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .expect("response head terminator");
+        let head = std::str::from_utf8(&response[..head_end]).expect("ASCII response head");
+        head.lines()
+            .find_map(|line| {
+                line.split_once(':').and_then(|(name, value)| {
+                    name.eq_ignore_ascii_case("content-length").then(|| {
+                        value
+                            .trim()
+                            .parse::<usize>()
+                            .expect("numeric content length")
+                    })
+                })
+            })
+            .expect("content-length header")
     }
 
     #[track_caller]
@@ -2630,6 +2954,85 @@ mod tests {
             serde_json::from_slice(response_body(&post)).expect("method rejection JSON");
         assert_eq!(post_error["error"]["code"], "method_not_allowed");
         configured.shutdown().expect("graceful shutdown");
+    }
+
+    #[test]
+    fn c02_metrics_endpoint_is_raw_canonical_and_explicitly_gated() {
+        let snapshot = C02CaptureMetrics {
+            request_states: C02RequestStateMetrics {
+                active: 3,
+                pending_requests: 4,
+                completed: 5,
+                failed: 6,
+                cancelled: 7,
+                capacity_rejections: 8,
+            },
+            kv_blocks: C02KvBlockMetrics {
+                free: 9,
+                reserved: 10,
+                active: 11,
+            },
+            allocation: C02AllocationMetrics {
+                device_live_count: 12,
+                device_live_bytes: 13,
+                pinned_live_count: 14,
+                pinned_live_bytes: 15,
+            },
+            quiescence: C02QuiescenceMetrics {
+                completion_outbox: 16,
+                outstanding_iterations: 17,
+                riley_owned_live_allocations: 18,
+                worker_accepting: true,
+                scheduler_accepting: false,
+            },
+        };
+        let expected = c02_capture_metrics_json_bytes(snapshot).expect("canonical C02 bytes");
+        assert_eq!(
+            expected,
+            br#"{"allocation":{"device_live_bytes":13,"device_live_count":12,"pinned_live_bytes":15,"pinned_live_count":14},"kv_blocks":{"active":11,"free":9,"reserved":10},"quiescence":{"completion_outbox":16,"outstanding_iterations":17,"riley_owned_live_allocations":18,"scheduler_accepting":false,"worker_accepting":true},"request_states":{"active":3,"cancelled":7,"capacity_rejections":8,"completed":5,"failed":6,"pending_requests":4},"schema_version":"riley.c02-capture-metrics.v2"}"#
+        );
+        assert!(!expected.ends_with(b"\n"));
+
+        let backend = TestBackend::new([]);
+        backend.set_c02_metrics(snapshot);
+        let enabled_backend: Arc<dyn CompletionBackend> = backend.clone();
+        let enabled = start_server_with_c02_metrics(test_config(), enabled_backend, None, true)
+            .expect("start C02-enabled server");
+        let response = send_request(
+            enabled.local_address(),
+            b"GET /v1/c02/metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 200);
+        assert_eq!(response_body(&response), expected);
+        assert_eq!(response_content_length(&response), expected.len());
+        enabled.shutdown().expect("graceful C02-enabled shutdown");
+
+        let disabled_backend: Arc<dyn CompletionBackend> = TestBackend::new([]);
+        let disabled = start_server_with_c02_metrics(test_config(), disabled_backend, None, false)
+            .expect("start C02-disabled server");
+        let response = send_request(
+            disabled.local_address(),
+            b"GET /v1/c02/metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 404);
+        disabled.shutdown().expect("graceful C02-disabled shutdown");
+
+        let unavailable = TestBackend::new([]);
+        unavailable
+            .final_c02_metrics_available
+            .store(false, Ordering::Release);
+        let unavailable_backend: Arc<dyn CompletionBackend> = unavailable.clone();
+        let unavailable =
+            start_server_with_c02_metrics(test_config(), unavailable_backend, None, true)
+                .expect("start C02 endpoint with unavailable source metrics");
+        let response = send_request(
+            unavailable.local_address(),
+            b"GET /v1/c02/metrics HTTP/1.1\r\nHost: localhost\r\n\r\n",
+        );
+        assert_eq!(response_status(&response), 503);
+        unavailable
+            .shutdown()
+            .expect("graceful unavailable C02 shutdown");
     }
 
     #[test]
@@ -2908,6 +3311,58 @@ mod tests {
             Err(ServerShutdownError::FinalMetricsUnavailable)
         );
         assert!(backend.shutdown_called.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn c02_shutdown_evidence_requires_post_close_typed_quiescence() {
+        let missing = TestBackend::new([]);
+        missing
+            .final_c02_metrics_available
+            .store(false, Ordering::Release);
+        let missing_backend: Arc<dyn CompletionBackend> = missing.clone();
+        let server = start_server(test_config(), missing_backend).expect("start server");
+        assert_eq!(
+            server.shutdown_with_c02_evidence(),
+            Err(ServerShutdownError::FinalC02MetricsUnavailable)
+        );
+        assert!(missing.shutdown_called.load(Ordering::Acquire));
+
+        let non_quiescent = TestBackend::new([]);
+        non_quiescent.set_c02_metrics(C02CaptureMetrics {
+            request_states: C02RequestStateMetrics {
+                active: 1,
+                ..C02RequestStateMetrics::default()
+            },
+            ..C02CaptureMetrics::default()
+        });
+        let non_quiescent_backend: Arc<dyn CompletionBackend> = non_quiescent.clone();
+        let server = start_server(test_config(), non_quiescent_backend).expect("start server");
+        assert_eq!(
+            server.shutdown_with_c02_evidence(),
+            Err(ServerShutdownError::C02FinalStateNotQuiescent)
+        );
+        assert!(non_quiescent.shutdown_called.load(Ordering::Acquire));
+
+        let still_live = TestBackend::new([]);
+        still_live.delay_shutdown_by(Duration::ZERO);
+        let still_live_backend: Arc<dyn CompletionBackend> = still_live.clone();
+        let server = start_server(test_config(), still_live_backend).expect("start server");
+        assert_eq!(
+            server.shutdown_with_c02_evidence(),
+            Err(ServerShutdownError::C02BackendStillLive)
+        );
+        assert!(still_live.shutdown_called.load(Ordering::Acquire));
+
+        let quiescent = TestBackend::new([]);
+        let quiescent_backend: Arc<dyn CompletionBackend> = quiescent.clone();
+        let server = start_server(test_config(), quiescent_backend).expect("start server");
+        assert_eq!(
+            server.shutdown_with_c02_evidence(),
+            Ok(C02ShutdownEvidence {
+                final_metrics: C02CaptureMetrics::default(),
+            })
+        );
+        assert!(quiescent.shutdown_called.load(Ordering::Acquire));
     }
 
     #[test]

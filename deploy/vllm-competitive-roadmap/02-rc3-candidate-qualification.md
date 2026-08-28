@@ -50,14 +50,22 @@ injectable-synthetic producer mechanism 확인일 뿐, frozen candidate binding,
 build/execution image, exact feature build command에 결박한다. v2 fault-extension receipt/schema는
 historical only다.
 
-Soak/rollback raw producer의 공통 선행 관측 surface도 source에 추가한다. complete C02 runtime
-configuration과 loopback `--c02-audit-dir`가 함께 켜진 서버만 `GET /v1/c02/metrics`로
-prompt-free `riley.c02-capture-metrics.v1` snapshot을 제공한다. 이는 compatibility-closed
-public `/metrics`를 바꾸지 않으며, scheduler 또는 native allocation snapshot이 없거나 degraded면
-`503`으로 fail-closed한다. KV `active`는 실제 allocated block, `reserved`는 아직 allocated되지
-않은 promised capacity, `free`는 active sequence가 promise하지 않은 capacity다. 따라서 세 값의
-합은 physical pool이며 detached runtime-reservation object의 수를 주장하지 않는다. 이 endpoint는
-향후 raw producer의 telemetry input일 뿐, raw receipt·semantic report·C02 verdict가 아니다.
+### Historical v1 observation/shutdown proposal — superseded
+
+이전 문서의 `riley.c02-capture-metrics.v1`,
+`riley.c02-shutdown-quiescence.v1`, 그리고 hidden
+`.<basename>.complete` shutdown marker 제안은 historical-only다. 그것은 candidate
+qualification input이나 P1 v2 producer contract가 아니며, v2 binder/finalizer는 이를
+up-convert하거나 수용하지 않는다.
+
+대신 C02-P1은 complete C02 runtime configuration과 loopback
+`--c02-audit-dir`가 함께 켜진 server에 prompt-free
+`GET /v1/c02/metrics` **v2** surface를 구현해야 한다. 이 endpoint는
+compatibility-closed public `/metrics`를 바꾸지 않는다. raw response는
+`riley.c02-capture-metrics.v2`이고 정확히 `request_states`, `kv_blocks`,
+`allocation`, `quiescence`의 source-owned facts를 담는다. scheduler/native
+allocation snapshot을 얻지 못하거나 degraded이면 `503`으로 fail-closed한다. raw
+schema/binder는 field type만 확인하고 threshold나 qualification result를 만들지 않는다.
 
 새 `ci/release/check_rc3_prefreeze.py`는 freeze를 쓰기 전 clean source snapshot만
 fail-closed로 확인하는 별도 도구다. `HEAD` 별칭이 아닌 full SHA와 proposed RC ID를 받고,
@@ -68,7 +76,7 @@ workspace version, `Cargo.lock`·extension registry의 no-follow hash를 확인�
 생성하거나 검증했다고 주장하지 않으며, actual frozen candidate 또는 C02 qualification의 대체물이
 아니다.
 
-`ci/release/capture_c02_observations.py`는 이미 loopback C02 audit server로 실행 중인
+`ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의
 `/proc` RSS/start-tick, 지정 GPU UUID/compute-apps 원본을 새 external evidence directory에
 create-only로 보존한다. endpoint가 `200`/정확한 C02 schema가 아니거나 PID start tick, GPU UUID,
@@ -76,34 +84,39 @@ create-only로 보존한다. endpoint가 `200`/정확한 C02 schema가 아니거
 `qualification_status: not-run`이고 freeze, candidate ID, semantic receipt, soak-v2 trace 또는
 C02 verdict를 만들지 않는다.
 
-종료 직후 raw ownership을 별도 보존해야 할 경우에는 complete C02 identity, loopback
-`--c02-audit-dir`, 그리고 audit root의 직접 자식인
-`--c02-shutdown-artifact PATH`를 함께 지정한다. 이 경로는 일반
-`RILEY_SHUTDOWN_METRICS_PATH`와 동시에 지정할 수 없다. 서버가 모든 worker를 join하고
-backend close 뒤 authoritative final scheduler/allocation snapshot을 얻은 뒤에도
-worker가 `ready`이거나 accepting, scheduler ownership, KV reservation/allocation, native
-allocation 중 하나라도 남아 있으면 writer는 fail-closed하고 shutdown artifact를 만들지
-않는다. 성공 raw document는
-`riley.c02-shutdown-quiescence.v1`, `capture_status: "captured"`,
-`qualification_status: "not-run"`, `worker_ready: false`,
-final C02 metrics만 담는다. candidate ID, freeze SHA, Gate E,
-semantic receipt, `passed` 또는 rollback verdict는 포함하지 않는다.
+종료 직후 raw ownership을 별도 보존할 경우 source는 complete C02 identity,
+loopback `--c02-audit-dir`, audit root의 direct child인
+`--c02-shutdown-artifact PATH`를 함께 요구해야 한다. 이 flag는 일반
+`RILEY_SHUTDOWN_METRICS_PATH`와 mutual exclusion이고, server가 listener/HTTP worker를
+join하고 backend close가 성공한 뒤에만 writer에 authoritative final snapshot을 넘긴다.
 
-audit root는 euid 소유·정확히 `0700`이어야 하며, `/`부터 그 root까지의 각 ancestor는
-root 또는 euid 소유여야 한다. peer-writable ancestor는 sticky bit이 있는 경우만 허용한다.
-writer는 이 trusted chain을 FD로 no-follow traversal한 audit root FD 기준
-`O_NOFOLLOW|O_EXCL` create-only final file을 fsync한 뒤,
-같은 root에 `.<basename>.complete` marker를 create-only로 기록하고 final bytes SHA-256을
-binding한 뒤 directory를 fsync한다. final file만 있고 matching marker가 없거나 marker hash가
-다르면 incomplete이며 future producer/checker는 이를 C02 shutdown evidence로 사용할 수
-없다. 기존 file, symlink, sibling/subdirectory output path는 replacement·cleanup 없이
-거절한다.
+성공 artifact는 v2 schema의 정확히 일곱 field만 가진다:
+`schema_version: "riley.c02-shutdown-quiescence.v2"`,
+`capture_status: "captured"`, `qualification_status: "not-run"`,
+`server_pid`, `server_start_ticks`, `worker_ready: false`, `final_metrics`.
+`final_metrics`는 `riley.c02-capture-metrics.v2` exact nested object이며
+candidate ID, freeze SHA, Gate E, semantic receipt, `passed`, rollback verdict를
+포함할 수 없다. source writer는 worker accepting/scheduler ownership/KV
+reservation or allocation/native allocation 등 source-owned shutdown facts가
+남으면 fail-closed하고 artifact/marker를 만들지 않는다. raw binder가 이 field들을
+threshold로 판정하지 않는 것은 이후 semantic replay가 담당하기 때문이다.
+
+audit root는 euid 소유·정확히 `0700`이어야 하며, `/`부터 root까지의 각 ancestor는 root
+또는 euid 소유이고 peer-writable이면 sticky bit이어야 한다. writer는 startup에 열린
+trusted root FD를 유지해 direct child를 `O_CREAT|O_EXCL|O_NOFOLLOW`로 create-only write,
+file `fsync`, 같은 root의 nonhidden `<artifact_filename>.complete` marker write,
+marker/root-directory `fsync` 순서로 commit한다. marker는 정확히
+`schema_version: "riley.c02-shutdown-quiescence-complete.v2"`,
+`artifact_filename`, `artifact_sha256` 세 field이며 exact artifact bytes hash를 bind한다.
+final file만 있거나 matching v2 marker/hash가 다르면 incomplete다. existing file,
+symlink, hard link, sibling/subdirectory path, root parent swap은 replacement/cleanup
+없이 reject한다.
 
 ### C02-P1 provenance v2 closure (candidate freeze 전 필수)
 
 [`C02-P1 provenance v2와 reconstructed rollback baseline`](02b-c02-p1-provenance-v2.md)이 이 선행 gate의 규범적 계약이다. v1 soak/rollback receipt의 self-authored interval, worker/model label, `atomic-rename` 선언, fallback 문자열은 historical-only이며 C02 qualification input으로 수용하지 않는다. C02는 P1의 v2 raw descriptor replay와 source-owned selection audit, reconstructed-tag baseline manifest를 사용한다.
 
-현재 observation sampler와 shutdown artifact는 원시 관측 surface일 뿐이며,
+v2 observation sampler와 shutdown artifact producer는 원시 관측 surface일 뿐이며,
 `riley.soak-v2-receipt.v1` 또는 `riley.rc3-rollback-receipt.v1`을 실제로 생성하는
 producer는 아직 없다. 따라서 C02 candidate를 freeze하기 전, C01, C02-P0, C02-P1이 각각
 clean merge된 source에서 다음을 별도 mechanism 변경과 adversarial test로 닫아야 한다.

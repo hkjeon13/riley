@@ -344,6 +344,12 @@ pub struct RequestSettlementFailure {
 pub struct SchedulerCloseOutput {
     completions: Vec<RequestCompletion>,
     settlement_failures: Vec<RequestSettlementFailure>,
+    // Captured after the consuming close has proved that no scheduler-owned
+    // queue, plan, sequence, or KV reservation remains.  Keeping this typed
+    // source snapshot with the close result lets higher layers bind shutdown
+    // evidence to the same ownership transition rather than sampling a
+    // separate, already-dropped scheduler.
+    final_metrics: SchedulerMetricsSnapshot,
 }
 
 impl SchedulerCloseOutput {
@@ -355,6 +361,12 @@ impl SchedulerCloseOutput {
     #[must_use]
     pub fn settlement_failures(&self) -> &[RequestSettlementFailure] {
         &self.settlement_failures
+    }
+
+    /// Exact scheduler metrics captured after successful consuming close.
+    #[must_use]
+    pub const fn final_metrics(&self) -> SchedulerMetricsSnapshot {
+        self.final_metrics
     }
 
     #[must_use]
@@ -1353,9 +1365,16 @@ impl Scheduler {
                 settlement_failures,
             ));
         }
+        let final_metrics = match self.metrics_snapshot() {
+            Ok(metrics) => metrics,
+            Err(error) => {
+                return Err(self.close_failure(error, completions, settlement_failures));
+            }
+        };
         Ok(SchedulerCloseOutput {
             completions,
             settlement_failures,
+            final_metrics,
         })
     }
 
@@ -2718,6 +2737,20 @@ mod tests {
         assert_eq!(metric.gpu_idle_gap_ns, 29);
 
         scheduler.close(3, None).expect("exact scheduler cleanup");
+    }
+
+    #[test]
+    fn consuming_close_returns_a_typed_post_cleanup_metrics_snapshot() {
+        let scheduler = test_scheduler();
+        let output = scheduler.close(0, None).expect("clean consuming close");
+        let final_metrics = output.final_metrics();
+        assert!(!final_metrics.gauges.accepting);
+        assert_eq!(final_metrics.gauges.waiting_requests, 0);
+        assert_eq!(final_metrics.gauges.active_sequences, 0);
+        assert_eq!(final_metrics.gauges.promised_kv_blocks, 0);
+        assert_eq!(final_metrics.gauges.allocated_kv_blocks, 0);
+        assert_eq!(final_metrics.gauges.pending_completions, 0);
+        assert_eq!(final_metrics.gauges.outstanding_iterations, 0);
     }
 
     #[test]

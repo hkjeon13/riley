@@ -310,6 +310,14 @@ pub trait EngineBackend: Send + 'static {
         EngineMetricsSnapshot::default()
     }
 
+    /// Returns C02 shutdown metrics captured only after every owned native
+    /// resource has closed successfully. `None` means this backend cannot
+    /// prove the C02 source contract.
+    #[must_use]
+    fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
+        None
+    }
+
     /// Cancels remaining work and explicitly closes owned resources.
     ///
     /// # Errors
@@ -413,6 +421,7 @@ struct EngineStats {
     active_requests: AtomicUsize,
     waiting_requests: AtomicUsize,
     final_metrics: Mutex<Option<EngineMetricsSnapshot>>,
+    final_c02_metrics: Mutex<Option<C02CaptureMetrics>>,
 }
 
 impl Default for EngineStats {
@@ -421,6 +430,7 @@ impl Default for EngineStats {
             active_requests: AtomicUsize::new(0),
             waiting_requests: AtomicUsize::new(0),
             final_metrics: Mutex::new(None),
+            final_c02_metrics: Mutex::new(None),
         }
     }
 }
@@ -436,6 +446,20 @@ impl EngineStats {
     fn final_metrics(&self) -> Option<EngineMetricsSnapshot> {
         *self
             .final_metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn store_final_c02_metrics(&self, metrics: C02CaptureMetrics) {
+        *self
+            .final_c02_metrics
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(metrics);
+    }
+
+    fn final_c02_metrics(&self) -> Option<C02CaptureMetrics> {
+        *self
+            .final_c02_metrics
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
@@ -841,6 +865,162 @@ pub struct EngineMetricsSnapshot {
     pub allocation: Option<EngineAllocationMetrics>,
 }
 
+/// Source-owned terminal and live request counters exported by the narrow C02
+/// capture contract. Historical terminal counters intentionally remain
+/// visible during quiescence; only live ownership is required to reach zero.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct C02RequestStateMetrics {
+    pub active: u64,
+    pub pending_requests: u64,
+    pub completed: u64,
+    pub failed: u64,
+    pub cancelled: u64,
+    pub capacity_rejections: u64,
+}
+
+/// Source-owned KV-pool ownership partition exported by C02.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct C02KvBlockMetrics {
+    pub free: u64,
+    pub reserved: u64,
+    pub active: u64,
+}
+
+/// Native allocation facts captured from the exclusively owned CUDA context.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct C02AllocationMetrics {
+    pub device_live_count: u64,
+    pub device_live_bytes: u64,
+    pub pinned_live_count: u64,
+    pub pinned_live_bytes: u64,
+}
+
+/// Source-owned shutdown facts that must all prove quiescence before a C02
+/// completion marker can be created.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct C02QuiescenceMetrics {
+    pub completion_outbox: u64,
+    pub outstanding_iterations: u64,
+    pub riley_owned_live_allocations: u64,
+    pub worker_accepting: bool,
+    pub scheduler_accepting: bool,
+}
+
+/// Typed, source-owned C02 metrics. This type deliberately contains no
+/// generic service counters or saturating conversions: it is built only from
+/// the scheduler and the owned CUDA allocation context.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct C02CaptureMetrics {
+    pub request_states: C02RequestStateMetrics,
+    pub kv_blocks: C02KvBlockMetrics,
+    pub allocation: C02AllocationMetrics,
+    pub quiescence: C02QuiescenceMetrics,
+}
+
+impl C02CaptureMetrics {
+    /// Maps one live engine snapshot into the closed C02 source contract.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the backend did not provide source-owned scheduler and
+    /// allocation facts, or when their checked ownership relationships cannot
+    /// be represented faithfully.
+    pub fn from_engine_snapshot(
+        status: EngineStatus,
+        snapshot: EngineMetricsSnapshot,
+    ) -> Result<Self, &'static str> {
+        let scheduler = snapshot
+            .scheduler
+            .ok_or("C02 metrics require a scheduler snapshot")?;
+        let allocation = snapshot
+            .allocation
+            .ok_or("C02 metrics require an allocation snapshot")?;
+        Self::from_source_snapshots(status.accepting, scheduler, allocation)
+    }
+
+    /// Maps authoritative scheduler and allocation snapshots without reading
+    /// any state concurrently with their owners.
+    ///
+    /// # Errors
+    ///
+    /// Returns when a source metric is degraded, violates its checked
+    /// ownership partition, or cannot be represented as a C02 counter.
+    pub fn from_source_snapshots(
+        worker_accepting: bool,
+        scheduler: SchedulerMetricsSnapshot,
+        allocation: EngineAllocationMetrics,
+    ) -> Result<Self, &'static str> {
+        if scheduler.metrics_degraded {
+            return Err("C02 metrics refuse degraded scheduler observations");
+        }
+        let gauges = scheduler.gauges;
+        let reserved = gauges
+            .promised_kv_blocks
+            .checked_sub(gauges.allocated_kv_blocks)
+            .ok_or("C02 metrics saw allocated KV blocks above promised blocks")?;
+        let free = gauges
+            .physical_kv_blocks
+            .checked_sub(gauges.promised_kv_blocks)
+            .ok_or("C02 metrics saw promised KV blocks above physical blocks")?;
+        let riley_owned_live_allocations = allocation
+            .device_live_allocations
+            .checked_add(allocation.pinned_host_live_allocations)
+            .ok_or("C02 metrics allocation count overflowed")?;
+        Ok(Self {
+            request_states: C02RequestStateMetrics {
+                active: c02_usize_to_u64(gauges.active_sequences)?,
+                pending_requests: c02_usize_to_u64(gauges.waiting_requests)?,
+                completed: scheduler.requests_finished,
+                failed: scheduler.requests_failed,
+                cancelled: scheduler.requests_cancelled,
+                capacity_rejections: scheduler.requests_rejected,
+            },
+            kv_blocks: C02KvBlockMetrics {
+                free: c02_usize_to_u64(free)?,
+                reserved: c02_usize_to_u64(reserved)?,
+                active: c02_usize_to_u64(gauges.allocated_kv_blocks)?,
+            },
+            allocation: C02AllocationMetrics {
+                device_live_count: allocation.device_live_allocations,
+                device_live_bytes: allocation.device_live_bytes,
+                pinned_live_count: allocation.pinned_host_live_allocations,
+                pinned_live_bytes: allocation.pinned_host_live_bytes,
+            },
+            quiescence: C02QuiescenceMetrics {
+                completion_outbox: c02_usize_to_u64(gauges.pending_completions)?,
+                outstanding_iterations: c02_usize_to_u64(gauges.outstanding_iterations)?,
+                riley_owned_live_allocations,
+                worker_accepting,
+                scheduler_accepting: gauges.accepting,
+            },
+        })
+    }
+
+    /// Whether every source-owned live ownership gauge proves shutdown
+    /// quiescence. Historical terminal request counters intentionally do not
+    /// participate in this predicate.
+    #[must_use]
+    pub const fn is_quiescent(self) -> bool {
+        self.request_states.active == 0
+            && self.request_states.pending_requests == 0
+            && self.kv_blocks.active == 0
+            && self.kv_blocks.reserved == 0
+            && self.allocation.device_live_count == 0
+            && self.allocation.device_live_bytes == 0
+            && self.allocation.pinned_live_count == 0
+            && self.allocation.pinned_live_bytes == 0
+            && self.quiescence.completion_outbox == 0
+            && self.quiescence.outstanding_iterations == 0
+            && self.quiescence.riley_owned_live_allocations == 0
+            && !self.quiescence.worker_accepting
+            && !self.quiescence.scheduler_accepting
+    }
+}
+
+fn c02_usize_to_u64(value: usize) -> Result<u64, &'static str> {
+    u64::try_from(value).map_err(|_| "C02 metrics counter exceeds u64")
+}
+
 impl fmt::Debug for InferenceEngine {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
@@ -976,6 +1156,26 @@ impl InferenceEngine {
     #[must_use]
     pub fn final_metrics_snapshot(&self) -> Option<EngineMetricsSnapshot> {
         self.inner.stats.final_metrics()
+    }
+
+    /// Returns one source-owned C02 live snapshot serialized through the
+    /// exclusive backend worker.
+    ///
+    /// # Errors
+    ///
+    /// Returns when the worker is unavailable or the backend cannot provide
+    /// complete, non-degraded scheduler and allocation facts.
+    pub fn c02_metrics_snapshot(&self) -> Result<C02CaptureMetrics, EngineError> {
+        let status = self.status();
+        let snapshot = self.metrics_snapshot()?;
+        C02CaptureMetrics::from_engine_snapshot(status, snapshot).map_err(|_| EngineError::Internal)
+    }
+
+    /// Returns C02 metrics captured only after a successful explicit native
+    /// resource close. `None` means shutdown evidence must fail closed.
+    #[must_use]
+    pub fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
+        self.inner.stats.final_c02_metrics()
     }
 
     /// Submits one request without blocking on generation.
@@ -1315,6 +1515,9 @@ fn worker_main<B: EngineBackend>(
                 Ok(events) => {
                     publish_events(&mut backend, &mut requests, events);
                     stats.store_final_metrics(&backend.final_metrics_snapshot());
+                    if let Some(metrics) = backend.final_c02_metrics_snapshot() {
+                        stats.store_final_c02_metrics(metrics);
+                    }
                 }
                 Err(error) => {
                     eprintln!("riley engine shutdown failure: {}", error.detail());
@@ -1635,6 +1838,14 @@ impl crate::service::CompletionBackend for InferenceEngine {
         InferenceEngine::final_metrics_snapshot(self)
     }
 
+    fn c02_metrics_snapshot(&self) -> Result<C02CaptureMetrics, ServiceErrorClass> {
+        InferenceEngine::c02_metrics_snapshot(self).map_err(|error| error.service_class())
+    }
+
+    fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
+        InferenceEngine::final_c02_metrics_snapshot(self)
+    }
+
     fn submit(
         &self,
         request: GenerationRequest,
@@ -1692,13 +1903,14 @@ mod cuda_backend {
     };
 
     use super::{
-        BackendError, BackendEvent, BatchShapeExecutionSample, C02CommittedSamplingSelection,
-        C02GenerationAuditDeliveryMode, C02GenerationAuditRecord, C02GenerationAuditSink,
-        C02GenerationAuditToken, C02SamplingBackend, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
-        EngineAllocationMetrics, EngineBackend, EngineBatchShapeMetricsSnapshot, EngineConfig,
-        EngineError, EngineMetricsSnapshot, EngineRequestId, InferenceEngine,
-        gpu_greedy_ineligibility, prepare_batch_shape_metrics, private_request_error,
-        record_committed_batch_shape, selection_after_scheduler_commit, visible_utf8_prefix,
+        BackendError, BackendEvent, BatchShapeExecutionSample, C02CaptureMetrics,
+        C02CommittedSamplingSelection, C02GenerationAuditDeliveryMode, C02GenerationAuditRecord,
+        C02GenerationAuditSink, C02GenerationAuditToken, C02SamplingBackend,
+        ENGINE_BATCH_SHAPE_BUCKET_CAPACITY, EngineAllocationMetrics, EngineBackend,
+        EngineBatchShapeMetricsSnapshot, EngineConfig, EngineError, EngineMetricsSnapshot,
+        EngineRequestId, InferenceEngine, gpu_greedy_ineligibility, prepare_batch_shape_metrics,
+        private_request_error, record_committed_batch_shape, selection_after_scheduler_commit,
+        visible_utf8_prefix,
     };
 
     const _: () = assert!(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY == MAX_LLAMA_BATCH_SHAPE_BUCKETS);
@@ -2166,6 +2378,7 @@ mod cuda_backend {
         pending_events: VecDeque<BackendEvent>,
         batch_shapes: EngineBatchShapeMetricsSnapshot,
         final_metrics: EngineMetricsSnapshot,
+        final_c02_metrics: Option<C02CaptureMetrics>,
         clock: Instant,
     }
 
@@ -2240,6 +2453,7 @@ mod cuda_backend {
                 pending_events,
                 batch_shapes,
                 final_metrics: EngineMetricsSnapshot::default(),
+                final_c02_metrics: None,
                 clock: Instant::now(),
             })
         }
@@ -2654,6 +2868,8 @@ mod cuda_backend {
 
         fn close_resources(&mut self) -> Result<(), BackendError> {
             let mut first_error = None;
+            let mut final_scheduler = None;
+            let mut final_allocation = None;
             if self
                 .scheduler
                 .as_ref()
@@ -2689,8 +2905,13 @@ mod cuda_backend {
             }
             if first_error.is_none() {
                 if let Some(scheduler) = self.scheduler.take() {
-                    if let Err(source) = scheduler.close(self.now_ns(), None) {
-                        first_error = Some(format!("scheduler close failed: {source}"));
+                    match scheduler.close(self.now_ns(), None) {
+                        Ok(output) => {
+                            final_scheduler = Some(output.final_metrics());
+                        }
+                        Err(source) => {
+                            first_error = Some(format!("scheduler close failed: {source}"));
+                        }
                     }
                 }
             }
@@ -2717,17 +2938,13 @@ mod cuda_backend {
                 match self.context.as_ref() {
                     Some(context) => match context.allocation_stats() {
                         Ok(allocation) => {
-                            self.final_metrics = EngineMetricsSnapshot {
-                                scheduler: None,
-                                batch_shapes: Some(self.batch_shapes),
-                                allocation: Some(EngineAllocationMetrics {
-                                    device_live_bytes: allocation.device_live_bytes(),
-                                    device_live_allocations: allocation.device_live_allocations(),
-                                    pinned_host_live_bytes: allocation.pinned_host_live_bytes(),
-                                    pinned_host_live_allocations: allocation
-                                        .pinned_host_live_allocations(),
-                                }),
-                            };
+                            final_allocation = Some(EngineAllocationMetrics {
+                                device_live_bytes: allocation.device_live_bytes(),
+                                device_live_allocations: allocation.device_live_allocations(),
+                                pinned_host_live_bytes: allocation.pinned_host_live_bytes(),
+                                pinned_host_live_allocations: allocation
+                                    .pinned_host_live_allocations(),
+                            });
                         }
                         Err(source) => {
                             first_error = Some(format!(
@@ -2747,7 +2964,21 @@ mod cuda_backend {
             }
             match first_error {
                 Some(detail) => Err(internal(detail)),
-                None => Ok(()),
+                None => {
+                    let allocation = final_allocation
+                        .expect("successful CUDA close always samples allocation metrics");
+                    self.final_metrics = EngineMetricsSnapshot {
+                        // Preserve the pre-existing generic shutdown payload;
+                        // C02 consumes the typed scheduler close snapshot below.
+                        scheduler: None,
+                        batch_shapes: Some(self.batch_shapes),
+                        allocation: Some(allocation),
+                    };
+                    self.final_c02_metrics = final_scheduler.and_then(|scheduler| {
+                        C02CaptureMetrics::from_source_snapshots(false, scheduler, allocation).ok()
+                    });
+                    Ok(())
+                }
             }
         }
     }
@@ -3074,6 +3305,10 @@ mod cuda_backend {
             self.final_metrics
         }
 
+        fn final_c02_metrics_snapshot(&self) -> Option<C02CaptureMetrics> {
+            self.final_c02_metrics
+        }
+
         fn shutdown(&mut self) -> Result<Vec<BackendEvent>, BackendError> {
             if self.scheduler.is_none()
                 && self.executor.is_none()
@@ -3133,14 +3368,16 @@ mod tests {
         FinishReason, GenerationEvent, GenerationRequest, ModelMetadata, RequestMetadata,
         SamplingParameters, ServiceErrorClass, TokenUsage,
     };
+    use riley_scheduler::SchedulerGauges;
+    use riley_scheduler::metrics::SchedulerMetrics;
 
     use super::{
-        BackendError, BackendEvent, BatchShapeExecutionSample, C02CommittedSamplingSelection,
-        C02GpuGreedyIneligibility, C02SamplingBackend, EngineBackend,
-        EngineBatchShapeMetricsSnapshot, EngineConfig, EngineError, EngineRequestId,
-        InferenceEngine, gpu_greedy_ineligibility, prepare_batch_shape_metrics,
-        private_request_error, record_committed_batch_shape, selection_after_scheduler_commit,
-        visible_utf8_prefix,
+        BackendError, BackendEvent, BatchShapeExecutionSample, C02CaptureMetrics,
+        C02CommittedSamplingSelection, C02GpuGreedyIneligibility, C02SamplingBackend,
+        EngineAllocationMetrics, EngineBackend, EngineBatchShapeMetricsSnapshot, EngineConfig,
+        EngineError, EngineRequestId, InferenceEngine, gpu_greedy_ineligibility,
+        prepare_batch_shape_metrics, private_request_error, record_committed_batch_shape,
+        selection_after_scheduler_commit, visible_utf8_prefix,
     };
 
     #[derive(Debug)]
@@ -3326,6 +3563,7 @@ mod tests {
         let counters = Arc::new(MockCounters::default());
         let engine = engine(counters, 2, 2, Duration::ZERO);
         assert_eq!(engine.final_metrics_snapshot(), None);
+        assert_eq!(engine.final_c02_metrics_snapshot(), None);
         assert_eq!(
             engine.metrics_snapshot().expect("metrics snapshot"),
             super::EngineMetricsSnapshot::default()
@@ -3335,6 +3573,65 @@ mod tests {
             engine.final_metrics_snapshot(),
             Some(super::EngineMetricsSnapshot::default())
         );
+        assert_eq!(engine.final_c02_metrics_snapshot(), None);
+    }
+
+    #[test]
+    fn c02_metrics_map_only_checked_source_owned_scheduler_and_allocation_facts() {
+        let mut source = SchedulerMetrics::new(1).expect("small metric windows");
+        source.record_finished().expect("finished counter");
+        source.record_failed().expect("failed counter");
+        source.record_rejection().expect("rejection counter");
+        source.record_cancellation().expect("cancellation counter");
+        source
+            .set_gauges(SchedulerGauges {
+                waiting_requests: 2,
+                active_sequences: 3,
+                promised_kv_blocks: 7,
+                allocated_kv_blocks: 5,
+                physical_kv_blocks: 11,
+                pending_completions: 13,
+                completion_capacity: 13,
+                accepting: true,
+                outstanding_iterations: 1,
+                ..SchedulerGauges::default()
+            })
+            .expect("valid ownership partition");
+        let metrics = C02CaptureMetrics::from_source_snapshots(
+            true,
+            source.snapshot().expect("snapshot"),
+            EngineAllocationMetrics {
+                device_live_allocations: 17,
+                device_live_bytes: 19,
+                pinned_host_live_allocations: 23,
+                pinned_host_live_bytes: 29,
+            },
+        )
+        .expect("map C02 source metrics");
+        assert_eq!(metrics.request_states.active, 3);
+        assert_eq!(metrics.request_states.pending_requests, 2);
+        assert_eq!(metrics.request_states.completed, 1);
+        assert_eq!(metrics.request_states.failed, 1);
+        assert_eq!(metrics.request_states.cancelled, 1);
+        assert_eq!(metrics.request_states.capacity_rejections, 1);
+        assert_eq!(metrics.kv_blocks.free, 4);
+        assert_eq!(metrics.kv_blocks.reserved, 2);
+        assert_eq!(metrics.kv_blocks.active, 5);
+        assert_eq!(metrics.quiescence.completion_outbox, 13);
+        assert_eq!(metrics.quiescence.outstanding_iterations, 1);
+        assert_eq!(metrics.quiescence.riley_owned_live_allocations, 40);
+        assert!(!metrics.is_quiescent());
+
+        let final_metrics = C02CaptureMetrics::from_source_snapshots(
+            false,
+            SchedulerMetrics::new(1)
+                .expect("small metric windows")
+                .snapshot()
+                .expect("empty snapshot"),
+            EngineAllocationMetrics::default(),
+        )
+        .expect("map final C02 metrics");
+        assert!(final_metrics.is_quiescent());
     }
 
     #[test]

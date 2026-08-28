@@ -2,10 +2,10 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
-#[cfg(feature = "cuda")]
-use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
+#[cfg(all(any(feature = "cuda", test), unix))]
+use std::sync::Arc;
 
 #[cfg(any(feature = "cuda", test))]
 use sha2::Digest;
@@ -52,6 +52,7 @@ serve options:
   --c02-configuration-profile ID stable-default or max-performance-exact
   --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
   --c02-audit-dir PATH           absolute C02 generation-audit output directory
+  --c02-shutdown-artifact PATH   direct-child C02 shutdown-v2 JSON artifact in audit dir
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
 
@@ -87,6 +88,7 @@ struct ServeOptions {
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
     c02_audit_dir: Option<PathBuf>,
+    c02_shutdown_artifact: Option<C02ShutdownArtifactOptions>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -146,6 +148,13 @@ struct C02RuntimeConfigOptions {
     candidate_id: String,
     configuration_profile: C02ConfigurationProfile,
     startup_artifact: PathBuf,
+}
+
+/// Parsed C02 shutdown-v2 target. Only the validated direct-child basename is
+/// retained: the writer never reopens the user-provided path during shutdown.
+#[derive(Debug, Eq, PartialEq)]
+struct C02ShutdownArtifactOptions {
+    basename: String,
 }
 
 fn main() -> ExitCode {
@@ -238,6 +247,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut c02_configuration_profile = None;
     let mut c02_startup_artifact = None;
     let mut c02_audit_dir = None;
+    let mut c02_shutdown_artifact = None;
 
     while let Some(flag) = arguments.next() {
         let Some(flag_text) = flag.to_str() else {
@@ -396,6 +406,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 )?),
                 "--c02-audit-dir",
             )?,
+            "--c02-shutdown-artifact" => set_once(
+                &mut c02_shutdown_artifact,
+                PathBuf::from(parse_utf8(
+                    next_value(&mut arguments, "--c02-shutdown-artifact")?,
+                    "--c02-shutdown-artifact",
+                )?),
+                "--c02-shutdown-artifact",
+            )?,
             "--shutdown-on-stdin" => {
                 if shutdown_on_stdin {
                     return Err("--shutdown-on-stdin may occur only once".to_owned());
@@ -438,6 +456,11 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         c02_startup_artifact,
     )?;
     let c02_audit_dir = parse_c02_audit_dir(c02_runtime_config.as_ref(), c02_audit_dir)?;
+    let c02_shutdown_artifact = parse_c02_shutdown_artifact(
+        c02_runtime_config.as_ref(),
+        c02_audit_dir.as_deref(),
+        c02_shutdown_artifact,
+    )?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     Ok(CliCommand::Serve(ServeOptions {
@@ -463,6 +486,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         shutdown_on_stdin,
         c02_runtime_config,
         c02_audit_dir,
+        c02_shutdown_artifact,
     }))
 }
 
@@ -605,6 +629,63 @@ fn parse_c02_audit_dir(
     Ok(Some(audit_dir))
 }
 
+fn parse_c02_shutdown_artifact(
+    runtime_config: Option<&C02RuntimeConfigOptions>,
+    audit_dir: Option<&std::path::Path>,
+    artifact: Option<PathBuf>,
+) -> Result<Option<C02ShutdownArtifactOptions>, String> {
+    let Some(artifact) = artifact else {
+        return Ok(None);
+    };
+    if runtime_config.is_none() {
+        return Err(
+            "--c02-shutdown-artifact requires complete C02 runtime configuration".to_owned(),
+        );
+    }
+    let audit_dir = audit_dir.ok_or_else(|| {
+        "--c02-shutdown-artifact requires --c02-audit-dir as its held evidence root".to_owned()
+    })?;
+    if artifact.as_os_str().is_empty() || !artifact.is_absolute() {
+        return Err("--c02-shutdown-artifact must be an absolute non-empty path".to_owned());
+    }
+    let relative = artifact.strip_prefix(audit_dir).map_err(|_| {
+        "--c02-shutdown-artifact must be a direct child of --c02-audit-dir".to_owned()
+    })?;
+    let mut components = relative.components();
+    let Some(std::path::Component::Normal(component)) = components.next() else {
+        return Err("--c02-shutdown-artifact must name one direct-child file".to_owned());
+    };
+    if components.next().is_some() {
+        return Err("--c02-shutdown-artifact must be a direct child of --c02-audit-dir".to_owned());
+    }
+    let basename = component.to_str().ok_or_else(|| {
+        "--c02-shutdown-artifact requires an ASCII-safe UTF-8 basename".to_owned()
+    })?;
+    if !c02_shutdown_artifact_basename_is_valid(basename) {
+        return Err(
+            "--c02-shutdown-artifact must be a nonhidden ASCII-safe .json basename of at most 246 bytes"
+                .to_owned(),
+        );
+    }
+    Ok(Some(C02ShutdownArtifactOptions {
+        basename: basename.to_owned(),
+    }))
+}
+
+fn c02_shutdown_artifact_basename_is_valid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() > b".json".len()
+        && bytes.len() <= 246
+        // The source contract uses the exact lowercase schema extension,
+        // rather than accepting a platform-dependent case variant.
+        && bytes.ends_with(b".json")
+        && bytes.iter().copied().enumerate().all(|(index, byte)| {
+            (index == 0 && byte.is_ascii_alphanumeric())
+                || (index != 0
+                    && (byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_')))
+        })
+}
+
 fn validate_c02_candidate_id(candidate_id: &str) -> Result<(), String> {
     let Some(version_and_rc) = candidate_id.strip_prefix("riley-") else {
         return Err(c02_candidate_id_error());
@@ -730,6 +811,7 @@ fn run_serve(
         options.shutdown_on_stdin,
         options.c02_runtime_config,
         options.c02_audit_dir,
+        options.c02_shutdown_artifact,
     );
     Err("serve requires a build with --features server,cuda".to_owned())
 }
@@ -741,7 +823,7 @@ fn run_serve(
     launch_arguments: &[OsString],
     launch_environment: &[(OsString, OsString)],
 ) -> Result<(), String> {
-    use std::net::SocketAddr;
+    use std::net::{IpAddr, Ipv4Addr, SocketAddr};
     use std::sync::Arc;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -756,9 +838,7 @@ fn run_serve(
     use riley_server::engine::{
         CudaBackendConfig, CudaEngineResources, EngineConfig, InferenceEngine,
     };
-    use riley_server::service::{
-        CompletionBackend, ServerConfig, start_server_with_runtime_config,
-    };
+    use riley_server::service::{CompletionBackend, ServerConfig, start_server_with_c02_metrics};
 
     #[cfg(not(unix))]
     return Err("serve currently requires POSIX SIGINT/SIGTERM support".to_owned());
@@ -770,6 +850,12 @@ fn run_serve(
     let shutdown_metrics_path = shutdown_metrics_path_from_env()?;
     let c02_runtime_config = options.c02_runtime_config;
     let c02_audit_dir = options.c02_audit_dir;
+    let c02_shutdown_artifact = options.c02_shutdown_artifact;
+    if shutdown_metrics_path.is_some() && c02_shutdown_artifact.is_some() {
+        return Err(format!(
+            "{SHUTDOWN_METRICS_ENV} and --c02-shutdown-artifact are mutually exclusive"
+        ));
+    }
 
     validate_positive("--max-active-sequences", options.max_active_sequences)?;
     validate_positive("--max-waiting-requests", options.max_waiting_requests)?;
@@ -791,6 +877,20 @@ fn run_serve(
         .bind_address
         .parse::<SocketAddr>()
         .map_err(|_| "--bind must be an IP socket address such as 127.0.0.1:8080".to_owned())?;
+    if c02_runtime_config.is_some() && bind_address.ip() != IpAddr::V4(Ipv4Addr::LOCALHOST) {
+        return Err("C02 evidence mode requires --bind 127.0.0.1:PORT".to_owned());
+    }
+    // Open the private root and retain its descriptor chain before model/CUDA
+    // setup. Generation audit and shutdown-v2 writers clone this one held
+    // root, so later pathname rebinding cannot redirect either evidence leaf.
+    let c02_audit_root = c02_audit_dir
+        .as_deref()
+        .map(c02_open_audit_root)
+        .transpose()?;
+    let c02_process_identity = c02_audit_root
+        .as_ref()
+        .map(|_| c02_capture_process_identity())
+        .transpose()?;
     let load_limits = LoadLimits::default()
         .with_weight_byte_limits(options.max_weight_bytes, options.max_weight_bytes)
         .map_err(|error| format!("invalid model load limit: {error}"))?;
@@ -915,17 +1015,19 @@ fn run_serve(
                 launch_environment,
             )?;
             let receipt = c02_endpoint_receipt(c02, &runtime_identity, &effective_config)?;
-            let generation_audit = match c02_audit_dir.as_ref() {
-                Some(directory) => {
-                    let process_identity = c02_capture_process_identity()?;
+            let generation_audit = match (c02_audit_root.as_ref(), c02_process_identity) {
+                (Some(directory), Some(process_identity)) => {
                     Some(Arc::new(C02GenerationAuditWriter::new(
-                        directory,
+                        Arc::clone(directory),
                         c02,
                         &runtime_identity,
                         process_identity,
                     )?))
                 }
-                None => None,
+                (Some(_), None) => {
+                    return Err("C02 audit root has no captured process identity".to_owned());
+                }
+                (None, _) => None,
             };
             (Some(receipt), generation_audit)
         }
@@ -956,6 +1058,21 @@ fn run_serve(
         (None, None) => None,
         _ => return Err("internal C02 runtime configuration state mismatch".to_owned()),
     };
+    let c02_shutdown_writer = match (
+        c02_shutdown_artifact,
+        c02_audit_root.as_ref(),
+        c02_process_identity,
+    ) {
+        (Some(artifact), Some(directory), Some(process_identity)) => Some(
+            C02ShutdownArtifactWriter::new(Arc::clone(directory), artifact, process_identity)?,
+        ),
+        (Some(_), _, _) => {
+            return Err(
+                "C02 shutdown artifact has no held audit root or process identity".to_owned(),
+            );
+        }
+        (None, _, _) => None,
+    };
 
     let request_limits = RequestLimits {
         max_output_tokens,
@@ -967,8 +1084,13 @@ fn run_serve(
         ..ServerConfig::default()
     };
     let backend: Arc<dyn CompletionBackend> = engine;
-    let server = start_server_with_runtime_config(server_config, backend, runtime_config_body)
-        .map_err(|error| format!("HTTP server startup failed: {error}"))?;
+    let server = start_server_with_c02_metrics(
+        server_config,
+        backend,
+        runtime_config_body,
+        c02_audit_root.is_some(),
+    )
+    .map_err(|error| format!("HTTP server startup failed: {error}"))?;
     println!(
         "riley listening on http://{} (graceful_signals=SIGINT,SIGTERM graceful_stdin_shutdown={})",
         server.local_address(),
@@ -977,8 +1099,8 @@ fn run_serve(
 
     let trigger = wait_for_shutdown(Arc::clone(&shutdown_signals), options.shutdown_on_stdin)?;
     println!("riley graceful shutdown requested by {trigger}");
-    match shutdown_metrics_path {
-        Some(path) => {
+    match (shutdown_metrics_path, c02_shutdown_writer) {
+        (Some(path), None) => {
             let snapshot = server
                 .shutdown_with_metrics()
                 .map_err(|error| format!("graceful shutdown failed: {error}"))?;
@@ -989,9 +1111,21 @@ fn run_serve(
             );
             Ok(())
         }
-        None => server
+        (None, Some(writer)) => {
+            let evidence = server
+                .shutdown_with_c02_evidence()
+                .map_err(|error| format!("graceful C02 shutdown failed: {error}"))?;
+            writer.write(evidence.final_metrics)?;
+            println!(
+                "riley wrote verified C02 shutdown evidence to {}",
+                writer.artifact_basename
+            );
+            Ok(())
+        }
+        (None, None) => server
             .shutdown()
             .map_err(|error| format!("graceful shutdown failed: {error}")),
+        (Some(_), Some(_)) => Err("internal shutdown artifact configuration conflict".to_owned()),
     }
 }
 
@@ -1531,8 +1665,27 @@ mod c02_strict_audit_io {
     }
 }
 
-#[cfg(all(feature = "cuda", unix))]
+#[cfg(all(any(feature = "cuda", test), unix))]
 use c02_strict_audit_io::C02HeldPrivateDirectory;
+
+// The audit root is opened and topology-validated once at startup. Every C02
+// writer receives a clone of this held descriptor root; no shutdown path is
+// opened again after launch-time validation.
+#[cfg(all(any(feature = "cuda", test), unix))]
+type C02SharedAuditRoot = Arc<C02HeldPrivateDirectory>;
+
+#[cfg(all(any(feature = "cuda", test), unix))]
+fn c02_open_audit_root(path: &std::path::Path) -> Result<C02SharedAuditRoot, String> {
+    C02HeldPrivateDirectory::open(path).map(Arc::new)
+}
+
+#[cfg(all(feature = "cuda", not(unix)))]
+type C02SharedAuditRoot = std::sync::Arc<()>;
+
+#[cfg(all(feature = "cuda", not(unix)))]
+fn c02_open_audit_root(_path: &std::path::Path) -> Result<C02SharedAuditRoot, String> {
+    Err("--c02-audit-dir requires Unix no-follow descriptor APIs".to_owned())
+}
 
 /// Raw source-owned C02 generation-audit writer.
 ///
@@ -1542,7 +1695,7 @@ use c02_strict_audit_io::C02HeldPrivateDirectory;
 /// only; it does not imply executor, attention, or GEMM fallback.
 #[cfg(all(feature = "cuda", unix))]
 struct C02GenerationAuditWriter {
-    directory: C02HeldPrivateDirectory,
+    directory: C02SharedAuditRoot,
     candidate_id: String,
     configuration_profile: C02ConfigurationProfile,
     configuration_sha256: String,
@@ -1552,7 +1705,7 @@ struct C02GenerationAuditWriter {
 #[cfg(all(feature = "cuda", unix))]
 impl C02GenerationAuditWriter {
     fn new(
-        directory: &Path,
+        directory: C02SharedAuditRoot,
         c02: &C02RuntimeConfigOptions,
         identity: &C02RuntimeIdentity,
         process_identity: C02AuditProcessIdentity,
@@ -1566,7 +1719,7 @@ impl C02GenerationAuditWriter {
             );
         }
         Ok(Self {
-            directory: C02HeldPrivateDirectory::open(directory)?,
+            directory,
             candidate_id: c02.candidate_id.clone(),
             configuration_profile: identity.configuration_profile,
             configuration_sha256: identity.configuration_sha256.clone(),
@@ -1783,13 +1936,164 @@ impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
     }
 }
 
+#[cfg(any(feature = "cuda", test))]
+const C02_SHUTDOWN_SCHEMA_VERSION: &str = "riley.c02-shutdown-quiescence.v2";
+#[cfg(any(feature = "cuda", test))]
+const C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION: &str = "riley.c02-shutdown-quiescence-complete.v2";
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_shutdown_completion_basename(artifact_basename: &str) -> Result<String, String> {
+    if !c02_shutdown_artifact_basename_is_valid(artifact_basename) {
+        return Err("C02 shutdown artifact basename is not a safe nonhidden JSON leaf".to_owned());
+    }
+    let completion_basename = format!("{artifact_basename}.complete");
+    if completion_basename.len() > 255 {
+        return Err("C02 shutdown completion marker basename is too long".to_owned());
+    }
+    Ok(completion_basename)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_shutdown_artifact_bytes(
+    artifact_basename: &str,
+    process_identity: C02AuditProcessIdentity,
+    final_metrics: riley_server::engine::C02CaptureMetrics,
+) -> Result<Vec<u8>, String> {
+    let _ = c02_shutdown_completion_basename(artifact_basename)?;
+    if process_identity.pid == 0 || process_identity.start_ticks == 0 {
+        return Err(
+            "C02 shutdown process identity must have nonzero PID and start ticks".to_owned(),
+        );
+    }
+    if !final_metrics.is_quiescent() {
+        return Err("C02 shutdown refuses non-quiescent final source metrics".to_owned());
+    }
+    let mut document = BTreeMap::new();
+    document.insert(
+        "schema_version".to_owned(),
+        serde_json::Value::String(C02_SHUTDOWN_SCHEMA_VERSION.to_owned()),
+    );
+    document.insert(
+        "capture_status".to_owned(),
+        serde_json::Value::String("captured".to_owned()),
+    );
+    document.insert(
+        "qualification_status".to_owned(),
+        serde_json::Value::String("not-run".to_owned()),
+    );
+    document.insert(
+        "server_pid".to_owned(),
+        serde_json::Value::Number(serde_json::Number::from(process_identity.pid)),
+    );
+    document.insert(
+        "server_start_ticks".to_owned(),
+        serde_json::Value::Number(serde_json::Number::from(process_identity.start_ticks)),
+    );
+    document.insert("worker_ready".to_owned(), serde_json::Value::Bool(false));
+    document.insert(
+        "final_metrics".to_owned(),
+        riley_server::service::c02_capture_metrics_json_value(final_metrics)?,
+    );
+    c02_canonical_json_bytes(&document)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_shutdown_completion_marker_bytes(
+    artifact_basename: &str,
+    artifact_bytes: &[u8],
+) -> Result<Vec<u8>, String> {
+    let _ = c02_shutdown_completion_basename(artifact_basename)?;
+    let completion = c02_json_object([
+        (
+            "schema_version".to_owned(),
+            serde_json::Value::String(C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION.to_owned()),
+        ),
+        (
+            "artifact_filename".to_owned(),
+            serde_json::Value::String(artifact_basename.to_owned()),
+        ),
+        (
+            "artifact_sha256".to_owned(),
+            serde_json::Value::String(c02_sha256_hex(artifact_bytes)),
+        ),
+    ])?;
+    c02_canonical_json_bytes(&completion)
+}
+
+/// Create-only writer for C02 shutdown-v2 evidence. Its root descriptor was
+/// opened at startup and is shared with generation-audit writing. The final
+/// allocation values are sampled from the still-owned context before its
+/// close, but this writer is reachable only after the context close succeeds
+/// and the engine publishes its final zero-ownership snapshot.
+#[cfg(all(any(feature = "cuda", test), unix))]
+struct C02ShutdownArtifactWriter {
+    directory: C02SharedAuditRoot,
+    artifact_basename: String,
+    process_identity: C02AuditProcessIdentity,
+}
+
+#[cfg(all(any(feature = "cuda", test), unix))]
+impl C02ShutdownArtifactWriter {
+    fn new(
+        directory: C02SharedAuditRoot,
+        artifact: C02ShutdownArtifactOptions,
+        process_identity: C02AuditProcessIdentity,
+    ) -> Result<Self, String> {
+        let _ = c02_shutdown_completion_basename(&artifact.basename)?;
+        if process_identity.pid == 0 || process_identity.start_ticks == 0 {
+            return Err(
+                "C02 shutdown process identity must have nonzero PID and start ticks".to_owned(),
+            );
+        }
+        Ok(Self {
+            directory,
+            artifact_basename: artifact.basename,
+            process_identity,
+        })
+    }
+
+    fn write(&self, final_metrics: riley_server::engine::C02CaptureMetrics) -> Result<(), String> {
+        let artifact_bytes = c02_shutdown_artifact_bytes(
+            &self.artifact_basename,
+            self.process_identity,
+            final_metrics,
+        )?;
+        self.directory
+            .create_new_regular_leaf(&self.artifact_basename, &artifact_bytes)?;
+        let completion_bytes =
+            c02_shutdown_completion_marker_bytes(&self.artifact_basename, &artifact_bytes)?;
+        self.directory.create_new_regular_leaf(
+            &c02_shutdown_completion_basename(&self.artifact_basename)?,
+            &completion_bytes,
+        )
+    }
+}
+
+#[cfg(all(feature = "cuda", not(unix)))]
+struct C02ShutdownArtifactWriter;
+
+#[cfg(all(feature = "cuda", not(unix)))]
+impl C02ShutdownArtifactWriter {
+    fn new(
+        _directory: C02SharedAuditRoot,
+        _artifact: C02ShutdownArtifactOptions,
+        _process_identity: C02AuditProcessIdentity,
+    ) -> Result<Self, String> {
+        Err("--c02-shutdown-artifact requires Unix no-follow descriptor APIs".to_owned())
+    }
+
+    fn write(&self, _final_metrics: riley_server::engine::C02CaptureMetrics) -> Result<(), String> {
+        Err("--c02-shutdown-artifact requires Unix no-follow descriptor APIs".to_owned())
+    }
+}
+
 #[cfg(all(feature = "cuda", not(unix)))]
 struct C02GenerationAuditWriter;
 
 #[cfg(all(feature = "cuda", not(unix)))]
 impl C02GenerationAuditWriter {
     fn new(
-        _directory: &Path,
+        _directory: C02SharedAuditRoot,
         _c02: &C02RuntimeConfigOptions,
         _identity: &C02RuntimeIdentity,
         _process_identity: C02AuditProcessIdentity,
@@ -2194,15 +2498,18 @@ mod tests {
         C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS,
         C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS,
         C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS, C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS,
-        C02_GENERATION_AUDIT_SCHEMA_VERSION, C02AuditProcessIdentity, C02ConfigurationProfile,
-        C02RuntimeConfigOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
-        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
-        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, c02_canonical_json_bytes,
-        c02_endpoint_receipt, c02_generation_audit_completion_basename,
+        C02_GENERATION_AUDIT_SCHEMA_VERSION, C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION,
+        C02_SHUTDOWN_SCHEMA_VERSION, C02AuditProcessIdentity, C02ConfigurationProfile,
+        C02RuntimeConfigOptions, C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES,
+        ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode,
+        ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE,
+        c02_canonical_json_bytes, c02_endpoint_receipt, c02_generation_audit_completion_basename,
         c02_generation_audit_completion_marker_bytes, c02_generation_audit_record_basename,
         c02_process_identity_from_linux_proc_stat, c02_runtime_identity, c02_sha256_hex,
-        c02_utc_timestamp_from_unix_seconds, parse_arguments, validate_reduction_profile_context,
-        validate_shutdown_metrics_path, write_c02_startup_artifact, write_shutdown_metrics,
+        c02_shutdown_artifact_bytes, c02_shutdown_completion_basename,
+        c02_shutdown_completion_marker_bytes, c02_utc_timestamp_from_unix_seconds, parse_arguments,
+        validate_reduction_profile_context, validate_shutdown_metrics_path,
+        write_c02_startup_artifact, write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
@@ -2411,6 +2718,92 @@ mod tests {
         std::fs::remove_dir_all(&outer).expect("remove exact C02 test directory");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn c02_shutdown_writer_binds_raw_final_metrics_to_a_nonhidden_marker() {
+        use riley_server::engine::C02CaptureMetrics;
+
+        let outer = c02_test_path("shutdown-writer");
+        std::fs::create_dir(&outer).expect("create C02 writer parent");
+        let evidence = outer.join("evidence");
+        create_private_c02_test_directory(&evidence);
+        let writer = super::C02ShutdownArtifactWriter::new(
+            super::c02_open_audit_root(&evidence).expect("hold private audit root"),
+            C02ShutdownArtifactOptions {
+                basename: "shutdown.json".to_owned(),
+            },
+            C02AuditProcessIdentity {
+                pid: 321,
+                start_ticks: 4_242,
+            },
+        )
+        .expect("construct C02 shutdown writer");
+
+        // After launch-time validation, rebinding the visible path must not
+        // redirect either the artifact or its marker.
+        let rebound = outer.join("rebound");
+        std::fs::rename(&evidence, &rebound).expect("rebind visible audit path");
+        create_private_c02_test_directory(&evidence);
+        writer
+            .write(C02CaptureMetrics::default())
+            .expect("write quiescent C02 shutdown evidence");
+        assert!(
+            writer.write(C02CaptureMetrics::default()).is_err(),
+            "shutdown evidence is create-only"
+        );
+        assert!(!evidence.join("shutdown.json").exists());
+
+        let artifact_path = rebound.join("shutdown.json");
+        let raw = std::fs::read(&artifact_path).expect("read shutdown artifact");
+        assert!(!raw.ends_with(b"\n"));
+        assert_eq!(
+            raw,
+            c02_shutdown_artifact_bytes(
+                "shutdown.json",
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4_242,
+                },
+                C02CaptureMetrics::default(),
+            )
+            .expect("canonical shutdown bytes")
+        );
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&raw).expect("decode shutdown artifact");
+        assert_eq!(artifact.as_object().expect("artifact object").len(), 7);
+        assert_eq!(artifact["schema_version"], C02_SHUTDOWN_SCHEMA_VERSION);
+        assert_eq!(artifact["capture_status"], "captured");
+        assert_eq!(artifact["qualification_status"], "not-run");
+        assert_eq!(artifact["server_pid"], 321);
+        assert_eq!(artifact["server_start_ticks"], 4_242);
+        assert_eq!(artifact["worker_ready"], false);
+        assert_eq!(
+            artifact["final_metrics"]["schema_version"],
+            "riley.c02-capture-metrics.v2"
+        );
+
+        let marker_name =
+            c02_shutdown_completion_basename("shutdown.json").expect("safe completion basename");
+        assert_eq!(marker_name, "shutdown.json.complete");
+        let marker_raw = std::fs::read(rebound.join(&marker_name)).expect("read completion marker");
+        assert!(!marker_raw.ends_with(b"\n"));
+        assert_eq!(
+            marker_raw,
+            c02_shutdown_completion_marker_bytes("shutdown.json", &raw)
+                .expect("canonical completion marker")
+        );
+        let marker: serde_json::Value =
+            serde_json::from_slice(&marker_raw).expect("decode completion marker");
+        assert_eq!(marker.as_object().expect("marker object").len(), 3);
+        assert_eq!(
+            marker["schema_version"],
+            C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(marker["artifact_filename"], "shutdown.json");
+        assert_eq!(marker["artifact_sha256"], c02_sha256_hex(&raw));
+        std::fs::remove_dir_all(&outer).expect("remove exact C02 test directory");
+    }
+
     #[cfg(all(feature = "cuda", unix))]
     #[test]
     fn c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once() {
@@ -2436,7 +2829,7 @@ mod tests {
         };
         {
             let writer = super::C02GenerationAuditWriter::new(
-                &evidence,
+                super::c02_open_audit_root(&evidence).expect("hold C02 audit root"),
                 &c02,
                 &identity,
                 C02AuditProcessIdentity {
@@ -2548,7 +2941,7 @@ mod tests {
             configuration_sha256: "a".repeat(64),
         };
         let writer = super::C02GenerationAuditWriter::new(
-            &evidence,
+            super::c02_open_audit_root(&evidence).expect("hold C02 audit root"),
             &c02,
             &identity,
             C02AuditProcessIdentity {
@@ -2631,6 +3024,7 @@ mod tests {
         assert!(USAGE.contains("--c02-configuration-profile ID"));
         assert!(USAGE.contains("--c02-startup-artifact PATH"));
         assert!(USAGE.contains("--c02-audit-dir PATH"));
+        assert!(USAGE.contains("--c02-shutdown-artifact PATH"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -2662,6 +3056,7 @@ mod tests {
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
                 c02_audit_dir: None,
+                c02_shutdown_artifact: None,
             }))
         );
         assert!(parse_arguments(args(&["serve"])).is_err());
@@ -2768,6 +3163,107 @@ mod tests {
             assert!(
                 parse_arguments(args(&invalid)).is_err(),
                 "invalid C02 inputs: {invalid:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn c02_shutdown_artifact_requires_one_safe_nonhidden_audit_child() {
+        let parsed = parse_arguments(args(&[
+            "serve",
+            "--model",
+            "/models/fixture",
+            "--c02-candidate-id",
+            "riley-1.2.3-rc4",
+            "--c02-configuration-profile",
+            "stable-default",
+            "--c02-startup-artifact",
+            "/tmp/riley-c02-startup.json",
+            "--c02-audit-dir",
+            "/tmp/riley-c02-audit",
+            "--c02-shutdown-artifact",
+            "/tmp/riley-c02-audit/shutdown.json",
+        ]));
+        let Ok(CliCommand::Serve(options)) = parsed else {
+            panic!("valid C02 shutdown artifact must parse");
+        };
+        assert_eq!(
+            options.c02_shutdown_artifact,
+            Some(C02ShutdownArtifactOptions {
+                basename: "shutdown.json".to_owned(),
+            })
+        );
+
+        for invalid in [
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-shutdown-artifact",
+                "/tmp/shutdown.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+                "--c02-shutdown-artifact",
+                "/tmp/riley-c02-audit/shutdown.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+                "--c02-audit-dir",
+                "/tmp/riley-c02-audit",
+                "--c02-shutdown-artifact",
+                "/tmp/riley-c02-audit/nested/shutdown.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+                "--c02-audit-dir",
+                "/tmp/riley-c02-audit",
+                "--c02-shutdown-artifact",
+                "/tmp/riley-c02-audit/.shutdown.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+                "--c02-audit-dir",
+                "/tmp/riley-c02-audit",
+                "--c02-shutdown-artifact",
+                "/tmp/riley-c02-audit/shutdown.txt",
+            ],
+        ] {
+            assert!(
+                parse_arguments(args(&invalid)).is_err(),
+                "invalid C02 shutdown artifact arguments: {invalid:?}"
             );
         }
     }
@@ -2945,6 +3441,7 @@ mod tests {
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
                 c02_audit_dir: None,
+                c02_shutdown_artifact: None,
             }))
         );
         assert!(parse_arguments(args(&["serve", "--model", "/a", "--model", "/b"])).is_err());
@@ -3096,6 +3593,7 @@ mod tests {
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
                 c02_audit_dir: None,
+                c02_shutdown_artifact: None,
             }))
         );
 
@@ -3214,6 +3712,7 @@ mod tests {
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
                 c02_audit_dir: None,
+                c02_shutdown_artifact: None,
             }))
         );
         assert!(

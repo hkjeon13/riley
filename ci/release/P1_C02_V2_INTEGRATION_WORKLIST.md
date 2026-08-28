@@ -35,6 +35,39 @@ inode swaps, noncanonical manifest/session JSON, an unremoved
 | Candidate shutdown | v2 shutdown artifact with PID **and start ticks**, final raw C02 metrics, plus a create-only matching completion marker whose hash covers the exact artifact bytes.  Use a nonhidden v2 marker name such as `shutdown.json.complete`; v1's hidden marker is historical-only. |
 | Rollback drill | candidate and rollback observation sequences, both HTTP/audit leaves, raw binary/bundle/image-inspect evidence for each phase, and raw `pre_active_stat`, `post_active_stat`, `candidate_staged_stat`, `rollback_staged_stat`, and successful rename transcript. |
 
+### Shutdown v2 leaf contract
+
+The source-owned producer and raw binder share these published schemas:
+
+- `benchmarks/release/candidates/c02-capture-metrics-v2.schema.json`
+  (`riley.c02-capture-metrics.v2`);
+- `benchmarks/release/candidates/c02-shutdown-quiescence-v2.schema.json`
+  (`riley.c02-shutdown-quiescence.v2`); and
+- `benchmarks/release/candidates/c02-shutdown-quiescence-completion-v2.schema.json`
+  (`riley.c02-shutdown-quiescence-complete.v2`).
+
+The shutdown artifact has exactly seven top-level fields:
+`schema_version`, `capture_status`, `qualification_status`, `server_pid`,
+`server_start_ticks`, `worker_ready`, and `final_metrics`.  Its only allowed
+statuses are `captured` and `not-run`; `worker_ready` is exactly `false`.
+`final_metrics` is exactly the v2 metrics object with `request_states`
+(`active`, `pending_requests`, `completed`, `failed`, `cancelled`,
+`capacity_rejections`), `kv_blocks` (`free`, `reserved`, `active`),
+`allocation` (`device_live_count`, `device_live_bytes`,
+`pinned_live_count`, `pinned_live_bytes`), and `quiescence`
+(`completion_outbox`, `outstanding_iterations`,
+`riley_owned_live_allocations`, `worker_accepting`, `scheduler_accepting`).
+The raw schema checks exact field names and types only; semantic thresholds
+remain a later checker concern.
+
+The matching marker has exactly `schema_version`, `artifact_filename`, and
+`artifact_sha256`.  `artifact_filename` is a nonhidden direct-child JSON leaf
+and the physical marker name is exactly `<artifact_filename>.complete` in the
+same held private root.  It is written only after the artifact file is
+`fsync`ed, contains the SHA-256 of those exact artifact bytes, and is itself
+`fsync`ed before the root directory is synced.  A v1 artifact or hidden
+`.<basename>.complete` marker is historical-only and rejected by v2 input.
+
 The eventual atomic-switch semantic checker must reconstruct same-device and
 inode transitions from those raw stat/transcript bytes; a JSON
 `"strategy":"atomic-rename"` string is not proof.  The exact-backend
@@ -53,10 +86,10 @@ runtime configuration field or a trace counter.
      stability, unique descriptors, and create-only 0600+fsync leaf/marker
      helpers.  Do not use `getattr(..., 0)` fallbacks.
 
-2. `ci/release/capture_c02_observations.py` and
-   `ci/release/run_remote_c02_observations.sh`
-   - Preserve v1 only for history; add a self-contained v2 producer because
-     the runner invokes Python with `-I -S`.
+2. `ci/release/capture_c02_observations_v2.py` and
+   `ci/release/run_remote_c02_observations_v2.sh`
+   - Keep their v1 predecessors historical-only.  The v2 producer must remain
+     self-contained because the runner invokes Python with `-I -S`.
    - Emit v2 session/sample/socket schema names and descriptors with lengths;
      retain the raw sample inventory above and the incomplete marker closure.
      Change the v1 UUID-only GPU query to a raw `index,uuid` selection query,
@@ -65,10 +98,13 @@ runtime configuration field or a trace counter.
      exclusive lock, loopback-only target, and `env -i`.  No source-tree
      output and no public `/metrics` fallback.
 
-3. `crates/riley-server/src/service.rs` (and the startup plumbing that owns
-   the server PID)
-   - Introduce v2 shutdown artifact/marker schemas; persist `server_start_ticks`
-     with the PID and bind the exact artifact hash in a create-only marker.
+3. `crates/riley-server/src/main.rs`, `crates/riley-server/src/service.rs`,
+   and `crates/riley-server/src/engine.rs`
+   - Implement the published v2 shutdown artifact/marker schemas; persist
+     `server_start_ticks` with the PID and bind the exact artifact hash in a
+     create-only nonhidden `<artifact>.complete` marker.  Do not add candidate,
+     freeze, Gate E, semantic, or pass/fail fields to the exact seven-field
+     artifact.
    - Replace `C02GenerationAuditWriter`'s `Path` plus pending-file/hard-link
      flow with a private 0700 root held directory FD and direct-child
      `O_CREAT|O_EXCL|O_NOFOLLOW` create-only writes.  A sampling record should

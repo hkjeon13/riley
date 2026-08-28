@@ -30,6 +30,43 @@
 
 raw producer가 `qualification_status: "not-run"`을 쓰는 것은 mechanism 검증에만 허용된다. actual C02 candidate의 semantic report는 freeze와 Gate E를 별도 input으로 replay해야 하며 raw file의 `passed` 문자열을 신뢰하지 않는다.
 
+### Shutdown raw leaf v2 contract
+
+shutdown source producer는 다음 세 published schema를 함께 사용한다.
+
+- `benchmarks/release/candidates/c02-capture-metrics-v2.schema.json`
+  — `riley.c02-capture-metrics.v2`
+- `benchmarks/release/candidates/c02-shutdown-quiescence-v2.schema.json`
+  — `riley.c02-shutdown-quiescence.v2`
+- `benchmarks/release/candidates/c02-shutdown-quiescence-completion-v2.schema.json`
+  — `riley.c02-shutdown-quiescence-complete.v2`
+
+shutdown artifact는 정확히 `schema_version`, `capture_status`,
+`qualification_status`, `server_pid`, `server_start_ticks`, `worker_ready`,
+`final_metrics`의 일곱 field만 가진다. `capture_status: "captured"`,
+`qualification_status: "not-run"`, `worker_ready: false`는 고정이며,
+PID와 Linux `/proc/self/stat` start tick은 해당 server process에서 source가 직접
+capture한다. candidate ID, freeze SHA, Gate E, semantic receipt, `passed`,
+rollback verdict 같은 self-authored conclusion은 이 raw leaf에 넣지 않는다.
+
+`final_metrics`는 exact v2 object이다. `request_states`에는 `active`,
+`pending_requests`, `completed`, `failed`, `cancelled`,
+`capacity_rejections`; `kv_blocks`에는 `free`, `reserved`, `active`;
+`allocation`에는 `device_live_count`, `device_live_bytes`,
+`pinned_live_count`, `pinned_live_bytes`; `quiescence`에는
+`completion_outbox`, `outstanding_iterations`,
+`riley_owned_live_allocations`, `worker_accepting`, `scheduler_accepting`만
+있다. 이 schema/binder 단계는 raw fact의 exact shape와 type만 확인하며
+failure/KV/quiescence threshold나 candidate pass/fail을 해석하지 않는다.
+
+artifact file을 `fsync`한 다음, 같은 held private root FD 아래 nonhidden
+`<artifact_filename>.complete` marker를 `O_CREAT|O_EXCL|O_NOFOLLOW`로 한 번만
+생성한다. marker는 정확히 `schema_version`, `artifact_filename`,
+`artifact_sha256` 세 field이고 raw artifact bytes의 SHA-256을 bind한다. marker와
+root directory도 `fsync`한다. v1 `riley.c02-shutdown-quiescence.v1` 또는
+hidden `.<basename>.complete` convention은 historical-only이며 P1 v2 input으로
+수용하지 않는다.
+
 ## 3. 실제 selection trace
 
 C02-P1이 증명할 수 있는 실제 selection 전환은 executor backend fallback이 아니라 다음으로 한정한다.
@@ -87,7 +124,8 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 1. v2 schemas와 strict shared evidence primitive를 추가하고 v1 rejection policy를 문서화한다.
 2. reconstructed baseline builder/checker와 adversarial tests를 추가한다.
-3. typed sampling selection과 generation audit v2를 Rust source에 추가한다.
+3. typed sampling selection, private-FD generation audit, 그리고 source-owned
+   shutdown v2 artifact/marker producer를 Rust source에 추가한다.
 4. soak/rollback raw runners·binders와 hostile-evidence tests를 추가한다.
 5. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
 6. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
@@ -97,6 +135,8 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 - v1 receipt, self-authored fallback string, missing strict-open flags, self-authored worker/model IDs는 final C02 input에서 fail closed한다.
 - v2 report는 raw descriptor hash뿐 아니라 same candidate/config/PID/start-tick/socket/GPU tuple을 replay한다.
 - max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2와 public generation bytes가 one-to-one으로 bind된다.
+- shutdown v2 artifact와 nonhidden completion marker는 same PID/start-tick tuple과
+  exact final-metrics bytes를 bind하며, v1 artifact/hidden marker는 fail closed한다.
 - reconstructed baseline manifest는 previous stable artifact라고 주장하지 않으며, A/B reconstruction equality와 artifact provenance를 검증한다.
 - C02 finalizer가 soak-v2/rollback-v2만 수용하고 resulting final report에서 operational rollback과 historical-stable rollback status를 분리한다.
 - 이 단계는 candidate freeze, Gate E pass, C02 pass, vLLM win을 주장하지 않는다.
