@@ -113,19 +113,19 @@ def canonical_json_bytes(value: Any) -> bytes:
         _fail("unencodable-canonical-json", f"cannot encode canonical JSON: {error}")
 
 
-def parse_canonical_json(
+def parse_strict_json(
     raw: bytes,
     label: str,
     *,
     maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
     require_object: bool = True,
 ) -> Any:
-    """Parse only exact canonical, finite, duplicate-key-free UTF-8 JSON.
+    """Parse finite, duplicate-key-free UTF-8 JSON without byte normalization.
 
-    Exact byte equality with ``canonical_json_bytes`` rejects whitespace,
-    alternate numeric spellings, escaped Unicode aliases, and trailing
-    newlines.  Receipt/schema code can therefore bind a digest to the same
-    bytes that this parser interpreted.
+    This is for source-owned raw JSON captures such as ``docker image
+    inspect`` output.  Such tools commonly emit formatting whitespace, so a
+    verifier must bind raw bytes with a descriptor and parse them strictly
+    without requiring the producer to rewrite them canonically.
     """
 
     _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
@@ -143,6 +143,30 @@ def parse_canonical_json(
         _fail("invalid-json", f"{label} is not JSON: {error}")
     if require_object and not isinstance(decoded, dict):
         _fail("invalid-json-root", f"{label} root must be a JSON object")
+    return decoded
+
+
+def parse_canonical_json(
+    raw: bytes,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
+    require_object: bool = True,
+) -> Any:
+    """Parse only exact canonical, finite, duplicate-key-free UTF-8 JSON.
+
+    Exact byte equality with ``canonical_json_bytes`` rejects whitespace,
+    alternate numeric spellings, escaped Unicode aliases, and trailing
+    newlines.  Receipt/schema code can therefore bind a digest to the same
+    bytes that this parser interpreted.
+    """
+
+    decoded = parse_strict_json(
+        raw,
+        label,
+        maximum_bytes=maximum_bytes,
+        require_object=require_object,
+    )
     if raw != canonical_json_bytes(decoded):
         _fail("noncanonical-json", f"{label} must use exact canonical JSON bytes")
     return decoded
@@ -268,6 +292,73 @@ def open_absolute_directory(path: Path, label: str) -> int:
             os.close(current_fd)
             current_fd = child_fd
         _require_directory_fd(current_fd, label)
+        return current_fd
+    except BaseException:
+        _close_quietly(current_fd)
+        raise
+
+
+def _validate_private_evidence_ancestor(metadata: os.stat_result, label: str) -> None:
+    """Reject an unsafe writable parent while allowing a sticky trusted boundary."""
+
+    if not stat.S_ISDIR(metadata.st_mode):
+        _fail("unsafe-evidence-directory", f"{label} must be a directory")
+    writable_by_others = metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+    if not writable_by_others:
+        return
+    if not metadata.st_mode & stat.S_ISVTX:
+        _fail(
+            "unsafe-evidence-ancestor",
+            f"{label} is group/world writable without a sticky boundary",
+        )
+    if metadata.st_uid not in {0, os.geteuid()}:
+        _fail(
+            "unsafe-evidence-ancestor",
+            f"{label} is writable and not owned by root or the effective UID",
+        )
+
+
+def _validate_private_evidence_root(metadata: os.stat_result, label: str) -> None:
+    if not stat.S_ISDIR(metadata.st_mode):
+        _fail("unsafe-evidence-root", f"{label} must be a regular directory")
+    if metadata.st_uid != os.geteuid():
+        _fail("unsafe-evidence-root-owner", f"{label} must be owned by the effective UID")
+    if stat.S_IMODE(metadata.st_mode) != 0o700:
+        _fail("unsafe-evidence-root-mode", f"{label} mode must be exactly 0700")
+
+
+def open_private_evidence_directory(path: Path, label: str) -> int:
+    """Pin a private evidence root without accepting unsafe writable parents.
+
+    This is intentionally stricter than ``open_absolute_directory``.  C02-P1
+    receipts may be used as qualification evidence, so the terminal root must
+    be an effective-UID-owned 0700 directory.  Every ancestor is opened with
+    no-follow directory FDs; an ancestor writable by group/other is accepted
+    only when it is a sticky boundary owned by root or the effective UID.
+    """
+
+    components = _absolute_components(path, label)
+    flags = _directory_open_flags()
+    try:
+        current_fd = os.open(os.path.sep, flags)
+    except OSError as error:
+        _fail("unsafe-evidence-directory", f"cannot open root for {label}: {error}")
+    try:
+        _validate_private_evidence_ancestor(os.fstat(current_fd), f"{label} ancestor /")
+        for component in components:
+            try:
+                child_fd = os.open(component, flags, dir_fd=current_fd)
+            except OSError as error:
+                _fail(
+                    "unsafe-evidence-directory",
+                    f"cannot open {label} component {component!r} without following links: {error}",
+                )
+            os.close(current_fd)
+            current_fd = child_fd
+            _validate_private_evidence_ancestor(
+                os.fstat(current_fd), f"{label} ancestor {component!r}"
+            )
+        _validate_private_evidence_root(os.fstat(current_fd), label)
         return current_fd
     except BaseException:
         _close_quietly(current_fd)
@@ -498,6 +589,32 @@ def read_descriptor_json(
 ) -> tuple[bytes, dict[str, Any]]:
     """Load one descriptor, verify digest/length, then parse exact canonical JSON."""
 
+    raw = read_descriptor_bytes(
+        root_fd,
+        descriptor,
+        label,
+        maximum_bytes=maximum_bytes,
+    )
+    parsed_document = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
+    assert isinstance(parsed_document, dict)
+    return raw, parsed_document
+
+
+def read_descriptor_bytes(
+    root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> bytes:
+    """Read one bounded descriptor and bind its exact raw bytes.
+
+    Use this for a raw JSON capture when a caller must parse a source tool's
+    original formatting.  Large opaque artifacts should instead use
+    ``verify_descriptor_file`` to stream their digest without materializing
+    them in memory.
+    """
+
     candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
     parsed = parse_descriptor(candidate, label)
     if parsed.byte_length > maximum_bytes:
@@ -512,9 +629,7 @@ def read_descriptor_json(
         _fail("evidence-length-mismatch", f"{label} byte length differs from descriptor")
     if hashlib.sha256(raw).hexdigest() != parsed.sha256:
         _fail("evidence-hash-mismatch", f"{label} SHA-256 differs from descriptor")
-    parsed_document = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
-    assert isinstance(parsed_document, dict)
-    return raw, parsed_document
+    return raw
 
 
 def _verify_regular_at(

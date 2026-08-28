@@ -37,6 +37,20 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                 common.parse_canonical_json(malformed, "receipt")
             self.assert_reason(raised, reason)
 
+    def test_strict_raw_json_accepts_docker_whitespace_but_rejects_duplicate_or_nonfinite(self) -> None:
+        raw_docker = b'[\n  {"Id": "sha256:abc"}\n]\n'
+        self.assertEqual(
+            common.parse_strict_json(raw_docker, "docker inspect", require_object=False),
+            [{"Id": "sha256:abc"}],
+        )
+        for malformed, reason in (
+            (b'[{"Id":"one","Id":"two"}]', "duplicate-json-key"),
+            (b'[{"Id":NaN}]', "non-finite-json-number"),
+        ):
+            with self.subTest(malformed=malformed), self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.parse_strict_json(malformed, "docker inspect", require_object=False)
+            self.assert_reason(raised, reason)
+
     def test_missing_nofollow_fails_closed_before_opening(self) -> None:
         with mock.patch.object(common.os, "O_NOFOLLOW", 0):
             with self.assertRaises(common.ProvenanceV2Error) as raised:
@@ -49,6 +63,40 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                 with self.assertRaises(common.ProvenanceV2Error) as raised:
                     common.open_absolute_directory(Path(temporary), "evidence root")
         self.assert_reason(raised, "missing-open-safety-flag")
+
+    def test_private_evidence_root_requires_0700_euid_and_safe_ancestors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve(strict=True)
+            root = parent / "evidence"
+            root.mkdir(mode=0o700)
+            root.chmod(0o700)
+            descriptor = common.open_private_evidence_directory(root, "evidence root")
+            os.close(descriptor)
+
+            root.chmod(0o755)
+            with self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.open_private_evidence_directory(root, "evidence root")
+            self.assert_reason(raised, "unsafe-evidence-root-mode")
+            root.chmod(0o700)
+
+            with mock.patch.object(common.os, "geteuid", return_value=os.geteuid() + 1):
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.open_private_evidence_directory(root, "evidence root")
+            self.assert_reason(raised, "unsafe-evidence-root-owner")
+
+            link = parent / "evidence-link"
+            link.symlink_to(root.name, target_is_directory=True)
+            with self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.open_private_evidence_directory(link, "evidence root")
+            self.assert_reason(raised, "unsafe-evidence-directory")
+
+            parent.chmod(0o777)
+            try:
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.open_private_evidence_directory(root, "evidence root")
+                self.assert_reason(raised, "unsafe-evidence-ancestor")
+            finally:
+                parent.chmod(0o700)
 
     def test_final_symlink_is_rejected_without_reading_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -206,6 +254,20 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                 received_raw, document = common.read_descriptor_json(root_fd, descriptor, "sample")
                 self.assertEqual(received_raw, raw)
                 self.assertEqual(document, {"sample": 1})
+            finally:
+                os.close(root_fd)
+
+    def test_read_descriptor_bytes_binds_noncanonical_raw_json(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            try:
+                raw = b'[\n {"Id":"sha256:abc"}\n]\n'
+                common.write_create_only(root_fd, "docker-inspect.json", raw, "docker inspect")
+                descriptor = common.descriptor_for_bytes("docker-inspect.json", raw, "docker inspect")
+                self.assertEqual(
+                    common.read_descriptor_bytes(root_fd, descriptor, "docker inspect"), raw
+                )
             finally:
                 os.close(root_fd)
 
