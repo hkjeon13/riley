@@ -4,7 +4,7 @@
 **의미 등급:** `E0`<br>
 **한 가지 목적:** cold prepare가 끝난 release runtime의 실제 configuration을 canonical `/v1/config` 응답과 create-only startup artifact로 고정해 C02 `startup_configuration` semantic gate가 재현 가능한 raw evidence를 받을 수 있게 한다.
 
-[이전: C01](01-vllm-win-contract.md) | [목차](README.md) | [다음: C02](02-rc3-candidate-qualification.md)
+[이전: C01](01-vllm-win-contract.md) | [목차](README.md) | [다음: C02-P1](02b-c02-p1-provenance-v2.md)
 
 ## 1. 배경과 상태
 

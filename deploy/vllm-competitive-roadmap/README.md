@@ -1,7 +1,7 @@
 # Riley vLLM 경쟁력 로드맵
 
-**상태:** Planned  
-**작성 기준:** `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`  
+**상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure가 candidate freeze 전에 진행 중이다.
+**작성 기준:** `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`
 **목표:** Riley가 제한된 우선 지원 범위에서 vLLM보다 더 낮은 지연, 더 높은 SLO goodput, 더 예측 가능한 오류 격리와 복구를 제공하도록 후속 작업을 독립 PR로 분해한다.
 
 이 폴더는 기존 [`deploy/00-pr-contract.md`](../00-pr-contract.md), [`deploy/15-profiling-and-optimization.md`](../15-profiling-and-optimization.md), [`deploy/16-reliability-and-release.md`](../16-reliability-and-release.md), [`deploy/17-extension-gates.md`](../17-extension-gates.md)의 하위 실행 계획이다. 기존 gate와 충돌하는 경우 기존 문서의 fail-closed 규칙이 우선한다.
@@ -53,8 +53,10 @@ Riley는 vLLM의 전체 기능을 복제하지 않고 다음 범위부터 이긴
 | ID | 문서 | 한 가지 목적 | 선행 조건 |
 |---|---|---|---|
 | C01 | [vLLM 승리 계약](01-vllm-win-contract.md) | 공정 비교와 M4/M5 판정 계약 고정 | 없음 |
-| C02 | [RC3 candidate qualification](02-rc3-candidate-qualification.md) | 최신 단일 revision의 정식 release gate 종료 | C01 일부 계약 재사용 |
-| C03 | [Scheduler routing property fuzz](03-scheduler-output-routing-fuzz.md) | request-token routing invariant를 생성형 테스트로 고정 | 없음 |
+| C02-P0 | [effective runtime configuration receipt](02a-effective-runtime-config-receipt.md) | cold-prepared `/v1/config`와 startup artifact raw evidence 구현 | C01 |
+| C02-P1 | [provenance v2와 reconstructed rollback baseline](02b-c02-p1-provenance-v2.md) | self-authored soak/rollback summary를 raw process/evidence provenance로 교체 | C02-P0 |
+| C02 | [RC3 candidate qualification](02-rc3-candidate-qualification.md) | 최신 단일 revision의 정식 release gate 종료 | C01, C02-P0, C02-P1 |
+| C03 | [Scheduler routing property fuzz](03-scheduler-output-routing-fuzz.md) | request-token routing invariant를 생성형 테스트로 고정 | C02 |
 | C04 | [Llama executor 분리](04-llama-executor-refactor.md) | graph/fusion 작업 전에 거대 executor를 동작 보존 분리 | C03 권장 |
 | C05 | [CUDA Graph ownership ABI](05-cuda-graph-ownership-abi.md) | capture/instantiate/replay/close의 native ownership 경계 구현 | C04 |
 | C06 | [Graph signature dispatcher](06-graph-signature-dispatcher.md) | full/piecewise/eager 선택과 exact fallback 구현 | C05 |
@@ -123,4 +125,4 @@ known limitations
 
 ## 8. 권장 착수 순서
 
-우선 `C01 → C02 → C03 → C04`로 비교 기준, release 안정성, routing invariant, 코드 경계를 닫는다. 이후 `C05 → C06 → C07`로 CUDA Graph M2를 판정한다. C07 이후 새 profile이 실제 병목을 선택할 때만 C09~C11의 fusion 순서를 확정한다. Prefix cache와 process 격리는 성능 숫자를 만들기 위한 우회가 아니라 별도의 serving 효율·안정성 축으로 판정한다.
+우선 `C01 → C02-P0 → C02-P1 → C02 → C03 → C04`로 비교 기준, raw evidence surface, provenance closure, release 안정성, routing invariant, 코드 경계를 닫는다. 이후 `C05 → C06 → C07`로 CUDA Graph M2를 판정한다. C07 이후 새 profile이 실제 병목을 선택할 때만 C09~C11의 fusion 순서를 확정한다. Prefix cache와 process 격리는 성능 숫자를 만들기 위한 우회가 아니라 별도의 serving 효율·안정성 축으로 판정한다.
