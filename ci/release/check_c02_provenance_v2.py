@@ -74,6 +74,7 @@ SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 COMPLETION_REQUEST_ID_RE = re.compile(r"^cmpl-[A-Za-z0-9_-]{1,123}$")
 SOAK_TERMINAL_MANIFEST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.json$")
 MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES = 246
+SHUTDOWN_ARTIFACT_FILENAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,240}\.json$")
 SCENARIO_CAPTURE_SESSION_VERSION = "riley.c02-raw-scenario-capture.v1"
 SCENARIO_CAPTURE_CONTRACT_VERSION = "riley.c02-raw-soak-runner-contract.v1"
 SCENARIO_CAPTURE_LEDGER_VERSION = "riley.c02-raw-request-ledger.v1"
@@ -1164,6 +1165,11 @@ def _shutdown_completion_marker_basename(
     marker_path = PurePosixPath(marker.path)
     artifact_basename = artifact_path.name
     marker_basename = marker_path.name
+    if SHUTDOWN_ARTIFACT_FILENAME_RE.fullmatch(artifact_basename) is None:
+        _fail(
+            "invalid-shutdown-artifact-filename",
+            f"{label} artifact must be a nonhidden direct-child .json leaf of at most 246 bytes",
+        )
     expected_marker_path = f"{artifact.path}.complete"
     if (
         marker.path != expected_marker_path

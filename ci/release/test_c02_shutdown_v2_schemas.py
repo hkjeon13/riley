@@ -120,9 +120,12 @@ class C02ShutdownV2SchemaTests(unittest.TestCase):
         )
         filename_pattern = properties["artifact_filename"]["pattern"]
         self.assertIsNotNone(re.fullmatch(filename_pattern, "shutdown.json"))
+        self.assertIsNotNone(re.fullmatch(filename_pattern, "a" + ("b" * 240) + ".json"))
         self.assertIsNone(re.fullmatch(filename_pattern, ".shutdown.json"))
         self.assertIsNone(re.fullmatch(filename_pattern, "nested/shutdown.json"))
+        self.assertIsNone(re.fullmatch(filename_pattern, "shutdown.txt"))
         self.assertIsNone(re.fullmatch(filename_pattern, "shutdown.json.complete"))
+        self.assertIsNone(re.fullmatch(filename_pattern, "a" + ("b" * 241) + ".json"))
         self.assertIn("<artifact_filename>.complete", schema["description"])
         sha256 = properties["artifact_sha256"]
         self.assertEqual(sha256["allOf"][0]["pattern"], "^[0-9a-f]{64}$")

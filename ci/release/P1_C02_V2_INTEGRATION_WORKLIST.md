@@ -180,6 +180,17 @@ same held private root.  It is written only after the artifact file is
 `fsync`ed before the root directory is synced.  A v1 artifact or hidden
 `.<basename>.complete` marker is historical-only and rejected by v2 input.
 
+The artifact leaf is exactly
+`^[A-Za-z0-9][A-Za-z0-9._-]{0,240}\\.json$`: ASCII, nonhidden, and at most
+246 bytes so its sibling `.complete` stays within the POSIX 255-byte filename
+limit.  The term “direct-child” is relative to the source writer's held
+private audit-root FD, not necessarily the global evidence root; thus a
+descriptor such as `candidate-phase/shutdown.json` remains valid.  The writer
+opens that root at startup through a no-follow component chain, keeps its FD,
+and never reopens the pathname during shutdown.  A pathname rename/swap must
+not redirect publication to a replacement directory or make that replacement
+an equivalent evidence root.
+
 The eventual atomic-switch semantic checker must reconstruct same-device and
 inode transitions from those raw stat/transcript bytes; a JSON
 `"strategy":"atomic-rename"` string is not proof.  The exact-backend

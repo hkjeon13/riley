@@ -900,10 +900,28 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                 filename_shutdown,
                 "other-shutdown.json",
             )
+            invalid_artifacts = tuple(
+                (
+                    name,
+                    tree.put(f"candidate-phase/{leaf}", shutdown_document),
+                    leaf,
+                )
+                for name, leaf in (
+                    ("artifact-text", "shutdown.txt"),
+                    ("artifact-hidden", ".shutdown.json"),
+                    ("artifact-complete", "shutdown.json.complete"),
+                    ("artifact-overlong", "a" + ("b" * 241) + ".json"),
+                )
+            )
 
             for name, artifact, marker, reason in (
                 ("marker-nested", shutdown, nested_marker, "shutdown-marker-path-mismatch"),
-                ("marker-hidden", hidden_shutdown, hidden_marker, "shutdown-marker-path-mismatch"),
+                (
+                    "marker-hidden",
+                    hidden_shutdown,
+                    hidden_marker,
+                    "invalid-shutdown-artifact-filename",
+                ),
                 ("marker-filename", filename_shutdown, filename_marker, "shutdown-marker-mismatch"),
             ):
                 with self.subTest(name=name):
@@ -912,6 +930,24 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                             tree.root.resolve(), manifest(name, artifact, marker).path
                         )
                     self.assert_reason(raised, reason)
+
+            for name, artifact, leaf in invalid_artifacts:
+                with self.subTest(name=name):
+                    marker_path = (
+                        "candidate-phase/short.complete"
+                        if len(leaf) + len(".complete") > 255
+                        else f"candidate-phase/{leaf}.complete"
+                    )
+                    marker = completion_marker(
+                        marker_path,
+                        artifact,
+                        leaf,
+                    )
+                    with self.assertRaises(checker.C02ProvenanceError) as raised:
+                        checker.verify_rollback_provenance(
+                            tree.root.resolve(), manifest(name, artifact, marker).path
+                        )
+                    self.assert_reason(raised, "invalid-shutdown-artifact-filename")
 
     def test_shutdown_marker_mismatch_and_symlink_manifest_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

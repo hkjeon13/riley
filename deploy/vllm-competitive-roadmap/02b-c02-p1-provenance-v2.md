@@ -67,6 +67,16 @@ root directory도 `fsync`한다. v1 `riley.c02-shutdown-quiescence.v1` 또는
 hidden `.<basename>.complete` convention은 historical-only이며 P1 v2 input으로
 수용하지 않는다.
 
+`artifact_filename`은 정확히 `^[A-Za-z0-9][A-Za-z0-9._-]{0,240}\\.json$`인
+ASCII nonhidden leaf여야 한다. 최대 246 byte로 제한해 sibling `.complete`까지
+POSIX 255-byte filename bound를 넘지 않게 한다. global evidence root에서
+`candidate-phase/shutdown.json`처럼 보일 수 있지만, `direct-child`는 Rust
+writer가 startup부터 보유하는 private audit-root FD에 대한 표현이다. writer는
+path를 shutdown 시점에 다시 열지 않고 그 held FD로만 artifact와 marker를
+create-only publish한다. 따라서 path rename/swap은 새 경로로 redirect하지 않고,
+writer는 원래 보유한 audit root 외의 replacement를 절대 다시 열어 동등한
+evidence root로 취급하지 않는다.
+
 ## 3. 실제 selection trace
 
 C02-P1이 증명할 수 있는 실제 selection 전환은 executor backend fallback이 아니라 다음으로 한정한다.
