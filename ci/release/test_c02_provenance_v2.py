@@ -545,6 +545,104 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                 checker.verify_rollback_provenance(tree.root.resolve(), historical.path)
             self.assert_reason(raised, "historical-rollback-v1-rejected")
 
+    def test_shutdown_marker_descriptor_path_and_filename_mismatches_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = EvidenceTree(Path(temporary))
+            candidate_phase = self.phase(tree, "candidate", pid=1111, ticks=2222, port=8080)
+            rollback_phase = self.phase(tree, "rollback", pid=3333, ticks=4444, port=8081)
+            candidate_artifacts = {
+                key: tree.put(f"candidate-artifacts/{key}", f"candidate {key}".encode("ascii")).as_json()
+                for key in ("binary", "bundle", "image_inspect")
+            }
+            rollback_artifacts = {
+                key: tree.put(f"rollback-artifacts/{key}", f"rollback {key}".encode("ascii")).as_json()
+                for key in ("binary", "bundle", "image_inspect")
+            }
+            atomic_switch = {
+                key: tree.put(f"atomic/{key}.raw", f"raw {key}".encode("ascii")).as_json()
+                for key in ("pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript")
+            }
+            shutdown_document = {
+                "schema_version": checker.SHUTDOWN_VERSION,
+                "capture_status": "captured",
+                "qualification_status": "not-run",
+                "server_pid": 1111,
+                "server_start_ticks": 2222,
+                "worker_ready": False,
+                "final_metrics": metrics(),
+            }
+
+            def completion_marker(
+                path: str,
+                artifact: common.EvidenceDescriptor,
+                artifact_filename: str,
+            ) -> common.EvidenceDescriptor:
+                return tree.put(
+                    path,
+                    {
+                        "schema_version": checker.SHUTDOWN_MARKER_VERSION,
+                        "artifact_filename": artifact_filename,
+                        "artifact_sha256": artifact.sha256,
+                    },
+                )
+
+            def manifest(
+                name: str,
+                artifact: common.EvidenceDescriptor,
+                marker: common.EvidenceDescriptor,
+            ) -> common.EvidenceDescriptor:
+                phase = {
+                    **candidate_phase,
+                    "shutdown_artifact": artifact.as_json(),
+                    "shutdown_marker": marker.as_json(),
+                }
+                return tree.put(
+                    f"rollback/{name}.json",
+                    {
+                        "schema_version": checker.ROLLBACK_MANIFEST_VERSION,
+                        "capture_status": "captured",
+                        "qualification_status": "not-run",
+                        "candidate_id": self.candidate,
+                        "bindings": self.bindings,
+                        "candidate": phase,
+                        "rollback": rollback_phase,
+                        "candidate_artifacts": candidate_artifacts,
+                        "rollback_artifacts": rollback_artifacts,
+                        "atomic_switch": atomic_switch,
+                    },
+                )
+
+            shutdown = tree.put("candidate-phase/shutdown.json", shutdown_document)
+            nested_marker = completion_marker(
+                "candidate-phase/nested/shutdown.json.complete",
+                shutdown,
+                "shutdown.json",
+            )
+            hidden_shutdown = tree.put("candidate-phase/.shutdown.json", shutdown_document)
+            hidden_marker = completion_marker(
+                "candidate-phase/.shutdown.json.complete",
+                hidden_shutdown,
+                ".shutdown.json",
+            )
+            filename_shutdown = tree.put("candidate-phase/shutdown-filename.json", shutdown_document)
+            filename_marker = completion_marker(
+                "candidate-phase/shutdown-filename.json.complete",
+                filename_shutdown,
+                "other-shutdown.json",
+            )
+
+            for name, artifact, marker, reason in (
+                ("marker-nested", shutdown, nested_marker, "shutdown-marker-path-mismatch"),
+                ("marker-hidden", hidden_shutdown, hidden_marker, "shutdown-marker-path-mismatch"),
+                ("marker-filename", filename_shutdown, filename_marker, "shutdown-marker-mismatch"),
+            ):
+                with self.subTest(name=name):
+                    with self.assertRaises(checker.C02ProvenanceError) as raised:
+                        checker.verify_rollback_provenance(
+                            tree.root.resolve(), manifest(name, artifact, marker).path
+                        )
+                    self.assert_reason(raised, reason)
+
     def test_shutdown_marker_mismatch_and_symlink_manifest_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             tree = EvidenceTree(Path(temporary))

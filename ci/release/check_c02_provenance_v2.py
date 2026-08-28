@@ -580,6 +580,31 @@ def _read_opaque_leaf(
     _read_bytes(root_fd, descriptor, label)
 
 
+def _shutdown_completion_marker_basename(
+    artifact: common.EvidenceDescriptor,
+    marker: common.EvidenceDescriptor,
+    label: str,
+) -> str:
+    """Require the v2 marker to be the artifact's nonhidden sibling leaf."""
+
+    artifact_path = PurePosixPath(artifact.path)
+    marker_path = PurePosixPath(marker.path)
+    artifact_basename = artifact_path.name
+    marker_basename = marker_path.name
+    expected_marker_path = f"{artifact.path}.complete"
+    if (
+        marker.path != expected_marker_path
+        or marker_path.parent != artifact_path.parent
+        or marker_basename != f"{artifact_basename}.complete"
+        or marker_basename.startswith(".")
+    ):
+        _fail(
+            "shutdown-marker-path-mismatch",
+            f"{label} marker must be nonhidden direct-child {expected_marker_path!r}",
+        )
+    return artifact_basename
+
+
 def _parse_shutdown(
     root_fd: int,
     artifact: common.EvidenceDescriptor,
@@ -588,6 +613,7 @@ def _parse_shutdown(
     label: str,
     used_paths: set[str],
 ) -> None:
+    artifact_basename = _shutdown_completion_marker_basename(artifact, marker, label)
     _reserve(artifact, label=f"{label} artifact", used_paths=used_paths)
     _reserve(marker, label=f"{label} marker", used_paths=used_paths)
     raw, document = _read_json(root_fd, artifact, f"{label} artifact")
@@ -607,7 +633,9 @@ def _parse_shutdown(
     marker_row = _exact(marker_document, {"schema_version", "artifact_filename", "artifact_sha256"}, f"{label} marker")
     if marker_row["schema_version"] != SHUTDOWN_MARKER_VERSION:
         _fail("historical-shutdown-version-rejected", f"{label} marker must use {SHUTDOWN_MARKER_VERSION}")
-    if marker_row["artifact_filename"] != PurePosixPath(artifact.path).name or _sha256(marker_row["artifact_sha256"], f"{label}.marker.artifact_sha256") != hashlib.sha256(raw).hexdigest():
+    if marker_row["artifact_filename"] != artifact_basename:
+        _fail("shutdown-marker-mismatch", f"{label} marker filename does not bind its artifact leaf")
+    if _sha256(marker_row["artifact_sha256"], f"{label}.marker.artifact_sha256") != hashlib.sha256(raw).hexdigest():
         _fail("shutdown-marker-mismatch", f"{label} marker does not bind exact shutdown artifact bytes")
     if not marker_raw:
         _fail("shutdown-marker-mismatch", f"{label} marker is empty")
