@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-generation-audit-v2.schema.json",
+  "title": "Riley C02 source-owned generation audit v2",
+  "description": "Raw source-owned generation evidence. It records only committed sampling-path selection, never an executor, attention, GEMM, or historical-rollout fallback. An eventual semantic C02-P1 binder enforces descriptor provenance, completion-marker binding, and one-to-one output/selection ordering.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "runtime_identity",
+    "process_identity",
+    "server_request_id",
+    "delivery_mode",
+    "prompt_token_ids",
+    "committed_output_tokens",
+    "sampling_selections",
+    "finish_reason",
+    "usage"
+  ],
+  "properties": {
+    "schema_version": { "const": "riley.c02-generation-audit.v2" },
+    "candidate_id": { "type": "string", "pattern": "^riley-(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-rc[1-9][0-9]*$" },
+    "runtime_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configuration_profile", "configuration_sha256"],
+      "properties": {
+        "configuration_profile": { "enum": ["stable-default", "max-performance-exact"] },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "process_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pid", "start_ticks"],
+      "properties": {
+        "pid": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "start_ticks": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "server_request_id": { "type": "string", "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}$" },
+    "delivery_mode": { "enum": ["non-stream", "stream"] },
+    "prompt_token_ids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 131072,
+      "items": { "$ref": "#/$defs/tokenId" }
+    },
+    "committed_output_tokens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 65536,
+      "items": { "$ref": "#/$defs/outputToken" }
+    },
+    "sampling_selections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 65536,
+      "items": { "$ref": "#/$defs/samplingSelection" }
+    },
+    "finish_reason": { "enum": ["length", "stop"] },
+    "usage": { "$ref": "#/$defs/usage" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "tokenId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "outputToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token_id", "emitted_text_delta"],
+      "properties": {
+        "token_id": { "$ref": "#/$defs/tokenId" },
+        "emitted_text_delta": {
+          "type": "string",
+          "maxLength": 1048576,
+          "description": "Public response delta associated with the committed token; it is not a token-wise detokenization and may suppress special, incomplete UTF-8, or stop content."
+        }
+      }
+    },
+    "samplingSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["iteration_id", "configured_backend", "selected_backend", "ineligibility_reason", "committed"],
+      "properties": {
+        "iteration_id": { "type": "integer", "minimum": 1 },
+        "configured_backend": { "enum": ["cpu-normative", "gpu-greedy"] },
+        "selected_backend": { "enum": ["cpu-normative", "gpu-greedy"] },
+        "ineligibility_reason": {
+          "oneOf": [
+            { "type": "null" },
+            { "enum": ["gpu-greedy-not-configured", "addressable-vocabulary-mismatch", "nonzero-temperature", "repetition-penalty", "finish-token-mask"] }
+          ]
+        },
+        "committed": { "const": true }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "selected_backend": { "const": "gpu-greedy" } }, "required": ["selected_backend"] },
+          "then": { "properties": { "ineligibility_reason": { "type": "null" } } }
+        },
+        {
+          "if": { "properties": { "selected_backend": { "const": "cpu-normative" } }, "required": ["selected_backend"] },
+          "then": {
+            "properties": {
+              "ineligibility_reason": {
+                "enum": ["gpu-greedy-not-configured", "addressable-vocabulary-mismatch", "nonzero-temperature", "repetition-penalty", "finish-token-mask"]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": { "type": "integer", "minimum": 1 },
+        "completion_tokens": { "type": "integer", "minimum": 1 },
+        "total_tokens": { "type": "integer", "minimum": 2 }
+      }
+    }
+  }
+}

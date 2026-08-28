@@ -482,6 +482,181 @@ pub struct EngineAllocationMetrics {
 /// the no-CUDA server API depend on CUDA-only runtime types.
 pub const ENGINE_BATCH_SHAPE_BUCKET_CAPACITY: usize = 10;
 
+/// Backend selected for one scheduler-committed sampling operation.
+///
+/// This is deliberately narrower than the cold runtime configuration: it
+/// records the source-owned, per-iteration sampling choice only. In
+/// particular, `CpuNormative` is not an executor/attention/GEMM fallback.
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum C02SamplingBackend {
+    /// The normative host logits-processing and categorical sampler.
+    CpuNormative,
+    /// Exact device-side greedy token selection.
+    GpuGreedy,
+}
+
+#[cfg(any(feature = "cuda", test))]
+impl C02SamplingBackend {
+    /// Stable C02 audit spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::CpuNormative => "cpu-normative",
+            Self::GpuGreedy => "gpu-greedy",
+        }
+    }
+}
+
+/// Typed reason why an iteration did not use device-side greedy selection.
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum C02GpuGreedyIneligibility {
+    /// The cold profile configured CPU sampling rather than GPU greedy.
+    GpuGreedyNotConfigured,
+    /// The tokenizer cannot address every executor vocabulary token.
+    AddressableVocabularyMismatch,
+    /// At least one output request requested a non-zero temperature.
+    NonZeroTemperature,
+    /// At least one output request requested a repetition penalty.
+    RepetitionPenalty,
+    /// At least one output request needs a finish-token mask.
+    FinishTokenMask,
+}
+
+#[cfg(any(feature = "cuda", test))]
+impl C02GpuGreedyIneligibility {
+    /// Stable C02 audit spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GpuGreedyNotConfigured => "gpu-greedy-not-configured",
+            Self::AddressableVocabularyMismatch => "addressable-vocabulary-mismatch",
+            Self::NonZeroTemperature => "nonzero-temperature",
+            Self::RepetitionPenalty => "repetition-penalty",
+            Self::FinishTokenMask => "finish-token-mask",
+        }
+    }
+}
+
+/// One typed sampling selection retained only after the scheduler commit.
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct C02CommittedSamplingSelection {
+    /// Scheduler-issued immutable iteration identity.
+    pub iteration_id: u64,
+    /// Sampling backend configured by the cold runtime profile.
+    pub configured_backend: C02SamplingBackend,
+    /// Backend actually used for this committed output token.
+    pub selected_backend: C02SamplingBackend,
+    /// Why GPU greedy was ineligible, when CPU was selected.
+    pub ineligibility_reason: Option<C02GpuGreedyIneligibility>,
+    /// Always true for exported records; staged selections are never exported.
+    pub committed: bool,
+}
+
+/// One committed token and its public delivery delta retained in a C02 audit record.
+#[cfg(feature = "cuda")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct C02GenerationAuditToken {
+    /// Token accepted by the scheduler-committed generation state.
+    pub token_id: u32,
+    /// Public response delta associated with this token.
+    ///
+    /// This is not a token-wise detokenization: delivery may suppress special
+    /// tokens, withhold an incomplete UTF-8 sequence, or omit stop content.
+    pub emitted_text_delta: String,
+}
+
+/// Transport mode of the source-issued request represented by an audit record.
+#[cfg(feature = "cuda")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum C02GenerationAuditDeliveryMode {
+    /// One aggregate JSON completion response.
+    NonStream,
+    /// An SSE completion response.
+    Stream,
+}
+
+#[cfg(feature = "cuda")]
+impl C02GenerationAuditDeliveryMode {
+    /// Stable C02 audit spelling.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::NonStream => "non-stream",
+            Self::Stream => "stream",
+        }
+    }
+}
+
+/// Complete source-owned terminal audit payload for one successful request.
+#[cfg(feature = "cuda")]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct C02GenerationAuditRecord {
+    /// Source-issued public completion ID.
+    pub server_request_id: String,
+    /// Request transport mode retained for raw public-response binding.
+    pub delivery_mode: C02GenerationAuditDeliveryMode,
+    /// Exact tokenized prompt accepted by the runtime.
+    pub prompt_token_ids: Vec<u32>,
+    /// Every scheduler-committed generated token in order.
+    pub committed_output_tokens: Vec<C02GenerationAuditToken>,
+    /// One source-owned selection for every committed output token in order.
+    pub sampling_selections: Vec<C02CommittedSamplingSelection>,
+    /// Successful terminal reason; C02 records only `stop` or `length`.
+    pub finish_reason: crate::domain::FinishReason,
+    /// Exact terminal token accounting.
+    pub usage: crate::domain::TokenUsage,
+}
+
+/// Durable sink used by the CUDA worker after an authoritative commit.
+///
+/// A sink error is a backend error: the worker must not publish a successful
+/// C02 request whose source-owned audit record could not be created.
+#[cfg(feature = "cuda")]
+pub trait C02GenerationAuditSink: Send + Sync {
+    /// Creates the terminal record without replacing an existing one.
+    fn write_record(&self, record: C02GenerationAuditRecord) -> Result<(), String>;
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn gpu_greedy_ineligibility(
+    gpu_greedy_configured: bool,
+    exact_vocabulary: bool,
+    temperature: f32,
+    repetition_penalty: f32,
+    has_finish_token_mask: bool,
+) -> Option<C02GpuGreedyIneligibility> {
+    if !gpu_greedy_configured {
+        Some(C02GpuGreedyIneligibility::GpuGreedyNotConfigured)
+    } else if !exact_vocabulary {
+        Some(C02GpuGreedyIneligibility::AddressableVocabularyMismatch)
+    } else if temperature != 0.0 {
+        Some(C02GpuGreedyIneligibility::NonZeroTemperature)
+    } else if repetition_penalty != 1.0 {
+        Some(C02GpuGreedyIneligibility::RepetitionPenalty)
+    } else if has_finish_token_mask {
+        Some(C02GpuGreedyIneligibility::FinishTokenMask)
+    } else {
+        None
+    }
+}
+
+/// Promotes a staged selection only after `Scheduler::complete_iteration`
+/// has reported success. Callers discard the `None` result on abort or commit
+/// failure, so it cannot become a terminal C02 audit record.
+#[cfg(any(feature = "cuda", test))]
+fn selection_after_scheduler_commit(
+    selection: C02CommittedSamplingSelection,
+    scheduler_commit_succeeded: bool,
+) -> Option<C02CommittedSamplingSelection> {
+    scheduler_commit_succeeded.then_some(C02CommittedSamplingSelection {
+        committed: true,
+        ..selection
+    })
+}
+
 /// Active and selected dense-row facts for the latest committed iteration.
 #[allow(clippy::struct_field_names)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1491,6 +1666,7 @@ impl crate::service::CompletionBackend for InferenceEngine {
 #[cfg(feature = "cuda")]
 mod cuda_backend {
     use std::collections::VecDeque;
+    use std::sync::Arc;
     use std::time::Instant;
 
     use riley_model::{DecodeOptions, EncodeOptions, LoadedModel};
@@ -1516,11 +1692,13 @@ mod cuda_backend {
     };
 
     use super::{
-        BackendError, BackendEvent, BatchShapeExecutionSample, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
+        BackendError, BackendEvent, BatchShapeExecutionSample, C02CommittedSamplingSelection,
+        C02GenerationAuditDeliveryMode, C02GenerationAuditRecord, C02GenerationAuditSink,
+        C02GenerationAuditToken, C02SamplingBackend, ENGINE_BATCH_SHAPE_BUCKET_CAPACITY,
         EngineAllocationMetrics, EngineBackend, EngineBatchShapeMetricsSnapshot, EngineConfig,
         EngineError, EngineMetricsSnapshot, EngineRequestId, InferenceEngine,
-        prepare_batch_shape_metrics, private_request_error, record_committed_batch_shape,
-        visible_utf8_prefix,
+        gpu_greedy_ineligibility, prepare_batch_shape_metrics, private_request_error,
+        record_committed_batch_shape, selection_after_scheduler_commit, visible_utf8_prefix,
     };
 
     const _: () = assert!(ENGINE_BATCH_SHAPE_BUCKET_CAPACITY == MAX_LLAMA_BATCH_SHAPE_BUCKETS);
@@ -1716,6 +1894,7 @@ mod cuda_backend {
         executor: PreparedLlamaBatchExecutor,
         timer: LlamaIterationCudaTimer,
         gpu_greedy: bool,
+        generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
     }
 
     impl std::fmt::Debug for CudaEngineResources {
@@ -1725,6 +1904,7 @@ mod cuda_backend {
                 .field("metadata", &self.metadata)
                 .field("scheduler", &self.scheduler)
                 .field("executor", &self.executor)
+                .field("generation_audit_enabled", &self.generation_audit.is_some())
                 .finish_non_exhaustive()
         }
     }
@@ -1791,6 +1971,7 @@ mod cuda_backend {
                 executor,
                 timer,
                 gpu_greedy: config.gpu_greedy,
+                generation_audit: None,
             })
         }
 
@@ -1812,6 +1993,17 @@ mod cuda_backend {
                 &self.scheduler,
                 self.effective_sampling_backend(),
             )
+        }
+
+        /// Attaches the optional C02 terminal-audit sink before the resources
+        /// transfer to the exclusive worker.
+        #[must_use]
+        pub fn with_c02_generation_audit(
+            mut self,
+            generation_audit: Arc<dyn C02GenerationAuditSink>,
+        ) -> Self {
+            self.generation_audit = Some(generation_audit);
+            self
         }
 
         fn effective_sampling_backend(&self) -> &'static str {
@@ -1855,12 +2047,103 @@ mod cuda_backend {
         prompt_tokens: u64,
         cancellation_deferred: bool,
         pre_iteration_cancel_delta: String,
+        generation_audit: Option<C02RequestAudit>,
+    }
+
+    struct C02RequestAudit {
+        server_request_id: String,
+        delivery_mode: C02GenerationAuditDeliveryMode,
+        output_tokens: Vec<C02GenerationAuditToken>,
+        selections: Vec<C02CommittedSamplingSelection>,
+    }
+
+    impl C02RequestAudit {
+        fn new(
+            metadata: &RequestMetadata,
+            stream: bool,
+            maximum_output_tokens: usize,
+        ) -> Result<Self, BackendError> {
+            let mut output_tokens = Vec::new();
+            output_tokens
+                .try_reserve_exact(maximum_output_tokens)
+                .map_err(|_| internal("C02 audit token staging allocation failed"))?;
+            let mut selections = Vec::new();
+            selections
+                .try_reserve_exact(maximum_output_tokens)
+                .map_err(|_| internal("C02 audit selection staging allocation failed"))?;
+            Ok(Self {
+                server_request_id: metadata.request_id.clone(),
+                delivery_mode: if stream {
+                    C02GenerationAuditDeliveryMode::Stream
+                } else {
+                    C02GenerationAuditDeliveryMode::NonStream
+                },
+                output_tokens,
+                selections,
+            })
+        }
+
+        fn record_committed(
+            &mut self,
+            token_id: u32,
+            emitted_text_delta: &str,
+            selection: C02CommittedSamplingSelection,
+        ) -> Result<(), BackendError> {
+            if !selection.committed
+                || self.output_tokens.len() == self.output_tokens.capacity()
+                || self.selections.len() == self.selections.capacity()
+            {
+                return Err(internal("C02 audit committed token staging overflowed"));
+            }
+            self.output_tokens.push(C02GenerationAuditToken {
+                token_id,
+                emitted_text_delta: emitted_text_delta.to_owned(),
+            });
+            self.selections.push(selection);
+            Ok(())
+        }
+
+        fn into_record(
+            self,
+            state: &GenerationState,
+            completion: &RequestCompletion,
+            finish_reason: FinishReason,
+            usage: TokenUsage,
+        ) -> Result<C02GenerationAuditRecord, BackendError> {
+            if !matches!(finish_reason, FinishReason::Length | FinishReason::Stop)
+                || state.request().prompt_token_ids.is_empty()
+                || self.output_tokens.is_empty()
+                || self.output_tokens.len() != completion.generated_token_ids().len()
+                || self.selections.len() != self.output_tokens.len()
+                || state.generated_token_ids() != completion.generated_token_ids()
+                || self
+                    .output_tokens
+                    .iter()
+                    .zip(completion.generated_token_ids())
+                    .any(|(recorded, expected)| recorded.token_id != *expected)
+                || self.selections.iter().any(|selection| !selection.committed)
+            {
+                return Err(internal(
+                    "C02 audit terminal record is not a committed token projection",
+                ));
+            }
+            Ok(C02GenerationAuditRecord {
+                server_request_id: self.server_request_id,
+                delivery_mode: self.delivery_mode,
+                prompt_token_ids: state.request().prompt_token_ids.clone(),
+                committed_output_tokens: self.output_tokens,
+                sampling_selections: self.selections,
+                finish_reason,
+                usage,
+            })
+        }
     }
 
     struct PendingToken {
         scheduler_id: SchedulerRequestId,
         token_id: u32,
         text_delta: String,
+        selection: C02CommittedSamplingSelection,
     }
 
     struct CudaBackend {
@@ -1875,6 +2158,7 @@ mod cuda_backend {
         allowed_tokens: Vec<bool>,
         addressable_tokens: usize,
         gpu_greedy: bool,
+        generation_audit: Option<Arc<dyn C02GenerationAuditSink>>,
         greedy_token_workspace: Vec<u32>,
         requests: Vec<CudaRequest>,
         samples: Vec<SampledIterationToken>,
@@ -1948,6 +2232,7 @@ mod cuda_backend {
                 allowed_tokens,
                 addressable_tokens,
                 gpu_greedy: resources.gpu_greedy,
+                generation_audit: resources.generation_audit,
                 greedy_token_workspace,
                 requests,
                 samples,
@@ -1988,6 +2273,7 @@ mod cuda_backend {
             let Some(index) = self.request_index_by_scheduler(completion.request_id()) else {
                 return Ok(Vec::new());
             };
+            let generation_audit = self.generation_audit.clone();
             let mut request = self.requests.swap_remove(index);
             let mut events = Vec::new();
             events
@@ -2029,6 +2315,18 @@ mod cuda_backend {
                         RequestFinishReason::AdmissionTimeout
                         | RequestFinishReason::ExecutorFailure => unreachable!(),
                     };
+                    if matches!(reason, FinishReason::Length | FinishReason::Stop) {
+                        if let Some(generation_audit) = generation_audit.as_ref() {
+                            let audit = request.generation_audit.take().ok_or_else(|| {
+                                internal("C02 audit sink has no request-local committed record")
+                            })?;
+                            let record =
+                                audit.into_record(&request.state, completion, reason, usage)?;
+                            generation_audit.write_record(record).map_err(|error| {
+                                internal(format!("C02 generation audit write failed: {error}"))
+                            })?;
+                        }
+                    }
                     events.push(BackendEvent::new(
                         request.engine_id,
                         GenerationEvent::Finished { reason, usage },
@@ -2068,10 +2366,11 @@ mod cuda_backend {
             &mut self,
             plan: &riley_scheduler::IterationPlan,
             downloaded: &riley_scheduler::DownloadedLlamaIteration,
-            gpu_greedy: bool,
+            selection: C02CommittedSamplingSelection,
         ) -> Result<(), BackendError> {
             self.samples.clear();
             self.pending_tokens.clear();
+            let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             for &slot in plan.output_slots() {
                 let item = plan
                     .prefill_items()
@@ -2160,18 +2459,37 @@ mod cuda_backend {
                     scheduler_id: item.request_id(),
                     token_id,
                     text_delta: generated.text_delta().to_owned(),
+                    selection,
                 });
             }
             Ok(())
         }
 
         #[allow(clippy::float_cmp)]
-        fn iteration_gpu_greedy_eligible(
+        fn sampling_selection_for_plan(
             &self,
             plan: &riley_scheduler::IterationPlan,
-        ) -> Result<bool, BackendError> {
-            if !self.gpu_greedy || self.addressable_tokens != self.sampling.vocabulary_size() {
-                return Ok(false);
+        ) -> Result<C02CommittedSamplingSelection, BackendError> {
+            let configured_backend = if self.gpu_greedy {
+                C02SamplingBackend::GpuGreedy
+            } else {
+                C02SamplingBackend::CpuNormative
+            };
+            let static_ineligibility = gpu_greedy_ineligibility(
+                self.gpu_greedy,
+                self.addressable_tokens == self.sampling.vocabulary_size(),
+                0.0,
+                1.0,
+                false,
+            );
+            if let Some(reason) = static_ineligibility {
+                return Ok(C02CommittedSamplingSelection {
+                    iteration_id: plan.iteration_id().get(),
+                    configured_backend,
+                    selected_backend: C02SamplingBackend::CpuNormative,
+                    ineligibility_reason: Some(reason),
+                    committed: false,
+                });
             }
             for &slot in plan.output_slots() {
                 let item = plan
@@ -2185,14 +2503,110 @@ mod cuda_backend {
                     .ok_or_else(|| internal("iteration references unknown request"))?;
                 let state = &self.requests[request_index].state;
                 let params = state.request().sampling_params;
-                if params.temperature != 0.0
-                    || params.repetition_penalty != 1.0
-                    || !state.masked_finish_token_ids().is_empty()
-                {
-                    return Ok(false);
+                if let Some(reason) = gpu_greedy_ineligibility(
+                    true,
+                    true,
+                    params.temperature,
+                    params.repetition_penalty,
+                    !state.masked_finish_token_ids().is_empty(),
+                ) {
+                    return Ok(C02CommittedSamplingSelection {
+                        iteration_id: plan.iteration_id().get(),
+                        configured_backend,
+                        selected_backend: C02SamplingBackend::CpuNormative,
+                        ineligibility_reason: Some(reason),
+                        committed: false,
+                    });
                 }
             }
-            Ok(true)
+            Ok(C02CommittedSamplingSelection {
+                iteration_id: plan.iteration_id().get(),
+                configured_backend,
+                selected_backend: C02SamplingBackend::GpuGreedy,
+                ineligibility_reason: None,
+                committed: false,
+            })
+        }
+
+        fn record_committed_audit_tokens(
+            &mut self,
+            token_events: &[riley_scheduler::TokenEvent],
+        ) -> Result<(), BackendError> {
+            if self.generation_audit.is_none() {
+                return Ok(());
+            }
+            if token_events.len() != self.pending_tokens.len() {
+                return Err(internal(
+                    "scheduler committed tokens do not exactly cover C02 audit staging",
+                ));
+            }
+            for (index, token) in token_events.iter().enumerate() {
+                if token_events[..index]
+                    .iter()
+                    .any(|earlier| earlier.request_id() == token.request_id())
+                {
+                    return Err(internal(
+                        "scheduler committed duplicate C02 audit request token",
+                    ));
+                }
+                let pending_count = self
+                    .pending_tokens
+                    .iter()
+                    .filter(|pending| pending.scheduler_id == token.request_id())
+                    .count();
+                if pending_count != 1 {
+                    return Err(internal(
+                        "C02 audit staging has missing or duplicate request token",
+                    ));
+                }
+                let pending = self
+                    .pending_tokens
+                    .iter()
+                    .find(|pending| pending.scheduler_id == token.request_id())
+                    .ok_or_else(|| internal("C02 audit staging lookup failed"))?;
+                if pending.token_id != token.token_id() {
+                    return Err(internal("C02 audit token differs from scheduler commit"));
+                }
+                let request_index = self
+                    .request_index_by_scheduler(token.request_id())
+                    .ok_or_else(|| internal("C02 audit token targets unknown request"))?;
+                let request_audit = self.requests[request_index]
+                    .generation_audit
+                    .as_ref()
+                    .ok_or_else(|| internal("C02 audit sink has no request staging"))?;
+                if request_audit.output_tokens.len() == request_audit.output_tokens.capacity()
+                    || request_audit.selections.len() == request_audit.selections.capacity()
+                {
+                    return Err(internal("C02 audit request staging capacity exhausted"));
+                }
+            }
+            for token in token_events {
+                let (token_id, emitted_text_delta, selection) = {
+                    let pending = self
+                        .pending_tokens
+                        .iter()
+                        .find(|pending| pending.scheduler_id == token.request_id())
+                        .ok_or_else(|| internal("C02 audit staging lookup failed"))?;
+                    (
+                        pending.token_id,
+                        pending.text_delta.clone(),
+                        pending.selection,
+                    )
+                };
+                let selection =
+                    selection_after_scheduler_commit(selection, true).ok_or_else(|| {
+                        internal("C02 audit selection was not promoted after scheduler commit")
+                    })?;
+                let request_index = self
+                    .request_index_by_scheduler(token.request_id())
+                    .ok_or_else(|| internal("C02 audit token targets unknown request"))?;
+                self.requests[request_index]
+                    .generation_audit
+                    .as_mut()
+                    .ok_or_else(|| internal("C02 audit sink has no request staging"))?
+                    .record_committed(token_id, &emitted_text_delta, selection)?;
+            }
+            Ok(())
         }
 
         fn snapshot_cancel_deltas(
@@ -2408,6 +2822,11 @@ mod cuda_backend {
             pre_iteration_cancel_delta
                 .try_reserve_exact(maximum_bytes)
                 .map_err(|_| internal("cancellation delta allocation failed"))?;
+            let generation_audit = self
+                .generation_audit
+                .is_some()
+                .then(|| C02RequestAudit::new(metadata, request.stream, request.max_new_tokens))
+                .transpose()?;
             let now_ns = self.now_ns();
             let submission = self
                 .scheduler_mut()?
@@ -2424,6 +2843,7 @@ mod cuda_backend {
                 prompt_tokens,
                 cancellation_deferred: false,
                 pre_iteration_cancel_delta,
+                generation_audit,
             });
             Ok(())
         }
@@ -2467,7 +2887,8 @@ mod cuda_backend {
                 return Ok(events);
             };
             self.snapshot_cancel_deltas(&plan)?;
-            let gpu_greedy = self.iteration_gpu_greedy_eligible(&plan)?;
+            let selection = self.sampling_selection_for_plan(&plan)?;
+            let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
             let expected_active_rows = plan.total_tokens();
             let (mut downloaded, timing, staged_shape) = {
                 let executor = self
@@ -2512,7 +2933,7 @@ mod cuda_backend {
                     }
                 }
             };
-            let sampling = self.sample_iteration(&plan, &downloaded, gpu_greedy);
+            let sampling = self.sample_iteration(&plan, &downloaded, selection);
             if gpu_greedy {
                 if let Err(source) =
                     downloaded.restore_greedy_token_workspace(&mut self.greedy_token_workspace)
@@ -2587,6 +3008,7 @@ mod cuda_backend {
                 staged_shape,
                 updates.iteration_metric().is_some(),
             );
+            self.record_committed_audit_tokens(updates.token_events())?;
 
             // External publication starts only after the authoritative commit
             // above returns successfully.
@@ -2713,10 +3135,12 @@ mod tests {
     };
 
     use super::{
-        BackendError, BackendEvent, BatchShapeExecutionSample, EngineBackend,
+        BackendError, BackendEvent, BatchShapeExecutionSample, C02CommittedSamplingSelection,
+        C02GpuGreedyIneligibility, C02SamplingBackend, EngineBackend,
         EngineBatchShapeMetricsSnapshot, EngineConfig, EngineError, EngineRequestId,
-        InferenceEngine, prepare_batch_shape_metrics, private_request_error,
-        record_committed_batch_shape, visible_utf8_prefix,
+        InferenceEngine, gpu_greedy_ineligibility, prepare_batch_shape_metrics,
+        private_request_error, record_committed_batch_shape, selection_after_scheduler_commit,
+        visible_utf8_prefix,
     };
 
     #[derive(Debug)]
@@ -2910,6 +3334,59 @@ mod tests {
         assert_eq!(
             engine.final_metrics_snapshot(),
             Some(super::EngineMetricsSnapshot::default())
+        );
+    }
+
+    #[test]
+    fn gpu_greedy_ineligibility_is_typed_and_has_a_stable_precedence() {
+        assert_eq!(
+            gpu_greedy_ineligibility(false, false, 1.0, 2.0, true),
+            Some(C02GpuGreedyIneligibility::GpuGreedyNotConfigured)
+        );
+        assert_eq!(
+            gpu_greedy_ineligibility(true, false, 1.0, 2.0, true),
+            Some(C02GpuGreedyIneligibility::AddressableVocabularyMismatch)
+        );
+        assert_eq!(
+            gpu_greedy_ineligibility(true, true, 0.25, 2.0, true),
+            Some(C02GpuGreedyIneligibility::NonZeroTemperature)
+        );
+        assert_eq!(
+            gpu_greedy_ineligibility(true, true, 0.0, 1.5, true),
+            Some(C02GpuGreedyIneligibility::RepetitionPenalty)
+        );
+        assert_eq!(
+            gpu_greedy_ineligibility(true, true, 0.0, 1.0, true),
+            Some(C02GpuGreedyIneligibility::FinishTokenMask)
+        );
+        assert_eq!(gpu_greedy_ineligibility(true, true, 0.0, 1.0, false), None);
+    }
+
+    #[test]
+    fn complete_iteration_failure_produces_no_audit_record() {
+        let staged = C02CommittedSamplingSelection {
+            iteration_id: 17,
+            configured_backend: C02SamplingBackend::GpuGreedy,
+            selected_backend: C02SamplingBackend::CpuNormative,
+            ineligibility_reason: Some(C02GpuGreedyIneligibility::NonZeroTemperature),
+            committed: false,
+        };
+        let mut exported = Vec::new();
+        if let Some(selection) = selection_after_scheduler_commit(staged, false) {
+            exported.push(selection);
+        }
+        assert!(
+            exported.is_empty(),
+            "a failed scheduler commit must not export audit evidence"
+        );
+
+        let committed = selection_after_scheduler_commit(staged, true)
+            .expect("successful scheduler commit promotes the staged selection");
+        assert!(committed.committed);
+        assert_eq!(committed.selected_backend, C02SamplingBackend::CpuNormative);
+        assert_eq!(
+            committed.ineligibility_reason,
+            Some(C02GpuGreedyIneligibility::NonZeroTemperature)
         );
     }
 

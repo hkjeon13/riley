@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-generation-audit-completion-v2.schema.json",
+  "title": "Riley C02 generation audit completion marker v2",
+  "description": "A create-only `<artifact_filename>.complete` marker written after a generation-audit-v2 JSON leaf has been fsynced. Its content schema identity is v2. A raw leaf without this marker is incomplete evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+  "properties": {
+    "schema_version": { "const": "riley.c02-generation-audit-completion.v2" },
+    "artifact_filename": { "type": "string", "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}\\.json$" },
+    "artifact_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+  }
+}

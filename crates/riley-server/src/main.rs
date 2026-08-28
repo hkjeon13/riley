@@ -2,6 +2,8 @@
 use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
+#[cfg(feature = "cuda")]
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -49,6 +51,7 @@ serve options:
   --c02-candidate-id ID          release candidate identity for C02 evidence mode
   --c02-configuration-profile ID stable-default or max-performance-exact
   --c02-startup-artifact PATH    absolute create-only C02 startup artifact path
+  --c02-audit-dir PATH           absolute C02 generation-audit output directory
   --shutdown-on-stdin            gracefully stop after one input line or EOF
 ";
 
@@ -83,6 +86,7 @@ struct ServeOptions {
     max_weight_bytes: u64,
     shutdown_on_stdin: bool,
     c02_runtime_config: Option<C02RuntimeConfigOptions>,
+    c02_audit_dir: Option<PathBuf>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -233,6 +237,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
     let mut c02_candidate_id = None;
     let mut c02_configuration_profile = None;
     let mut c02_startup_artifact = None;
+    let mut c02_audit_dir = None;
 
     while let Some(flag) = arguments.next() {
         let Some(flag_text) = flag.to_str() else {
@@ -383,6 +388,14 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
                 )?),
                 "--c02-startup-artifact",
             )?,
+            "--c02-audit-dir" => set_once(
+                &mut c02_audit_dir,
+                PathBuf::from(parse_utf8(
+                    next_value(&mut arguments, "--c02-audit-dir")?,
+                    "--c02-audit-dir",
+                )?),
+                "--c02-audit-dir",
+            )?,
             "--shutdown-on-stdin" => {
                 if shutdown_on_stdin {
                     return Err("--shutdown-on-stdin may occur only once".to_owned());
@@ -424,6 +437,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         c02_configuration_profile,
         c02_startup_artifact,
     )?;
+    let c02_audit_dir = parse_c02_audit_dir(c02_runtime_config.as_ref(), c02_audit_dir)?;
     let bind_address = bind_address.unwrap_or_else(|| "127.0.0.1:8080".to_owned());
 
     Ok(CliCommand::Serve(ServeOptions {
@@ -448,6 +462,7 @@ fn parse_arguments(arguments: impl IntoIterator<Item = OsString>) -> Result<CliC
         max_weight_bytes: max_weight_bytes.unwrap_or(DEFAULT_MAX_WEIGHT_BYTES),
         shutdown_on_stdin,
         c02_runtime_config,
+        c02_audit_dir,
     }))
 }
 
@@ -574,6 +589,22 @@ fn parse_c02_runtime_config_options(
     }))
 }
 
+fn parse_c02_audit_dir(
+    runtime_config: Option<&C02RuntimeConfigOptions>,
+    audit_dir: Option<PathBuf>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(audit_dir) = audit_dir else {
+        return Ok(None);
+    };
+    if runtime_config.is_none() {
+        return Err("--c02-audit-dir requires complete C02 runtime configuration".to_owned());
+    }
+    if audit_dir.as_os_str().is_empty() || !audit_dir.is_absolute() {
+        return Err("--c02-audit-dir must be an absolute non-empty path".to_owned());
+    }
+    Ok(Some(audit_dir))
+}
+
 fn validate_c02_candidate_id(candidate_id: &str) -> Result<(), String> {
     let Some(version_and_rc) = candidate_id.strip_prefix("riley-") else {
         return Err(c02_candidate_id_error());
@@ -698,6 +729,7 @@ fn run_serve(
         options.max_weight_bytes,
         options.shutdown_on_stdin,
         options.c02_runtime_config,
+        options.c02_audit_dir,
     );
     Err("serve requires a build with --features server,cuda".to_owned())
 }
@@ -737,6 +769,7 @@ fn run_serve(
     );
     let shutdown_metrics_path = shutdown_metrics_path_from_env()?;
     let c02_runtime_config = options.c02_runtime_config;
+    let c02_audit_dir = options.c02_audit_dir;
 
     validate_positive("--max-active-sequences", options.max_active_sequences)?;
     validate_positive("--max-waiting-requests", options.max_waiting_requests)?;
@@ -872,7 +905,7 @@ fn run_serve(
         },
     )
     .map_err(|error| format!("CUDA backend preparation failed: {error}"))?;
-    let c02_receipt = match c02_runtime_config.as_ref() {
+    let (c02_receipt, c02_generation_audit) = match c02_runtime_config.as_ref() {
         Some(c02) => {
             let facts = resources.effective_runtime_facts();
             let effective_config = c02_effective_config_from_facts(&facts)?;
@@ -882,9 +915,25 @@ fn run_serve(
                 launch_environment,
             )?;
             let receipt = c02_endpoint_receipt(c02, &runtime_identity, &effective_config)?;
-            Some(receipt)
+            let generation_audit = match c02_audit_dir.as_ref() {
+                Some(directory) => {
+                    let process_identity = c02_capture_process_identity()?;
+                    Some(Arc::new(C02GenerationAuditWriter::new(
+                        directory,
+                        c02,
+                        &runtime_identity,
+                        process_identity,
+                    )?))
+                }
+                None => None,
+            };
+            (Some(receipt), generation_audit)
         }
-        None => None,
+        None => (None, None),
+    };
+    let resources = match c02_generation_audit {
+        Some(generation_audit) => resources.with_c02_generation_audit(generation_audit),
+        None => resources,
     };
     let engine = Arc::new(
         InferenceEngine::start_cuda(
@@ -1127,6 +1176,595 @@ fn c02_endpoint_receipt(
     );
     let bytes = c02_canonical_json_bytes(&document)?;
     Ok(C02EndpointReceipt { document, bytes })
+}
+
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_SCHEMA_VERSION: &str = "riley.c02-generation-audit.v2";
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION: &str =
+    "riley.c02-generation-audit-completion.v2";
+
+/// Linux process identity retained in each raw C02 audit leaf so a PID cannot
+/// be replayed after it has been reused by a later process.
+#[cfg(any(feature = "cuda", test))]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct C02AuditProcessIdentity {
+    pid: u32,
+    start_ticks: u64,
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_process_identity_from_linux_proc_stat(
+    stat: &str,
+) -> Result<C02AuditProcessIdentity, String> {
+    // Field 2 (`comm`) may contain spaces and parentheses, so splitting the
+    // whole line is unsound. After its final ')' field 3 is index 0 and
+    // starttime (field 22) is index 19.
+    let (before_comm_end, after_comm_end) = stat
+        .rsplit_once(')')
+        .ok_or_else(|| "C02 process stat has no terminating comm field".to_owned())?;
+    let pid = before_comm_end
+        .trim_start()
+        .split_ascii_whitespace()
+        .next()
+        .ok_or_else(|| "C02 process stat has no PID field".to_owned())?
+        .parse::<u32>()
+        .map_err(|_| "C02 process stat PID is not an unsigned integer".to_owned())?;
+    let start_ticks = after_comm_end
+        .split_ascii_whitespace()
+        .nth(19)
+        .ok_or_else(|| "C02 process stat has no start-tick field".to_owned())?
+        .parse::<u64>()
+        .map_err(|_| "C02 process stat start ticks are not an unsigned integer".to_owned())?;
+    if start_ticks == 0 {
+        return Err("C02 process stat start ticks must be greater than zero".to_owned());
+    }
+    Ok(C02AuditProcessIdentity { pid, start_ticks })
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_generation_audit_record_basename(server_request_id: &str) -> Result<String, String> {
+    if !server_request_id.starts_with("cmpl-")
+        || server_request_id.len() == "cmpl-".len()
+        || server_request_id.len() > 128
+        || !server_request_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+    {
+        return Err("C02 audit record has an invalid source-issued request ID".to_owned());
+    }
+    Ok(format!("{server_request_id}.json"))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_generation_audit_completion_basename(record_basename: &str) -> Result<String, String> {
+    let completion_basename = format!("{record_basename}.complete");
+    if completion_basename.len() > 255 {
+        return Err("C02 audit completion marker basename is too long".to_owned());
+    }
+    Ok(completion_basename)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_generation_audit_completion_marker_bytes(
+    record_basename: &str,
+    raw_bytes: &[u8],
+) -> Result<Vec<u8>, String> {
+    let _ = c02_generation_audit_completion_basename(record_basename)?;
+    let completion = c02_json_object([
+        (
+            "schema_version".to_owned(),
+            serde_json::Value::String(C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION.to_owned()),
+        ),
+        (
+            "artifact_filename".to_owned(),
+            serde_json::Value::String(record_basename.to_owned()),
+        ),
+        (
+            "artifact_sha256".to_owned(),
+            serde_json::Value::String(c02_sha256_hex(raw_bytes)),
+        ),
+    ])?;
+    c02_canonical_json_bytes(&completion)
+}
+
+#[cfg(feature = "cuda")]
+fn c02_capture_process_identity() -> Result<C02AuditProcessIdentity, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let stat = std::fs::read_to_string("/proc/self/stat")
+            .map_err(|error| format!("could not read /proc/self/stat for C02 audit: {error}"))?;
+        let identity = c02_process_identity_from_linux_proc_stat(&stat)?;
+        if identity.pid != std::process::id() {
+            return Err("C02 process stat PID differs from the running process".to_owned());
+        }
+        Ok(identity)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("--c02-audit-dir requires Linux /proc PID start-tick support".to_owned())
+    }
+}
+
+/// Strict descriptor-relative C02 audit I/O.
+///
+/// The source has no safe standard-library replacement for `openat` with
+/// `O_NOFOLLOW`; the narrowly scoped unsafe boundary below retains every
+/// opened directory descriptor for the writer lifetime and never falls back
+/// when a required kernel flag is unavailable.
+#[cfg(all(any(feature = "cuda", test), unix))]
+#[allow(unsafe_code)]
+mod c02_strict_audit_io {
+    use std::ffi::{CStr, CString};
+    use std::fs::File;
+    use std::io::Write;
+    use std::os::fd::{AsRawFd, FromRawFd, RawFd};
+    use std::os::unix::ffi::OsStrExt;
+    use std::path::{Component, Path};
+
+    #[derive(Debug)]
+    pub(super) struct C02HeldPrivateDirectory {
+        // The final item is the private evidence root. Keeping the complete
+        // chain open prevents a later path rebinding from changing the root
+        // used by `openat` and retains the validated parent topology.
+        chain: Vec<File>,
+    }
+
+    impl C02HeldPrivateDirectory {
+        pub(super) fn open(path: &Path) -> Result<Self, String> {
+            if path.as_os_str().is_empty() || !path.is_absolute() {
+                return Err("--c02-audit-dir must be an absolute non-empty path".to_owned());
+            }
+            let raw_path = path.as_os_str().as_bytes();
+            if raw_path.len() < 2
+                || raw_path[0] != b'/'
+                || raw_path[1..].split(|byte| *byte == b'/').any(|component| {
+                    component.is_empty() || component == b"." || component == b".."
+                })
+            {
+                return Err("--c02-audit-dir must contain only normal path components".to_owned());
+            }
+
+            let flags = directory_open_flags()?;
+            let slash = CString::new("/").expect("literal path has no NUL");
+            let root = open_directory_at(libc::AT_FDCWD, &slash, flags, "C02 audit path root")?;
+            validate_ancestor_directory(&root, "C02 audit path root")?;
+            let mut chain = vec![root];
+            let mut normal_components = 0_usize;
+            for component in path.components() {
+                let Component::Normal(component) = component else {
+                    if matches!(component, Component::RootDir) {
+                        continue;
+                    }
+                    return Err(
+                        "--c02-audit-dir must contain only normal path components".to_owned()
+                    );
+                };
+                normal_components = normal_components
+                    .checked_add(1)
+                    .ok_or_else(|| "C02 audit path component count overflowed".to_owned())?;
+                let name = CString::new(component.as_bytes())
+                    .map_err(|_| "C02 audit path component contains a NUL byte".to_owned())?;
+                let parent_fd = chain
+                    .last()
+                    .expect("C02 audit path always retains /")
+                    .as_raw_fd();
+                let next = open_directory_at(parent_fd, &name, flags, "C02 audit path ancestor")?;
+                validate_ancestor_directory(&next, "C02 audit path ancestor")?;
+                chain.push(next);
+            }
+            if normal_components == 0 {
+                return Err("--c02-audit-dir must not be the filesystem root".to_owned());
+            }
+            validate_private_root(
+                chain
+                    .last()
+                    .expect("C02 audit path with a component retains a root"),
+            )?;
+            Ok(Self { chain })
+        }
+
+        pub(super) fn create_new_regular_leaf(
+            &self,
+            basename: &str,
+            bytes: &[u8],
+        ) -> Result<(), String> {
+            if !safe_basename(basename) {
+                return Err(
+                    "C02 audit output must be an ASCII-safe direct-child basename".to_owned(),
+                );
+            }
+            let name = CString::new(basename)
+                .map_err(|_| "C02 audit output basename contains a NUL byte".to_owned())?;
+            let flags = leaf_open_flags()?;
+            let fd = unsafe { libc::openat(self.root().as_raw_fd(), name.as_ptr(), flags, 0o600) };
+            if fd < 0 {
+                return Err(format!(
+                    "could not create C02 audit leaf {basename} without replacement: {}",
+                    std::io::Error::last_os_error()
+                ));
+            }
+            let mut file = unsafe { File::from_raw_fd(fd) };
+            validate_new_leaf(&file, basename)?;
+            file.write_all(bytes)
+                .map_err(|error| format!("could not write C02 audit leaf {basename}: {error}"))?;
+            file.sync_all()
+                .map_err(|error| format!("could not fsync C02 audit leaf {basename}: {error}"))?;
+            self.root().sync_all().map_err(|error| {
+                format!("could not fsync C02 audit directory after {basename}: {error}")
+            })
+        }
+
+        fn root(&self) -> &File {
+            self.chain
+                .last()
+                .expect("C02 held directory chain is never empty")
+        }
+    }
+
+    fn directory_open_flags() -> Result<i32, String> {
+        if libc::O_NOFOLLOW == 0
+            || libc::O_DIRECTORY == 0
+            || libc::O_CLOEXEC == 0
+            || libc::O_NONBLOCK == 0
+        {
+            return Err(
+                "C02 audit requires O_NOFOLLOW, O_DIRECTORY, O_CLOEXEC, and O_NONBLOCK; no fallback is allowed"
+                    .to_owned(),
+            );
+        }
+        Ok(libc::O_RDONLY
+            | libc::O_NOFOLLOW
+            | libc::O_DIRECTORY
+            | libc::O_CLOEXEC
+            | libc::O_NONBLOCK)
+    }
+
+    fn leaf_open_flags() -> Result<i32, String> {
+        if libc::O_NOFOLLOW == 0 || libc::O_CLOEXEC == 0 {
+            return Err(
+                "C02 audit requires O_NOFOLLOW and O_CLOEXEC; no fallback is allowed".to_owned(),
+            );
+        }
+        Ok(libc::O_WRONLY | libc::O_CREAT | libc::O_EXCL | libc::O_NOFOLLOW | libc::O_CLOEXEC)
+    }
+
+    fn open_directory_at(
+        parent_fd: RawFd,
+        name: &CStr,
+        flags: i32,
+        label: &str,
+    ) -> Result<File, String> {
+        let fd = unsafe { libc::openat(parent_fd, name.as_ptr(), flags) };
+        if fd < 0 {
+            return Err(format!(
+                "could not securely open {label}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let file = unsafe { File::from_raw_fd(fd) };
+        let stat = fstat(&file, label)?;
+        if stat.st_mode & libc::S_IFMT != libc::S_IFDIR {
+            return Err(format!("{label} is not a directory"));
+        }
+        Ok(file)
+    }
+
+    fn validate_ancestor_directory(file: &File, label: &str) -> Result<(), String> {
+        let stat = fstat(file, label)?;
+        let effective_uid = unsafe { libc::geteuid() };
+        if stat.st_uid != 0 && stat.st_uid != effective_uid {
+            return Err(format!(
+                "{label} is not owned by root or the effective user"
+            ));
+        }
+        let writable_by_group_or_other = stat.st_mode & 0o022 != 0;
+        if writable_by_group_or_other && stat.st_mode & libc::S_ISVTX == 0 {
+            return Err(format!(
+                "{label} is group/other-writable without a sticky boundary"
+            ));
+        }
+        Ok(())
+    }
+
+    fn validate_private_root(file: &File) -> Result<(), String> {
+        let stat = fstat(file, "C02 audit directory")?;
+        let effective_uid = unsafe { libc::geteuid() };
+        if stat.st_uid != effective_uid || stat.st_mode & 0o7777 != 0o700 {
+            return Err(
+                "--c02-audit-dir must be owned by the effective user with exact mode 0700"
+                    .to_owned(),
+            );
+        }
+        Ok(())
+    }
+
+    fn validate_new_leaf(file: &File, basename: &str) -> Result<(), String> {
+        let stat = fstat(file, "C02 audit output")?;
+        let effective_uid = unsafe { libc::geteuid() };
+        if stat.st_mode & libc::S_IFMT != libc::S_IFREG
+            || stat.st_nlink != 1
+            || stat.st_uid != effective_uid
+            || stat.st_mode & 0o7777 != 0o600
+        {
+            return Err(format!(
+                "new C02 audit leaf {basename} is not an euid-owned 0600 single-link regular file"
+            ));
+        }
+        Ok(())
+    }
+
+    fn fstat(file: &File, label: &str) -> Result<libc::stat, String> {
+        let mut stat = unsafe { std::mem::zeroed::<libc::stat>() };
+        if unsafe { libc::fstat(file.as_raw_fd(), &mut stat) } != 0 {
+            return Err(format!(
+                "could not inspect {label}: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(stat)
+    }
+
+    fn safe_basename(value: &str) -> bool {
+        !value.is_empty()
+            && value.len() <= 255
+            && value != "."
+            && value != ".."
+            && value
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+    }
+}
+
+#[cfg(all(feature = "cuda", unix))]
+use c02_strict_audit_io::C02HeldPrivateDirectory;
+
+/// Raw source-owned C02 generation-audit writer.
+///
+/// The writer owns a held, private directory descriptor rather than a path.
+/// It creates a request JSON leaf and its hash-bound completion marker with
+/// no-replace descriptor-relative calls. It records sampling-path selection
+/// only; it does not imply executor, attention, or GEMM fallback.
+#[cfg(all(feature = "cuda", unix))]
+struct C02GenerationAuditWriter {
+    directory: C02HeldPrivateDirectory,
+    candidate_id: String,
+    configuration_profile: C02ConfigurationProfile,
+    configuration_sha256: String,
+    process_identity: C02AuditProcessIdentity,
+}
+
+#[cfg(all(feature = "cuda", unix))]
+impl C02GenerationAuditWriter {
+    fn new(
+        directory: &Path,
+        c02: &C02RuntimeConfigOptions,
+        identity: &C02RuntimeIdentity,
+        process_identity: C02AuditProcessIdentity,
+    ) -> Result<Self, String> {
+        if c02.configuration_profile != identity.configuration_profile {
+            return Err("C02 audit identity profile drifted from parsed launch profile".to_owned());
+        }
+        if process_identity.pid == 0 || process_identity.start_ticks == 0 {
+            return Err(
+                "C02 audit process identity must have nonzero PID and start ticks".to_owned(),
+            );
+        }
+        Ok(Self {
+            directory: C02HeldPrivateDirectory::open(directory)?,
+            candidate_id: c02.candidate_id.clone(),
+            configuration_profile: identity.configuration_profile,
+            configuration_sha256: identity.configuration_sha256.clone(),
+            process_identity,
+        })
+    }
+}
+
+#[cfg(all(feature = "cuda", unix))]
+impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
+    fn write_record(
+        &self,
+        record: riley_server::engine::C02GenerationAuditRecord,
+    ) -> Result<(), String> {
+        let record_basename = c02_generation_audit_record_basename(&record.server_request_id)?;
+        let finish_reason = match record.finish_reason {
+            riley_server::domain::FinishReason::Length => "length",
+            riley_server::domain::FinishReason::Stop => "stop",
+            riley_server::domain::FinishReason::Cancelled
+            | riley_server::domain::FinishReason::Error => {
+                return Err("C02 generation audit refuses a non-success terminal".to_owned());
+            }
+            _ => {
+                return Err("C02 generation audit refuses an unsupported terminal".to_owned());
+            }
+        };
+        if record.committed_output_tokens.len() != record.sampling_selections.len()
+            || record.prompt_token_ids.is_empty()
+            || record.committed_output_tokens.is_empty()
+            || record
+                .sampling_selections
+                .iter()
+                .any(|selection| !selection.committed)
+            || record.sampling_selections.iter().any(|selection| {
+                matches!(
+                    (selection.selected_backend, selection.ineligibility_reason),
+                    (riley_server::engine::C02SamplingBackend::GpuGreedy, Some(_))
+                        | (riley_server::engine::C02SamplingBackend::CpuNormative, None)
+                )
+            })
+        {
+            return Err(
+                "C02 generation audit record is not an exact committed selection projection"
+                    .to_owned(),
+            );
+        }
+        let output_tokens = record
+            .committed_output_tokens
+            .into_iter()
+            .map(|token| {
+                c02_json_object([
+                    (
+                        "token_id".to_owned(),
+                        serde_json::Value::Number(serde_json::Number::from(token.token_id)),
+                    ),
+                    (
+                        "emitted_text_delta".to_owned(),
+                        serde_json::Value::String(token.emitted_text_delta),
+                    ),
+                ])
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let selections = record
+            .sampling_selections
+            .into_iter()
+            .map(|selection| {
+                c02_json_object([
+                    (
+                        "iteration_id".to_owned(),
+                        serde_json::Value::Number(serde_json::Number::from(selection.iteration_id)),
+                    ),
+                    (
+                        "configured_backend".to_owned(),
+                        serde_json::Value::String(selection.configured_backend.as_str().to_owned()),
+                    ),
+                    (
+                        "selected_backend".to_owned(),
+                        serde_json::Value::String(selection.selected_backend.as_str().to_owned()),
+                    ),
+                    (
+                        "ineligibility_reason".to_owned(),
+                        selection
+                            .ineligibility_reason
+                            .map(|reason| serde_json::Value::String(reason.as_str().to_owned()))
+                            .unwrap_or(serde_json::Value::Null),
+                    ),
+                    (
+                        "committed".to_owned(),
+                        serde_json::Value::Bool(selection.committed),
+                    ),
+                ])
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let runtime_identity = c02_json_object([
+            (
+                "configuration_profile".to_owned(),
+                serde_json::Value::String(self.configuration_profile.as_str().to_owned()),
+            ),
+            (
+                "configuration_sha256".to_owned(),
+                serde_json::Value::String(self.configuration_sha256.clone()),
+            ),
+        ])?;
+        let process_identity = c02_json_object([
+            (
+                "pid".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(self.process_identity.pid)),
+            ),
+            (
+                "start_ticks".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(
+                    self.process_identity.start_ticks,
+                )),
+            ),
+        ])?;
+        let usage = c02_json_object([
+            (
+                "prompt_tokens".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(record.usage.prompt_tokens())),
+            ),
+            (
+                "completion_tokens".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(
+                    record.usage.completion_tokens(),
+                )),
+            ),
+            (
+                "total_tokens".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(record.usage.total_tokens())),
+            ),
+        ])?;
+        let mut document = BTreeMap::new();
+        document.insert(
+            "schema_version".to_owned(),
+            serde_json::Value::String(C02_GENERATION_AUDIT_SCHEMA_VERSION.to_owned()),
+        );
+        document.insert(
+            "candidate_id".to_owned(),
+            serde_json::Value::String(self.candidate_id.clone()),
+        );
+        document.insert("runtime_identity".to_owned(), runtime_identity);
+        document.insert("process_identity".to_owned(), process_identity);
+        document.insert(
+            "server_request_id".to_owned(),
+            serde_json::Value::String(record.server_request_id),
+        );
+        document.insert(
+            "delivery_mode".to_owned(),
+            serde_json::Value::String(record.delivery_mode.as_str().to_owned()),
+        );
+        document.insert(
+            "prompt_token_ids".to_owned(),
+            serde_json::Value::Array(
+                record
+                    .prompt_token_ids
+                    .into_iter()
+                    .map(serde_json::Number::from)
+                    .map(serde_json::Value::Number)
+                    .collect(),
+            ),
+        );
+        document.insert(
+            "committed_output_tokens".to_owned(),
+            serde_json::Value::Array(output_tokens),
+        );
+        document.insert(
+            "sampling_selections".to_owned(),
+            serde_json::Value::Array(selections),
+        );
+        document.insert(
+            "finish_reason".to_owned(),
+            serde_json::Value::String(finish_reason.to_owned()),
+        );
+        document.insert("usage".to_owned(), usage);
+        let bytes = c02_canonical_json_bytes(&document)?;
+        self.directory
+            .create_new_regular_leaf(&record_basename, &bytes)?;
+
+        // A raw leaf without this independently create-only hash-bound marker
+        // is deliberately incomplete evidence. Do not clean up a failed leaf:
+        // a retry could overwrite the causal failure boundary.
+        let completion_bytes =
+            c02_generation_audit_completion_marker_bytes(&record_basename, &bytes)?;
+        self.directory.create_new_regular_leaf(
+            &c02_generation_audit_completion_basename(&record_basename)?,
+            &completion_bytes,
+        )
+    }
+}
+
+#[cfg(all(feature = "cuda", not(unix)))]
+struct C02GenerationAuditWriter;
+
+#[cfg(all(feature = "cuda", not(unix)))]
+impl C02GenerationAuditWriter {
+    fn new(
+        _directory: &Path,
+        _c02: &C02RuntimeConfigOptions,
+        _identity: &C02RuntimeIdentity,
+        _process_identity: C02AuditProcessIdentity,
+    ) -> Result<Self, String> {
+        Err("--c02-audit-dir requires Unix no-follow descriptor APIs".to_owned())
+    }
+}
+
+#[cfg(all(feature = "cuda", not(unix)))]
+impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
+    fn write_record(
+        &self,
+        _record: riley_server::engine::C02GenerationAuditRecord,
+    ) -> Result<(), String> {
+        Err("--c02-audit-dir requires Unix no-follow descriptor APIs".to_owned())
+    }
 }
 
 #[cfg(feature = "cuda")]
@@ -1511,17 +2149,294 @@ mod tests {
     use std::path::PathBuf;
 
     use super::{
-        BatchShapePolicyMode, C02ConfigurationProfile, C02RuntimeConfigOptions, CliCommand,
-        DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS,
-        MetadataTransportMode, ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode,
-        ServeOptions, USAGE, c02_canonical_json_bytes, c02_endpoint_receipt, c02_runtime_identity,
-        c02_sha256_hex, c02_utc_timestamp_from_unix_seconds, parse_arguments,
-        validate_reduction_profile_context, validate_shutdown_metrics_path,
-        write_c02_startup_artifact, write_shutdown_metrics,
+        BatchShapePolicyMode, C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION,
+        C02_GENERATION_AUDIT_SCHEMA_VERSION, C02AuditProcessIdentity, C02ConfigurationProfile,
+        C02RuntimeConfigOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
+        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
+        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, c02_canonical_json_bytes,
+        c02_endpoint_receipt, c02_generation_audit_completion_basename,
+        c02_generation_audit_completion_marker_bytes, c02_generation_audit_record_basename,
+        c02_process_identity_from_linux_proc_stat, c02_runtime_identity, c02_sha256_hex,
+        c02_utc_timestamp_from_unix_seconds, parse_arguments, validate_reduction_profile_context,
+        validate_shutdown_metrics_path, write_c02_startup_artifact, write_shutdown_metrics,
     };
 
     fn args<'a>(values: &'a [&'a str]) -> impl Iterator<Item = OsString> + 'a {
         values.iter().map(OsString::from)
+    }
+
+    #[test]
+    fn c02_generation_audit_v2_schema_is_narrow_and_canonical() {
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../benchmarks/release/candidates/c02-generation-audit-v2.schema.json"
+        ))
+        .expect("decode C02 generation-audit schema");
+        assert_eq!(
+            schema["properties"]["schema_version"]["const"],
+            C02_GENERATION_AUDIT_SCHEMA_VERSION
+        );
+        let required = schema["required"].as_array().expect("required fields");
+        for field in [
+            "runtime_identity",
+            "process_identity",
+            "server_request_id",
+            "committed_output_tokens",
+            "sampling_selections",
+            "finish_reason",
+            "usage",
+        ] {
+            assert!(
+                required.iter().any(|entry| entry == field),
+                "missing required audit field {field}"
+            );
+        }
+        assert_eq!(
+            schema["$defs"]["samplingSelection"]["properties"]["committed"]["const"],
+            true
+        );
+        assert_eq!(
+            schema["$defs"]["outputToken"]["required"],
+            serde_json::json!(["token_id", "emitted_text_delta"])
+        );
+        assert_eq!(
+            schema["properties"]["process_identity"]["properties"]["start_ticks"]["minimum"],
+            1
+        );
+        assert!(
+            schema["description"]
+                .as_str()
+                .expect("schema description")
+                .contains("sampling-path selection")
+        );
+
+        let completion: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../benchmarks/release/candidates/c02-generation-audit-completion-v2.schema.json"
+        ))
+        .expect("decode C02 audit completion schema");
+        assert_eq!(
+            completion["properties"]["schema_version"]["const"],
+            C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(
+            completion["properties"]["artifact_filename"]["pattern"],
+            "^cmpl-[A-Za-z0-9_-]{1,123}\\.json$"
+        );
+        assert!(
+            completion["description"]
+                .as_str()
+                .expect("completion description")
+                .contains(".complete")
+        );
+    }
+
+    #[test]
+    fn c02_linux_process_identity_parser_handles_a_parenthesized_comm() {
+        assert_eq!(
+            c02_process_identity_from_linux_proc_stat(
+                "321 (riley worker) R 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 4242 20"
+            ),
+            Ok(C02AuditProcessIdentity {
+                pid: 321,
+                start_ticks: 4242,
+            })
+        );
+        assert!(c02_process_identity_from_linux_proc_stat("321 no-parens").is_err());
+        assert!(
+            c02_process_identity_from_linux_proc_stat(
+                "321 (riley worker) R 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 0 20"
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn c02_generation_audit_marker_binds_only_a_safe_create_only_leaf() {
+        let record = c02_generation_audit_record_basename("cmpl-safe_123")
+            .expect("source-issued completion ID becomes a safe leaf");
+        assert_eq!(record, "cmpl-safe_123.json");
+        assert_eq!(
+            c02_generation_audit_completion_basename(&record),
+            Ok("cmpl-safe_123.json.complete".to_owned())
+        );
+        assert!(c02_generation_audit_record_basename("cmpl-").is_err());
+        assert!(c02_generation_audit_record_basename("cmpl-../escape").is_err());
+
+        let raw = br#"{\"schema_version\":\"riley.c02-generation-audit.v2\"}"#;
+        let marker: serde_json::Value = serde_json::from_slice(
+            &c02_generation_audit_completion_marker_bytes(&record, raw)
+                .expect("canonical completion marker"),
+        )
+        .expect("decode completion marker");
+        assert_eq!(
+            marker["schema_version"],
+            C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(marker["artifact_filename"], record);
+        assert_eq!(marker["artifact_sha256"], c02_sha256_hex(raw));
+    }
+
+    #[cfg(unix)]
+    fn c02_test_path(label: &str) -> PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static NEXT_PATH: AtomicU64 = AtomicU64::new(0);
+        std::fs::canonicalize(std::env::temp_dir())
+            .expect("canonical test temporary directory")
+            .join(format!(
+                "riley-c02-{label}-{}-{}",
+                std::process::id(),
+                NEXT_PATH.fetch_add(1, Ordering::AcqRel),
+            ))
+    }
+
+    #[cfg(unix)]
+    fn create_private_c02_test_directory(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::create_dir(path).expect("create C02 test directory");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .expect("set C02 test directory mode");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn c02_audit_directory_is_private_held_and_descriptor_relative() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        use super::c02_strict_audit_io::C02HeldPrivateDirectory;
+
+        let outer = c02_test_path("audit-root");
+        std::fs::create_dir(&outer).expect("create C02 test parent");
+        let evidence = outer.join("evidence");
+        create_private_c02_test_directory(&evidence);
+
+        {
+            let held = C02HeldPrivateDirectory::open(&evidence)
+                .expect("open exact private audit directory");
+            held.create_new_regular_leaf("cmpl-held.json", b"{}")
+                .expect("create first leaf");
+            assert!(
+                held.create_new_regular_leaf("cmpl-held.json", b"replacement")
+                    .is_err(),
+                "a record leaf must not be replaced"
+            );
+
+            let rebound = outer.join("rebound");
+            std::fs::rename(&evidence, &rebound).expect("rebind visible audit path");
+            create_private_c02_test_directory(&evidence);
+            held.create_new_regular_leaf("cmpl-after-rebind.json", b"{}")
+                .expect("write through held root descriptor");
+            assert!(rebound.join("cmpl-after-rebind.json").is_file());
+            assert!(!evidence.join("cmpl-after-rebind.json").exists());
+
+            let insecure = outer.join("insecure");
+            create_private_c02_test_directory(&insecure);
+            std::fs::set_permissions(&insecure, std::fs::Permissions::from_mode(0o750))
+                .expect("make test directory non-private");
+            assert!(C02HeldPrivateDirectory::open(&insecure).is_err());
+
+            let special_bits = outer.join("special-bits");
+            create_private_c02_test_directory(&special_bits);
+            std::fs::set_permissions(&special_bits, std::fs::Permissions::from_mode(0o1700))
+                .expect("set C02 test directory special bit");
+            assert!(C02HeldPrivateDirectory::open(&special_bits).is_err());
+
+            let target = outer.join("target");
+            create_private_c02_test_directory(&target);
+            let alias = outer.join("alias");
+            symlink(&target, &alias).expect("create audit symlink");
+            assert!(C02HeldPrivateDirectory::open(&alias).is_err());
+        }
+
+        std::fs::remove_dir_all(&outer).expect("remove exact C02 test directory");
+    }
+
+    #[cfg(all(feature = "cuda", unix))]
+    #[test]
+    fn c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once() {
+        use riley_server::domain::{FinishReason, TokenUsage};
+        use riley_server::engine::{
+            C02CommittedSamplingSelection, C02GenerationAuditDeliveryMode,
+            C02GenerationAuditRecord, C02GenerationAuditSink, C02GenerationAuditToken,
+            C02GpuGreedyIneligibility, C02SamplingBackend,
+        };
+
+        let outer = c02_test_path("writer");
+        std::fs::create_dir(&outer).expect("create C02 writer test parent");
+        let evidence = outer.join("evidence");
+        create_private_c02_test_directory(&evidence);
+        let c02 = C02RuntimeConfigOptions {
+            candidate_id: "riley-1.2.3-rc4".to_owned(),
+            configuration_profile: C02ConfigurationProfile::MaxPerformanceExact,
+            startup_artifact: outer.join("startup.json"),
+        };
+        let identity = super::C02RuntimeIdentity {
+            configuration_profile: C02ConfigurationProfile::MaxPerformanceExact,
+            configuration_sha256: "a".repeat(64),
+        };
+        {
+            let writer = super::C02GenerationAuditWriter::new(
+                &evidence,
+                &c02,
+                &identity,
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4242,
+                },
+            )
+            .expect("construct strict C02 writer");
+            let record = C02GenerationAuditRecord {
+                server_request_id: "cmpl-writer-test".to_owned(),
+                delivery_mode: C02GenerationAuditDeliveryMode::NonStream,
+                prompt_token_ids: vec![1],
+                committed_output_tokens: vec![C02GenerationAuditToken {
+                    token_id: 2,
+                    emitted_text_delta: "x".to_owned(),
+                }],
+                sampling_selections: vec![C02CommittedSamplingSelection {
+                    iteration_id: 7,
+                    configured_backend: C02SamplingBackend::GpuGreedy,
+                    selected_backend: C02SamplingBackend::CpuNormative,
+                    ineligibility_reason: Some(C02GpuGreedyIneligibility::NonZeroTemperature),
+                    committed: true,
+                }],
+                finish_reason: FinishReason::Length,
+                usage: TokenUsage::new(1, 1).expect("small usage"),
+            };
+            let mut empty = record.clone();
+            empty.server_request_id = "cmpl-empty-output".to_owned();
+            empty.committed_output_tokens.clear();
+            empty.sampling_selections.clear();
+            assert!(writer.write_record(empty).is_err());
+            assert!(!evidence.join("cmpl-empty-output.json").exists());
+            writer
+                .write_record(record.clone())
+                .expect("create audit record");
+            assert!(
+                writer.write_record(record).is_err(),
+                "a source-issued request ID cannot overwrite audit evidence"
+            );
+        }
+        let raw_path = evidence.join("cmpl-writer-test.json");
+        let raw = std::fs::read(&raw_path).expect("read created audit leaf");
+        let decoded: serde_json::Value = serde_json::from_slice(&raw).expect("decode audit leaf");
+        assert_eq!(decoded["process_identity"]["pid"], 321);
+        assert_eq!(
+            decoded["sampling_selections"][0]["selected_backend"],
+            "cpu-normative"
+        );
+        assert_eq!(
+            decoded["committed_output_tokens"][0]["emitted_text_delta"],
+            "x"
+        );
+        let marker: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(evidence.join("cmpl-writer-test.json.complete"))
+                .expect("read completion marker"),
+        )
+        .expect("decode completion marker");
+        assert_eq!(marker["artifact_filename"], "cmpl-writer-test.json");
+        assert_eq!(marker["artifact_sha256"], c02_sha256_hex(&raw));
+        std::fs::remove_dir_all(&outer).expect("remove exact C02 writer test directory");
     }
 
     #[test]
@@ -1545,6 +2460,7 @@ mod tests {
         assert!(USAGE.contains("--c02-candidate-id ID"));
         assert!(USAGE.contains("--c02-configuration-profile ID"));
         assert!(USAGE.contains("--c02-startup-artifact PATH"));
+        assert!(USAGE.contains("--c02-audit-dir PATH"));
         assert!(parse_arguments(args(&["--version", "extra"])).is_err());
         assert!(parse_arguments(args(&[])).is_err());
     }
@@ -1575,6 +2491,7 @@ mod tests {
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
+                c02_audit_dir: None,
             }))
         );
         assert!(parse_arguments(args(&["serve"])).is_err());
@@ -1592,10 +2509,16 @@ mod tests {
             "stable-default",
             "--c02-startup-artifact",
             "/tmp/riley-c02-startup.json",
+            "--c02-audit-dir",
+            "/tmp/riley-c02-audit",
         ]));
         let Ok(CliCommand::Serve(options)) = parsed else {
             panic!("valid C02 identity must parse");
         };
+        assert_eq!(
+            options.c02_audit_dir,
+            Some(PathBuf::from("/tmp/riley-c02-audit"))
+        );
         let c02 = options
             .c02_runtime_config
             .expect("all C02 inputs must enable evidence mode");
@@ -1639,6 +2562,26 @@ mod tests {
                 "max-performance-exact",
                 "--c02-startup-artifact",
                 "relative.json",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-audit-dir",
+                "/tmp/riley-c02-audit",
+            ],
+            vec![
+                "serve",
+                "--model",
+                "/models/fixture",
+                "--c02-candidate-id",
+                "riley-1.2.3-rc4",
+                "--c02-configuration-profile",
+                "stable-default",
+                "--c02-startup-artifact",
+                "/tmp/riley-c02-startup.json",
+                "--c02-audit-dir",
+                "relative-audit",
             ],
             vec![
                 "serve",
@@ -1831,6 +2774,7 @@ mod tests {
                 max_weight_bytes: 4096,
                 shutdown_on_stdin: true,
                 c02_runtime_config: None,
+                c02_audit_dir: None,
             }))
         );
         assert!(parse_arguments(args(&["serve", "--model", "/a", "--model", "/b"])).is_err());
@@ -1981,6 +2925,7 @@ mod tests {
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
+                c02_audit_dir: None,
             }))
         );
 
@@ -2098,6 +3043,7 @@ mod tests {
                 max_weight_bytes: DEFAULT_MAX_WEIGHT_BYTES,
                 shutdown_on_stdin: false,
                 c02_runtime_config: None,
+                c02_audit_dir: None,
             }))
         );
         assert!(
