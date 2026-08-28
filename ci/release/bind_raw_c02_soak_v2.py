@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create one completed, raw-only C02 soak provenance-v2 manifest.
+"""Create one completed, raw-only C02 soak provenance-v3 manifest.
 
 This binder never starts a service, invokes a GPU tool, or decides whether a
 candidate qualifies.  It takes a canonical path-only bind request, reads every
@@ -24,7 +24,7 @@ import effective_runtime_config_contract as runtime_config
 import provenance_v2_common as common
 
 
-BIND_REQUEST_VERSION = "riley.soak-v2-bind-request.v2"
+BIND_REQUEST_VERSION = "riley.soak-v2-bind-request.v3"
 MAX_BIND_REQUEST_BYTES = common.DEFAULT_MAX_JSON_BYTES
 MAX_RAW_LEAF_BYTES = checker.MAX_RAW_BYTES
 MAX_RELATIVE_PATH_BYTES = checker.MAX_RELATIVE_PATH_BYTES
@@ -244,7 +244,7 @@ def _configuration_evidence(
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     row = _exact(
         value,
-        {"endpoint_path", "startup_artifact_path"},
+        {"endpoint_path", "startup_artifact_path", "endpoint_observation_path"},
         "soak bind request.configuration_evidence",
     )
     endpoint_path = _reserve_declared_path(
@@ -255,6 +255,11 @@ def _configuration_evidence(
     startup_path = _reserve_declared_path(
         row["startup_artifact_path"],
         "soak bind request.configuration_evidence.startup_artifact_path",
+        declared_paths,
+    )
+    observation_path = _reserve_declared_path(
+        row["endpoint_observation_path"],
+        "soak bind request.configuration_evidence.endpoint_observation_path",
         declared_paths,
     )
     endpoint_descriptor, endpoint_raw = _descriptor_from_path(
@@ -268,6 +273,11 @@ def _configuration_evidence(
         startup_path,
         "soak raw configuration startup artifact",
         maximum_bytes=runtime_config.MAX_JSON_BYTES,
+    )
+    observation_descriptor, _observation_raw = _descriptor_from_path(
+        root_fd,
+        observation_path,
+        "soak raw configuration endpoint observation",
     )
     endpoint_document, endpoint = _runtime_config(
         lambda: runtime_config.validate_endpoint_bytes(
@@ -309,6 +319,7 @@ def _configuration_evidence(
         {
             "endpoint": endpoint_descriptor.as_json(),
             "startup_artifact": startup_descriptor.as_json(),
+            "endpoint_observation": observation_descriptor.as_json(),
         },
         identity,
     )

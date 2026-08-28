@@ -124,6 +124,11 @@ clean merge된 source에서 다음을 별도 mechanism 변경과 adversarial tes
 - `run_remote_c02_soak_v2`와 binder는 GPU UUID/memory preflight, exclusive lock,
   `env -i`, 새 private external evidence root를 강제하고, scenario별 raw observation
   session·raw HTTP/audit·process identity를 create-only descriptor로 보존한다.
+  `capture_c02_config_endpoint_observation_v1.py`는 이미 실행 중인 loopback
+  server의 canonical `/v1/config` response를 pre/post PID/start-tick,
+  listener inode, GPU index/UUID raw leaves에 결박한다. v3 binder는 이 derived
+  tuple이 every scenario observation tuple과 같지 않으면 fail closed한다. 이것은
+  raw `bound`/`not-run` mechanism이고 candidate freeze나 semantic receipt가 아니다.
 - `run_remote_rc3_rollback_capture`와 binder는 candidate/rollback PID+start tick,
   listener/health/generation/audit raw bytes, shutdown artifact와 completion marker,
   atomic rename 전후 inode/stat provenance를 보존한다. worker/model 이름만 다른
@@ -345,11 +350,15 @@ ci/release/check_fault_extension_receipt.py
 ci/release/run_remote_c02_fault_capture.sh
 ci/release/bind_raw_c02_fault_capture.py
 benchmarks/release/candidates/reconstructed-prior-baseline-v1.schema.json
-benchmarks/release/candidates/soak-v2-receipt-v2.schema.json
+benchmarks/release/candidates/soak-v2-receipt-v3.schema.json
+benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json
+benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json
 benchmarks/release/candidates/rollback-receipt-v2.schema.json
 ci/release/check_reconstructed_prior_baseline.py
 ci/release/run_remote_c02_soak_v2.sh
 ci/release/bind_raw_c02_soak_v2.py
+ci/release/capture_c02_config_endpoint_observation_v1.py
+ci/release/run_remote_c02_config_endpoint_observation_v1.sh
 ci/release/check_soak_v2_receipt_v2.py
 ci/release/run_remote_rc3_rollback_capture.sh
 ci/release/bind_raw_rc3_rollback_capture.py
@@ -376,7 +385,7 @@ final report는 다음 모든 receipt hash를 포함한다.
 - Qwen regression
 - Python-free E2E
 - performance regression
-- soak-v2 (v2 provenance receipt)
+- soak-v2 (v3 raw provenance; later semantic receipt remains a separate gate)
 - fault injection
 - reproducible build
 - dependency manifest

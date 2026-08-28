@@ -458,49 +458,152 @@ class CaptureC02ObservationsV2Test(unittest.TestCase):
             "endpoint_payload_sha256": hashlib.sha256(endpoint_raw).hexdigest(),
             "endpoint_payload": endpoint_document,
         }
-        (self.evidence_root / "config-endpoint.json").write_bytes(endpoint_raw)
         startup_raw = runtime_config.canonical_json_bytes(startup_document)
         (self.evidence_root / "config-startup.json").write_bytes(startup_raw)
-        session_raw = (self.evidence_root / self.request.capture_name / "session.json").read_bytes()
-        manifest = {
-            "schema_version": "riley.soak-v2-raw-provenance.v2",
+        bridge_prefix = "config-bridge"
+        bridge_raw = {
+            "request": (
+                f"GET /v1/config HTTP/1.1\r\nHost: 127.0.0.1:{self.endpoint.port}\r\n"
+                "Accept: application/json\r\nConnection: close\r\n\r\n"
+            ).encode("ascii"),
+            "response_head": (
+                f"HTTP/1.1 200 OK\r\nContent-Length: {len(endpoint_raw)}\r\n"
+                "Content-Type: application/json\r\n\r\n"
+            ).encode("ascii"),
+            "tcp_before": tcp_listener_table(port=self.endpoint.port, inode=42),
+            "tcp_after": tcp_listener_table(port=self.endpoint.port, inode=42),
+            "sockets_before": canonical(
+                {
+                    "schema_version": capture.SOCKET_SNAPSHOT_VERSION,
+                    "server_pid": self.target.server_pid,
+                    "socket_inodes": [42, 99],
+                }
+            ),
+            "sockets_after": canonical(
+                {
+                    "schema_version": capture.SOCKET_SNAPSHOT_VERSION,
+                    "server_pid": self.target.server_pid,
+                    "socket_inodes": [42, 99],
+                }
+            ),
+            "stat_before": proc_stat(),
+            "stat_after": proc_stat(),
+            "status": proc_status(),
+            "selection": b"0, GPU-deadbeef\n",
+            "apps": b"123, 0\n",
+            # The normal configuration-evidence descriptor owns this body;
+            # the bridge intentionally records only its SHA-256 and length.
+            "endpoint": endpoint_raw,
+        }
+        filenames = {
+            "request": "config-request.http",
+            "response_head": "config-response-head.http",
+            "tcp_before": "proc-net-tcp-before",
+            "tcp_after": "proc-net-tcp-after",
+            "sockets_before": "proc-fd-sockets-before.json",
+            "sockets_after": "proc-fd-sockets-after.json",
+            "stat_before": "proc-stat-before",
+            "stat_after": "proc-stat-after",
+            "status": "proc-status",
+            "selection": "gpu-selection.csv",
+            "apps": "gpu-compute-apps.csv",
+            "endpoint": "config-endpoint.json",
+        }
+        for key, filename in filenames.items():
+            path = self.evidence_root / bridge_prefix / "raw" / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(bridge_raw[key])
+
+        def bridge_descriptor(key: str) -> dict[str, object]:
+            return capture._descriptor(
+                f"{bridge_prefix}/raw/{filenames[key]}", bridge_raw[key]
+            )
+
+        bridge_document = {
+            "schema_version": "riley.c02-config-endpoint-observation.v1",
             "capture_status": "captured",
             "qualification_status": "not-run",
+            "target": {
+                **self.target.as_json(),
+                "listener_port": self.endpoint.port,
+                "listener_inode": 42,
+            },
+            "endpoint": {
+                "method": "GET",
+                "request_target": "/v1/config",
+                "http_status": 200,
+                "request": bridge_descriptor("request"),
+                "response_head": bridge_descriptor("response_head"),
+                "body_sha256": hashlib.sha256(endpoint_raw).hexdigest(),
+                "body_byte_length": len(endpoint_raw),
+                "listener": {
+                    "address": "127.0.0.1",
+                    "port": self.endpoint.port,
+                    "socket_inode": 42,
+                    "before_proc_net_tcp": bridge_descriptor("tcp_before"),
+                    "after_proc_net_tcp": bridge_descriptor("tcp_after"),
+                    "before_server_fd_sockets": bridge_descriptor("sockets_before"),
+                    "after_server_fd_sockets": bridge_descriptor("sockets_after"),
+                },
+            },
+            "process": {
+                "server_pid": self.target.server_pid,
+                "server_start_ticks": self.target.server_start_ticks,
+                "pre_endpoint_stat": bridge_descriptor("stat_before"),
+                "post_endpoint_stat": bridge_descriptor("stat_after"),
+                "status": bridge_descriptor("status"),
+            },
+            "gpu": {
+                "index": self.target.gpu_index,
+                "uuid": self.target.gpu_uuid,
+                "selection_query": bridge_descriptor("selection"),
+                "compute_apps": bridge_descriptor("apps"),
+            },
+        }
+        bridge_path = f"{bridge_prefix}/session.json"
+        bridge_raw_session = canonical(bridge_document)
+        (self.evidence_root / bridge_path).write_bytes(bridge_raw_session)
+        bind_request = {
+            "schema_version": "riley.soak-v2-bind-request.v3",
             "candidate_id": "riley-0.1.0-rc2",
-            "bindings": {
+            "binding_inputs": {
                 "freeze_sha256": "a" * 64,
                 "base_release_candidate_report_sha256": "b" * 64,
                 "configuration_profile": "stable-default",
-                "configuration_sha256": "c" * 64,
             },
             "configuration_evidence": {
-                "endpoint": capture._descriptor("config-endpoint.json", endpoint_raw),
-                "startup_artifact": capture._descriptor("config-startup.json", startup_raw),
+                "endpoint_path": f"{bridge_prefix}/raw/{filenames['endpoint']}",
+                "startup_artifact_path": "config-startup.json",
+                "endpoint_observation_path": bridge_path,
             },
-            "scenario_contract": capture._descriptor("scenario-contract.json", opaque["scenario-contract.json"]),
+            "scenario_contract_path": "scenario-contract.json",
             "scenarios": [
                 {
                     "scenario_id": "normal",
                     "target": session["target"],
-                    "observation_session": capture._descriptor(
-                        f"{self.request.capture_name}/session.json", session_raw
-                    ),
-                    "request_ledger": capture._descriptor("request-ledger.json", opaque["request-ledger.json"]),
-                    "runtime_event_log": capture._descriptor("runtime-event.log", opaque["runtime-event.log"]),
-                    "generation_audit_index": capture._descriptor(
-                        "generation-audit-index.json", opaque["generation-audit-index.json"]
-                    ),
-                    "fallback_event_log": None,
+                    "observation_session_path": f"{self.request.capture_name}/session.json",
+                    "request_ledger_path": "request-ledger.json",
+                    "runtime_event_log_path": "runtime-event.log",
+                    "generation_audit_index_path": "generation-audit-index.json",
+                    "fallback_event_log_path": None,
                 }
             ],
         }
-        (self.evidence_root / "soak-manifest.json").write_bytes(canonical(manifest))
-        import check_c02_provenance_v2 as binder
+        (self.evidence_root / "bind-request.json").write_bytes(canonical(bind_request))
+        import bind_raw_c02_soak_v2 as binder
 
-        report = binder.verify_soak_provenance(self.evidence_root, "soak-manifest.json")
+        report = binder.bind_raw_soak_manifest(
+            self.evidence_root, "bind-request.json", "soak-manifest.json"
+        )
         self.assertEqual(report["status"], "bound")
         self.assertEqual(report["qualification_status"], "not-run")
         self.assertEqual(report["targets"][0]["target"], self.target.as_json())
+        manifest = json.loads((self.evidence_root / "soak-manifest.json").read_bytes())
+        self.assertEqual(manifest["schema_version"], "riley.soak-v2-raw-provenance.v3")
+        self.assertEqual(
+            manifest["configuration_evidence"]["endpoint_observation"],
+            capture._descriptor(bridge_path, bridge_raw_session),
+        )
 
     def test_isolated_python_can_load_cli_help_and_source_has_no_semantic_checker(self) -> None:
         script = Path(capture.__file__)

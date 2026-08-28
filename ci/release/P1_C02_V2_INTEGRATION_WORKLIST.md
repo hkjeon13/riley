@@ -28,37 +28,40 @@ an atomic cross-file snapshot, so the exact-0700 trusted-writer boundary remains
 part of the P1 threat model.  It also rejects an unremoved
 `capture-incomplete.json` and every v1 input before semantic replay.
 
-### Raw soak manifest binder v2
+### Raw soak manifest binder v3 and configuration process bridge
 
 `bind_raw_c02_soak_v2.py` accepts only a canonical
-`riley.soak-v2-bind-request.v2` path-only request.  It re-reads every declared
-endpoint, startup artifact, scenario contract, session, ledger, runtime-event,
-generation-audit, and optional fallback leaf through one held root FD, derives
+`riley.soak-v2-bind-request.v3` path-only request.  It re-reads every declared
+endpoint, startup artifact, configuration endpoint observation, scenario
+contract, session, ledger, runtime-event, generation-audit, and optional
+fallback leaf through one held root FD, derives
 all manifest descriptors from those bytes, and creates one nonhidden root
 `NAME.json` manifest followed by `NAME.json.complete`.  The marker is exact
-canonical `riley.soak-v2-raw-provenance-complete.v2` JSON containing only
+canonical `riley.soak-v2-raw-provenance-complete.v3` JSON containing only
 `schema_version`, `artifact_filename`, and the artifact's SHA-256.  Both files
 are create-only and durable; a missing marker leaves the manifest incomplete.
-`benchmarks/release/candidates/soak-v2-bind-request-v2.schema.json` publishes
+`benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json` publishes
 the exact closed request shape; it carries paths and target tuples only, never
 caller-supplied evidence hashes/descriptors.
+The former v2 bind request, raw manifest, completion marker, and check report
+are historical-only and are rejected rather than widened in place.
 
 The manifest must bind canonical `/v1/config` endpoint and startup-artifact
 bytes through the P0 byte-only APIs.  It derives `configuration_sha256` from
 `endpoint.runtime_identity.configuration_sha256` (never the effective-config
 digest or a caller field), and requires candidate/profile/runtime-identity and
-the startup embedded endpoint digest to agree.  This is **configuration-arm
-byte/identity binding only**: it does not prove that the config response was
-served by the same PID/listener as every scenario.  The existing observation
-session binds each scenario's PID/start-tick/listener/GPU tuple; a future raw
-runner plus semantic replay must provide any cross-endpoint same-process
-closure.
+the startup embedded endpoint digest to agree.  This is configuration-arm
+byte/identity binding plus a raw process bridge.  The v3 bridge preserves the
+exact loopback request/head/body relation and pre/post PID, listener and GPU
+facts; its derived `(PID,start-tick,listener port/inode,GPU index/UUID)` must
+equal every scenario observation tuple.  It remains raw `bound` / `not-run`;
+semantic workload and Gate E replay remain later work.
 
 ## Required raw evidence inventory
 
 | Scope | Create-only raw leaves to bind |
 | --- | --- |
-| Soak configuration arm | canonical raw `/v1/config` endpoint and its startup artifact; bind candidate/profile/runtime identity plus exact embedded endpoint payload/hash.  This is not a PID/listener assertion. |
+| Soak configuration arm | canonical raw `/v1/config` endpoint and startup artifact plus config bridge session; bind candidate/profile/runtime identity, exact embedded endpoint payload/hash, and pre/post PID/listener/GPU tuple equal to every scenario. |
 | Every observation sample | metrics response bytes; `/proc/<pid>/stat` before and after; `/proc/net/tcp` before and after; PID FD-to-socket snapshots before and after; `/proc/<pid>/status`; GPU **index+UUID** selection-query output; GPU compute-apps output; canonical sample/session descriptors. |
 | Every bound target | Derive, do not assert: `{server_pid, server_start_ticks, listener_inode, gpu_index, gpu_uuid}`.  Match both stat snapshots, both TCP snapshots, both FD socket snapshots, and the GPU PID row. |
 | Soak scenario | raw HTTP request/response ledger, native runtime event log, generation-audit index, and exact-backend-fallback event log when that scenario runs.  Those fields stay generic descriptors so the Rust sampling audit remains the source of event payload semantics. |
@@ -147,7 +150,7 @@ runtime configuration field or a trace counter.
 4. `ci/release/run_remote_c02_soak_v2.sh` (new) and
    `ci/release/bind_raw_c02_soak_v2.py` (new)
    - The future runner captures GPU/preflight and raw scenario material only;
-     the completed binder emits `riley.soak-v2-raw-provenance.v2`, never a
+     the completed binder emits `riley.soak-v2-raw-provenance.v3`, never a
      semantic receipt.  Its local `run_bind_raw_c02_soak_v2.sh` wrapper does
      not start/stop a service or invoke GPU/SSH/container tools.
    - Bind each declared scenario target to its raw observation session and
@@ -157,9 +160,10 @@ runtime configuration field or a trace counter.
      scenario is valid only in the latter arm and still remains
      `qualification_status: not-run`.
    - Bind canonical endpoint/startup configuration bytes and derive the arm
-     identity from the endpoint runtime identity.  Do not describe this as a
-     config-to-scenario PID/listener binding until the raw runner captures an
-     explicit same-process bridge.
+     identity from the endpoint runtime identity. The isolated
+     `capture_c02_config_endpoint_observation_v1.py` captures the required
+     same-process bridge; the future runner must invoke it before binding
+     scenario material.
 
 5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)
@@ -180,13 +184,16 @@ runtime configuration field or a trace counter.
      an explicit historical-v1 rejection reason before generic gate failure.
    - Replace all existing no-follow fallback flag patterns.
 
-7. `benchmarks/release/candidates/soak-v2-receipt-v2.schema.json`,
+7. `benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json`,
+   `benchmarks/release/candidates/soak-v2-receipt-v3.schema.json`,
+   `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
    `benchmarks/release/candidates/README.md`, and
    `deploy/vllm-competitive-roadmap/02-rc3-candidate-qualification.md`
-   - Publish v2 raw-manifest and raw-binding report schemas separately from
-     v2 semantic receipts.
-   - State that v1 artifacts are historical/rejected and that raw binders do
+   - Publish v3 raw-manifest and raw-binding report schemas separately from
+     later semantic receipts.  The retained v2 soak schemas are historical
+     only and must not be accepted or upconverted.
+   - State that v1/v2 historical soak artifacts are rejected and that raw binders do
      not qualify a candidate.  Any reconstructed baseline must be labelled
      reconstructed: remote history has RC tags/C02 dev images but no verified
      historical release bundle/image to call a shipped rollback source.

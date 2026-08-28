@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json",
+  "title": "Riley C02 raw /v1/config endpoint process bridge v1",
+  "description": "Create-only raw evidence only. It captures one loopback GET /v1/config body and proves its live PID/start-tick/listener/GPU tuple before and after the response. It never contains a qualification verdict.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "capture_status", "qualification_status", "target", "endpoint", "process", "gpu"],
+  "properties": {
+    "schema_version": {"const": "riley.c02-config-endpoint-observation.v1"},
+    "capture_status": {"const": "captured"},
+    "qualification_status": {"const": "not-run"},
+    "target": {"$ref": "#/$defs/target"},
+    "endpoint": {"$ref": "#/$defs/endpoint"},
+    "process": {"$ref": "#/$defs/process"},
+    "gpu": {"$ref": "#/$defs/gpu"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "relativePath": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+    "descriptor": {
+      "type": "object", "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {"path": {"$ref": "#/$defs/relativePath"}, "sha256": {"$ref": "#/$defs/sha256"}, "byte_length": {"type": "integer", "minimum": 1, "maximum": 16777216}}
+    },
+    "target": {
+      "type": "object", "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "listener_port", "listener_inode", "gpu_index", "gpu_uuid"],
+      "properties": {
+        "server_pid": {"type": "integer", "minimum": 1},
+        "server_start_ticks": {"type": "integer", "minimum": 1},
+        "listener_port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "listener_inode": {"type": "integer", "minimum": 1},
+        "gpu_index": {"type": "integer", "minimum": 0},
+        "gpu_uuid": {"type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$"}
+      }
+    },
+    "listener": {
+      "type": "object", "additionalProperties": false,
+      "required": ["address", "port", "socket_inode", "before_proc_net_tcp", "after_proc_net_tcp", "before_server_fd_sockets", "after_server_fd_sockets"],
+      "properties": {
+        "address": {"const": "127.0.0.1"}, "port": {"type": "integer", "minimum": 1024, "maximum": 65535}, "socket_inode": {"type": "integer", "minimum": 1},
+        "before_proc_net_tcp": {"$ref": "#/$defs/descriptor"}, "after_proc_net_tcp": {"$ref": "#/$defs/descriptor"},
+        "before_server_fd_sockets": {"$ref": "#/$defs/descriptor"}, "after_server_fd_sockets": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "endpoint": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "request_target", "http_status", "request", "response_head", "body_sha256", "body_byte_length", "listener"],
+      "properties": {
+        "method": {"const": "GET"}, "request_target": {"const": "/v1/config"}, "http_status": {"const": 200},
+        "request": {"$ref": "#/$defs/descriptor"}, "response_head": {"$ref": "#/$defs/descriptor"},
+        "body_sha256": {"$ref": "#/$defs/sha256"}, "body_byte_length": {"type": "integer", "minimum": 1, "maximum": 8388608},
+        "listener": {"$ref": "#/$defs/listener"}
+      }
+    },
+    "process": {
+      "type": "object", "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "pre_endpoint_stat", "post_endpoint_stat", "status"],
+      "properties": {"server_pid": {"type": "integer", "minimum": 1}, "server_start_ticks": {"type": "integer", "minimum": 1}, "pre_endpoint_stat": {"$ref": "#/$defs/descriptor"}, "post_endpoint_stat": {"$ref": "#/$defs/descriptor"}, "status": {"$ref": "#/$defs/descriptor"}}
+    },
+    "gpu": {
+      "type": "object", "additionalProperties": false,
+      "required": ["index", "uuid", "selection_query", "compute_apps"],
+      "properties": {"index": {"type": "integer", "minimum": 0}, "uuid": {"type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$"}, "selection_query": {"$ref": "#/$defs/descriptor"}, "compute_apps": {"$ref": "#/$defs/descriptor"}}
+    }
+  }
+}

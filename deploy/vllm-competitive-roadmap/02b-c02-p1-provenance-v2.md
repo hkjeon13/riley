@@ -100,20 +100,20 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 이 baseline으로 가능한 판정은 `reconstructed_operational_rollback`뿐이다. `historical_stable_binary_rollback`은 `not-established`로 유지한다. 실제 historical stable bundle이 나중에 제공되면 새 immutable manifest/version과 별도 gate로 추가한다.
 
-## 5. v2 raw producer와 semantic replay
+## 5. v3 raw config bridge와 semantic replay
 
 ### Soak v2
 
 향후 `run_remote_c02_soak_v2.sh`가 GPU UUID/used-memory preflight, exclusive
 lock, frozen arm의 `env -i`, 새 evidence root를 강제한다.
 `bind_raw_c02_soak_v2.py`는 그 runner를 대체하거나 service/GPU/SSH/container를
-조작하지 않는다. canonical `riley.soak-v2-bind-request.v2`의 path-only leaf를
-하나의 held private-root FD로 읽고, `riley.soak-v2-raw-provenance.v2` manifest와
+조작하지 않는다. canonical `riley.soak-v2-bind-request.v3`의 path-only leaf를
+하나의 held private-root FD로 읽고, `riley.soak-v2-raw-provenance.v3` manifest와
 nonhidden `<manifest>.complete` marker를 create-only로 기록한다. marker는
-`riley.soak-v2-raw-provenance-complete.v2`이며 정확히 `schema_version`,
+`riley.soak-v2-raw-provenance-complete.v3`이며 정확히 `schema_version`,
 `artifact_filename`, `artifact_sha256`만 가진다. 각 scenario는 다음 raw leaf를
 descriptor로 남긴다.
-`benchmarks/release/candidates/soak-v2-bind-request-v2.schema.json`는 이 bind
+`benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json`는 이 bind
 request의 closed path-only shape를 publish하며 caller-supplied descriptor/hash를
 받지 않는다.
 
@@ -132,13 +132,14 @@ provenance는 `stable-default` arm으로만 제한한다.
 Binder는 raw `/v1/config` endpoint 및 startup artifact canonical bytes도
 descriptor로 bind한다. endpoint `runtime_identity`에서 candidate, profile,
 `configuration_sha256`를 derive하고 startup artifact의 embedded endpoint
-payload/hash와 같음을 확인한다. 이는 **configuration arm bytes/identity**만
-증명한다. 현재 raw inventory에는 config endpoint가 각 scenario의 PID/port
-listener에서 나온 것임을 연결하는 별도 same-process proof가 없으므로, 이 binder는
-그러한 config-to-scenario tuple linkage를 주장하지 않는다. scenario의
-PID/start-tick/listener/GPU 결속은 observation session이 담당하고, endpoint와
-scenario의 same-process closure는 향후 remote runner 및 semantic replay의
-명시적 raw proof로 추가해야 한다.
+payload/hash와 같음을 확인한다. v3는 별도 create-only
+`riley.c02-config-endpoint-observation.v1` leaf를 추가한다. 이 leaf는 exact
+loopback GET request/HTTP response head/body hash+length와 pre/post stat, TCP,
+FD socket, status, GPU selection/compute-app raw leaves를 보존한다. binder는
+그 raw facts에서 `(PID,start-tick,listener port/inode,GPU index/UUID)`를
+derive하고 모든 scenario observation tuple과 일치시킨다. 따라서 config-to-
+scenario **process identity**는 raw layer에서 닫히지만, workload/Gate E와
+sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 
 `check_soak_v2_receipt_v2.py`는 summary counter나 free-form backend event를 믿지 않고 위 leaf에서 identity, interval order, request/audit binding, metrics monotonicity, actual typed sampling selection을 재구성한다.
 
@@ -154,14 +155,16 @@ scenario의 same-process closure는 향후 remote runner 및 semantic replay의
 2. reconstructed baseline builder/checker와 adversarial tests를 추가한다.
 3. typed sampling selection, private-FD generation audit, 그리고 source-owned
    shutdown v2 artifact/marker producer를 Rust source에 추가한다.
-4. soak/rollback raw runners·binders와 hostile-evidence tests를 추가한다.
+4. config endpoint process bridge와 soak/rollback raw runners·binders, hostile-
+   evidence tests를 추가한다.
 5. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
 6. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
 ## 7. 완료 조건
 
 - v1 receipt, self-authored fallback string, missing strict-open flags, self-authored worker/model IDs는 final C02 input에서 fail closed한다.
-- v2 report는 raw descriptor hash뿐 아니라 same candidate/config/PID/start-tick/socket/GPU tuple을 replay한다.
+- v3 soak provenance는 raw descriptor hash뿐 아니라 config endpoint와 every
+  scenario의 same candidate/config/PID/start-tick/listener inode/GPU tuple을 replay한다.
 - max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2와 public generation bytes가 one-to-one으로 bind된다.
 - shutdown v2 artifact와 nonhidden completion marker는 same PID/start-tick tuple과
   exact final-metrics bytes를 bind하며, v1 artifact/hidden marker는 fail closed한다.

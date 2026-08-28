@@ -283,9 +283,63 @@ class BindRawC02SoakV2Tests(unittest.TestCase):
         }
         startup_path = "config/startup.json"
         self.tree.put(startup_path, startup)
+        target = self._target()
+        pid = target["server_pid"]
+        ticks = target["server_start_ticks"]
+        port = 18080
+        inode = 7001
+        bridge_prefix = "captures/config-bridge"
+        request_raw = (
+            f"GET /v1/config HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+            "Accept: application/json\r\nConnection: close\r\n\r\n"
+        ).encode("ascii")
+        response_head = (
+            f"HTTP/1.1 200 OK\r\nContent-Length: {len(endpoint_raw)}\r\n"
+            "Content-Type: application/json\r\n\r\n"
+        ).encode("ascii")
+        bridge_bytes = {
+            "request": self.tree.put(f"{bridge_prefix}/raw/config-request.http", request_raw),
+            "response_head": self.tree.put(f"{bridge_prefix}/raw/config-response-head.http", response_head),
+            "tcp_before": self.tree.put(f"{bridge_prefix}/raw/proc-net-tcp-before", _proc_tcp(port, inode)),
+            "tcp_after": self.tree.put(f"{bridge_prefix}/raw/proc-net-tcp-after", _proc_tcp(port, inode)),
+            "sockets_before": self.tree.put(f"{bridge_prefix}/raw/proc-fd-sockets-before.json", {"schema_version": checker.SOCKET_SNAPSHOT_VERSION, "server_pid": pid, "socket_inodes": [inode]}),
+            "sockets_after": self.tree.put(f"{bridge_prefix}/raw/proc-fd-sockets-after.json", {"schema_version": checker.SOCKET_SNAPSHOT_VERSION, "server_pid": pid, "socket_inodes": [inode]}),
+            "stat_before": self.tree.put(f"{bridge_prefix}/raw/proc-stat-before", _proc_stat(pid, ticks)),
+            "stat_after": self.tree.put(f"{bridge_prefix}/raw/proc-stat-after", _proc_stat(pid, ticks)),
+            "status": self.tree.put(f"{bridge_prefix}/raw/proc-status", f"Name:\triley\nPid:\t{pid}\n".encode("ascii")),
+            "selection": self.tree.put(f"{bridge_prefix}/raw/gpu-selection.csv", f"0, {self.gpu_uuid}\n".encode("ascii")),
+            "apps": self.tree.put(f"{bridge_prefix}/raw/gpu-compute-apps.csv", f"{pid}, 42\n".encode("ascii")),
+        }
+        bridge_descriptor = lambda key: common.descriptor_for_bytes(
+            f"{bridge_prefix}/raw/" + {
+                "request": "config-request.http", "response_head": "config-response-head.http",
+                "tcp_before": "proc-net-tcp-before", "tcp_after": "proc-net-tcp-after",
+                "sockets_before": "proc-fd-sockets-before.json", "sockets_after": "proc-fd-sockets-after.json",
+                "stat_before": "proc-stat-before", "stat_after": "proc-stat-after", "status": "proc-status",
+                "selection": "gpu-selection.csv", "apps": "gpu-compute-apps.csv",
+            }[key], bridge_bytes[key], key
+        ).as_json()
+        bridge_path = f"{bridge_prefix}/session.json"
+        self.tree.put(
+            bridge_path,
+            {
+                "schema_version": checker.CONFIG_ENDPOINT_OBSERVATION_VERSION,
+                "capture_status": "captured", "qualification_status": "not-run",
+                "target": {**target, "listener_port": port, "listener_inode": inode},
+                "endpoint": {
+                    "method": "GET", "request_target": "/v1/config", "http_status": 200,
+                    "request": bridge_descriptor("request"), "response_head": bridge_descriptor("response_head"),
+                    "body_sha256": hashlib.sha256(endpoint_raw).hexdigest(), "body_byte_length": len(endpoint_raw),
+                    "listener": {"address": "127.0.0.1", "port": port, "socket_inode": inode, "before_proc_net_tcp": bridge_descriptor("tcp_before"), "after_proc_net_tcp": bridge_descriptor("tcp_after"), "before_server_fd_sockets": bridge_descriptor("sockets_before"), "after_server_fd_sockets": bridge_descriptor("sockets_after")},
+                },
+                "process": {"server_pid": pid, "server_start_ticks": ticks, "pre_endpoint_stat": bridge_descriptor("stat_before"), "post_endpoint_stat": bridge_descriptor("stat_after"), "status": bridge_descriptor("status")},
+                "gpu": {"index": 0, "uuid": self.gpu_uuid, "selection_query": bridge_descriptor("selection"), "compute_apps": bridge_descriptor("apps")},
+            },
+        )
         return {
             "endpoint_path": endpoint_path,
             "startup_artifact_path": startup_path,
+            "endpoint_observation_path": bridge_path,
         }
 
     def _write_bind_request(
@@ -533,6 +587,22 @@ class BindRawC02SoakV2Tests(unittest.TestCase):
         with self.assertRaises(binder.RawSoakBindError) as raised:
             binder.bind_raw_soak_manifest(self.root, request_path, "duplicate.json")
         self.assert_reason(raised, "duplicate-evidence-path")
+
+        request_path, request = self._write_bind_request()
+        request["configuration_evidence"]["endpoint_observation_path"] = request[
+            "configuration_evidence"
+        ]["endpoint_path"]
+        self.tree.put(request_path, request)
+        with self.assertRaises(binder.RawSoakBindError) as raised:
+            binder.bind_raw_soak_manifest(self.root, request_path, "bridge-path-collision.json")
+        self.assert_reason(raised, "duplicate-evidence-path")
+
+        request_path, request = self._write_bind_request()
+        request["schema_version"] = "riley.soak-v2-bind-request.v2"
+        self.tree.put(request_path, request)
+        with self.assertRaises(binder.RawSoakBindError) as raised:
+            binder.bind_raw_soak_manifest(self.root, request_path, "historical-request.json")
+        self.assert_reason(raised, "unsupported-bind-request-version")
 
         long_path = "/".join(["a" * 100] * 5 + ["a" * 8])
         self.assertEqual(len(long_path), checker.MAX_RELATIVE_PATH_BYTES + 1)

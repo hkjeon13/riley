@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Raw-provenance binding layer for the proposed C02 soak/rollback v2 gates.
+"""Raw-provenance binding layer for the proposed C02 soak/rollback gates.
 
 This is intentionally narrower than the eventual semantic soak and rollback
-checkers.  It proves that a manifest is made from bounded, canonical,
-create-only raw leaves; reconstructs every sampled PID/start-tick/listener/GPU
-tuple from those leaves; and rejects an unfinished capture marker.  It does
-not turn a raw capture into a C02 qualification decision, replay Gate E, or
-interpret workload-specific runtime event fields.
+checkers.  Its soak path accepts provenance v3 only: it proves that a manifest
+is made from bounded, canonical, create-only raw leaves; reconstructs every
+sampled PID/start-tick/listener/GPU tuple and joins it to the separately
+observed /v1/config process tuple.  It does not turn a raw capture into a C02
+qualification decision, replay Gate E, or interpret workload-specific runtime
+event fields.
 
 The schema names and event-log descriptors are deliberately generic so a
 native C02 audit producer can evolve its event payload without a Python
@@ -28,8 +29,13 @@ import effective_runtime_config_contract as runtime_config
 import provenance_v2_common as common
 
 
-SOAK_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v2"
-SOAK_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v2"
+# ``soak-v2`` identifies the reviewed workload contract.  The provenance
+# document itself is v3 because v2 did not bind the /v1/config response to
+# the observed scenario process/listener tuple.  Do not silently widen that
+# closed v2 grammar: qualification code must treat it as historical input.
+SOAK_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v3"
+SOAK_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v3"
+CONFIG_ENDPOINT_OBSERVATION_VERSION = "riley.c02-config-endpoint-observation.v1"
 ROLLBACK_MANIFEST_VERSION = "riley.rc3-rollback-raw-provenance.v2"
 OBSERVATION_SESSION_VERSION = "riley.c02-raw-observation-session.v2"
 OBSERVATION_SAMPLE_VERSION = "riley.c02-raw-observation-sample.v2"
@@ -37,7 +43,7 @@ SOCKET_SNAPSHOT_VERSION = "riley.c02-proc-fd-socket-snapshot.v2"
 METRICS_VERSION = "riley.c02-capture-metrics.v2"
 SHUTDOWN_VERSION = "riley.c02-shutdown-quiescence.v2"
 SHUTDOWN_MARKER_VERSION = "riley.c02-shutdown-quiescence-complete.v2"
-SOAK_REPORT_VERSION = "riley.soak-v2-provenance-check.v2"
+SOAK_REPORT_VERSION = "riley.soak-v2-provenance-check.v3"
 ROLLBACK_REPORT_VERSION = "riley.rc3-rollback-provenance-check.v2"
 STABLE_DEFAULT_PROFILE = "stable-default"
 MAX_PERFORMANCE_EXACT_PROFILE = "max-performance-exact"
@@ -56,13 +62,14 @@ CANDIDATE_RE = re.compile(
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 UINT_RE = re.compile(r"^[0-9]+$")
 ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/c02/metrics$")
+CONFIG_ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/config$")
 SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 SOAK_TERMINAL_MANIFEST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.json$")
 MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES = 246
 
 
 class C02ProvenanceError(ValueError):
-    """Raw C02 evidence cannot establish a safe v2 provenance binding."""
+    """Raw C02 evidence cannot establish a safe provenance binding."""
 
 
 def _fail(code: str, message: str) -> NoReturn:
@@ -117,6 +124,15 @@ def _positive(value: Any, label: str) -> int:
     if type(value) is not int or value < 1:
         _fail("invalid-integer", f"{label} must be a positive integer")
     return value
+
+
+def _unprivileged_listener_port(value: Any, label: str) -> int:
+    """Reject ports the closed bridge producer/schema could never capture."""
+
+    port = _positive(value, label)
+    if not 1024 <= port <= 65535:
+        _fail("invalid-listener-port", f"{label} must be from 1024 through 65535")
+    return port
 
 
 def _nonnegative(value: Any, label: str) -> int:
@@ -265,6 +281,28 @@ class TargetTuple:
             "server_start_ticks": self.start_ticks,
             "gpu_index": self.gpu_index,
             "gpu_uuid": self.gpu_uuid,
+        }
+
+
+@dataclass(frozen=True)
+class ObservedTarget:
+    """A target reconstructed from raw leaves, including listener identity.
+
+    ``TargetTuple`` deliberately remains the public scenario-request shape so
+    existing v2 observation sessions do not need to claim a listener inode at
+    authoring time.  The verifier derives that fifth identity component from
+    every raw observation sample instead.
+    """
+
+    target: TargetTuple
+    listener_port: int
+    listener_inode: int
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            **self.target.as_json(),
+            "listener_port": self.listener_port,
+            "listener_inode": self.listener_inode,
         }
 
 
@@ -468,7 +506,7 @@ def _load_session(
     descriptor: common.EvidenceDescriptor,
     label: str,
     used_paths: set[str],
-) -> TargetTuple:
+) -> ObservedTarget:
     _assert_capture_marker_absent(root_fd, descriptor.path, label)
     _raw, document = _read_json(root_fd, descriptor, label)
     row = _exact(
@@ -493,11 +531,12 @@ def _load_session(
     _common(lambda: common.require_unique_descriptors(sample_descriptors, f"{label}.samples"))
     prefix = PurePosixPath(descriptor.path).parent.as_posix()
     previous_elapsed_millis: int | None = None
+    observed_listener: tuple[int, int] | None = None
     for index, sample_descriptor in enumerate(sample_descriptors):
         if not sample_descriptor.path.startswith(f"{prefix}/samples/"):
             _fail("session-layout-mismatch", f"{label} sample is outside its capture samples directory")
         _reserve(sample_descriptor, label=f"{label}.samples[{index}]", used_paths=used_paths)
-        elapsed_millis = _load_sample(
+        elapsed_millis, listener_port, listener_inode = _load_sample(
             root_fd,
             sample_descriptor,
             target,
@@ -512,7 +551,19 @@ def _load_session(
                 f"{label}.samples must have strictly increasing elapsed_monotonic_millis",
             )
         previous_elapsed_millis = elapsed_millis
-    return target
+        if observed_listener is None:
+            observed_listener = (listener_port, listener_inode)
+        elif observed_listener != (listener_port, listener_inode):
+            _fail(
+                "session-listener-drift",
+                f"{label}.samples do not preserve one listener port/inode tuple",
+            )
+    assert observed_listener is not None
+    return ObservedTarget(
+        target=target,
+        listener_port=observed_listener[0],
+        listener_inode=observed_listener[1],
+    )
 
 
 def _load_sample(
@@ -523,7 +574,7 @@ def _load_sample(
     session_label: str,
     used_paths: set[str],
     expected_sequence: int,
-) -> int:
+) -> tuple[int, int, int]:
     label = f"{session_label} sample[{expected_sequence}]"
     _raw, document = _read_json(root_fd, descriptor, label)
     row = _exact(
@@ -609,7 +660,7 @@ def _load_sample(
     if (selected_index, selected_uuid) != (expected_target.gpu_index, expected_target.gpu_uuid):
         _fail("gpu-tuple-mismatch", f"{label} GPU selection raw leaf drifted")
     _parse_compute_apps(_read_bytes(root_fd, descriptors[9], f"{label} GPU compute apps"), expected_target.pid, f"{label} GPU compute apps")
-    return elapsed_millis
+    return elapsed_millis, expected_port, socket_inode
 
 
 def _read_opaque_leaf(
@@ -622,6 +673,254 @@ def _read_opaque_leaf(
     _read_bytes(root_fd, descriptor, label)
 
 
+def _parse_config_request(raw: bytes, port: int, label: str) -> None:
+    """Require the exact loopback request bytes emitted by the bridge producer."""
+
+    expected = (
+        f"GET /v1/config HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{port}\r\n"
+        "Accept: application/json\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    if raw != expected:
+        _fail(
+            "config-request-mismatch",
+            f"{label} is not the exact canonical loopback GET /v1/config request",
+        )
+
+
+def _parse_config_response_head(raw: bytes, label: str) -> int:
+    """Return the exact declared body length from a captured HTTP/1.1 head."""
+
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as error:
+        _fail("invalid-config-response-head", f"{label} is not ASCII: {error}")
+    if not text.endswith("\r\n\r\n"):
+        _fail("invalid-config-response-head", f"{label} lacks a complete HTTP header terminator")
+    lines = text[:-4].split("\r\n")
+    if not lines or lines[0] != "HTTP/1.1 200 OK":
+        _fail("config-response-status-mismatch", f"{label} must be HTTP/1.1 200 OK")
+    headers: dict[str, str] = {}
+    for line in lines[1:]:
+        if not line or ":" not in line or line[:1] in {" ", "\t"}:
+            _fail("invalid-config-response-head", f"{label} has a malformed header")
+        name, value = line.split(":", 1)
+        lowered = name.lower()
+        if lowered in headers or not re.fullmatch(r"[A-Za-z0-9-]+", name):
+            _fail("invalid-config-response-head", f"{label} repeats or has an invalid header name")
+        headers[lowered] = value.strip()
+    length = headers.get("content-length")
+    content_type = headers.get("content-type")
+    if "transfer-encoding" in headers:
+        _fail("invalid-config-response-head", f"{label} must not use Transfer-Encoding")
+    if length is None or UINT_RE.fullmatch(length) is None:
+        _fail("invalid-config-response-head", f"{label} lacks one exact Content-Length")
+    parsed_length = int(length)
+    if parsed_length < 1 or parsed_length > runtime_config.MAX_JSON_BYTES:
+        _fail("invalid-config-response-head", f"{label} Content-Length is out of bounds")
+    if content_type is None or content_type.split(";", 1)[0].strip().lower() != "application/json":
+        _fail("invalid-config-response-head", f"{label} Content-Type is not application/json")
+    return parsed_length
+
+
+def _config_observed_target(value: Any, label: str) -> ObservedTarget:
+    row = _exact(
+        value,
+        {
+            "server_pid",
+            "server_start_ticks",
+            "listener_port",
+            "listener_inode",
+            "gpu_index",
+            "gpu_uuid",
+        },
+        label,
+    )
+    target = _target(
+        {
+            "server_pid": row["server_pid"],
+            "server_start_ticks": row["server_start_ticks"],
+            "gpu_index": row["gpu_index"],
+            "gpu_uuid": row["gpu_uuid"],
+        },
+        label,
+    )
+    port = _unprivileged_listener_port(row["listener_port"], f"{label}.listener_port")
+    return ObservedTarget(
+        target=target,
+        listener_port=port,
+        listener_inode=_positive(row["listener_inode"], f"{label}.listener_inode"),
+    )
+
+
+def _load_config_endpoint_observation(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    endpoint_descriptor: common.EvidenceDescriptor,
+    *,
+    used_paths: set[str],
+) -> ObservedTarget:
+    """Replay a raw /v1/config response and its process/listener proof.
+
+    The endpoint body descriptor belongs only to ``configuration_evidence``.
+    The bridge records its hash and length instead of another descriptor so a
+    leaf can never be aliased under two independent evidence meanings.
+    """
+
+    bridge_path = PurePosixPath(descriptor.path)
+    if bridge_path.name != "session.json" or bridge_path.parent == PurePosixPath("."):
+        _fail(
+            "config-observation-layout-mismatch",
+            "configuration endpoint observation must be a capture/session.json leaf",
+        )
+    _assert_capture_marker_absent(
+        root_fd,
+        descriptor.path,
+        "soak raw configuration endpoint observation",
+    )
+    _reserve(descriptor, label="soak raw configuration endpoint observation", used_paths=used_paths)
+    _raw, document = _read_json(
+        root_fd,
+        descriptor,
+        "soak raw configuration endpoint observation",
+    )
+    row = _exact(
+        document,
+        {"schema_version", "capture_status", "qualification_status", "target", "endpoint", "process", "gpu"},
+        "soak raw configuration endpoint observation",
+    )
+    if row["schema_version"] != CONFIG_ENDPOINT_OBSERVATION_VERSION:
+        _fail(
+            "historical-config-endpoint-observation-rejected",
+            "soak raw configuration endpoint observation has an unsupported schema version",
+        )
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail(
+            "invalid-capture-status",
+            "soak raw configuration endpoint observation must be captured/not-run",
+        )
+    target = _config_observed_target(row["target"], "soak raw configuration endpoint observation.target")
+    endpoint = _exact(
+        row["endpoint"],
+        {"method", "request_target", "http_status", "request", "response_head", "body_sha256", "body_byte_length", "listener"},
+        "soak raw configuration endpoint observation.endpoint",
+    )
+    if endpoint["method"] != "GET" or endpoint["request_target"] != "/v1/config" or endpoint["http_status"] != 200:
+        _fail("config-endpoint-shape-mismatch", "configuration bridge must capture GET /v1/config HTTP 200")
+    if _sha256(endpoint["body_sha256"], "soak raw configuration endpoint observation.endpoint.body_sha256") != endpoint_descriptor.sha256:
+        _fail("config-endpoint-body-hash-mismatch", "configuration bridge body hash differs from the bound endpoint bytes")
+    if _positive(endpoint["body_byte_length"], "soak raw configuration endpoint observation.endpoint.body_byte_length") != endpoint_descriptor.byte_length:
+        _fail("config-endpoint-body-length-mismatch", "configuration bridge body length differs from the bound endpoint bytes")
+    listener = _exact(
+        endpoint["listener"],
+        {"address", "port", "socket_inode", "before_proc_net_tcp", "after_proc_net_tcp", "before_server_fd_sockets", "after_server_fd_sockets"},
+        "soak raw configuration endpoint observation.endpoint.listener",
+    )
+    if (
+        listener["address"] != "127.0.0.1"
+        or _unprivileged_listener_port(listener["port"], "soak raw configuration endpoint observation.endpoint.listener.port") != target.listener_port
+        or _positive(listener["socket_inode"], "soak raw configuration endpoint observation.endpoint.listener.socket_inode") != target.listener_inode
+    ):
+        _fail("config-listener-target-mismatch", "configuration bridge listener differs from its target tuple")
+    process = _exact(
+        row["process"],
+        {"server_pid", "server_start_ticks", "pre_endpoint_stat", "post_endpoint_stat", "status"},
+        "soak raw configuration endpoint observation.process",
+    )
+    if (
+        _positive(process["server_pid"], "soak raw configuration endpoint observation.process.server_pid") != target.target.pid
+        or _positive(process["server_start_ticks"], "soak raw configuration endpoint observation.process.server_start_ticks") != target.target.start_ticks
+    ):
+        _fail("config-process-target-mismatch", "configuration bridge process differs from its target tuple")
+    gpu = _exact(
+        row["gpu"],
+        {"index", "uuid", "selection_query", "compute_apps"},
+        "soak raw configuration endpoint observation.gpu",
+    )
+    if _nonnegative(gpu["index"], "soak raw configuration endpoint observation.gpu.index") != target.target.gpu_index or gpu["uuid"] != target.target.gpu_uuid:
+        _fail("config-gpu-target-mismatch", "configuration bridge GPU differs from its target tuple")
+    leaves = [
+        _descriptor(endpoint["request"], "soak raw configuration endpoint observation.endpoint.request"),
+        _descriptor(endpoint["response_head"], "soak raw configuration endpoint observation.endpoint.response_head"),
+        _descriptor(listener["before_proc_net_tcp"], "soak raw configuration endpoint observation.listener.before_proc_net_tcp"),
+        _descriptor(listener["after_proc_net_tcp"], "soak raw configuration endpoint observation.listener.after_proc_net_tcp"),
+        _descriptor(listener["before_server_fd_sockets"], "soak raw configuration endpoint observation.listener.before_server_fd_sockets"),
+        _descriptor(listener["after_server_fd_sockets"], "soak raw configuration endpoint observation.listener.after_server_fd_sockets"),
+        _descriptor(process["pre_endpoint_stat"], "soak raw configuration endpoint observation.process.pre_endpoint_stat"),
+        _descriptor(process["post_endpoint_stat"], "soak raw configuration endpoint observation.process.post_endpoint_stat"),
+        _descriptor(process["status"], "soak raw configuration endpoint observation.process.status"),
+        _descriptor(gpu["selection_query"], "soak raw configuration endpoint observation.gpu.selection_query"),
+        _descriptor(gpu["compute_apps"], "soak raw configuration endpoint observation.gpu.compute_apps"),
+    ]
+    _common(lambda: common.require_unique_descriptors(leaves, "configuration endpoint bridge raw leaves"))
+    raw_prefix = f"{bridge_path.parent.as_posix()}/raw/"
+    for leaf in leaves:
+        if not leaf.path.startswith(raw_prefix):
+            _fail(
+                "config-observation-layout-mismatch",
+                "configuration endpoint observation raw leaf is outside its own capture/raw directory",
+            )
+        _reserve(leaf, label="configuration endpoint bridge raw leaf", used_paths=used_paths)
+    request_raw = _read_bytes(root_fd, leaves[0], "configuration bridge request")
+    _parse_config_request(request_raw, target.listener_port, "configuration bridge request")
+    response_length = _parse_config_response_head(
+        _read_bytes(root_fd, leaves[1], "configuration bridge response head"),
+        "configuration bridge response head",
+    )
+    if response_length != endpoint_descriptor.byte_length:
+        _fail("config-endpoint-body-length-mismatch", "configuration response Content-Length differs from endpoint bytes")
+    before_stat = _read_bytes(root_fd, leaves[6], "configuration bridge pre-endpoint stat")
+    after_stat = _read_bytes(root_fd, leaves[7], "configuration bridge post-endpoint stat")
+    expected_process = (target.target.pid, target.target.start_ticks)
+    if _parse_proc_stat(before_stat, "configuration bridge pre-endpoint stat") != expected_process or _parse_proc_stat(after_stat, "configuration bridge post-endpoint stat") != expected_process:
+        _fail("config-pid-start-tick-mismatch", "configuration bridge raw stat differs from its target tuple")
+    _parse_proc_status_pid(
+        _read_bytes(root_fd, leaves[8], "configuration bridge process status"),
+        target.target.pid,
+        "configuration bridge process status",
+    )
+    before_tcp = _parse_listener_inodes(
+        _read_bytes(root_fd, leaves[2], "configuration bridge proc tcp before"),
+        target.listener_port,
+        "configuration bridge proc tcp before",
+    )
+    after_tcp = _parse_listener_inodes(
+        _read_bytes(root_fd, leaves[3], "configuration bridge proc tcp after"),
+        target.listener_port,
+        "configuration bridge proc tcp after",
+    )
+    before_sockets = _parse_socket_snapshot(
+        _read_bytes(root_fd, leaves[4], "configuration bridge fd sockets before"),
+        target.target,
+        "configuration bridge fd sockets before",
+    )
+    after_sockets = _parse_socket_snapshot(
+        _read_bytes(root_fd, leaves[5], "configuration bridge fd sockets after"),
+        target.target,
+        "configuration bridge fd sockets after",
+    )
+    if (
+        before_tcp != {target.listener_inode}
+        or after_tcp != {target.listener_inode}
+        or target.listener_inode not in before_sockets
+        or target.listener_inode not in after_sockets
+    ):
+        _fail("config-listener-proof-mismatch", "configuration bridge cannot bind listener to PID before and after response")
+    selected_index, selected_uuid = _parse_gpu_selection(
+        _read_bytes(root_fd, leaves[9], "configuration bridge GPU selection"),
+        "configuration bridge GPU selection",
+    )
+    if (selected_index, selected_uuid) != (target.target.gpu_index, target.target.gpu_uuid):
+        _fail("config-gpu-tuple-mismatch", "configuration bridge GPU selection raw leaf drifted")
+    _parse_compute_apps(
+        _read_bytes(root_fd, leaves[10], "configuration bridge GPU compute apps"),
+        target.target.pid,
+        "configuration bridge GPU compute apps",
+    )
+    return target
+
+
 def _load_soak_configuration_evidence(
     root_fd: int,
     value: Any,
@@ -629,8 +928,8 @@ def _load_soak_configuration_evidence(
     candidate_id: str,
     bindings: Mapping[str, str],
     used_paths: set[str],
-) -> None:
-    """Bind the raw P0 endpoint/startup pair to this soak arm exactly.
+) -> ObservedTarget:
+    """Bind raw config facts and return their observed process/listener tuple.
 
     The P0 module owns the JSON/configuration grammar.  This raw provenance
     layer only supplies held-FD bytes, verifies that the startup artifact
@@ -640,7 +939,7 @@ def _load_soak_configuration_evidence(
 
     row = _exact(
         value,
-        {"endpoint", "startup_artifact"},
+        {"endpoint", "startup_artifact", "endpoint_observation"},
         "soak raw manifest.configuration_evidence",
     )
     endpoint_descriptor = _descriptor(
@@ -649,6 +948,10 @@ def _load_soak_configuration_evidence(
     startup_descriptor = _descriptor(
         row["startup_artifact"],
         "soak raw manifest.configuration_evidence.startup_artifact",
+    )
+    observation_descriptor = _descriptor(
+        row["endpoint_observation"],
+        "soak raw manifest.configuration_evidence.endpoint_observation",
     )
     _reserve(
         endpoint_descriptor,
@@ -714,6 +1017,12 @@ def _load_soak_configuration_evidence(
             "runtime-config-sha256-mismatch",
             "soak configuration SHA-256 differs from the bound runtime identity",
         )
+    return _load_config_endpoint_observation(
+        root_fd,
+        observation_descriptor,
+        endpoint_descriptor,
+        used_paths=used_paths,
+    )
 
 
 def _soak_terminal_manifest_name(manifest_path: str, label: str) -> str:
@@ -875,7 +1184,7 @@ def _report(
 
 
 def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
-    """Bind raw v2 soak leaves through one caller-held private-root FD.
+    """Bind raw v3 soak leaves through one caller-held private-root FD.
 
     This deliberately remains a *raw* verifier.  It does not require a
     terminal manifest marker so focused fixtures can isolate raw-tree
@@ -899,7 +1208,8 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
         "soak raw manifest",
     )
     if row["schema_version"] != SOAK_MANIFEST_VERSION:
-        _fail("historical-soak-v1-rejected", f"soak raw manifest must use {SOAK_MANIFEST_VERSION}")
+        historical = "historical-soak-v2-rejected" if row["schema_version"] == "riley.soak-v2-raw-provenance.v2" else "historical-soak-v1-rejected"
+        _fail(historical, f"soak raw manifest must use {SOAK_MANIFEST_VERSION}")
     if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
         _fail("invalid-capture-status", "soak raw manifest must be captured/not-run")
     candidate = _candidate_id(row["candidate_id"], "soak raw manifest.candidate_id")
@@ -909,7 +1219,7 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
         allowed_profiles=SOAK_CONFIGURATION_PROFILES,
     )
     used = {manifest_descriptor.path}
-    _load_soak_configuration_evidence(
+    configuration_target = _load_soak_configuration_evidence(
         root_fd,
         row["configuration_evidence"],
         candidate_id=candidate,
@@ -955,8 +1265,13 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
         session = _descriptor(scenario["observation_session"], f"{label}.observation_session")
         _reserve(session, label=f"{label}.observation_session", used_paths=used)
         observed_target = _load_session(root_fd, session, label, used)
-        if observed_target != declared_target:
+        if observed_target.target != declared_target:
             _fail("session-target-mismatch", f"{label} declared target differs from raw observation session")
+        if observed_target != configuration_target:
+            _fail(
+                "configuration-scenario-target-mismatch",
+                f"{label} does not share the configuration endpoint PID/start-tick/listener/GPU tuple",
+            )
         for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
             _read_opaque_leaf(root_fd, _descriptor(scenario[key], f"{label}.{key}"), f"{label}.{key}", used)
         if fallback is not None:
@@ -969,13 +1284,14 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
         bindings=bindings,
         targets=targets,
         check_names=(
-            "v2-version-only",
+            "v3-version-only",
             "canonical-descriptor-binding",
             "capture-marker-closure",
             "pid-start-tick-listener-gpu-binding",
             "raw-workload-and-audit-leaves",
             "runtime-config-candidate-profile-binding",
             "configuration-profile-arm-binding",
+            "configuration-endpoint-scenario-process-bridge",
         ),
     )
 
@@ -1062,7 +1378,7 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
             target = _target(phase["target"], f"{label}.target")
             session = _descriptor(phase["observation_session"], f"{label}.observation_session")
             _reserve(session, label=f"{label}.observation_session", used_paths=used)
-            if _load_session(root_fd, session, label, used) != target:
+            if _load_session(root_fd, session, label, used).target != target:
                 _fail("session-target-mismatch", f"{label} target differs from raw observation session")
             for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
                 _read_opaque_leaf(root_fd, _descriptor(phase[key], f"{label}.{key}"), f"{label}.{key}", used)

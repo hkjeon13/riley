@@ -99,6 +99,10 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         self,
         tree: EvidenceTree,
         bindings: dict[str, str],
+        *,
+        pid: int = 1111,
+        ticks: int = 2222,
+        port: int = 8080,
     ) -> dict:
         profile = bindings["configuration_profile"]
         effective_config = {
@@ -142,9 +146,50 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             "endpoint_payload": endpoint,
         }
         prefix = f"configuration/{profile}"
+        inode = 7000 + pid
+        bridge_prefix = "captures/config-bridge"
+        request_raw = (
+            f"GET /v1/config HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+            "Accept: application/json\r\nConnection: close\r\n\r\n"
+        ).encode("ascii")
+        response_head = (
+            f"HTTP/1.1 200 OK\r\nContent-Length: {len(endpoint_raw)}\r\n"
+            "Content-Type: application/json\r\n\r\n"
+        ).encode("ascii")
+        leaves = {
+            "request": tree.put(f"{bridge_prefix}/raw/config-request.http", request_raw),
+            "response_head": tree.put(f"{bridge_prefix}/raw/config-response-head.http", response_head),
+            "tcp_before": tree.put(f"{bridge_prefix}/raw/proc-net-tcp-before", proc_net_tcp(port, inode)),
+            "tcp_after": tree.put(f"{bridge_prefix}/raw/proc-net-tcp-after", proc_net_tcp(port, inode)),
+            "sockets_before": tree.put(f"{bridge_prefix}/raw/proc-fd-sockets-before.json", {"schema_version": checker.SOCKET_SNAPSHOT_VERSION, "server_pid": pid, "socket_inodes": [inode]}),
+            "sockets_after": tree.put(f"{bridge_prefix}/raw/proc-fd-sockets-after.json", {"schema_version": checker.SOCKET_SNAPSHOT_VERSION, "server_pid": pid, "socket_inodes": [inode]}),
+            "stat_before": tree.put(f"{bridge_prefix}/raw/proc-stat-before", proc_stat(pid, ticks)),
+            "stat_after": tree.put(f"{bridge_prefix}/raw/proc-stat-after", proc_stat(pid, ticks)),
+            "status": tree.put(f"{bridge_prefix}/raw/proc-status", f"Name:\triley\nPid:\t{pid}\n".encode("ascii")),
+            "selection": tree.put(f"{bridge_prefix}/raw/gpu-selection.csv", f"0, {self.gpu_uuid}\n".encode("ascii")),
+            "apps": tree.put(f"{bridge_prefix}/raw/gpu-compute-apps.csv", f"{pid}, 42\n".encode("ascii")),
+        }
+        bridge = tree.put(
+            f"{bridge_prefix}/session.json",
+            {
+                "schema_version": checker.CONFIG_ENDPOINT_OBSERVATION_VERSION,
+                "capture_status": "captured",
+                "qualification_status": "not-run",
+                "target": {"server_pid": pid, "server_start_ticks": ticks, "listener_port": port, "listener_inode": inode, "gpu_index": 0, "gpu_uuid": self.gpu_uuid},
+                "endpoint": {
+                    "method": "GET", "request_target": "/v1/config", "http_status": 200,
+                    "request": leaves["request"].as_json(), "response_head": leaves["response_head"].as_json(),
+                    "body_sha256": hashlib.sha256(endpoint_raw).hexdigest(), "body_byte_length": len(endpoint_raw),
+                    "listener": {"address": "127.0.0.1", "port": port, "socket_inode": inode, "before_proc_net_tcp": leaves["tcp_before"].as_json(), "after_proc_net_tcp": leaves["tcp_after"].as_json(), "before_server_fd_sockets": leaves["sockets_before"].as_json(), "after_server_fd_sockets": leaves["sockets_after"].as_json()},
+                },
+                "process": {"server_pid": pid, "server_start_ticks": ticks, "pre_endpoint_stat": leaves["stat_before"].as_json(), "post_endpoint_stat": leaves["stat_after"].as_json(), "status": leaves["status"].as_json()},
+                "gpu": {"index": 0, "uuid": self.gpu_uuid, "selection_query": leaves["selection"].as_json(), "compute_apps": leaves["apps"].as_json()},
+            },
+        )
         return {
             "endpoint": tree.put(f"{prefix}-endpoint.json", endpoint_raw).as_json(),
             "startup_artifact": tree.put(f"{prefix}-startup.json", startup).as_json(),
+            "endpoint_observation": bridge.as_json(),
         }
 
     def complete_soak_manifest(
@@ -284,6 +329,85 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             )
             self.assertEqual(report["targets"][0]["target"], self.target(1111, 2222))
 
+    def test_config_bridge_rejects_body_tuple_and_cross_capture_drift(self) -> None:
+        def check(mutator: object, reason: str, *, phase_pid: int = 1111) -> None:
+            with tempfile.TemporaryDirectory() as temporary:
+                tree = EvidenceTree(Path(temporary))
+                phase = self.phase(tree, "soak", pid=phase_pid, ticks=2222, port=8080)
+                config = self.configuration_evidence(tree, self.bindings)
+                bridge_path = config["endpoint_observation"]["path"]
+                assert isinstance(bridge_path, str)
+                bridge = json.loads((tree.root / bridge_path).read_bytes())
+                assert callable(mutator)
+                mutator(tree, bridge)
+                config["endpoint_observation"] = tree.put(bridge_path, bridge).as_json()
+                contract = tree.put("contracts/soak-v2.json", b"contract")
+                manifest = tree.put(
+                    "soak/bridge-drift.json",
+                    {
+                        "schema_version": checker.SOAK_MANIFEST_VERSION,
+                        "capture_status": "captured",
+                        "qualification_status": "not-run",
+                        "candidate_id": self.candidate,
+                        "bindings": self.bindings,
+                        "configuration_evidence": config,
+                        "scenario_contract": contract.as_json(),
+                        "scenarios": [{"scenario_id": "bridge", **phase, "fallback_event_log": None}],
+                    },
+                )
+                with self.assertRaises(checker.C02ProvenanceError) as raised:
+                    checker.verify_soak_provenance(tree.root.resolve(), manifest.path)
+                self.assert_reason(raised, reason)
+
+        check(lambda _tree, bridge: bridge["endpoint"].__setitem__("body_sha256", "f" * 64), "config-endpoint-body-hash-mismatch")
+        check(lambda _tree, bridge: bridge["endpoint"].__setitem__("body_byte_length", 1), "config-endpoint-body-length-mismatch")
+        check(lambda _tree, bridge: bridge["process"].__setitem__("server_pid", 9999), "config-process-target-mismatch")
+        check(lambda _tree, bridge: bridge["endpoint"]["listener"].__setitem__("socket_inode", 9999), "config-listener-target-mismatch")
+        check(lambda _tree, bridge: bridge["endpoint"]["listener"].__setitem__("port", 8081), "config-listener-target-mismatch")
+        check(lambda _tree, bridge: bridge["gpu"].__setitem__("uuid", "GPU-deadbeef"), "config-gpu-target-mismatch")
+        check(lambda _tree, bridge: bridge["target"].__setitem__("listener_port", 80), "invalid-listener-port")
+        check(lambda _tree, bridge: bridge["target"].__setitem__("listener_port", 1023), "invalid-listener-port")
+        check(lambda _tree, bridge: bridge["endpoint"]["listener"].__setitem__("port", 80), "invalid-listener-port")
+        check(lambda _tree, bridge: bridge["endpoint"]["listener"].__setitem__("port", 1023), "invalid-listener-port")
+        check(lambda _tree, _bridge: None, "configuration-scenario-target-mismatch", phase_pid=1112)
+
+        def inject_other_capture(tree: EvidenceTree, bridge: dict) -> None:
+            raw = (tree.root / bridge["endpoint"]["request"]["path"]).read_bytes()
+            bridge["endpoint"]["request"] = tree.put("other-capture/raw/request.http", raw).as_json()
+
+        check(inject_other_capture, "config-observation-layout-mismatch")
+
+    def test_config_bridge_rejects_transfer_encoding_and_incomplete_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = EvidenceTree(Path(temporary))
+            phase = self.phase(tree, "soak", pid=1111, ticks=2222, port=8080)
+            config = self.configuration_evidence(tree, self.bindings)
+            bridge_path = config["endpoint_observation"]["path"]
+            assert isinstance(bridge_path, str)
+            bridge = json.loads((tree.root / bridge_path).read_bytes())
+            head_path = bridge["endpoint"]["response_head"]["path"]
+            assert isinstance(head_path, str)
+            original_head = (tree.root / head_path).read_bytes()
+            head = original_head.replace(
+                b"Content-Type: application/json\r\n", b"Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n"
+            )
+            bridge["endpoint"]["response_head"] = tree.put(head_path, head).as_json()
+            config["endpoint_observation"] = tree.put(bridge_path, bridge).as_json()
+            contract = tree.put("contracts/soak-v2.json", b"contract")
+            manifest = tree.put("soak/transfer.json", {"schema_version": checker.SOAK_MANIFEST_VERSION, "capture_status": "captured", "qualification_status": "not-run", "candidate_id": self.candidate, "bindings": self.bindings, "configuration_evidence": config, "scenario_contract": contract.as_json(), "scenarios": [{"scenario_id": "bridge", **phase, "fallback_event_log": None}]})
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_soak_provenance(tree.root.resolve(), manifest.path)
+            self.assert_reason(raised, "invalid-config-response-head")
+
+            bridge["endpoint"]["response_head"] = tree.put(head_path, original_head).as_json()
+            config["endpoint_observation"] = tree.put(bridge_path, bridge).as_json()
+            manifest = tree.put("soak/incomplete.json", {**json.loads((tree.root / manifest.path).read_bytes()), "configuration_evidence": config})
+            marker = tree.root / "captures/config-bridge/capture-incomplete.json"
+            marker.write_bytes(common.canonical_json_bytes({"capture_status": "incomplete"}))
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_soak_provenance(tree.root.resolve(), manifest.path)
+            self.assert_reason(raised, "incomplete-capture")
+
     def test_metrics_are_structural_but_validate_all_declared_value_types(self) -> None:
         raw_metrics = metrics()
         raw_metrics["request_states"]["failed"] = 7
@@ -414,7 +538,9 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
-                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
+                    "configuration_evidence": self.configuration_evidence(
+                        tree, self.bindings, pid=2222, ticks=3333, port=8081
+                    ),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "elapsed-order", **phase, "fallback_event_log": None}],
                 },
@@ -518,6 +644,17 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             with self.assertRaises(checker.C02ProvenanceError) as raised:
                 checker.verify_soak_provenance(tree.root.resolve(), v1.path)
             self.assert_reason(raised, "historical-soak-v1-rejected")
+
+            historical_v2 = tree.put(
+                "soak/historical-v2.json",
+                {
+                    **json.loads((tree.root / v1.path).read_bytes()),
+                    "schema_version": "riley.soak-v2-raw-provenance.v2",
+                },
+            )
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_soak_provenance(tree.root.resolve(), historical_v2.path)
+            self.assert_reason(raised, "historical-soak-v2-rejected")
 
             missing_fallback = tree.put(
                 "soak/v2.json",
@@ -842,14 +979,19 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             / "release"
             / "candidates"
         )
-        for name in ("soak-v2-receipt-v2.schema.json", "rollback-receipt-v2.schema.json"):
+        for name in (
+            "soak-v2-receipt-v2.schema.json",
+            "soak-v2-receipt-v3.schema.json",
+            "rollback-receipt-v2.schema.json",
+            "c02-config-endpoint-observation-v1.schema.json",
+        ):
             with self.subTest(name=name):
                 document = json.loads((directory / name).read_text(encoding="utf-8"))
                 self.assertEqual(document["$schema"], "https://json-schema.org/draft/2020-12/schema")
                 self.assertEqual(document["$defs"]["descriptor"]["properties"]["byte_length"]["minimum"], 1)
 
         soak_schema = json.loads(
-            (directory / "soak-v2-receipt-v2.schema.json").read_text(encoding="utf-8")
+            (directory / "soak-v2-receipt-v3.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
             soak_schema["$defs"]["bindings"]["properties"]["configuration_profile"]["enum"],
@@ -861,10 +1003,10 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         )
         self.assertEqual(
             soak_schema["$defs"]["configurationEvidence"]["required"],
-            ["endpoint", "startup_artifact"],
+            ["endpoint", "startup_artifact", "endpoint_observation"],
         )
         self.assertEqual(
-            soak_schema["$defs"]["rawProvenanceCompletion"]["properties"][
+            soak_schema["$defs"]["completion"]["properties"][
                 "schema_version"
             ],
             {"const": checker.SOAK_COMPLETION_MARKER_VERSION},
@@ -881,12 +1023,20 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             ],
             {"const": checker.MAX_PERFORMANCE_EXACT_PROFILE},
         )
+        self.assertEqual(
+            soak_schema["$defs"]["configurationEvidence"]["properties"]["endpoint"],
+            {"$ref": "#/$defs/configEndpointDescriptor"},
+        )
         bind_request_schema = json.loads(
-            (directory / "soak-v2-bind-request-v2.schema.json").read_text(encoding="utf-8")
+            (directory / "soak-v2-bind-request-v3.schema.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
             bind_request_schema["properties"]["schema_version"],
-            {"const": "riley.soak-v2-bind-request.v2"},
+            {"const": "riley.soak-v2-bind-request.v3"},
+        )
+        self.assertEqual(
+            bind_request_schema["$defs"]["configurationEvidence"]["required"],
+            ["endpoint_path", "startup_artifact_path", "endpoint_observation_path"],
         )
         self.assertEqual(
             bind_request_schema["$defs"]["relativePath"]["maxLength"],
