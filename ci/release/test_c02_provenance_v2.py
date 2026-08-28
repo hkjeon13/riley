@@ -7,12 +7,14 @@ import hashlib
 import io
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import check_c02_provenance_v2 as checker
+import effective_runtime_config_contract as runtime_config
 import provenance_v2_common as common
 
 
@@ -92,6 +94,70 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             "gpu_index": 0,
             "gpu_uuid": self.gpu_uuid,
         }
+
+    def configuration_evidence(
+        self,
+        tree: EvidenceTree,
+        bindings: dict[str, str],
+    ) -> dict:
+        profile = bindings["configuration_profile"]
+        effective_config = {
+            "execution_completion_mode": "iteration-batch",
+            "batch_shape": {"policy": "power-of-two", "buckets": [1, 8, 64]},
+            "metadata_transport": "packed-async",
+            "sampling_backend": "gpu-greedy",
+            "attention_backend": {
+                "prefill": "riley.attention.prefill-v1",
+                "decode": "riley.attention.decode-v1",
+            },
+            "gemm_reduction_policy": "strict-no-split-v1",
+            "experimental_flags": {},
+            "fallback_policy": {
+                "cross_profile_fallback": "forbidden",
+                "runtime_selection": "exact-fallback-allowed",
+            },
+            "batch_token_budget": 64,
+            "kv_geometry": {"layout": "paged", "block_tokens": 16, "physical_blocks": 512},
+        }
+        endpoint = {
+            "schema_version": runtime_config.ENDPOINT_VERSION,
+            "candidate_id": self.candidate,
+            "runtime_identity": {
+                "configuration_profile": profile,
+                "configuration_sha256": bindings["configuration_sha256"],
+            },
+            "effective_config": effective_config,
+            "effective_config_sha256": hashlib.sha256(
+                runtime_config.canonical_json_bytes(effective_config)
+            ).hexdigest(),
+        }
+        endpoint_raw = runtime_config.canonical_json_bytes(endpoint)
+        startup = {
+            "schema_version": runtime_config.STARTUP_ARTIFACT_VERSION,
+            "created_at_utc": "2026-08-29T00:00:00Z",
+            "candidate_id": self.candidate,
+            "endpoint_path": "/v1/config",
+            "runtime_identity": endpoint["runtime_identity"],
+            "endpoint_payload_sha256": hashlib.sha256(endpoint_raw).hexdigest(),
+            "endpoint_payload": endpoint,
+        }
+        prefix = f"configuration/{profile}"
+        return {
+            "endpoint": tree.put(f"{prefix}-endpoint.json", endpoint_raw).as_json(),
+            "startup_artifact": tree.put(f"{prefix}-startup.json", startup).as_json(),
+        }
+
+    def complete_soak_manifest(
+        self, tree: EvidenceTree, manifest: common.EvidenceDescriptor
+    ) -> common.EvidenceDescriptor:
+        return tree.put(
+            f"{manifest.path}.complete",
+            {
+                "schema_version": checker.SOAK_COMPLETION_MARKER_VERSION,
+                "artifact_filename": Path(manifest.path).name,
+                "artifact_sha256": manifest.sha256,
+            },
+        )
 
     def session(self, tree: EvidenceTree, name: str, *, pid: int, ticks: int, port: int) -> common.EvidenceDescriptor:
         base = f"captures/{name}"
@@ -201,6 +267,9 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.max_performance_bindings,
+                    "configuration_evidence": self.configuration_evidence(
+                        tree, self.max_performance_bindings
+                    ),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [scenario],
                 },
@@ -266,6 +335,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "Not_A_Scenario", **phase, "fallback_event_log": None}],
                 },
@@ -300,6 +370,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "status-pid", **phase, "fallback_event_log": None}],
                 },
@@ -343,6 +414,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "elapsed-order", **phase, "fallback_event_log": None}],
                 },
@@ -357,17 +429,19 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             phase = self.phase(tree, "soak", pid=1111, ticks=2222, port=8080)
             contract = tree.put("contracts/soak-v2.json", b"contract")
             manifest = tree.put(
-                "soak/raw-manifest.json",
+                "raw-manifest.json",
                 {
                     "schema_version": checker.SOAK_MANIFEST_VERSION,
                     "capture_status": "captured",
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "cli-output", **phase, "fallback_event_log": None}],
                 },
             )
+            self.complete_soak_manifest(tree, manifest)
             output_bytes = io.BytesIO()
             output = io.TextIOWrapper(output_bytes, encoding="utf-8")
             with mock.patch.object(checker.sys, "stdout", output):
@@ -414,6 +488,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "gpu-tuple", **phase, "fallback_event_log": None}],
                 },
@@ -435,6 +510,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [],
                 },
@@ -451,6 +527,9 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.max_performance_bindings,
+                    "configuration_evidence": self.configuration_evidence(
+                        tree, self.max_performance_bindings
+                    ),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "exact-backend-fallback", **phase, "fallback_event_log": None}],
                 },
@@ -473,6 +552,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.bindings,
+                    "configuration_evidence": self.configuration_evidence(tree, self.bindings),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [
                         {
@@ -512,6 +592,9 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
                     "bindings": self.max_performance_bindings,
+                    "configuration_evidence": self.configuration_evidence(
+                        tree, self.max_performance_bindings
+                    ),
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "exact-backend-fallback", **phase, "fallback_event_log": fallback.as_json()}],
                 },
@@ -772,6 +855,20 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             soak_schema["$defs"]["bindings"]["properties"]["configuration_profile"]["enum"],
             [checker.STABLE_DEFAULT_PROFILE, checker.MAX_PERFORMANCE_EXACT_PROFILE],
         )
+        self.assertEqual(
+            soak_schema["$defs"]["rawManifest"]["properties"]["configuration_evidence"],
+            {"$ref": "#/$defs/configurationEvidence"},
+        )
+        self.assertEqual(
+            soak_schema["$defs"]["configurationEvidence"]["required"],
+            ["endpoint", "startup_artifact"],
+        )
+        self.assertEqual(
+            soak_schema["$defs"]["rawProvenanceCompletion"]["properties"][
+                "schema_version"
+            ],
+            {"const": checker.SOAK_COMPLETION_MARKER_VERSION},
+        )
         fallback_condition = soak_schema["$defs"]["scenario"]["allOf"][0]
         self.assertEqual(
             fallback_condition["then"]["properties"]["fallback_event_log"],
@@ -784,6 +881,28 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             ],
             {"const": checker.MAX_PERFORMANCE_EXACT_PROFILE},
         )
+        bind_request_schema = json.loads(
+            (directory / "soak-v2-bind-request-v2.schema.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            bind_request_schema["properties"]["schema_version"],
+            {"const": "riley.soak-v2-bind-request.v2"},
+        )
+        self.assertEqual(
+            bind_request_schema["$defs"]["relativePath"]["maxLength"],
+            checker.MAX_RELATIVE_PATH_BYTES,
+        )
+        self.assertEqual(
+            bind_request_schema["$defs"]["scenario"]["properties"][
+                "fallback_event_log_path"
+            ]["oneOf"][0],
+            {"type": "null"},
+        )
+        for schema in (soak_schema, bind_request_schema):
+            relative_path_pattern = schema["$defs"]["relativePath"]["pattern"]
+            self.assertIsNone(re.fullmatch(relative_path_pattern, "a/."))
+            self.assertIsNone(re.fullmatch(relative_path_pattern, "a/.."))
+            self.assertIsNotNone(re.fullmatch(relative_path_pattern, "a/.hidden"))
 
 
 if __name__ == "__main__":

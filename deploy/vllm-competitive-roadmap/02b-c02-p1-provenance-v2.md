@@ -26,7 +26,7 @@
 - `O_NOFOLLOW`와 `O_DIRECTORY`가 플랫폼에 없으면 fallback 값 `0`을 쓰지 않고 즉시 fail closed한다.
 - input은 regular non-link file, path uniqueness, bounded byte size, FD inode stability, canonical JSON, SHA-256을 함께 확인한다.
 - output은 basename-only `O_CREAT|O_EXCL|O_NOFOLLOW`, file/directory `fsync`, completion marker hash binding으로 한 번만 기록한다.
-- raw descriptor 하나가 다른 leaf/path에 재사용되거나, symlink/hardlink alias, parent swap, incomplete marker, PID start-tick/socket/GPU UUID mismatch가 있으면 semantic replay는 실패한다.
+- raw descriptor 하나가 다른 leaf/path에 재사용되거나, symlink/hardlink alias, controlled leaf read 중 관측된 parent/inode swap, incomplete marker, PID start-tick/socket/GPU UUID mismatch가 있으면 semantic replay는 실패한다. held root FD 검증은 cross-file atomic snapshot이 아니라 point-in-time leaf 검증이므로, P1은 exact-0700 trusted-writer boundary를 전제로 한다.
 
 raw producer가 `qualification_status: "not-run"`을 쓰는 것은 mechanism 검증에만 허용된다. actual C02 candidate의 semantic report는 freeze와 Gate E를 별도 input으로 replay해야 하며 raw file의 `passed` 문자열을 신뢰하지 않는다.
 
@@ -104,7 +104,18 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 ### Soak v2
 
-`run_remote_c02_soak_v2.sh`와 `bind_raw_c02_soak_v2.py`는 GPU UUID/used-memory preflight, exclusive lock, frozen arm의 `env -i`, 새 evidence root를 강제한다. 각 scenario는 다음 raw leaf를 descriptor로 남긴다.
+향후 `run_remote_c02_soak_v2.sh`가 GPU UUID/used-memory preflight, exclusive
+lock, frozen arm의 `env -i`, 새 evidence root를 강제한다.
+`bind_raw_c02_soak_v2.py`는 그 runner를 대체하거나 service/GPU/SSH/container를
+조작하지 않는다. canonical `riley.soak-v2-bind-request.v2`의 path-only leaf를
+하나의 held private-root FD로 읽고, `riley.soak-v2-raw-provenance.v2` manifest와
+nonhidden `<manifest>.complete` marker를 create-only로 기록한다. marker는
+`riley.soak-v2-raw-provenance-complete.v2`이며 정확히 `schema_version`,
+`artifact_filename`, `artifact_sha256`만 가진다. 각 scenario는 다음 raw leaf를
+descriptor로 남긴다.
+`benchmarks/release/candidates/soak-v2-bind-request-v2.schema.json`는 이 bind
+request의 closed path-only shape를 publish하며 caller-supplied descriptor/hash를
+받지 않는다.
 
 raw soak provenance는 `stable-default`와 `max-performance-exact`만 수용한다.
 `exact-backend-fallback` scenario는 후자의 arm에서만 허용되고 non-null native
@@ -117,6 +128,17 @@ provenance는 `stable-default` arm으로만 제한한다.
 - same PID/start-tick pre/post C02 metrics, `/proc` status/stat/fd/socket and `/proc/net/tcp`
 - selected GPU UUID/compute-app raw output
 - scenario lifecycle/process exit and create-only completion markers
+
+Binder는 raw `/v1/config` endpoint 및 startup artifact canonical bytes도
+descriptor로 bind한다. endpoint `runtime_identity`에서 candidate, profile,
+`configuration_sha256`를 derive하고 startup artifact의 embedded endpoint
+payload/hash와 같음을 확인한다. 이는 **configuration arm bytes/identity**만
+증명한다. 현재 raw inventory에는 config endpoint가 각 scenario의 PID/port
+listener에서 나온 것임을 연결하는 별도 same-process proof가 없으므로, 이 binder는
+그러한 config-to-scenario tuple linkage를 주장하지 않는다. scenario의
+PID/start-tick/listener/GPU 결속은 observation session이 담당하고, endpoint와
+scenario의 same-process closure는 향후 remote runner 및 semantic replay의
+명시적 raw proof로 추가해야 한다.
 
 `check_soak_v2_receipt_v2.py`는 summary counter나 free-form backend event를 믿지 않고 위 leaf에서 identity, interval order, request/audit binding, metrics monotonicity, actual typed sampling selection을 재구성한다.
 

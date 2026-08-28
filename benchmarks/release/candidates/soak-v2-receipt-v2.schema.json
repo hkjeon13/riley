@@ -2,10 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://riley.invalid/benchmarks/release/candidates/soak-v2-receipt-v2.schema.json",
   "title": "Riley C02 soak raw-provenance v2",
-  "description": "Versioned raw provenance input only. It cannot assert C02 qualification; the semantic checker must separately replay the reviewed workload and Gate E evidence.",
+  "description": "Versioned raw provenance input only. A raw manifest binds canonical endpoint/startup configuration-arm bytes and scenario leaves, but does not assert config-to-scenario PID/listener linkage or C02 qualification; a later semantic checker must separately replay reviewed workload and Gate E evidence.",
   "oneOf": [
     { "$ref": "#/$defs/rawManifest" },
-    { "$ref": "#/$defs/provenanceReport" }
+    { "$ref": "#/$defs/provenanceReport" },
+    { "$ref": "#/$defs/rawProvenanceCompletion" }
   ],
   "$defs": {
     "sha256": {
@@ -19,7 +20,7 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 512,
-      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
     },
     "descriptor": {
       "type": "object",
@@ -46,6 +47,15 @@
           "enum": ["stable-default", "max-performance-exact"]
         },
         "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "configurationEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoint", "startup_artifact"],
+      "properties": {
+        "endpoint": { "$ref": "#/$defs/descriptor" },
+        "startup_artifact": { "$ref": "#/$defs/descriptor" }
       }
     },
     "targetTuple": {
@@ -96,13 +106,14 @@
     "rawManifest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "scenario_contract", "scenarios"],
+      "required": ["schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "configuration_evidence", "scenario_contract", "scenarios"],
       "properties": {
         "schema_version": { "const": "riley.soak-v2-raw-provenance.v2" },
         "capture_status": { "const": "captured" },
         "qualification_status": { "const": "not-run" },
         "candidate_id": { "$ref": "#/$defs/candidateId" },
         "bindings": { "$ref": "#/$defs/bindings" },
+        "configuration_evidence": { "$ref": "#/$defs/configurationEvidence" },
         "scenario_contract": { "$ref": "#/$defs/descriptor" },
         "scenarios": {
           "type": "array",
@@ -138,6 +149,21 @@
           }
         }
       ]
+    },
+    "rawProvenanceCompletion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-raw-provenance-complete.v2" },
+        "artifact_filename": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 246,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.json$"
+        },
+        "artifact_sha256": { "$ref": "#/$defs/sha256" }
+      }
     },
     "boundCheck": {
       "type": "object",

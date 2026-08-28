@@ -24,10 +24,12 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, NoReturn, Sequence
 
+import effective_runtime_config_contract as runtime_config
 import provenance_v2_common as common
 
 
 SOAK_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v2"
+SOAK_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v2"
 ROLLBACK_MANIFEST_VERSION = "riley.rc3-rollback-raw-provenance.v2"
 OBSERVATION_SESSION_VERSION = "riley.c02-raw-observation-session.v2"
 OBSERVATION_SAMPLE_VERSION = "riley.c02-raw-observation-sample.v2"
@@ -44,6 +46,7 @@ SOAK_CONFIGURATION_PROFILES = frozenset(
 )
 ROLLBACK_CONFIGURATION_PROFILES = frozenset((STABLE_DEFAULT_PROFILE,))
 MAX_RAW_BYTES = 16 * 1024 * 1024
+MAX_RELATIVE_PATH_BYTES = 512
 MAX_SAMPLES = 1024
 MAX_SCENARIOS = 32
 GPU_UUID_RE = re.compile(r"^GPU-[0-9A-Fa-f-]+$")
@@ -54,6 +57,8 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 UINT_RE = re.compile(r"^[0-9]+$")
 ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/c02/metrics$")
 SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+SOAK_TERMINAL_MANIFEST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.json$")
+MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES = 246
 
 
 class C02ProvenanceError(ValueError):
@@ -71,6 +76,15 @@ def _common(call: Any) -> Any:
         return call()
     except common.ProvenanceV2Error as error:
         _fail(getattr(error, "reason_code", "unsafe-evidence"), str(error))
+
+
+def _runtime_config(call: Any) -> Any:
+    """Translate the pure P0 contract's errors into this raw-binder domain."""
+
+    try:
+        return call()
+    except runtime_config.EffectiveRuntimeConfigError as error:
+        _fail(getattr(error, "reason_code", "invalid-runtime-config"), str(error))
 
 
 def _open_private_evidence_root(evidence_root: Path, label: str) -> int:
@@ -160,6 +174,14 @@ def _bindings(
 
 def _descriptor(value: Any, label: str) -> common.EvidenceDescriptor:
     descriptor = _common(lambda: common.parse_descriptor(value, label))
+    # Published C02 raw-manifest schemas cap every descriptor path at 512
+    # ASCII bytes.  common validates traversal safety, while this layer owns
+    # the receipt contract's explicit DoS bound.
+    if len(descriptor.path) > MAX_RELATIVE_PATH_BYTES:
+        _fail(
+            "invalid-relative-path",
+            f"{label}.path exceeds {MAX_RELATIVE_PATH_BYTES} bytes",
+        )
     if descriptor.byte_length < 1:
         _fail("empty-evidence-leaf", f"{label} must bind nonempty raw evidence")
     return descriptor
@@ -215,6 +237,11 @@ def _read_json(
 
 def _read_manifest(root_fd: int, relative_path: str, label: str) -> tuple[common.EvidenceDescriptor, dict[str, Any]]:
     relative = _common(lambda: common.validate_relative_path(relative_path, f"{label}.path"))
+    if len(relative) > MAX_RELATIVE_PATH_BYTES:
+        _fail(
+            "invalid-relative-path",
+            f"{label}.path exceeds {MAX_RELATIVE_PATH_BYTES} bytes",
+        )
     raw = _common(
         lambda: common.read_bounded_regular_relative(
             root_fd, relative, label, maximum_bytes=MAX_RAW_BYTES
@@ -595,6 +622,175 @@ def _read_opaque_leaf(
     _read_bytes(root_fd, descriptor, label)
 
 
+def _load_soak_configuration_evidence(
+    root_fd: int,
+    value: Any,
+    *,
+    candidate_id: str,
+    bindings: Mapping[str, str],
+    used_paths: set[str],
+) -> None:
+    """Bind the raw P0 endpoint/startup pair to this soak arm exactly.
+
+    The P0 module owns the JSON/configuration grammar.  This raw provenance
+    layer only supplies held-FD bytes, verifies that the startup artifact
+    embeds *those* endpoint bytes, and cross-binds the candidate/profile/
+    configuration identity before any scenario leaf is considered.
+    """
+
+    row = _exact(
+        value,
+        {"endpoint", "startup_artifact"},
+        "soak raw manifest.configuration_evidence",
+    )
+    endpoint_descriptor = _descriptor(
+        row["endpoint"], "soak raw manifest.configuration_evidence.endpoint"
+    )
+    startup_descriptor = _descriptor(
+        row["startup_artifact"],
+        "soak raw manifest.configuration_evidence.startup_artifact",
+    )
+    _reserve(
+        endpoint_descriptor,
+        label="soak raw manifest.configuration_evidence.endpoint",
+        used_paths=used_paths,
+    )
+    _reserve(
+        startup_descriptor,
+        label="soak raw manifest.configuration_evidence.startup_artifact",
+        used_paths=used_paths,
+    )
+    endpoint_raw = _read_bytes(
+        root_fd,
+        endpoint_descriptor,
+        "soak raw configuration endpoint",
+        maximum_bytes=runtime_config.MAX_JSON_BYTES,
+    )
+    startup_raw = _read_bytes(
+        root_fd,
+        startup_descriptor,
+        "soak raw configuration startup artifact",
+        maximum_bytes=runtime_config.MAX_JSON_BYTES,
+    )
+    endpoint_document, endpoint = _runtime_config(
+        lambda: runtime_config.validate_endpoint_bytes(
+            endpoint_raw, "soak raw configuration endpoint"
+        )
+    )
+    startup_document, startup = _runtime_config(
+        lambda: runtime_config.validate_startup_artifact_bytes(
+            startup_raw, "soak raw configuration startup artifact"
+        )
+    )
+    endpoint_digest = hashlib.sha256(endpoint_raw).hexdigest()
+    if startup.endpoint_payload_sha256 != endpoint_digest:
+        _fail(
+            "startup-endpoint-hash-mismatch",
+            "soak startup artifact does not hash the bound endpoint bytes",
+        )
+    if startup_document["endpoint_payload"] != endpoint_document:
+        _fail(
+            "startup-endpoint-payload-mismatch",
+            "soak startup artifact does not embed the bound endpoint payload",
+        )
+    if endpoint.candidate_id != candidate_id or startup.candidate_id != candidate_id:
+        _fail(
+            "runtime-config-candidate-mismatch",
+            "soak configuration evidence candidate differs from the manifest candidate",
+        )
+    if endpoint.runtime_identity != startup.runtime_identity:
+        _fail(
+            "runtime-config-identity-mismatch",
+            "soak endpoint and startup artifact runtime identities differ",
+        )
+    identity = endpoint.runtime_identity
+    if identity["configuration_profile"] != bindings["configuration_profile"]:
+        _fail(
+            "runtime-config-profile-mismatch",
+            "soak configuration profile differs from the bound runtime identity",
+        )
+    if identity["configuration_sha256"] != bindings["configuration_sha256"]:
+        _fail(
+            "runtime-config-sha256-mismatch",
+            "soak configuration SHA-256 differs from the bound runtime identity",
+        )
+
+
+def _soak_terminal_manifest_name(manifest_path: str, label: str) -> str:
+    """Require a terminal raw soak manifest to be one root child JSON leaf."""
+
+    relative = _common(lambda: common.validate_relative_path(manifest_path, label))
+    if (
+        "/" in relative
+        or len(relative) > MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES
+        or SOAK_TERMINAL_MANIFEST_NAME_RE.fullmatch(relative) is None
+    ):
+        _fail(
+            "invalid-terminal-manifest-name",
+            f"{label} must be a nonhidden root direct-child .json name of at most "
+            f"{MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES} bytes",
+        )
+    return relative
+
+
+def _read_soak_completion_marker(
+    root_fd: int,
+    manifest: common.EvidenceDescriptor,
+) -> None:
+    """Require the exact durable sibling marker for a terminal soak manifest."""
+
+    manifest_name = _soak_terminal_manifest_name(
+        manifest.path, "soak completed manifest path"
+    )
+    marker_name = f"{manifest_name}.complete"
+    try:
+        marker_raw = _common(
+            lambda: common.read_bounded_regular_relative(
+                root_fd,
+                marker_name,
+                "soak raw manifest completion marker",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+    except C02ProvenanceError as error:
+        if getattr(error, "reason_code", None) == "missing-input":
+            _fail(
+                "missing-soak-completion-marker",
+                f"soak raw manifest requires exact sibling marker {marker_name!r}",
+            )
+        raise
+    marker = _common(
+        lambda: common.parse_canonical_json(
+            marker_raw,
+            "soak raw manifest completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    assert isinstance(marker, dict)
+    row = _exact(
+        marker,
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        "soak raw manifest completion marker",
+    )
+    if row["schema_version"] != SOAK_COMPLETION_MARKER_VERSION:
+        _fail(
+            "historical-soak-completion-version-rejected",
+            "soak raw manifest completion marker has an unsupported schema version",
+        )
+    if row["artifact_filename"] != manifest_name:
+        _fail(
+            "soak-completion-marker-mismatch",
+            "soak raw manifest completion marker does not bind its artifact leaf",
+        )
+    if _sha256(
+        row["artifact_sha256"], "soak raw manifest completion marker.artifact_sha256"
+    ) != manifest.sha256:
+        _fail(
+            "soak-completion-marker-mismatch",
+            "soak raw manifest completion marker does not bind exact manifest bytes",
+        )
+
+
 def _shutdown_completion_marker_basename(
     artifact: common.EvidenceDescriptor,
     marker: common.EvidenceDescriptor,
@@ -678,89 +874,159 @@ def _report(
     }
 
 
+def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
+    """Bind raw v2 soak leaves through one caller-held private-root FD.
+
+    This deliberately remains a *raw* verifier.  It does not require a
+    terminal manifest marker so focused fixtures can isolate raw-tree
+    validation.  Any production/terminal caller must use
+    :func:`verify_completed_soak_provenance_fd` instead.
+    """
+
+    manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "soak raw manifest")
+    row = _exact(
+        document,
+        {
+            "schema_version",
+            "capture_status",
+            "qualification_status",
+            "candidate_id",
+            "bindings",
+            "configuration_evidence",
+            "scenario_contract",
+            "scenarios",
+        },
+        "soak raw manifest",
+    )
+    if row["schema_version"] != SOAK_MANIFEST_VERSION:
+        _fail("historical-soak-v1-rejected", f"soak raw manifest must use {SOAK_MANIFEST_VERSION}")
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail("invalid-capture-status", "soak raw manifest must be captured/not-run")
+    candidate = _candidate_id(row["candidate_id"], "soak raw manifest.candidate_id")
+    bindings = _bindings(
+        row["bindings"],
+        "soak raw manifest.bindings",
+        allowed_profiles=SOAK_CONFIGURATION_PROFILES,
+    )
+    used = {manifest_descriptor.path}
+    _load_soak_configuration_evidence(
+        root_fd,
+        row["configuration_evidence"],
+        candidate_id=candidate,
+        bindings=bindings,
+        used_paths=used,
+    )
+    contract = _descriptor(row["scenario_contract"], "soak raw manifest.scenario_contract")
+    _read_opaque_leaf(root_fd, contract, "soak scenario contract", used)
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= MAX_SCENARIOS:
+        _fail("invalid-scenario-inventory", "soak raw manifest must contain a bounded nonempty scenario list")
+    scenario_ids: set[str] = set()
+    targets: list[dict[str, Any]] = []
+    for index, item in enumerate(scenarios):
+        label = f"soak raw manifest.scenarios[{index}]"
+        scenario = _exact(
+            item,
+            {"scenario_id", "target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index", "fallback_event_log"},
+            label,
+        )
+        scenario_id = scenario["scenario_id"]
+        if (
+            type(scenario_id) is not str
+            or len(scenario_id) > 128
+            or SCENARIO_ID_RE.fullmatch(scenario_id) is None
+            or scenario_id in scenario_ids
+        ):
+            _fail(
+                "invalid-scenario-inventory",
+                f"{label}.scenario_id must be a unique canonical scenario identifier",
+            )
+        scenario_ids.add(scenario_id)
+        fallback = scenario["fallback_event_log"]
+        if scenario_id == "exact-backend-fallback":
+            if bindings["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE:
+                _fail(
+                    "fallback-profile-mismatch",
+                    f"{label} requires {MAX_PERFORMANCE_EXACT_PROFILE}",
+                )
+            if fallback is None:
+                _fail("fallback-raw-leaf-missing", f"{label} lacks raw fallback event evidence")
+        declared_target = _target(scenario["target"], f"{label}.target")
+        session = _descriptor(scenario["observation_session"], f"{label}.observation_session")
+        _reserve(session, label=f"{label}.observation_session", used_paths=used)
+        observed_target = _load_session(root_fd, session, label, used)
+        if observed_target != declared_target:
+            _fail("session-target-mismatch", f"{label} declared target differs from raw observation session")
+        for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
+            _read_opaque_leaf(root_fd, _descriptor(scenario[key], f"{label}.{key}"), f"{label}.{key}", used)
+        if fallback is not None:
+            _read_opaque_leaf(root_fd, _descriptor(fallback, f"{label}.fallback_event_log"), f"{label}.fallback_event_log", used)
+        targets.append({"scenario_id": scenario_id, "target": declared_target.as_json()})
+    return _report(
+        schema_version=SOAK_REPORT_VERSION,
+        manifest=manifest_descriptor,
+        candidate_id=candidate,
+        bindings=bindings,
+        targets=targets,
+        check_names=(
+            "v2-version-only",
+            "canonical-descriptor-binding",
+            "capture-marker-closure",
+            "pid-start-tick-listener-gpu-binding",
+            "raw-workload-and-audit-leaves",
+            "runtime-config-candidate-profile-binding",
+            "configuration-profile-arm-binding",
+        ),
+    )
+
+
 def verify_soak_provenance(evidence_root: Path, manifest_path: str) -> dict[str, Any]:
-    """Bind raw v2 soak leaves without interpreting workload event semantics."""
+    """Path wrapper for the nonterminal raw verifier used by focused tests."""
 
     root_fd = _open_private_evidence_root(evidence_root, "evidence root")
     try:
-        manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "soak raw manifest")
-        row = _exact(
-            document,
-            {"schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "scenario_contract", "scenarios"},
-            "soak raw manifest",
+        return verify_soak_provenance_fd(root_fd, manifest_path)
+    finally:
+        os.close(root_fd)
+
+
+def verify_completed_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
+    """Verify a terminal raw soak manifest and its exact sibling marker."""
+
+    manifest_name = _soak_terminal_manifest_name(
+        manifest_path, "soak completed manifest path"
+    )
+    report = verify_soak_provenance_fd(root_fd, manifest_name)
+    manifest = _descriptor(report["raw_manifest"], "soak completed manifest descriptor")
+    _read_soak_completion_marker(root_fd, manifest)
+    # The marker is intentionally read after the raw verifier's first manifest
+    # read.  Re-read the manifest through the same held root before returning
+    # so a replacement between those two operations cannot splice a valid old
+    # marker onto a different current manifest.
+    final_manifest, _final_document = _read_manifest(
+        root_fd, manifest_name, "soak completed manifest final revalidation"
+    )
+    if final_manifest != manifest:
+        _fail(
+            "soak-manifest-changed-during-completion-verification",
+            "soak manifest changed while its completion marker was verified",
         )
-        if row["schema_version"] != SOAK_MANIFEST_VERSION:
-            _fail("historical-soak-v1-rejected", f"soak raw manifest must use {SOAK_MANIFEST_VERSION}")
-        if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
-            _fail("invalid-capture-status", "soak raw manifest must be captured/not-run")
-        candidate = _candidate_id(row["candidate_id"], "soak raw manifest.candidate_id")
-        bindings = _bindings(
-            row["bindings"],
-            "soak raw manifest.bindings",
-            allowed_profiles=SOAK_CONFIGURATION_PROFILES,
-        )
-        used = {manifest_descriptor.path}
-        contract = _descriptor(row["scenario_contract"], "soak raw manifest.scenario_contract")
-        _read_opaque_leaf(root_fd, contract, "soak scenario contract", used)
-        scenarios = row["scenarios"]
-        if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= MAX_SCENARIOS:
-            _fail("invalid-scenario-inventory", "soak raw manifest must contain a bounded nonempty scenario list")
-        scenario_ids: set[str] = set()
-        targets: list[dict[str, Any]] = []
-        for index, item in enumerate(scenarios):
-            label = f"soak raw manifest.scenarios[{index}]"
-            scenario = _exact(
-                item,
-                {"scenario_id", "target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index", "fallback_event_log"},
-                label,
-            )
-            scenario_id = scenario["scenario_id"]
-            if (
-                type(scenario_id) is not str
-                or len(scenario_id) > 128
-                or SCENARIO_ID_RE.fullmatch(scenario_id) is None
-                or scenario_id in scenario_ids
-            ):
-                _fail(
-                    "invalid-scenario-inventory",
-                    f"{label}.scenario_id must be a unique canonical scenario identifier",
-                )
-            scenario_ids.add(scenario_id)
-            fallback = scenario["fallback_event_log"]
-            if scenario_id == "exact-backend-fallback":
-                if bindings["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE:
-                    _fail(
-                        "fallback-profile-mismatch",
-                        f"{label} requires {MAX_PERFORMANCE_EXACT_PROFILE}",
-                    )
-                if fallback is None:
-                    _fail("fallback-raw-leaf-missing", f"{label} lacks raw fallback event evidence")
-            declared_target = _target(scenario["target"], f"{label}.target")
-            session = _descriptor(scenario["observation_session"], f"{label}.observation_session")
-            _reserve(session, label=f"{label}.observation_session", used_paths=used)
-            observed_target = _load_session(root_fd, session, label, used)
-            if observed_target != declared_target:
-                _fail("session-target-mismatch", f"{label} declared target differs from raw observation session")
-            for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
-                _read_opaque_leaf(root_fd, _descriptor(scenario[key], f"{label}.{key}"), f"{label}.{key}", used)
-            if fallback is not None:
-                _read_opaque_leaf(root_fd, _descriptor(fallback, f"{label}.fallback_event_log"), f"{label}.fallback_event_log", used)
-            targets.append({"scenario_id": scenario_id, "target": declared_target.as_json()})
-        return _report(
-            schema_version=SOAK_REPORT_VERSION,
-            manifest=manifest_descriptor,
-            candidate_id=candidate,
-            bindings=bindings,
-            targets=targets,
-            check_names=(
-                "v2-version-only",
-                "canonical-descriptor-binding",
-                "capture-marker-closure",
-                "pid-start-tick-listener-gpu-binding",
-                "raw-workload-and-audit-leaves",
-                "configuration-profile-arm-binding",
-            ),
-        )
+    # Check the marker one final time against the final manifest descriptor as
+    # well.  This catches a marker replacement during the manifest
+    # revalidation window; the last read still defines the verifier's exact
+    # observed state if another writer races after it returns.
+    _read_soak_completion_marker(root_fd, final_manifest)
+    return report
+
+
+def verify_completed_soak_provenance(
+    evidence_root: Path, manifest_path: str
+) -> dict[str, Any]:
+    """Path wrapper for the completed-only terminal raw soak verifier."""
+
+    root_fd = _open_private_evidence_root(evidence_root, "evidence root")
+    try:
+        return verify_completed_soak_provenance_fd(root_fd, manifest_path)
     finally:
         os.close(root_fd)
 
@@ -861,7 +1127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
         report = (
-            verify_soak_provenance(args.evidence_root, args.manifest)
+            verify_completed_soak_provenance(args.evidence_root, args.manifest)
             if args.kind == "soak"
             else verify_rollback_provenance(args.evidence_root, args.manifest)
         )

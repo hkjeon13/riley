@@ -22,13 +22,43 @@ Every v2 descriptor is exactly:
 
 The binder must hold one no-follow FD for an external, euid-owned, exact-0700
 evidence root for its entire parse.  It rejects symlinks, hard links, aliases,
-inode swaps, noncanonical manifest/session JSON, an unremoved
-`capture-incomplete.json`, and every v1 input before semantic replay.
+and noncanonical manifest/session JSON; each controlled leaf read detects an
+inode/path swap during that read.  These are point-in-time per-leaf checks, not
+an atomic cross-file snapshot, so the exact-0700 trusted-writer boundary remains
+part of the P1 threat model.  It also rejects an unremoved
+`capture-incomplete.json` and every v1 input before semantic replay.
+
+### Raw soak manifest binder v2
+
+`bind_raw_c02_soak_v2.py` accepts only a canonical
+`riley.soak-v2-bind-request.v2` path-only request.  It re-reads every declared
+endpoint, startup artifact, scenario contract, session, ledger, runtime-event,
+generation-audit, and optional fallback leaf through one held root FD, derives
+all manifest descriptors from those bytes, and creates one nonhidden root
+`NAME.json` manifest followed by `NAME.json.complete`.  The marker is exact
+canonical `riley.soak-v2-raw-provenance-complete.v2` JSON containing only
+`schema_version`, `artifact_filename`, and the artifact's SHA-256.  Both files
+are create-only and durable; a missing marker leaves the manifest incomplete.
+`benchmarks/release/candidates/soak-v2-bind-request-v2.schema.json` publishes
+the exact closed request shape; it carries paths and target tuples only, never
+caller-supplied evidence hashes/descriptors.
+
+The manifest must bind canonical `/v1/config` endpoint and startup-artifact
+bytes through the P0 byte-only APIs.  It derives `configuration_sha256` from
+`endpoint.runtime_identity.configuration_sha256` (never the effective-config
+digest or a caller field), and requires candidate/profile/runtime-identity and
+the startup embedded endpoint digest to agree.  This is **configuration-arm
+byte/identity binding only**: it does not prove that the config response was
+served by the same PID/listener as every scenario.  The existing observation
+session binds each scenario's PID/start-tick/listener/GPU tuple; a future raw
+runner plus semantic replay must provide any cross-endpoint same-process
+closure.
 
 ## Required raw evidence inventory
 
 | Scope | Create-only raw leaves to bind |
 | --- | --- |
+| Soak configuration arm | canonical raw `/v1/config` endpoint and its startup artifact; bind candidate/profile/runtime identity plus exact embedded endpoint payload/hash.  This is not a PID/listener assertion. |
 | Every observation sample | metrics response bytes; `/proc/<pid>/stat` before and after; `/proc/net/tcp` before and after; PID FD-to-socket snapshots before and after; `/proc/<pid>/status`; GPU **index+UUID** selection-query output; GPU compute-apps output; canonical sample/session descriptors. |
 | Every bound target | Derive, do not assert: `{server_pid, server_start_ticks, listener_inode, gpu_index, gpu_uuid}`.  Match both stat snapshots, both TCP snapshots, both FD socket snapshots, and the GPU PID row. |
 | Soak scenario | raw HTTP request/response ledger, native runtime event log, generation-audit index, and exact-backend-fallback event log when that scenario runs.  Those fields stay generic descriptors so the Rust sampling audit remains the source of event payload semantics. |
@@ -116,14 +146,20 @@ runtime configuration field or a trace counter.
 
 4. `ci/release/run_remote_c02_soak_v2.sh` (new) and
    `ci/release/bind_raw_c02_soak_v2.py` (new)
-   - The runner captures raw scenario material only; the binder emits
-     `riley.soak-v2-raw-provenance.v2`, never a semantic receipt.
+   - The future runner captures GPU/preflight and raw scenario material only;
+     the completed binder emits `riley.soak-v2-raw-provenance.v2`, never a
+     semantic receipt.  Its local `run_bind_raw_c02_soak_v2.sh` wrapper does
+     not start/stop a service or invoke GPU/SSH/container tools.
    - Bind each declared scenario target to its raw observation session and
      request/runtime/generation/fallback descriptor leaves.  Require fallback
      leaf presence for `exact-backend-fallback`.  The raw soak binder accepts
      only `stable-default` or `max-performance-exact`; that exact fallback
      scenario is valid only in the latter arm and still remains
      `qualification_status: not-run`.
+   - Bind canonical endpoint/startup configuration bytes and derive the arm
+     identity from the endpoint runtime identity.  Do not describe this as a
+     config-to-scenario PID/listener binding until the raw runner captures an
+     explicit same-process bridge.
 
 5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)

@@ -19,6 +19,7 @@ from unittest import mock
 sys.path.insert(0, str(Path(__file__).parent))
 
 import capture_c02_observations_v2 as capture  # noqa: E402
+import effective_runtime_config_contract as runtime_config  # noqa: E402
 
 
 def canonical(value: object) -> bytes:
@@ -417,6 +418,49 @@ class CaptureC02ObservationsV2Test(unittest.TestCase):
         }
         for name, raw in opaque.items():
             (self.evidence_root / name).write_bytes(raw)
+        effective_config = {
+            "execution_completion_mode": "iteration-batch",
+            "batch_shape": {"policy": "power-of-two", "buckets": [1, 8, 64]},
+            "metadata_transport": "packed-async",
+            "sampling_backend": "gpu-greedy",
+            "attention_backend": {
+                "prefill": "riley.attention.prefill-v1",
+                "decode": "riley.attention.decode-v1",
+            },
+            "gemm_reduction_policy": "strict-no-split-v1",
+            "experimental_flags": {},
+            "fallback_policy": {
+                "cross_profile_fallback": "forbidden",
+                "runtime_selection": "exact-fallback-allowed",
+            },
+            "batch_token_budget": 64,
+            "kv_geometry": {"layout": "paged", "block_tokens": 16, "physical_blocks": 512},
+        }
+        endpoint_document = {
+            "schema_version": runtime_config.ENDPOINT_VERSION,
+            "candidate_id": "riley-0.1.0-rc2",
+            "runtime_identity": {
+                "configuration_profile": "stable-default",
+                "configuration_sha256": "c" * 64,
+            },
+            "effective_config": effective_config,
+            "effective_config_sha256": hashlib.sha256(
+                runtime_config.canonical_json_bytes(effective_config)
+            ).hexdigest(),
+        }
+        endpoint_raw = runtime_config.canonical_json_bytes(endpoint_document)
+        startup_document = {
+            "schema_version": runtime_config.STARTUP_ARTIFACT_VERSION,
+            "created_at_utc": "2026-08-29T00:00:00Z",
+            "candidate_id": "riley-0.1.0-rc2",
+            "endpoint_path": "/v1/config",
+            "runtime_identity": endpoint_document["runtime_identity"],
+            "endpoint_payload_sha256": hashlib.sha256(endpoint_raw).hexdigest(),
+            "endpoint_payload": endpoint_document,
+        }
+        (self.evidence_root / "config-endpoint.json").write_bytes(endpoint_raw)
+        startup_raw = runtime_config.canonical_json_bytes(startup_document)
+        (self.evidence_root / "config-startup.json").write_bytes(startup_raw)
         session_raw = (self.evidence_root / self.request.capture_name / "session.json").read_bytes()
         manifest = {
             "schema_version": "riley.soak-v2-raw-provenance.v2",
@@ -428,6 +472,10 @@ class CaptureC02ObservationsV2Test(unittest.TestCase):
                 "base_release_candidate_report_sha256": "b" * 64,
                 "configuration_profile": "stable-default",
                 "configuration_sha256": "c" * 64,
+            },
+            "configuration_evidence": {
+                "endpoint": capture._descriptor("config-endpoint.json", endpoint_raw),
+                "startup_artifact": capture._descriptor("config-startup.json", startup_raw),
             },
             "scenario_contract": capture._descriptor("scenario-contract.json", opaque["scenario-contract.json"]),
             "scenarios": [
