@@ -4,7 +4,7 @@
 **의미 등급:** `reference`  
 **한 가지 목적:** Riley와 vLLM을 같은 조건에서 비교하고 M4 parity/M5 win을 기계적으로 판정하는 immutable benchmark contract를 만든다.
 
-[목차](README.md) | [다음: C02](02-rc3-candidate-qualification.md)
+[목차](README.md) | [다음: C02-P0](02a-effective-runtime-config-receipt.md)
 
 ## 1. 배경
 

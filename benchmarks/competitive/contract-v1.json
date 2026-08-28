@@ -1,0 +1,113 @@
+{
+  "$schema": "contract-v1.schema.json",
+  "schema_version": "riley.competitive.contract.v1",
+  "contract_id": "riley-vllm-competitive-v1",
+  "status": "planned",
+  "purpose": "Predeclare a fail-closed, same-campaign M4 parity and M5 win comparison between Riley and a pinned current vLLM baseline.",
+  "required_independent_runs": 5,
+  "orders": [
+    "AB",
+    "BA"
+  ],
+  "required_environment_keys": [
+    "gpu_uuid",
+    "gpu_model",
+    "compute_capability",
+    "gpu_count",
+    "driver_version",
+    "cuda_runtime_version",
+    "cuda_toolkit_version",
+    "container_image_digest",
+    "git_commit",
+    "source_archive_sha256",
+    "lane_command_sha256",
+    "engine_version",
+    "engine_revision",
+    "engine_options_sha256",
+    "model_id",
+    "model_revision",
+    "model_weights_sha256",
+    "tokenizer_revision",
+    "tokenizer_files_sha256",
+    "dtype",
+    "clock_policy",
+    "power_limit_watts"
+  ],
+  "identity_requirements": {
+    "candidate_lane_id": "riley",
+    "baseline_lane_id": "vllm-current",
+    "same_campaign_fields": [
+      "model_id",
+      "model_revision",
+      "model_weights_sha256",
+      "tokenizer_revision",
+      "tokenizer_files_sha256",
+      "prompt_token_ids_sha256",
+      "sampling",
+      "seed",
+      "requested_output_tokens",
+      "eos_policy",
+      "cache_policy",
+      "arrival_schedule_id",
+      "gpu_uuid",
+      "driver_version",
+      "cuda_runtime_version"
+    ],
+    "token_equivalence_policy": "exact-generated-token-hash-when-comparable"
+  },
+  "measurement_requirements": {
+    "percentile_method": "nearest-rank",
+    "statistics": [
+      "p50",
+      "p95",
+      "p99",
+      "median-of-independent-runs",
+      "geometric-mean-ratio"
+    ],
+    "warmup_excluded": true,
+    "engine_and_http_separate": true,
+    "failure_samples_excluded_from_success_percentiles": true
+  },
+  "m4": {
+    "ttft_p95_ratio_max": 1.03,
+    "tpot_p95_ratio_max": 1.03,
+    "slo_goodput_ratio_min": 0.97,
+    "peak_vram_ratio_max": 1.05,
+    "failure_count_max": 0,
+    "token_mismatch_count_max": 0,
+    "required_cell_selector": "all-expanded-cells-required-for-m4"
+  },
+  "m5": {
+    "ttft_p95_ratio_max": 0.9,
+    "tpot_p95_ratio_max": 0.9,
+    "slo_goodput_ratio_min": 1.1,
+    "peak_vram_ratio_max": 1.05,
+    "failure_count_max": 0,
+    "token_mismatch_count_max": 0,
+    "required_cell_selector": "all-expanded-cells-required-for-m5",
+    "aggregate": "geometric-mean-ratio-across-required-cells"
+  },
+  "matrix_manifests": [
+    "benchmarks/competitive/matrices/diagnostic-sm89-bf16-v1.json",
+    "benchmarks/competitive/matrices/latency-sm89-bf16-v1.json",
+    "benchmarks/competitive/matrices/serving-sm89-bf16-v1.json"
+  ],
+  "lane_manifests": [
+    "benchmarks/competitive/lanes/riley.json",
+    "benchmarks/competitive/lanes/vllm-current.json"
+  ],
+  "campaign_admission": {
+    "current_competitor_pin_required": true,
+    "model_identity_pin_required": true,
+    "request_manifest_schema_version": "riley.competitive.requests.v1",
+    "execution_plan_schema_version": "riley.competitive.execution-plan.v1",
+    "raw_record_schema_version": "riley.competitive.raw.v1",
+    "unknown_fields_rejected": true
+  },
+  "result_states": [
+    "passed",
+    "partial-win",
+    "failed",
+    "incomparable"
+  ]
+}
