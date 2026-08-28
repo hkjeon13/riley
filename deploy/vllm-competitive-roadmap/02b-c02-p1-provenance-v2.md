@@ -106,6 +106,30 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 향후 `run_remote_c02_soak_v2.sh`가 GPU UUID/used-memory preflight, exclusive
 lock, frozen arm의 `env -i`, 새 evidence root를 강제한다.
+그 lifecycle runner에 앞서 landed한
+`c02-raw-soak-runner-contract-v1.schema.json`과
+`capture_c02_raw_soak_scenarios_v1.py`는 이미 실행 중인 **단일** host process에서
+serial non-stream completion의 exact request/response bytes와 source-written
+generation-audit-v2 record/marker를 보존한다. 이는 runner나 GPU operation이
+아니며 `qualification_status: "not-run"`만 낸다. source audit record가
+`runtime_event_log` 원본이고, wrapper는 fallback event나 sampling summary를
+합성하지 않는다. producer는 completion 전후와 audit marker 확인 뒤의 raw
+PID/start-tick, loopback listener inode, `/proc/net/tcp`, PID FD-socket snapshot도
+보존한다. GPU query는 여기서 하지 않으며 held lock 아래 existing C02 observer가
+GPU tuple을 보존한다.
+
+v1 serial contract는 streaming, concurrency/cancel/disconnect,
+restart/rollback/multi-PID, `exact-backend-fallback`을 fail closed한다.
+특히 현재 source에는 generation-audit record와 별개인 native fallback-event leaf가
+없고 v3 binder는 fallback descriptor의 중복 재사용을 허용하지 않으므로, audit
+record를 복사하거나 config 문자열로 대체해서 fallback을 주장하면 안 된다. 이후
+lifecycle runner만 config bridge → scenario producer → per-scenario C02 observer
+→ source shutdown marker → versioned raw bind 순서를 하나의 held GPU lock 아래에서 연결한다.
+현재 v3 bind-request/manifest에는 scenario producer의 `session.json` field가 없어
+opaque ledger/index leaf만으로 이 producer를 terminal bind하면 안 된다. 다음
+versioned binder는 session descriptor, incomplete-marker closure, request/response
+ID-to-source-audit marker, contract inventory, 그리고 scenario PID/listener proof를
+explicit replay한 뒤에만 lifecycle runner output을 수용한다.
 `bind_raw_c02_soak_v2.py`는 그 runner를 대체하거나 service/GPU/SSH/container를
 조작하지 않는다. canonical `riley.soak-v2-bind-request.v3`의 path-only leaf를
 하나의 held private-root FD로 읽고, `riley.soak-v2-raw-provenance.v3` manifest와

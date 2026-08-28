@@ -68,6 +68,40 @@ semantic workload and Gate E replay remain later work.
 | Candidate shutdown | v2 shutdown artifact with PID **and start ticks**, final raw C02 metrics, plus a create-only matching completion marker whose hash covers the exact artifact bytes.  Use a nonhidden v2 marker name such as `shutdown.json.complete`; v1's hidden marker is historical-only. |
 | Rollback drill | candidate and rollback observation sequences, both HTTP/audit leaves, raw binary/bundle/image-inspect evidence for each phase, and raw `pre_active_stat`, `post_active_stat`, `candidate_staged_stat`, `rollback_staged_stat`, and successful rename transcript. |
 
+### Landed serial raw-scenario producer
+
+`c02-raw-soak-runner-contract-v1.schema.json` and the self-contained
+`capture_c02_raw_soak_scenarios_v1.py` close the first narrow producer gap for
+an **already-running** single host process.  The canonical contract binds one
+serial, non-stream `/v1/completions` request per scenario.  The producer keeps
+the exact emitted request bytes, response head/body bytes, a canonical ledger,
+and a canonical index over the source-written `cmpl-*.json` audit record plus
+its hash-bound completion marker.  It also keeps pre/post/final raw
+`/proc/<pid>/stat`, `/proc/net/tcp`, and PID FD-to-socket snapshots so the
+literal completion port is tied to the requested process while the audit
+marker becomes visible.  Its `runtime_event_log` is that original source audit
+record, never a wrapper-generated summary.  GPU evidence remains solely with
+the existing observation producer under the lifecycle runner's held lock; this
+local helper does not query or operate a GPU.
+
+This helper cannot start/stop a service, acquire a GPU lock, use Docker/SSH,
+or issue a qualification result.  It deliberately rejects streaming,
+restart/rollback/multi-PID semantics, and `exact-backend-fallback`: the v3
+binder requires a distinct fallback-event path, while the current source only
+publishes one generation-audit record/marker leaf.  A later lifecycle runner
+must perform the GPU/port/process preflight, run the config bridge before this
+producer, invoke a C02 metrics observation for each scenario, and own graceful
+shutdown before it can call a raw binder.
+
+The current v3 bind-request/manifest shape has no
+`scenario_capture_session_path`; it treats ledger/runtime/index leaves as
+opaque and therefore **must not** terminally bind this producer's leaves.  The
+next raw-binder version must take this session explicitly, reject its retained
+`capture-incomplete.json`, replay its source-audit marker/hash and contract
+inventory, and compare its PID/listener proof with the C02 observation tuple.
+Until then this is a nonterminal producer prerequisite, not a v3 candidate
+capture path.
+
 ### Shutdown v2 leaf contract
 
 The source-owned producer and raw binder share these published schemas:
@@ -147,12 +181,19 @@ runtime configuration field or a trace counter.
      fallback scenario.  Static `cross_profile_fallback: forbidden` config is
      not an event.
 
-4. `ci/release/run_remote_c02_soak_v2.sh` (new) and
-   `ci/release/bind_raw_c02_soak_v2.py` (new)
+4. `ci/release/run_remote_c02_soak_v2.sh` (new),
+   `capture_c02_raw_soak_scenarios_v1.py`, and
+   `ci/release/bind_raw_c02_soak_v2.py`
    - The future runner captures GPU/preflight and raw scenario material only;
      the completed binder emits `riley.soak-v2-raw-provenance.v3`, never a
      semantic receipt.  Its local `run_bind_raw_c02_soak_v2.sh` wrapper does
      not start/stop a service or invoke GPU/SSH/container tools.
+   - The landed serial scenario producer is local-to-an-already-running
+     service and emits no bind request or terminal manifest.  It is the only
+     layer that may pair a public response ID to the source-owned audit record
+     for this initial non-stream subset.  The v3 request must not consume it:
+     a subsequent versioned binder needs an explicit scenario-capture session
+     field before the lifecycle runner may add its observation-session paths.
    - Bind each declared scenario target to its raw observation session and
      request/runtime/generation/fallback descriptor leaves.  Require fallback
      leaf presence for `exact-backend-fallback`.  The raw soak binder accepts
