@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/soak-v2-receipt-v2.schema.json",
+  "title": "Riley C02 soak raw-provenance v2",
+  "description": "Versioned raw provenance input only. It cannot assert C02 qualification; the semantic checker must separately replay the reviewed workload and Gate E evidence.",
+  "oneOf": [
+    { "$ref": "#/$defs/rawManifest" },
+    { "$ref": "#/$defs/provenanceReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 16777216 }
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "targetTuple": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "gpu_index", "gpu_uuid"],
+      "properties": {
+        "server_pid": { "type": "integer", "minimum": 1 },
+        "server_start_ticks": { "type": "integer", "minimum": 1 },
+        "gpu_index": { "type": "integer", "minimum": 0 },
+        "gpu_uuid": { "type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$" }
+      }
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index", "fallback_event_log"],
+      "properties": {
+        "scenario_id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "target": { "$ref": "#/$defs/targetTuple" },
+        "observation_session": { "$ref": "#/$defs/descriptor" },
+        "request_ledger": { "$ref": "#/$defs/descriptor" },
+        "runtime_event_log": { "$ref": "#/$defs/descriptor" },
+        "generation_audit_index": { "$ref": "#/$defs/descriptor" },
+        "fallback_event_log": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/descriptor" }
+          ]
+        }
+      }
+    },
+    "rawManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "scenario_contract", "scenarios"],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-raw-provenance.v2" },
+        "capture_status": { "const": "captured" },
+        "qualification_status": { "const": "not-run" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "scenario_contract": { "$ref": "#/$defs/descriptor" },
+        "scenarios": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "items": { "$ref": "#/$defs/scenario" }
+        }
+      }
+    },
+    "boundCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "bound"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "bound": { "const": true }
+      }
+    },
+    "provenanceReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "qualification_status", "candidate_id", "bindings", "raw_manifest", "targets", "checks", "reason_codes"],
+      "properties": {
+        "schema_version": { "const": "riley.soak-v2-provenance-check.v2" },
+        "status": { "const": "bound" },
+        "qualification_status": { "const": "not-run" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "raw_manifest": { "$ref": "#/$defs/descriptor" },
+        "targets": { "type": "array", "minItems": 1, "maxItems": 32 },
+        "checks": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/boundCheck" } },
+        "reason_codes": { "const": [] }
+      }
+    }
+  }
+}
