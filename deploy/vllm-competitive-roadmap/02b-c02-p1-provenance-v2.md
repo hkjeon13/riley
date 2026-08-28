@@ -292,6 +292,28 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 
 `check_rc3_rollback_receipt_v2.py`는 frozen candidate가 pin한 baseline manifest를 replay하고, candidate drain/zero ownership, replacement process/socket, generation response, shutdown marker, filesystem switch를 raw leaf에서 재구성한다.
 
+#### Reconstructed RC2 compatibility boundary
+
+현재 reconstructed `riley-0.1.0-rc2` tag target (`6093006…`)에는
+`/v1/c02/metrics`, `--c02-audit-dir`, generation-audit-v2, shutdown-v2
+artifact surface가 없다. 반면 published rollback raw-provenance **v2**는 candidate와
+rollback 양쪽에 그 C02 observation-session-v2 grammar를 요구한다. 따라서
+reconstructed RC2를 v2 rollback runner에 직접 넣을 수 없으며, wrapper가 C02
+metrics/audit를 합성하거나 v1 receipt를 v2로 up-convert하는 것도 금지한다.
+
+v2의 closed schema를 이 legacy case에 맞춰 넓히지 않는다. v2 raw binder는
+C02-instrumented baseline만 raw descriptor binding으로 다룰 수 있고, actual
+reconstructed-tag rollback은 baseline-side health/generation/proc/socket/GPU raw
+surface를 명시하는 별도 versioned v3 contract로 추가한다. 그 semantic checker는
+후속 단계에서 baseline manifest, device/inode transition, health/generation bytes를
+재구성한다. 이 boundary가 닫히기 전에는 actual GPU rollback drill, candidate
+freeze, rollback success verdict를 실행하거나 주장하지 않는다.
+
+새 binder가 input replay → create-only manifest publication → self-verification을
+중간 root 재open 없이 수행할 수 있도록, existing v2 raw verifier also exposes a
+held-FD replay entry point. 그것은 raw descriptor 안전성만 보강하며 legacy RC2를
+v2-compatible하다고 바꾸거나 terminal/semantic authority를 만들지 않는다.
+
 ## 6. 변경 순서
 
 1. v2 schemas와 strict shared evidence primitive를 추가하고 v1 rejection policy를 문서화한다.

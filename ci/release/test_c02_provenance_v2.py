@@ -712,6 +712,20 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                 with self.assertRaises(checker.C02ProvenanceError) as raised:
                     checker.verify_soak_provenance(root, "soak/raw-manifest.json")
                 self.assert_reason(raised, "unsafe-evidence-root-mode")
+
+                root_fd = common.open_absolute_directory(
+                    root,
+                    "rollback provenance nonprivate held root",
+                )
+                try:
+                    with self.assertRaises(checker.C02ProvenanceError) as raised:
+                        checker.verify_rollback_provenance_fd(
+                            root_fd,
+                            "rollback/raw-manifest.json",
+                        )
+                    self.assert_reason(raised, "unsafe-evidence-root-mode")
+                finally:
+                    os.close(root_fd)
             finally:
                 os.chmod(root, 0o700)
 
@@ -802,6 +816,16 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             self.assertEqual(shutdown_verifier.call_count, 1)
             self.assertEqual(report["schema_version"], checker.ROLLBACK_REPORT_VERSION)
             self.assertEqual(report["targets"][0]["target"], self.target(1111, 2222))
+
+            root_fd = common.open_private_evidence_directory(
+                tree.root.resolve(),
+                "rollback provenance held evidence root",
+            )
+            try:
+                replayed_fd = checker.verify_rollback_provenance_fd(root_fd, manifest.path)
+            finally:
+                os.close(root_fd)
+            self.assertEqual(replayed_fd, report)
 
             manifest_document["schema_version"] = "riley.rc3-rollback-receipt.v1"
             historical = tree.put("rollback/historical-v1.json", manifest_document)

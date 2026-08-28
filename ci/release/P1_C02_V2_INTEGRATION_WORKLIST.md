@@ -187,6 +187,31 @@ paired-hardlink protocol. v1/v4 and the lifecycle-v4 receipt remain fallback
 rejecting, and v5 neither launches a service nor uses GPU/SSH/Docker nor makes
 a qualification decision.
 
+### Rollback raw compatibility boundary
+
+No rollback runner, binder, or semantic checker is landed yet. The existing
+`riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
+replayer: it binds stable-default, distinct candidate/rollback process tuples,
+the candidate shutdown-v2 pair, artifact maps, and five opaque switch leaves.
+It does not interpret health/generation/audit bytes, baseline identity, or
+atomic-rename success, and it has no terminal completion-marker protocol.
+
+More importantly, v2 requires a C02 observation-session-v2 for both phases.
+The reconstructed `riley-0.1.0-rc2` target (`6093006…`) has no
+`/v1/c02/metrics`, `--c02-audit-dir`, generation-audit-v2, or shutdown-v2
+surface. It is therefore incompatible with a direct v2 rollback capture.
+Synthesizing those leaves around the legacy binary, accepting a v1 receipt, or
+up-converting an old trace would violate the provenance boundary.
+
+The next rollback path must introduce a distinct, versioned baseline-observation
+contract (v3) for the reconstructed-tag case rather than widening v2. Its
+future runner may collect explicit baseline health/generation plus proc/socket/
+GPU raw leaves, but must not publish a rollback verdict. Before that binder is
+implemented, `verify_rollback_provenance_fd()` keeps all v2 input replay and
+self-verification on one held private root FD; the public path API remains only
+the safe open/close wrapper. This is a mechanical safety boundary, not
+compatibility approval or qualification evidence.
+
 ## Required raw evidence inventory
 
 | Scope | Create-only raw leaves to bind |

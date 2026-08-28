@@ -3418,86 +3418,103 @@ def verify_completed_soak_provenance_v5(
         os.close(root_fd)
 
 
+def verify_rollback_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
+    """Replay v2 rollback raw leaves through one caller-held private root FD.
+
+    A future raw binder must hold the evidence root lock across input replay,
+    create-only manifest publication, and self-verification.  Keeping that
+    sequence on this exact descriptor prevents a pathname re-open from
+    silently accepting a replacement evidence root.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "rollback provenance evidence root"
+        )
+    )
+    manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "rollback raw manifest")
+    row = _exact(
+        document,
+        {"schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "candidate", "rollback", "candidate_artifacts", "rollback_artifacts", "atomic_switch"},
+        "rollback raw manifest",
+    )
+    if row["schema_version"] != ROLLBACK_MANIFEST_VERSION:
+        _fail("historical-rollback-v1-rejected", f"rollback raw manifest must use {ROLLBACK_MANIFEST_VERSION}")
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail("invalid-capture-status", "rollback raw manifest must be captured/not-run")
+    candidate_id = _candidate_id(row["candidate_id"], "rollback raw manifest.candidate_id")
+    bindings = _bindings(
+        row["bindings"],
+        "rollback raw manifest.bindings",
+        allowed_profiles=ROLLBACK_CONFIGURATION_PROFILES,
+    )
+    used = {manifest_descriptor.path}
+
+    def server_phase(value: Any, label: str, *, candidate_phase: bool) -> TargetTuple:
+        fields = {"target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index"}
+        if candidate_phase:
+            fields |= {"shutdown_artifact", "shutdown_marker"}
+        phase = _exact(value, fields, label)
+        target = _target(phase["target"], f"{label}.target")
+        session = _descriptor(phase["observation_session"], f"{label}.observation_session")
+        _reserve(session, label=f"{label}.observation_session", used_paths=used)
+        if _load_session(root_fd, session, label, used).target != target:
+            _fail("session-target-mismatch", f"{label} target differs from raw observation session")
+        for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
+            _read_opaque_leaf(root_fd, _descriptor(phase[key], f"{label}.{key}"), f"{label}.{key}", used)
+        if candidate_phase:
+            _verify_c02_shutdown_v2_descriptors_fd(
+                root_fd,
+                _descriptor(phase["shutdown_artifact"], f"{label}.shutdown_artifact"),
+                _descriptor(phase["shutdown_marker"], f"{label}.shutdown_marker"),
+                target,
+                label,
+                used,
+            )
+        return target
+
+    candidate_target = server_phase(row["candidate"], "rollback candidate", candidate_phase=True)
+    rollback_target = server_phase(row["rollback"], "rollback prior artifact", candidate_phase=False)
+    if (candidate_target.pid, candidate_target.start_ticks) == (rollback_target.pid, rollback_target.start_ticks):
+        _fail("reused-candidate-process", "rollback must use a distinct PID/start-tick process identity")
+    for phase_name in ("candidate_artifacts", "rollback_artifacts"):
+        artifacts = _exact(row[phase_name], {"binary", "bundle", "image_inspect"}, phase_name)
+        for key in ("binary", "bundle", "image_inspect"):
+            _read_opaque_leaf(root_fd, _descriptor(artifacts[key], f"{phase_name}.{key}"), f"{phase_name}.{key}", used)
+    switch = _exact(
+        row["atomic_switch"],
+        {"pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript"},
+        "rollback atomic_switch",
+    )
+    for key in ("pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript"):
+        _read_opaque_leaf(root_fd, _descriptor(switch[key], f"rollback atomic_switch.{key}"), f"rollback atomic_switch.{key}", used)
+    return _report(
+        schema_version=ROLLBACK_REPORT_VERSION,
+        manifest=manifest_descriptor,
+        candidate_id=candidate_id,
+        bindings=bindings,
+        targets=[
+            {"phase": "candidate", "target": candidate_target.as_json()},
+            {"phase": "rollback", "target": rollback_target.as_json()},
+        ],
+        check_names=(
+            "v2-version-only",
+            "canonical-descriptor-binding",
+            "capture-marker-closure",
+            "candidate-and-rollback-process-tuples",
+            "shutdown-marker-binding",
+            "raw-atomic-switch-material",
+            "configuration-profile-arm-binding",
+        ),
+    )
+
+
 def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[str, Any]:
     """Bind v2 rollback raw leaves without trusting a self-authored timeline."""
 
     root_fd = _open_private_evidence_root(evidence_root, "evidence root")
     try:
-        manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "rollback raw manifest")
-        row = _exact(
-            document,
-            {"schema_version", "capture_status", "qualification_status", "candidate_id", "bindings", "candidate", "rollback", "candidate_artifacts", "rollback_artifacts", "atomic_switch"},
-            "rollback raw manifest",
-        )
-        if row["schema_version"] != ROLLBACK_MANIFEST_VERSION:
-            _fail("historical-rollback-v1-rejected", f"rollback raw manifest must use {ROLLBACK_MANIFEST_VERSION}")
-        if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
-            _fail("invalid-capture-status", "rollback raw manifest must be captured/not-run")
-        candidate_id = _candidate_id(row["candidate_id"], "rollback raw manifest.candidate_id")
-        bindings = _bindings(
-            row["bindings"],
-            "rollback raw manifest.bindings",
-            allowed_profiles=ROLLBACK_CONFIGURATION_PROFILES,
-        )
-        used = {manifest_descriptor.path}
-
-        def server_phase(value: Any, label: str, *, candidate_phase: bool) -> TargetTuple:
-            fields = {"target", "observation_session", "request_ledger", "runtime_event_log", "generation_audit_index"}
-            if candidate_phase:
-                fields |= {"shutdown_artifact", "shutdown_marker"}
-            phase = _exact(value, fields, label)
-            target = _target(phase["target"], f"{label}.target")
-            session = _descriptor(phase["observation_session"], f"{label}.observation_session")
-            _reserve(session, label=f"{label}.observation_session", used_paths=used)
-            if _load_session(root_fd, session, label, used).target != target:
-                _fail("session-target-mismatch", f"{label} target differs from raw observation session")
-            for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
-                _read_opaque_leaf(root_fd, _descriptor(phase[key], f"{label}.{key}"), f"{label}.{key}", used)
-            if candidate_phase:
-                _verify_c02_shutdown_v2_descriptors_fd(
-                    root_fd,
-                    _descriptor(phase["shutdown_artifact"], f"{label}.shutdown_artifact"),
-                    _descriptor(phase["shutdown_marker"], f"{label}.shutdown_marker"),
-                    target,
-                    label,
-                    used,
-                )
-            return target
-
-        candidate_target = server_phase(row["candidate"], "rollback candidate", candidate_phase=True)
-        rollback_target = server_phase(row["rollback"], "rollback prior artifact", candidate_phase=False)
-        if (candidate_target.pid, candidate_target.start_ticks) == (rollback_target.pid, rollback_target.start_ticks):
-            _fail("reused-candidate-process", "rollback must use a distinct PID/start-tick process identity")
-        for phase_name in ("candidate_artifacts", "rollback_artifacts"):
-            artifacts = _exact(row[phase_name], {"binary", "bundle", "image_inspect"}, phase_name)
-            for key in ("binary", "bundle", "image_inspect"):
-                _read_opaque_leaf(root_fd, _descriptor(artifacts[key], f"{phase_name}.{key}"), f"{phase_name}.{key}", used)
-        switch = _exact(
-            row["atomic_switch"],
-            {"pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript"},
-            "rollback atomic_switch",
-        )
-        for key in ("pre_active_stat", "post_active_stat", "candidate_staged_stat", "rollback_staged_stat", "rename_transcript"):
-            _read_opaque_leaf(root_fd, _descriptor(switch[key], f"rollback atomic_switch.{key}"), f"rollback atomic_switch.{key}", used)
-        return _report(
-            schema_version=ROLLBACK_REPORT_VERSION,
-            manifest=manifest_descriptor,
-            candidate_id=candidate_id,
-            bindings=bindings,
-            targets=[
-                {"phase": "candidate", "target": candidate_target.as_json()},
-                {"phase": "rollback", "target": rollback_target.as_json()},
-            ],
-            check_names=(
-                "v2-version-only",
-                "canonical-descriptor-binding",
-                "capture-marker-closure",
-                "candidate-and-rollback-process-tuples",
-                "shutdown-marker-binding",
-                "raw-atomic-switch-material",
-                "configuration-profile-arm-binding",
-            ),
-        )
+        return verify_rollback_provenance_fd(root_fd, manifest_path)
     finally:
         os.close(root_fd)
 
