@@ -1183,6 +1183,21 @@ const C02_GENERATION_AUDIT_SCHEMA_VERSION: &str = "riley.c02-generation-audit.v2
 #[cfg(any(feature = "cuda", test))]
 const C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION: &str =
     "riley.c02-generation-audit-completion.v2";
+// Keep these producer limits synchronized with
+// `benchmarks/release/candidates/c02-generation-audit-v2.schema.json`.
+//
+// `emitted_text_delta` is capped in Unicode scalar values, not UTF-8 bytes:
+// serde_json serializes Rust `String` values as valid JSON Unicode strings and
+// JSON Schema's `maxLength` is defined over Unicode characters. Rust's
+// `str::chars` counts exactly those scalar values for a valid Rust string.
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS: usize = 131_072;
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS: usize = 65_536;
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS: usize = 65_536;
+#[cfg(any(feature = "cuda", test))]
+const C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS: usize = 1_048_576;
 
 /// Linux process identity retained in each raw C02 audit leaf so a PID cannot
 /// be replayed after it has been reused by a later process.
@@ -1560,12 +1575,38 @@ impl C02GenerationAuditWriter {
     }
 }
 
+#[cfg(feature = "cuda")]
+fn validate_c02_generation_audit_schema_bounds(
+    record: &riley_server::engine::C02GenerationAuditRecord,
+) -> Result<(), String> {
+    if record.prompt_token_ids.len() > C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS {
+        return Err("C02 generation audit prompt token count exceeds its schema limit".to_owned());
+    }
+    if record.committed_output_tokens.len() > C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS {
+        return Err("C02 generation audit output token count exceeds its schema limit".to_owned());
+    }
+    if record.sampling_selections.len() > C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS {
+        return Err(
+            "C02 generation audit sampling selection count exceeds its schema limit".to_owned(),
+        );
+    }
+    if record.committed_output_tokens.iter().any(|token| {
+        token.emitted_text_delta.chars().count() > C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS
+    }) {
+        return Err("C02 generation audit emitted text delta exceeds its schema limit".to_owned());
+    }
+    Ok(())
+}
+
 #[cfg(all(feature = "cuda", unix))]
 impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
     fn write_record(
         &self,
         record: riley_server::engine::C02GenerationAuditRecord,
     ) -> Result<(), String> {
+        // Validate every schema capacity before creating the raw leaf. An
+        // oversize record must leave neither an evidence leaf nor a marker.
+        validate_c02_generation_audit_schema_bounds(&record)?;
         let record_basename = c02_generation_audit_record_basename(&record.server_request_id)?;
         let finish_reason = match record.finish_reason {
             riley_server::domain::FinishReason::Length => "length",
@@ -2150,6 +2191,9 @@ mod tests {
 
     use super::{
         BatchShapePolicyMode, C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION,
+        C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS,
+        C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS,
+        C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS, C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS,
         C02_GENERATION_AUDIT_SCHEMA_VERSION, C02AuditProcessIdentity, C02ConfigurationProfile,
         C02RuntimeConfigOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
         FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
@@ -2197,6 +2241,22 @@ mod tests {
         assert_eq!(
             schema["$defs"]["outputToken"]["required"],
             serde_json::json!(["token_id", "emitted_text_delta"])
+        );
+        assert_eq!(
+            schema["properties"]["prompt_token_ids"]["maxItems"],
+            serde_json::json!(C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS)
+        );
+        assert_eq!(
+            schema["properties"]["committed_output_tokens"]["maxItems"],
+            serde_json::json!(C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS)
+        );
+        assert_eq!(
+            schema["properties"]["sampling_selections"]["maxItems"],
+            serde_json::json!(C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS)
+        );
+        assert_eq!(
+            schema["$defs"]["outputToken"]["properties"]["emitted_text_delta"]["maxLength"],
+            serde_json::json!(C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS)
         );
         assert_eq!(
             schema["properties"]["process_identity"]["properties"]["start_ticks"]["minimum"],
@@ -2436,6 +2496,116 @@ mod tests {
         .expect("decode completion marker");
         assert_eq!(marker["artifact_filename"], "cmpl-writer-test.json");
         assert_eq!(marker["artifact_sha256"], c02_sha256_hex(&raw));
+        std::fs::remove_dir_all(&outer).expect("remove exact C02 writer test directory");
+    }
+
+    #[cfg(all(feature = "cuda", unix))]
+    #[test]
+    fn c02_generation_audit_writer_refuses_schema_oversize_without_evidence() {
+        use riley_server::domain::{FinishReason, TokenUsage};
+        use riley_server::engine::{
+            C02CommittedSamplingSelection, C02GenerationAuditDeliveryMode,
+            C02GenerationAuditRecord, C02GenerationAuditSink, C02GenerationAuditToken,
+            C02GpuGreedyIneligibility, C02SamplingBackend,
+        };
+
+        fn selection() -> C02CommittedSamplingSelection {
+            C02CommittedSamplingSelection {
+                iteration_id: 7,
+                configured_backend: C02SamplingBackend::GpuGreedy,
+                selected_backend: C02SamplingBackend::CpuNormative,
+                ineligibility_reason: Some(C02GpuGreedyIneligibility::NonZeroTemperature),
+                committed: true,
+            }
+        }
+
+        fn record(server_request_id: &str) -> C02GenerationAuditRecord {
+            C02GenerationAuditRecord {
+                server_request_id: server_request_id.to_owned(),
+                delivery_mode: C02GenerationAuditDeliveryMode::NonStream,
+                prompt_token_ids: vec![1],
+                committed_output_tokens: vec![C02GenerationAuditToken {
+                    token_id: 2,
+                    emitted_text_delta: "x".to_owned(),
+                }],
+                sampling_selections: vec![selection()],
+                finish_reason: FinishReason::Length,
+                usage: TokenUsage::new(1, 1).expect("small usage"),
+            }
+        }
+
+        let outer = c02_test_path("writer-oversize");
+        std::fs::create_dir(&outer).expect("create C02 writer test parent");
+        let evidence = outer.join("evidence");
+        create_private_c02_test_directory(&evidence);
+        let c02 = C02RuntimeConfigOptions {
+            candidate_id: "riley-1.2.3-rc4".to_owned(),
+            configuration_profile: C02ConfigurationProfile::MaxPerformanceExact,
+            startup_artifact: outer.join("startup.json"),
+        };
+        let identity = super::C02RuntimeIdentity {
+            configuration_profile: C02ConfigurationProfile::MaxPerformanceExact,
+            configuration_sha256: "a".repeat(64),
+        };
+        let writer = super::C02GenerationAuditWriter::new(
+            &evidence,
+            &c02,
+            &identity,
+            C02AuditProcessIdentity {
+                pid: 321,
+                start_ticks: 4242,
+            },
+        )
+        .expect("construct strict C02 writer");
+
+        let mut oversized_prompt = record("cmpl-oversized-prompt");
+        oversized_prompt.prompt_token_ids = vec![1; C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS + 1];
+
+        let mut oversized_output = record("cmpl-oversized-output");
+        oversized_output.committed_output_tokens = vec![
+            C02GenerationAuditToken {
+                token_id: 2,
+                emitted_text_delta: "x".to_owned(),
+            };
+            C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS
+                + 1
+        ];
+        oversized_output.sampling_selections =
+            vec![selection(); C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS + 1];
+
+        let mut oversized_selections = record("cmpl-oversized-selections");
+        oversized_selections.sampling_selections =
+            vec![selection(); C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS + 1];
+
+        let mut oversized_delta = record("cmpl-oversized-delta");
+        oversized_delta.committed_output_tokens[0].emitted_text_delta =
+            "x".repeat(C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS + 1);
+
+        for oversized in [
+            oversized_prompt,
+            oversized_output,
+            oversized_selections,
+            oversized_delta,
+        ] {
+            let record_basename =
+                c02_generation_audit_record_basename(&oversized.server_request_id)
+                    .expect("oversized test request ID is still a safe basename");
+            assert!(writer.write_record(oversized).is_err());
+            assert!(
+                !evidence.join(&record_basename).exists(),
+                "oversized record must not create its raw audit leaf"
+            );
+            assert!(
+                !evidence
+                    .join(
+                        c02_generation_audit_completion_basename(&record_basename)
+                            .expect("marker basename")
+                    )
+                    .exists(),
+                "oversized record must not create its completion marker"
+            );
+        }
+
         std::fs::remove_dir_all(&outer).expect("remove exact C02 writer test directory");
     }
 
