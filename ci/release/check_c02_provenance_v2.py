@@ -1184,14 +1184,37 @@ def _shutdown_completion_marker_basename(
     return artifact_basename
 
 
-def _parse_shutdown(
+@dataclass(frozen=True)
+class VerifiedC02ShutdownV2:
+    """One source-owned shutdown-v2 artifact and its bound completion leaf.
+
+    This is deliberately a raw replay result rather than a qualification
+    report.  The descriptors are derived from the held evidence-root FD, so a
+    lifecycle supervisor can retain their exact bytes without accepting a
+    caller-authored descriptor or target tuple.
+    """
+
+    artifact: common.EvidenceDescriptor
+    marker: common.EvidenceDescriptor
+    target: TargetTuple
+
+
+def _verify_c02_shutdown_v2_descriptors_fd(
     root_fd: int,
     artifact: common.EvidenceDescriptor,
     marker: common.EvidenceDescriptor,
     expected_target: TargetTuple,
     label: str,
     used_paths: set[str],
-) -> None:
+) -> VerifiedC02ShutdownV2:
+    """Replay declared shutdown descriptors without weakening manifest binding.
+
+    Manifest consumers already own their declared descriptors and collision
+    set, so they use this shared core instead of deriving replacement
+    descriptors from paths.  The public path API below derives those
+    descriptors only after it has pinned and validated a private root.
+    """
+
     artifact_basename = _shutdown_completion_marker_basename(artifact, marker, label)
     _reserve(artifact, label=f"{label} artifact", used_paths=used_paths)
     _reserve(marker, label=f"{label} marker", used_paths=used_paths)
@@ -1218,6 +1241,106 @@ def _parse_shutdown(
         _fail("shutdown-marker-mismatch", f"{label} marker does not bind exact shutdown artifact bytes")
     if not marker_raw:
         _fail("shutdown-marker-mismatch", f"{label} marker is empty")
+    return VerifiedC02ShutdownV2(
+        artifact=artifact,
+        marker=marker,
+        target=expected_target,
+    )
+
+
+def _shutdown_descriptor_from_path(
+    root_fd: int,
+    path: str,
+    label: str,
+) -> common.EvidenceDescriptor:
+    """Derive one bounded shutdown descriptor through the caller-held root."""
+
+    relative = _common(lambda: common.validate_relative_path(path, f"{label}.path"))
+    if len(relative) > MAX_RELATIVE_PATH_BYTES:
+        _fail(
+            "invalid-relative-path",
+            f"{label}.path exceeds {MAX_RELATIVE_PATH_BYTES} bytes",
+        )
+    raw = _common(
+        lambda: common.read_bounded_regular_relative(
+            root_fd,
+            relative,
+            label,
+            maximum_bytes=MAX_RAW_BYTES,
+        )
+    )
+    if not raw:
+        _fail("empty-evidence-leaf", f"{label} must bind nonempty raw evidence")
+    return common.descriptor_for_bytes(relative, raw, label)
+
+
+def verify_c02_shutdown_v2_fd(
+    root_fd: int,
+    artifact_path: str,
+    marker_path: str,
+    expected_target: TargetTuple,
+) -> VerifiedC02ShutdownV2:
+    """Verify one completed source-owned shutdown-v2 pair through held FDs.
+
+    ``expected_target`` must come from a separately replayed process bridge;
+    this helper never accepts a candidate, freeze, semantic verdict, or
+    caller-authored evidence descriptor.  It is intentionally suitable for a
+    lifecycle supervisor before it decides whether a later success receipt may
+    be emitted.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "C02 shutdown evidence root",
+        )
+    )
+    if not isinstance(expected_target, TargetTuple):
+        _fail(
+            "invalid-shutdown-target",
+            "C02 shutdown expected target must be a derived TargetTuple",
+        )
+    artifact = _shutdown_descriptor_from_path(
+        root_fd,
+        artifact_path,
+        "C02 shutdown artifact",
+    )
+    marker = _shutdown_descriptor_from_path(
+        root_fd,
+        marker_path,
+        "C02 shutdown completion marker",
+    )
+    return _verify_c02_shutdown_v2_descriptors_fd(
+        root_fd,
+        artifact,
+        marker,
+        expected_target,
+        "C02 shutdown",
+        set(),
+    )
+
+
+def verify_c02_shutdown_v2(
+    evidence_root: Path,
+    artifact_path: str,
+    marker_path: str,
+    expected_target: TargetTuple,
+) -> VerifiedC02ShutdownV2:
+    """Path wrapper for :func:`verify_c02_shutdown_v2_fd`."""
+
+    root_fd = _open_private_evidence_root(
+        evidence_root,
+        "C02 shutdown evidence root",
+    )
+    try:
+        return verify_c02_shutdown_v2_fd(
+            root_fd,
+            artifact_path,
+            marker_path,
+            expected_target,
+        )
+    finally:
+        os.close(root_fd)
 
 
 def _report(
@@ -2316,7 +2439,7 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
             for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
                 _read_opaque_leaf(root_fd, _descriptor(phase[key], f"{label}.{key}"), f"{label}.{key}", used)
             if candidate_phase:
-                _parse_shutdown(
+                _verify_c02_shutdown_v2_descriptors_fd(
                     root_fd,
                     _descriptor(phase["shutdown_artifact"], f"{label}.shutdown_artifact"),
                     _descriptor(phase["shutdown_marker"], f"{label}.shutdown_marker"),

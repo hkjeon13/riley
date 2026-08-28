@@ -380,6 +380,98 @@ def open_private_evidence_directory(path: Path, label: str) -> int:
         raise
 
 
+def create_private_evidence_directory(path: Path, label: str) -> int:
+    """Create and pin one fresh private evidence-root directory.
+
+    The final path component is create-only; every existing ancestor is
+    traversed through no-follow directory FDs and checked with the same
+    sticky-boundary policy as :func:`open_private_evidence_directory`.
+    The returned FD pins the new child inode for later ``openat`` operations.
+    Failures deliberately leave any newly created child in place rather than
+    replacing or removing evidence-path state.
+    """
+
+    components = _absolute_components(path, label)
+    if not components:
+        _fail(
+            "invalid-absolute-path",
+            f"{label} must name a new evidence-directory child, not filesystem root",
+        )
+    leaf = _validate_leaf_name(components[-1], f"{label} name")
+    flags = _directory_open_flags()
+    try:
+        parent_fd = os.open(os.path.sep, flags)
+    except OSError as error:
+        _fail("unsafe-evidence-directory", f"cannot open root for {label}: {error}")
+    child_fd: int | None = None
+    try:
+        _validate_private_evidence_ancestor(os.fstat(parent_fd), f"{label} ancestor /")
+        for component in components[:-1]:
+            try:
+                next_fd = os.open(component, flags, dir_fd=parent_fd)
+            except OSError as error:
+                _fail(
+                    "unsafe-evidence-directory",
+                    f"cannot open {label} component {component!r} without following links: {error}",
+                )
+            _close_quietly(parent_fd)
+            parent_fd = next_fd
+            _validate_private_evidence_ancestor(
+                os.fstat(parent_fd), f"{label} ancestor {component!r}"
+            )
+        try:
+            os.mkdir(leaf, 0o700, dir_fd=parent_fd)
+        except FileExistsError as error:
+            _fail("create-only-collision", f"cannot create new {label}: {error}")
+        except (NotImplementedError, TypeError) as error:
+            _fail(
+                "missing-directory-fd-support",
+                f"host cannot safely create {label} below a held parent FD: {error}",
+            )
+        except OSError as error:
+            _fail("unwritable-output", f"cannot create new {label}: {error}")
+        try:
+            child_fd = os.open(leaf, flags, dir_fd=parent_fd)
+        except OSError as error:
+            _fail(
+                "unsafe-evidence-directory",
+                f"cannot reopen newly created {label} without following links: {error}",
+            )
+        try:
+            try:
+                os.fchmod(child_fd, 0o700)
+            except OSError as error:
+                _fail("unsafe-evidence-root-mode", f"cannot make {label} mode 0700: {error}")
+            metadata = _require_directory_fd(child_fd, label)
+            if (
+                metadata.st_uid != os.geteuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o700
+                or metadata.st_nlink != 2
+            ):
+                _fail(
+                    "unsafe-evidence-root",
+                    f"{label} was not created as an effective-UID-owned private directory",
+                )
+            try:
+                visible = os.lstat(leaf, dir_fd=parent_fd)
+            except OSError as error:
+                _fail("raced-output", f"cannot re-inspect newly created {label}: {error}")
+            if (
+                not stat.S_ISDIR(visible.st_mode)
+                or (visible.st_dev, visible.st_ino) != (metadata.st_dev, metadata.st_ino)
+            ):
+                _fail("raced-output", f"{label} changed while it was created")
+            _fsync_checked(child_fd, label)
+            _fsync_checked(parent_fd, f"{label} parent directory")
+            assert child_fd is not None
+            return child_fd
+        except BaseException:
+            _close_quietly(child_fd)
+            raise
+    finally:
+        _close_quietly(parent_fd)
+
+
 def _open_relative_directory_chain(
     root_fd: int,
     components: Sequence[str],

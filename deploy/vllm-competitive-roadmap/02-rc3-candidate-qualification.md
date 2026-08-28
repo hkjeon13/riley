@@ -1,6 +1,6 @@
 # C02 — RC3 Candidate-bound Qualification
 
-**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. 그러나 C02-P1의 provenance v2/reconstructed baseline, frozen candidate, candidate-bound raw capture/semantic replay, qualification decision은 미완료다.<br>
+**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt도 CPU/static hostile-path 범위로 구현됐지만, provenance v2/reconstructed baseline 전체, frozen candidate, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 
@@ -118,23 +118,30 @@ symlink, hard link, sibling/subdirectory path, root parent swap은 replacement/c
 
 v2 observation sampler와 shutdown artifact producer는 원시 관측 surface일 뿐이며,
 `riley.soak-v2-receipt.v1` 또는 `riley.rc3-rollback-receipt.v1`을 실제로 생성하는
-producer는 아직 없다. 따라서 C02 candidate를 freeze하기 전, C01, C02-P0, C02-P1이 각각
-clean merge된 source에서 다음을 별도 mechanism 변경과 adversarial test로 닫아야 한다.
+producer는 아직 없다. initial v4 raw lifecycle/receipt는 이 historical receipt를
+up-convert하지 않으며, 여전히 semantic receipt 또는 C02 verdict가 아니다. 따라서 C02
+candidate를 freeze하기 전, C01, C02-P0, C02-P1이 각각 clean merge된 source에서 다음
+mechanism과 adversarial test를 닫아야 한다.
 
-- `run_remote_c02_soak_v2`와 binder는 GPU UUID/memory preflight, exclusive lock,
-  `env -i`, 새 private external evidence root를 강제하고, scenario별 raw observation
-  session·raw HTTP/audit·process identity를 create-only descriptor로 보존한다.
-  `capture_c02_config_endpoint_observation_v1.py`는 이미 실행 중인 loopback
-  server의 canonical `/v1/config` response를 pre/post PID/start-tick,
-  listener inode, GPU index/UUID raw leaves에 결박한다. v3 binder는 이 derived
-  tuple이 every scenario observation tuple과 같지 않으면 fail closed한다. 이것은
-  raw `bound`/`not-run` mechanism이고 candidate freeze나 semantic receipt가 아니다.
+- initial `run_remote_c02_soak_v2.sh`는 authenticated no-follow host lock과 `env -i`,
+  새 private external evidence root, host binary/model의 launch 전·후 safe hash/input
+  revalidation을 강제하는 host-binary raw supervisor로 구현됐다. 한 invocation은 frozen
+  contract의 한 serial scenario, 그 직후 한 C02 observation, 하나의 v4 manifest만
+  허용한다. `capture_c02_config_endpoint_observation_v1.py`는 loopback server의
+  canonical `/v1/config` response를 pre/post PID/start-tick, listener inode, GPU
+  index/UUID raw leaves에 결박하고, v4 binder는 derived tuple이 scenario observation과
+  같지 않으면 fail closed한다. same-process receipt finalizer만 successful v4 bind 뒤
+  source-owned shutdown-v2 artifact/marker를 replay하여 `completed`/
+  `qualification_status: not-run` receipt를 publish한다. 현재 이 경로는 CPU/static
+  hostile-path 검증만 마쳤으며, actual GPU capture, candidate freeze, Gate E replay,
+  semantic receipt 또는 C02 verdict가 아니다.
 - `run_remote_rc3_rollback_capture`와 binder는 candidate/rollback PID+start tick,
   listener/health/generation/audit raw bytes, shutdown artifact와 completion marker,
   atomic rename 전후 inode/stat provenance를 보존한다. worker/model 이름만 다른
   self-authored JSON은 증명이 아니다.
-- soak/rollback semantic contract와 checker는 위 descriptor를 no-follow hash replay로
-  필수 검증한다. 기존 v1 public schema를 불명확하게 약화하지 않고, 호환되지 않는
+- native fallback leaf, rollback raw runner/binder, soak/rollback semantic contract와
+  checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
+  필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
   provenance closure는 명시적 새 version으로 추가한다.
 
 이 단계는 raw receipt나 semantic report, candidate freeze, qualification decision을
@@ -352,11 +359,17 @@ ci/release/bind_raw_c02_fault_capture.py
 benchmarks/release/candidates/reconstructed-prior-baseline-v1.schema.json
 benchmarks/release/candidates/soak-v2-receipt-v3.schema.json
 benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json
+benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json
+benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json
 benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json
 benchmarks/release/candidates/rollback-receipt-v2.schema.json
 ci/release/check_reconstructed_prior_baseline.py
 ci/release/run_remote_c02_soak_v2.sh
 ci/release/bind_raw_c02_soak_v2.py
+ci/release/write_c02_lifecycle_supervisor_receipt_v1.py
+ci/release/prepare_c02_lifecycle_evidence_v1.py
+ci/release/verify_c02_lifecycle_launch_inputs_v1.py
+ci/release/verify_c02_lifecycle_shutdown_v1.py
 ci/release/capture_c02_config_endpoint_observation_v1.py
 ci/release/run_remote_c02_config_endpoint_observation_v1.sh
 ci/release/check_soak_v2_receipt_v2.py
@@ -385,7 +398,7 @@ final report는 다음 모든 receipt hash를 포함한다.
 - Qwen regression
 - Python-free E2E
 - performance regression
-- soak-v2 (v3 raw provenance; later semantic receipt remains a separate gate)
+- soak-v2 (initial v4 raw provenance와 same-process lifecycle receipt; later semantic receipt remains a separate gate)
 - fault injection
 - reproducible build
 - dependency manifest
@@ -423,4 +436,4 @@ qualification PR 안에서 production 코드를 고치지 않는다.
 
 최신 단일 Riley revision에 대해 release checker가 예외나 waiver 없이 `Gate E passed`, `Python-free passed`, `candidate qualified`를 반환할 때 완료다.
 
-현재 static schema/checker의 존재, fixture 통과, 또는 `riley-0.1.0-rc99` nonqualifying smoke는 이 완료 정의를 충족하지 않으며, actual qualification 완료를 뜻하지 않는다.
+현재 static schema/checker 또는 initial lifecycle supervisor/receipt의 존재와 CPU/static fixture 통과, 혹은 `riley-0.1.0-rc99` nonqualifying smoke는 이 완료 정의를 충족하지 않으며, actual GPU capture, frozen candidate 또는 qualification 완료를 뜻하지 않는다.

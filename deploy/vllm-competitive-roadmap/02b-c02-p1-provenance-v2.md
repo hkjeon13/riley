@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor와 raw receipt는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -114,8 +114,23 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 ### Soak v2
 
-향후 `run_remote_c02_soak_v2.sh`가 GPU UUID/used-memory preflight, exclusive
-lock, frozen arm의 `env -i`, 새 evidence root를 강제한다.
+`run_remote_c02_soak_v2.sh` initial lifecycle supervisor는 GPU UUID/used-memory
+preflight, authenticated no-follow host lock, frozen arm의 `env -i`, 새 private
+evidence root를 강제하도록 구현됐다. outer caller가 만든 sentinel이나 inherited
+lock FD를 신뢰하지 않고, clean Python supervisor가 canonical host lock을
+`O_NOFOLLOW`로 열어 inode/mode/owner와 nonblocking flock을 확인한 뒤 Bash child를
+인증한다. runner는 새 root와 source-audit child를 create-only로 만들고, host
+binary와 model tree의 safe ownership/permission/hash를 launch 전과 process exit 후에
+다시 확인한다.
+
+이 initial runner는 host binary만 실행하며 frozen canonical contract의 정확히 한
+serial non-stream scenario, 그 completion 직후 한 번의 C02 metrics observation,
+하나의 v4 raw manifest만 허용한다. config bridge, scenario producer, immediate
+observer, SIGTERM graceful shutdown, shutdown-v2 artifact/marker replay까지의 raw
+순서를 한 held host lock 아래에서 연결한다. 이는 CPU/static hostile-path로만
+검증된 구현이다. 아직 원격 GPU capture, candidate freeze, Gate E replay, semantic
+qualification을 실행하거나 주장하지 않는다.
+
 그 lifecycle runner에 앞서 landed한
 `c02-raw-soak-runner-contract-v1.schema.json`,
 `c02-raw-scenario-capture-v1.schema.json`과
@@ -133,12 +148,12 @@ v1 serial contract는 streaming, concurrency/cancel/disconnect,
 restart/rollback/multi-PID, `exact-backend-fallback`을 fail closed한다.
 특히 현재 source에는 generation-audit record와 별개인 native fallback-event leaf가
 없으므로 audit record를 복사하거나 config 문자열로 대체해서 fallback을 주장하면
-안 된다. 이후 lifecycle runner만 config bridge → scenario producer → C02 observer
-→ source shutdown marker → versioned raw bind 순서를 하나의 held GPU lock 아래에서
-연결한다. 단 첫 runner version은 **contract 1 scenario / observation 1회 / v4 manifest
-1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지 증명하지
-못하므로 aggregate/interleaved soak은 timing을 별도 증명하는 후속 v5/semantic contract로
-미룬다.
+안 된다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
+→ source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host
+lock 아래에서 연결한다. 첫 version은 **contract 1 scenario / observation 1회 / v4
+manifest 1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지
+증명하지 못하므로 aggregate/interleaved soak은 timing을 별도 증명하는 후속 v5/semantic
+contract로 미룬다.
 
 현재 v3 bind-request/manifest에는 scenario producer의 `session.json` field가 없어
 opaque ledger/index leaf만으로 이 producer를 terminal bind하면 안 된다. 따라서
@@ -192,6 +207,26 @@ initial serial subset에서는 `exact-backend-fallback`을 수용하지 않는�
 binding 조건일 뿐 semantic selection replay나 candidate qualification을 판정하지
 않는다. rollback raw provenance는 `stable-default` arm으로만 제한한다.
 
+### Initial lifecycle supervisor receipt v1
+
+`write_c02_lifecycle_supervisor_receipt_v1.py`와
+`c02-lifecycle-supervisor-receipt-v1.schema.json`은 initial runner의 raw-only
+terminal edge다. 이 writer는 독립된 나중 단계가 아니라 **같은 process**에서 먼저
+closed v4 binder를 호출하고, 성공한 v4 manifest를 held private-root FD로 replay한
+다음 source-owned shutdown-v2 artifact와 matching nonhidden completion marker를
+replay하여 receipt를 publish한다. 따라서 v4 final marker의
+`ambiguous-terminal-publication` 결과 뒤에 보이는 leaf를 다른 process가 성공
+lifecycle로 재해석할 수 없고, 그 경우 receipt는 생성되지 않는다.
+
+receipt는 v4 manifest, derived target, config endpoint/startup/bridge,
+한 scenario capture, 한 observation, shutdown artifact/marker의 exact descriptors만
+bind한다. schema 상태는 정확히 `status: "completed"`와
+`qualification_status: "not-run"`이다. 이는 좁은 raw lifecycle이 완료됐다는 뜻일
+뿐 fallback event의 존재, rollback 성공, candidate freeze, Gate E, semantic
+workload 판정 또는 C02 pass를 뜻하지 않는다. native fallback leaf, rollback raw
+runner, semantic checker/finalizer, clean candidate freeze와 실제 GPU capture는 이후
+versioned work로 남는다.
+
 lifecycle runner보다 먼저 `check_c02_config_bridge_v1.py`를 추가한다. 이 helper는
 private evidence root와 endpoint/startup/direct `<capture>/session.json` path, expected
 candidate/profile만 받아 held-FD로 config bridge를 pure replay하고 configuration SHA와
@@ -234,10 +269,12 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 3. typed sampling selection, private-FD generation audit, 그리고 source-owned
    shutdown v2 artifact/marker producer를 Rust source에 추가한다.
 4. v4 serial capture-session binder/schema와 hostile fixture tests를 추가한다.
-5. config endpoint process bridge와 soak/rollback raw runners·binders, hostile-
-   evidence tests를 추가한다.
-6. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
-7. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
+5. config endpoint process bridge, initial one-scenario lifecycle runner, same-process
+   v4/shutdown receipt closure와 hostile/static tests를 추가한다. 이 구현만으로는
+   GPU capture나 qualification을 실행하지 않는다.
+6. native fallback leaf와 rollback raw runner/binder를 추가한다.
+7. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
+8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
 ## 7. 완료 조건
 
@@ -249,6 +286,10 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 - max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2와 public generation bytes가 one-to-one으로 bind된다.
 - shutdown v2 artifact와 nonhidden completion marker는 same PID/start-tick tuple과
   exact final-metrics bytes를 bind하며, v1 artifact/hidden marker는 fail closed한다.
+- initial lifecycle receipt는 same-process successful-v4 edge에서만 shutdown
+  artifact/marker를 다시 bind하고 `completed`/`not-run` raw status만 낸다. CPU/static
+  tests 또는 receipt 존재만으로 GPU capture, freeze, fallback/rollback semantic result를
+  주장할 수 없다.
 - reconstructed baseline manifest는 previous stable artifact라고 주장하지 않으며, A/B reconstruction equality와 artifact provenance를 검증한다.
 - C02 finalizer가 soak-v2/rollback-v2만 수용하고 resulting final report에서 operational rollback과 historical-stable rollback status를 분리한다.
 - 이 단계는 candidate freeze, Gate E pass, C02 pass, vLLM win을 주장하지 않는다.

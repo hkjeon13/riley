@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -107,6 +108,116 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                 self.assert_reason(raised, "unsafe-evidence-ancestor")
             finally:
                 parent.chmod(0o700)
+
+    def test_create_private_evidence_directory_is_durable_private_and_held(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve(strict=True)
+            target = parent / "new-evidence"
+            parent_metadata = parent.stat()
+            synchronized: list[int] = []
+            real_fsync = os.fsync
+
+            def record_fsync(descriptor: int) -> None:
+                synchronized.append(os.fstat(descriptor).st_ino)
+                real_fsync(descriptor)
+
+            with mock.patch.object(common.os, "fsync", side_effect=record_fsync):
+                descriptor = common.create_private_evidence_directory(target, "new evidence root")
+            try:
+                metadata = os.fstat(descriptor)
+                self.assertTrue(stat.S_ISDIR(metadata.st_mode))
+                self.assertEqual(metadata.st_uid, os.geteuid())
+                self.assertEqual(stat.S_IMODE(metadata.st_mode), 0o700)
+                self.assertEqual(metadata.st_nlink, 2)
+                self.assertIn(metadata.st_ino, synchronized)
+                self.assertIn(parent_metadata.st_ino, synchronized)
+
+                moved = parent / "moved-evidence"
+                os.rename(target, moved)
+                target.mkdir(mode=0o700)
+                os.chmod(target, 0o700)
+                os.mkdir("through-held-fd", 0o700, dir_fd=descriptor)
+                self.assertTrue((moved / "through-held-fd").is_dir())
+                self.assertFalse((target / "through-held-fd").exists())
+            finally:
+                os.close(descriptor)
+
+    def test_create_private_evidence_directory_rejects_hostile_paths_and_collisions(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as outside_temporary:
+            parent = Path(temporary).resolve(strict=True)
+            outside = Path(outside_temporary).resolve(strict=True)
+            target = parent / "evidence"
+            target.mkdir(mode=0o700)
+            target.chmod(0o700)
+            with self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.create_private_evidence_directory(target, "collision")
+            self.assert_reason(raised, "create-only-collision")
+
+            target.rmdir()
+            target.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.create_private_evidence_directory(target, "symlink collision")
+            self.assert_reason(raised, "create-only-collision")
+            self.assertFalse((outside / "evidence").exists())
+            target.unlink()
+
+            link = parent / "linked-parent"
+            link.symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(common.ProvenanceV2Error) as raised:
+                common.create_private_evidence_directory(link / "child", "linked parent")
+            self.assert_reason(raised, "unsafe-evidence-directory")
+            self.assertFalse((outside / "child").exists())
+
+            unsafe_parent = parent / "unsafe-parent"
+            unsafe_parent.mkdir(mode=0o700)
+            unsafe_parent.chmod(0o777)
+            try:
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.create_private_evidence_directory(unsafe_parent / "child", "unsafe parent")
+                self.assert_reason(raised, "unsafe-evidence-ancestor")
+                self.assertFalse((unsafe_parent / "child").exists())
+            finally:
+                unsafe_parent.chmod(0o700)
+
+            with mock.patch.object(common.os, "O_NOFOLLOW", 0):
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.create_private_evidence_directory(parent / "missing-flag", "missing flag")
+            self.assert_reason(raised, "missing-open-safety-flag")
+            self.assertFalse((parent / "missing-flag").exists())
+
+    def test_create_private_evidence_directory_allows_owned_sticky_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve(strict=True)
+            parent.chmod(0o1777)
+            try:
+                descriptor = common.create_private_evidence_directory(parent / "evidence", "sticky parent")
+                try:
+                    metadata = os.fstat(descriptor)
+                    self.assertEqual(metadata.st_uid, os.geteuid())
+                    self.assertEqual(stat.S_IMODE(metadata.st_mode), 0o700)
+                finally:
+                    os.close(descriptor)
+            finally:
+                parent.chmod(0o700)
+
+    def test_create_private_evidence_directory_fails_closed_on_parent_sync_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve(strict=True)
+            parent_inode = parent.stat().st_ino
+            target = parent / "unsynced-evidence"
+            real_fsync = os.fsync
+
+            def fail_parent_sync(descriptor: int) -> None:
+                if os.fstat(descriptor).st_ino == parent_inode:
+                    raise OSError("fixture parent fsync failure")
+                real_fsync(descriptor)
+
+            with mock.patch.object(common.os, "fsync", side_effect=fail_parent_sync):
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.create_private_evidence_directory(target, "unsynced evidence root")
+            self.assert_reason(raised, "durability-failure")
+            self.assertTrue(target.is_dir())
+            self.assertEqual(stat.S_IMODE(target.stat().st_mode), 0o700)
 
     def test_final_symlink_is_rejected_without_reading_target(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,8 +1,10 @@
 # C02-P1 v2 raw-provenance integration worklist
 
-Status: read-only source audit plus `/tmp` design material.  This is **not** a
-qualification report and must not be copied into a candidate result directory
-as evidence.
+Status: initial v4 lifecycle-supervisor/receipt source is implemented and has
+CPU/static hostile-path coverage; this worklist remains design and integration
+material, not a qualification report. No actual GPU capture, candidate freeze,
+or semantic qualification has been performed, and this file must not be copied
+into a candidate result directory as evidence.
 
 ## Boundary to preserve
 
@@ -83,6 +85,34 @@ native fallback leaf is a later prerequisite, not a field that a wrapper may
 synthesize.  It remains raw `bound` / `not-run`; semantic workload and Gate E
 replay remain later work.
 
+### Landed initial lifecycle supervisor and receipt
+
+`run_remote_c02_soak_v2.sh` is the deliberately narrow host-binary supervisor.
+Its clean Python parent creates and authenticates one no-follow, nonblocking
+host GPU lock before it launches the Bash child; the child cannot forge its
+control sentinel or retain the lock FD. The runner uses `env -i`, creates a new
+no-follow private evidence root plus source-audit child, and revalidates the
+permitted host binary and model-tree inputs before launch and after process
+exit. It owns the C02 `serve` flags and SIGTERM shutdown; it does not accept a
+caller-supplied server command, configuration hash, PID/start-tick target, or
+GPU UUID.
+
+One invocation freezes exactly one canonical serial non-stream scenario, takes
+one immediate C02 observation, and produces at most one v4 raw manifest. Its
+terminal writer, `write_c02_lifecycle_supervisor_receipt_v1.py`, is the only
+same-process finalizer: it first binds v4, then replays the completed v4
+manifest and the source-owned shutdown artifact plus matching marker through
+the held private root FD. A v4 `ambiguous-terminal-publication` error therefore
+cannot be turned into a later successful lifecycle receipt. The published
+`riley.c02-lifecycle-supervisor-receipt.v1` is strictly `status: completed` and
+`qualification_status: not-run`.
+
+This is CPU/static hostile-path-tested mechanism code only. Receipt presence
+does not establish a GPU capture, candidate freeze, Gate E replay, native
+fallback event, rollback result, semantic qualification, or C02 decision.
+Native fallback/rollback flows, semantic checker/finalizer work, clean freeze,
+and remote GPU qualification remain subsequent gates.
+
 ## Required raw evidence inventory
 
 | Scope | Create-only raw leaves to bind |
@@ -115,20 +145,20 @@ This helper cannot start/stop a service, acquire a GPU lock, use Docker/SSH,
 or issue a qualification result.  It deliberately rejects streaming,
 restart/rollback/multi-PID semantics, and `exact-backend-fallback`: the v3
 binder requires a distinct fallback-event path, while the current source only
-publishes one generation-audit record/marker leaf.  A later lifecycle runner
-must perform the GPU/port/process preflight, run the config bridge before this
-producer, invoke a C02 metrics observation for each scenario, and own graceful
-shutdown before it can call a raw binder.
+publishes one generation-audit record/marker leaf. The landed initial lifecycle
+runner performs the GPU/port/process preflight, config bridge, one immediate
+C02 metrics observation, and graceful shutdown around exactly one producer
+scenario before it reaches the same-process raw finalizer.
 
-The first lifecycle runner is deliberately narrower than the producer: one
-runner invocation owns one canonical scenario, one immediately following C02
-observation, and one v4 manifest.  A multi-scenario producer capture followed
-by delayed observations cannot prove per-scenario timing, so aggregate or
-interleaved soak remains a later v5/semantic contract rather than an implied
-property of v4.
+The landed first lifecycle runner is deliberately narrower than the producer:
+one runner invocation owns one canonical scenario, one immediately following
+C02 observation, one v4 manifest, and one raw-only lifecycle receipt. A
+multi-scenario producer capture followed by delayed observations cannot prove
+per-scenario timing, so aggregate or interleaved soak remains a later
+v5/semantic contract rather than an implied property of v4.
 
-Before any lifecycle runner is added, `check_c02_config_bridge_v1.py` must
-publish a pure held-FD replay boundary for the existing config bridge.  It
+`check_c02_config_bridge_v1.py` publishes the pure held-FD replay boundary used
+by the landed lifecycle runner for the existing config bridge. It
 accepts only a private evidence root, endpoint/startup/session paths, expected
 candidate ID, and expected profile; the session is a direct
 `<capture>/session.json` child and the helper derives (rather than accepts)
@@ -137,15 +167,15 @@ Its canonical stdout report is diagnostic `bound` / `not-run` data, never an
 evidence leaf or a qualification verdict, and it must not invoke GPU, network,
 or subprocess tooling.  Its exact diagnostic report shape is published as
 `benchmarks/release/candidates/c02-config-bridge-replay-v1.schema.json`; the
-runner must consume the derived configuration SHA and target only from that
-report, never from caller input.
+runner consumes the derived configuration SHA and target only from that report,
+never from caller input.
 
 The v4 binder is the first terminal consumer for this producer: it takes one
 explicit `scenario_capture_session_path`, rejects a retained
 `capture-incomplete.json`, replays its source-audit marker/hash and contract
 inventory, and compares its PID/listener proof with the C02 observation tuple.
-Until v4 is landed, the producer remains a nonterminal prerequisite and is not
-a v3 candidate-capture path.
+The initial runner reaches it only through the same-process receipt writer; the
+producer is not a v3 candidate-capture path.
 
 ### Shutdown v2 leaf contract
 
@@ -238,8 +268,9 @@ runtime configuration field or a trace counter.
      not an event.
 
 4. `ci/release/bind_raw_c02_soak_v4.py`,
-   `capture_c02_raw_soak_scenarios_v1.py`, and
-   `ci/release/run_remote_c02_soak_v2.sh` (new)
+   `capture_c02_raw_soak_scenarios_v1.py`,
+   `ci/release/run_remote_c02_soak_v2.sh`, and
+   `ci/release/write_c02_lifecycle_supervisor_receipt_v1.py`
    - First publish the v4 request/manifest/marker schemas, strict binder, and
      hostile fixture tests.  The completed serial binder emits
      `riley.soak-v2-raw-provenance.v4`, never a semantic receipt.  Its local
@@ -255,16 +286,17 @@ runtime configuration field or a trace counter.
      v4-derived request/runtime/generation leaves.  The raw soak binder accepts
      only `stable-default` or `max-performance-exact` and remains
      `qualification_status: not-run`.
-   - Keep the first lifecycle invocation single-scenario: config bridge,
-     producer, one observation, shutdown, and one v4 manifest.  Do not claim
-     per-scenario timing or aggregate a multi-scenario capture until a later
-     versioned semantic contract proves that relationship.
+   - The landed first lifecycle invocation is single-scenario: config bridge,
+     producer, one immediate observation, shutdown, one v4 manifest, then the
+     same-process receipt binding v4 and the shutdown artifact/marker. It is
+     `completed`/`not-run` raw mechanism code only; do not claim per-scenario
+     timing, GPU capture, freeze, or qualification from it.
    - Bind canonical endpoint/startup configuration bytes and derive the arm
      identity from the endpoint runtime identity. The isolated
      `capture_c02_config_endpoint_observation_v1.py` captures the required
-     same-process bridge; the future runner must invoke it before binding
-     scenario material.
-   - First expose that bridge through `check_c02_config_bridge_v1.py`: strict
+     same-process bridge; the initial runner invokes it before binding scenario
+     material.
+   - Expose that bridge through `check_c02_config_bridge_v1.py`: strict
      held-FD replay of direct endpoint/startup/session paths derives the
      configuration SHA and observed target for the lifecycle runner.  It takes
      no caller-supplied SHA or target tuple and performs no operational action.
@@ -292,13 +324,15 @@ runtime configuration field or a trace counter.
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
    `benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`,
    `benchmarks/release/candidates/soak-v2-receipt-v4.schema.json`,
+   `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
    `benchmarks/release/candidates/README.md`, and
    `deploy/vllm-competitive-roadmap/02-rc3-candidate-qualification.md`
-   - Publish v4 serial raw-manifest and raw-binding report schemas separately
-     from later semantic receipts.  Retained v2/v3 schemas are historical for
-     the serial capture path and must not be accepted or upconverted.
+   - Publish v4 serial raw-manifest/raw-binding schemas and the separate
+     raw-only lifecycle receipt schema independently from later semantic
+     receipts. Retained v2/v3 schemas are historical for the serial capture
+     path and must not be accepted or upconverted.
    - State that v1/v2 historical soak artifacts are rejected and that raw binders do
      not qualify a candidate.  Any reconstructed baseline must be labelled
      reconstructed: remote history has RC tags/C02 dev images but no verified
@@ -309,10 +343,12 @@ runtime configuration field or a trace counter.
 1. Land strict common primitives plus focused hostile tests.
 2. Land Rust private-FD v2 audit/shutdown producer and unit tests.
 3. Land the v4 serial-session binder/schema and hostile fixture tests before
-   any lifecycle runner.
-4. Land v2 observation/remote lifecycle runner and raw binders.
-5. Land semantic soak/rollback replay and outer qualification v2-only policy.
-6. Freeze only the clean source revision after all mechanism tests pass; then
+   the initial lifecycle runner.
+4. Land the one-scenario v2 observation/remote lifecycle runner and its
+   same-process v4/shutdown receipt closure; retain CPU/static-only scope.
+5. Land native fallback and rollback raw capture/binding.
+6. Land semantic soak/rollback replay and outer qualification v2-only policy.
+7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
 
 ## Minimum adversarial tests

@@ -793,7 +793,13 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                 "atomic_switch": atomic_switch,
             }
             manifest = tree.put("rollback/raw-manifest.json", manifest_document)
-            report = checker.verify_rollback_provenance(tree.root.resolve(), manifest.path)
+            with mock.patch.object(
+                checker,
+                "_verify_c02_shutdown_v2_descriptors_fd",
+                wraps=checker._verify_c02_shutdown_v2_descriptors_fd,
+            ) as shutdown_verifier:
+                report = checker.verify_rollback_provenance(tree.root.resolve(), manifest.path)
+            self.assertEqual(shutdown_verifier.call_count, 1)
             self.assertEqual(report["schema_version"], checker.ROLLBACK_REPORT_VERSION)
             self.assertEqual(report["targets"][0]["target"], self.target(1111, 2222))
 
@@ -814,6 +820,136 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             with self.assertRaises(checker.C02ProvenanceError) as raised:
                 checker.verify_rollback_provenance(tree.root.resolve(), max_profile.path)
             self.assert_reason(raised, "invalid-configuration-profile")
+
+    def test_standalone_shutdown_v2_replay_derives_held_fd_descriptors(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = EvidenceTree(Path(temporary))
+            artifact = tree.put(
+                "candidate-phase/shutdown.json",
+                {
+                    "schema_version": checker.SHUTDOWN_VERSION,
+                    "capture_status": "captured",
+                    "qualification_status": "not-run",
+                    "server_pid": 1111,
+                    "server_start_ticks": 2222,
+                    "worker_ready": False,
+                    "final_metrics": metrics(),
+                },
+            )
+            marker = tree.put(
+                "candidate-phase/shutdown.json.complete",
+                {
+                    "schema_version": checker.SHUTDOWN_MARKER_VERSION,
+                    "artifact_filename": "shutdown.json",
+                    "artifact_sha256": artifact.sha256,
+                },
+            )
+            expected = checker.TargetTuple(
+                pid=1111,
+                start_ticks=2222,
+                gpu_index=0,
+                gpu_uuid=self.gpu_uuid,
+            )
+
+            replayed = checker.verify_c02_shutdown_v2(
+                tree.root.resolve(),
+                artifact.path,
+                marker.path,
+                expected,
+            )
+            self.assertEqual(replayed.artifact, artifact)
+            self.assertEqual(replayed.marker, marker)
+            self.assertEqual(replayed.target, expected)
+
+            root_fd = common.open_private_evidence_directory(
+                tree.root.resolve(),
+                "standalone shutdown evidence root",
+            )
+            try:
+                replayed_fd = checker.verify_c02_shutdown_v2_fd(
+                    root_fd,
+                    artifact.path,
+                    marker.path,
+                    expected,
+                )
+            finally:
+                os.close(root_fd)
+            self.assertEqual(replayed_fd, replayed)
+
+    def test_standalone_shutdown_v2_replay_preserves_marker_target_and_root_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = EvidenceTree(Path(temporary))
+            artifact_document = {
+                "schema_version": checker.SHUTDOWN_VERSION,
+                "capture_status": "captured",
+                "qualification_status": "not-run",
+                "server_pid": 1111,
+                "server_start_ticks": 2222,
+                "worker_ready": False,
+                "final_metrics": metrics(),
+            }
+            artifact = tree.put("candidate-phase/shutdown.json", artifact_document)
+            marker = tree.put(
+                "candidate-phase/shutdown.json.complete",
+                {
+                    "schema_version": checker.SHUTDOWN_MARKER_VERSION,
+                    "artifact_filename": "shutdown.json",
+                    "artifact_sha256": artifact.sha256,
+                },
+            )
+            expected = checker.TargetTuple(
+                pid=1111,
+                start_ticks=2222,
+                gpu_index=0,
+                gpu_uuid=self.gpu_uuid,
+            )
+
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_c02_shutdown_v2(
+                    tree.root.resolve(),
+                    artifact.path,
+                    marker.path,
+                    checker.TargetTuple(
+                        pid=9999,
+                        start_ticks=2222,
+                        gpu_index=0,
+                        gpu_uuid=self.gpu_uuid,
+                    ),
+                )
+            self.assert_reason(raised, "shutdown-target-mismatch")
+
+            bad_artifact = tree.put("bad-phase/shutdown.json", artifact_document)
+            bad_marker = tree.put(
+                "bad-phase/shutdown.json.complete",
+                {
+                    "schema_version": checker.SHUTDOWN_MARKER_VERSION,
+                    "artifact_filename": "shutdown.json",
+                    "artifact_sha256": "f" * 64,
+                },
+            )
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_c02_shutdown_v2(
+                    tree.root.resolve(),
+                    bad_artifact.path,
+                    bad_marker.path,
+                    expected,
+                )
+            self.assert_reason(raised, "shutdown-marker-mismatch")
+
+            root_fd = os.open(tree.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.chmod(tree.root, 0o755)
+                with self.assertRaises(checker.C02ProvenanceError) as raised:
+                    checker.verify_c02_shutdown_v2_fd(
+                        root_fd,
+                        artifact.path,
+                        marker.path,
+                        expected,
+                    )
+                self.assert_reason(raised, "unsafe-evidence-root-mode")
+            finally:
+                os.chmod(tree.root, 0o700)
+                os.close(root_fd)
 
     def test_shutdown_marker_descriptor_path_and_filename_mismatches_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
