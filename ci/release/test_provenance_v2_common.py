@@ -291,6 +291,101 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             finally:
                 os.close(root_fd)
 
+    def test_paired_hardlink_publication_and_reader_remain_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            raw = common.canonical_json_bytes({"artifact": "marker"})
+            try:
+                common.write_create_only(root_fd, "marker.intent", raw, "marker intent")
+                common.publish_create_only_hardlink(
+                    root_fd,
+                    "marker.intent",
+                    "marker.complete",
+                    "marker",
+                )
+                self.assertEqual(
+                    common.read_bounded_paired_hardlink(
+                        root_fd,
+                        "marker.complete",
+                        "marker.intent",
+                        "marker",
+                    ),
+                    raw,
+                )
+                common.write_create_only(root_fd, "collision.intent", raw, "collision intent")
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.publish_create_only_hardlink(
+                        root_fd,
+                        "collision.intent",
+                        "marker.complete",
+                        "marker",
+                    )
+                self.assert_reason(raised, "create-only-collision")
+
+                os.link(root / "marker.complete", root / "marker-third-link")
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.read_bounded_paired_hardlink(
+                        root_fd,
+                        "marker.complete",
+                        "marker.intent",
+                        "marker",
+                    )
+                self.assert_reason(raised, "invalid-paired-hardlink")
+                os.unlink(root / "marker-third-link")
+
+                os.unlink(root / "marker.complete")
+                os.unlink(root / "marker.intent")
+                (root / "first").write_bytes(raw)
+                (root / "second").write_bytes(raw)
+                os.chmod(root / "first", 0o600)
+                os.chmod(root / "second", 0o600)
+                os.link(root / "first", root / "marker.complete")
+                os.link(root / "first", root / "first-peer")
+                os.link(root / "second", root / "marker.intent")
+                os.link(root / "second", root / "second-peer")
+                os.unlink(root / "first")
+                os.unlink(root / "second")
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.read_bounded_paired_hardlink(
+                        root_fd,
+                        "marker.complete",
+                        "marker.intent",
+                        "marker",
+                    )
+                self.assert_reason(raised, "invalid-paired-hardlink")
+            finally:
+                os.close(root_fd)
+
+    def test_paired_hardlink_publication_rejects_unsafe_source_modes_and_links(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            try:
+                common.write_create_only(root_fd, "mode.intent", b"mode", "mode intent")
+                os.chmod(root / "mode.intent", 0o644)
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.publish_create_only_hardlink(
+                        root_fd,
+                        "mode.intent",
+                        "mode.complete",
+                        "mode marker",
+                    )
+                self.assert_reason(raised, "unsafe-output-mode")
+
+                common.write_create_only(root_fd, "linked.intent", b"linked", "linked intent")
+                os.link(root / "linked.intent", root / "linked-peer")
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.publish_create_only_hardlink(
+                        root_fd,
+                        "linked.intent",
+                        "linked.complete",
+                        "linked marker",
+                    )
+                self.assert_reason(raised, "nonunique-evidence-inode")
+            finally:
+                os.close(root_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

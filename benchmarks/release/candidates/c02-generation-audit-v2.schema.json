@@ -63,7 +63,7 @@
     "usage": { "$ref": "#/$defs/usage" }
   },
   "$defs": {
-    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$", "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } },
     "tokenId": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
     "outputToken": {
       "type": "object",

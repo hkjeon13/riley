@@ -28,34 +28,60 @@ an atomic cross-file snapshot, so the exact-0700 trusted-writer boundary remains
 part of the P1 threat model.  It also rejects an unremoved
 `capture-incomplete.json` and every v1 input before semantic replay.
 
-### Raw soak manifest binder v3 and configuration process bridge
+### Raw soak manifest binder v3 and serial-scenario binder v4
 
-`bind_raw_c02_soak_v2.py` accepts only a canonical
-`riley.soak-v2-bind-request.v3` path-only request.  It re-reads every declared
-endpoint, startup artifact, configuration endpoint observation, scenario
-contract, session, ledger, runtime-event, generation-audit, and optional
-fallback leaf through one held root FD, derives
-all manifest descriptors from those bytes, and creates one nonhidden root
-`NAME.json` manifest followed by `NAME.json.complete`.  The marker is exact
-canonical `riley.soak-v2-raw-provenance-complete.v3` JSON containing only
-`schema_version`, `artifact_filename`, and the artifact's SHA-256.  Both files
-are create-only and durable; a missing marker leaves the manifest incomplete.
-`benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json` publishes
-the exact closed request shape; it carries paths and target tuples only, never
-caller-supplied evidence hashes/descriptors.
-The former v2 bind request, raw manifest, completion marker, and check report
-are historical-only and are rejected rather than widened in place.
+`bind_raw_c02_soak_v2.py` and its canonical
+`riley.soak-v2-bind-request.v3` input remain a closed configuration-process
+bridge.  They may bind the existing v3 observation-session shape, but they
+**must not** consume `riley.c02-raw-scenario-capture.v1`.  In particular, v3's
+caller-declared ledger/runtime/index leaves are opaque, so accepting the new
+producer there would make a terminal manifest without replaying the producer's
+closure.  Both the v3 binder and verifier therefore reject the v1 serial
+contract, request-ledger, and generation-audit-index schema versions before
+publication or terminal verification; the generic historical runtime-event
+leaf itself remains unchanged.  v2 and v3 must not be widened in place.
 
-The manifest must bind canonical `/v1/config` endpoint and startup-artifact
-bytes through the P0 byte-only APIs.  It derives `configuration_sha256` from
-`endpoint.runtime_identity.configuration_sha256` (never the effective-config
-digest or a caller field), and requires candidate/profile/runtime-identity and
-the startup embedded endpoint digest to agree.  This is configuration-arm
-byte/identity binding plus a raw process bridge.  The v3 bridge preserves the
-exact loopback request/head/body relation and pre/post PID, listener and GPU
-facts; its derived `(PID,start-tick,listener port/inode,GPU index/UUID)` must
-equal every scenario observation tuple.  It remains raw `bound` / `not-run`;
-semantic workload and Gate E replay remain later work.
+The serial non-stream path therefore uses a separate v4 contract:
+`riley.soak-v2-bind-request.v4`,
+`riley.soak-v2-raw-provenance.v4`, and
+`riley.soak-v2-raw-provenance-complete.v4`.  The v4 request has one top-level
+`scenario_capture_session_path`, rather than repeating that descriptor in each
+scenario; it has no caller-supplied scenario-contract, ledger, runtime-event,
+or generation-audit path.  Each v4 scenario contains only its canonical
+`scenario_id` and its C02 `observation_session_path`.  The binder derives every
+other descriptor from the one session through one held root FD and publishes a
+create-only root `NAME.json` plus `NAME.json.complete` marker.
+
+Every v4 `*_session_path` is exactly one direct
+`<capture>/session.json` child below the private root.  The source audit
+record/marker pair must live in one *different* direct-child audit directory
+for the entire serial capture; it cannot borrow the capture directory or mix
+audit parents across scenarios.  While a nonblocking exclusive root lock is
+held, both terminal output names must be absent before a manifest is created.
+
+Before publication v4 must require the session's parent capture directory to
+have no `capture-incomplete.json`, validate the exact v1 session and its
+contract inventory, derive each ledger/request/response ID, source audit
+record, and hash-bound audit marker, and prove every session PID/start-tick/
+loopback-listener tuple agrees with the corresponding observation tuple and
+the v3 configuration bridge.  Candidate ID, profile, configuration SHA-256,
+completion port, GPU index/UUID, and scenario order/IDs must agree as well.
+The full config-bridge/serial/observation tuple replay completes before any
+output is created.  v4 publishes its completion marker through a separately
+durable, nonterminal intent leaf and a create-only linked final marker: a
+pre-publication file-sync failure therefore leaves no final marker at all.
+If the final marker has become visible but its parent-directory sync reports
+an error, the binder returns the distinct nonzero
+`ambiguous-terminal-publication` result and no lifecycle success receipt may
+be emitted.  The raw verifier treats that paired intent/final marker shape as
+an evidence format only; a later qualification/finalizer must additionally
+require the runner's successful-supervisor receipt, rather than interpreting
+a visible marker after that ambiguous result as lifecycle authority.
+The initial v4
+subset rejects `exact-backend-fallback` entirely: its source-owned distinct
+native fallback leaf is a later prerequisite, not a field that a wrapper may
+synthesize.  It remains raw `bound` / `not-run`; semantic workload and Gate E
+replay remain later work.
 
 ## Required raw evidence inventory
 
@@ -70,7 +96,8 @@ semantic workload and Gate E replay remain later work.
 
 ### Landed serial raw-scenario producer
 
-`c02-raw-soak-runner-contract-v1.schema.json` and the self-contained
+`c02-raw-soak-runner-contract-v1.schema.json`, the published
+`c02-raw-scenario-capture-v1.schema.json`, and the self-contained
 `capture_c02_raw_soak_scenarios_v1.py` close the first narrow producer gap for
 an **already-running** single host process.  The canonical contract binds one
 serial, non-stream `/v1/completions` request per scenario.  The producer keeps
@@ -93,14 +120,29 @@ must perform the GPU/port/process preflight, run the config bridge before this
 producer, invoke a C02 metrics observation for each scenario, and own graceful
 shutdown before it can call a raw binder.
 
-The current v3 bind-request/manifest shape has no
-`scenario_capture_session_path`; it treats ledger/runtime/index leaves as
-opaque and therefore **must not** terminally bind this producer's leaves.  The
-next raw-binder version must take this session explicitly, reject its retained
-`capture-incomplete.json`, replay its source-audit marker/hash and contract
-inventory, and compare its PID/listener proof with the C02 observation tuple.
-Until then this is a nonterminal producer prerequisite, not a v3 candidate
-capture path.
+The first lifecycle runner is deliberately narrower than the producer: one
+runner invocation owns one canonical scenario, one immediately following C02
+observation, and one v4 manifest.  A multi-scenario producer capture followed
+by delayed observations cannot prove per-scenario timing, so aggregate or
+interleaved soak remains a later v5/semantic contract rather than an implied
+property of v4.
+
+Before any lifecycle runner is added, `check_c02_config_bridge_v1.py` must
+publish a pure held-FD replay boundary for the existing config bridge.  It
+accepts only a private evidence root, endpoint/startup/session paths, expected
+candidate ID, and expected profile; the session is a direct
+`<capture>/session.json` child and the helper derives (rather than accepts)
+the configuration SHA-256 and observed PID/start-tick/listener/GPU tuple.
+Its canonical stdout report is diagnostic `bound` / `not-run` data, never an
+evidence leaf or a qualification verdict, and it must not invoke GPU, network,
+or subprocess tooling.
+
+The v4 binder is the first terminal consumer for this producer: it takes one
+explicit `scenario_capture_session_path`, rejects a retained
+`capture-incomplete.json`, replays its source-audit marker/hash and contract
+inventory, and compares its PID/listener proof with the C02 observation tuple.
+Until v4 is landed, the producer remains a nonterminal prerequisite and is not
+a v3 candidate-capture path.
 
 ### Shutdown v2 leaf contract
 
@@ -181,30 +223,37 @@ runtime configuration field or a trace counter.
      fallback scenario.  Static `cross_profile_fallback: forbidden` config is
      not an event.
 
-4. `ci/release/run_remote_c02_soak_v2.sh` (new),
+4. `ci/release/bind_raw_c02_soak_v4.py`,
    `capture_c02_raw_soak_scenarios_v1.py`, and
-   `ci/release/bind_raw_c02_soak_v2.py`
-   - The future runner captures GPU/preflight and raw scenario material only;
-     the completed binder emits `riley.soak-v2-raw-provenance.v3`, never a
-     semantic receipt.  Its local `run_bind_raw_c02_soak_v2.sh` wrapper does
-     not start/stop a service or invoke GPU/SSH/container tools.
+   `ci/release/run_remote_c02_soak_v2.sh` (new)
+   - First publish the v4 request/manifest/marker schemas, strict binder, and
+     hostile fixture tests.  The completed serial binder emits
+     `riley.soak-v2-raw-provenance.v4`, never a semantic receipt.  Its local
+     wrapper does not start/stop a service or invoke GPU/SSH/container tools.
    - The landed serial scenario producer is local-to-an-already-running
      service and emits no bind request or terminal manifest.  It is the only
      layer that may pair a public response ID to the source-owned audit record
-     for this initial non-stream subset.  The v3 request must not consume it:
-     a subsequent versioned binder needs an explicit scenario-capture session
-     field before the lifecycle runner may add its observation-session paths.
-   - Bind each declared scenario target to its raw observation session and
-     request/runtime/generation/fallback descriptor leaves.  Require fallback
-     leaf presence for `exact-backend-fallback`.  The raw soak binder accepts
-     only `stable-default` or `max-performance-exact`; that exact fallback
-     scenario is valid only in the latter arm and still remains
+     for this initial non-stream subset.  v3 must not consume it.  v4 derives
+     contract/ledger/runtime/index leaves from one explicit capture session
+     and admits only its serial non-stream scenarios; it rejects
+     `exact-backend-fallback` until Rust publishes a separate native leaf.
+   - Bind each declared scenario target to its raw observation session and the
+     v4-derived request/runtime/generation leaves.  The raw soak binder accepts
+     only `stable-default` or `max-performance-exact` and remains
      `qualification_status: not-run`.
+   - Keep the first lifecycle invocation single-scenario: config bridge,
+     producer, one observation, shutdown, and one v4 manifest.  Do not claim
+     per-scenario timing or aggregate a multi-scenario capture until a later
+     versioned semantic contract proves that relationship.
    - Bind canonical endpoint/startup configuration bytes and derive the arm
      identity from the endpoint runtime identity. The isolated
      `capture_c02_config_endpoint_observation_v1.py` captures the required
      same-process bridge; the future runner must invoke it before binding
      scenario material.
+   - First expose that bridge through `check_c02_config_bridge_v1.py`: strict
+     held-FD replay of direct endpoint/startup/session paths derives the
+     configuration SHA and observed target for the lifecycle runner.  It takes
+     no caller-supplied SHA or target tuple and performs no operational action.
 
 5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)
@@ -225,15 +274,16 @@ runtime configuration field or a trace counter.
      an explicit historical-v1 rejection reason before generic gate failure.
    - Replace all existing no-follow fallback flag patterns.
 
-7. `benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json`,
-   `benchmarks/release/candidates/soak-v2-receipt-v3.schema.json`,
+7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
+   `benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`,
+   `benchmarks/release/candidates/soak-v2-receipt-v4.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
    `benchmarks/release/candidates/README.md`, and
    `deploy/vllm-competitive-roadmap/02-rc3-candidate-qualification.md`
-   - Publish v3 raw-manifest and raw-binding report schemas separately from
-     later semantic receipts.  The retained v2 soak schemas are historical
-     only and must not be accepted or upconverted.
+   - Publish v4 serial raw-manifest and raw-binding report schemas separately
+     from later semantic receipts.  Retained v2/v3 schemas are historical for
+     the serial capture path and must not be accepted or upconverted.
    - State that v1/v2 historical soak artifacts are rejected and that raw binders do
      not qualify a candidate.  Any reconstructed baseline must be labelled
      reconstructed: remote history has RC tags/C02 dev images but no verified
@@ -243,9 +293,9 @@ runtime configuration field or a trace counter.
 
 1. Land strict common primitives plus focused hostile tests.
 2. Land Rust private-FD v2 audit/shutdown producer and unit tests.
-3. Land v2 observation/remote capture runners and raw binders.
-4. Land schema + binder unit tests, including known-good fixtures only in
-   temporary/nonqualification paths.
+3. Land the v4 serial-session binder/schema and hostile fixture tests before
+   any lifecycle runner.
+4. Land v2 observation/remote lifecycle runner and raw binders.
 5. Land semantic soak/rollback replay and outer qualification v2-only policy.
 6. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

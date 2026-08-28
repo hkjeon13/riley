@@ -158,8 +158,12 @@ def _configuration_profile(value: Any, label: str) -> str:
 
 
 def _sha256(value: Any, label: str) -> str:
-    if type(value) is not str or SHA256_RE.fullmatch(value) is None:
-        _fail(f"{label} must be a lowercase SHA-256")
+    if (
+        type(value) is not str
+        or SHA256_RE.fullmatch(value) is None
+        or value == "0" * 64
+    ):
+        _fail(f"{label} must be a non-zero lowercase SHA-256")
     return value
 
 

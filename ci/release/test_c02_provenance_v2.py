@@ -982,13 +982,20 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         for name in (
             "soak-v2-receipt-v2.schema.json",
             "soak-v2-receipt-v3.schema.json",
+            "soak-v2-receipt-v4.schema.json",
+            "soak-v2-bind-request-v4.schema.json",
+            "c02-raw-scenario-capture-v1.schema.json",
             "rollback-receipt-v2.schema.json",
             "c02-config-endpoint-observation-v1.schema.json",
         ):
             with self.subTest(name=name):
                 document = json.loads((directory / name).read_text(encoding="utf-8"))
                 self.assertEqual(document["$schema"], "https://json-schema.org/draft/2020-12/schema")
-                self.assertEqual(document["$defs"]["descriptor"]["properties"]["byte_length"]["minimum"], 1)
+                if "descriptor" in document["$defs"]:
+                    self.assertEqual(
+                        document["$defs"]["descriptor"]["properties"]["byte_length"]["minimum"],
+                        1,
+                    )
 
         soak_schema = json.loads(
             (directory / "soak-v2-receipt-v3.schema.json").read_text(encoding="utf-8")
@@ -1053,6 +1060,42 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             self.assertIsNone(re.fullmatch(relative_path_pattern, "a/."))
             self.assertIsNone(re.fullmatch(relative_path_pattern, "a/.."))
             self.assertIsNotNone(re.fullmatch(relative_path_pattern, "a/.hidden"))
+
+        soak_v4_schema = json.loads(
+            (directory / "soak-v2-receipt-v4.schema.json").read_text(encoding="utf-8")
+        )
+        bind_request_v4_schema = json.loads(
+            (directory / "soak-v2-bind-request-v4.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            soak_v4_schema["$defs"]["rawManifest"]["properties"]["schema_version"],
+            {"const": checker.SOAK_V4_MANIFEST_VERSION},
+        )
+        self.assertEqual(
+            soak_v4_schema["$defs"]["completion"]["properties"]["schema_version"],
+            {"const": checker.SOAK_V4_COMPLETION_MARKER_VERSION},
+        )
+        self.assertEqual(
+            bind_request_v4_schema["properties"]["schema_version"],
+            {"const": "riley.soak-v2-bind-request.v4"},
+        )
+        self.assertEqual(
+            set(bind_request_v4_schema["required"]),
+            {
+                "schema_version",
+                "candidate_id",
+                "binding_inputs",
+                "configuration_evidence",
+                "scenario_capture_session_path",
+                "scenarios",
+            },
+        )
+        self.assertEqual(
+            set(bind_request_v4_schema["$defs"]["scenario"]["required"]),
+            {"scenario_id", "observation_session_path"},
+        )
 
 
 if __name__ == "__main__":

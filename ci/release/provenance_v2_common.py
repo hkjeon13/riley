@@ -484,6 +484,121 @@ def read_bounded_regular_relative(
             _close_quietly(descriptor)
 
 
+def _require_private_paired_hardlinks(
+    primary: os.stat_result,
+    intent: os.stat_result,
+    label: str,
+) -> None:
+    """Require the one explicit two-name marker exception used by v4.
+
+    General evidence leaves stay single-linked.  A v4 completion marker uses a
+    previously durable nonterminal intent leaf and a create-only hard link so
+    a file-sync failure cannot expose a final marker.  Both names must remain
+    direct siblings of the same private root and resolve to exactly one
+    mode-0600 regular inode with exactly two links.
+    """
+
+    for role, metadata in (("final", primary), ("intent", intent)):
+        if not stat.S_ISREG(metadata.st_mode):
+            _fail(
+                "invalid-paired-hardlink",
+                f"{label} {role} must be a regular file",
+            )
+        if metadata.st_nlink != 2:
+            _fail(
+                "invalid-paired-hardlink",
+                f"{label} {role} must have exactly two hard links",
+            )
+        if stat.S_IMODE(metadata.st_mode) != 0o600:
+            _fail(
+                "unsafe-output-mode",
+                f"{label} {role} must be mode 0600",
+            )
+    if (primary.st_dev, primary.st_ino) != (intent.st_dev, intent.st_ino):
+        _fail(
+            "invalid-paired-hardlink",
+            f"{label} final and intent must resolve to the same inode",
+        )
+
+
+def _paired_hardlink_stats(
+    directory_fd: int,
+    primary_name: str,
+    intent_name: str,
+    label: str,
+) -> tuple[os.stat_result, os.stat_result]:
+    try:
+        primary = os.lstat(primary_name, dir_fd=directory_fd)
+        intent = os.lstat(intent_name, dir_fd=directory_fd)
+    except FileNotFoundError as error:
+        _fail("missing-input", f"cannot inspect {label} paired marker: {error}")
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot inspect {label} paired marker: {error}")
+    _require_private_paired_hardlinks(primary, intent, label)
+    return primary, intent
+
+
+def read_bounded_paired_hardlink(
+    directory_fd: int,
+    primary_name: str,
+    intent_name: str,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
+) -> bytes:
+    """Read one v4-style final/intent hard-link pair without weakening reads.
+
+    This is deliberately not a replacement for ``read_bounded_regular_*``:
+    ordinary evidence continues to require exactly one link.  The two supplied
+    leaf names are checked before open, while open, and after read so an
+    observed final marker cannot be silently substituted for its durable
+    nonterminal intent.
+    """
+
+    _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
+    _require_directory_fd(directory_fd, f"{label} parent")
+    primary_name = _validate_leaf_name(primary_name, f"{label} final name")
+    intent_name = _validate_leaf_name(intent_name, f"{label} intent name")
+    if primary_name == intent_name:
+        _fail("invalid-paired-hardlink", f"{label} final and intent names must differ")
+    primary_before, intent_before = _paired_hardlink_stats(
+        directory_fd,
+        primary_name,
+        intent_name,
+        label,
+    )
+    if primary_before.st_size > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+    try:
+        descriptor = os.open(primary_name, _file_open_flags(), dir_fd=directory_fd)
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
+    try:
+        opened = os.fstat(descriptor)
+        _require_private_paired_hardlinks(opened, intent_before, label)
+        if _stable_stat(primary_before) != _stable_stat(opened):
+            _fail("raced-input", f"{label} changed while it was opened")
+        raw = _read_exact_bounded(descriptor, opened.st_size, maximum_bytes, label)
+        primary_after_open = os.fstat(descriptor)
+        _require_private_paired_hardlinks(primary_after_open, intent_before, label)
+        if _stable_stat(opened) != _stable_stat(primary_after_open):
+            _fail("mutated-input", f"{label} changed while it was read")
+    finally:
+        _close_quietly(descriptor)
+    primary_after, intent_after = _paired_hardlink_stats(
+        directory_fd,
+        primary_name,
+        intent_name,
+        label,
+    )
+    if (
+        _stable_stat(primary_before) != _stable_stat(primary_after)
+        or _stable_stat(intent_before) != _stable_stat(intent_after)
+    ):
+        _fail("raced-input", f"{label} changed while it was read")
+    return raw
+
+
 def read_bounded_regular_path(
     path: Path,
     label: str,
@@ -837,6 +952,79 @@ def write_create_only_json(
     """Create one durable evidence file containing exact canonical JSON."""
 
     return write_create_only(directory_fd, name, canonical_json_bytes(value), label)
+
+
+def publish_create_only_hardlink(
+    directory_fd: int,
+    source_name: str,
+    destination_name: str,
+    label: str,
+) -> None:
+    """Publish one already-durable private leaf through a no-replace hard link.
+
+    The source must be a mode-0600, single-link regular leaf made durable by
+    ``write_create_only``.  Publication intentionally has no rename/replace
+    fallback: hard-link creation preserves create-only final-name semantics.
+    On success both source and destination remain an explicit two-link pair;
+    callers that use this protocol must verify that pair with
+    :func:`read_bounded_paired_hardlink` rather than weakening ordinary
+    single-link evidence reads.
+    """
+
+    _require_directory_fd(directory_fd, f"{label} parent")
+    source_name = _validate_leaf_name(source_name, f"{label} source name")
+    destination_name = _validate_leaf_name(destination_name, f"{label} destination name")
+    if source_name == destination_name:
+        _fail("invalid-paired-hardlink", f"{label} source and destination names must differ")
+    try:
+        source_before = os.lstat(source_name, dir_fd=directory_fd)
+    except FileNotFoundError as error:
+        _fail("missing-input", f"cannot inspect {label} source: {error}")
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot inspect {label} source: {error}")
+    _require_regular_single_link(source_before, f"{label} source")
+    if stat.S_IMODE(source_before.st_mode) != 0o600:
+        _fail("unsafe-output-mode", f"{label} source must be mode 0600")
+    try:
+        os.link(
+            source_name,
+            destination_name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+            follow_symlinks=False,
+        )
+    except FileExistsError as error:
+        _fail("create-only-collision", f"cannot publish new {label}: {error}")
+    except (NotImplementedError, TypeError) as error:
+        _fail("missing-hardlink-safety-support", f"host cannot safely publish {label}: {error}")
+    except OSError as error:
+        _fail("link-publication-failure", f"cannot publish new {label}: {error}")
+    primary_after, intent_after = _paired_hardlink_stats(
+        directory_fd,
+        destination_name,
+        source_name,
+        label,
+    )
+    if (
+        (primary_after.st_dev, primary_after.st_ino, primary_after.st_mode, primary_after.st_size, primary_after.st_mtime_ns)
+        != (
+            source_before.st_dev,
+            source_before.st_ino,
+            source_before.st_mode,
+            source_before.st_size,
+            source_before.st_mtime_ns,
+        )
+        or (intent_after.st_dev, intent_after.st_ino, intent_after.st_mode, intent_after.st_size, intent_after.st_mtime_ns)
+        != (
+            source_before.st_dev,
+            source_before.st_ino,
+            source_before.st_mode,
+            source_before.st_size,
+            source_before.st_mtime_ns,
+        )
+    ):
+        _fail("raced-output", f"{label} source changed while it was published")
+    _fsync_checked(directory_fd, f"{label} parent directory")
 
 
 def create_incomplete_marker(

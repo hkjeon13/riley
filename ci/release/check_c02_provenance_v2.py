@@ -2,12 +2,13 @@
 """Raw-provenance binding layer for the proposed C02 soak/rollback gates.
 
 This is intentionally narrower than the eventual semantic soak and rollback
-checkers.  Its soak path accepts provenance v3 only: it proves that a manifest
-is made from bounded, canonical, create-only raw leaves; reconstructs every
-sampled PID/start-tick/listener/GPU tuple and joins it to the separately
-observed /v1/config process tuple.  It does not turn a raw capture into a C02
-qualification decision, replay Gate E, or interpret workload-specific runtime
-event fields.
+checkers.  Its retained v3 soak path proves bounded, canonical, create-only
+raw leaves and joins sampled PID/start-tick/listener/GPU tuples to a separately
+observed /v1/config process tuple.  Its separate v4 serial path additionally
+replays one source-owned completion-capture session rather than accepting
+opaque workload/audit leaves.  Neither path turns a raw capture into a C02
+qualification decision, replays Gate E, or interprets workload-specific
+runtime-event semantics.
 
 The schema names and event-log descriptors are deliberately generic so a
 native C02 audit producer can evolve its event payload without a Python
@@ -18,6 +19,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import math
 import os
 import re
 import sys
@@ -35,6 +38,8 @@ import provenance_v2_common as common
 # closed v2 grammar: qualification code must treat it as historical input.
 SOAK_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v3"
 SOAK_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v3"
+SOAK_V4_MANIFEST_VERSION = "riley.soak-v2-raw-provenance.v4"
+SOAK_V4_COMPLETION_MARKER_VERSION = "riley.soak-v2-raw-provenance-complete.v4"
 CONFIG_ENDPOINT_OBSERVATION_VERSION = "riley.c02-config-endpoint-observation.v1"
 ROLLBACK_MANIFEST_VERSION = "riley.rc3-rollback-raw-provenance.v2"
 OBSERVATION_SESSION_VERSION = "riley.c02-raw-observation-session.v2"
@@ -44,6 +49,7 @@ METRICS_VERSION = "riley.c02-capture-metrics.v2"
 SHUTDOWN_VERSION = "riley.c02-shutdown-quiescence.v2"
 SHUTDOWN_MARKER_VERSION = "riley.c02-shutdown-quiescence-complete.v2"
 SOAK_REPORT_VERSION = "riley.soak-v2-provenance-check.v3"
+SOAK_V4_REPORT_VERSION = "riley.soak-v2-provenance-check.v4"
 ROLLBACK_REPORT_VERSION = "riley.rc3-rollback-provenance-check.v2"
 STABLE_DEFAULT_PROFILE = "stable-default"
 MAX_PERFORMANCE_EXACT_PROFILE = "max-performance-exact"
@@ -63,9 +69,24 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 UINT_RE = re.compile(r"^[0-9]+$")
 ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/c02/metrics$")
 CONFIG_ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/config$")
+COMPLETION_ENDPOINT_RE = re.compile(r"^http://127\.0\.0\.1:([1-9][0-9]{0,4})/v1/completions$")
 SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+COMPLETION_REQUEST_ID_RE = re.compile(r"^cmpl-[A-Za-z0-9_-]{1,123}$")
 SOAK_TERMINAL_MANIFEST_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*\.json$")
 MAX_SOAK_TERMINAL_MANIFEST_NAME_BYTES = 246
+SCENARIO_CAPTURE_SESSION_VERSION = "riley.c02-raw-scenario-capture.v1"
+SCENARIO_CAPTURE_CONTRACT_VERSION = "riley.c02-raw-soak-runner-contract.v1"
+SCENARIO_CAPTURE_LEDGER_VERSION = "riley.c02-raw-request-ledger.v1"
+SCENARIO_CAPTURE_AUDIT_INDEX_VERSION = "riley.c02-generation-audit-index.v1"
+SCENARIO_CAPTURE_AUDIT_VERSION = "riley.c02-generation-audit.v2"
+SCENARIO_CAPTURE_AUDIT_MARKER_VERSION = "riley.c02-generation-audit-completion.v2"
+SERIAL_CAPTURE_V1_OPAQUE_SCHEMA_VERSIONS = frozenset(
+    (
+        SCENARIO_CAPTURE_CONTRACT_VERSION,
+        SCENARIO_CAPTURE_LEDGER_VERSION,
+        SCENARIO_CAPTURE_AUDIT_INDEX_VERSION,
+    )
+)
 
 
 class C02ProvenanceError(ValueError):
@@ -668,9 +689,35 @@ def _read_opaque_leaf(
     descriptor: common.EvidenceDescriptor,
     label: str,
     used_paths: set[str],
-) -> None:
+) -> bytes:
     _reserve(descriptor, label=label, used_paths=used_paths)
-    _read_bytes(root_fd, descriptor, label)
+    return _read_bytes(root_fd, descriptor, label)
+
+
+def reject_v1_serial_capture_opaque_leaf(raw: bytes, label: str) -> None:
+    """Keep the historical v3 raw path from consuming the closed v1 producer.
+
+    v3 deliberately treats its workload leaves as opaque, so arbitrary legacy
+    text remains valid there.  The newer serial producer has uniquely versioned
+    canonical contract, ledger, and audit-index objects; accepting any of
+    those in v3 would bypass the v1 session's incomplete-marker and source
+    audit replay that only v4 performs.
+    """
+
+    try:
+        document = common.parse_strict_json(
+            raw,
+            label,
+            maximum_bytes=MAX_RAW_BYTES,
+        )
+    except common.ProvenanceV2Error:
+        return
+    assert isinstance(document, dict)
+    if document.get("schema_version") in SERIAL_CAPTURE_V1_OPAQUE_SCHEMA_VERSIONS:
+        _fail(
+            "v3-serial-capture-v1-rejected",
+            f"{label} is a v1 serial-capture leaf and must be terminally replayed only by v4",
+        )
 
 
 def _parse_config_request(raw: bytes, port: int, label: str) -> None:
@@ -928,6 +975,7 @@ def _load_soak_configuration_evidence(
     candidate_id: str,
     bindings: Mapping[str, str],
     used_paths: set[str],
+    require_direct_observation_session: bool = False,
 ) -> ObservedTarget:
     """Bind raw config facts and return their observed process/listener tuple.
 
@@ -953,6 +1001,11 @@ def _load_soak_configuration_evidence(
         row["endpoint_observation"],
         "soak raw manifest.configuration_evidence.endpoint_observation",
     )
+    if require_direct_observation_session:
+        _require_direct_v4_session_path(
+            observation_descriptor,
+            "v4 soak raw manifest.configuration_evidence.endpoint_observation",
+        )
     _reserve(
         endpoint_descriptor,
         label="soak raw manifest.configuration_evidence.endpoint",
@@ -1227,7 +1280,10 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
         used_paths=used,
     )
     contract = _descriptor(row["scenario_contract"], "soak raw manifest.scenario_contract")
-    _read_opaque_leaf(root_fd, contract, "soak scenario contract", used)
+    reject_v1_serial_capture_opaque_leaf(
+        _read_opaque_leaf(root_fd, contract, "soak scenario contract", used),
+        "soak scenario contract",
+    )
     scenarios = row["scenarios"]
     if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= MAX_SCENARIOS:
         _fail("invalid-scenario-inventory", "soak raw manifest must contain a bounded nonempty scenario list")
@@ -1273,7 +1329,14 @@ def verify_soak_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any
                 f"{label} does not share the configuration endpoint PID/start-tick/listener/GPU tuple",
             )
         for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
-            _read_opaque_leaf(root_fd, _descriptor(scenario[key], f"{label}.{key}"), f"{label}.{key}", used)
+            raw = _read_opaque_leaf(
+                root_fd,
+                _descriptor(scenario[key], f"{label}.{key}"),
+                f"{label}.{key}",
+                used,
+            )
+            if key in {"request_ledger", "generation_audit_index"}:
+                reject_v1_serial_capture_opaque_leaf(raw, f"{label}.{key}")
         if fallback is not None:
             _read_opaque_leaf(root_fd, _descriptor(fallback, f"{label}.fallback_event_log"), f"{label}.fallback_event_log", used)
         targets.append({"scenario_id": scenario_id, "target": declared_target.as_json()})
@@ -1343,6 +1406,870 @@ def verify_completed_soak_provenance(
     root_fd = _open_private_evidence_root(evidence_root, "evidence root")
     try:
         return verify_completed_soak_provenance_fd(root_fd, manifest_path)
+    finally:
+        os.close(root_fd)
+
+
+@dataclass(frozen=True)
+class ScenarioCaptureTarget:
+    """The process/listener tuple produced by the serial completion capture.
+
+    GPU selection is intentionally absent here.  It is proven independently
+    by the C02 observation and configuration-bridge producers, then joined by
+    the v4 manifest verifier.
+    """
+
+    pid: int
+    start_ticks: int
+    listener_port: int
+    listener_inode: int
+
+
+@dataclass(frozen=True)
+class ReplayedScenario:
+    scenario_id: str
+    target: ScenarioCaptureTarget
+    request_ledger: common.EvidenceDescriptor
+    runtime_event_log: common.EvidenceDescriptor
+    generation_audit_index: common.EvidenceDescriptor
+    request_id: str
+    audit_directory: str
+
+
+@dataclass(frozen=True)
+class ReplayedScenarioCapture:
+    session: common.EvidenceDescriptor
+    contract: common.EvidenceDescriptor
+    target: ScenarioCaptureTarget
+    scenarios: tuple[ReplayedScenario, ...]
+    audit_directory: str
+
+
+def _capture_target(value: Any, label: str) -> ScenarioCaptureTarget:
+    row = _exact(
+        value,
+        {"server_pid", "server_start_ticks", "listener_port", "listener_inode"},
+        label,
+    )
+    return ScenarioCaptureTarget(
+        pid=_positive(row["server_pid"], f"{label}.server_pid"),
+        start_ticks=_positive(row["server_start_ticks"], f"{label}.server_start_ticks"),
+        listener_port=_unprivileged_listener_port(
+            row["listener_port"], f"{label}.listener_port"
+        ),
+        listener_inode=_positive(row["listener_inode"], f"{label}.listener_inode"),
+    )
+
+
+def _capture_matches_observed(
+    capture: ScenarioCaptureTarget,
+    observed: ObservedTarget,
+) -> bool:
+    return (
+        capture.pid == observed.target.pid
+        and capture.start_ticks == observed.target.start_ticks
+        and capture.listener_port == observed.listener_port
+        and capture.listener_inode == observed.listener_inode
+    )
+
+
+def _capture_parent(descriptor: common.EvidenceDescriptor, label: str) -> str:
+    path = PurePosixPath(descriptor.path)
+    # The v1 producer creates the capture as one direct child of the trusted
+    # root.  Requiring that exact layout prevents a session from borrowing a
+    # parent marker or raw leaf namespace from another capture.
+    if (
+        path.name != "session.json"
+        or path.parent == PurePosixPath(".")
+        or len(path.parent.parts) != 1
+    ):
+        _fail(
+            "scenario-capture-layout-mismatch",
+            f"{label} must be a direct capture/session.json leaf",
+        )
+    return path.parent.as_posix()
+
+
+def _require_direct_v4_session_path(
+    descriptor: common.EvidenceDescriptor,
+    label: str,
+) -> None:
+    """Require a v4 bridge/observation session to use one root child.
+
+    The serial-capture producer, the config bridge, and the C02 observation
+    producer each publish a private direct-child capture directory.  v4's
+    published request schema fixes this namespace, so terminal replay must
+    enforce it too instead of inheriting v3's more permissive historical
+    observation layout.
+    """
+
+    path = PurePosixPath(descriptor.path)
+    if (
+        path.name != "session.json"
+        or path.parent == PurePosixPath(".")
+        or len(path.parent.parts) != 1
+    ):
+        _fail(
+            "invalid-session-path",
+            f"{label} must be a direct capture/session.json leaf",
+        )
+
+
+def _capture_raw_path(
+    descriptor: common.EvidenceDescriptor,
+    capture_name: str,
+    expected_name: str,
+    label: str,
+) -> None:
+    if descriptor.path != f"{capture_name}/raw/{expected_name}":
+        _fail(
+            "scenario-capture-layout-mismatch",
+            f"{label} must be {capture_name}/raw/{expected_name}",
+        )
+
+
+def _capture_child_path(
+    descriptor: common.EvidenceDescriptor,
+    capture_name: str,
+    expected_name: str,
+    label: str,
+) -> None:
+    if descriptor.path != f"{capture_name}/{expected_name}":
+        _fail(
+            "scenario-capture-layout-mismatch",
+            f"{label} must be {capture_name}/{expected_name}",
+        )
+
+
+def _capture_socket_target(target: ScenarioCaptureTarget) -> TargetTuple:
+    """Adapt the PID-only socket record parser without manufacturing GPU proof."""
+
+    return TargetTuple(
+        pid=target.pid,
+        start_ticks=target.start_ticks,
+        gpu_index=0,
+        gpu_uuid="GPU-00000000-0000-0000-0000-000000000000",
+    )
+
+
+def _completion_request_contract(value: Any, label: str) -> dict[str, Any]:
+    row = _exact(
+        value,
+        {"model", "prompt", "max_tokens", "temperature", "top_p", "seed", "stream"},
+        label,
+    )
+    for key, maximum in (("model", 256), ("prompt", 1024 * 1024)):
+        item = row[key]
+        if type(item) is not str or not item or len(item) > maximum or "\x00" in item:
+            _fail("invalid-completion-contract", f"{label}.{key} must be a bounded nonempty string")
+    max_tokens = row["max_tokens"]
+    if type(max_tokens) is not int or not 1 <= max_tokens <= 65536:
+        _fail("invalid-completion-contract", f"{label}.max_tokens must be from 1 through 65536")
+    for key, lower, upper, strict_lower in (
+        ("temperature", 0.0, 2.0, False),
+        ("top_p", 0.0, 1.0, True),
+    ):
+        item = row[key]
+        if type(item) not in {int, float} or isinstance(item, bool):
+            _fail("invalid-completion-contract", f"{label}.{key} must be finite")
+        number = float(item)
+        if not math.isfinite(number) or number > upper or (number <= lower if strict_lower else number < lower):
+            _fail("invalid-completion-contract", f"{label}.{key} is outside its supported range")
+    seed = row["seed"]
+    if type(seed) is not int or not 0 <= seed <= (1 << 64) - 1:
+        _fail("invalid-completion-contract", f"{label}.seed is outside its supported range")
+    if row["stream"] is not False:
+        _fail("invalid-completion-contract", f"{label}.stream must be false")
+    if len(common.canonical_json_bytes(row)) > MAX_RAW_BYTES:
+        _fail("invalid-completion-contract", f"{label} exceeds the bounded completion request size")
+    return row
+
+
+def _replay_capture_contract(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    capture_name: str,
+    candidate_id: str,
+    configuration_profile: str,
+    used_paths: set[str],
+) -> list[tuple[str, dict[str, Any]]]:
+    _capture_raw_path(
+        descriptor,
+        capture_name,
+        "scenario-contract.json",
+        "scenario capture contract",
+    )
+    _reserve(descriptor, label="scenario capture contract", used_paths=used_paths)
+    _raw, document = _read_json(root_fd, descriptor, "scenario capture contract")
+    row = _exact(
+        document,
+        {"schema_version", "candidate_id", "configuration_profile", "scenarios"},
+        "scenario capture contract",
+    )
+    if row["schema_version"] != SCENARIO_CAPTURE_CONTRACT_VERSION:
+        _fail(
+            "historical-scenario-contract-version-rejected",
+            "scenario capture contract has an unsupported schema version",
+        )
+    if _candidate_id(row["candidate_id"], "scenario capture contract.candidate_id") != candidate_id:
+        _fail("scenario-contract-candidate-mismatch", "scenario capture contract candidate drifted")
+    if row["configuration_profile"] != configuration_profile:
+        _fail("scenario-contract-profile-mismatch", "scenario capture contract profile drifted")
+    values = row["scenarios"]
+    if not isinstance(values, list) or not 1 <= len(values) <= MAX_SCENARIOS:
+        _fail("invalid-scenario-inventory", "scenario capture contract must have a bounded nonempty scenario list")
+    result: list[tuple[str, dict[str, Any]]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(values):
+        label = f"scenario capture contract.scenarios[{index}]"
+        scenario = _exact(item, {"scenario_id", "completion_request"}, label)
+        scenario_id = scenario["scenario_id"]
+        if (
+            type(scenario_id) is not str
+            or len(scenario_id) > 128
+            or SCENARIO_ID_RE.fullmatch(scenario_id) is None
+            or scenario_id == "exact-backend-fallback"
+            or scenario_id in seen
+        ):
+            _fail("invalid-scenario-inventory", f"{label}.scenario_id is invalid for serial v4")
+        seen.add(scenario_id)
+        result.append((scenario_id, _completion_request_contract(scenario["completion_request"], f"{label}.completion_request")))
+    return result
+
+
+def _completion_request_bytes(port: int, body: bytes) -> bytes:
+    return (
+        f"POST /v1/completions HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+        f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii") + body
+
+
+def _completion_response_length(raw: bytes, label: str) -> int:
+    if not raw.endswith(b"\r\n\r\n") or not raw or len(raw) > 64 * 1024:
+        _fail("invalid-completion-response-head", f"{label} is malformed or oversized")
+    try:
+        lines = raw[:-4].decode("ascii").split("\r\n")
+    except UnicodeDecodeError as error:
+        _fail("invalid-completion-response-head", f"{label} is not ASCII: {error}")
+    if not lines or lines[0] != "HTTP/1.1 200 OK":
+        _fail("completion-response-status-mismatch", f"{label} must be HTTP/1.1 200 OK")
+    headers: dict[str, str] = {}
+    for line in lines[1:]:
+        if not line or ":" not in line or line[:1] in {" ", "\t"}:
+            _fail("invalid-completion-response-head", f"{label} has a malformed header")
+        name, value = line.split(":", 1)
+        lowered = name.lower()
+        if lowered in headers or re.fullmatch(r"[A-Za-z0-9-]+", name) is None:
+            _fail("invalid-completion-response-head", f"{label} repeats or has an invalid header name")
+        if any((ord(character) < 32 and character != "\t") or ord(character) == 127 for character in value):
+            _fail("invalid-completion-response-head", f"{label} has a control character in a header value")
+        headers[lowered] = value.strip(" \t")
+    if "transfer-encoding" in headers:
+        _fail("invalid-completion-response-head", f"{label} must not use Transfer-Encoding")
+    length = headers.get("content-length")
+    content_type = headers.get("content-type")
+    if length is None or UINT_RE.fullmatch(length) is None:
+        _fail("invalid-completion-response-head", f"{label} lacks one numeric Content-Length")
+    parsed = int(length)
+    if not 1 <= parsed <= MAX_RAW_BYTES:
+        _fail("invalid-completion-response-head", f"{label} Content-Length is out of bounds")
+    if content_type is None or content_type.split(";", 1)[0].strip().lower() != "application/json":
+        _fail("invalid-completion-response-head", f"{label} Content-Type is not application/json")
+    return parsed
+
+
+def _source_request_id(raw: bytes, label: str) -> str:
+    document = _common(
+        lambda: common.parse_strict_json(
+            raw,
+            label,
+            maximum_bytes=MAX_RAW_BYTES,
+            require_object=True,
+        )
+    )
+    assert isinstance(document, dict)
+    request_id = document.get("id")
+    if type(request_id) is not str or COMPLETION_REQUEST_ID_RE.fullmatch(request_id) is None:
+        _fail("invalid-completion-response-id", f"{label} has no valid source-issued completion ID")
+    return request_id
+
+
+def _replay_source_audit(
+    root_fd: int,
+    record: common.EvidenceDescriptor,
+    marker: common.EvidenceDescriptor,
+    *,
+    capture_name: str,
+    expected_audit_directory: str | None,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    target: ScenarioCaptureTarget,
+    request_id: str,
+    used_paths: set[str],
+    label: str,
+) -> str:
+    record_path = PurePosixPath(record.path)
+    marker_path = PurePosixPath(marker.path)
+    audit_directory = record_path.parent.as_posix()
+    if (
+        record_path.parent == PurePosixPath(".")
+        or len(record_path.parent.parts) != 1
+        or audit_directory == capture_name
+        or (
+            expected_audit_directory is not None
+            and audit_directory != expected_audit_directory
+        )
+        or record_path.name != f"{request_id}.json"
+        or marker.path != f"{record.path}.complete"
+        or marker_path.parent != record_path.parent
+        or marker_path.name != f"{record_path.name}.complete"
+    ):
+        _fail("source-audit-layout-mismatch", f"{label} audit record/marker layout drifted")
+    _reserve(record, label=f"{label} source audit", used_paths=used_paths)
+    _reserve(marker, label=f"{label} source audit marker", used_paths=used_paths)
+    record_raw, document = _read_json(root_fd, record, f"{label} source audit")
+    row = _exact(
+        document,
+        {
+            "schema_version", "candidate_id", "runtime_identity", "process_identity",
+            "server_request_id", "delivery_mode", "prompt_token_ids",
+            "committed_output_tokens", "sampling_selections", "finish_reason", "usage",
+        },
+        f"{label} source audit",
+    )
+    if row["schema_version"] != SCENARIO_CAPTURE_AUDIT_VERSION:
+        _fail("historical-source-audit-version-rejected", f"{label} source audit has an unsupported version")
+    if _candidate_id(row["candidate_id"], f"{label} source audit.candidate_id") != candidate_id:
+        _fail("source-audit-candidate-mismatch", f"{label} source audit candidate drifted")
+    identity = _exact(
+        row["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        f"{label} source audit.runtime_identity",
+    )
+    if identity["configuration_profile"] != configuration_profile or _sha256(
+        identity["configuration_sha256"],
+        f"{label} source audit.runtime_identity.configuration_sha256",
+    ) != configuration_sha256:
+        _fail("source-audit-runtime-identity-mismatch", f"{label} source audit runtime identity drifted")
+    process = _exact(
+        row["process_identity"],
+        {"pid", "start_ticks"},
+        f"{label} source audit.process_identity",
+    )
+    if (
+        _positive(process["pid"], f"{label} source audit.process_identity.pid") != target.pid
+        or _positive(process["start_ticks"], f"{label} source audit.process_identity.start_ticks") != target.start_ticks
+    ):
+        _fail("source-audit-process-mismatch", f"{label} source audit process tuple drifted")
+    if row["server_request_id"] != request_id or row["delivery_mode"] != "non-stream":
+        _fail("source-audit-request-mismatch", f"{label} source audit request identity drifted")
+    marker_raw, marker_document = _read_json(root_fd, marker, f"{label} source audit marker")
+    marker_row = _exact(
+        marker_document,
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        f"{label} source audit marker",
+    )
+    if marker_row["schema_version"] != SCENARIO_CAPTURE_AUDIT_MARKER_VERSION:
+        _fail("historical-source-audit-marker-version-rejected", f"{label} source audit marker has an unsupported version")
+    if marker_row["artifact_filename"] != record_path.name or _sha256(
+        marker_row["artifact_sha256"], f"{label} source audit marker.artifact_sha256"
+    ) != hashlib.sha256(record_raw).hexdigest() or not marker_raw:
+        _fail("source-audit-marker-mismatch", f"{label} source audit marker does not bind exact record bytes")
+    return audit_directory
+
+
+def _replay_capture_scenario(
+    root_fd: int,
+    value: Any,
+    *,
+    capture_name: str,
+    sequence: int,
+    expected_scenario_id: str,
+    completion_request: dict[str, Any],
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    expected_target: ScenarioCaptureTarget,
+    expected_audit_directory: str | None,
+    used_paths: set[str],
+) -> ReplayedScenario:
+    label = f"scenario capture.scenarios[{sequence}]"
+    row = _exact(
+        value,
+        {
+            "scenario_id", "target", "process", "listener", "request_ledger",
+            "runtime_event_log", "generation_audit_index",
+        },
+        label,
+    )
+    if row["scenario_id"] != expected_scenario_id:
+        _fail("scenario-capture-inventory-mismatch", f"{label} does not preserve contract scenario order/ID")
+    target = _capture_target(row["target"], f"{label}.target")
+    if target != expected_target:
+        _fail("scenario-capture-target-drift", f"{label} target differs from the capture session target")
+    prefix = f"{sequence:06d}"
+    process = _exact(row["process"], {"pre_stat", "post_stat", "final_stat"}, f"{label}.process")
+    listener = _exact(
+        row["listener"],
+        {
+            "address", "port", "socket_inode", "pre_proc_net_tcp", "post_proc_net_tcp",
+            "pre_server_fd_sockets", "post_server_fd_sockets", "final_proc_net_tcp",
+            "final_server_fd_sockets",
+        },
+        f"{label}.listener",
+    )
+    if (
+        listener["address"] != "127.0.0.1"
+        or _unprivileged_listener_port(listener["port"], f"{label}.listener.port") != target.listener_port
+        or _positive(listener["socket_inode"], f"{label}.listener.socket_inode") != target.listener_inode
+    ):
+        _fail("scenario-capture-listener-mismatch", f"{label} listener differs from its target tuple")
+    process_descriptors = {
+        key: _descriptor(process[key], f"{label}.process.{key}")
+        for key in ("pre_stat", "post_stat", "final_stat")
+    }
+    listener_descriptors = {
+        key: _descriptor(listener[key], f"{label}.listener.{key}")
+        for key in (
+            "pre_proc_net_tcp", "post_proc_net_tcp", "pre_server_fd_sockets",
+            "post_server_fd_sockets", "final_proc_net_tcp", "final_server_fd_sockets",
+        )
+    }
+    expected_names = {
+        "pre_stat": f"{prefix}.pre.proc-stat",
+        "post_stat": f"{prefix}.post.proc-stat",
+        "final_stat": f"{prefix}.final.proc-stat",
+        "pre_proc_net_tcp": f"{prefix}.pre.proc-net-tcp",
+        "post_proc_net_tcp": f"{prefix}.post.proc-net-tcp",
+        "pre_server_fd_sockets": f"{prefix}.pre.proc-fd-sockets.json",
+        "post_server_fd_sockets": f"{prefix}.post.proc-fd-sockets.json",
+        "final_proc_net_tcp": f"{prefix}.final.proc-net-tcp",
+        "final_server_fd_sockets": f"{prefix}.final.proc-fd-sockets.json",
+    }
+    all_raw = list(process_descriptors.values()) + list(listener_descriptors.values())
+    _common(lambda: common.require_unique_descriptors(all_raw, f"{label} process/listener leaves"))
+    for key, descriptor in {**process_descriptors, **listener_descriptors}.items():
+        _capture_raw_path(descriptor, capture_name, expected_names[key], f"{label}.{key}")
+        _reserve(descriptor, label=f"{label}.{key}", used_paths=used_paths)
+    expected_process = (target.pid, target.start_ticks)
+    for key, descriptor in process_descriptors.items():
+        if _parse_proc_stat(_read_bytes(root_fd, descriptor, f"{label}.{key}"), f"{label}.{key}") != expected_process:
+            _fail("scenario-capture-pid-start-tick-mismatch", f"{label}.{key} differs from its target tuple")
+    socket_target = _capture_socket_target(target)
+    for key in ("pre_proc_net_tcp", "post_proc_net_tcp", "final_proc_net_tcp"):
+        if _parse_listener_inodes(
+            _read_bytes(root_fd, listener_descriptors[key], f"{label}.{key}"),
+            target.listener_port,
+            f"{label}.{key}",
+        ) != {target.listener_inode}:
+            _fail("scenario-capture-listener-proof-mismatch", f"{label}.{key} does not bind one expected listener inode")
+    for key in ("pre_server_fd_sockets", "post_server_fd_sockets", "final_server_fd_sockets"):
+        sockets = _parse_socket_snapshot(
+            _read_bytes(root_fd, listener_descriptors[key], f"{label}.{key}"),
+            socket_target,
+            f"{label}.{key}",
+        )
+        if target.listener_inode not in sockets:
+            _fail("scenario-capture-listener-proof-mismatch", f"{label}.{key} does not bind the listener to the target PID")
+
+    ledger = _descriptor(row["request_ledger"], f"{label}.request_ledger")
+    index = _descriptor(row["generation_audit_index"], f"{label}.generation_audit_index")
+    _capture_child_path(ledger, capture_name, f"{prefix}-{expected_scenario_id}.request-ledger.json", f"{label}.request_ledger")
+    _capture_child_path(index, capture_name, f"{prefix}-{expected_scenario_id}.generation-audit-index.json", f"{label}.generation_audit_index")
+    _reserve(ledger, label=f"{label}.request_ledger", used_paths=used_paths)
+    _reserve(index, label=f"{label}.generation_audit_index", used_paths=used_paths)
+    _ledger_raw, ledger_document = _read_json(root_fd, ledger, f"{label}.request_ledger")
+    ledger_row = _exact(
+        ledger_document,
+        {"schema_version", "scenario_id", "delivery_mode", "server_request_id", "request", "response_head", "response_body"},
+        f"{label}.request_ledger",
+    )
+    if (
+        ledger_row["schema_version"] != SCENARIO_CAPTURE_LEDGER_VERSION
+        or ledger_row["scenario_id"] != expected_scenario_id
+        or ledger_row["delivery_mode"] != "non-stream"
+        or type(ledger_row["server_request_id"]) is not str
+        or COMPLETION_REQUEST_ID_RE.fullmatch(ledger_row["server_request_id"]) is None
+    ):
+        _fail("scenario-capture-ledger-mismatch", f"{label} ledger identity is invalid")
+    request_descriptor = _descriptor(ledger_row["request"], f"{label}.request_ledger.request")
+    head_descriptor = _descriptor(ledger_row["response_head"], f"{label}.request_ledger.response_head")
+    body_descriptor = _descriptor(ledger_row["response_body"], f"{label}.request_ledger.response_body")
+    _common(lambda: common.require_unique_descriptors([request_descriptor, head_descriptor, body_descriptor], f"{label} ledger leaves"))
+    for descriptor, name in (
+        (request_descriptor, f"{prefix}.request.http"),
+        (head_descriptor, f"{prefix}.response-head.http"),
+        (body_descriptor, f"{prefix}.response-body.json"),
+    ):
+        _capture_raw_path(descriptor, capture_name, name, f"{label} ledger raw leaf")
+        _reserve(descriptor, label=f"{label} ledger raw leaf", used_paths=used_paths)
+    expected_body = common.canonical_json_bytes(completion_request)
+    if _read_bytes(root_fd, request_descriptor, f"{label} completion request") != _completion_request_bytes(target.listener_port, expected_body):
+        _fail("scenario-capture-request-mismatch", f"{label} raw completion request differs from the contract")
+    response_head = _read_bytes(root_fd, head_descriptor, f"{label} completion response head")
+    response_body = _read_bytes(root_fd, body_descriptor, f"{label} completion response body")
+    if _completion_response_length(response_head, f"{label} completion response head") != len(response_body):
+        _fail("scenario-capture-response-length-mismatch", f"{label} response body differs from Content-Length")
+    request_id = _source_request_id(response_body, f"{label} completion response body")
+    if request_id != ledger_row["server_request_id"]:
+        _fail("scenario-capture-response-id-mismatch", f"{label} response ID differs from its ledger")
+
+    _index_raw, index_document = _read_json(root_fd, index, f"{label}.generation_audit_index")
+    index_row = _exact(
+        index_document,
+        {"schema_version", "scenario_id", "server_request_id", "audit_record", "audit_completion_marker"},
+        f"{label}.generation_audit_index",
+    )
+    if (
+        index_row["schema_version"] != SCENARIO_CAPTURE_AUDIT_INDEX_VERSION
+        or index_row["scenario_id"] != expected_scenario_id
+        or index_row["server_request_id"] != request_id
+    ):
+        _fail("scenario-capture-audit-index-mismatch", f"{label} audit index identity drifted")
+    audit_record = _descriptor(index_row["audit_record"], f"{label}.generation_audit_index.audit_record")
+    audit_marker = _descriptor(index_row["audit_completion_marker"], f"{label}.generation_audit_index.audit_completion_marker")
+    runtime_event = _descriptor(row["runtime_event_log"], f"{label}.runtime_event_log")
+    if runtime_event != audit_record:
+        _fail("scenario-capture-runtime-event-mismatch", f"{label} runtime event must be the indexed source audit record")
+    audit_directory = _replay_source_audit(
+        root_fd,
+        audit_record,
+        audit_marker,
+        capture_name=capture_name,
+        expected_audit_directory=expected_audit_directory,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        configuration_sha256=configuration_sha256,
+        target=target,
+        request_id=request_id,
+        used_paths=used_paths,
+        label=label,
+    )
+    return ReplayedScenario(
+        scenario_id=expected_scenario_id,
+        target=target,
+        request_ledger=ledger,
+        runtime_event_log=runtime_event,
+        generation_audit_index=index,
+        request_id=request_id,
+        audit_directory=audit_directory,
+    )
+
+
+def replay_raw_scenario_capture_v1_fd(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    used_paths: set[str],
+) -> ReplayedScenarioCapture:
+    """Replay a closed v1 serial capture with no current-process operations.
+
+    All reads happen through ``root_fd``.  This function does not import the
+    capture producer because that program deliberately owns socket and timing
+    capabilities that a terminal raw binder must not gain.
+    """
+
+    capture_name = _capture_parent(descriptor, "scenario capture session")
+    _assert_capture_marker_absent(root_fd, descriptor.path, "scenario capture session")
+    _reserve(descriptor, label="scenario capture session", used_paths=used_paths)
+    _raw, document = _read_json(root_fd, descriptor, "scenario capture session")
+    row = _exact(
+        document,
+        {"schema_version", "capture_status", "qualification_status", "endpoint", "contract", "runtime_identity", "target", "scenarios"},
+        "scenario capture session",
+    )
+    if row["schema_version"] != SCENARIO_CAPTURE_SESSION_VERSION:
+        _fail("historical-scenario-capture-version-rejected", "scenario capture session has an unsupported version")
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail("invalid-capture-status", "scenario capture session must be captured/not-run")
+    if type(row["endpoint"]) is not str:
+        _fail("invalid-completion-endpoint", "scenario capture endpoint must be literal loopback completions")
+    endpoint_match = COMPLETION_ENDPOINT_RE.fullmatch(row["endpoint"])
+    if endpoint_match is None:
+        _fail("invalid-completion-endpoint", "scenario capture endpoint must be literal loopback completions")
+    target = _capture_target(row["target"], "scenario capture session.target")
+    if int(endpoint_match.group(1)) != target.listener_port:
+        _fail("scenario-capture-endpoint-target-mismatch", "scenario capture endpoint port differs from its target tuple")
+    identity = _exact(
+        row["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        "scenario capture session.runtime_identity",
+    )
+    if identity["configuration_profile"] != configuration_profile or _sha256(
+        identity["configuration_sha256"], "scenario capture session.runtime_identity.configuration_sha256"
+    ) != configuration_sha256:
+        _fail("scenario-capture-runtime-identity-mismatch", "scenario capture runtime identity drifted")
+    contract = _descriptor(row["contract"], "scenario capture session.contract")
+    contract_rows = _replay_capture_contract(
+        root_fd,
+        contract,
+        capture_name=capture_name,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        used_paths=used_paths,
+    )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != len(contract_rows):
+        _fail("scenario-capture-inventory-mismatch", "scenario capture does not preserve the contract inventory")
+    replayed: list[ReplayedScenario] = []
+    request_ids: set[str] = set()
+    audit_directory: str | None = None
+    for sequence, (scenario_id, completion_request) in enumerate(contract_rows):
+        scenario = _replay_capture_scenario(
+            root_fd,
+            scenarios[sequence],
+            capture_name=capture_name,
+            sequence=sequence,
+            expected_scenario_id=scenario_id,
+            completion_request=completion_request,
+            candidate_id=candidate_id,
+            configuration_profile=configuration_profile,
+            configuration_sha256=configuration_sha256,
+            expected_target=target,
+            expected_audit_directory=audit_directory,
+            used_paths=used_paths,
+        )
+        if scenario.request_id in request_ids:
+            _fail("scenario-capture-request-id-reuse", "scenario capture reuses a source request ID")
+        request_ids.add(scenario.request_id)
+        audit_directory = scenario.audit_directory
+        replayed.append(scenario)
+    if audit_directory is None:
+        _fail("invalid-scenario-inventory", "scenario capture must bind one source audit directory")
+    return ReplayedScenarioCapture(
+        session=descriptor,
+        contract=contract,
+        target=target,
+        scenarios=tuple(replayed),
+        audit_directory=audit_directory,
+    )
+
+
+def _read_soak_v4_completion_marker(
+    root_fd: int,
+    manifest: common.EvidenceDescriptor,
+) -> None:
+    manifest_name = _soak_terminal_manifest_name(
+        manifest.path, "completed v4 soak manifest path"
+    )
+    marker_name = f"{manifest_name}.complete"
+    intent_name = f"{manifest_name}.intent"
+    try:
+        marker_raw = _common(
+            lambda: common.read_bounded_paired_hardlink(
+                root_fd,
+                marker_name,
+                intent_name,
+                "v4 soak raw manifest completion marker",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+    except C02ProvenanceError as error:
+        if getattr(error, "reason_code", None) == "missing-input":
+            _fail(
+                "missing-soak-v4-completion-marker",
+                f"v4 soak raw manifest requires exact sibling marker pair "
+                f"{marker_name!r} and {intent_name!r}",
+            )
+        raise
+    marker = _common(
+        lambda: common.parse_canonical_json(
+            marker_raw,
+            "v4 soak raw manifest completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    assert isinstance(marker, dict)
+    row = _exact(
+        marker,
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        "v4 soak raw manifest completion marker",
+    )
+    if row["schema_version"] != SOAK_V4_COMPLETION_MARKER_VERSION:
+        _fail(
+            "historical-soak-v4-completion-version-rejected",
+            "v4 soak raw manifest completion marker has an unsupported schema version",
+        )
+    if row["artifact_filename"] != manifest_name or _sha256(
+        row["artifact_sha256"], "v4 soak raw manifest completion marker.artifact_sha256"
+    ) != manifest.sha256:
+        _fail(
+            "soak-v4-completion-marker-mismatch",
+            "v4 soak raw manifest completion marker does not bind exact manifest bytes",
+        )
+
+
+def verify_soak_provenance_v4_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
+    """Verify a raw v4 serial scenario manifest through one held root FD.
+
+    Unlike the v3 verifier, v4 does not accept opaque workload/audit leaves:
+    all such descriptors are re-derived and replayed from the one source-owned
+    serial capture session before they can appear in a manifest.
+    """
+
+    manifest_descriptor, document = _read_manifest(root_fd, manifest_path, "v4 soak raw manifest")
+    row = _exact(
+        document,
+        {
+            "schema_version", "capture_status", "qualification_status", "candidate_id",
+            "bindings", "configuration_evidence", "scenario_capture_session",
+            "scenario_contract", "scenarios",
+        },
+        "v4 soak raw manifest",
+    )
+    if row["schema_version"] != SOAK_V4_MANIFEST_VERSION:
+        if row["schema_version"] == SOAK_MANIFEST_VERSION:
+            _fail("historical-soak-v3-rejected", f"v4 soak raw manifest must use {SOAK_V4_MANIFEST_VERSION}")
+        if row["schema_version"] == "riley.soak-v2-raw-provenance.v2":
+            _fail("historical-soak-v2-rejected", f"v4 soak raw manifest must use {SOAK_V4_MANIFEST_VERSION}")
+        _fail("historical-soak-v1-rejected", f"v4 soak raw manifest must use {SOAK_V4_MANIFEST_VERSION}")
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail("invalid-capture-status", "v4 soak raw manifest must be captured/not-run")
+    candidate = _candidate_id(row["candidate_id"], "v4 soak raw manifest.candidate_id")
+    bindings = _bindings(
+        row["bindings"],
+        "v4 soak raw manifest.bindings",
+        allowed_profiles=SOAK_CONFIGURATION_PROFILES,
+    )
+    used = {manifest_descriptor.path}
+    configuration_target = _load_soak_configuration_evidence(
+        root_fd,
+        row["configuration_evidence"],
+        candidate_id=candidate,
+        bindings=bindings,
+        used_paths=used,
+        require_direct_observation_session=True,
+    )
+    capture_descriptor = _descriptor(
+        row["scenario_capture_session"],
+        "v4 soak raw manifest.scenario_capture_session",
+    )
+    capture = replay_raw_scenario_capture_v1_fd(
+        root_fd,
+        capture_descriptor,
+        candidate_id=candidate,
+        configuration_profile=bindings["configuration_profile"],
+        configuration_sha256=bindings["configuration_sha256"],
+        used_paths=used,
+    )
+    if not _capture_matches_observed(capture.target, configuration_target):
+        _fail(
+            "configuration-scenario-capture-target-mismatch",
+            "serial capture does not share the configuration bridge PID/start-tick/listener tuple",
+        )
+    contract = _descriptor(row["scenario_contract"], "v4 soak raw manifest.scenario_contract")
+    if contract != capture.contract:
+        _fail(
+            "scenario-capture-contract-descriptor-mismatch",
+            "v4 manifest contract must be the descriptor derived from its serial capture",
+        )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != len(capture.scenarios):
+        _fail("scenario-capture-inventory-mismatch", "v4 manifest must preserve the serial capture inventory")
+    targets: list[dict[str, Any]] = []
+    for index, captured in enumerate(capture.scenarios):
+        label = f"v4 soak raw manifest.scenarios[{index}]"
+        scenario = _exact(
+            scenarios[index],
+            {
+                "scenario_id", "target", "observation_session", "request_ledger",
+                "runtime_event_log", "generation_audit_index",
+            },
+            label,
+        )
+        scenario_id = scenario["scenario_id"]
+        if (
+            type(scenario_id) is not str
+            or scenario_id == "exact-backend-fallback"
+            or scenario_id != captured.scenario_id
+        ):
+            _fail("scenario-capture-inventory-mismatch", f"{label} does not preserve serial capture scenario ID/order")
+        declared_target = _target(scenario["target"], f"{label}.target")
+        if _descriptor(scenario["request_ledger"], f"{label}.request_ledger") != captured.request_ledger:
+            _fail("scenario-capture-derived-leaf-mismatch", f"{label} request ledger was not derived from the capture")
+        if _descriptor(scenario["runtime_event_log"], f"{label}.runtime_event_log") != captured.runtime_event_log:
+            _fail("scenario-capture-derived-leaf-mismatch", f"{label} runtime event was not derived from the capture")
+        if _descriptor(scenario["generation_audit_index"], f"{label}.generation_audit_index") != captured.generation_audit_index:
+            _fail("scenario-capture-derived-leaf-mismatch", f"{label} audit index was not derived from the capture")
+        observation = _descriptor(scenario["observation_session"], f"{label}.observation_session")
+        _require_direct_v4_session_path(observation, f"{label}.observation_session")
+        _reserve(observation, label=f"{label}.observation_session", used_paths=used)
+        observed_target = _load_session(root_fd, observation, label, used)
+        if declared_target != observed_target.target:
+            _fail("session-target-mismatch", f"{label} target differs from its C02 observation session")
+        if not _capture_matches_observed(captured.target, observed_target):
+            _fail(
+                "scenario-capture-observation-target-mismatch",
+                f"{label} serial capture does not share the observation PID/start-tick/listener tuple",
+            )
+        if observed_target != configuration_target:
+            _fail(
+                "configuration-scenario-target-mismatch",
+                f"{label} does not share the configuration bridge PID/start-tick/listener/GPU tuple",
+            )
+        targets.append({"scenario_id": scenario_id, "target": declared_target.as_json()})
+    return _report(
+        schema_version=SOAK_V4_REPORT_VERSION,
+        manifest=manifest_descriptor,
+        candidate_id=candidate,
+        bindings=bindings,
+        targets=targets,
+        check_names=(
+            "v4-version-only",
+            "canonical-descriptor-binding",
+            "capture-marker-closure",
+            "serial-contract-request-response-audit-replay",
+            "source-audit-marker-binding",
+            "pid-start-tick-listener-gpu-binding",
+            "runtime-config-candidate-profile-binding",
+            "configuration-serial-observation-process-bridge",
+        ),
+    )
+
+
+def verify_soak_provenance_v4(evidence_root: Path, manifest_path: str) -> dict[str, Any]:
+    root_fd = _open_private_evidence_root(evidence_root, "evidence root")
+    try:
+        return verify_soak_provenance_v4_fd(root_fd, manifest_path)
+    finally:
+        os.close(root_fd)
+
+
+def verify_completed_soak_provenance_v4_fd(
+    root_fd: int,
+    manifest_path: str,
+) -> dict[str, Any]:
+    manifest_name = _soak_terminal_manifest_name(
+        manifest_path, "completed v4 soak manifest path"
+    )
+    report = verify_soak_provenance_v4_fd(root_fd, manifest_name)
+    manifest = _descriptor(report["raw_manifest"], "completed v4 soak manifest descriptor")
+    _read_soak_v4_completion_marker(root_fd, manifest)
+    final_manifest, _final_document = _read_manifest(
+        root_fd, manifest_name, "completed v4 soak manifest final revalidation"
+    )
+    if final_manifest != manifest:
+        _fail(
+            "soak-v4-manifest-changed-during-completion-verification",
+            "v4 soak manifest changed while its completion marker was verified",
+        )
+    _read_soak_v4_completion_marker(root_fd, final_manifest)
+    return report
+
+
+def verify_completed_soak_provenance_v4(
+    evidence_root: Path,
+    manifest_path: str,
+) -> dict[str, Any]:
+    root_fd = _open_private_evidence_root(evidence_root, "evidence root")
+    try:
+        return verify_completed_soak_provenance_v4_fd(root_fd, manifest_path)
     finally:
         os.close(root_fd)
 
@@ -1434,7 +2361,7 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evidence-root", required=True, type=Path)
-    parser.add_argument("--kind", required=True, choices=("soak", "rollback"))
+    parser.add_argument("--kind", required=True, choices=("soak", "soak-v4", "rollback"))
     parser.add_argument("--manifest", required=True)
     return parser
 
@@ -1442,11 +2369,12 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        report = (
-            verify_completed_soak_provenance(args.evidence_root, args.manifest)
-            if args.kind == "soak"
-            else verify_rollback_provenance(args.evidence_root, args.manifest)
-        )
+        if args.kind == "soak":
+            report = verify_completed_soak_provenance(args.evidence_root, args.manifest)
+        elif args.kind == "soak-v4":
+            report = verify_completed_soak_provenance_v4(args.evidence_root, args.manifest)
+        else:
+            report = verify_rollback_provenance(args.evidence_root, args.manifest)
     except (C02ProvenanceError, common.ProvenanceV2Error) as error:
         print(str(error), file=sys.stderr)
         return 2

@@ -54,7 +54,7 @@ Riley는 vLLM의 전체 기능을 복제하지 않고 다음 범위부터 이긴
 |---|---|---|---|
 | C01 | [vLLM 승리 계약](01-vllm-win-contract.md) | 공정 비교와 M4/M5 판정 계약 고정 | 없음 |
 | C02-P0 | [effective runtime configuration receipt](02a-effective-runtime-config-receipt.md) | cold-prepared `/v1/config`와 startup artifact raw evidence 구현 | C01 |
-| C02-P1 | [provenance v2와 reconstructed rollback baseline](02b-c02-p1-provenance-v2.md) | self-authored soak/rollback summary를 raw process/evidence provenance로 교체 | C02-P0 |
+| C02-P1 | [provenance v2와 reconstructed rollback baseline](02b-c02-p1-provenance-v2.md) | v3 config bridge 뒤에 v4 serial-session raw provenance를 닫고 self-authored soak/rollback summary를 raw process/evidence provenance로 교체 | C02-P0 |
 | C02 | [RC3 candidate qualification](02-rc3-candidate-qualification.md) | 최신 단일 revision의 정식 release gate 종료 | C01, C02-P0, C02-P1 |
 | C03 | [Scheduler routing property fuzz](03-scheduler-output-routing-fuzz.md) | request-token routing invariant를 생성형 테스트로 고정 | C02 |
 | C04 | [Llama executor 분리](04-llama-executor-refactor.md) | graph/fusion 작업 전에 거대 executor를 동작 보존 분리 | C03 권장 |
@@ -125,4 +125,4 @@ known limitations
 
 ## 8. 권장 착수 순서
 
-우선 `C01 → C02-P0 → C02-P1 → C02 → C03 → C04`로 비교 기준, raw evidence surface, provenance closure, release 안정성, routing invariant, 코드 경계를 닫는다. 이후 `C05 → C06 → C07`로 CUDA Graph M2를 판정한다. C07 이후 새 profile이 실제 병목을 선택할 때만 C09~C11의 fusion 순서를 확정한다. Prefix cache와 process 격리는 성능 숫자를 만들기 위한 우회가 아니라 별도의 serving 효율·안정성 축으로 판정한다.
+우선 `C01 → C02-P0 → C02-P1/v3 config bridge → C02-P1/v4 serial-session binder → C02-P1 lifecycle·semantic closure → C02 → C03 → C04`로 비교 기준, raw evidence surface, provenance closure, release 안정성, routing invariant, 코드 경계를 닫는다. 첫 C02-P1 lifecycle runner는 contract 1 scenario·observation 1회·v4 manifest 1개만 허용하며, multi-scenario timing/집계는 후속 versioned semantic contract로 미룬다. v4 binder와 fixture 테스트가 clean source로 고정되기 전에는 GPU capture나 candidate freeze를 시작하지 않는다. 이후 `C05 → C06 → C07`로 CUDA Graph M2를 판정한다. C07 이후 새 profile이 실제 병목을 선택할 때만 C09~C11의 fusion 순서를 확정한다. Prefix cache와 process 격리는 성능 숫자를 만들기 위한 우회가 아니라 별도의 serving 효율·안정성 축으로 판정한다.

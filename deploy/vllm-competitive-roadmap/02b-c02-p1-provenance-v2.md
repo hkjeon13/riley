@@ -100,14 +100,15 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 이 baseline으로 가능한 판정은 `reconstructed_operational_rollback`뿐이다. `historical_stable_binary_rollback`은 `not-established`로 유지한다. 실제 historical stable bundle이 나중에 제공되면 새 immutable manifest/version과 별도 gate로 추가한다.
 
-## 5. v3 raw config bridge와 semantic replay
+## 5. v3 raw config bridge, v4 serial closure와 semantic replay
 
 ### Soak v2
 
 향후 `run_remote_c02_soak_v2.sh`가 GPU UUID/used-memory preflight, exclusive
 lock, frozen arm의 `env -i`, 새 evidence root를 강제한다.
 그 lifecycle runner에 앞서 landed한
-`c02-raw-soak-runner-contract-v1.schema.json`과
+`c02-raw-soak-runner-contract-v1.schema.json`,
+`c02-raw-scenario-capture-v1.schema.json`과
 `capture_c02_raw_soak_scenarios_v1.py`는 이미 실행 중인 **단일** host process에서
 serial non-stream completion의 exact request/response bytes와 source-written
 generation-audit-v2 record/marker를 보존한다. 이는 runner나 GPU operation이
@@ -121,31 +122,72 @@ GPU tuple을 보존한다.
 v1 serial contract는 streaming, concurrency/cancel/disconnect,
 restart/rollback/multi-PID, `exact-backend-fallback`을 fail closed한다.
 특히 현재 source에는 generation-audit record와 별개인 native fallback-event leaf가
-없고 v3 binder는 fallback descriptor의 중복 재사용을 허용하지 않으므로, audit
-record를 복사하거나 config 문자열로 대체해서 fallback을 주장하면 안 된다. 이후
-lifecycle runner만 config bridge → scenario producer → per-scenario C02 observer
-→ source shutdown marker → versioned raw bind 순서를 하나의 held GPU lock 아래에서 연결한다.
-현재 v3 bind-request/manifest에는 scenario producer의 `session.json` field가 없어
-opaque ledger/index leaf만으로 이 producer를 terminal bind하면 안 된다. 다음
-versioned binder는 session descriptor, incomplete-marker closure, request/response
-ID-to-source-audit marker, contract inventory, 그리고 scenario PID/listener proof를
-explicit replay한 뒤에만 lifecycle runner output을 수용한다.
-`bind_raw_c02_soak_v2.py`는 그 runner를 대체하거나 service/GPU/SSH/container를
-조작하지 않는다. canonical `riley.soak-v2-bind-request.v3`의 path-only leaf를
-하나의 held private-root FD로 읽고, `riley.soak-v2-raw-provenance.v3` manifest와
-nonhidden `<manifest>.complete` marker를 create-only로 기록한다. marker는
-`riley.soak-v2-raw-provenance-complete.v3`이며 정확히 `schema_version`,
-`artifact_filename`, `artifact_sha256`만 가진다. 각 scenario는 다음 raw leaf를
-descriptor로 남긴다.
-`benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json`는 이 bind
-request의 closed path-only shape를 publish하며 caller-supplied descriptor/hash를
-받지 않는다.
+없으므로 audit record를 복사하거나 config 문자열로 대체해서 fallback을 주장하면
+안 된다. 이후 lifecycle runner만 config bridge → scenario producer → C02 observer
+→ source shutdown marker → versioned raw bind 순서를 하나의 held GPU lock 아래에서
+연결한다. 단 첫 runner version은 **contract 1 scenario / observation 1회 / v4 manifest
+1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지 증명하지
+못하므로 aggregate/interleaved soak은 timing을 별도 증명하는 후속 v5/semantic contract로
+미룬다.
 
-raw soak provenance는 `stable-default`와 `max-performance-exact`만 수용한다.
-`exact-backend-fallback` scenario는 후자의 arm에서만 허용되고 non-null native
-fallback event leaf를 반드시 bind한다. 이는 raw binding 조건일 뿐 semantic
-selection replay나 candidate qualification을 판정하지 않는다. rollback raw
-provenance는 `stable-default` arm으로만 제한한다.
+현재 v3 bind-request/manifest에는 scenario producer의 `session.json` field가 없어
+opaque ledger/index leaf만으로 이 producer를 terminal bind하면 안 된다. 따라서
+v3를 넓히지 않고 serial non-stream subset 전용 **v4**를 추가한다.
+v3 binder와 verifier는 v1 serial contract, request ledger, generation-audit index의
+versioned JSON을 명시적으로 거부해, rename/copy나 retained
+`capture-incomplete.json`이 있어도 opaque v3 leaf로 producer closure를 우회하지
+못하게 한다. 기존 generic historical runtime-event leaf의 grammar는 바꾸지 않는다.
+`riley.soak-v2-bind-request.v4`에는 top-level
+`scenario_capture_session_path` 하나만 두며, scenario별 caller input은
+`scenario_id`와 C02 `observation_session_path`뿐이다. scenario contract,
+ledger, runtime event, generation-audit index, target tuple은 caller가 다시
+선언하지 않고 held private-root FD로 읽은 capture session에서 derive한다.
+
+v4에서 쓰는 모든 `*_session_path`는 evidence root 바로 아래의 정확한
+`<capture>/session.json` direct child여야 한다. source audit record/marker는 capture
+directory와 다른 하나의 direct-child audit directory에만 있어야 하며, scenario마다
+audit parent를 섞을 수 없다. private root의 nonblocking exclusive lock을 잡은 뒤
+`NAME.json`과 `NAME.json.complete`가 모두 없는 경우에만 terminal output을 생성한다.
+
+v4 binder는 session descriptor, parent `capture-incomplete.json` 부재,
+contract inventory, request/response ID-to-source-audit marker, 그리고
+scenario PID/start-tick/listener proof를 explicit replay한 뒤에만 lifecycle
+runner output을 수용한다. 그 tuple은 config bridge와 observation session의
+PID/start-tick/listener/GPU tuple에도 일치해야 한다. 새 terminal manifest와 marker는
+각각 `riley.soak-v2-raw-provenance.v4` 및
+`riley.soak-v2-raw-provenance-complete.v4`이고, marker는 정확히
+`schema_version`, `artifact_filename`, `artifact_sha256`만 가진다. v4는
+`exact-backend-fallback`을 fail closed한다; 해당 source-owned native leaf가
+추가된 후 별도 version bump에서만 다시 다룬다.
+
+이 full config-bridge/serial/observation join은 manifest 생성 **전에** 완료한다.
+따라서 정상적인 target/GPU/bridge drift는 create-only nonterminal manifest를 남기지
+않는다. v4 completion marker는 먼저 별도 durable nonterminal intent leaf를 만든 뒤
+create-only linked final marker로 공개한다. 따라서 final 공개 전 file-sync 실패는 final
+marker를 만들지 않는다. final marker가 보인 뒤 parent-directory sync가 실패하면 binder는
+`ambiguous-terminal-publication` nonzero로 끝나며 lifecycle success receipt를 만들면 안
+된다. raw verifier가 paired intent/final marker를 읽을 수 있어도, 이후 qualification/
+finalizer는 이 ambiguous 결과 뒤의 visible marker만으로 lifecycle authority를 인정하지
+않고 runner supervisor의 성공 receipt를 추가로 요구한다.
+
+`bind_raw_c02_soak_v2.py` 계열은 runner를 대체하거나
+service/GPU/SSH/container를 조작하지 않는다. v3 schema는 config bridge의
+historical closed shape로 남기고,
+`benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`가 v4의
+closed path-only shape를 publish한다. 어느 버전도 caller-supplied
+descriptor/hash를 받지 않는다.
+
+raw soak provenance v4는 `stable-default`와 `max-performance-exact`만 수용하며,
+initial serial subset에서는 `exact-backend-fallback`을 수용하지 않는다. 이는 raw
+binding 조건일 뿐 semantic selection replay나 candidate qualification을 판정하지
+않는다. rollback raw provenance는 `stable-default` arm으로만 제한한다.
+
+lifecycle runner보다 먼저 `check_c02_config_bridge_v1.py`를 추가한다. 이 helper는
+private evidence root와 endpoint/startup/direct `<capture>/session.json` path, expected
+candidate/profile만 받아 held-FD로 config bridge를 pure replay하고 configuration SHA와
+PID/start-tick/listener/GPU tuple을 derive한다. caller-supplied SHA/target, GPU/network/
+subprocess 실행, evidence leaf 생성, qualification verdict는 금지하며 canonical stdout의
+`bound` / `not-run` diagnostic report만 낸다.
 
 - raw `/v1/config` 및 startup artifact bytes
 - raw public request/response or SSE bytes와 matching generation audit v2
@@ -179,16 +221,19 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 2. reconstructed baseline builder/checker와 adversarial tests를 추가한다.
 3. typed sampling selection, private-FD generation audit, 그리고 source-owned
    shutdown v2 artifact/marker producer를 Rust source에 추가한다.
-4. config endpoint process bridge와 soak/rollback raw runners·binders, hostile-
+4. v4 serial capture-session binder/schema와 hostile fixture tests를 추가한다.
+5. config endpoint process bridge와 soak/rollback raw runners·binders, hostile-
    evidence tests를 추가한다.
-5. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
-6. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
+6. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
+7. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
 ## 7. 완료 조건
 
 - v1 receipt, self-authored fallback string, missing strict-open flags, self-authored worker/model IDs는 final C02 input에서 fail closed한다.
-- v3 soak provenance는 raw descriptor hash뿐 아니라 config endpoint와 every
-  scenario의 same candidate/config/PID/start-tick/listener inode/GPU tuple을 replay한다.
+- v4 serial soak provenance는 raw descriptor hash뿐 아니라 capture session의
+  incomplete-marker closure, contract/request/audit linkage와 config endpoint 및
+  every scenario의 same candidate/config/PID/start-tick/listener inode/GPU tuple을
+  replay한다. v3 input은 serial-capture path에서 허용하지 않는다.
 - max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2와 public generation bytes가 one-to-one으로 bind된다.
 - shutdown v2 artifact와 nonhidden completion marker는 same PID/start-tick tuple과
   exact final-metrics bytes를 bind하며, v1 artifact/hidden marker는 fail closed한다.

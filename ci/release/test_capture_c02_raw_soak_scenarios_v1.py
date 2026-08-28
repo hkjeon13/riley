@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import stat
 import tempfile
 import unittest
@@ -291,6 +292,7 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
         for endpoint in (
             "http://localhost:18080/v1/completions",
             "http://127.0.0.1:80/v1/completions",
+            "http://127.0.0.1:65536/v1/completions",
             "http://127.0.0.1:18080/v1/config",
         ):
             with self.subTest(endpoint=endpoint):
@@ -304,6 +306,10 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
             with self.assertRaises(capture.RawScenarioCaptureError):
                 capture._open_flags(directory=True)
 
+    def test_rejects_zero_configuration_sha256(self) -> None:
+        with self.assertRaises(capture.RawScenarioCaptureError):
+            capture._sha256("0" * 64, "fixture configuration SHA-256")
+
     def test_cli_help_is_available_without_a_capture(self) -> None:
         with contextlib.redirect_stdout(io.StringIO()):
             with self.assertRaises(SystemExit) as raised:
@@ -311,8 +317,9 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
         self.assertEqual(raised.exception.code, 0)
 
     def test_published_contract_schema_matches_the_closed_runtime_contract(self) -> None:
+        candidate_root = Path(__file__).resolve().parents[2] / "benchmarks/release/candidates"
         schema = json.loads(
-            (Path(__file__).resolve().parents[2] / "benchmarks/release/candidates/c02-raw-soak-runner-contract-v1.schema.json").read_text(
+            (candidate_root / "c02-raw-soak-runner-contract-v1.schema.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -322,6 +329,58 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
         self.assertEqual(
             schema["$defs"]["completionRequest"]["properties"]["stream"]["const"],
             False,
+        )
+        capture_schema = json.loads(
+            (candidate_root / "c02-raw-scenario-capture-v1.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            capture_schema["properties"]["schema_version"]["const"],
+            capture.CAPTURE_VERSION,
+        )
+        self.assertEqual(
+            set(capture_schema["required"]),
+            {
+                "schema_version",
+                "capture_status",
+                "qualification_status",
+                "endpoint",
+                "contract",
+                "runtime_identity",
+                "target",
+                "scenarios",
+            },
+        )
+        self.assertEqual(
+            capture_schema["$defs"]["sha256"]["not"]["const"],
+            "0" * 64,
+        )
+        endpoint_pattern = capture_schema["properties"]["endpoint"]["pattern"]
+        for endpoint in (
+            "http://127.0.0.1:1024/v1/completions",
+            "http://127.0.0.1:65535/v1/completions",
+        ):
+            self.assertIsNotNone(re.fullmatch(endpoint_pattern, endpoint))
+        for endpoint in (
+            "http://127.0.0.1:1023/v1/completions",
+            "http://127.0.0.1:65536/v1/completions",
+        ):
+            self.assertIsNone(re.fullmatch(endpoint_pattern, endpoint))
+        audit_schema = json.loads(
+            (candidate_root / "c02-generation-audit-v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        completion_schema = json.loads(
+            (candidate_root / "c02-generation-audit-completion-v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(audit_schema["$defs"]["sha256"]["not"]["const"], "0" * 64)
+        self.assertEqual(
+            completion_schema["properties"]["artifact_sha256"]["not"]["const"],
+            "0" * 64,
         )
 
 
