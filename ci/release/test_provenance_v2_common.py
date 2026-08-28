@@ -209,6 +209,26 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             finally:
                 os.close(root_fd)
 
+    def test_verify_descriptor_file_streams_digest_length_without_json_loading(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            try:
+                payload = b"artifact-bytes" * 4096
+                common.write_create_only(root_fd, "artifact.bin", payload, "artifact")
+                descriptor = common.descriptor_for_bytes("artifact.bin", payload, "artifact")
+                common.verify_descriptor_file(root_fd, descriptor, "artifact")
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.verify_descriptor_file(
+                        root_fd,
+                        {**descriptor.as_json(), "byte_length": len(payload) - 1},
+                        "artifact",
+                    )
+                self.assert_reason(raised, "evidence-length-mismatch")
+            finally:
+                os.close(root_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

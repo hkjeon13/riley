@@ -25,6 +25,7 @@ from typing import Any, Mapping, NoReturn, Sequence
 
 
 DEFAULT_MAX_JSON_BYTES = 8 * 1024 * 1024
+DEFAULT_MAX_ARTIFACT_BYTES = 1 << 42
 DEFAULT_READ_CHUNK_BYTES = 1024 * 1024
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SAFE_LEAF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -514,6 +515,102 @@ def read_descriptor_json(
     parsed_document = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
     assert isinstance(parsed_document, dict)
     return raw, parsed_document
+
+
+def _verify_regular_at(
+    directory_fd: int,
+    name: str,
+    descriptor: EvidenceDescriptor,
+    label: str,
+    *,
+    maximum_bytes: int,
+) -> None:
+    """Stream-hash one descriptor without loading an artifact into memory."""
+
+    _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
+    _require_directory_fd(directory_fd, f"{label} parent")
+    name = _validate_leaf_name(name, f"{label} name")
+    if descriptor.byte_length > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+    try:
+        before = os.lstat(name, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect {label}: {error}")
+    _require_regular_single_link(before, label)
+    if before.st_size != descriptor.byte_length:
+        _fail("evidence-length-mismatch", f"{label} byte length differs from descriptor")
+    try:
+        opened_fd = os.open(name, _file_open_flags(), dir_fd=directory_fd)
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
+    try:
+        opened = os.fstat(opened_fd)
+        _require_regular_single_link(opened, label)
+        if _stable_stat(before) != _stable_stat(opened):
+            _fail("raced-input", f"{label} changed while it was opened")
+        digest = hashlib.sha256()
+        remaining = opened.st_size
+        while remaining:
+            try:
+                chunk = os.read(opened_fd, min(DEFAULT_READ_CHUNK_BYTES, remaining))
+            except OSError as error:
+                _fail("unreadable-input", f"cannot read {label}: {error}")
+            if not chunk:
+                _fail("truncated-input", f"{label} changed while it was read")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        try:
+            if os.read(opened_fd, 1):
+                _fail("mutated-input", f"{label} grew while it was read")
+        except OSError as error:
+            _fail("unreadable-input", f"cannot re-read {label}: {error}")
+        after = os.fstat(opened_fd)
+        _require_regular_single_link(after, label)
+        if _stable_stat(opened) != _stable_stat(after):
+            _fail("mutated-input", f"{label} changed while it was read")
+    finally:
+        _close_quietly(opened_fd)
+    try:
+        path_after = os.lstat(name, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("raced-input", f"cannot re-inspect {label}: {error}")
+    _require_regular_single_link(path_after, label)
+    if _stable_stat(before) != _stable_stat(path_after):
+        _fail("raced-input", f"{label} changed while it was read")
+    if digest.hexdigest() != descriptor.sha256:
+        _fail("evidence-hash-mismatch", f"{label} SHA-256 differs from descriptor")
+
+
+def verify_descriptor_file(
+    root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> None:
+    """Fail-closed stream verification for any checksummed evidence leaf.
+
+    Unlike ``read_descriptor_json``, this helper never materializes the raw
+    file.  It is appropriate for source archives, bundles, and OCI artifacts
+    whose configured upper bound may exceed the JSON evidence limit.
+    """
+
+    candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
+    parsed = parse_descriptor(candidate, label)
+    relative = validate_relative_path(parsed.path, f"{label}.path")
+    parts = PurePosixPath(relative).parts
+    parent_fd, owned = _open_relative_directory_chain(root_fd, parts[:-1], label)
+    try:
+        _verify_regular_at(
+            parent_fd,
+            parts[-1],
+            parsed,
+            label,
+            maximum_bytes=maximum_bytes,
+        )
+    finally:
+        for owned_fd in reversed(owned):
+            _close_quietly(owned_fd)
 
 
 @dataclass(frozen=True)
