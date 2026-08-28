@@ -1157,6 +1157,9 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             "soak-v2-receipt-v4.schema.json",
             "soak-v2-bind-request-v4.schema.json",
             "c02-raw-scenario-capture-v1.schema.json",
+            "c02-raw-soak-runner-contract-v2.schema.json",
+            "c02-generation-audit-index-v2.schema.json",
+            "c02-raw-scenario-capture-v2.schema.json",
             "rollback-receipt-v2.schema.json",
             "c02-config-endpoint-observation-v1.schema.json",
         ):

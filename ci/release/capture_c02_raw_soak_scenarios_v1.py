@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture serial, non-stream C02 soak scenarios from an already-running server.
+"""Capture serial, non-stream C02 scenarios from an already-running server.
 
 This is the raw-scenario producer used by the future C02-P1 host lifecycle
 runner.  It deliberately does *not* launch or stop Riley, choose a GPU, call
@@ -9,12 +9,13 @@ directory, and a canonical serial scenario contract, it writes exact public
 HTTP request/response bytes and binds each response ID to the corresponding
 source-written generation-audit-v2 record and completion marker.
 
-The initial contract is intentionally narrow: one non-stream request per
-scenario, serial execution, and no ``exact-backend-fallback`` scenario.  The
-source now emits a separate source-owned fallback-event leaf, but this v1
-capture does not replay or bind it with the paired generation audit; that
-requires a later versioned fallback capture/binder.  The module is
-self-contained because its remote wrapper invokes it with ``python -I -S``.
+The retained v1 contract intentionally rejects ``exact-backend-fallback``.
+The separate v2 contract admits exactly one max-performance-exact,
+non-stream, explicit ``temperature: 1`` request and replays the source-owned
+generation-audit and native fallback-event marker pairs.  Neither version
+launches or stops a process, operates a GPU, or decides qualification.  The
+module is self-contained because its remote wrapper invokes it with
+``python -I -S``.
 """
 
 from __future__ import annotations
@@ -43,14 +44,22 @@ CAPTURE_VERSION = "riley.c02-raw-scenario-capture.v1"
 LEDGER_VERSION = "riley.c02-raw-request-ledger.v1"
 AUDIT_INDEX_VERSION = "riley.c02-generation-audit-index.v1"
 INCOMPLETE_MARKER_VERSION = "riley.c02-raw-scenario-capture-incomplete.v1"
+FALLBACK_CONTRACT_VERSION = "riley.c02-raw-soak-runner-contract.v2"
+FALLBACK_CAPTURE_VERSION = "riley.c02-raw-scenario-capture.v2"
+FALLBACK_AUDIT_INDEX_VERSION = "riley.c02-generation-audit-index.v2"
+FALLBACK_INCOMPLETE_MARKER_VERSION = "riley.c02-raw-scenario-capture-incomplete.v2"
 AUDIT_VERSION = "riley.c02-generation-audit.v2"
 AUDIT_COMPLETION_VERSION = "riley.c02-generation-audit-completion.v2"
+FALLBACK_EVENT_VERSION = "riley.c02-native-fallback-event.v1"
+FALLBACK_EVENT_COMPLETION_VERSION = "riley.c02-native-fallback-event-completion.v1"
+FALLBACK_SCENARIO_ID = "exact-backend-fallback"
 INCOMPLETE_MARKER_NAME = "capture-incomplete.json"
 
 MAX_CONTRACT_BYTES = 1024 * 1024
 MAX_HTTP_BODY_BYTES = 16 * 1024 * 1024
 MAX_HTTP_HEAD_BYTES = 64 * 1024
 MAX_AUDIT_BYTES = 16 * 1024 * 1024
+MAX_NATIVE_FALLBACK_EVENTS = 65_536
 MAX_PROC_BYTES = 1024 * 1024
 MAX_SERVER_FDS = 16384
 MAX_SCENARIOS = 32
@@ -604,20 +613,50 @@ def _completion_request(value: Any, label: str) -> dict[str, Any]:
     return row
 
 
+def _fallback_completion_request(value: Any, label: str) -> dict[str, Any]:
+    """Close the first public fallback arm to one f32-stable cause.
+
+    The current public completion grammar cannot set a repetition penalty,
+    minimum output tokens, or token-ID stop mask.  Pinning temperature to one
+    is the only public byte sequence this version admits: it both establishes
+    the reviewed native fallback reason and cannot round to zero in Rust's
+    f32 request decoder.
+    """
+
+    row = _completion_request(value, label)
+    if row["max_tokens"] != 1:
+        _fail(f"{label}.max_tokens must be exactly 1 in the native fallback v2 contract")
+    if row["temperature"] != 1.0:
+        _fail(f"{label}.temperature must be exactly 1.0 in the native fallback v2 contract")
+    if row["top_p"] != 1.0:
+        _fail(f"{label}.top_p must be exactly 1.0 in the native fallback v2 contract")
+    return row
+
+
 def validate_contract(raw: bytes, *, candidate_id: str, configuration_profile: str) -> dict[str, Any]:
     row = _exact(
         _parse_json(raw, "scenario contract", maximum=MAX_CONTRACT_BYTES, canonical=True),
         {"schema_version", "candidate_id", "configuration_profile", "scenarios"},
         "scenario contract",
     )
-    if row["schema_version"] != CONTRACT_VERSION:
-        _fail(f"scenario contract must use {CONTRACT_VERSION}")
+    version = row["schema_version"]
+    if version not in {CONTRACT_VERSION, FALLBACK_CONTRACT_VERSION}:
+        _fail(
+            f"scenario contract must use {CONTRACT_VERSION} or {FALLBACK_CONTRACT_VERSION}"
+        )
     if _candidate_id(row["candidate_id"], "scenario contract.candidate_id") != candidate_id:
         _fail("scenario contract candidate_id differs from --candidate-id")
     if _configuration_profile(row["configuration_profile"], "scenario contract.configuration_profile") != configuration_profile:
         _fail("scenario contract configuration_profile differs from --configuration-profile")
     scenarios = row["scenarios"]
-    if not isinstance(scenarios, list) or not 1 <= len(scenarios) <= MAX_SCENARIOS:
+    if not isinstance(scenarios, list):
+        _fail("scenario contract.scenarios must be an array")
+    if version == FALLBACK_CONTRACT_VERSION:
+        if configuration_profile != "max-performance-exact":
+            _fail("native fallback v2 capture requires max-performance-exact")
+        if len(scenarios) != 1:
+            _fail("native fallback v2 contract must contain exactly one scenario")
+    elif not 1 <= len(scenarios) <= MAX_SCENARIOS:
         _fail("scenario contract.scenarios must be a bounded nonempty array")
     seen: set[str] = set()
     for index, item in enumerate(scenarios):
@@ -625,10 +664,16 @@ def validate_contract(raw: bytes, *, candidate_id: str, configuration_profile: s
         scenario_id = scenario["scenario_id"]
         if type(scenario_id) is not str or SCENARIO_ID_RE.fullmatch(scenario_id) is None or scenario_id in seen:
             _fail(f"scenario contract.scenarios[{index}].scenario_id must be a unique normalized identifier")
-        if scenario_id == "exact-backend-fallback":
+        if version == CONTRACT_VERSION and scenario_id == FALLBACK_SCENARIO_ID:
             _fail("exact-backend-fallback requires versioned native fallback capture/binder replay and is deferred")
+        if version == FALLBACK_CONTRACT_VERSION and scenario_id != FALLBACK_SCENARIO_ID:
+            _fail("native fallback v2 contract permits only exact-backend-fallback")
         seen.add(scenario_id)
-        _completion_request(scenario["completion_request"], f"scenario contract.scenarios[{index}].completion_request")
+        request_label = f"scenario contract.scenarios[{index}].completion_request"
+        if version == FALLBACK_CONTRACT_VERSION:
+            _fallback_completion_request(scenario["completion_request"], request_label)
+        else:
+            _completion_request(scenario["completion_request"], request_label)
     return row
 
 
@@ -744,7 +789,7 @@ def _audit_record(
     pid: int,
     start_ticks: int,
     request_id: str,
-) -> None:
+) -> dict[str, Any]:
     row = _parse_json(raw, "source generation audit", maximum=MAX_AUDIT_BYTES, canonical=True)
     required = {
         "schema_version", "candidate_id", "runtime_identity", "process_identity", "server_request_id",
@@ -760,9 +805,12 @@ def _audit_record(
         or identity["configuration_sha256"] != configuration_sha256
     ):
         _fail("source generation audit runtime identity differs from the bound configuration")
-    process = _exact(row["process_identity"], {"pid", "start_ticks"}, "source generation audit.process_identity")
-    if process["pid"] != pid or process["start_ticks"] != start_ticks:
+    audit_pid, audit_start_ticks = _source_process_identity(
+        row["process_identity"], "source generation audit.process_identity"
+    )
+    if audit_pid != pid or audit_start_ticks != start_ticks:
         _fail("source generation audit process identity differs from the live server")
+    return row
 
 
 def _audit_marker(raw: bytes, *, record_name: str, record_raw: bytes) -> None:
@@ -775,6 +823,122 @@ def _audit_marker(raw: bytes, *, record_name: str, record_raw: bytes) -> None:
         _fail("source generation audit completion marker does not bind the record name")
     if row["artifact_sha256"] != hashlib.sha256(record_raw).hexdigest():
         _fail("source generation audit completion marker hash does not bind the record bytes")
+
+
+def _source_process_identity(value: Any, label: str) -> tuple[int, int]:
+    process = _exact(value, {"pid", "start_ticks"}, label)
+    pid = process["pid"]
+    start_ticks = process["start_ticks"]
+    if type(pid) is not int or not 1 <= pid <= (1 << 32) - 1:
+        _fail(f"{label}.pid must be a positive u32 integer")
+    if type(start_ticks) is not int or start_ticks < 1:
+        _fail(f"{label}.start_ticks must be a positive integer")
+    return pid, start_ticks
+
+
+def _fallback_event(
+    raw: bytes,
+    *,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    pid: int,
+    start_ticks: int,
+    request_id: str,
+    audit_name: str,
+    audit_raw: bytes,
+    audit: dict[str, Any],
+) -> None:
+    """Replay the closed public nonzero-temperature fallback source leaf."""
+
+    if configuration_profile != "max-performance-exact":
+        _fail("source native fallback event requires max-performance-exact")
+    row = _exact(
+        _parse_json(raw, "source native fallback event", maximum=MAX_AUDIT_BYTES, canonical=True),
+        {
+            "schema_version",
+            "candidate_id",
+            "runtime_identity",
+            "process_identity",
+            "server_request_id",
+            "generation_audit",
+            "fallback_selections",
+        },
+        "source native fallback event",
+    )
+    if row["schema_version"] != FALLBACK_EVENT_VERSION:
+        _fail("source native fallback event has an unsupported schema version")
+    if row["candidate_id"] != candidate_id or row["server_request_id"] != request_id:
+        _fail("source native fallback event does not match the captured completion")
+    identity = _exact(
+        row["runtime_identity"],
+        {"configuration_profile", "configuration_sha256"},
+        "source native fallback event.runtime_identity",
+    )
+    if (
+        identity["configuration_profile"] != configuration_profile
+        or identity["configuration_sha256"] != configuration_sha256
+    ):
+        _fail("source native fallback event runtime identity differs from the bound configuration")
+    event_pid, event_start_ticks = _source_process_identity(
+        row["process_identity"], "source native fallback event.process_identity"
+    )
+    if event_pid != pid or event_start_ticks != start_ticks:
+        _fail("source native fallback event process identity differs from the live server")
+    generation_audit = _exact(
+        row["generation_audit"],
+        {"artifact_filename", "artifact_sha256"},
+        "source native fallback event.generation_audit",
+    )
+    if (
+        generation_audit["artifact_filename"] != audit_name
+        or generation_audit["artifact_sha256"] != hashlib.sha256(audit_raw).hexdigest()
+    ):
+        _fail("source native fallback event does not bind the exact generation audit")
+    events = row["fallback_selections"]
+    selections = audit["sampling_selections"]
+    if not isinstance(events, list) or not 1 <= len(events) <= MAX_NATIVE_FALLBACK_EVENTS:
+        _fail("source native fallback selections are outside the published event bound")
+    if events != selections:
+        _fail("source native fallback selections do not exactly replay the generation audit")
+    for index, selection in enumerate(events):
+        item = _exact(
+            selection,
+            {
+                "iteration_id",
+                "configured_backend",
+                "selected_backend",
+                "ineligibility_reason",
+                "committed",
+            },
+            f"source native fallback event.fallback_selections[{index}]",
+        )
+        if (
+            type(item["iteration_id"]) is not int
+            or item["iteration_id"] < 1
+            or item["configured_backend"] != "gpu-greedy"
+            or item["selected_backend"] != "cpu-normative"
+            or item["ineligibility_reason"] != "nonzero-temperature"
+            or item["committed"] is not True
+        ):
+            _fail("source native fallback event is not the reviewed nonzero-temperature transition")
+
+
+def _fallback_marker(raw: bytes, *, event_name: str, event_raw: bytes) -> None:
+    row = _exact(
+        _parse_json(
+            raw,
+            "source native fallback completion marker",
+            maximum=MAX_AUDIT_BYTES,
+            canonical=True,
+        ),
+        {"schema_version", "artifact_filename", "artifact_sha256"},
+        "source native fallback completion marker",
+    )
+    if row["schema_version"] != FALLBACK_EVENT_COMPLETION_VERSION or row["artifact_filename"] != event_name:
+        _fail("source native fallback completion marker does not bind the event name")
+    if row["artifact_sha256"] != hashlib.sha256(event_raw).hexdigest():
+        _fail("source native fallback completion marker hash does not bind the event bytes")
 
 
 def _wait_for_audit(
@@ -815,6 +979,70 @@ def _wait_for_audit(
         time.sleep(0.05)
 
 
+def _wait_for_native_fallback(
+    audit_fd: int,
+    *,
+    candidate_id: str,
+    configuration_profile: str,
+    configuration_sha256: str,
+    pid: int,
+    start_ticks: int,
+    request_id: str,
+    audit_name: str,
+    audit_raw: bytes,
+    wait_seconds: float,
+) -> tuple[str, bytes, str, bytes]:
+    """Wait for the source-owned fallback pair derived from one response ID."""
+
+    audit = _audit_record(
+        audit_raw,
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
+        configuration_sha256=configuration_sha256,
+        pid=pid,
+        start_ticks=start_ticks,
+        request_id=request_id,
+    )
+    event_name = f"{request_id}.fallback.json"
+    marker_name = f"{event_name}.complete"
+    deadline = time.monotonic() + wait_seconds
+    last_error: RawScenarioCaptureError | None = None
+    while True:
+        try:
+            event = _read_regular_at(
+                audit_fd,
+                event_name,
+                "source native fallback event",
+                maximum=MAX_AUDIT_BYTES,
+            )
+            marker = _read_regular_at(
+                audit_fd,
+                marker_name,
+                "source native fallback completion marker",
+                maximum=MAX_AUDIT_BYTES,
+            )
+            _fallback_event(
+                event,
+                candidate_id=candidate_id,
+                configuration_profile=configuration_profile,
+                configuration_sha256=configuration_sha256,
+                pid=pid,
+                start_ticks=start_ticks,
+                request_id=request_id,
+                audit_name=audit_name,
+                audit_raw=audit_raw,
+                audit=audit,
+            )
+            _fallback_marker(marker, event_name=event_name, event_raw=event)
+            return event_name, event, marker_name, marker
+        except RawScenarioCaptureError as error:
+            last_error = error
+        if time.monotonic() >= deadline:
+            detail = str(last_error) if last_error is not None else "source fallback event did not appear"
+            _fail(f"timed out waiting for completed source native fallback event: {detail}")
+        time.sleep(0.05)
+
+
 @dataclass(frozen=True)
 class CaptureRequest:
     endpoint: Endpoint
@@ -840,6 +1068,12 @@ def capture_raw_scenarios(request: CaptureRequest, *, repository_root: Path) -> 
         _fail("--audit-wait-seconds must be between 0.1 and 300")
     contract_raw = _read_absolute_regular(request.scenario_contract, "--scenario-contract", maximum=MAX_CONTRACT_BYTES)
     contract = validate_contract(contract_raw, candidate_id=candidate_id, configuration_profile=profile)
+    native_fallback = contract["schema_version"] == FALLBACK_CONTRACT_VERSION
+    capture_version = FALLBACK_CAPTURE_VERSION if native_fallback else CAPTURE_VERSION
+    index_version = FALLBACK_AUDIT_INDEX_VERSION if native_fallback else AUDIT_INDEX_VERSION
+    incomplete_marker_version = (
+        FALLBACK_INCOMPLETE_MARKER_VERSION if native_fallback else INCOMPLETE_MARKER_VERSION
+    )
     root_fd = _open_absolute_directory(request.evidence_root, "--evidence-root", private_root=True)
     audit_fd: int | None = None
     capture_fd: int | None = None
@@ -849,7 +1083,7 @@ def capture_raw_scenarios(request: CaptureRequest, *, repository_root: Path) -> 
         capture_fd = _new_private_directory(root_fd, capture_name, "scenario capture directory")
         _lock(capture_fd)
         marker = _canonical({
-            "schema_version": INCOMPLETE_MARKER_VERSION,
+            "schema_version": incomplete_marker_version,
             "capture_name": capture_name,
         })
         _write_new(capture_fd, INCOMPLETE_MARKER_NAME, marker)
@@ -920,6 +1154,28 @@ def capture_raw_scenarios(request: CaptureRequest, *, repository_root: Path) -> 
                 request_id=request_id,
                 wait_seconds=float(request.audit_wait_seconds),
             )
+            fallback_name: str | None = None
+            fallback_raw: bytes | None = None
+            fallback_marker_name: str | None = None
+            fallback_marker_raw: bytes | None = None
+            if native_fallback:
+                (
+                    fallback_name,
+                    fallback_raw,
+                    fallback_marker_name,
+                    fallback_marker_raw,
+                ) = _wait_for_native_fallback(
+                    audit_fd,
+                    candidate_id=candidate_id,
+                    configuration_profile=profile,
+                    configuration_sha256=configuration_sha256,
+                    pid=request.server_pid,
+                    start_ticks=start_ticks,
+                    request_id=request_id,
+                    audit_name=record_name,
+                    audit_raw=record_raw,
+                    wait_seconds=float(request.audit_wait_seconds),
+                )
             # The source audit can arrive after the HTTP completion.  Recheck
             # the held PID/listener tuple after its marker is visible so a
             # restart or PID reuse during that wait leaves this capture
@@ -953,14 +1209,28 @@ def capture_raw_scenarios(request: CaptureRequest, *, repository_root: Path) -> 
             }
             ledger_raw = _write_json(capture_fd, ledger_name, ledger)
             index = {
-                "schema_version": AUDIT_INDEX_VERSION,
+                "schema_version": index_version,
                 "scenario_id": scenario_id,
                 "server_request_id": request_id,
                 "audit_record": _descriptor(audit_path, record_raw),
                 "audit_completion_marker": _descriptor(audit_marker_path, marker_raw),
             }
+            if native_fallback:
+                if (
+                    fallback_name is None
+                    or fallback_raw is None
+                    or fallback_marker_name is None
+                    or fallback_marker_raw is None
+                ):
+                    _fail("native fallback source pair was not captured")
+                index["fallback_event"] = _descriptor(
+                    f"{audit_dir_name}/{fallback_name}", fallback_raw
+                )
+                index["fallback_completion_marker"] = _descriptor(
+                    f"{audit_dir_name}/{fallback_marker_name}", fallback_marker_raw
+                )
             index_raw = _write_json(capture_fd, index_name, index)
-            scenario_rows.append({
+            scenario_row = {
                 "scenario_id": scenario_id,
                 "target": target,
                 "process": {
@@ -984,11 +1254,18 @@ def capture_raw_scenarios(request: CaptureRequest, *, repository_root: Path) -> 
                 # record itself, never a wrapper-derived event summary.
                 "runtime_event_log": _descriptor(audit_path, record_raw),
                 "generation_audit_index": _descriptor(f"{capture_name}/{index_name}", index_raw),
-            })
+            }
+            if native_fallback:
+                if fallback_name is None or fallback_raw is None:
+                    _fail("native fallback event was not captured")
+                scenario_row["fallback_event_log"] = _descriptor(
+                    f"{audit_dir_name}/{fallback_name}", fallback_raw
+                )
+            scenario_rows.append(scenario_row)
         if expected_target is None:
             _fail("scenario contract unexpectedly contained no scenarios")
         session = {
-            "schema_version": CAPTURE_VERSION,
+            "schema_version": capture_version,
             "capture_status": "captured",
             "qualification_status": "not-run",
             "endpoint": request.endpoint.url,

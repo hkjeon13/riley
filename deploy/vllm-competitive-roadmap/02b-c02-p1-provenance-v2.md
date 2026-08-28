@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt와 native sampling fallback source leaf/marker는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, 그리고 source pair raw capture v2는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, terminal binder v5·GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -160,9 +160,20 @@ v1 serial contract는 streaming, concurrency/cancel/disconnect,
 restart/rollback/multi-PID, `exact-backend-fallback`을 계속 fail closed한다.
 source에는 이제 generation-audit record와 별개인 native fallback-event leaf/marker가
 있지만, v1 capture와 v4 binder는 이를 아직 소비하지 않는다. audit record를 복사하거나
-config 문자열로 대체해서 fallback을 주장해서는 안 되며, 이후 capture v2/binder v5가
-두 source pair와 endpoint의 실제 GPU-greedy arm을 함께 replay한 뒤에만 해당 scenario를
-열 수 있다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
+config 문자열로 대체해서 fallback을 주장해서는 안 된다. `c02-raw-soak-runner-contract-v2`,
+`c02-raw-scenario-capture-v2`, `c02-generation-audit-index-v2`와 같은 self-contained
+producer의 explicit v2 branch는 `max-performance-exact`의 단일 non-stream
+`exact-backend-fallback` 요청만 받으며, Rust `f32` decoder에서도 0으로 반올림되지 않는
+exact `temperature: 1`의 `nonzero-temperature` 이유만 수용한다. response ID에서 파생한 같은 held
+`source-audit` child의 audit JSON/marker와 fallback JSON/marker 네 leaf를 모두
+replay하고, event가 exact audit filename/SHA·candidate/runtime/process/request identity와
+ordered selection을 재현할 때만 v2 raw session/index descriptor를 쓴다. 이 capture는
+wrapper fallback을 합성하지 않고 `qualification_status: "not-run"`만 남긴다.
+
+capture v2도 endpoint가 실제 GPU-greedy arm이었다는 사실이나 terminal fallback을
+증명하지 않는다. 이후 binder v5가 config bridge의 effective sampling backend와 두 source
+pair를 함께 replay한 뒤에만 해당 scenario를 terminally 열 수 있다. initial lifecycle
+runner는 config bridge → scenario producer → C02 observer
 → source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host
 lock 아래에서 연결한다. 첫 version은 **contract 1 scenario / observation 1회 / v4
 manifest 1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지

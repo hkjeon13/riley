@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/c02-raw-soak-runner-contract-v2.schema.json",
+  "title": "Riley C02 native fallback raw-capture contract v2",
+  "description": "Closed raw-capture input for the first public native sampling fallback arm. It admits exactly one max-performance-exact non-stream completion with temperature fixed at 1, which cannot round to zero in the Rust f32 request decoder. It neither interprets a fallback result nor operates SSH, Docker, or a GPU.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "candidate_id", "configuration_profile", "scenarios"],
+  "properties": {
+    "schema_version": {"const": "riley.c02-raw-soak-runner-contract.v2"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "configuration_profile": {"const": "max-performance-exact"},
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {"$ref": "#/$defs/scenario"}
+    }
+  },
+  "$defs": {
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "completion_request"],
+      "properties": {
+        "scenario_id": {"const": "exact-backend-fallback"},
+        "completion_request": {"$ref": "#/$defs/completionRequest"}
+      }
+    },
+    "completionRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "prompt", "max_tokens", "temperature", "top_p", "seed", "stream"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1, "maxLength": 256},
+        "prompt": {"type": "string", "minLength": 1, "maxLength": 1048576},
+        "max_tokens": {"const": 1},
+        "temperature": {"const": 1},
+        "top_p": {"const": 1},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 18446744073709551615},
+        "stream": {"const": false}
+      }
+    }
+  }
+}

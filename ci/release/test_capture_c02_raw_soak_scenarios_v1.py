@@ -102,7 +102,41 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
             ],
         }
 
-    def _write_audit(self, request_id: str = "cmpl-safe") -> tuple[bytes, bytes]:
+    def _fallback_contract(
+        self,
+        *,
+        configuration_profile: str = "max-performance-exact",
+        scenario_id: str = capture.FALLBACK_SCENARIO_ID,
+        max_tokens: int = 1,
+        temperature: float = 1.0,
+        top_p: float = 1.0,
+        stream: bool = False,
+    ) -> dict:
+        contract = self._contract(scenario_id=scenario_id, stream=stream)
+        contract["schema_version"] = capture.FALLBACK_CONTRACT_VERSION
+        contract["configuration_profile"] = configuration_profile
+        request = contract["scenarios"][0]["completion_request"]
+        request["max_tokens"] = max_tokens
+        request["temperature"] = temperature
+        request["top_p"] = top_p
+        return contract
+
+    def _write_audit(self, request_id: str = "cmpl-safe", *, fallback: bool = False) -> tuple[bytes, bytes]:
+        selection = {
+            "committed": True,
+            "configured_backend": "gpu-greedy",
+            "ineligibility_reason": None,
+            "iteration_id": 1,
+            "selected_backend": "gpu-greedy",
+        }
+        if fallback:
+            selection = {
+                "committed": True,
+                "configured_backend": "gpu-greedy",
+                "ineligibility_reason": "nonzero-temperature",
+                "iteration_id": 1,
+                "selected_backend": "cpu-normative",
+            }
         record = canonical(
             {
                 "schema_version": capture.AUDIT_VERSION,
@@ -116,15 +150,7 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
                 "delivery_mode": "non-stream",
                 "prompt_token_ids": [1],
                 "committed_output_tokens": [{"emitted_text_delta": "x", "token_id": 2}],
-                "sampling_selections": [
-                    {
-                        "committed": True,
-                        "configured_backend": "gpu-greedy",
-                        "ineligibility_reason": None,
-                        "iteration_id": 1,
-                        "selected_backend": "gpu-greedy",
-                    }
-                ],
+                "sampling_selections": [selection],
                 "finish_reason": "length",
                 "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             }
@@ -141,7 +167,54 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
         (self.audit_dir / f"{name}.complete").write_bytes(marker)
         return record, marker
 
-    def _request(self) -> capture.CaptureRequest:
+    def _write_native_fallback(
+        self,
+        audit_raw: bytes,
+        request_id: str = "cmpl-safe",
+        *,
+        event_mutator=None,
+        write_marker: bool = True,
+    ) -> tuple[bytes, bytes | None]:
+        audit = json.loads(audit_raw.decode("utf-8"))
+        event = {
+            "schema_version": capture.FALLBACK_EVENT_VERSION,
+            "candidate_id": self.candidate_id,
+            "runtime_identity": {
+                "configuration_profile": self.profile,
+                "configuration_sha256": self.configuration_sha256,
+            },
+            "process_identity": {"pid": self.server_pid, "start_ticks": self.start_ticks},
+            "server_request_id": request_id,
+            "generation_audit": {
+                "artifact_filename": f"{request_id}.json",
+                "artifact_sha256": hashlib.sha256(audit_raw).hexdigest(),
+            },
+            "fallback_selections": audit["sampling_selections"],
+        }
+        if event_mutator is not None:
+            event_mutator(event)
+        event_raw = canonical(event)
+        event_name = f"{request_id}.fallback.json"
+        marker_name = f"{event_name}.complete"
+        (self.audit_dir / event_name).write_bytes(event_raw)
+        if not write_marker:
+            return event_raw, None
+        marker = canonical(
+            {
+                "schema_version": capture.FALLBACK_EVENT_COMPLETION_VERSION,
+                "artifact_filename": event_name,
+                "artifact_sha256": hashlib.sha256(event_raw).hexdigest(),
+            }
+        )
+        (self.audit_dir / marker_name).write_bytes(marker)
+        return event_raw, marker
+
+    def _request(
+        self,
+        *,
+        capture_name: str = "serial-capture",
+        audit_wait_seconds: float = 0.2,
+    ) -> capture.CaptureRequest:
         return capture.CaptureRequest(
             endpoint=self.endpoint,
             server_pid=self.server_pid,
@@ -149,10 +222,10 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
             configuration_profile=self.profile,
             configuration_sha256=self.configuration_sha256,
             evidence_root=self.evidence,
-            capture_name="serial-capture",
+            capture_name=capture_name,
             audit_dir_name="source-audit",
             scenario_contract=self.contract_path,
-            audit_wait_seconds=0.2,
+            audit_wait_seconds=audit_wait_seconds,
         )
 
     def test_capture_preserves_exact_http_and_source_audit_without_gpu_or_service_calls(self) -> None:
@@ -200,6 +273,203 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
                     capture.validate_contract(raw, candidate_id=self.candidate_id, configuration_profile=self.profile)
         with self.assertRaises(capture.RawScenarioCaptureError):
             capture.validate_contract(canonical(self._contract()), candidate_id="riley-0.1.0-rc4", configuration_profile=self.profile)
+
+    def test_native_fallback_v2_contract_is_closed(self) -> None:
+        accepted = capture.validate_contract(
+            canonical(self._fallback_contract()),
+            candidate_id=self.candidate_id,
+            configuration_profile=self.profile,
+        )
+        self.assertEqual(accepted["schema_version"], capture.FALLBACK_CONTRACT_VERSION)
+        invalid = [
+            ("stable-profile", self._fallback_contract(configuration_profile="stable-default"), "stable-default"),
+            ("wrong-scenario", self._fallback_contract(scenario_id="smoke"), self.profile),
+            ("two-tokens", self._fallback_contract(max_tokens=2), self.profile),
+            ("float-token-count", self._fallback_contract(max_tokens=1.0), self.profile),
+            ("zero-temperature", self._fallback_contract(temperature=0.0), self.profile),
+            ("noncanonical-temperature", self._fallback_contract(temperature=0.5), self.profile),
+            ("sub-f32-temperature", self._fallback_contract(temperature=1e-100), self.profile),
+            ("top-p", self._fallback_contract(top_p=0.9), self.profile),
+            ("stream", self._fallback_contract(stream=True), self.profile),
+        ]
+        two_scenarios = self._fallback_contract()
+        two_scenarios["scenarios"].append(two_scenarios["scenarios"][0])
+        invalid.append(("multiple-scenarios", two_scenarios, self.profile))
+        for label, contract, profile in invalid:
+            with self.subTest(label=label):
+                with self.assertRaises(capture.RawScenarioCaptureError):
+                    capture.validate_contract(
+                        canonical(contract),
+                        candidate_id=self.candidate_id,
+                        configuration_profile=profile,
+                    )
+
+    def test_native_fallback_v2_captures_the_exact_source_pairs(self) -> None:
+        self.contract_path.write_bytes(canonical(self._fallback_contract()))
+        record, audit_marker = self._write_audit(fallback=True)
+        event, fallback_marker = self._write_native_fallback(record)
+        response = canonical({"id": "cmpl-safe", "object": "text_completion"})
+        head = (
+            f"HTTP/1.1 200 OK\r\nContent-Length: {len(response)}\r\n"
+            "Content-Type: application/json\r\n\r\n"
+        ).encode("ascii")
+        fake = FakeSocket([head + response, b""])
+        with mock.patch.object(capture.socket, "create_connection", return_value=fake), mock.patch.object(
+            capture, "_server_stat", return_value=(proc_stat(self.server_pid, self.start_ticks), self.start_ticks)
+        ), mock.patch.object(capture, "_bound_listener", return_value=self.listener):
+            session = capture.capture_raw_scenarios(
+                self._request(capture_name="fallback-capture"), repository_root=self.repository
+            )
+        self.assertEqual(session["schema_version"], capture.FALLBACK_CAPTURE_VERSION)
+        self.assertEqual(session["qualification_status"], "not-run")
+        scenario = session["scenarios"][0]
+        fallback_descriptor = scenario["fallback_event_log"]
+        self.assertEqual(fallback_descriptor["path"], "source-audit/cmpl-safe.fallback.json")
+        self.assertEqual(fallback_descriptor["sha256"], hashlib.sha256(event).hexdigest())
+        self.assertEqual(fallback_descriptor["byte_length"], len(event))
+        capture_dir = self.evidence / "fallback-capture"
+        index = json.loads(
+            (capture_dir / "000000-exact-backend-fallback.generation-audit-index.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(index["schema_version"], capture.FALLBACK_AUDIT_INDEX_VERSION)
+        self.assertEqual(
+            set(index),
+            {
+                "schema_version",
+                "scenario_id",
+                "server_request_id",
+                "audit_record",
+                "audit_completion_marker",
+                "fallback_event",
+                "fallback_completion_marker",
+            },
+        )
+        self.assertEqual(index["fallback_event"], fallback_descriptor)
+        self.assertEqual(index["fallback_completion_marker"]["path"], "source-audit/cmpl-safe.fallback.json.complete")
+        self.assertEqual((self.audit_dir / "cmpl-safe.json").read_bytes(), record)
+        self.assertEqual((self.audit_dir / "cmpl-safe.json.complete").read_bytes(), audit_marker)
+        self.assertEqual((self.audit_dir / "cmpl-safe.fallback.json").read_bytes(), event)
+        self.assertEqual((self.audit_dir / "cmpl-safe.fallback.json.complete").read_bytes(), fallback_marker)
+        self.assertFalse((capture_dir / capture.INCOMPLETE_MARKER_NAME).exists())
+        sent_body = json.loads(fake.sent.split(b"\r\n\r\n", 1)[1].decode("utf-8"))
+        self.assertEqual(sent_body["max_tokens"], 1)
+        self.assertEqual(sent_body["temperature"], 1.0)
+        self.assertEqual(sent_body["top_p"], 1.0)
+        self.assertIs(sent_body["stream"], False)
+
+    def test_native_fallback_v2_rejects_unbound_or_nonterminal_source_pairs(self) -> None:
+        self.contract_path.write_bytes(canonical(self._fallback_contract()))
+        record, _ = self._write_audit(fallback=True)
+        response = canonical({"id": "cmpl-safe", "object": "text_completion"})
+        head = (
+            f"HTTP/1.1 200 OK\r\nContent-Length: {len(response)}\r\n"
+            "Content-Type: application/json\r\n\r\n"
+        ).encode("ascii")
+        for label in ("missing-marker", "audit-sha", "selection", "marker-sha"):
+            with self.subTest(label=label):
+                event_path = self.audit_dir / "cmpl-safe.fallback.json"
+                marker_path = self.audit_dir / "cmpl-safe.fallback.json.complete"
+                event_path.unlink(missing_ok=True)
+                marker_path.unlink(missing_ok=True)
+                if label == "missing-marker":
+                    self._write_native_fallback(record, write_marker=False)
+                elif label == "audit-sha":
+                    self._write_native_fallback(
+                        record,
+                        event_mutator=lambda event: event["generation_audit"].update(
+                            {"artifact_sha256": "b" * 64}
+                        ),
+                    )
+                elif label == "selection":
+                    self._write_native_fallback(
+                        record,
+                        event_mutator=lambda event: event["fallback_selections"][0].update(
+                            {"selected_backend": "gpu-greedy"}
+                        ),
+                    )
+                else:
+                    event, _ = self._write_native_fallback(record)
+                    marker_path.write_bytes(
+                        canonical(
+                            {
+                                "schema_version": capture.FALLBACK_EVENT_COMPLETION_VERSION,
+                                "artifact_filename": "cmpl-safe.fallback.json",
+                                "artifact_sha256": "b" * 64,
+                            }
+                        )
+                    )
+                    self.assertNotEqual(hashlib.sha256(event).hexdigest(), "b" * 64)
+                capture_name = f"fallback-{label}"
+                with mock.patch.object(capture.socket, "create_connection", return_value=FakeSocket([head + response, b""])), mock.patch.object(
+                    capture, "_server_stat", return_value=(proc_stat(self.server_pid, self.start_ticks), self.start_ticks)
+                ), mock.patch.object(capture, "_bound_listener", return_value=self.listener):
+                    with self.assertRaises(capture.RawScenarioCaptureError):
+                        capture.capture_raw_scenarios(
+                            self._request(capture_name=capture_name, audit_wait_seconds=0.1),
+                            repository_root=self.repository,
+                        )
+                capture_dir = self.evidence / capture_name
+                marker = json.loads((capture_dir / capture.INCOMPLETE_MARKER_NAME).read_text(encoding="utf-8"))
+                self.assertEqual(marker["schema_version"], capture.FALLBACK_INCOMPLETE_MARKER_VERSION)
+                self.assertFalse((capture_dir / "session.json").exists())
+
+    def test_native_fallback_v2_rejects_event_selection_overflow(self) -> None:
+        record, _ = self._write_audit(fallback=True)
+        audit = json.loads(record.decode("utf-8"))
+        second_selection = dict(audit["sampling_selections"][0])
+        second_selection["iteration_id"] = 2
+        audit["sampling_selections"].append(second_selection)
+        audit_raw = canonical(audit)
+        event, _ = self._write_native_fallback(audit_raw)
+        self.assertEqual(capture.MAX_NATIVE_FALLBACK_EVENTS, 65_536)
+        with mock.patch.object(capture, "MAX_NATIVE_FALLBACK_EVENTS", 1):
+            with self.assertRaises(capture.RawScenarioCaptureError):
+                capture._fallback_event(
+                    event,
+                    candidate_id=self.candidate_id,
+                    configuration_profile=self.profile,
+                    configuration_sha256=self.configuration_sha256,
+                    pid=self.server_pid,
+                    start_ticks=self.start_ticks,
+                    request_id="cmpl-safe",
+                    audit_name="cmpl-safe.json",
+                    audit_raw=audit_raw,
+                    audit=audit,
+                )
+
+    def test_source_process_identity_rejects_float_json_numbers(self) -> None:
+        record, _ = self._write_audit(fallback=True)
+        bad_audit = json.loads(record.decode("utf-8"))
+        bad_audit["process_identity"]["pid"] = float(self.server_pid)
+        with self.assertRaises(capture.RawScenarioCaptureError):
+            capture._audit_record(
+                canonical(bad_audit),
+                candidate_id=self.candidate_id,
+                configuration_profile=self.profile,
+                configuration_sha256=self.configuration_sha256,
+                pid=self.server_pid,
+                start_ticks=self.start_ticks,
+                request_id="cmpl-safe",
+            )
+        event, _ = self._write_native_fallback(record)
+        audit = json.loads(record.decode("utf-8"))
+        bad_event = json.loads(event.decode("utf-8"))
+        bad_event["process_identity"]["start_ticks"] = float(self.start_ticks)
+        with self.assertRaises(capture.RawScenarioCaptureError):
+            capture._fallback_event(
+                canonical(bad_event),
+                candidate_id=self.candidate_id,
+                configuration_profile=self.profile,
+                configuration_sha256=self.configuration_sha256,
+                pid=self.server_pid,
+                start_ticks=self.start_ticks,
+                request_id="cmpl-safe",
+                audit_name="cmpl-safe.json",
+                audit_raw=record,
+                audit=audit,
+            )
 
     def test_response_capture_rejects_trailing_or_truncated_bytes(self) -> None:
         body = canonical({"id": "cmpl-safe"})
@@ -355,6 +625,74 @@ class CaptureRawSoakScenariosTests(unittest.TestCase):
         self.assertEqual(
             capture_schema["$defs"]["sha256"]["not"]["const"],
             "0" * 64,
+        )
+        fallback_contract_schema = json.loads(
+            (candidate_root / "c02-raw-soak-runner-contract-v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            fallback_contract_schema["properties"]["schema_version"]["const"],
+            capture.FALLBACK_CONTRACT_VERSION,
+        )
+        self.assertEqual(
+            fallback_contract_schema["properties"]["configuration_profile"]["const"],
+            "max-performance-exact",
+        )
+        self.assertEqual(
+            fallback_contract_schema["properties"]["scenarios"]["minItems"], 1
+        )
+        self.assertEqual(
+            fallback_contract_schema["properties"]["scenarios"]["maxItems"], 1
+        )
+        fallback_request = fallback_contract_schema["$defs"]["completionRequest"]["properties"]
+        self.assertEqual(
+            fallback_contract_schema["$defs"]["scenario"]["properties"]["scenario_id"]["const"],
+            capture.FALLBACK_SCENARIO_ID,
+        )
+        self.assertEqual(fallback_request["max_tokens"]["const"], 1)
+        self.assertEqual(fallback_request["temperature"]["const"], 1)
+        self.assertEqual(fallback_request["top_p"]["const"], 1)
+        self.assertIs(fallback_request["stream"]["const"], False)
+        fallback_index_schema = json.loads(
+            (candidate_root / "c02-generation-audit-index-v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            fallback_index_schema["properties"]["schema_version"]["const"],
+            capture.FALLBACK_AUDIT_INDEX_VERSION,
+        )
+        self.assertEqual(
+            set(fallback_index_schema["required"]),
+            {
+                "schema_version",
+                "scenario_id",
+                "server_request_id",
+                "audit_record",
+                "audit_completion_marker",
+                "fallback_event",
+                "fallback_completion_marker",
+            },
+        )
+        fallback_capture_schema = json.loads(
+            (candidate_root / "c02-raw-scenario-capture-v2.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(
+            fallback_capture_schema["properties"]["schema_version"]["const"],
+            capture.FALLBACK_CAPTURE_VERSION,
+        )
+        self.assertEqual(
+            fallback_capture_schema["$defs"]["runtimeIdentity"]["properties"][
+                "configuration_profile"
+            ]["const"],
+            "max-performance-exact",
+        )
+        self.assertIn(
+            "fallback_event_log",
+            fallback_capture_schema["$defs"]["scenario"]["required"],
         )
         endpoint_pattern = capture_schema["properties"]["endpoint"]["pattern"]
         for endpoint in (

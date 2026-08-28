@@ -1,11 +1,12 @@
 # C02-P1 v2 raw-provenance integration worklist
 
-Status: initial v4 lifecycle-supervisor/receipt and the source-owned native
-sampling fallback event/marker are implemented with CPU/static hostile-path
-coverage; this worklist remains design and integration material, not a
-qualification report. No actual GPU capture, candidate freeze, fallback
-capture/binding, or semantic qualification has been performed, and this file
-must not be copied into a candidate result directory as evidence.
+Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
+sampling fallback event/marker, and raw source-pair capture v2 are implemented
+with CPU/static hostile-path coverage; this worklist remains design and
+integration material, not a qualification report. No actual GPU capture,
+candidate freeze, terminal fallback binding, or semantic qualification has
+been performed, and this file must not be copied into a candidate result
+directory as evidence.
 
 ## Boundary to preserve
 
@@ -81,10 +82,12 @@ an evidence format only; a later qualification/finalizer must additionally
 require the runner's successful-supervisor receipt, rather than interpreting
 a visible marker after that ambiguous result as lifecycle authority.
 The initial v4 subset rejects `exact-backend-fallback` entirely. Its
-source-owned distinct native fallback leaf/marker is now published by Rust,
-but no v1/v4 producer or binder may synthesize or consume it yet. It remains
-raw `bound` / `not-run`; a later versioned capture/binder, semantic workload,
-and Gate E replay remain later work.
+source-owned distinct native fallback leaf/marker is now published by Rust.
+v1 capture, v4 binder, and the lifecycle runner/receipt still may not
+synthesize or consume it. The separate raw capture-v2 branch now records the
+two source marker pairs as descriptors, but remains `qualification_status:
+not-run`; terminal binder v5, semantic workload, and Gate E replay remain
+later work.
 
 ### Landed initial lifecycle supervisor and receipt
 
@@ -137,6 +140,29 @@ allow the lifecycle runner/receipt to claim fallback. Capture v2 and binder
 v5 must replay both source marker pairs and the endpoint's effective sampling
 backend before an `exact-backend-fallback` scenario can be admitted.
 
+### Landed native sampling fallback raw capture v2
+
+The self-contained `capture_c02_raw_soak_scenarios_v1.py` now dispatches by
+canonical contract version without widening v1. The new
+`c02-raw-soak-runner-contract-v2.schema.json` accepts exactly one
+`max-performance-exact`, non-stream `exact-backend-fallback` completion with
+`max_tokens: 1`, `top_p: 1`, and exact `temperature: 1`. Pinning temperature
+to one prevents a positive Python JSON value from underflowing to zero in the
+Rust `f32` request decoder; public completion bytes cannot establish the other
+source reasons, so this initial raw arm is closed to `nonzero-temperature`.
+
+For that v2 arm, the response ID derives exactly four sibling leaves under the
+same held `source-audit` FD: audit JSON/ordinary marker and native fallback
+JSON/ordinary marker. The event must bind the exact audit filename/SHA and
+identity tuple, and its ordered selections must exactly equal the audit's
+committed `gpu-greedy` → `cpu-normative`, `nonzero-temperature` projection.
+It accepts at most the source schema's 65,536 selections. The v2 index preserves
+descriptors for all four leaves and the v2 session's `fallback_event_log` is
+the original source event descriptor. A missing, unsafe, mismatched, or
+nonterminal source leaf leaves `capture-incomplete.json` in place. This is raw
+source-pair capture only: it does not use GPU/SSH/Docker, does not change
+v1/v4/lifecycle acceptance, and does not bind `/v1/config`.
+
 ## Required raw evidence inventory
 
 | Scope | Create-only raw leaves to bind |
@@ -165,11 +191,16 @@ record, never a wrapper-generated summary.  GPU evidence remains solely with
 the existing observation producer under the lifecycle runner's held lock; this
 local helper does not query or operate a GPU.
 
+The versioned v2 branch reuses that transport and held-FD boundary rather than
+copying a second producer. Its new contract/capture/index schemas record only
+the closed native fallback source-pair arm described above. v1 output remains
+fallback-free and byte-shape compatible with the existing v4 replay; v2 is not
+input to v4 or the initial lifecycle runner.
+
 This helper cannot start/stop a service, acquire a GPU lock, use Docker/SSH,
-or issue a qualification result.  It deliberately rejects streaming,
-restart/rollback/multi-PID semantics, and `exact-backend-fallback`: the v3
-binder requires a distinct fallback-event path, while v1/v4 do not yet replay
-the newly published source fallback pair. The landed initial lifecycle
+or issue a qualification result. Its v1 branch deliberately rejects streaming,
+restart/rollback/multi-PID semantics, and `exact-backend-fallback`; v1/v4 do
+not replay the newly published source fallback pair. The landed initial lifecycle
 runner performs the GPU/port/process preflight, config bridge, one immediate
 C02 metrics observation, and graceful shutdown around exactly one producer
 scenario before it reaches the same-process raw finalizer.
@@ -305,8 +336,9 @@ runtime configuration field or a trace counter.
      for this initial non-stream subset.  v3 must not consume it.  v4 derives
      contract/ledger/runtime/index leaves from one explicit capture session
    and admits only its serial non-stream scenarios; it rejects
-   `exact-backend-fallback` until a later capture/binder version replays the
-   separate native leaf.
+   `exact-backend-fallback`. The separate capture-v2 branch preserves the
+   native source pair, while the later terminal binder v5 must replay it with
+   the config bridge.
    - Bind each declared scenario target to its raw observation session and the
      v4-derived request/runtime/generation leaves.  The raw soak binder accepts
      only `stable-default` or `max-performance-exact` and remains
@@ -371,8 +403,9 @@ runtime configuration field or a trace counter.
    the initial lifecycle runner.
 4. Land the one-scenario v2 observation/remote lifecycle runner and its
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
-5. Land capture/binding for the already-published native fallback source leaf,
-   plus rollback raw capture/binding.
+5. Land raw capture v2 for the already-published native fallback source leaf
+   (complete), then add its separate terminal binder v5 and rollback raw
+   capture/binding.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

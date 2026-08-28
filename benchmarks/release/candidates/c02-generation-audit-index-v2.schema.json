@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/c02-generation-audit-index-v2.schema.json",
+  "title": "Riley C02 generation audit and native fallback index v2",
+  "description": "Capture-owned descriptor index for one source-owned generation-audit pair and its distinct native fallback-event pair. The wrapper records descriptors only; it never synthesizes a fallback event or summary.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scenario_id", "server_request_id", "audit_record", "audit_completion_marker", "fallback_event", "fallback_completion_marker"],
+  "properties": {
+    "schema_version": {"const": "riley.c02-generation-audit-index.v2"},
+    "scenario_id": {"const": "exact-backend-fallback"},
+    "server_request_id": {"type": "string", "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}$"},
+    "audit_record": {"$ref": "#/$defs/descriptor"},
+    "audit_completion_marker": {"$ref": "#/$defs/descriptor"},
+    "fallback_event": {"$ref": "#/$defs/descriptor"},
+    "fallback_completion_marker": {"$ref": "#/$defs/descriptor"}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$", "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}},
+    "relativePath": {"type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+    "descriptor": {"type": "object", "additionalProperties": false, "required": ["path", "sha256", "byte_length"], "properties": {"path": {"$ref": "#/$defs/relativePath"}, "sha256": {"$ref": "#/$defs/sha256"}, "byte_length": {"type": "integer", "minimum": 1, "maximum": 16777216}}}
+  }
+}
