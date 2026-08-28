@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/schemas/c02-native-fallback-event-completion-v1.schema.json",
+  "title": "Riley C02 source-owned native sampling fallback completion v1",
+  "description": "Create-only, nonhidden completion marker for one source-owned native sampling fallback event. artifact_sha256 hashes the exact event bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_filename", "artifact_sha256"],
+  "properties": {
+    "schema_version": {
+      "const": "riley.c02-native-fallback-event-completion.v1"
+    },
+    "artifact_filename": {
+      "type": "string",
+      "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}\\.fallback\\.json$"
+    },
+    "artifact_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "const": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  }
+}

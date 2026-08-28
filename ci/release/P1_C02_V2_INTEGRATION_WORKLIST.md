@@ -1,10 +1,11 @@
 # C02-P1 v2 raw-provenance integration worklist
 
-Status: initial v4 lifecycle-supervisor/receipt source is implemented and has
-CPU/static hostile-path coverage; this worklist remains design and integration
-material, not a qualification report. No actual GPU capture, candidate freeze,
-or semantic qualification has been performed, and this file must not be copied
-into a candidate result directory as evidence.
+Status: initial v4 lifecycle-supervisor/receipt and the source-owned native
+sampling fallback event/marker are implemented with CPU/static hostile-path
+coverage; this worklist remains design and integration material, not a
+qualification report. No actual GPU capture, candidate freeze, fallback
+capture/binding, or semantic qualification has been performed, and this file
+must not be copied into a candidate result directory as evidence.
 
 ## Boundary to preserve
 
@@ -79,11 +80,11 @@ be emitted.  The raw verifier treats that paired intent/final marker shape as
 an evidence format only; a later qualification/finalizer must additionally
 require the runner's successful-supervisor receipt, rather than interpreting
 a visible marker after that ambiguous result as lifecycle authority.
-The initial v4
-subset rejects `exact-backend-fallback` entirely: its source-owned distinct
-native fallback leaf is a later prerequisite, not a field that a wrapper may
-synthesize.  It remains raw `bound` / `not-run`; semantic workload and Gate E
-replay remain later work.
+The initial v4 subset rejects `exact-backend-fallback` entirely. Its
+source-owned distinct native fallback leaf/marker is now published by Rust,
+but no v1/v4 producer or binder may synthesize or consume it yet. It remains
+raw `bound` / `not-run`; a later versioned capture/binder, semantic workload,
+and Gate E replay remain later work.
 
 ### Landed initial lifecycle supervisor and receipt
 
@@ -112,6 +113,29 @@ does not establish a GPU capture, candidate freeze, Gate E replay, native
 fallback event, rollback result, semantic qualification, or C02 decision.
 Native fallback/rollback flows, semantic checker/finalizer work, clean freeze,
 and remote GPU qualification remain subsequent gates.
+
+### Landed native sampling fallback source leaf
+
+For a `max-performance-exact` source audit only, Rust now writes
+`cmpl-<request-id>.fallback.json` and the matching nonhidden `.complete`
+marker only after the matching generation-audit-v2 JSON and marker succeed.
+The event binds the exact generation-audit filename/SHA, candidate, runtime
+identity, PID/start tick, request ID, and the full ordered projection of
+committed request-induced `gpu-greedy` to `cpu-normative` selections. Every
+selection must have originated from a one-output-slot scheduler plan; a
+multi-output CPU decision may have been caused by a peer request, so it leaves
+only the ordinary audit and no fallback pair. The only allowed reasons are
+`nonzero-temperature`, `repetition-penalty`, and `finish-token-mask`; cold
+configuration incompatibility, a CPU profile, GPU-selected work, cancellation,
+abort, and an uncommitted selection produce no terminal fallback event. A
+fallback marker collision fails the request and leaves any created event
+nonterminal.
+
+This is a source boundary only. It does not make the event a v4 scenario
+leaf, does not prove the endpoint actually exposed GPU-greedy, and does not
+allow the lifecycle runner/receipt to claim fallback. Capture v2 and binder
+v5 must replay both source marker pairs and the endpoint's effective sampling
+backend before an `exact-backend-fallback` scenario can be admitted.
 
 ## Required raw evidence inventory
 
@@ -144,8 +168,8 @@ local helper does not query or operate a GPU.
 This helper cannot start/stop a service, acquire a GPU lock, use Docker/SSH,
 or issue a qualification result.  It deliberately rejects streaming,
 restart/rollback/multi-PID semantics, and `exact-backend-fallback`: the v3
-binder requires a distinct fallback-event path, while the current source only
-publishes one generation-audit record/marker leaf. The landed initial lifecycle
+binder requires a distinct fallback-event path, while v1/v4 do not yet replay
+the newly published source fallback pair. The landed initial lifecycle
 runner performs the GPU/port/process preflight, config bridge, one immediate
 C02 metrics observation, and graceful shutdown around exactly one producer
 scenario before it reaches the same-process raw finalizer.
@@ -280,8 +304,9 @@ runtime configuration field or a trace counter.
      layer that may pair a public response ID to the source-owned audit record
      for this initial non-stream subset.  v3 must not consume it.  v4 derives
      contract/ledger/runtime/index leaves from one explicit capture session
-     and admits only its serial non-stream scenarios; it rejects
-     `exact-backend-fallback` until Rust publishes a separate native leaf.
+   and admits only its serial non-stream scenarios; it rejects
+   `exact-backend-fallback` until a later capture/binder version replays the
+   separate native leaf.
    - Bind each declared scenario target to its raw observation session and the
      v4-derived request/runtime/generation leaves.  The raw soak binder accepts
      only `stable-default` or `max-performance-exact` and remains
@@ -346,7 +371,8 @@ runtime configuration field or a trace counter.
    the initial lifecycle runner.
 4. Land the one-scenario v2 observation/remote lifecycle runner and its
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
-5. Land native fallback and rollback raw capture/binding.
+5. Land capture/binding for the already-published native fallback source leaf,
+   plus rollback raw capture/binding.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

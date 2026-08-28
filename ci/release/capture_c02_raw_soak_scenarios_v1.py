@@ -10,9 +10,10 @@ HTTP request/response bytes and binds each response ID to the corresponding
 source-written generation-audit-v2 record and completion marker.
 
 The initial contract is intentionally narrow: one non-stream request per
-scenario, serial execution, and no ``exact-backend-fallback`` scenario.  A
-separate source-owned fallback-event leaf is required before that scenario can
-be represented without manufacturing a wrapper event log.  The module is
+scenario, serial execution, and no ``exact-backend-fallback`` scenario.  The
+source now emits a separate source-owned fallback-event leaf, but this v1
+capture does not replay or bind it with the paired generation audit; that
+requires a later versioned fallback capture/binder.  The module is
 self-contained because its remote wrapper invokes it with ``python -I -S``.
 """
 
@@ -625,7 +626,7 @@ def validate_contract(raw: bytes, *, candidate_id: str, configuration_profile: s
         if type(scenario_id) is not str or SCENARIO_ID_RE.fullmatch(scenario_id) is None or scenario_id in seen:
             _fail(f"scenario contract.scenarios[{index}].scenario_id must be a unique normalized identifier")
         if scenario_id == "exact-backend-fallback":
-            _fail("exact-backend-fallback requires a separate source-owned fallback-event leaf and is deferred")
+            _fail("exact-backend-fallback requires versioned native fallback capture/binder replay and is deferred")
         seen.add(scenario_id)
         _completion_request(scenario["completion_request"], f"scenario contract.scenarios[{index}].completion_request")
     return row

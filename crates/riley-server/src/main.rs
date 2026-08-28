@@ -1317,6 +1317,11 @@ const C02_GENERATION_AUDIT_SCHEMA_VERSION: &str = "riley.c02-generation-audit.v2
 #[cfg(any(feature = "cuda", test))]
 const C02_GENERATION_AUDIT_COMPLETION_SCHEMA_VERSION: &str =
     "riley.c02-generation-audit-completion.v2";
+#[cfg(any(feature = "cuda", test))]
+const C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION: &str = "riley.c02-native-fallback-event.v1";
+#[cfg(any(feature = "cuda", test))]
+const C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION: &str =
+    "riley.c02-native-fallback-event-completion.v1";
 // Keep these producer limits synchronized with
 // `benchmarks/release/candidates/c02-generation-audit-v2.schema.json`.
 //
@@ -1332,6 +1337,8 @@ const C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS: usize = 65_536;
 const C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS: usize = 65_536;
 #[cfg(any(feature = "cuda", test))]
 const C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS: usize = 1_048_576;
+#[cfg(any(feature = "cuda", test))]
+const C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS: usize = C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS;
 
 /// Linux process identity retained in each raw C02 audit leaf so a PID cannot
 /// be replayed after it has been reused by a later process.
@@ -1415,6 +1422,262 @@ fn c02_generation_audit_completion_marker_bytes(
         ),
     ])?;
     c02_canonical_json_bytes(&completion)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_native_fallback_event_basename(server_request_id: &str) -> Result<String, String> {
+    let record_basename = c02_generation_audit_record_basename(server_request_id)?;
+    let stem = record_basename
+        .strip_suffix(".json")
+        .ok_or_else(|| "C02 audit record basename has no JSON suffix".to_owned())?;
+    Ok(format!("{stem}.fallback.json"))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_native_fallback_event_completion_basename(event_basename: &str) -> Result<String, String> {
+    let server_request_id = event_basename
+        .strip_suffix(".fallback.json")
+        .ok_or_else(|| "C02 native fallback event has an invalid basename".to_owned())?;
+    if c02_native_fallback_event_basename(server_request_id)? != event_basename {
+        return Err("C02 native fallback event has an invalid basename".to_owned());
+    }
+    let completion_basename = format!("{event_basename}.complete");
+    if completion_basename.len() > 255 {
+        return Err("C02 native fallback completion marker basename is too long".to_owned());
+    }
+    Ok(completion_basename)
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_native_fallback_event_completion_marker_bytes(
+    event_basename: &str,
+    event_bytes: &[u8],
+) -> Result<Vec<u8>, String> {
+    let _ = c02_native_fallback_event_completion_basename(event_basename)?;
+    let completion = c02_json_object([
+        (
+            "schema_version".to_owned(),
+            serde_json::Value::String(
+                C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION.to_owned(),
+            ),
+        ),
+        (
+            "artifact_filename".to_owned(),
+            serde_json::Value::String(event_basename.to_owned()),
+        ),
+        (
+            "artifact_sha256".to_owned(),
+            serde_json::Value::String(c02_sha256_hex(event_bytes)),
+        ),
+    ])?;
+    c02_canonical_json_bytes(&completion)
+}
+
+/// Extract the only C02-P1 native fallback that this source version can
+/// attest: a request-local, scheduler-committed GPU-greedy selection that
+/// switched to CPU normative sampling because of a request parameter.
+///
+/// The cold profile name alone is never sufficient. Conversely, a selection
+/// with a static incompatibility, an uncommitted iteration, a GPU selection,
+/// or a mixed request is not a complete exact-fallback event and deliberately
+/// receives no leaf.
+#[cfg(any(feature = "cuda", test))]
+fn c02_native_fallback_projection(
+    configuration_profile: C02ConfigurationProfile,
+    native_fallback_attribution_complete: bool,
+    selections: &[riley_server::engine::C02CommittedSamplingSelection],
+) -> Result<Option<Vec<riley_server::engine::C02CommittedSamplingSelection>>, String> {
+    use riley_server::engine::{C02GpuGreedyIneligibility, C02SamplingBackend};
+
+    if configuration_profile != C02ConfigurationProfile::MaxPerformanceExact
+        || !native_fallback_attribution_complete
+        || selections.is_empty()
+    {
+        return Ok(None);
+    }
+    if selections.len() > C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS {
+        return Err("C02 native fallback event count exceeds its schema limit".to_owned());
+    }
+    let mut events = Vec::new();
+    events
+        .try_reserve_exact(selections.len())
+        .map_err(|_| "C02 native fallback event staging allocation failed".to_owned())?;
+    for &selection in selections {
+        let request_induced_fallback = matches!(
+            (
+                selection.configured_backend,
+                selection.selected_backend,
+                selection.ineligibility_reason,
+                selection.committed,
+            ),
+            (
+                C02SamplingBackend::GpuGreedy,
+                C02SamplingBackend::CpuNormative,
+                Some(
+                    C02GpuGreedyIneligibility::NonZeroTemperature
+                        | C02GpuGreedyIneligibility::RepetitionPenalty
+                        | C02GpuGreedyIneligibility::FinishTokenMask
+                ),
+                true,
+            )
+        );
+        if !request_induced_fallback {
+            return Ok(None);
+        }
+        events.push(selection);
+    }
+    Ok(Some(events))
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn c02_native_fallback_event_bytes(
+    candidate_id: &str,
+    configuration_profile: C02ConfigurationProfile,
+    configuration_sha256: &str,
+    process_identity: C02AuditProcessIdentity,
+    native_fallback_attribution_complete: bool,
+    server_request_id: &str,
+    generation_audit_basename: &str,
+    generation_audit_bytes: &[u8],
+    events: &[riley_server::engine::C02CommittedSamplingSelection],
+) -> Result<Vec<u8>, String> {
+    use riley_server::engine::{C02GpuGreedyIneligibility, C02SamplingBackend};
+
+    validate_c02_candidate_id(candidate_id)?;
+    if configuration_profile != C02ConfigurationProfile::MaxPerformanceExact {
+        return Err("C02 native fallback event requires max-performance-exact profile".to_owned());
+    }
+    if !native_fallback_attribution_complete {
+        return Err(
+            "C02 native fallback event lacks complete request-local attribution".to_owned(),
+        );
+    }
+    if configuration_sha256.len() != 64
+        || configuration_sha256
+            .bytes()
+            .any(|byte| !byte.is_ascii_hexdigit())
+        || configuration_sha256
+            .bytes()
+            .any(|byte| byte.is_ascii_uppercase())
+        || configuration_sha256.bytes().all(|byte| byte == b'0')
+    {
+        return Err(
+            "C02 native fallback event has an invalid runtime configuration SHA".to_owned(),
+        );
+    }
+    if process_identity.pid == 0 || process_identity.start_ticks == 0 {
+        return Err("C02 native fallback event has an invalid process identity".to_owned());
+    }
+    let expected_audit_basename = c02_generation_audit_record_basename(server_request_id)?;
+    if generation_audit_basename != expected_audit_basename {
+        return Err("C02 native fallback event audit basename drifts from request ID".to_owned());
+    }
+    let _ = c02_native_fallback_event_basename(server_request_id)?;
+    if events.is_empty() || events.len() > C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS {
+        return Err("C02 native fallback event count is outside its schema bounds".to_owned());
+    }
+    let mut serialized_events = Vec::new();
+    serialized_events
+        .try_reserve_exact(events.len())
+        .map_err(|_| "C02 native fallback event serialization allocation failed".to_owned())?;
+    for event in events {
+        if event.iteration_id == 0 {
+            return Err(
+                "C02 native fallback event iteration ID is outside its schema bounds".to_owned(),
+            );
+        }
+        let Some(reason) = event.ineligibility_reason else {
+            return Err("C02 native fallback event lacks an ineligibility reason".to_owned());
+        };
+        if !matches!(
+            (
+                event.configured_backend,
+                event.selected_backend,
+                reason,
+                event.committed,
+            ),
+            (
+                C02SamplingBackend::GpuGreedy,
+                C02SamplingBackend::CpuNormative,
+                C02GpuGreedyIneligibility::NonZeroTemperature
+                    | C02GpuGreedyIneligibility::RepetitionPenalty
+                    | C02GpuGreedyIneligibility::FinishTokenMask,
+                true,
+            )
+        ) {
+            return Err("C02 native fallback event is not an exact committed fallback".to_owned());
+        }
+        serialized_events.push(c02_json_object([
+            (
+                "iteration_id".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(event.iteration_id)),
+            ),
+            (
+                "configured_backend".to_owned(),
+                serde_json::Value::String(event.configured_backend.as_str().to_owned()),
+            ),
+            (
+                "selected_backend".to_owned(),
+                serde_json::Value::String(event.selected_backend.as_str().to_owned()),
+            ),
+            (
+                "ineligibility_reason".to_owned(),
+                serde_json::Value::String(reason.as_str().to_owned()),
+            ),
+            ("committed".to_owned(), serde_json::Value::Bool(true)),
+        ])?);
+    }
+    let runtime_identity = c02_json_object([
+        (
+            "configuration_profile".to_owned(),
+            serde_json::Value::String(configuration_profile.as_str().to_owned()),
+        ),
+        (
+            "configuration_sha256".to_owned(),
+            serde_json::Value::String(configuration_sha256.to_owned()),
+        ),
+    ])?;
+    let process = c02_json_object([
+        (
+            "pid".to_owned(),
+            serde_json::Value::Number(serde_json::Number::from(process_identity.pid)),
+        ),
+        (
+            "start_ticks".to_owned(),
+            serde_json::Value::Number(serde_json::Number::from(process_identity.start_ticks)),
+        ),
+    ])?;
+    let generation_audit = c02_json_object([
+        (
+            "artifact_filename".to_owned(),
+            serde_json::Value::String(generation_audit_basename.to_owned()),
+        ),
+        (
+            "artifact_sha256".to_owned(),
+            serde_json::Value::String(c02_sha256_hex(generation_audit_bytes)),
+        ),
+    ])?;
+    let mut document = BTreeMap::new();
+    document.insert(
+        "schema_version".to_owned(),
+        serde_json::Value::String(C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION.to_owned()),
+    );
+    document.insert(
+        "candidate_id".to_owned(),
+        serde_json::Value::String(candidate_id.to_owned()),
+    );
+    document.insert("runtime_identity".to_owned(), runtime_identity);
+    document.insert("process_identity".to_owned(), process);
+    document.insert(
+        "server_request_id".to_owned(),
+        serde_json::Value::String(server_request_id.to_owned()),
+    );
+    document.insert("generation_audit".to_owned(), generation_audit);
+    document.insert(
+        "fallback_selections".to_owned(),
+        serde_json::Value::Array(serialized_events),
+    );
+    c02_canonical_json_bytes(&document)
 }
 
 #[cfg(feature = "cuda")]
@@ -1693,7 +1956,7 @@ fn c02_open_audit_root(_path: &std::path::Path) -> Result<C02SharedAuditRoot, St
 /// It creates a request JSON leaf and its hash-bound completion marker with
 /// no-replace descriptor-relative calls. It records sampling-path selection
 /// only; it does not imply executor, attention, or GEMM fallback.
-#[cfg(all(feature = "cuda", unix))]
+#[cfg(all(any(feature = "cuda", test), unix))]
 struct C02GenerationAuditWriter {
     directory: C02SharedAuditRoot,
     candidate_id: String,
@@ -1702,7 +1965,7 @@ struct C02GenerationAuditWriter {
     process_identity: C02AuditProcessIdentity,
 }
 
-#[cfg(all(feature = "cuda", unix))]
+#[cfg(all(any(feature = "cuda", test), unix))]
 impl C02GenerationAuditWriter {
     fn new(
         directory: C02SharedAuditRoot,
@@ -1728,7 +1991,7 @@ impl C02GenerationAuditWriter {
     }
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", test))]
 fn validate_c02_generation_audit_schema_bounds(
     record: &riley_server::engine::C02GenerationAuditRecord,
 ) -> Result<(), String> {
@@ -1743,6 +2006,13 @@ fn validate_c02_generation_audit_schema_bounds(
             "C02 generation audit sampling selection count exceeds its schema limit".to_owned(),
         );
     }
+    if record
+        .sampling_selections
+        .iter()
+        .any(|selection| selection.iteration_id == 0)
+    {
+        return Err("C02 generation audit iteration ID is outside its schema bounds".to_owned());
+    }
     if record.committed_output_tokens.iter().any(|token| {
         token.emitted_text_delta.chars().count() > C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS
     }) {
@@ -1751,7 +2021,7 @@ fn validate_c02_generation_audit_schema_bounds(
     Ok(())
 }
 
-#[cfg(all(feature = "cuda", unix))]
+#[cfg(all(any(feature = "cuda", test), unix))]
 impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
     fn write_record(
         &self,
@@ -1761,6 +2031,12 @@ impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
         // oversize record must leave neither an evidence leaf nor a marker.
         validate_c02_generation_audit_schema_bounds(&record)?;
         let record_basename = c02_generation_audit_record_basename(&record.server_request_id)?;
+        let server_request_id = record.server_request_id.clone();
+        let fallback_events = c02_native_fallback_projection(
+            self.configuration_profile,
+            record.native_fallback_attribution_complete,
+            &record.sampling_selections,
+        )?;
         let finish_reason = match record.finish_reason {
             riley_server::domain::FinishReason::Length => "length",
             riley_server::domain::FinishReason::Stop => "stop",
@@ -1932,7 +2208,36 @@ impl riley_server::engine::C02GenerationAuditSink for C02GenerationAuditWriter {
         self.directory.create_new_regular_leaf(
             &c02_generation_audit_completion_basename(&record_basename)?,
             &completion_bytes,
-        )
+        )?;
+
+        // This is a distinct source-owned leaf, not an interpretation of the
+        // configuration or a copied wrapper trace. It is written only after
+        // the exact generation-audit leaf and its marker are durable, and
+        // only for a complete request-local projection of committed,
+        // request-induced GPU-greedy -> CPU-normative selections.
+        if let Some(events) = fallback_events {
+            let event_basename = c02_native_fallback_event_basename(&server_request_id)?;
+            let event_bytes = c02_native_fallback_event_bytes(
+                &self.candidate_id,
+                self.configuration_profile,
+                &self.configuration_sha256,
+                self.process_identity,
+                record.native_fallback_attribution_complete,
+                &server_request_id,
+                &record_basename,
+                &bytes,
+                &events,
+            )?;
+            self.directory
+                .create_new_regular_leaf(&event_basename, &event_bytes)?;
+            let event_completion_bytes =
+                c02_native_fallback_event_completion_marker_bytes(&event_basename, &event_bytes)?;
+            self.directory.create_new_regular_leaf(
+                &c02_native_fallback_event_completion_basename(&event_basename)?,
+                &event_completion_bytes,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -2498,13 +2803,18 @@ mod tests {
         C02_GENERATION_AUDIT_MAX_COMMITTED_OUTPUT_TOKENS,
         C02_GENERATION_AUDIT_MAX_EMITTED_TEXT_DELTA_CHARS,
         C02_GENERATION_AUDIT_MAX_PROMPT_TOKEN_IDS, C02_GENERATION_AUDIT_MAX_SAMPLING_SELECTIONS,
-        C02_GENERATION_AUDIT_SCHEMA_VERSION, C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION,
-        C02_SHUTDOWN_SCHEMA_VERSION, C02AuditProcessIdentity, C02ConfigurationProfile,
-        C02RuntimeConfigOptions, C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES,
-        ExecutionCompletionMode, FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode,
-        ReductionProfileMode, ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE,
-        c02_canonical_json_bytes, c02_endpoint_receipt, c02_generation_audit_completion_basename,
+        C02_GENERATION_AUDIT_SCHEMA_VERSION, C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION,
+        C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS, C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION,
+        C02_SHUTDOWN_COMPLETION_SCHEMA_VERSION, C02_SHUTDOWN_SCHEMA_VERSION,
+        C02AuditProcessIdentity, C02ConfigurationProfile, C02RuntimeConfigOptions,
+        C02ShutdownArtifactOptions, CliCommand, DEFAULT_MAX_WEIGHT_BYTES, ExecutionCompletionMode,
+        FIXED37_MAX_SEQUENCE_TOKENS, MetadataTransportMode, ReductionProfileMode,
+        ResidualRmsNormMode, SamplingBackendMode, ServeOptions, USAGE, c02_canonical_json_bytes,
+        c02_endpoint_receipt, c02_generation_audit_completion_basename,
         c02_generation_audit_completion_marker_bytes, c02_generation_audit_record_basename,
+        c02_native_fallback_event_basename, c02_native_fallback_event_bytes,
+        c02_native_fallback_event_completion_basename,
+        c02_native_fallback_event_completion_marker_bytes, c02_native_fallback_projection,
         c02_process_identity_from_linux_proc_stat, c02_runtime_identity, c02_sha256_hex,
         c02_shutdown_artifact_bytes, c02_shutdown_completion_basename,
         c02_shutdown_completion_marker_bytes, c02_utc_timestamp_from_unix_seconds, parse_arguments,
@@ -2593,6 +2903,280 @@ mod tests {
                 .as_str()
                 .expect("completion description")
                 .contains(".complete")
+        );
+    }
+
+    #[test]
+    fn c02_native_fallback_event_v1_is_a_closed_committed_sampling_projection() {
+        use riley_server::engine::{
+            C02CommittedSamplingSelection, C02GpuGreedyIneligibility, C02SamplingBackend,
+        };
+
+        fn selection(reason: C02GpuGreedyIneligibility) -> C02CommittedSamplingSelection {
+            C02CommittedSamplingSelection {
+                iteration_id: 7,
+                configured_backend: C02SamplingBackend::GpuGreedy,
+                selected_backend: C02SamplingBackend::CpuNormative,
+                ineligibility_reason: Some(reason),
+                committed: true,
+            }
+        }
+
+        let schema: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../benchmarks/release/candidates/c02-native-fallback-event-v1.schema.json"
+        ))
+        .expect("decode native fallback event schema");
+        assert_eq!(
+            schema["properties"]["schema_version"]["const"],
+            C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION
+        );
+        assert_eq!(
+            schema["required"],
+            serde_json::json!([
+                "schema_version",
+                "candidate_id",
+                "runtime_identity",
+                "process_identity",
+                "server_request_id",
+                "generation_audit",
+                "fallback_selections"
+            ])
+        );
+        assert_eq!(
+            schema["properties"]["runtime_identity"]["properties"]["configuration_profile"]["const"],
+            "max-performance-exact"
+        );
+        assert_eq!(
+            schema["properties"]["fallback_selections"]["maxItems"],
+            serde_json::json!(C02_NATIVE_FALLBACK_EVENT_MAX_EVENTS)
+        );
+        assert_eq!(
+            schema["$defs"]["event"]["properties"]["ineligibility_reason"]["enum"],
+            serde_json::json!([
+                "nonzero-temperature",
+                "repetition-penalty",
+                "finish-token-mask"
+            ])
+        );
+
+        let completion: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../benchmarks/release/candidates/c02-native-fallback-event-completion-v1.schema.json"
+        ))
+        .expect("decode native fallback completion schema");
+        assert_eq!(
+            completion["properties"]["schema_version"]["const"],
+            C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(
+            completion["properties"]["artifact_filename"]["pattern"],
+            "^cmpl-[A-Za-z0-9_-]{1,123}\\.fallback\\.json$"
+        );
+
+        let fallback = selection(C02GpuGreedyIneligibility::NonZeroTemperature);
+        let projection = c02_native_fallback_projection(
+            C02ConfigurationProfile::MaxPerformanceExact,
+            true,
+            &[fallback],
+        )
+        .expect("project exact committed fallback");
+        assert_eq!(projection, Some(vec![fallback]));
+        assert_eq!(
+            c02_native_fallback_projection(
+                C02ConfigurationProfile::StableDefault,
+                true,
+                &[fallback],
+            )
+            .expect("stable profile is not a fallback event"),
+            None
+        );
+        assert_eq!(
+            c02_native_fallback_projection(
+                C02ConfigurationProfile::MaxPerformanceExact,
+                false,
+                &[fallback],
+            )
+            .expect("mixed batch cannot make a request-local fallback event"),
+            None
+        );
+        for mut rejected in [
+            selection(C02GpuGreedyIneligibility::GpuGreedyNotConfigured),
+            selection(C02GpuGreedyIneligibility::AddressableVocabularyMismatch),
+            selection(C02GpuGreedyIneligibility::RepetitionPenalty),
+        ] {
+            if rejected.ineligibility_reason == Some(C02GpuGreedyIneligibility::RepetitionPenalty) {
+                rejected.committed = false;
+            }
+            assert_eq!(
+                c02_native_fallback_projection(
+                    C02ConfigurationProfile::MaxPerformanceExact,
+                    true,
+                    &[rejected],
+                )
+                .expect("unreviewed selection is not an event"),
+                None
+            );
+        }
+        let mut gpu_selected = fallback;
+        gpu_selected.selected_backend = C02SamplingBackend::GpuGreedy;
+        gpu_selected.ineligibility_reason = None;
+        assert_eq!(
+            c02_native_fallback_projection(
+                C02ConfigurationProfile::MaxPerformanceExact,
+                true,
+                &[gpu_selected],
+            )
+            .expect("GPU selection is not a fallback event"),
+            None
+        );
+
+        let audit_basename =
+            c02_generation_audit_record_basename("cmpl-native-fallback").expect("safe audit");
+        let audit_bytes = br#"{"schema_version":"riley.c02-generation-audit.v2"}"#;
+        let event_bytes = c02_native_fallback_event_bytes(
+            "riley-1.2.3-rc4",
+            C02ConfigurationProfile::MaxPerformanceExact,
+            &"a".repeat(64),
+            C02AuditProcessIdentity {
+                pid: 321,
+                start_ticks: 4_242,
+            },
+            true,
+            "cmpl-native-fallback",
+            &audit_basename,
+            audit_bytes,
+            &[fallback],
+        )
+        .expect("serialize exact fallback event");
+        assert!(!event_bytes.ends_with(b"\n"));
+        let event: serde_json::Value =
+            serde_json::from_slice(&event_bytes).expect("decode native fallback event");
+        assert_eq!(event.as_object().expect("event object").len(), 7);
+        assert_eq!(
+            event["schema_version"],
+            C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION
+        );
+        assert_eq!(
+            event["runtime_identity"]["configuration_profile"],
+            "max-performance-exact"
+        );
+        assert_eq!(event["process_identity"]["pid"], 321);
+        assert_eq!(event["server_request_id"], "cmpl-native-fallback");
+        assert_eq!(
+            event["generation_audit"]["artifact_filename"],
+            audit_basename
+        );
+        assert_eq!(
+            event["generation_audit"]["artifact_sha256"],
+            c02_sha256_hex(audit_bytes)
+        );
+        assert_eq!(
+            event["fallback_selections"][0]["ineligibility_reason"],
+            "nonzero-temperature"
+        );
+        for reason in [
+            C02GpuGreedyIneligibility::NonZeroTemperature,
+            C02GpuGreedyIneligibility::RepetitionPenalty,
+            C02GpuGreedyIneligibility::FinishTokenMask,
+        ] {
+            let reason_event = c02_native_fallback_event_bytes(
+                "riley-1.2.3-rc4",
+                C02ConfigurationProfile::MaxPerformanceExact,
+                &"a".repeat(64),
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4_242,
+                },
+                true,
+                "cmpl-native-fallback",
+                &audit_basename,
+                audit_bytes,
+                &[selection(reason)],
+            )
+            .expect("serialize every reviewed native fallback reason");
+            let decoded: serde_json::Value =
+                serde_json::from_slice(&reason_event).expect("decode reviewed fallback reason");
+            assert_eq!(
+                decoded["fallback_selections"][0]["ineligibility_reason"],
+                reason.as_str()
+            );
+        }
+
+        let event_basename =
+            c02_native_fallback_event_basename("cmpl-native-fallback").expect("safe event");
+        assert_eq!(event_basename, "cmpl-native-fallback.fallback.json");
+        let completion_basename = c02_native_fallback_event_completion_basename(&event_basename)
+            .expect("safe fallback completion");
+        assert_eq!(
+            completion_basename,
+            "cmpl-native-fallback.fallback.json.complete"
+        );
+        let marker: serde_json::Value = serde_json::from_slice(
+            &c02_native_fallback_event_completion_marker_bytes(&event_basename, &event_bytes)
+                .expect("serialize fallback completion marker"),
+        )
+        .expect("decode fallback completion marker");
+        assert_eq!(
+            marker["schema_version"],
+            C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(marker["artifact_filename"], event_basename);
+        assert_eq!(marker["artifact_sha256"], c02_sha256_hex(&event_bytes));
+        assert!(c02_native_fallback_event_basename("cmpl-../escape").is_err());
+        assert!(c02_native_fallback_event_completion_basename("cmpl-x.json").is_err());
+        assert!(
+            c02_native_fallback_event_bytes(
+                "riley-1.2.3-rc4",
+                C02ConfigurationProfile::StableDefault,
+                &"a".repeat(64),
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4_242,
+                },
+                true,
+                "cmpl-native-fallback",
+                &audit_basename,
+                audit_bytes,
+                &[fallback],
+            )
+            .is_err()
+        );
+        assert!(
+            c02_native_fallback_event_bytes(
+                "riley-1.2.3-rc4",
+                C02ConfigurationProfile::MaxPerformanceExact,
+                &"a".repeat(64),
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4_242,
+                },
+                false,
+                "cmpl-native-fallback",
+                &audit_basename,
+                audit_bytes,
+                &[fallback],
+            )
+            .is_err(),
+            "an unproven request-local attribution cannot serialize a fallback leaf"
+        );
+        let mut zero_iteration = fallback;
+        zero_iteration.iteration_id = 0;
+        assert!(
+            c02_native_fallback_event_bytes(
+                "riley-1.2.3-rc4",
+                C02ConfigurationProfile::MaxPerformanceExact,
+                &"a".repeat(64),
+                C02AuditProcessIdentity {
+                    pid: 321,
+                    start_ticks: 4_242,
+                },
+                true,
+                "cmpl-native-fallback",
+                &audit_basename,
+                audit_bytes,
+                &[zero_iteration],
+            )
+            .is_err(),
+            "a native fallback event cannot serialize an out-of-schema iteration ID"
         );
     }
 
@@ -2804,7 +3388,7 @@ mod tests {
         std::fs::remove_dir_all(&outer).expect("remove exact C02 test directory");
     }
 
-    #[cfg(all(feature = "cuda", unix))]
+    #[cfg(all(any(feature = "cuda", test), unix))]
     #[test]
     fn c02_generation_audit_writer_creates_a_bound_leaf_and_marker_once() {
         use riley_server::domain::{FinishReason, TokenUsage};
@@ -2853,6 +3437,7 @@ mod tests {
                     ineligibility_reason: Some(C02GpuGreedyIneligibility::NonZeroTemperature),
                     committed: true,
                 }],
+                native_fallback_attribution_complete: true,
                 finish_reason: FinishReason::Length,
                 usage: TokenUsage::new(1, 1).expect("small usage"),
             };
@@ -2865,6 +3450,36 @@ mod tests {
             writer
                 .write_record(record.clone())
                 .expect("create audit record");
+            let mut gpu_selected = record.clone();
+            gpu_selected.server_request_id = "cmpl-writer-gpu-selected".to_owned();
+            gpu_selected.sampling_selections[0].selected_backend = C02SamplingBackend::GpuGreedy;
+            gpu_selected.sampling_selections[0].ineligibility_reason = None;
+            writer
+                .write_record(gpu_selected)
+                .expect("GPU selection remains an ordinary audit record");
+            let mut ambiguous_batch = record.clone();
+            ambiguous_batch.server_request_id = "cmpl-writer-ambiguous-batch".to_owned();
+            ambiguous_batch.native_fallback_attribution_complete = false;
+            writer
+                .write_record(ambiguous_batch)
+                .expect("an ambiguous batch remains an ordinary audit record");
+            let mut zero_iteration = record.clone();
+            zero_iteration.server_request_id = "cmpl-writer-zero-iteration".to_owned();
+            zero_iteration.sampling_selections[0].iteration_id = 0;
+            assert!(
+                writer.write_record(zero_iteration).is_err(),
+                "an out-of-schema generation audit iteration cannot create evidence"
+            );
+            let collision_marker =
+                evidence.join("cmpl-writer-marker-collision.fallback.json.complete");
+            std::fs::write(&collision_marker, b"preexisting marker")
+                .expect("stage nonreplaceable fallback marker collision");
+            let mut marker_collision = record.clone();
+            marker_collision.server_request_id = "cmpl-writer-marker-collision".to_owned();
+            assert!(
+                writer.write_record(marker_collision).is_err(),
+                "a fallback marker collision must prevent successful terminal publication"
+            );
             assert!(
                 writer.write_record(record).is_err(),
                 "a source-issued request ID cannot overwrite audit evidence"
@@ -2889,10 +3504,102 @@ mod tests {
         .expect("decode completion marker");
         assert_eq!(marker["artifact_filename"], "cmpl-writer-test.json");
         assert_eq!(marker["artifact_sha256"], c02_sha256_hex(&raw));
+        let fallback_path = evidence.join("cmpl-writer-test.fallback.json");
+        let fallback_raw = std::fs::read(&fallback_path).expect("read native fallback event");
+        let fallback: serde_json::Value =
+            serde_json::from_slice(&fallback_raw).expect("decode native fallback event");
+        assert_eq!(
+            fallback["schema_version"],
+            C02_NATIVE_FALLBACK_EVENT_SCHEMA_VERSION
+        );
+        assert_eq!(fallback["candidate_id"], "riley-1.2.3-rc4");
+        assert_eq!(
+            fallback["runtime_identity"]["configuration_profile"],
+            "max-performance-exact"
+        );
+        assert_eq!(fallback["process_identity"]["pid"], 321);
+        assert_eq!(fallback["server_request_id"], "cmpl-writer-test");
+        assert_eq!(
+            fallback["generation_audit"]["artifact_filename"],
+            "cmpl-writer-test.json"
+        );
+        assert_eq!(
+            fallback["generation_audit"]["artifact_sha256"],
+            c02_sha256_hex(&raw)
+        );
+        assert_eq!(
+            fallback["fallback_selections"][0]["ineligibility_reason"],
+            "nonzero-temperature"
+        );
+        let fallback_marker_name =
+            c02_native_fallback_event_completion_basename("cmpl-writer-test.fallback.json")
+                .expect("safe native fallback marker basename");
+        let fallback_marker_raw = std::fs::read(evidence.join(&fallback_marker_name))
+            .expect("read native fallback marker");
+        assert_eq!(
+            fallback_marker_raw,
+            c02_native_fallback_event_completion_marker_bytes(
+                "cmpl-writer-test.fallback.json",
+                &fallback_raw,
+            )
+            .expect("canonical native fallback marker")
+        );
+        let fallback_marker: serde_json::Value =
+            serde_json::from_slice(&fallback_marker_raw).expect("decode native fallback marker");
+        assert_eq!(
+            fallback_marker["schema_version"],
+            C02_NATIVE_FALLBACK_EVENT_COMPLETION_SCHEMA_VERSION
+        );
+        assert_eq!(
+            fallback_marker["artifact_filename"],
+            "cmpl-writer-test.fallback.json"
+        );
+        assert_eq!(
+            fallback_marker["artifact_sha256"],
+            c02_sha256_hex(&fallback_raw)
+        );
+        assert!(
+            !evidence
+                .join("cmpl-writer-gpu-selected.fallback.json")
+                .exists(),
+            "a GPU-selected audit record must not manufacture fallback evidence"
+        );
+        assert!(
+            evidence.join("cmpl-writer-ambiguous-batch.json").is_file()
+                && evidence
+                    .join("cmpl-writer-ambiguous-batch.json.complete")
+                    .is_file()
+                && !evidence
+                    .join("cmpl-writer-ambiguous-batch.fallback.json")
+                    .exists(),
+            "a multi-output batch cannot attribute another request's fallback reason"
+        );
+        assert!(
+            !evidence.join("cmpl-writer-zero-iteration.json").exists(),
+            "an out-of-schema iteration ID must fail before the audit leaf"
+        );
+        assert!(
+            evidence.join("cmpl-writer-marker-collision.json").is_file()
+                && evidence
+                    .join("cmpl-writer-marker-collision.json.complete")
+                    .is_file(),
+            "the earlier audit pair remains causal evidence after fallback publication fails"
+        );
+        assert!(
+            evidence
+                .join("cmpl-writer-marker-collision.fallback.json")
+                .is_file(),
+            "a failed fallback marker leaves a nonterminal source event rather than replacement"
+        );
+        assert_eq!(
+            std::fs::read(evidence.join("cmpl-writer-marker-collision.fallback.json.complete"))
+                .expect("read collision marker"),
+            b"preexisting marker"
+        );
         std::fs::remove_dir_all(&outer).expect("remove exact C02 writer test directory");
     }
 
-    #[cfg(all(feature = "cuda", unix))]
+    #[cfg(all(any(feature = "cuda", test), unix))]
     #[test]
     fn c02_generation_audit_writer_refuses_schema_oversize_without_evidence() {
         use riley_server::domain::{FinishReason, TokenUsage};
@@ -2922,6 +3629,7 @@ mod tests {
                     emitted_text_delta: "x".to_owned(),
                 }],
                 sampling_selections: vec![selection()],
+                native_fallback_attribution_complete: true,
                 finish_reason: FinishReason::Length,
                 usage: TokenUsage::new(1, 1).expect("small usage"),
             }

@@ -32,7 +32,7 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^(?!exact-backend-fallback$)[a-z0-9][a-z0-9-]*$",
-          "description": "The fallback scenario is excluded until source emits a second distinct native fallback-event leaf; generation-audit-v2 is already reserved as the runtime-event leaf."
+          "description": "The fallback scenario is excluded from v1 until a versioned capture/binder replays the source-owned distinct native fallback-event leaf with its paired generation audit; v1 preserves only generation-audit-v2."
         },
         "completion_request": {"$ref": "#/$defs/completionRequest"}
       }

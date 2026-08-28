@@ -511,7 +511,7 @@ pub const ENGINE_BATCH_SHAPE_BUCKET_CAPACITY: usize = 10;
 /// This is deliberately narrower than the cold runtime configuration: it
 /// records the source-owned, per-iteration sampling choice only. In
 /// particular, `CpuNormative` is not an executor/attention/GEMM fallback.
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum C02SamplingBackend {
     /// The normative host logits-processing and categorical sampler.
@@ -520,7 +520,7 @@ pub enum C02SamplingBackend {
     GpuGreedy,
 }
 
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 impl C02SamplingBackend {
     /// Stable C02 audit spelling.
     #[must_use]
@@ -533,7 +533,7 @@ impl C02SamplingBackend {
 }
 
 /// Typed reason why an iteration did not use device-side greedy selection.
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum C02GpuGreedyIneligibility {
     /// The cold profile configured CPU sampling rather than GPU greedy.
@@ -548,7 +548,7 @@ pub enum C02GpuGreedyIneligibility {
     FinishTokenMask,
 }
 
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 impl C02GpuGreedyIneligibility {
     /// Stable C02 audit spelling.
     #[must_use]
@@ -564,7 +564,7 @@ impl C02GpuGreedyIneligibility {
 }
 
 /// One typed sampling selection retained only after the scheduler commit.
-#[cfg(any(feature = "cuda", test))]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct C02CommittedSamplingSelection {
     /// Scheduler-issued immutable iteration identity.
@@ -580,7 +580,7 @@ pub struct C02CommittedSamplingSelection {
 }
 
 /// One committed token and its public delivery delta retained in a C02 audit record.
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct C02GenerationAuditToken {
     /// Token accepted by the scheduler-committed generation state.
@@ -593,7 +593,7 @@ pub struct C02GenerationAuditToken {
 }
 
 /// Transport mode of the source-issued request represented by an audit record.
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum C02GenerationAuditDeliveryMode {
     /// One aggregate JSON completion response.
@@ -602,7 +602,7 @@ pub enum C02GenerationAuditDeliveryMode {
     Stream,
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 impl C02GenerationAuditDeliveryMode {
     /// Stable C02 audit spelling.
     #[must_use]
@@ -615,7 +615,7 @@ impl C02GenerationAuditDeliveryMode {
 }
 
 /// Complete source-owned terminal audit payload for one successful request.
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct C02GenerationAuditRecord {
     /// Source-issued public completion ID.
@@ -628,6 +628,11 @@ pub struct C02GenerationAuditRecord {
     pub committed_output_tokens: Vec<C02GenerationAuditToken>,
     /// One source-owned selection for every committed output token in order.
     pub sampling_selections: Vec<C02CommittedSamplingSelection>,
+    /// True only when every audited selection was sampled from a plan with
+    /// exactly one output slot. This is source-only provenance for the
+    /// distinct native-fallback leaf; it is intentionally not serialized
+    /// into the general generation-audit schema.
+    pub native_fallback_attribution_complete: bool,
     /// Successful terminal reason; C02 records only `stop` or `length`.
     pub finish_reason: crate::domain::FinishReason,
     /// Exact terminal token accounting.
@@ -638,7 +643,7 @@ pub struct C02GenerationAuditRecord {
 ///
 /// A sink error is a backend error: the worker must not publish a successful
 /// C02 request whose source-owned audit record could not be created.
-#[cfg(feature = "cuda")]
+#[cfg(any(feature = "cuda", feature = "server", test))]
 pub trait C02GenerationAuditSink: Send + Sync {
     /// Creates the terminal record without replacing an existing one.
     fn write_record(&self, record: C02GenerationAuditRecord) -> Result<(), String>;
@@ -679,6 +684,15 @@ fn selection_after_scheduler_commit(
         committed: true,
         ..selection
     })
+}
+
+/// A batch-wide CPU sampling decision is request-local only when the
+/// scheduler plan has exactly one output slot. With multiple slots, another
+/// request can make GPU greedy ineligible for the whole iteration.
+#[cfg(any(feature = "cuda", test))]
+#[must_use]
+const fn c02_native_fallback_request_is_local(output_slot_count: usize) -> bool {
+    output_slot_count == 1
 }
 
 /// Active and selected dense-row facts for the latest committed iteration.
@@ -2267,6 +2281,7 @@ mod cuda_backend {
         delivery_mode: C02GenerationAuditDeliveryMode,
         output_tokens: Vec<C02GenerationAuditToken>,
         selections: Vec<C02CommittedSamplingSelection>,
+        native_fallback_attribution_complete: bool,
     }
 
     impl C02RequestAudit {
@@ -2292,6 +2307,7 @@ mod cuda_backend {
                 },
                 output_tokens,
                 selections,
+                native_fallback_attribution_complete: true,
             })
         }
 
@@ -2300,6 +2316,7 @@ mod cuda_backend {
             token_id: u32,
             emitted_text_delta: &str,
             selection: C02CommittedSamplingSelection,
+            native_fallback_request_local: bool,
         ) -> Result<(), BackendError> {
             if !selection.committed
                 || self.output_tokens.len() == self.output_tokens.capacity()
@@ -2312,6 +2329,7 @@ mod cuda_backend {
                 emitted_text_delta: emitted_text_delta.to_owned(),
             });
             self.selections.push(selection);
+            self.native_fallback_attribution_complete &= native_fallback_request_local;
             Ok(())
         }
 
@@ -2345,6 +2363,7 @@ mod cuda_backend {
                 prompt_token_ids: state.request().prompt_token_ids.clone(),
                 committed_output_tokens: self.output_tokens,
                 sampling_selections: self.selections,
+                native_fallback_attribution_complete: self.native_fallback_attribution_complete,
                 finish_reason,
                 usage,
             })
@@ -2356,6 +2375,7 @@ mod cuda_backend {
         token_id: u32,
         text_delta: String,
         selection: C02CommittedSamplingSelection,
+        native_fallback_request_local: bool,
     }
 
     struct CudaBackend {
@@ -2585,6 +2605,15 @@ mod cuda_backend {
             self.samples.clear();
             self.pending_tokens.clear();
             let gpu_greedy = selection.selected_backend == C02SamplingBackend::GpuGreedy;
+            // `sampling_selection_for_plan` chooses one backend for the
+            // entire batch. A request-induced CPU selection is attributable
+            // to an individual request only when that request is the sole
+            // output slot; otherwise another request may have forced the
+            // batch-wide CPU path. Preserve this source fact privately so
+            // the terminal fallback leaf can fail closed without changing
+            // inference behavior or the general audit schema.
+            let native_fallback_request_local =
+                c02_native_fallback_request_is_local(plan.output_slots().len());
             for &slot in plan.output_slots() {
                 let item = plan
                     .prefill_items()
@@ -2674,6 +2703,7 @@ mod cuda_backend {
                     token_id,
                     text_delta: generated.text_delta().to_owned(),
                     selection,
+                    native_fallback_request_local,
                 });
             }
             Ok(())
@@ -2795,7 +2825,7 @@ mod cuda_backend {
                 }
             }
             for token in token_events {
-                let (token_id, emitted_text_delta, selection) = {
+                let (token_id, emitted_text_delta, selection, native_fallback_request_local) = {
                     let pending = self
                         .pending_tokens
                         .iter()
@@ -2805,6 +2835,7 @@ mod cuda_backend {
                         pending.token_id,
                         pending.text_delta.clone(),
                         pending.selection,
+                        pending.native_fallback_request_local,
                     )
                 };
                 let selection =
@@ -2818,7 +2849,12 @@ mod cuda_backend {
                     .generation_audit
                     .as_mut()
                     .ok_or_else(|| internal("C02 audit sink has no request staging"))?
-                    .record_committed(token_id, &emitted_text_delta, selection)?;
+                    .record_committed(
+                        token_id,
+                        &emitted_text_delta,
+                        selection,
+                        native_fallback_request_local,
+                    )?;
             }
             Ok(())
         }
@@ -3375,9 +3411,9 @@ mod tests {
         BackendError, BackendEvent, BatchShapeExecutionSample, C02CaptureMetrics,
         C02CommittedSamplingSelection, C02GpuGreedyIneligibility, C02SamplingBackend,
         EngineAllocationMetrics, EngineBackend, EngineBatchShapeMetricsSnapshot, EngineConfig,
-        EngineError, EngineRequestId, InferenceEngine, gpu_greedy_ineligibility,
-        prepare_batch_shape_metrics, private_request_error, record_committed_batch_shape,
-        selection_after_scheduler_commit, visible_utf8_prefix,
+        EngineError, EngineRequestId, InferenceEngine, c02_native_fallback_request_is_local,
+        gpu_greedy_ineligibility, prepare_batch_shape_metrics, private_request_error,
+        record_committed_batch_shape, selection_after_scheduler_commit, visible_utf8_prefix,
     };
 
     #[derive(Debug)]
@@ -3685,6 +3721,13 @@ mod tests {
             committed.ineligibility_reason,
             Some(C02GpuGreedyIneligibility::NonZeroTemperature)
         );
+    }
+
+    #[test]
+    fn native_fallback_attribution_requires_one_output_slot() {
+        assert!(c02_native_fallback_request_is_local(1));
+        assert!(!c02_native_fallback_request_is_local(0));
+        assert!(!c02_native_fallback_request_is_local(2));
     }
 
     #[test]

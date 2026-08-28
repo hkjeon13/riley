@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor와 raw receipt는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt와 native sampling fallback source leaf/marker는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, GPU capture·candidate freeze·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -90,6 +90,18 @@ max-performance-exact arm
 
 Rust worker는 scheduler commit 성공 뒤에만 bounded typed event를 기록한다. event는 `iteration_id`, configured/selected backend, typed ineligibility reason, committed flag만 가진다. terminal `length|stop`, completion token count, source-issued server request ID와 C02 runtime-config identity가 같은 create-only `riley.c02-generation-audit.v2` record에 결합된다. 실패, abort, cancel, duplicate/missing/overflow trace는 successful fallback evidence가 될 수 없다.
 
+현재 source는 이 audit/marker가 먼저 durable하게 생성된 뒤에만 별도
+`riley.c02-native-fallback-event.v1` leaf와 matching nonhidden completion marker를
+create-only로 발행한다. leaf는 audit record filename/SHA, candidate/runtime/PID
+start-tick, request ID와 ordered committed `gpu-greedy → cpu-normative` selection
+projection을 결합하며, request-induced
+`nonzero-temperature|repetition-penalty|finish-token-mask`만 허용한다. 이 leaf는
+모든 audited selection이 one-output-slot scheduler plan에서 나온 경우에만
+발행된다. multi-output plan의 CPU 결정은 다른 request가 강제했을 수 있어
+request-local attribution이 불완전하므로 일반 audit만 남기고 fallback leaf는
+fail closed한다. 이는 source-level raw event일 뿐 아직 capture session이나 terminal
+manifest가 아니다.
+
 stable-default arm이 CPU sampling이면 이 evidence를 재사용할 수 없다. max-performance-exact endpoint/startup artifact raw bytes가 GPU-greedy configuration임을 먼저 bind해야 한다. attention/GEMM/executor fallback이 필요해지면 별도 runtime feature를 먼저 설계하고 이 P1을 그 증거로 바꾸지 않는다.
 
 ## 4. Reconstructed-tag baseline
@@ -145,10 +157,12 @@ PID/start-tick, loopback listener inode, `/proc/net/tcp`, PID FD-socket snapshot
 GPU tuple을 보존한다.
 
 v1 serial contract는 streaming, concurrency/cancel/disconnect,
-restart/rollback/multi-PID, `exact-backend-fallback`을 fail closed한다.
-특히 현재 source에는 generation-audit record와 별개인 native fallback-event leaf가
-없으므로 audit record를 복사하거나 config 문자열로 대체해서 fallback을 주장하면
-안 된다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
+restart/rollback/multi-PID, `exact-backend-fallback`을 계속 fail closed한다.
+source에는 이제 generation-audit record와 별개인 native fallback-event leaf/marker가
+있지만, v1 capture와 v4 binder는 이를 아직 소비하지 않는다. audit record를 복사하거나
+config 문자열로 대체해서 fallback을 주장해서는 안 되며, 이후 capture v2/binder v5가
+두 source pair와 endpoint의 실제 GPU-greedy arm을 함께 replay한 뒤에만 해당 scenario를
+열 수 있다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
 → source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host
 lock 아래에서 연결한다. 첫 version은 **contract 1 scenario / observation 1회 / v4
 manifest 1개**만 허용한다. multi-scenario capture 뒤의 관측은 어느 completion 직후인지
@@ -182,8 +196,8 @@ PID/start-tick/listener/GPU tuple에도 일치해야 한다. 새 terminal manife
 각각 `riley.soak-v2-raw-provenance.v4` 및
 `riley.soak-v2-raw-provenance-complete.v4`이고, marker는 정확히
 `schema_version`, `artifact_filename`, `artifact_sha256`만 가진다. v4는
-`exact-backend-fallback`을 fail closed한다; 해당 source-owned native leaf가
-추가된 후 별도 version bump에서만 다시 다룬다.
+`exact-backend-fallback`을 계속 fail closed한다; source-owned native leaf가
+추가됐더라도 그것을 replay하는 capture/binder의 별도 version bump 뒤에만 다시 다룬다.
 
 이 full config-bridge/serial/observation join은 manifest 생성 **전에** 완료한다.
 따라서 정상적인 target/GPU/bridge drift는 create-only nonterminal manifest를 남기지
@@ -223,9 +237,9 @@ receipt는 v4 manifest, derived target, config endpoint/startup/bridge,
 bind한다. schema 상태는 정확히 `status: "completed"`와
 `qualification_status: "not-run"`이다. 이는 좁은 raw lifecycle이 완료됐다는 뜻일
 뿐 fallback event의 존재, rollback 성공, candidate freeze, Gate E, semantic
-workload 판정 또는 C02 pass를 뜻하지 않는다. native fallback leaf, rollback raw
-runner, semantic checker/finalizer, clean candidate freeze와 실제 GPU capture는 이후
-versioned work로 남는다.
+workload 판정 또는 C02 pass를 뜻하지 않는다. native fallback **capture/binder**,
+rollback raw runner, semantic checker/finalizer, clean candidate freeze와 실제 GPU
+capture는 이후 versioned work로 남는다.
 
 lifecycle runner보다 먼저 `check_c02_config_bridge_v1.py`를 추가한다. 이 helper는
 private evidence root와 endpoint/startup/direct `<capture>/session.json` path, expected
@@ -272,7 +286,8 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 5. config endpoint process bridge, initial one-scenario lifecycle runner, same-process
    v4/shutdown receipt closure와 hostile/static tests를 추가한다. 이 구현만으로는
    GPU capture나 qualification을 실행하지 않는다.
-6. native fallback leaf와 rollback raw runner/binder를 추가한다.
+6. landed native fallback source leaf를 replay하는 capture/binder와 rollback raw
+   runner/binder를 추가한다.
 7. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
@@ -283,7 +298,9 @@ sampling semantic verdict는 여전히 later semantic replay만 담당한다.
   incomplete-marker closure, contract/request/audit linkage와 config endpoint 및
   every scenario의 same candidate/config/PID/start-tick/listener inode/GPU tuple을
   replay한다. v3 input은 serial-capture path에서 허용하지 않는다.
-- max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2와 public generation bytes가 one-to-one으로 bind된다.
+- max-performance-exact GPU-greedy ineligible case는 Rust-written audit v2,
+  native fallback event/marker pair와 public generation bytes가 후속 versioned
+  capture에서 one-to-one으로 bind된다.
 - shutdown v2 artifact와 nonhidden completion marker는 same PID/start-tick tuple과
   exact final-metrics bytes를 bind하며, v1 artifact/hidden marker는 fail closed한다.
 - initial lifecycle receipt는 same-process successful-v4 edge에서만 shutdown
