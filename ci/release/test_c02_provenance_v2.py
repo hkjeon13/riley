@@ -78,6 +78,11 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         "configuration_profile": "stable-default",
         "configuration_sha256": "3" * 64,
     }
+    max_performance_bindings = {
+        **bindings,
+        "configuration_profile": checker.MAX_PERFORMANCE_EXACT_PROFILE,
+        "configuration_sha256": "4" * 64,
+    }
     gpu_uuid = "GPU-12345678-abcd-efab-cdef-1234567890ab"
 
     def target(self, pid: int, ticks: int) -> dict:
@@ -177,7 +182,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
     def assert_reason(self, raised: unittest.case._AssertRaisesContext, reason: str) -> None:
         self.assertEqual(getattr(raised.exception, "reason_code", None), reason)
 
-    def test_soak_binds_raw_pid_listener_gpu_and_generic_event_leaves(self) -> None:
+    def test_soak_binds_max_performance_exact_fallback_raw_leaves(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             tree = EvidenceTree(Path(temporary))
             phase = self.phase(tree, "soak", pid=1111, ticks=2222, port=8080)
@@ -195,14 +200,19 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "capture_status": "captured",
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
-                    "bindings": self.bindings,
+                    "bindings": self.max_performance_bindings,
                     "scenario_contract": contract.as_json(),
                     "scenarios": [scenario],
                 },
             )
             report = checker.verify_soak_provenance(tree.root.resolve(), manifest.path)
             self.assertEqual(report["schema_version"], checker.SOAK_REPORT_VERSION)
+            self.assertEqual(report["status"], "bound")
             self.assertEqual(report["qualification_status"], "not-run")
+            self.assertEqual(
+                report["bindings"]["configuration_profile"],
+                checker.MAX_PERFORMANCE_EXACT_PROFILE,
+            )
             self.assertEqual(report["targets"][0]["target"], self.target(1111, 2222))
 
     def test_metrics_are_structural_but_validate_all_declared_value_types(self) -> None:
@@ -440,7 +450,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "capture_status": "captured",
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
-                    "bindings": self.bindings,
+                    "bindings": self.max_performance_bindings,
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "exact-backend-fallback", **phase, "fallback_event_log": None}],
                 },
@@ -448,6 +458,34 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             with self.assertRaises(checker.C02ProvenanceError) as raised:
                 checker.verify_soak_provenance(tree.root.resolve(), missing_fallback.path)
             self.assert_reason(raised, "fallback-raw-leaf-missing")
+
+    def test_soak_rejects_exact_fallback_under_stable_default(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = EvidenceTree(Path(temporary))
+            phase = self.phase(tree, "soak", pid=1111, ticks=2222, port=8080)
+            contract = tree.put("contracts/soak-v2.json", b"contract")
+            fallback = tree.put("soak-phase/fallback.ndjson", b"native fallback event")
+            manifest = tree.put(
+                "soak/stable-fallback.json",
+                {
+                    "schema_version": checker.SOAK_MANIFEST_VERSION,
+                    "capture_status": "captured",
+                    "qualification_status": "not-run",
+                    "candidate_id": self.candidate,
+                    "bindings": self.bindings,
+                    "scenario_contract": contract.as_json(),
+                    "scenarios": [
+                        {
+                            "scenario_id": "exact-backend-fallback",
+                            **phase,
+                            "fallback_event_log": fallback.as_json(),
+                        }
+                    ],
+                },
+            )
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_soak_provenance(tree.root.resolve(), manifest.path)
+            self.assert_reason(raised, "fallback-profile-mismatch")
 
     def test_rejects_nonprivate_evidence_root_before_reading_a_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -473,7 +511,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                     "capture_status": "captured",
                     "qualification_status": "not-run",
                     "candidate_id": self.candidate,
-                    "bindings": self.bindings,
+                    "bindings": self.max_performance_bindings,
                     "scenario_contract": contract.as_json(),
                     "scenarios": [{"scenario_id": "exact-backend-fallback", **phase, "fallback_event_log": fallback.as_json()}],
                 },
@@ -544,6 +582,18 @@ class C02ProvenanceV2Tests(unittest.TestCase):
             with self.assertRaises(checker.C02ProvenanceError) as raised:
                 checker.verify_rollback_provenance(tree.root.resolve(), historical.path)
             self.assert_reason(raised, "historical-rollback-v1-rejected")
+
+            max_profile = tree.put(
+                "rollback/max-profile.json",
+                {
+                    **manifest_document,
+                    "schema_version": checker.ROLLBACK_MANIFEST_VERSION,
+                    "bindings": self.max_performance_bindings,
+                },
+            )
+            with self.assertRaises(checker.C02ProvenanceError) as raised:
+                checker.verify_rollback_provenance(tree.root.resolve(), max_profile.path)
+            self.assert_reason(raised, "invalid-configuration-profile")
 
     def test_shutdown_marker_descriptor_path_and_filename_mismatches_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -714,6 +764,26 @@ class C02ProvenanceV2Tests(unittest.TestCase):
                 document = json.loads((directory / name).read_text(encoding="utf-8"))
                 self.assertEqual(document["$schema"], "https://json-schema.org/draft/2020-12/schema")
                 self.assertEqual(document["$defs"]["descriptor"]["properties"]["byte_length"]["minimum"], 1)
+
+        soak_schema = json.loads(
+            (directory / "soak-v2-receipt-v2.schema.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            soak_schema["$defs"]["bindings"]["properties"]["configuration_profile"]["enum"],
+            [checker.STABLE_DEFAULT_PROFILE, checker.MAX_PERFORMANCE_EXACT_PROFILE],
+        )
+        fallback_condition = soak_schema["$defs"]["scenario"]["allOf"][0]
+        self.assertEqual(
+            fallback_condition["then"]["properties"]["fallback_event_log"],
+            {"$ref": "#/$defs/descriptor"},
+        )
+        profile_condition = soak_schema["$defs"]["rawManifest"]["allOf"][0]
+        self.assertEqual(
+            profile_condition["then"]["properties"]["bindings"]["properties"][
+                "configuration_profile"
+            ],
+            {"const": checker.MAX_PERFORMANCE_EXACT_PROFILE},
+        )
 
 
 if __name__ == "__main__":

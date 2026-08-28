@@ -120,12 +120,17 @@ runtime configuration field or a trace counter.
      `riley.soak-v2-raw-provenance.v2`, never a semantic receipt.
    - Bind each declared scenario target to its raw observation session and
      request/runtime/generation/fallback descriptor leaves.  Require fallback
-     leaf presence for `exact-backend-fallback`.
+     leaf presence for `exact-backend-fallback`.  The raw soak binder accepts
+     only `stable-default` or `max-performance-exact`; that exact fallback
+     scenario is valid only in the latter arm and still remains
+     `qualification_status: not-run`.
 
 5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)
    - Capture candidate/rollback target tuples and reject equal
      `(pid,start_ticks)` identities.
+   - Bind rollback evidence only to `stable-default`; max-performance-exact
+     is opt-in soak evidence, never a rollback arm.
    - Bind candidate shutdown artifact+marker, both phase artifact maps, and
      all raw atomic-switch leaves.  It still returns `not-run`; the later
      semantic checker owns filesystem and health/generation interpretation.

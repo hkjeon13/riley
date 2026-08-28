@@ -106,6 +106,12 @@ manifest는 tag object/target, source archive, exact build recipe and image insp
 
 `run_remote_c02_soak_v2.sh`와 `bind_raw_c02_soak_v2.py`는 GPU UUID/used-memory preflight, exclusive lock, frozen arm의 `env -i`, 새 evidence root를 강제한다. 각 scenario는 다음 raw leaf를 descriptor로 남긴다.
 
+raw soak provenance는 `stable-default`와 `max-performance-exact`만 수용한다.
+`exact-backend-fallback` scenario는 후자의 arm에서만 허용되고 non-null native
+fallback event leaf를 반드시 bind한다. 이는 raw binding 조건일 뿐 semantic
+selection replay나 candidate qualification을 판정하지 않는다. rollback raw
+provenance는 `stable-default` arm으로만 제한한다.
+
 - raw `/v1/config` 및 startup artifact bytes
 - raw public request/response or SSE bytes와 matching generation audit v2
 - same PID/start-tick pre/post C02 metrics, `/proc` status/stat/fd/socket and `/proc/net/tcp`

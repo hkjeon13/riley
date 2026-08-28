@@ -42,7 +42,9 @@
       "properties": {
         "freeze_sha256": { "$ref": "#/$defs/sha256" },
         "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
-        "configuration_profile": { "const": "stable-default" },
+        "configuration_profile": {
+          "enum": ["stable-default", "max-performance-exact"]
+        },
         "configuration_sha256": { "$ref": "#/$defs/sha256" }
       }
     },
@@ -74,7 +76,22 @@
             { "$ref": "#/$defs/descriptor" }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scenario_id": { "const": "exact-backend-fallback" }
+            },
+            "required": ["scenario_id"]
+          },
+          "then": {
+            "properties": {
+              "fallback_event_log": { "$ref": "#/$defs/descriptor" }
+            }
+          }
+        }
+      ]
     },
     "rawManifest": {
       "type": "object",
@@ -93,7 +110,34 @@
           "maxItems": 32,
           "items": { "$ref": "#/$defs/scenario" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "scenarios": {
+                "contains": {
+                  "type": "object",
+                  "required": ["scenario_id"],
+                  "properties": {
+                    "scenario_id": { "const": "exact-backend-fallback" }
+                  }
+                }
+              }
+            },
+            "required": ["scenarios"]
+          },
+          "then": {
+            "properties": {
+              "bindings": {
+                "properties": {
+                  "configuration_profile": { "const": "max-performance-exact" }
+                }
+              }
+            }
+          }
+        }
+      ]
     },
     "boundCheck": {
       "type": "object",

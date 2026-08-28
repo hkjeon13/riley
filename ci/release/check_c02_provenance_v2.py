@@ -37,6 +37,12 @@ SHUTDOWN_VERSION = "riley.c02-shutdown-quiescence.v2"
 SHUTDOWN_MARKER_VERSION = "riley.c02-shutdown-quiescence-complete.v2"
 SOAK_REPORT_VERSION = "riley.soak-v2-provenance-check.v2"
 ROLLBACK_REPORT_VERSION = "riley.rc3-rollback-provenance-check.v2"
+STABLE_DEFAULT_PROFILE = "stable-default"
+MAX_PERFORMANCE_EXACT_PROFILE = "max-performance-exact"
+SOAK_CONFIGURATION_PROFILES = frozenset(
+    (STABLE_DEFAULT_PROFILE, MAX_PERFORMANCE_EXACT_PROFILE)
+)
+ROLLBACK_CONFIGURATION_PROFILES = frozenset((STABLE_DEFAULT_PROFILE,))
 MAX_RAW_BYTES = 16 * 1024 * 1024
 MAX_SAMPLES = 1024
 MAX_SCENARIOS = 32
@@ -117,7 +123,12 @@ def _candidate_id(value: Any, label: str) -> str:
     return value
 
 
-def _bindings(value: Any, label: str) -> dict[str, str]:
+def _bindings(
+    value: Any,
+    label: str,
+    *,
+    allowed_profiles: frozenset[str],
+) -> dict[str, str]:
     row = _exact(
         value,
         {
@@ -128,15 +139,19 @@ def _bindings(value: Any, label: str) -> dict[str, str]:
         },
         label,
     )
-    if row["configuration_profile"] != "stable-default":
-        _fail("invalid-configuration-profile", f"{label} must bind stable-default")
+    profile = row["configuration_profile"]
+    if type(profile) is not str or profile not in allowed_profiles:
+        _fail(
+            "invalid-configuration-profile",
+            f"{label}.configuration_profile must be one of {sorted(allowed_profiles)}",
+        )
     return {
         "freeze_sha256": _sha256(row["freeze_sha256"], f"{label}.freeze_sha256"),
         "base_release_candidate_report_sha256": _sha256(
             row["base_release_candidate_report_sha256"],
             f"{label}.base_release_candidate_report_sha256",
         ),
-        "configuration_profile": "stable-default",
+        "configuration_profile": profile,
         "configuration_sha256": _sha256(
             row["configuration_sha256"], f"{label}.configuration_sha256"
         ),
@@ -679,7 +694,11 @@ def verify_soak_provenance(evidence_root: Path, manifest_path: str) -> dict[str,
         if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
             _fail("invalid-capture-status", "soak raw manifest must be captured/not-run")
         candidate = _candidate_id(row["candidate_id"], "soak raw manifest.candidate_id")
-        bindings = _bindings(row["bindings"], "soak raw manifest.bindings")
+        bindings = _bindings(
+            row["bindings"],
+            "soak raw manifest.bindings",
+            allowed_profiles=SOAK_CONFIGURATION_PROFILES,
+        )
         used = {manifest_descriptor.path}
         contract = _descriptor(row["scenario_contract"], "soak raw manifest.scenario_contract")
         _read_opaque_leaf(root_fd, contract, "soak scenario contract", used)
@@ -707,6 +726,15 @@ def verify_soak_provenance(evidence_root: Path, manifest_path: str) -> dict[str,
                     f"{label}.scenario_id must be a unique canonical scenario identifier",
                 )
             scenario_ids.add(scenario_id)
+            fallback = scenario["fallback_event_log"]
+            if scenario_id == "exact-backend-fallback":
+                if bindings["configuration_profile"] != MAX_PERFORMANCE_EXACT_PROFILE:
+                    _fail(
+                        "fallback-profile-mismatch",
+                        f"{label} requires {MAX_PERFORMANCE_EXACT_PROFILE}",
+                    )
+                if fallback is None:
+                    _fail("fallback-raw-leaf-missing", f"{label} lacks raw fallback event evidence")
             declared_target = _target(scenario["target"], f"{label}.target")
             session = _descriptor(scenario["observation_session"], f"{label}.observation_session")
             _reserve(session, label=f"{label}.observation_session", used_paths=used)
@@ -715,9 +743,6 @@ def verify_soak_provenance(evidence_root: Path, manifest_path: str) -> dict[str,
                 _fail("session-target-mismatch", f"{label} declared target differs from raw observation session")
             for key in ("request_ledger", "runtime_event_log", "generation_audit_index"):
                 _read_opaque_leaf(root_fd, _descriptor(scenario[key], f"{label}.{key}"), f"{label}.{key}", used)
-            fallback = scenario["fallback_event_log"]
-            if scenario_id == "exact-backend-fallback" and fallback is None:
-                _fail("fallback-raw-leaf-missing", f"{label} lacks raw fallback event evidence")
             if fallback is not None:
                 _read_opaque_leaf(root_fd, _descriptor(fallback, f"{label}.fallback_event_log"), f"{label}.fallback_event_log", used)
             targets.append({"scenario_id": scenario_id, "target": declared_target.as_json()})
@@ -733,6 +758,7 @@ def verify_soak_provenance(evidence_root: Path, manifest_path: str) -> dict[str,
                 "capture-marker-closure",
                 "pid-start-tick-listener-gpu-binding",
                 "raw-workload-and-audit-leaves",
+                "configuration-profile-arm-binding",
             ),
         )
     finally:
@@ -755,7 +781,11 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
         if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
             _fail("invalid-capture-status", "rollback raw manifest must be captured/not-run")
         candidate_id = _candidate_id(row["candidate_id"], "rollback raw manifest.candidate_id")
-        bindings = _bindings(row["bindings"], "rollback raw manifest.bindings")
+        bindings = _bindings(
+            row["bindings"],
+            "rollback raw manifest.bindings",
+            allowed_profiles=ROLLBACK_CONFIGURATION_PROFILES,
+        )
         used = {manifest_descriptor.path}
 
         def server_phase(value: Any, label: str, *, candidate_phase: bool) -> TargetTuple:
@@ -812,6 +842,7 @@ def verify_rollback_provenance(evidence_root: Path, manifest_path: str) -> dict[
                 "candidate-and-rollback-process-tuples",
                 "shutdown-marker-binding",
                 "raw-atomic-switch-material",
+                "configuration-profile-arm-binding",
             ),
         )
     finally:
