@@ -135,7 +135,10 @@ candidate ID, and expected profile; the session is a direct
 the configuration SHA-256 and observed PID/start-tick/listener/GPU tuple.
 Its canonical stdout report is diagnostic `bound` / `not-run` data, never an
 evidence leaf or a qualification verdict, and it must not invoke GPU, network,
-or subprocess tooling.
+or subprocess tooling.  Its exact diagnostic report shape is published as
+`benchmarks/release/candidates/c02-config-bridge-replay-v1.schema.json`; the
+runner must consume the derived configuration SHA and target only from that
+report, never from caller input.
 
 The v4 binder is the first terminal consumer for this producer: it takes one
 explicit `scenario_capture_session_path`, rejects a retained
@@ -254,6 +257,7 @@ runtime configuration field or a trace counter.
      held-FD replay of direct endpoint/startup/session paths derives the
      configuration SHA and observed target for the lifecycle runner.  It takes
      no caller-supplied SHA or target tuple and performs no operational action.
+     Publish its closed canonical stdout report schema alongside the helper.
 
 5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)

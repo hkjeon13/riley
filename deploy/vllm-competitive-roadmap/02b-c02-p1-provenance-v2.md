@@ -187,7 +187,9 @@ private evidence root와 endpoint/startup/direct `<capture>/session.json` path, 
 candidate/profile만 받아 held-FD로 config bridge를 pure replay하고 configuration SHA와
 PID/start-tick/listener/GPU tuple을 derive한다. caller-supplied SHA/target, GPU/network/
 subprocess 실행, evidence leaf 생성, qualification verdict는 금지하며 canonical stdout의
-`bound` / `not-run` diagnostic report만 낸다.
+`bound` / `not-run` diagnostic report만 낸다. 그 closed report는
+`c02-config-bridge-replay-v1.schema.json`으로 publish하며, lifecycle runner는 이
+report가 derive한 SHA/target 외의 caller input을 같은 사실로 받아들이지 않는다.
 
 - raw `/v1/config` 및 startup artifact bytes
 - raw public request/response or SSE bytes와 matching generation audit v2

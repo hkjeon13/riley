@@ -77,6 +77,16 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             with self.assertRaises(common.ProvenanceV2Error) as raised:
                 common.open_private_evidence_directory(root, "evidence root")
             self.assert_reason(raised, "unsafe-evidence-root-mode")
+            direct_fd = common.open_absolute_directory(root, "direct evidence root")
+            try:
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.require_private_evidence_directory_fd(
+                        direct_fd,
+                        "direct evidence root",
+                    )
+                self.assert_reason(raised, "unsafe-evidence-root-mode")
+            finally:
+                os.close(direct_fd)
             root.chmod(0o700)
 
             with mock.patch.object(common.os, "geteuid", return_value=os.geteuid() + 1):

@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "C02 config bridge replay diagnostic v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "candidate_id",
+    "runtime_identity",
+    "configuration_evidence",
+    "target",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.c02-config-bridge-replay.v1"
+    },
+    "status": {
+      "const": "bound"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "runtime_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "configuration_profile": {
+          "enum": [
+            "stable-default",
+            "max-performance-exact"
+          ]
+        },
+        "configuration_sha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        }
+      }
+    },
+    "configuration_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endpoint",
+        "startup_artifact",
+        "endpoint_observation"
+      ],
+      "properties": {
+        "endpoint": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "startup_artifact": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "endpoint_observation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/descriptor"
+            },
+            {
+              "properties": {
+                "path": {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*/session\\.json$"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "server_pid",
+        "server_start_ticks",
+        "listener_port",
+        "listener_inode",
+        "gpu_index",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "server_pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "server_start_ticks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "listener_port": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535
+        },
+        "listener_inode": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gpu_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gpu_uuid": {
+          "type": "string",
+          "pattern": "^GPU-[0-9A-Fa-f-]+$"
+        }
+      }
+    },
+    "reason_codes": {
+      "const": []
+    }
+  },
+  "$defs": {
+    "nonzeroSha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/nonzeroSha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        }
+      }
+    }
+  }
+}

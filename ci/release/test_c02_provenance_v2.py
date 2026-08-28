@@ -103,6 +103,7 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         pid: int = 1111,
         ticks: int = 2222,
         port: int = 8080,
+        bridge_prefix: str = "captures/config-bridge",
     ) -> dict:
         profile = bindings["configuration_profile"]
         effective_config = {
@@ -147,7 +148,6 @@ class C02ProvenanceV2Tests(unittest.TestCase):
         }
         prefix = f"configuration/{profile}"
         inode = 7000 + pid
-        bridge_prefix = "captures/config-bridge"
         request_raw = (
             f"GET /v1/config HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
             "Accept: application/json\r\nConnection: close\r\n\r\n"

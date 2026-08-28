@@ -327,6 +327,21 @@ def _validate_private_evidence_root(metadata: os.stat_result, label: str) -> Non
         _fail("unsafe-evidence-root-mode", f"{label} mode must be exactly 0700")
 
 
+def require_private_evidence_directory_fd(directory_fd: int, label: str) -> None:
+    """Require that one caller-held directory FD is an euid-owned 0700 root.
+
+    Path wrappers must still use :func:`open_private_evidence_directory` so
+    every pathname ancestor is opened and checked without following links.
+    This helper closes the otherwise weaker boundary of public APIs that
+    receive an already-held root descriptor directly.
+    """
+
+    _validate_private_evidence_root(
+        _require_directory_fd(directory_fd, label),
+        label,
+    )
+
+
 def open_private_evidence_directory(path: Path, label: str) -> int:
     """Pin a private evidence root without accepting unsafe writable parents.
 
@@ -358,7 +373,7 @@ def open_private_evidence_directory(path: Path, label: str) -> int:
             _validate_private_evidence_ancestor(
                 os.fstat(current_fd), f"{label} ancestor {component!r}"
             )
-        _validate_private_evidence_root(os.fstat(current_fd), label)
+        require_private_evidence_directory_fd(current_fd, label)
         return current_fd
     except BaseException:
         _close_quietly(current_fd)
