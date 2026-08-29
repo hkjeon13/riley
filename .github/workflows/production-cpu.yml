@@ -44,6 +44,7 @@ jobs:
           python3 -m unittest discover -s ci/release -p 'test_*.py' -v
           python3 -m unittest discover -s benchmarks/scripts/tests -p 'test_*.py' -v
           python3 ci/release/verify_runtime_dockerfile.py
+          python3 ci/release/verify_reconstructed_runtime_assembly_dockerfile.py
           bash -n ci/run_release_soak.sh
           python3 benchmarks/scripts/validate_contract.py
 

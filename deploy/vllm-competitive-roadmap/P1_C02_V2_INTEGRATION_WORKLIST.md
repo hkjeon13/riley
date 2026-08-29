@@ -44,6 +44,23 @@ The later arm-specific same-invocation runtime-image assembly/capture receipt
 must consume this closure before any v2 materializer can promote those missing
 image bindings.
 
+Before that raw receipt is introduced, the separate
+`ci/release/ReconstructedRuntimeAssembly.Dockerfile` is a static, reviewed
+assembly-tool contract. Its later canonical build context is exactly
+`Dockerfile`, `input/riley`, and `input/riley.tar.gz`; it uses two identical
+explicit-`linux/amd64`, digest-pinned CUDA runtime stages, unpacks supplied
+archive bytes as non-root, rejects special/set-ID/hard-linked runtime files and
+bundle-local Python/toolchain names, and verifies selected A/B binary and
+bundle digests plus the bundle's embedded binary before copying only verified
+`/opt/riley/` into the final Python-free runtime stage. Its static verifier
+pins the normalized instruction stream and rejects source context, rebuild
+toolchains, package installation, mutable Docker frontend, `ADD`, and build
+mount/secret/SSH additions. This is CPU-only source validation, not a Docker
+build or a source/bundle-to-image, OCI, capture-independence, rollback, freeze,
+or qualification claim. A later receipt must bind its exact canonical context
+tar, invocation, output image/OCI bytes, and never-started-container filesystem
+capture before any of those claims can be promoted.
+
 ## Boundary to preserve
 
 The v2 raw binder returns only `status: "bound"` and
@@ -744,10 +761,12 @@ runtime configuration field or a trace counter.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then add rollback
    raw capture/binding and a separately versioned lifecycle/semantic closure.
-6. Land source-only reviewed RC2 inputs and per-arm OCI image-layout input
-   closures, then the narrow held-FD cross-root content bridge; retain their
-   `prepared/not-run`/`bound/not-run` scope until an explicit A/B materializer
-   consumes them with a same-invocation runtime-image assembly/capture receipt.
+6. Land source-only reviewed RC2 inputs, per-arm OCI image-layout input
+   closures, the narrow held-FD cross-root content bridge, and the static
+   source-free runtime assembly recipe; retain their
+   `prepared/not-run`/`bound/not-run`/source-contract scope until an explicit
+   A/B materializer consumes them with a same-invocation runtime-image
+   assembly/capture receipt.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
 8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
