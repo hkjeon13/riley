@@ -94,8 +94,10 @@ def _sha256(value: Any, label: str) -> str:
 
 @dataclass(frozen=True)
 class StaticPreparationBindings:
-    """Exact static preparation leaves retained for a later writer recheck."""
+    """Static preparation identity and exact leaves retained for a later recheck."""
 
+    candidate_id: str
+    configuration_profile: str
     reconstructed_baseline: common.EvidenceDescriptor
     freeze: common.EvidenceDescriptor
     base_release_candidate_report: common.EvidenceDescriptor
@@ -121,6 +123,7 @@ class ReplayedStaticEffectiveConfig:
 
 
 def _static_bindings(session: Mapping[str, Any]) -> StaticPreparationBindings:
+    candidate_id, configuration_profile = _session_identity(session)
     reconstructed = _exact(
         session.get("reconstructed_baseline"),
         {"manifest", "baseline_id", "tag_name", "target_commit_sha1"},
@@ -185,11 +188,53 @@ def _static_bindings(session: Mapping[str, Any]) -> StaticPreparationBindings:
             "static baseline and snapshot descriptors must all have distinct paths",
         )
     return StaticPreparationBindings(
+        candidate_id=candidate_id,
+        configuration_profile=configuration_profile,
         reconstructed_baseline=baseline_descriptor,
         freeze=freeze,
         base_release_candidate_report=base_report,
         configuration=configuration,
     )
+
+
+def _recheck_static_preparation_bindings_on_held_root_fd(
+    root_fd: int,
+    expected: StaticPreparationBindings,
+) -> StaticPreparationBindings:
+    """Re-derive and compare static preparation identity and bindings before use.
+
+    A later writer must retain the descriptors returned by its initial static
+    replay and call this helper directly before publication.  Rehashing a
+    caller-selected path is not equivalent: this replay starts from the
+    completed static-preparation session and therefore keeps candidate/profile,
+    the reconstructed baseline, and all three immutable snapshots together.
+
+    The caller owns the held root FD and any surrounding lock.  This helper
+    deliberately opens no root path, takes no lock, and writes nothing.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "static preparation binding recheck evidence root",
+        )
+    )
+    session = _preparation(
+        lambda: preparation.verify_rollback_evidence_preparation_fd(root_fd)
+    )
+    actual = _static_bindings(session)
+    if actual != expected:
+        _fail(
+            "static-preparation-descriptor-drift",
+            "static preparation identity or immutable bindings changed after initial replay",
+        )
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "static preparation binding recheck evidence root",
+        )
+    )
+    return actual
 
 
 def _reserve_static_bindings(

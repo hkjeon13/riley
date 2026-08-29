@@ -382,7 +382,7 @@ non-stream completion, PID/TCP/FD-socket/GPU raw leaves를 같은 prepopulated
 private baseline root의 새 capture child에만 append한다. candidate source-audit
 generation은 여전히 별도의 source-owned scenario producer가 담당하고, RC2에는
 audit을 합성하지 않는다.
-fixed-name v3 bind-request writer 또는 authenticated finalizer를 추가하기 전에,
+fixed-name writer의 phase 선행 조건은
 `capture_rc3_rollback_phase_v1.py`의 strict held-FD replay API
 `replay_rc3_rollback_phase_v1_fd()`가 phase session을 먼저 재생한다. 이
 replayer는 같은 private root FD 아래 exact capture/raw child를 no-follow로 열고
@@ -419,13 +419,42 @@ config bridge를 replay하여 effective-config value/digest의 일치를 확인�
 bridge-derived launch-identity digest는 별도 값으로 retain하며 snapshot digest와 같다고
 비교하지 않는다. 기존 opaque static snapshot은 up-convert하지 않고 이 새 path에서
 fail closed한다.
-후속 fixed-name writer/finalizer는 terminal static-preparation session의 baseline 및 세
-snapshot descriptor를 v3 publication 직전과 이후 terminal publication 직전에 다시
-비교해야 한다. 단순 path rehash만으로는 static replay 뒤 같은 EUID가 바꾼 bytes가
-완료 preparation receipt와 무관하게 bind되는 것을 막지 못한다.
-landed candidate-source replay는 같은 invocation 안의 raw join drift만 닫으며, 이
-publication-bound static TOCTOU closure, v3/v4 manifest, writer 또는 finalizer를
-대체하지 않는다.
+이제 private fixed writer
+`write_rc3_rollback_candidate_source_bind_request_v1.py`가 landed 되었다. 유일한
+callable entry
+`_write_fixed_candidate_source_bind_request_on_held_root_switch_fds()`는 caller가
+계속 보유한 private root FD와 fixed switch FD만 받으며, caller는 전체 lexical call
+동안 root EX와 switch EX를 유지해야 한다. CLI, path-open wrapper, lock/relock,
+output-name parameter, caller-supplied candidate/profile/target/descriptor surface는 없다.
+writer는 candidate/source join, non-stream generation이 반드시 있는 fixed
+`rollback-phase`, terminal artifact-exchange transaction을 replay하고 legacy v3
+path-only request를 typed 결과에서만 derive한다. candidate process/health는 candidate
+phase에서, candidate generation/audit/shutdown은 source join에서만 오며 static
+baseline/snapshot, transaction artifact, atomic-switch path도 추측하거나 받지 않는다.
+그 결과 fixed nonterminal root leaf
+`rollback-v3-candidate-source-bind-request.json` 하나만 create-only로 쓰고
+`.intent`/`.complete` sibling을 미리 reserve한다.
+
+writer는 create-only request publication 직전에 모든 typed input을 독립적으로 다시
+rebuild한다. static checkpoint
+`_recheck_static_preparation_bindings_on_held_root_fd()`는 terminal
+static-preparation session에서 시작하여 initial typed binding의 baseline descriptor와 세
+snapshot descriptor뿐 아니라 candidate ID/stable-default profile도 다시 비교한다. 단순
+path rehash만으로는 static replay 뒤 같은 EUID가 바꾼 bytes 또는 preparation identity가
+완료 receipt와 무관하게 bind되는 것을 막지 못한다. candidate-source join의 immutable
+complete consumed-path inventory를 rollback phase/artifact/atomic-switch collision set의
+seed로 써서 config bridge·serial capture의 보조 leaf도 후속 역할과 alias하지 못하게
+한다. 따라서 이 static/cross-role TOCTOU edge는 request publication에서 닫히지만,
+writer는 v3/v4 manifest, terminal marker, rollback/lifecycle/qualification claim을 만들지
+않는다.
+
+후속 private normal-return finalizer는 반환된 typed state를 유지해 v3 publication 직전과
+이후 terminal publication 직전에 candidate/source·rollback phase·atomic transaction의
+**전체** typed replay equality를 다시 확인하고, held root FD에서 fixed request leaf를
+재read하여 writer가 반환한 descriptor와도 비교해야 한다. static binding만 recheck하면
+path-only v3 binder가 다시 읽는 raw leaf의 TOCTOU를 닫지 못한다. landed writer는 resume
+capability가 아니며, 별도 replay한 transaction completion pair를 producer success로
+되살리면 안 된다.
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
@@ -539,10 +568,11 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    GPU capture나 qualification을 실행하지 않는다.
 6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
    baseline rollback v3 raw verifier/schema, strict held-FD phase replay와 typed
-   source HTTP descriptor replay, versioned static-to-effective-config replay 및 fixed
-   held-FD candidate-source/config/shutdown join을 먼저 추가한다. 그 뒤 static
-   descriptor TOCTOU closure를 fixed-name writer 내부에 넣은 뒤에만 raw bind-request
-   writer와 private normal-return finalizer를 추가한다.
+   source HTTP descriptor replay, versioned static-to-effective-config replay, fixed
+   held-FD candidate-source/config/shutdown join, complete consumed-path inventory 및
+   publication-bound static identity/descriptor TOCTOU closure를 가진 fixed-name raw
+   bind-request writer까지 추가한다.
+   그 다음에만 same-stack private normal-return finalizer를 추가한다.
 7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
    v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.

@@ -92,6 +92,7 @@ class ReplayedCandidateSourceJoin:
     source_scenario: c02.ReplayedScenario
     generation: CandidateGenerationInputs
     shutdown: c02.VerifiedC02ShutdownV2
+    consumed_paths: frozenset[str]
 
 
 def _reserve(
@@ -284,6 +285,7 @@ def _replay_candidate_source_once(
             generation_audit_index=source_scenario.generation_audit_index,
         ),
         shutdown=shutdown,
+        consumed_paths=frozenset(used_paths),
     )
 
 

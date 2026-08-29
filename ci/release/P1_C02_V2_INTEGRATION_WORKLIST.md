@@ -333,9 +333,9 @@ RC2-compatible `capture_rc3_rollback_phase_v1.py` companion appends a new raw
 phase directory to that same prepopulated root and never creates a root or
 claims source audit for RC2. Its candidate no-generation mode deliberately
 leaves source-owned generation/audit capture to the existing scenario producer.
-Before a fixed-name v3 bind-request writer or authenticated finalizer is added,
-`replay_rc3_rollback_phase_v1_fd()` replays one direct phase child through the
-already-held private root FD. It admits only canonical
+The fixed-name writer's phase prerequisite is
+`replay_rc3_rollback_phase_v1_fd()`, which replays one direct phase child
+through the already-held private root FD. It admits only canonical
 `riley.rc3-rollback-raw-phase-capture.v1` session JSON, an exact fixed raw
 inventory and descriptor path/SHA-256/byte-length bindings, exact private
 `0700`/`0600` euid-owned directories/leaves, and an absent
@@ -377,16 +377,50 @@ bridge-derived launch-identity digest without comparing it to the snapshot
 digest. Historical opaque static snapshots are not up-converted and fail closed
 on this new path.
 
-The later fixed-name writer/finalizer must retain the terminal static-preparation
-session descriptors through v3 publication and compare the replayed baseline
-descriptor plus all three snapshot descriptors immediately before publication
-and again before a later terminal publication. Rehashing caller-controlled
-paths alone is not enough: without that comparison, same-EUID mutation after
-the static replay could bind bytes unrelated to its completed preparation
-receipt.
-The landed candidate-source replay detects only same-invocation raw join drift;
-it is not a substitute for that publication-bound static TOCTOU closure, a
-v3/v4 manifest, a writer, or a finalizer.
+The landed private fixed writer,
+`write_rc3_rollback_candidate_source_bind_request_v1.py`, now consumes that
+join only through
+`_write_fixed_candidate_source_bind_request_on_held_root_switch_fds()`.
+It accepts exactly the caller-held private root FD and the caller-held fixed
+switch FD; it has no CLI, path-open wrapper, lock/relock behavior, output-name
+parameter, or caller-supplied candidate/profile/target/descriptor surface.
+The caller must retain root EX and switch EX for the whole lexical call. The
+writer replays the candidate/source join, requires a distinct fixed
+`rollback-phase` with a non-stream generation exchange, and replays the
+terminal fixed artifact-exchange transaction. It derives the legacy v3
+path-only request entirely from those typed results: candidate process/health
+come from the candidate phase, while candidate generation/audit/shutdown come
+only from the source join; static baseline/snapshot paths, transaction
+artifact paths, and atomic-switch paths are likewise derived rather than
+accepted. It creates only the fixed nonterminal
+`rollback-v3-candidate-source-bind-request.json` root leaf and reserves its
+`.intent`/`.complete` siblings.
+
+Critically, the writer independently rebuilds every typed input immediately
+before its create-only request publication. Its static checkpoint calls
+`_recheck_static_preparation_bindings_on_held_root_fd()`, which starts from
+the terminal static-preparation session and compares the replayed baseline
+descriptor plus all three snapshot descriptors against the initial typed
+bindings **and its candidate ID/stable-default profile**. Rehashing
+caller-controlled paths alone is not enough: without this comparison,
+same-EUID mutation after the static replay could bind bytes or a replacement
+preparation identity unrelated to its completed receipt. The candidate/source
+join also returns its complete immutable consumed-path inventory; the writer
+seeds the rollback-phase, artifact, and atomic-switch collision set with that
+inventory, so auxiliary config-bridge/serial-capture evidence cannot alias a
+later rollback or transaction leaf. This closes those request-publication
+TOCTOU edges, but it writes no v3/v4 manifest or terminal marker and does not
+make a rollback, lifecycle, or qualification claim.
+
+A future private normal-return finalizer must retain the returned typed state,
+replay-and-compare the **complete** candidate/source, rollback-phase, and
+atomic-transaction closure immediately before v3 publication, and re-read the
+fixed request through the held root FD to compare its descriptor with the
+writer result. It must repeat those checks before later terminal publication;
+static preparation identity/descriptors alone are insufficient because the v3
+binder consumes path-only leaves. The landed writer is not a resume capability:
+it must not turn a separately replayed transaction completion pair into
+producer success.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures

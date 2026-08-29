@@ -299,6 +299,21 @@ class CandidateSourceJoinTests(unittest.TestCase):
         )
         self.assertEqual(replayed.shutdown.artifact.path, candidate_source.SHUTDOWN_ARTIFACT_PATH)
         self.assertEqual(replayed.shutdown.marker.path, candidate_source.SHUTDOWN_MARKER_PATH)
+        self.assertIsInstance(replayed.consumed_paths, frozenset)
+        for descriptor in (
+            replayed.static_effective.static_bindings.reconstructed_baseline,
+            replayed.static_effective.static_bindings.freeze,
+            replayed.static_effective.static_bindings.base_release_candidate_report,
+            replayed.static_effective.static_bindings.configuration,
+            replayed.static_effective.config_bridge.endpoint,
+            replayed.static_effective.config_bridge.startup_artifact,
+            replayed.static_effective.config_bridge.endpoint_observation,
+            replayed.source_capture.session,
+            replayed.source_capture.contract,
+            replayed.source_scenario.request_ledger,
+            replayed.source_scenario.runtime_event_log,
+        ):
+            self.assertIn(descriptor.path, replayed.consumed_paths)
 
     def test_rejects_local_generation_multiple_sources_target_and_shutdown_drift(self) -> None:
         local_generation = self._new_environment("local-generation", candidate_generation=True)

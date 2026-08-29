@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
+import inspect
 import json
 import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import check_rc3_rollback_provenance_v3 as rollback
 import check_rc3_static_effective_config_v1 as static_config
@@ -245,6 +248,91 @@ class StaticEffectiveConfigReplayTests(unittest.TestCase):
             "ssh ",
         ):
             self.assertNotIn(forbidden, source)
+        self.assertEqual(
+            list(
+                inspect.signature(
+                    static_config._recheck_static_preparation_bindings_on_held_root_fd  # noqa: SLF001
+                ).parameters
+            ),
+            ["root_fd", "expected"],
+        )
+
+    def test_recheck_retains_all_four_static_preparation_descriptors(self) -> None:
+        replayed = self._replay()
+        root = self.environment["root"]
+        assert isinstance(root, Path)
+        for field in (
+            "reconstructed_baseline",
+            "freeze",
+            "base_release_candidate_report",
+            "configuration",
+        ):
+            with self.subTest(field=field):
+                descriptor = getattr(replayed.static_bindings, field)
+                forged = common.EvidenceDescriptor(
+                    path=descriptor.path,
+                    sha256="f" * 64,
+                    byte_length=descriptor.byte_length,
+                )
+                expected = dataclasses.replace(
+                    replayed.static_bindings,
+                    **{field: forged},
+                )
+                root_fd = common.open_private_evidence_directory(
+                    root,
+                    "static binding recheck test root",
+                )
+                try:
+                    with self.assertRaises(
+                        static_config.StaticEffectiveConfigError
+                    ) as raised:
+                        static_config._recheck_static_preparation_bindings_on_held_root_fd(  # noqa: SLF001
+                            root_fd,
+                            expected,
+                        )
+                finally:
+                    os.close(root_fd)
+                self.assertEqual(
+                    getattr(raised.exception, "reason_code", None),
+                    "static-preparation-descriptor-drift",
+                )
+
+    def test_recheck_retains_static_preparation_identity(self) -> None:
+        replayed = self._replay()
+        root = self.environment["root"]
+        assert isinstance(root, Path)
+        original = preparation.verify_rollback_evidence_preparation_fd
+        source_fd = common.open_private_evidence_directory(
+            root,
+            "static identity recheck source root",
+        )
+        try:
+            forged = original(source_fd)
+        finally:
+            os.close(source_fd)
+        forged = dict(forged)
+        forged["candidate_id"] = "riley-0.1.0-rc4"
+        root_fd = common.open_private_evidence_directory(
+            root,
+            "static identity recheck test root",
+        )
+        try:
+            with mock.patch.object(
+                static_config.preparation,
+                "verify_rollback_evidence_preparation_fd",
+                return_value=forged,
+            ):
+                with self.assertRaises(static_config.StaticEffectiveConfigError) as raised:
+                    static_config._recheck_static_preparation_bindings_on_held_root_fd(  # noqa: SLF001
+                        root_fd,
+                        replayed.static_bindings,
+                    )
+        finally:
+            os.close(root_fd)
+        self.assertEqual(
+            getattr(raised.exception, "reason_code", None),
+            "static-preparation-descriptor-drift",
+        )
 
     def test_schema_document_is_closed_and_matches_the_static_contract(self) -> None:
         schema_path = (
