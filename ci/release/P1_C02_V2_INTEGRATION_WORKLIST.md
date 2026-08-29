@@ -6,7 +6,7 @@ lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
 runner, the fixed rollback candidate/source bind-request writer and same-stack
-v3/v4 finalizer, the C02 source pre-freeze checker, and the read-only v4/v5
+v3/v4 finalizer plus its private normal-return receipt v1, the C02 source pre-freeze checker, and the read-only v4/v5
 raw-manifest structural precheck are implemented with CPU/static hostile-path
 coverage; this worklist remains
 design and integration material, not a qualification report. No actual GPU
@@ -684,6 +684,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
    `benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json`,
    `benchmarks/release/candidates/rollback-raw-structural-precheck-v1.schema.json`,
+   `benchmarks/release/candidates/rc3-rollback-finalizer-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
@@ -709,8 +710,12 @@ runtime configuration field or a trace counter.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then land rollback
    raw phase capture and strict held-FD phase replay, then the fixed-name v3
-   bind-request writer and same-stack private normal-return v3/v4 finalizer
-   (complete), before separately versioned lifecycle/semantic closure.
+   bind-request writer, same-stack private normal-return v3/v4 finalizer, and
+   its fixed finalizer receipt v1 (complete), before separately versioned
+   lifecycle/semantic closure. Its final closure replay finishes before any
+   receipt leaf and a successful terminal hardlink returns immediately; the
+   visible pair is not a standalone semantic input, while a post-link hardlink
+   ambiguity is the only path that may leave it without that same-stack return.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

@@ -229,12 +229,22 @@ mechanism과 adversarial test를 닫아야 한다.
   transaction helper는 그 artifact-exchange 범위에서 동일 held-FD exclusive lock을
   유지한다. 그러나 phase/source/config session과 actual process lifecycle는 이 범위에
   포함되지 않으며 후속 authenticated runner가 닫아야 한다.
+- fixed `write_rc3_rollback_finalizer_receipt_v1.py`도 landed했다. 이 private helper는
+  caller-held root EX/switch EX 안에서 v3/v4 finalizer를 직접 호출한 **정상 반환**만
+  in-memory typed closure로 유지하고, fixed request·static preparation·candidate/source
+  complete inventory·candidate/rollback phase·transaction·v3/v4 descriptor를 다시
+  held-FD replay해 fixed receipt/paired marker를 낸다. status는 `completed/not-run`,
+  authority는 `raw-finalizer-normal-return-only`뿐이다. v4나 receipt marker의 post-link
+  fsync ambiguity는 successful return/receipt를 만들지 않고, visible receipt pair는
+  standalone rollback/lifecycle authority 또는 semantic checker input이 될 수 없다.
+  authenticated runner의 same-stack normal-return branch만 이 helper의 반환을 소비할 수
+  있으며, 이 코드 역시 service/GPU/deployment를 실행하지 않는다.
 - native fallback leaf, authenticated rollback raw runner, soak/rollback semantic contract와
   checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
   필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
   provenance closure는 명시적 새 version으로 추가한다.
 
-이 단계는 raw receipt나 semantic report, candidate freeze, qualification decision을
+이 단계는 actual GPU raw receipt나 semantic report, candidate freeze, qualification decision을
 미리 만들거나 backfill하지 않는다. 구현과 테스트가 끝난 clean C02 source revision만
 후속 freeze의 입력이 될 수 있다.
 

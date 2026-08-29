@@ -5,7 +5,7 @@ sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
-runner, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
+runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -798,6 +798,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
    `benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json`,
    `benchmarks/release/candidates/rollback-raw-structural-precheck-v1.schema.json`,
+   `benchmarks/release/candidates/rc3-rollback-finalizer-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
@@ -823,7 +824,13 @@ runtime configuration field or a trace counter.
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then add rollback
-   raw capture/binding and a separately versioned lifecycle/semantic closure.
+   raw capture/binding, the fixed candidate/source v3/v4 finalizer and its
+   same-stack normal-return receipt v1 (complete), before a separately
+   versioned lifecycle/semantic closure. Its final closure replay finishes
+   before any receipt leaf and a successful terminal hardlink returns
+   immediately. A receipt pair is not a path-replay success token or semantic
+   input; only terminal hardlink post-link ambiguity may leave it without the
+   producing same-stack return.
 6. Land source-only reviewed RC2 inputs, per-arm OCI image-layout input
    closures, the narrow held-FD cross-root content bridge, A/B reproducibility
    closure, static source-free runtime assembly recipe, and per-arm raw

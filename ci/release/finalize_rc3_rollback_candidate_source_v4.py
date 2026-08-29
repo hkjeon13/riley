@@ -2,13 +2,15 @@
 """Publish one fixed rollback v3/v4 closure only from one held-FD stack.
 
 This private compositor is deliberately not an operational runner and not a
-path-based resume API.  Its sole callable accepts the caller-owned private
+path-based resume API.  Its report-returning compatibility helper and its
+typed same-stack continuation helper accept only the caller-owned private
 evidence-root FD and already exclusively held rollback-switch FD.  While both
-locks remain held, it writes the fixed candidate/source v3 request, compares a
+locks remain held, they write the fixed candidate/source v3 request, compare a
 fresh replay of every consumed raw input plus that request's descriptor before
-v3 publication, then publishes fixed v3 and v4 raw manifests.  It repeats the
-same closure immediately before the v4 completion pair, so a path-only v3/v4
-replay cannot silently consume leaves changed after the writer returned.
+v3 publication, then publish fixed v3 and v4 raw manifests.  The continuation
+retains the successful closure only for the immediately nested receipt writer;
+a path-only v3/v4 replay cannot silently consume leaves changed after the
+writer returned.
 
 It never opens an evidence-root path, takes or releases caller locks, starts a
 service, contacts a GPU, performs an artifact exchange, or claims rollback or
@@ -19,6 +21,7 @@ from __future__ import annotations
 
 import os
 import stat
+from dataclasses import dataclass
 from typing import Any, Callable, Mapping, NoReturn, TypeVar
 
 import bind_raw_rc3_rollback_capture as v3_binder
@@ -34,6 +37,24 @@ ROLLBACK_V4_MANIFEST_NAME = "rollback-v4-candidate-source-manifest.json"
 
 class RollbackCandidateSourceFinalizerError(ValueError):
     """The fixed rollback candidate/source closure cannot become terminal."""
+
+
+@dataclass(frozen=True)
+class _FinalizedRollbackCandidateSourceV4:
+    """One successful same-stack finalizer result retained for its caller.
+
+    This is intentionally private typed state, not a resumable publication
+    token.  A direct caller can pass it only to an immediately nested
+    normal-return consumer that retains the same root and switch descriptors.
+    The on-disk v4 completion pair alone cannot reconstruct this success edge
+    after a post-link directory-sync ambiguity.
+    """
+
+    written: writer.WrittenCandidateSourceBindRequest
+    v3_descriptor: common.EvidenceDescriptor
+    v3_report: Mapping[str, Any]
+    v4_descriptor: common.EvidenceDescriptor
+    v4_report: Mapping[str, Any]
 
 
 def _fail(code: str, message: str) -> NoReturn:
@@ -277,10 +298,10 @@ def _completion_pair_is_visible(root_fd: int, name: str) -> bool:
     )
 
 
-def _finalize_rollback_candidate_source_v4_on_held_root_switch_fds(
+def _finalize_rollback_candidate_source_v4_with_closure_on_held_root_switch_fds(
     root_fd: int,
     switch_fd: int,
-) -> dict[str, Any]:
+) -> _FinalizedRollbackCandidateSourceV4:
     """Write fixed request → v3 → v4 only while caller root/switch EX persist.
 
     This private function has no resume path.  A failure after a create-only
@@ -424,10 +445,39 @@ def _finalize_rollback_candidate_source_v4_on_held_root_switch_fds(
                 "no later invocation may treat it as producer success",
             )
         raise
-    return _v4(
+    completed_v4 = _v4(
         lambda: v4_checker.verify_completed_rollback_provenance_v4_on_held_switch_fd(
             root_fd,
             switch_fd,
             ROLLBACK_V4_MANIFEST_NAME,
         )
     )
+    if completed_v4 != preflight:
+        _fail(
+            "rollback-v4-replay-drift",
+            "completed rollback v4 replay differs from its held-FD preflight",
+        )
+    return _FinalizedRollbackCandidateSourceV4(
+        written=written,
+        v3_descriptor=v3_descriptor,
+        v3_report=v3_report,
+        v4_descriptor=draft_descriptor,
+        v4_report=completed_v4,
+    )
+
+
+def _finalize_rollback_candidate_source_v4_on_held_root_switch_fds(
+    root_fd: int,
+    switch_fd: int,
+) -> dict[str, Any]:
+    """Compatibility result for the fixed same-stack finalizer.
+
+    The receipt-only continuation uses the private typed closure above.  This
+    existing narrow helper continues to return the raw v4 replay report so it
+    does not create an external continuation or path-resume surface.
+    """
+
+    return _finalize_rollback_candidate_source_v4_with_closure_on_held_root_switch_fds(
+        root_fd,
+        switch_fd,
+    ).v4_report

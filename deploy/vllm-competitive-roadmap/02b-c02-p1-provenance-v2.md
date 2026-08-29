@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, 그리고 source-free arm별 raw runtime-assembly host runner/USTAR composer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual Docker/GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, 그리고 source-free arm별 raw runtime-assembly host runner/USTAR composer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual Docker/GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -449,15 +449,32 @@ writer는 v3/v4 manifest, terminal marker, rollback/lifecycle/qualification clai
 않는다.
 
 이제 private same-stack finalizer
-`finalize_rc3_rollback_candidate_source_v4.py`도 landed 되었다. 유일한 callable entry
-`_finalize_rollback_candidate_source_v4_on_held_root_switch_fds()`는 caller가 같은 root
-EX/switch EX를 유지할 때만 fixed request → nonterminal v3 → v4를 normal-return stack에서
-연결한다. v3 직전과 v4 paired terminal marker 직전에 candidate/source·rollback phase·atomic
+`finalize_rc3_rollback_candidate_source_v4.py`도 landed 되었다. compatibility report helper
+`_finalize_rollback_candidate_source_v4_on_held_root_switch_fds()`와 receipt 전용 typed closure
+helper는 caller가 같은 root EX/switch EX를 유지할 때만 fixed request → nonterminal v3 → v4를
+normal-return stack에서 연결한다. v3 직전과 v4 paired terminal marker 직전에 candidate/source·rollback phase·atomic
 transaction의 **전체** typed replay equality와 held root FD의 fixed request descriptor/document를
 모두 다시 비교한다. static binding만 recheck하면 path-only v3 binder가 다시 읽는 raw leaf의
 TOCTOU를 닫지 못한다. v4 manifest는 preflight/create-only/self-replay 뒤에만 durable intent와
 hard-linked completion pair를 시도하고, post-link sync ambiguity는 resume이나 producer success가
 아닌 `ambiguous-terminal-publication`으로 fail closed한다.
+
+그 정상 반환 edge를 보존하는 다음 private continuation
+`write_rc3_rollback_finalizer_receipt_v1.py`도 landed 되었다. 유일한 entry
+`_finalize_and_write_rollback_receipt_on_held_root_switch_fds()`는 caller-held root EX/switch
+EX에서 먼저 finalizer를 직접 호출하고, 반환된 typed v3/v4 closure와 fixed request, static
+preparation, candidate/source complete consumed-path inventory, candidate/rollback phase 및
+atomic transaction을 **같은 FD stack에서** 다시 비교한 뒤 fixed
+`rollback-finalizer-receipt-v1.json`과 paired `.intent`/`.complete`만 create-only로
+publish한다. schema는 `riley.rc3-rollback-finalizer-receipt.v1`,
+`completed/not-run`, `raw-finalizer-normal-return-only` authority로 한정된다. receipt output
+충돌은 finalizer 전에 막고, 모든 closure/receipt replay도 receipt leaf/marker 전에 끝낸다.
+terminal hardlink helper가 성공하면 그 뒤 즉시 반환하며, v4 또는 receipt marker의 post-link
+sync ambiguity만 pair가 남은 채 반환값과 후속 receipt를 만들지 않을 수 있다. receipt pair
+자체도 filesystem-only success 증명이 아니므로
+path reopen/CLI/resume 또는 future semantic checker가 독립 input으로 수용할 수 없으며, 같은
+authenticated runner normal-return stack만 이 함수의 성공 반환을 소비할 수 있다.
+
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
