@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-runtime-image-export-oci-normalization-v1.schema.json",
+  "title": "Reconstructed runtime image-export OCI normalization v1",
+  "description": "A source-only, per-reconstruction closure for one already-captured runtime image-export tar and raw runtime image inspect response. The input can be a legacy Docker-save layout or an OCI image layout, with optional opaque root compatibility sidecars. It validates and retains the selected config/layer content, then writes deterministic canonical OCI image-layout USTAR bytes. It does not establish any Docker export/build execution, same-invocation capture, source/bundle/image provenance, independence, runtime/GPU/service behavior, rollback, freeze, or qualification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "capture_scope",
+    "reconstruction_id",
+    "raw_archive_format",
+    "normalized_archive_format",
+    "source_layout",
+    "platform",
+    "image_id",
+    "content_binding",
+    "docker_invocation_binding",
+    "source_binding",
+    "bundle_binding",
+    "build_invocation_binding",
+    "runtime_capture_binding",
+    "independence_binding",
+    "image_inspect",
+    "image_export_archive",
+    "oci_archive",
+    "layout",
+    "index",
+    "manifest",
+    "config"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.reconstructed-runtime-image-export-oci-normalization.v1"},
+    "status": {"const": "prepared"},
+    "qualification_status": {"const": "not-run"},
+    "authority": {"const": "runtime-image-export-to-canonical-oci-content-normalization-only"},
+    "capture_scope": {"const": "single-runtime-image-export-to-canonical-oci-content-normalization"},
+    "reconstruction_id": {"enum": ["a", "b"]},
+    "raw_archive_format": {"const": "runtime-image-export-tar.v1"},
+    "normalized_archive_format": {"const": "oci-image-layout-tar.v1"},
+    "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars"]},
+    "platform": {"$ref": "#/$defs/platform"},
+    "image_id": {"$ref": "#/$defs/ociDigest"},
+    "content_binding": {"const": "validated"},
+    "docker_invocation_binding": {"const": "not-established"},
+    "source_binding": {"const": "not-established"},
+    "bundle_binding": {"const": "not-established"},
+    "build_invocation_binding": {"const": "not-established"},
+    "runtime_capture_binding": {"const": "not-established"},
+    "independence_binding": {"const": "not-established"},
+    "image_inspect": {"$ref": "#/$defs/imageInspectDescriptor"},
+    "image_export_archive": {"$ref": "#/$defs/imageExportArchiveDescriptor"},
+    "oci_archive": {"$ref": "#/$defs/ociArchiveDescriptor"},
+    "layout": {"$ref": "#/$defs/layoutDescriptor"},
+    "index": {"$ref": "#/$defs/indexDescriptor"},
+    "manifest": {"$ref": "#/$defs/manifestDescriptor"},
+    "config": {"$ref": "#/$defs/configDescriptor"}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}
+    },
+    "ociDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": {"const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1}
+      }
+    },
+    "imageInspectDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "image-export/runtime-image-inspect.json"}}}
+      ]
+    },
+    "imageExportArchiveDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "image-export/runtime-image-export.tar"}, "byte_length": {"maximum": 8657043455}}}
+      ]
+    },
+    "ociArchiveDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "normalized-oci/oci-image-layout.tar"}, "byte_length": {"maximum": 8589934591}}}
+      ]
+    },
+    "layoutDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "normalized-oci/oci-layout"}}}
+      ]
+    },
+    "indexDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "normalized-oci/index.json"}}}
+      ]
+    },
+    "manifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "normalized-oci/manifest.json"}}}
+      ]
+    },
+    "configDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"const": "normalized-oci/config.json"}}}
+      ]
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": {"os": {"const": "linux"}, "architecture": {"const": "amd64"}}
+    }
+  }
+}

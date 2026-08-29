@@ -61,6 +61,27 @@ or qualification claim. A later receipt must bind its exact canonical context
 tar, invocation, output image/OCI bytes, and never-started-container filesystem
 capture before any of those claims can be promoted.
 
+The separate source-only
+`prepare_reconstructed_runtime_image_export_oci_normalization_v1.py` closes the
+Docker 28 exporter portability boundary without widening OCI-inputs v1 or
+assembly-capture v1. It snapshots an already-produced inspect response and
+runtime image export tar into a new private root, strict-discriminates a one-image
+legacy Docker-save layout from clean OCI layout or OCI layout with bounded,
+opaque root compatibility sidecars,
+and uses only the selected config/layer bytes to write a deterministic clean
+OCI USTAR plus derived layout/index/manifest/config snapshots. It requires
+inspect ID = raw config SHA-256, linux/amd64, selected layer descriptor
+hash/size closure, and legacy rootfs diff-id order. PAX/GNU/sparse,
+links/special files, traversal, duplicate/unknown closure, and an oversized
+zero trailer are rejected before a tar parser receives extension data; replay
+also requires exact USTAR headers, member order, metadata, zero padding, and
+the tarfile record trailer. Its
+`prepared/not-run`, `runtime-image-export-to-canonical-oci-content-normalization-only`
+receipt is content conversion only: it does not make a Docker export/build,
+same-invocation capture, source/bundle-to-image, A/B, runtime/GPU/service,
+rollback, freeze, or qualification claim. A later bridge, not this closure,
+must bind a raw runtime image export normalization root to an assembly capture.
+
 That post-capture mechanism is now landed as
 `ci/release/prepare_reconstructed_runtime_assembly_capture_v1.py` plus
 `benchmarks/release/candidates/reconstructed-runtime-assembly-capture-v1.schema.json`.
