@@ -5,8 +5,10 @@ sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
-runner, the C02 source pre-freeze checker, and the read-only v4/v5 raw-manifest
-structural precheck are implemented with CPU/static hostile-path coverage; this worklist remains
+runner, the fixed rollback candidate/source bind-request writer and same-stack
+v3/v4 finalizer, the C02 source pre-freeze checker, and the read-only v4/v5
+raw-manifest structural precheck are implemented with CPU/static hostile-path
+coverage; this worklist remains
 design and integration material, not a qualification report. No actual GPU
 capture, candidate freeze, lifecycle-v5 receipt, or semantic qualification has
 been performed, and this file must not be copied into a candidate result
@@ -412,15 +414,18 @@ later rollback or transaction leaf. This closes those request-publication
 TOCTOU edges, but it writes no v3/v4 manifest or terminal marker and does not
 make a rollback, lifecycle, or qualification claim.
 
-A future private normal-return finalizer must retain the returned typed state,
-replay-and-compare the **complete** candidate/source, rollback-phase, and
-atomic-transaction closure immediately before v3 publication, and re-read the
-fixed request through the held root FD to compare its descriptor with the
-writer result. It must repeat those checks before later terminal publication;
-static preparation identity/descriptors alone are insufficient because the v3
-binder consumes path-only leaves. The landed writer is not a resume capability:
-it must not turn a separately replayed transaction completion pair into
-producer success.
+The landed private same-stack finalizer,
+`finalize_rc3_rollback_candidate_source_v4.py`, has exactly one held-FD entry
+`_finalize_rollback_candidate_source_v4_on_held_root_switch_fds()`. While the
+caller retains the same root/switch EX stack, it writes the fixed request,
+replay-and-compares the **complete** candidate/source, rollback-phase, and
+atomic-transaction closure plus the held-FD request descriptor immediately
+before v3, binds the fixed nonterminal v3 manifest, and builds/preflights the
+fixed v4 manifest. It repeats both closure and request checks immediately
+before the v4 paired terminal marker; static preparation identity/descriptors
+alone are insufficient because the v3 binder consumes path-only leaves. A
+post-link sync ambiguity remains `ambiguous-terminal-publication`, never a
+resume or producer-success capability.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures
@@ -703,9 +708,9 @@ runtime configuration field or a trace counter.
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then land rollback
-   raw phase capture and strict held-FD phase replay before the fixed-name v3
-   bind-request writer/private normal-return finalizer and separately versioned
-   lifecycle/semantic closure.
+   raw phase capture and strict held-FD phase replay, then the fixed-name v3
+   bind-request writer and same-stack private normal-return v3/v4 finalizer
+   (complete), before separately versioned lifecycle/semantic closure.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
