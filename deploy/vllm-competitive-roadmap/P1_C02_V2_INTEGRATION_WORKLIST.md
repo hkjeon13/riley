@@ -339,6 +339,30 @@ capture for each arm, then one new materializer that explicitly consumes all of
 those independently prepared closures. A per-image OCI receipt alone is not a
 baseline producer and is not accepted by freeze admission or qualification.
 
+Before that materializer, `prepare_reconstructed_prior_baseline_content_bridge_v1.py`
+may create exactly one `bound/not-run`
+`riley.reconstructed-prior-baseline-content-bridge.v1` receipt in a fresh
+private root. It takes the v2 baseline root/relative canonical manifest, the
+source-input root plus the reviewer-provided source SHA again, and separate A/B
+OCI-input roots. It holds all four input root FDs, replays their existing
+verifiers, and records no absolute root path. It cross-binds only baseline
+source tag-object/tag-target/archive descriptors to source-v1 and each arm's
+raw image inspect/OCI archive/layout/manifest/image ID to its matching OCI-v1
+closure. `index.json` and `config.json` remain OCI-internal replay evidence,
+not invented v2 leaves. Different/overlapping root paths, same-inode roles,
+arm swaps, bridge output collisions, and extra bridge entries are rejected.
+
+The bridge receipt explicitly retains the v2 report's source/OCI
+`not-validated` states while recording the new source closure replay and OCI
+content-binding result. It does **not** establish source→runtime-image,
+bundle→runtime-image, build-invocation, runtime-capture independence, rollback,
+freeze, or qualification; those fields stay `not-established`/`not-run`.
+It is neither a baseline materializer nor a freeze/rollback/qualification
+input, and it never invokes Docker, a build, GPU, service, network, or shell.
+An actual materializer still needs a same-invocation arm-specific runtime-image
+assembly/capture receipt that exact-binds the independently replayed A/B
+binary/bundle evidence before it can promote any of those boundaries.
+
 The distinct v3 raw schema/checker is now landed for the reconstructed-tag
 case rather than widening v2. `check_rc3_rollback_provenance_v3.py` replays
 the full reconstructed baseline A/B manifest through one held FD, pins the
@@ -707,8 +731,9 @@ runtime configuration field or a trace counter.
    already-published native fallback source leaf (complete), then add rollback
    raw capture/binding and a separately versioned lifecycle/semantic closure.
 6. Land source-only reviewed RC2 inputs and per-arm OCI image-layout input
-   closures; retain their `prepared/not-run` scope until an explicit A/B
-   materializer consumes them.
+   closures, then the narrow held-FD cross-root content bridge; retain their
+   `prepared/not-run`/`bound/not-run` scope until an explicit A/B materializer
+   consumes them with a same-invocation runtime-image assembly/capture receipt.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
 8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
