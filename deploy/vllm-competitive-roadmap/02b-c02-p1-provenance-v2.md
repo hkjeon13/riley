@@ -393,6 +393,23 @@ leaf에서 target tuple을 재derive하여 session 값과 교차검증하고, he
 non-stream completion HTTP exchange는 bounded fixed grammar로만 replay한다. 이는
 raw structural input을 derive할 뿐 service/GPU/network/SSH/Docker/rename을 실행하거나
 terminal·rollback authority를 만들지 않는다.
+그 다음 fixed-name writer의 선행 조건은 별도 held-FD **candidate-source join**이다.
+phase replay만으로는 충분하지 않다. v1 serial-scenario replayer는 이미 검증한
+request·response-head·response-body descriptor만 typed `ReplayedScenario` field로
+노출하여 후속 writer가 추측한 ledger path를 다시 열지 않게 해야 한다. 이 join은
+정확히 하나의 stable-default source scenario를 replay하고 그 PID/start-tick/listener
+tuple이 candidate phase와 같은지 확인하며, candidate phase에는 local generation
+exchange가 없음을 요구하고 candidate generation/audit-index를 source replay에서만
+derive한다. source-owned shutdown-v2 artifact/marker도 같은 derived target에 대해
+별도 replay하고, config bridge의 PID/start-tick/listener/GPU tuple도 candidate phase와
+일치해야 한다. opaque static `stable-default-configuration.raw` snapshot의 SHA-256은
+runtime `/v1/config` SHA-256과 같은 값이라고 가정할 수 없으므로, 그 관계를 주장하려면
+versioned static-to-effective-config cross-binding을 먼저 추가한다. 그 전에는 static
+configuration을 opaque로만 취급하고 hash를 억지로 같게 만들지 않는다.
+후속 fixed-name writer/finalizer는 terminal static-preparation session의 baseline 및 세
+snapshot descriptor를 v3 publication 직전과 이후 terminal publication 직전에 다시
+비교해야 한다. 단순 path rehash만으로는 static replay 뒤 같은 EUID가 바꾼 bytes가
+완료 preparation receipt와 무관하게 bind되는 것을 막지 못한다.
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
@@ -505,8 +522,11 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    v4/shutdown receipt closure와 hostile/static tests를 추가한다. 이 구현만으로는
    GPU capture나 qualification을 실행하지 않는다.
 6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
-   baseline rollback v3 raw verifier/schema, strict held-FD phase replay를 먼저
-   추가한 뒤 fixed-name raw bind-request writer와 private normal-return finalizer를 추가한다.
+   baseline rollback v3 raw verifier/schema, strict held-FD phase replay와 typed
+   source HTTP descriptor replay를 먼저 추가한다. 그 뒤 candidate-source/config/shutdown
+   join, versioned static-to-effective-config cross-binding, static descriptor
+   TOCTOU closure를 추가한 뒤에만 fixed-name raw bind-request writer와 private
+   normal-return finalizer를 추가한다.
 7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
    v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.

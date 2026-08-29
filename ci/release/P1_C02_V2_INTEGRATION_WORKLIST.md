@@ -344,6 +344,31 @@ TCP, FD-socket, and GPU leaves and checks the bounded health and optional
 non-stream generation exchanges. It is a pure structural replay/input-derivation
 helper, not a CLI or operational action, and it confers no terminal, rollback,
 or qualification authority.
+
+The next writer prerequisite is a separate held-FD **candidate-source join**;
+phase replay alone is deliberately insufficient. The v1 serial-scenario
+replayer must expose only its already-verified request, response-head, and
+response-body descriptors as typed `ReplayedScenario` fields, so a later writer
+never reopens guessed ledger paths. That join must replay exactly one
+stable-default source scenario, require its PID/start-tick/listener tuple to
+equal the candidate phase tuple, require the candidate phase to have no local
+generation exchange, and derive the candidate generation and audit-index inputs
+only from that source replay. It must separately replay the source-owned
+shutdown-v2 artifact/marker against the same derived target and replay the
+config bridge so its full PID/start-tick/listener/GPU tuple agrees with the
+candidate phase. The opaque static `stable-default-configuration.raw` snapshot
+is not the runtime `/v1/config` SHA-256: a versioned static-to-effective-config
+cross-binding must be added before a writer can claim that relationship. The
+writer must otherwise treat the static configuration as opaque and fail closed
+rather than equating their hashes.
+
+The later fixed-name writer/finalizer must retain the terminal static-preparation
+session descriptors through v3 publication and compare the replayed baseline
+descriptor plus all three snapshot descriptors immediately before publication
+and again before a later terminal publication. Rehashing caller-controlled
+paths alone is not enough: without that comparison, same-EUID mutation after
+the static replay could bind bytes unrelated to its completed preparation
+receipt.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures

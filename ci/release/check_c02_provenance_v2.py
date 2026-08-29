@@ -1575,6 +1575,9 @@ class ReplayedScenario:
     scenario_id: str
     target: ScenarioCaptureTarget
     request_ledger: common.EvidenceDescriptor
+    request: common.EvidenceDescriptor
+    response_head: common.EvidenceDescriptor
+    response_body: common.EvidenceDescriptor
     runtime_event_log: common.EvidenceDescriptor
     generation_audit_index: common.EvidenceDescriptor
     request_id: str
@@ -2445,6 +2448,9 @@ def _replay_capture_scenario(
         scenario_id=expected_scenario_id,
         target=target,
         request_ledger=ledger,
+        request=request_descriptor,
+        response_head=head_descriptor,
+        response_body=body_descriptor,
         runtime_event_log=runtime_event,
         generation_audit_index=index,
         request_id=request_id,

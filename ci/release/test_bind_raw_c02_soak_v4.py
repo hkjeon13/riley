@@ -435,6 +435,50 @@ class BindRawC02SoakV4Tests(unittest.TestCase):
         self.assertEqual(report["qualification_status"], "not-run")
         self.assertEqual(checker.verify_completed_soak_provenance_v4(self.root, "soak-v4.json"), report)
 
+    def test_v1_replay_exposes_only_verified_completion_descriptors(self) -> None:
+        self._request(scenario_ids=("smoke",))
+        session_path = "serial-capture/session.json"
+        session_raw = (self.root / session_path).read_bytes()
+        session = common.parse_canonical_json(session_raw, "serial capture session")
+        assert isinstance(session, dict)
+        ledger_path = session["scenarios"][0]["request_ledger"]["path"]
+        ledger = common.parse_canonical_json(
+            (self.root / ledger_path).read_bytes(),
+            "serial capture request ledger",
+        )
+        assert isinstance(ledger, dict)
+
+        root_fd = common.open_private_evidence_directory(self.root, "test evidence root")
+        try:
+            replay = checker.replay_raw_scenario_capture_v1_fd(
+                root_fd,
+                common.descriptor_for_bytes(
+                    session_path,
+                    session_raw,
+                    "serial capture session",
+                ),
+                candidate_id=self.candidate_id,
+                configuration_profile=self.profile,
+                configuration_sha256=self.configuration_sha256,
+                used_paths=set(),
+            )
+        finally:
+            os.close(root_fd)
+
+        scenario = replay.scenarios[0]
+        self.assertEqual(
+            scenario.request,
+            common.parse_descriptor(ledger["request"], "expected request"),
+        )
+        self.assertEqual(
+            scenario.response_head,
+            common.parse_descriptor(ledger["response_head"], "expected response head"),
+        )
+        self.assertEqual(
+            scenario.response_body,
+            common.parse_descriptor(ledger["response_body"], "expected response body"),
+        )
+
     def test_rejects_legacy_fields_versions_and_reordered_inventory(self) -> None:
         request_path, request = self._request(scenario_ids=("first", "second"))
         request["schema_version"] = "riley.soak-v2-bind-request.v3"
