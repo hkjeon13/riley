@@ -1,6 +1,6 @@
 # Riley vLLM 경쟁력 로드맵
 
-**상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure와 C02 source pre-freeze check가 candidate freeze 전에 진행 중이다. initial one-scenario lifecycle supervisor/receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fixed native-fallback lifecycle bind-request writer v5, 별도 terminal binder v5의 private held-lock core, same-invocation rollback terminal-provenance v4, 그리고 held-FD source pre-freeze checker는 CPU/static hostile-path 범위로 구현됐다. 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·authenticated rollback runner·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure와 C02 source pre-freeze check가 candidate freeze 전에 진행 중이다. initial one-scenario lifecycle supervisor/receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh native-fallback lifecycle-evidence preparer v5, fixed native-fallback lifecycle bind-request writer v5, 별도 terminal binder v5의 private held-lock core, same-invocation rollback terminal-provenance v4, 그리고 held-FD source pre-freeze checker는 CPU/static hostile-path 범위로 구현됐다. 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·authenticated rollback runner·semantic qualification은 아직 수행하지 않았다.
 **작성 기준:** `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`
 **목표:** Riley가 제한된 우선 지원 범위에서 vLLM보다 더 낮은 지연, 더 높은 SLO goodput, 더 예측 가능한 오류 격리와 복구를 제공하도록 후속 작업을 독립 PR로 분해한다.
 
