@@ -85,7 +85,10 @@ canonical-v1)은 변하지 않았고, 추가된 C02 runtime-config/audit/shutdow
 경로는 모두 명시 opt-in·fail-closed임을 검토했다. 이후 이 source가 바뀌면 별도 reviewed
 release-contract PR이 새 exact pin을 승인해야 하며, pre-freeze checker는 hash를 자동 발견,
 허용 또는 갱신하지 않는다. 이 갱신도 candidate freeze나 Gate E/semantic qualification을
-수행하거나 승인하지 않는다.
+수행하거나 승인하지 않는다. 같은 reviewed literal은 active
+`ci/release/release_common.py` release preflight/bundle/manifest contract에도 별도로
+적용된다. 두 checker를 import로 결합하지 않으며, Python 3.10 held-FD pre-freeze boundary와
+build-oriented release helper는 각각의 고정 pin이 drift에서 fail-closed해야 한다.
 
 `ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의

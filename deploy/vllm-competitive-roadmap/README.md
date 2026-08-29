@@ -1,7 +1,9 @@
 # Riley vLLM 경쟁력 로드맵
 
 **상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure와 C02 source pre-freeze check가 candidate freeze 전에 진행 중이다. initial one-scenario lifecycle supervisor/receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh native-fallback lifecycle-evidence preparer v5, fixed native-fallback lifecycle bind-request writer v5, 별도 terminal binder v5의 private held-lock core와 fixed-name private raw compositor, authenticated native-fallback raw-v5 runner, same-invocation rollback terminal-provenance v4, held-FD source pre-freeze checker, completed v4/v5 soak raw manifest의 read-only structural precheck, 그리고 completed rollback v4 raw manifest의 read-only structural precheck는 CPU/static hostile-path 범위로 구현됐다. 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·authenticated rollback runner·semantic qualification은 아직 수행하지 않았다.
-**작성 기준:** `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`
+**작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
+현재 source-defaults release/pre-freeze contract pin은
+`main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
 **목표:** Riley가 제한된 우선 지원 범위에서 vLLM보다 더 낮은 지연, 더 높은 SLO goodput, 더 예측 가능한 오류 격리와 복구를 제공하도록 후속 작업을 독립 PR로 분해한다.
 
 이 폴더는 기존 [`deploy/00-pr-contract.md`](../00-pr-contract.md), [`deploy/15-profiling-and-optimization.md`](../15-profiling-and-optimization.md), [`deploy/16-reliability-and-release.md`](../16-reliability-and-release.md), [`deploy/17-extension-gates.md`](../17-extension-gates.md)의 하위 실행 계획이다. 기존 gate와 충돌하는 경우 기존 문서의 fail-closed 규칙이 우선한다.

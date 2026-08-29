@@ -433,6 +433,15 @@ class ReleaseBundleTests(unittest.TestCase):
             manifest["rollback"]["previous_release_scope"],
         )
 
+    def test_checked_in_server_defaults_contract_pin_matches_source(self) -> None:
+        source = REPOSITORY_ROOT / SERVER_DEFAULTS_SOURCE_PATH
+        self.assertEqual(
+            hashlib.sha256(source.read_bytes()).hexdigest(),
+            SERVER_DEFAULTS_SOURCE_SHA256,
+            "changing reviewed server defaults requires an explicit "
+            "release-contract pin update",
+        )
+
     def test_fixed37_cannot_be_promoted_by_manifest_tampering(self) -> None:
         source = self.build("fixed37-source.tar.gz")
         tampered = self.root / "fixed37-tampered.tar.gz"

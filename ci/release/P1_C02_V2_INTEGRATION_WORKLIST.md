@@ -17,7 +17,10 @@ The review compared the prior `1195cf20` pin: ordinary serve defaults are
 unchanged and the C02 runtime-config/audit/shutdown/native-fallback additions
 are opt-in and fail closed. Future source drift must fail pre-freeze until a
 separate reviewed release-contract pin update; this checker never derives or
-widens the pin and this update is not a candidate freeze or qualification.
+widens the pin and this update is not a candidate freeze or qualification. The
+same reviewed literal is independently used by the active release
+preflight/bundle/manifest contract; it is not imported into the Python-3.10
+held-FD checker, and either contract must fail closed on future source drift.
 
 ## Boundary to preserve
 

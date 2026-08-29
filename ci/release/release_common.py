@@ -19,8 +19,14 @@ CUDA_ARCHITECTURES = ["89"]
 ARCHIVE_SUFFIX = "linux-x86_64-cuda12.8"
 MIT_LICENSE_EXPRESSION = "MIT"
 SERVER_DEFAULTS_SOURCE_PATH = Path("crates/riley-server/src/main.rs")
+# Reviewed at source commit 21f445f4870a140346509144c36c7294f2f677f3.
+# Relative to the prior 1195cf20e source pin, ordinary serve defaults remain
+# unchanged; the C02 runtime-config, audit, shutdown, and native-fallback
+# paths are opt-in and fail closed.  Keep this literal independent from the
+# Python-3.10 pre-freeze checker: a future source change requires another
+# reviewed release-contract update, never runtime pin discovery or relaxation.
 SERVER_DEFAULTS_SOURCE_SHA256 = (
-    "d24145ab2ebb1df2723673821585f7f14d2f3f2e6d9cc80a08c4c9a8e15c61f9"
+    "47990249835eed190ee73521ede239841eae0eb73f20e71577258790f1734e4b"
 )
 STABLE_OPTIMIZATION_DEFAULTS = {
     "execution_completion": "iteration-batch",
