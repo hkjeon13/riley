@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, 그리고 RC2-compatible raw phase collector는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, isolated atomic-switch producer, 그리고 immutable artifact snapshot→separate runtime-copy preparation은 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -330,15 +330,28 @@ isolated switch child의 이미 staged된 private runtime files에만 Linux
 stat과 transcript 다섯 raw leaf를 create-only capture child에 남긴다. 실제
 deployment path에는 rename하지 않으며 `mv`/ordinary rename fallback도 없다. 이
 raw helper만으로 runtime copy와 artifact-map binary/bundle/image bytes의 content
-linkage는 주장하지 않는다. future runner는 immutable artifact snapshot에서
-별도의 private runtime copy를 materialize하고 그 mapping을 남겨야 한다.
+linkage는 주장하지 않는다. 그 선행 mapping은 이제 별도
+`prepare_rc3_rollback_artifacts_v1.py`가 담당한다. 이 helper는 fixed
+create-only `rollback-v3-artifact-snapshot/`, `rollback-v3-artifacts/`,
+`rollback-v3-switch/`만 append하고, 여섯 absolute host input을 no-follow
+streaming으로 immutable 0600 snapshot에 복제한 뒤 candidate/rollback binary
+snapshot에서만 distinct 0700 `active`/`rollback-staged` runtime copy를 만든다.
+terminal session verifier는 snapshot/runtime hash·length·inode mapping을
+재생하지만 runtime path를 artifact descriptor로 승격하지 않는다. source
+checkout/deployment/GPU/network/Docker/rename는 건드리지 않는다.
+verifier의 `pre-switch`/`post-switch` layout은 각각 그 순간의 bytes/inode mapping만
+재생한다. `post-switch`는 exchange 발생을 주장하지 않으며, helper가 잡는 shared
+switch lock도 replay 동안만 유지된다. 현재 atomic helper는 별도 FD를 열어 exclusive
+lock을 잡으므로 둘은 아직 하나의 authenticated transaction이 아니다. future runner는
+pre-switch replay → same held-FD exclusive transaction → exchange/atomic-session replay를
+닫힌 한 transaction으로 추가해야 한다.
 
-아직 이 둘을 하나의 authenticated host transaction으로 연결하는 v3 remote
-runner는 없다. 그 runner는 terminal phase/switch session과
-`capture-incomplete.json` 부재를 별도로 replay한 뒤에만 raw path를 bind request에
-넣어야 한다. v3 manifest 자체는 switch session/marker closure를 bind하지 않으므로
-이는 runner-only transaction rule이며, independent semantic/terminal closure는 후속
-version에서 추가한다. 따라서
+아직 이 셋을 하나의 authenticated host transaction으로 연결하는 v3 remote
+runner는 없다. 그 runner는 complete reconstructed-baseline closure 위에서 terminal
+preparation/phase/switch session과 각각의 `capture-incomplete.json` 부재를 별도로
+replay한 뒤에만 raw path를 bind request에 넣어야 한다. v3 manifest 자체는 이
+session/marker closure를 bind하지 않으므로 이는 runner-only transaction rule이며,
+independent semantic/terminal closure는 후속 version에서 추가한다. 따라서
 actual GPU rollback drill, candidate freeze, rollback success verdict를 실행하거나
 주장하지 않는다.
 

@@ -472,6 +472,138 @@ def create_private_evidence_directory(path: Path, label: str) -> int:
         _close_quietly(parent_fd)
 
 
+def create_private_child_directory(parent_fd: int, name: str, label: str) -> int:
+    """Create and pin one fresh mode-0700 direct child below a held FD.
+
+    This is deliberately narrower than a generic recursive-directory helper:
+    provenance producers may append one named workspace to a trusted root, but
+    may not accept arbitrary relative output paths.  The child is create-only,
+    opened with ``O_DIRECTORY|O_NOFOLLOW``, checked against the visible name
+    before and after durability sync, and returned as a caller-owned FD.
+    Failures retain any created path for forensic inspection rather than
+    deleting or replacing it.
+    """
+
+    _require_directory_fd(parent_fd, f"{label} parent")
+    child_name = _validate_leaf_name(name, f"{label} name")
+    flags = _directory_open_flags()
+    child_fd: int | None = None
+    try:
+        try:
+            os.mkdir(child_name, 0o700, dir_fd=parent_fd)
+        except FileExistsError as error:
+            _fail("create-only-collision", f"cannot create new {label}: {error}")
+        except (NotImplementedError, TypeError) as error:
+            _fail(
+                "missing-directory-fd-support",
+                f"host cannot safely create {label} below a held parent FD: {error}",
+            )
+        except OSError as error:
+            _fail("unwritable-output", f"cannot create new {label}: {error}")
+        try:
+            visible_before = os.lstat(child_name, dir_fd=parent_fd)
+        except OSError as error:
+            _fail("raced-output", f"cannot inspect newly created {label}: {error}")
+        try:
+            child_fd = os.open(child_name, flags, dir_fd=parent_fd)
+        except OSError as error:
+            _fail(
+                "unsafe-evidence-directory",
+                f"cannot reopen newly created {label} without following links: {error}",
+            )
+        try:
+            try:
+                os.fchmod(child_fd, 0o700)
+            except OSError as error:
+                _fail("unsafe-evidence-root-mode", f"cannot make {label} mode 0700: {error}")
+            metadata = _require_directory_fd(child_fd, label)
+            if (
+                metadata.st_uid != os.geteuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o700
+                or metadata.st_nlink != 2
+                or (visible_before.st_dev, visible_before.st_ino)
+                != (metadata.st_dev, metadata.st_ino)
+            ):
+                _fail(
+                    "raced-output",
+                    f"{label} was not created as an effective-UID-owned private directory",
+                )
+            _fsync_checked(child_fd, label)
+            _fsync_checked(parent_fd, f"{label} parent directory")
+            try:
+                visible_after = os.lstat(child_name, dir_fd=parent_fd)
+            except OSError as error:
+                _fail("raced-output", f"cannot re-inspect newly created {label}: {error}")
+            if (
+                not stat.S_ISDIR(visible_after.st_mode)
+                or (
+                    visible_after.st_dev,
+                    visible_after.st_ino,
+                    visible_after.st_mode,
+                    visible_after.st_nlink,
+                )
+                != (
+                    metadata.st_dev,
+                    metadata.st_ino,
+                    metadata.st_mode,
+                    metadata.st_nlink,
+                )
+            ):
+                _fail("raced-output", f"{label} changed before it became durable")
+            return child_fd
+        except BaseException:
+            _close_quietly(child_fd)
+            raise
+    except BaseException:
+        _close_quietly(child_fd)
+        raise
+
+
+def open_private_child_directory(parent_fd: int, name: str, label: str) -> int:
+    """Open one existing euid-owned exact-0700 direct child without traversal.
+
+    The returned descriptor pins the child inode.  Both visible-name checks
+    are retained because a private root protects against untrusted users, not
+    necessarily against a same-UID competing producer.
+    """
+
+    _require_directory_fd(parent_fd, f"{label} parent")
+    child_name = _validate_leaf_name(name, f"{label} name")
+    try:
+        before = os.lstat(child_name, dir_fd=parent_fd)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect {label}: {error}")
+    try:
+        child_fd = os.open(child_name, _directory_open_flags(), dir_fd=parent_fd)
+    except OSError as error:
+        _fail("unsafe-evidence-directory", f"cannot open {label} without following links: {error}")
+    try:
+        metadata = _require_directory_fd(child_fd, label)
+        if (
+            metadata.st_uid != os.geteuid()
+            or stat.S_IMODE(metadata.st_mode) != 0o700
+            or metadata.st_nlink < 2
+            or (before.st_dev, before.st_ino, before.st_mode, before.st_nlink)
+            != (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_nlink)
+        ):
+            _fail("unsafe-evidence-directory", f"{label} is not a stable private directory")
+        try:
+            after = os.lstat(child_name, dir_fd=parent_fd)
+        except OSError as error:
+            _fail("raced-input", f"cannot re-inspect {label}: {error}")
+        if (after.st_dev, after.st_ino, after.st_mode, after.st_nlink) != (
+            metadata.st_dev,
+            metadata.st_ino,
+            metadata.st_mode,
+            metadata.st_nlink,
+        ):
+            _fail("raced-input", f"{label} changed while it was opened")
+        return child_fd
+    except BaseException:
+        _close_quietly(child_fd)
+        raise
+
+
 def _open_relative_directory_chain(
     root_fd: int,
     components: Sequence[str],
@@ -861,6 +993,8 @@ def _verify_regular_at(
     label: str,
     *,
     maximum_bytes: int,
+    expected_mode: int | None = None,
+    require_euid_owned: bool = False,
 ) -> None:
     """Stream-hash one descriptor without loading an artifact into memory."""
 
@@ -869,11 +1003,21 @@ def _verify_regular_at(
     name = _validate_leaf_name(name, f"{label} name")
     if descriptor.byte_length > maximum_bytes:
         _fail("input-too-large", f"{label} exceeds its byte bound")
+    if expected_mode is not None and (type(expected_mode) is not int or expected_mode < 0 or expected_mode > 0o777):
+        _fail("unsafe-output-mode", f"{label} expected mode is invalid")
+
+    def require_identity(metadata: os.stat_result) -> None:
+        _require_regular_single_link(metadata, label)
+        if expected_mode is not None and stat.S_IMODE(metadata.st_mode) != expected_mode:
+            _fail("unsafe-output-mode", f"{label} must have exact mode {expected_mode:04o}")
+        if require_euid_owned and metadata.st_uid != os.geteuid():
+            _fail("unsafe-evidence-owner", f"{label} must be owned by the effective UID")
+
     try:
         before = os.lstat(name, dir_fd=directory_fd)
     except OSError as error:
         _fail("missing-input", f"cannot inspect {label}: {error}")
-    _require_regular_single_link(before, label)
+    require_identity(before)
     if before.st_size != descriptor.byte_length:
         _fail("evidence-length-mismatch", f"{label} byte length differs from descriptor")
     try:
@@ -882,7 +1026,7 @@ def _verify_regular_at(
         _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
     try:
         opened = os.fstat(opened_fd)
-        _require_regular_single_link(opened, label)
+        require_identity(opened)
         if _stable_stat(before) != _stable_stat(opened):
             _fail("raced-input", f"{label} changed while it was opened")
         digest = hashlib.sha256()
@@ -902,7 +1046,7 @@ def _verify_regular_at(
         except OSError as error:
             _fail("unreadable-input", f"cannot re-read {label}: {error}")
         after = os.fstat(opened_fd)
-        _require_regular_single_link(after, label)
+        require_identity(after)
         if _stable_stat(opened) != _stable_stat(after):
             _fail("mutated-input", f"{label} changed while it was read")
     finally:
@@ -911,7 +1055,7 @@ def _verify_regular_at(
         path_after = os.lstat(name, dir_fd=directory_fd)
     except OSError as error:
         _fail("raced-input", f"cannot re-inspect {label}: {error}")
-    _require_regular_single_link(path_after, label)
+    require_identity(path_after)
     if _stable_stat(before) != _stable_stat(path_after):
         _fail("raced-input", f"{label} changed while it was read")
     if digest.hexdigest() != descriptor.sha256:
@@ -1051,6 +1195,79 @@ def verify_descriptor_file(
             _close_quietly(owned_fd)
 
 
+def _verify_private_mode_descriptor_file(
+    root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    expected_mode: int,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> None:
+    """Stream-verify one private descriptor with one exact mode policy."""
+
+    candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
+    parsed = parse_descriptor(candidate, label)
+    relative = validate_relative_path(parsed.path, f"{label}.path")
+    parts = PurePosixPath(relative).parts
+    parent_fd, owned = _open_relative_directory_chain(root_fd, parts[:-1], label)
+    try:
+        _verify_regular_at(
+            parent_fd,
+            parts[-1],
+            parsed,
+            label,
+            maximum_bytes=maximum_bytes,
+            expected_mode=expected_mode,
+            require_euid_owned=True,
+        )
+    finally:
+        for owned_fd in reversed(owned):
+            _close_quietly(owned_fd)
+
+
+def verify_private_snapshot_descriptor_file(
+    root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> None:
+    """Stream-verify one immutable euid-owned mode-0600 snapshot descriptor.
+
+    Unlike :func:`verify_descriptor_file`, this stricter primitive is for
+    immutable snapshots that will later seed executable runtime copies.  It
+    checks owner/mode along the same before/open/after/path-after sequence as
+    the descriptor digest, so a permission-only or path-swap change cannot be
+    silently accepted just because the bytes remain the same.
+    """
+
+    _verify_private_mode_descriptor_file(
+        root_fd,
+        descriptor,
+        label,
+        expected_mode=0o600,
+        maximum_bytes=maximum_bytes,
+    )
+
+
+def verify_private_runtime_descriptor_file(
+    root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> None:
+    """Stream-verify one euid-owned exact-0700 executable runtime copy."""
+
+    _verify_private_mode_descriptor_file(
+        root_fd,
+        descriptor,
+        label,
+        expected_mode=0o700,
+        maximum_bytes=maximum_bytes,
+    )
+
+
 @dataclass(frozen=True)
 class CreatedEvidence:
     """Identity and digest returned only after a create-only file is durable."""
@@ -1073,6 +1290,391 @@ class CreatedEvidence:
             sha256=self.sha256,
             byte_length=self.byte_length,
         )
+
+
+@dataclass(frozen=True)
+class RuntimeMaterialization:
+    """Identity returned for a private executable runtime copy.
+
+    A runtime copy is intentionally *not* an :class:`EvidenceDescriptor`:
+    its mode-0700 path is executable operational staging, not an immutable
+    mode-0600 evidence leaf that a raw provenance binder may consume.
+    """
+
+    name: str
+    sha256: str
+    byte_length: int
+    device: int
+    inode: int
+
+
+def _require_snapshot_source(
+    metadata: os.stat_result,
+    label: str,
+    *,
+    minimum_bytes: int,
+    maximum_bytes: int,
+    require_owner_executable: bool,
+    required_mode: int | None,
+) -> None:
+    """Apply the fixed host-input policy at every source stat boundary."""
+
+    _require_regular_single_link(metadata, label)
+    if metadata.st_uid not in {0, os.geteuid()}:
+        _fail(
+            "unsafe-source-owner",
+            f"{label} must be owned by root or the effective UID",
+        )
+    if metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        _fail(
+            "unsafe-source-mode",
+            f"{label} must not be group- or world-writable",
+        )
+    mode = stat.S_IMODE(metadata.st_mode)
+    if required_mode is not None and mode != required_mode:
+        _fail(
+            "unsafe-source-mode",
+            f"{label} must have exact mode {required_mode:04o}",
+        )
+    if require_owner_executable and not metadata.st_mode & stat.S_IXUSR:
+        _fail("unsafe-source-mode", f"{label} owner must be able to execute it")
+    if metadata.st_size < minimum_bytes:
+        _fail("empty-input", f"{label} is smaller than its minimum byte length")
+    if metadata.st_size > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+
+
+def _validate_private_output_mode(mode: int, label: str) -> int:
+    if type(mode) is not int or mode not in {0o600, 0o700}:
+        _fail(
+            "unsafe-output-mode",
+            f"{label} must be exactly 0600 or 0700",
+        )
+    return mode
+
+
+def _copy_regular_at_create_only(
+    source_parent_fd: int,
+    source_name: str,
+    destination_parent_fd: int,
+    destination_name: str,
+    label: str,
+    *,
+    maximum_bytes: int,
+    minimum_bytes: int,
+    output_mode: int,
+    require_source_owner_executable: bool,
+    required_source_mode: int | None,
+    expected_descriptor: EvidenceDescriptor | None,
+    expected_source_identity: tuple[int, int] | None,
+) -> tuple[str, int, int, int]:
+    """Stream one pinned regular source into a new private destination leaf.
+
+    Both the source's visible path and its opened inode are checked before and
+    after the copy.  The output is created with no replacement semantics and
+    never hard-linked.  A failed operation deliberately leaves a partial
+    create-only destination in place so callers cannot mistake a rerun for
+    one uninterrupted provenance transaction.
+    """
+
+    _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
+    if type(minimum_bytes) is not int or minimum_bytes < 0 or minimum_bytes > maximum_bytes:
+        _fail("invalid-byte-bound", f"{label} minimum byte bound is invalid")
+    mode = _validate_private_output_mode(output_mode, f"{label} output mode")
+    _require_directory_fd(source_parent_fd, f"{label} source parent")
+    _require_directory_fd(destination_parent_fd, f"{label} destination parent")
+    source_name = _validate_leaf_name(source_name, f"{label} source name")
+    destination_name = _validate_leaf_name(destination_name, f"{label} destination name")
+    if source_parent_fd == destination_parent_fd and source_name == destination_name:
+        _fail("source-output-alias", f"{label} source and destination names must differ")
+    try:
+        source_before = os.lstat(source_name, dir_fd=source_parent_fd)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect {label} source: {error}")
+    _require_snapshot_source(
+        source_before,
+        f"{label} source",
+        minimum_bytes=minimum_bytes,
+        maximum_bytes=maximum_bytes,
+        require_owner_executable=require_source_owner_executable,
+        required_mode=required_source_mode,
+    )
+    if expected_descriptor is not None and source_before.st_size != expected_descriptor.byte_length:
+        _fail("evidence-length-mismatch", f"{label} source byte length differs from descriptor")
+    if expected_source_identity is not None and (
+        type(expected_source_identity) is not tuple
+        or len(expected_source_identity) != 2
+        or any(type(value) is not int or value < 0 for value in expected_source_identity)
+    ):
+        _fail("invalid-source-identity", f"{label} expected source identity is invalid")
+    if expected_source_identity is not None and (
+        source_before.st_dev,
+        source_before.st_ino,
+    ) != expected_source_identity:
+        _fail("raced-input", f"{label} source does not retain its expected inode")
+    source_fd: int | None = None
+    destination_fd: int | None = None
+    try:
+        try:
+            source_fd = os.open(source_name, _file_open_flags(), dir_fd=source_parent_fd)
+        except OSError as error:
+            _fail("unsafe-evidence-path", f"cannot open {label} source without following links: {error}")
+        source_opened = os.fstat(source_fd)
+        _require_snapshot_source(
+            source_opened,
+            f"{label} source",
+            minimum_bytes=minimum_bytes,
+            maximum_bytes=maximum_bytes,
+            require_owner_executable=require_source_owner_executable,
+            required_mode=required_source_mode,
+        )
+        if _stable_stat(source_before) != _stable_stat(source_opened):
+            _fail("raced-input", f"{label} source changed while it was opened")
+        if expected_source_identity is not None and (
+            source_opened.st_dev,
+            source_opened.st_ino,
+        ) != expected_source_identity:
+            _fail("raced-input", f"{label} source does not retain its expected opened inode")
+        try:
+            destination_fd = os.open(
+                destination_name,
+                _output_open_flags(),
+                mode,
+                dir_fd=destination_parent_fd,
+            )
+        except FileExistsError as error:
+            _fail("create-only-collision", f"cannot create new {label} destination: {error}")
+        except OSError as error:
+            _fail("unwritable-output", f"cannot create new {label} destination: {error}")
+        try:
+            os.fchmod(destination_fd, mode)
+        except OSError as error:
+            _fail("unsafe-output-mode", f"cannot make {label} destination private: {error}")
+        destination_initial = os.fstat(destination_fd)
+        _require_regular_single_link(destination_initial, f"{label} destination")
+        if (
+            destination_initial.st_uid != os.geteuid()
+            or stat.S_IMODE(destination_initial.st_mode) != mode
+            or destination_initial.st_size != 0
+        ):
+            _fail("unsafe-output-mode", f"{label} destination was not newly private")
+        digest = hashlib.sha256()
+        remaining = source_opened.st_size
+        while remaining:
+            try:
+                chunk = os.read(source_fd, min(DEFAULT_READ_CHUNK_BYTES, remaining))
+            except OSError as error:
+                _fail("unreadable-input", f"cannot read {label} source: {error}")
+            if not chunk:
+                _fail("truncated-input", f"{label} source changed while it was read")
+            _write_all(destination_fd, chunk, f"{label} destination")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        try:
+            if os.read(source_fd, 1):
+                _fail("mutated-input", f"{label} source grew while it was read")
+        except OSError as error:
+            _fail("unreadable-input", f"cannot re-read {label} source: {error}")
+        source_after = os.fstat(source_fd)
+        _require_snapshot_source(
+            source_after,
+            f"{label} source",
+            minimum_bytes=minimum_bytes,
+            maximum_bytes=maximum_bytes,
+            require_owner_executable=require_source_owner_executable,
+            required_mode=required_source_mode,
+        )
+        if _stable_stat(source_opened) != _stable_stat(source_after):
+            _fail("mutated-input", f"{label} source changed while it was read")
+        if expected_source_identity is not None and (
+            source_after.st_dev,
+            source_after.st_ino,
+        ) != expected_source_identity:
+            _fail("mutated-input", f"{label} source does not retain its expected inode")
+        produced_digest = digest.hexdigest()
+        if expected_descriptor is not None and produced_digest != expected_descriptor.sha256:
+            _fail("evidence-hash-mismatch", f"{label} source SHA-256 differs from descriptor")
+        _fsync_checked(destination_fd, f"{label} destination")
+        destination_stable = os.fstat(destination_fd)
+        _require_regular_single_link(destination_stable, f"{label} destination")
+        if (
+            destination_stable.st_uid != os.geteuid()
+            or stat.S_IMODE(destination_stable.st_mode) != mode
+            or destination_stable.st_size != source_opened.st_size
+            or (destination_stable.st_dev, destination_stable.st_ino)
+            != (destination_initial.st_dev, destination_initial.st_ino)
+        ):
+            _fail("raced-output", f"{label} destination changed while it was written")
+    finally:
+        _close_quietly(destination_fd)
+        _close_quietly(source_fd)
+    try:
+        source_path_after = os.lstat(source_name, dir_fd=source_parent_fd)
+    except OSError as error:
+        _fail("raced-input", f"cannot re-inspect {label} source: {error}")
+    _require_snapshot_source(
+        source_path_after,
+        f"{label} source",
+        minimum_bytes=minimum_bytes,
+        maximum_bytes=maximum_bytes,
+        require_owner_executable=require_source_owner_executable,
+        required_mode=required_source_mode,
+    )
+    if _stable_stat(source_before) != _stable_stat(source_path_after):
+        _fail("raced-input", f"{label} source changed while it was read")
+    if expected_source_identity is not None and (
+        source_path_after.st_dev,
+        source_path_after.st_ino,
+    ) != expected_source_identity:
+        _fail("raced-input", f"{label} source does not retain its expected visible inode")
+    try:
+        destination_visible = os.lstat(destination_name, dir_fd=destination_parent_fd)
+    except OSError as error:
+        _fail("raced-output", f"cannot re-inspect {label} destination: {error}")
+    _require_regular_single_link(destination_visible, f"{label} destination")
+    if (
+        destination_visible.st_uid != os.geteuid()
+        or stat.S_IMODE(destination_visible.st_mode) != mode
+        or destination_visible.st_size != source_before.st_size
+        or (destination_visible.st_dev, destination_visible.st_ino)
+        != (destination_stable.st_dev, destination_stable.st_ino)
+        or (destination_visible.st_dev, destination_visible.st_ino)
+        == (source_before.st_dev, source_before.st_ino)
+    ):
+        _fail("raced-output", f"{label} destination changed before it could be published")
+    _fsync_checked(destination_parent_fd, f"{label} destination parent directory")
+    return (
+        produced_digest,
+        destination_stable.st_size,
+        destination_stable.st_dev,
+        destination_stable.st_ino,
+    )
+
+
+def snapshot_absolute_regular_create_only(
+    source: Path,
+    destination_parent_fd: int,
+    destination_name: str,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+    minimum_bytes: int = 1,
+    require_owner_executable: bool = False,
+) -> CreatedEvidence:
+    """Snapshot one trusted absolute host input into a new immutable 0600 leaf.
+
+    The absolute parent chain is opened with no-follow directory FDs.  Source
+    files must be nonempty, single-link regular files owned by root or the
+    effective UID and never group/world writable.  Set
+    ``require_owner_executable`` for host binary inputs.  The returned
+    descriptor is for the new immutable copy, not the mutable source path.
+    """
+
+    components = _absolute_components(source, f"{label} source path")
+    if not components:
+        _fail("invalid-evidence-path", f"{label} source must name a regular file, not root")
+    source_name = _validate_leaf_name(components[-1], f"{label} source name")
+    parent_path = Path(os.path.sep).joinpath(*components[:-1])
+    source_parent_fd = open_absolute_directory(parent_path, f"{label} source parent")
+    try:
+        digest, byte_length, device, inode = _copy_regular_at_create_only(
+            source_parent_fd,
+            source_name,
+            destination_parent_fd,
+            destination_name,
+            label,
+            maximum_bytes=maximum_bytes,
+            minimum_bytes=minimum_bytes,
+            output_mode=0o600,
+            require_source_owner_executable=require_owner_executable,
+            required_source_mode=None,
+            expected_descriptor=None,
+            expected_source_identity=None,
+        )
+    finally:
+        _close_quietly(source_parent_fd)
+    return CreatedEvidence(
+        name=_validate_leaf_name(destination_name, f"{label} destination name"),
+        sha256=digest,
+        byte_length=byte_length,
+        device=device,
+        inode=inode,
+    )
+
+
+def materialize_descriptor_runtime_copy(
+    source_root_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    destination_parent_fd: int,
+    destination_name: str,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+    expected_source_snapshot: CreatedEvidence | None = None,
+) -> RuntimeMaterialization:
+    """Copy one immutable 0600 descriptor into a distinct executable 0700 leaf.
+
+    This is the sole bridge from a snapshot artifact to switchable runtime
+    staging.  It verifies the descriptor's byte length and SHA-256 while
+    streaming, requires the source snapshot to remain exact 0600 and
+    single-link, and creates a fresh exact-0700 inode.  The result intentionally
+    has no evidence-descriptor method, so callers cannot bind the mutable
+    runtime path as immutable artifact evidence.  A producer that has just
+    created the snapshot should pass that :class:`CreatedEvidence` as
+    ``expected_source_snapshot``; the source path is then required to retain
+    the exact create-only inode through every copy check.
+    """
+
+    candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
+    parsed = parse_descriptor(candidate, f"{label} source descriptor")
+    if parsed.byte_length < 1:
+        _fail("empty-input", f"{label} source descriptor must be nonempty")
+    if parsed.byte_length > maximum_bytes:
+        _fail("input-too-large", f"{label} source descriptor exceeds its byte bound")
+    if expected_source_snapshot is not None:
+        if (
+            expected_source_snapshot.name != PurePosixPath(parsed.path).name
+            or expected_source_snapshot.sha256 != parsed.sha256
+            or expected_source_snapshot.byte_length != parsed.byte_length
+        ):
+            _fail("invalid-source-identity", f"{label} expected snapshot does not match its descriptor")
+    require_private_evidence_directory_fd(source_root_fd, f"{label} source root")
+    relative = validate_relative_path(parsed.path, f"{label} source path")
+    parts = PurePosixPath(relative).parts
+    source_parent_fd, owned = _open_relative_directory_chain(
+        source_root_fd,
+        parts[:-1],
+        label,
+    )
+    try:
+        digest, byte_length, device, inode = _copy_regular_at_create_only(
+            source_parent_fd,
+            parts[-1],
+            destination_parent_fd,
+            destination_name,
+            label,
+            maximum_bytes=maximum_bytes,
+            minimum_bytes=1,
+            output_mode=0o700,
+            require_source_owner_executable=False,
+            required_source_mode=0o600,
+            expected_descriptor=parsed,
+            expected_source_identity=(
+                (expected_source_snapshot.device, expected_source_snapshot.inode)
+                if expected_source_snapshot is not None
+                else None
+            ),
+        )
+    finally:
+        for owned_fd in reversed(owned):
+            _close_quietly(owned_fd)
+    return RuntimeMaterialization(
+        name=_validate_leaf_name(destination_name, f"{label} destination name"),
+        sha256=digest,
+        byte_length=byte_length,
+        device=device,
+        inode=inode,
+    )
 
 
 def _fsync_checked(descriptor: int, label: str) -> None:

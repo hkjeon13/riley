@@ -142,14 +142,25 @@ mechanism과 adversarial test를 닫아야 한다.
   process/socket/GPU raw leaves를 남긴다. 아직 authenticated remote rollback runner는
   없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
   실제 deployment rollback을 실행하거나 주장하지 않는다.
-- isolated atomic-switch raw producer는 landed했다. 이는 evidence root 내부에
+- fixed artifact preparation raw producer와 isolated atomic-switch raw producer는
+  landed했다. preparation은 여섯 absolute host artifact를 no-follow streaming으로
+  immutable 0600 `rollback-v3-artifacts/` leaf에 snapshot하고, candidate/rollback
+  binary snapshot에서만 distinct 0700 `rollback-v3-switch/active`와
+  `rollback-staged`를 materialize한다. fixed create-only session은 두 runtime inode를
+  snapshot hash/length에 bind하고 terminal marker absence를 verifier가 replay한다;
+  runtime leaf 자체는 artifact-map descriptor가 아니다. atomic producer는 evidence root 내부에
   이미 staged된 private runtime files만 same-directory
   `renameat2(RENAME_EXCHANGE)`로 교환하고 v3의 다섯 opaque switch leaf를 남긴다.
   실제 deployment path, `mv`/ordinary rename fallback, rollback success verdict는
-  범위 밖이다. runtime copy와 artifact-map bytes linkage도 이 raw helper만으로는
-  성립하지 않는다. v3 manifest는 switch session/marker closure를 bind하지 않으므로,
-  future runner가 그것을 replay하는 transaction rule과 후속 semantic/terminal version이
-  필요하다.
+  범위 밖이다. 여전히 preparation/phase/switch를 한 authenticated host transaction으로
+  묶고 full reconstructed baseline replay를 요구하는 runner는 없다. v3 manifest는
+  session/marker closure를 bind하지 않으므로, future runner가 그것을 replay하는
+  transaction rule과 후속 semantic/terminal version이 필요하다.
+  preparation verifier의 `post-switch` mode는 content/inode mapping 재생일 뿐
+  `renameat2` success evidence가 아니며 atomic switch session을 별도로 replay해야 한다.
+  현재 두 helper의 switch lock은 invocation마다 분리되어 있으므로 future runner가
+  pre-switch verification부터 exchange와 post-switch/atomic replay까지 하나의 held-FD
+  exclusive transaction으로 닫아야 한다.
 - native fallback leaf, authenticated rollback raw runner, soak/rollback semantic contract와
   checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
   필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
