@@ -127,6 +127,18 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         self.oci_fixture.inspect.write_bytes(common.canonical_json_bytes(inspect))
         os.chmod(self.oci_fixture.inspect, 0o600)
 
+    def _container_config(self) -> dict[str, object]:
+        return {
+            "User": prepare.EXPECTED_RUNTIME_USER,
+            "Entrypoint": list(prepare.EXPECTED_RUNTIME_ENTRYPOINT),
+            "Cmd": list(prepare.EXPECTED_RUNTIME_COMMAND),
+            "Env": [
+                f"PATH={prepare.EXPECTED_IMAGE_ENVIRONMENT['PATH']}",
+                f"NVIDIA_VISIBLE_DEVICES={prepare.EXPECTED_IMAGE_ENVIRONMENT['NVIDIA_VISIBLE_DEVICES']}",
+                f"NVIDIA_DRIVER_CAPABILITIES={prepare.EXPECTED_IMAGE_ENVIRONMENT['NVIDIA_DRIVER_CAPABILITIES']}",
+            ],
+        }
+
     def _runtime_tree_tar(self) -> bytes:
         bundle = self.repro_root / "repro-builds" / "a" / "riley.tar.gz"
         rows: list[tuple[str, str, int, bytes]] = []
@@ -236,7 +248,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
                     "State": state,
                     "Mounts": [],
                     "HostConfig": {"NetworkMode": "none", "Privileged": False},
-                    "Config": {},
+                    "Config": self._container_config(),
                 }
             ]
         )
@@ -458,13 +470,60 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
                         "Privileged": False,
                         "Tmpfs": {"/opt/riley": "rw,noexec,nosuid"},
                     },
-                    "Config": {},
+                    "Config": self._container_config(),
                 }
             ]
         )
         self.assert_reason(
             "container-host-config-mismatch",
             lambda: prepare._validate_container_inspect(container, image_id),
+        )
+
+    def test_rejects_image_healthcheck_and_container_namespace_or_healthcheck_drift(self) -> None:
+        external = self._unit_external()
+        image_id = external.image_id
+        image = json.loads(self.oci_fixture.inspect.read_bytes())
+        image[0]["Id"] = image_id
+        image[0]["Config"]["Labels"] = prepare._image_labels(external)
+        image[0]["Config"]["Healthcheck"] = {"Test": ["CMD", "/tmp/evil-healthcheck"]}
+        self.assert_reason(
+            "image-config-mismatch",
+            lambda: prepare._validate_image_inspect(common.canonical_json_bytes(image), external, image_id),
+        )
+
+        container: dict[str, object] = {
+            "Id": "c" * 64,
+            "Image": image_id,
+            "State": {
+                "Status": "created",
+                "Running": False,
+                "Paused": False,
+                "Restarting": False,
+                "OOMKilled": False,
+                "Dead": False,
+                "Pid": 0,
+                "ExitCode": 0,
+                "Error": "",
+                "StartedAt": "0001-01-01T00:00:00Z",
+                "FinishedAt": "0001-01-01T00:00:00Z",
+            },
+            "Mounts": [],
+            "HostConfig": {"NetworkMode": "none", "Privileged": False, "PidMode": "host"},
+            "Config": self._container_config(),
+        }
+        self.assert_reason(
+            "container-host-config-mismatch",
+            lambda: prepare._validate_container_inspect(common.canonical_json_bytes([container]), image_id),
+        )
+        host = container["HostConfig"]
+        assert isinstance(host, dict)
+        host.pop("PidMode")
+        config = container["Config"]
+        assert isinstance(config, dict)
+        config["Healthcheck"] = {"Test": ["CMD", "/tmp/evil-healthcheck"]}
+        self.assert_reason(
+            "container-config-mismatch",
+            lambda: prepare._validate_container_inspect(common.canonical_json_bytes([container]), image_id),
         )
 
     def test_rejects_extra_output_and_tampered_snapshot_on_replay(self) -> None:

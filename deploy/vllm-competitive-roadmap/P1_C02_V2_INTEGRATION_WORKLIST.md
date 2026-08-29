@@ -70,7 +70,8 @@ RC2 source, PR16 reproducibility, matching-arm OCI, and static recipe facts on
 every verify. The fixed raw inventory binds `SHA256SUMS`, the three-leaf build
 context, an exact stdin `docker build` logical argv with exactly seven
 provenance args, iidfile, raw image inspect, OCI export record/archive,
-created-but-never-started unprivileged no-mount/network-none container inspect,
+created-but-never-started unprivileged no-mount/network-none private-namespace
+container inspect with the exact reviewed runtime config,
 and rootless `/opt/riley` filesystem tar with final numeric `65532:65532`
 ownership. Because USTAR cannot represent a
 single regular member above 8 GiB−1, the v1 raw capture accepts only an OCI v1
@@ -78,7 +79,9 @@ closure archive within that bound; it must not enable PAX/GNU as a workaround.
 The parser rejects PAX/GNU/sparse,
 links/special files, traversal, duplicate entries, noncanonical raw-capture
 metadata, and nonzero tar trailers before a tar parser sees extension data;
-the captured OCI/archive and inspect must byte-match the OCI v1 closure and
+image/container healthcheck, volume, deferred OnBuild, and host/container
+namespace drift are rejected alongside bind/tmpfs/device/capability/security
+options. The captured OCI/archive and inspect must byte-match the OCI v1 closure and
 the captured runtime tree must byte-match the selected verified bundle tree.
 `bound/not-run` means only that structural cross-check. It is neither a Docker
 or GPU action nor evidence that Docker build/container copy actually ran,

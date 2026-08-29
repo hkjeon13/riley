@@ -145,6 +145,9 @@ EXPECTED_IMAGE_ENVIRONMENT = {
     "NVIDIA_VISIBLE_DEVICES": "all",
     "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
 }
+EXPECTED_RUNTIME_USER = "65532:65532"
+EXPECTED_RUNTIME_ENTRYPOINT = ("/opt/riley/bin/riley",)
+EXPECTED_RUNTIME_COMMAND = ("--help",)
 CONTAINER_EMPTY_HOST_FIELDS = (
     "Binds",
     "VolumesFrom",
@@ -159,6 +162,16 @@ CONTAINER_EMPTY_HOST_FIELDS = (
     "ExtraHosts",
     "PortBindings",
 )
+# Docker represents its default private namespace modes differently across
+# daemon releases (empty string versus ``private``). Both are harmless here;
+# the host and another container's namespaces are not.
+CONTAINER_SAFE_NAMESPACE_MODES = {
+    "PidMode": (None, "", "private"),
+    "IpcMode": (None, "", "private"),
+    "UTSMode": (None, "", "private"),
+    "UsernsMode": (None, "", "private"),
+    "CgroupnsMode": (None, "", "private"),
+}
 
 
 class RuntimeAssemblyCaptureError(common.ProvenanceV2Error):
@@ -1026,14 +1039,81 @@ def _validate_oci_export_invocation(raw: bytes, image_id: str) -> None:
         _fail("oci-export-invocation-mismatch", "captured OCI export invocation differs from the closed capture contract")
 
 
-def _string_list(value: Any, label: str) -> list[str]:
+def _string_list(value: Any, label: str, *, invalid_code: str = "invalid-image-inspect") -> list[str]:
     if not isinstance(value, list) or any(type(item) is not str for item in value):
-        _fail("invalid-image-inspect", f"{label} must be a JSON string array")
+        _fail(invalid_code, f"{label} must be a JSON string array")
     return value
 
 
 def _empty_container_option(value: Any) -> bool:
     return value is None or value == [] or value == {}
+
+
+def _validate_expected_runtime_environment(
+    value: Any,
+    label: str,
+    *,
+    invalid_code: str,
+    mismatch_code: str,
+) -> None:
+    environment = _string_list(value, label, invalid_code=invalid_code)
+    parsed_environment: dict[str, str] = {}
+    for item in environment:
+        if "=" not in item:
+            _fail(invalid_code, f"{label} contains a malformed entry")
+        name, environment_value = item.split("=", 1)
+        if not name or name in parsed_environment:
+            _fail(invalid_code, f"{label} has an empty or duplicate name")
+        parsed_environment[name] = environment_value
+    if parsed_environment != EXPECTED_IMAGE_ENVIRONMENT:
+        missing_environment = sorted(set(EXPECTED_IMAGE_ENVIRONMENT) - set(parsed_environment))
+        extra_environment = sorted(set(parsed_environment) - set(EXPECTED_IMAGE_ENVIRONMENT))
+        mismatched_environment = sorted(
+            name
+            for name in set(EXPECTED_IMAGE_ENVIRONMENT) & set(parsed_environment)
+            if parsed_environment[name] != EXPECTED_IMAGE_ENVIRONMENT[name]
+        )
+        _fail(
+            mismatch_code,
+            "captured runtime config must contain exactly the reviewed runtime environment; "
+            f"missing={missing_environment}, extra={extra_environment}, mismatched={mismatched_environment}",
+        )
+
+
+def _validate_expected_runtime_config(
+    config: Mapping[str, Any],
+    label: str,
+    *,
+    invalid_code: str,
+    mismatch_code: str,
+    environment_mismatch_code: str,
+) -> None:
+    if config.get("User") != EXPECTED_RUNTIME_USER:
+        _fail(mismatch_code, f"{label}.User must retain the recipe's non-root user")
+    if _string_list(config.get("Entrypoint"), f"{label}.Entrypoint", invalid_code=invalid_code) != list(
+        EXPECTED_RUNTIME_ENTRYPOINT
+    ):
+        _fail(mismatch_code, f"{label}.Entrypoint differs from the reviewed recipe")
+    if _string_list(config.get("Cmd"), f"{label}.Cmd", invalid_code=invalid_code) != list(EXPECTED_RUNTIME_COMMAND):
+        _fail(mismatch_code, f"{label}.Cmd differs from the reviewed recipe")
+    _validate_expected_runtime_environment(
+        config.get("Env"),
+        f"{label}.Env",
+        invalid_code=invalid_code,
+        mismatch_code=environment_mismatch_code,
+    )
+    if config.get("WorkingDir") not in (None, ""):
+        _fail(mismatch_code, f"{label}.WorkingDir must not add a working directory")
+    if not _empty_container_option(config.get("Volumes")):
+        _fail(mismatch_code, f"{label}.Volumes must not declare volumes")
+    # A healthcheck executes independently of the reviewed entrypoint. The
+    # source-free image and its never-started capture must not retain one.
+    if config.get("Healthcheck") is not None:
+        _fail(mismatch_code, f"{label}.Healthcheck must be absent")
+    # The recipe does not use deferred parent-image build instructions either.
+    # Accept an absent/empty Docker representation only.
+    if config.get("OnBuild") not in (None, []):
+        _fail(mismatch_code, f"{label}.OnBuild must be absent")
 
 
 def _image_labels(external: ExternalFacts) -> dict[str, str]:
@@ -1067,38 +1147,13 @@ def _validate_image_inspect(raw: bytes, external: ExternalFacts, image_id: str) 
     for key, expected in _image_labels(external).items():
         if labels.get(key) != expected:
             _fail("image-label-mismatch", f"captured image label {key!r} differs from the closed recipe inputs")
-    if config.get("User") != "65532:65532":
-        _fail("image-config-mismatch", "captured image must retain the recipe's non-root user")
-    if _string_list(config.get("Entrypoint"), "captured image inspect.Config.Entrypoint") != ["/opt/riley/bin/riley"]:
-        _fail("image-config-mismatch", "captured image entrypoint differs from the reviewed recipe")
-    if _string_list(config.get("Cmd"), "captured image inspect.Config.Cmd") != ["--help"]:
-        _fail("image-config-mismatch", "captured image command differs from the reviewed recipe")
-    environment = _string_list(config.get("Env"), "captured image inspect.Config.Env")
-    parsed_environment: dict[str, str] = {}
-    for item in environment:
-        if "=" not in item:
-            _fail("invalid-image-inspect", "captured image environment contains a malformed entry")
-        name, value = item.split("=", 1)
-        if not name or name in parsed_environment:
-            _fail("invalid-image-inspect", "captured image environment has an empty or duplicate name")
-        parsed_environment[name] = value
-    if parsed_environment != EXPECTED_IMAGE_ENVIRONMENT:
-        missing_environment = sorted(set(EXPECTED_IMAGE_ENVIRONMENT) - set(parsed_environment))
-        extra_environment = sorted(set(parsed_environment) - set(EXPECTED_IMAGE_ENVIRONMENT))
-        mismatched_environment = sorted(
-            name
-            for name in set(EXPECTED_IMAGE_ENVIRONMENT) & set(parsed_environment)
-            if parsed_environment[name] != EXPECTED_IMAGE_ENVIRONMENT[name]
-        )
-        _fail(
-            "image-environment-mismatch",
-            "captured image config must contain exactly the reviewed runtime environment; "
-            f"missing={missing_environment}, extra={extra_environment}, mismatched={mismatched_environment}",
-        )
-    if config.get("WorkingDir") not in (None, ""):
-        _fail("image-config-mismatch", "captured image config must not add a working directory")
-    if not _empty_container_option(config.get("Volumes")):
-        _fail("image-config-mismatch", "captured image config must not declare volumes")
+    _validate_expected_runtime_config(
+        config,
+        "captured image inspect.Config",
+        invalid_code="invalid-image-inspect",
+        mismatch_code="image-config-mismatch",
+        environment_mismatch_code="image-environment-mismatch",
+    )
 
 
 def _validate_container_inspect(raw: bytes, image_id: str) -> str:
@@ -1136,9 +1191,22 @@ def _validate_container_inspect(raw: bytes, image_id: str) -> str:
     for field in CONTAINER_EMPTY_HOST_FIELDS:
         if not _empty_container_option(host.get(field)):
             _fail("container-host-config-mismatch", f"captured container HostConfig.{field} must be empty")
+    for field, safe_values in CONTAINER_SAFE_NAMESPACE_MODES.items():
+        if host.get(field) not in safe_values:
+            _fail(
+                "container-host-config-mismatch",
+                f"captured container HostConfig.{field} must retain a private namespace mode",
+            )
     config = row.get("Config")
-    if not isinstance(config, dict) or not _empty_container_option(config.get("Volumes")):
-        _fail("container-host-config-mismatch", "captured container must not declare volumes")
+    if not isinstance(config, dict):
+        _fail("invalid-container-inspect", "captured container inspect.Config must be an object")
+    _validate_expected_runtime_config(
+        config,
+        "captured container inspect.Config",
+        invalid_code="invalid-container-inspect",
+        mismatch_code="container-config-mismatch",
+        environment_mismatch_code="container-environment-mismatch",
+    )
     return container_id
 
 
