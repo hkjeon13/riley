@@ -885,24 +885,32 @@ def _publish_completion_marker(
     )
 
 
-def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
-    """Snapshot six host artifacts then stage two linked private runtime copies.
+def _prepare_artifacts_then_on_success_held_root_fd(
+    request: PreparationRequest,
+    root_fd: int,
+    continuation: Callable[[ArtifactPreparationReplay, int], T],
+) -> T:
+    """Run one preparation and its trusted continuation in the same lock stack.
 
-    A successful return is the only producer-success signal. In particular,
-    ``ambiguous-terminal-publication`` after completion-pair linking leaves
-    raw on-disk evidence that a later structural verifier may inspect, but it
-    must never be retried or consumed as a successful producer invocation.
+    This private compositor is the only continuation boundary for preparation.
+    It is intentionally not reconstructible from the on-disk completion pair:
+    an ``ambiguous-terminal-publication`` error skips ``continuation`` even
+    though a structural replayer may later see a paired marker.  The caller
+    owns an already-exclusive, source-guarded root FD for the whole call.
     """
 
-    _assert_external_to_source_checkout(request.evidence_root)
-    root_fd = _common(
-        lambda: common.open_private_evidence_directory(request.evidence_root, "--evidence-root")
+    if not callable(continuation):
+        _fail("invalid-continuation", "preparation success continuation must be callable")
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "held artifact preparation evidence root",
+        )
     )
     snapshot_fd: int | None = None
     artifacts_fd: int | None = None
     switch_fd: int | None = None
     try:
-        _lock_root(root_fd)
         _assert_root_children_absent(root_fd)
         snapshot_fd = _common(
             lambda: common.create_private_child_directory(
@@ -938,6 +946,7 @@ def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
                 "isolated rollback switch directory",
             )
         )
+        _lock_shared_switch(switch_fd)
         candidate_binary = _snapshot_artifact(
             artifacts_fd,
             source=request.candidate_binary,
@@ -1082,16 +1091,66 @@ def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
                 "artifact preparation session",
             )
         )
-        verify_artifact_preparation_fd(root_fd, require_terminal=False)
+        preterminal = replay_artifact_preparation_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            require_terminal=False,
+        )
+        if dict(preterminal.session) != session:
+            _fail(
+                "prepublication-replay-drift",
+                "held preparation replay differs from the draft session",
+            )
         _publish_completion_marker(snapshot_fd, marker, session_created)
-        return verify_artifact_preparation_fd(root_fd)
+        replay = replay_artifact_preparation_on_held_switch_fd(root_fd, switch_fd)
+        if dict(replay.session) != session:
+            _fail(
+                "post-publication-replay-drift",
+                "held preparation replay differs from the published session",
+            )
+        _common(
+            lambda: common.require_private_evidence_directory_fd(
+                root_fd,
+                "held artifact preparation evidence root",
+            )
+        )
+        _require_held_switch_fd(root_fd, switch_fd)
+        # The normal public preparation path preserves its shared switch lock
+        # through both replays.  A trusted same-stack continuation may now
+        # acquire EX only after this release; the caller still owns root EX.
+        _unlock_switch_quietly(switch_fd)
+        return continuation(replay, switch_fd)
     finally:
         if switch_fd is not None:
+            _unlock_switch_quietly(switch_fd)
             os.close(switch_fd)
         if artifacts_fd is not None:
             os.close(artifacts_fd)
         if snapshot_fd is not None:
             os.close(snapshot_fd)
+
+
+def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
+    """Snapshot six host artifacts then stage two linked private runtime copies.
+
+    A successful return is the only producer-success signal. In particular,
+    ``ambiguous-terminal-publication`` after completion-pair linking leaves
+    raw on-disk evidence that a later structural verifier may inspect, but it
+    must never be retried or consumed as a successful producer invocation.
+    """
+
+    _assert_external_to_source_checkout(request.evidence_root)
+    root_fd = _common(
+        lambda: common.open_private_evidence_directory(request.evidence_root, "--evidence-root")
+    )
+    try:
+        _lock_root(root_fd)
+        return _prepare_artifacts_then_on_success_held_root_fd(
+            request,
+            root_fd,
+            lambda replay, _switch_fd: dict(replay.session),
+        )
+    finally:
         _unlock_quietly(root_fd)
         os.close(root_fd)
 

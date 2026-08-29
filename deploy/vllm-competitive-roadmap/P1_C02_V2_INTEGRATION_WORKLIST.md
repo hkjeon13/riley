@@ -257,6 +257,18 @@ visible pair after that error is structurally replayable raw evidence only;
 the future authenticated binder/runner must consume only the normal-return
 branch of the same invocation under its held locks, never resume from a fresh
 verification of that ambiguous on-disk pair.
+The landed rollback terminal-provenance v4 helper now encodes that boundary:
+its public checker is structural-only, and its sole public producer begins a
+new preparation under root EX. Only the preparation normal-return closure may
+take switch EX, only its transaction normal-return closure may bind v3 and
+publish v4, and no serialized continuation object or reopenable held-FD
+compositor exists. An ambiguous preparation, transaction, or v4 completion
+pair therefore skips its successor and leaves fixed create-only children that
+block a later public retry. v4 joins v3 candidate/rollback artifact maps to
+preparation snapshot maps and v3 atomic-switch maps to the transaction atomic
+child by exact path/SHA-256/byte-length equality. It still emits raw
+`captured/not-run`, never a rollback success, lifecycle receipt, or
+authenticated runner result.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures

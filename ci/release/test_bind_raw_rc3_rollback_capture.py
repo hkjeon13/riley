@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import fcntl
 import hashlib
 import json
 import os
@@ -181,6 +182,33 @@ class BindRawRc3RollbackCaptureTests(unittest.TestCase):
                     "held-fd-bound.json",
                 )
         finally:
+            os.close(root_fd)
+        self.assertEqual(report["status"], "bound")
+
+    def test_held_locked_entry_neither_reopens_nor_relocks_the_root(self) -> None:
+        request_path, _request = self._request()
+        root_fd = common.open_private_evidence_directory(self.root, "held rollback v3 bind root")
+        fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        real_flock = fcntl.flock
+
+        def reject_root_relock(descriptor: int, operation: int) -> None:
+            if descriptor == root_fd:
+                raise AssertionError("held v3 root must not be relocked")
+            real_flock(descriptor, operation)
+
+        try:
+            with self.pinned_baseline(), mock.patch.object(
+                binder.fcntl,
+                "flock",
+                side_effect=reject_root_relock,
+            ):
+                report = binder._bind_raw_rollback_manifest_held_locked_fd(  # noqa: SLF001
+                    root_fd,
+                    request_path,
+                    "held-locked-bound.json",
+                )
+        finally:
+            fcntl.flock(root_fd, fcntl.LOCK_UN)
             os.close(root_fd)
         self.assertEqual(report["status"], "bound")
 

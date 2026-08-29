@@ -142,8 +142,8 @@ mechanism과 adversarial test를 닫아야 한다.
   process/socket/GPU raw leaves를 남긴다. 아직 authenticated remote rollback runner는
   없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
   실제 deployment rollback을 실행하거나 주장하지 않는다.
-- fixed artifact preparation raw producer, isolated atomic-switch raw producer, 그리고
-  held-FD artifact-exchange transaction은 landed했다. preparation은 여섯 absolute host artifact를 no-follow streaming으로
+- fixed artifact preparation raw producer, isolated atomic-switch raw producer, held-FD artifact-exchange transaction, 그리고
+  same-invocation rollback terminal-provenance v4는 landed했다. preparation은 여섯 absolute host artifact를 no-follow streaming으로
   immutable 0600 `rollback-v3-artifacts/` leaf에 snapshot하고, candidate/rollback
   binary snapshot에서만 distinct 0700 `rollback-v3-switch/active`와
   `rollback-staged`를 materialize한다. fixed create-only session은 두 runtime inode를
@@ -170,8 +170,7 @@ mechanism과 adversarial test를 닫아야 한다.
   아니다. 후속 authenticated runner는 같은 invocation과 held lock에서 정상 반환한 success
   branch만 소비해야 하며, 새 verifier가 ambiguous pair를 읽었다는 이유만으로 operation을
   재개하면 안 된다.
-  v3 manifest는 session/completion-receipt closure를 bind하지 않으므로, future runner가 그것을
-  replay하는 rule과 후속 semantic/terminal version이 필요하다.
+  v3 manifest는 session/completion-receipt closure를 bind하지 않으므로, v4는 v3 artifact/atomic descriptor maps를 transaction child sessions와 exact path/hash/length로 join한다. v4의 유일한 public producer는 새 preparation을 root EX 아래에서 시작하고, preparation normal-return closure → switch EX → transaction normal-return closure → v3/v4 publication을 같은 stack에 중첩한다. serialized continuation object나 기존 pair를 reopen하는 publisher는 없고, preparation·transaction·v4 어느 completion pair의 ambiguous 오류도 다음 closure를 호출하지 않는다. fresh replayer가 ambiguous pair를 읽어도 raw structural `bound/not-run` diagnostic일 뿐 operational terminal authority가 아니다. full phase/source/config/lifecycle semantic closure는 계속 future runner의 책임이다.
   preparation verifier의 `post-switch` mode는 content/inode mapping 재생일 뿐
   `renameat2` success evidence가 아니며 atomic switch session을 별도로 replay해야 한다.
   transaction helper는 그 artifact-exchange 범위에서 동일 held-FD exclusive lock을
@@ -403,6 +402,7 @@ benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json
 benchmarks/release/candidates/rollback-receipt-v2.schema.json
 benchmarks/release/candidates/rollback-receipt-v3.schema.json
 benchmarks/release/candidates/rollback-bind-request-v3.schema.json
+benchmarks/release/candidates/rollback-receipt-v4.schema.json
 ci/release/check_reconstructed_prior_baseline.py
 ci/release/run_remote_c02_soak_v2.sh
 ci/release/bind_raw_c02_soak_v2.py
@@ -422,6 +422,8 @@ ci/release/capture_rc3_rollback_atomic_switch_v1.py
 ci/release/run_capture_rc3_rollback_atomic_switch_v1.sh
 ci/release/capture_rc3_rollback_atomic_transaction_v1.py
 ci/release/run_capture_rc3_rollback_atomic_transaction_v1.sh
+ci/release/check_rc3_rollback_provenance_v4.py
+ci/release/bind_raw_rc3_rollback_terminal_v4.py
 ci/release/check_rc3_rollback_receipt_v2.py
 ```
 

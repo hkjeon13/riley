@@ -532,6 +532,63 @@ def _assert_output_absent(root_fd: int, manifest_name: str) -> None:
         )
 
 
+def _bind_raw_rollback_manifest_held_locked_fd(
+    root_fd: int,
+    bind_request_path: str,
+    manifest_name: str,
+) -> dict[str, Any]:
+    """Create and self-verify v3 through an already exclusively locked root FD.
+
+    This is intentionally a nonterminal-only held-FD primitive.  An outer
+    raw transaction compositor may retain the same root and switch locks
+    across a normal transaction return, v3 publication, and a later v4
+    finalizer without reopening or relocking this root.  It never writes a
+    completion marker and does not itself establish a producer-success edge
+    for any earlier transaction.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "rollback v3 bind evidence root",
+        )
+    )
+    name = _manifest_name(manifest_name)
+    _assert_output_absent(root_fd, name)
+    manifest = _manifest_from_request(root_fd, bind_request_path, name)
+    raw_manifest = _common(lambda: common.canonical_json_bytes(manifest))
+    draft_descriptor = _common(
+        lambda: common.descriptor_for_bytes(name, raw_manifest, "rollback v3 draft manifest")
+    )
+    preflight = _checker(
+        lambda: checker.verify_rollback_provenance_v3_bytes_fd(
+            root_fd,
+            draft_descriptor,
+            raw_manifest,
+        )
+    )
+    created = _common(
+        lambda: common.write_create_only_json(
+            root_fd,
+            name,
+            manifest,
+            "rollback v3 raw manifest",
+        )
+    )
+    if created.descriptor(name, "rollback v3 created manifest") != draft_descriptor:
+        _fail(
+            "published-manifest-descriptor-mismatch",
+            "create-only publication bytes differ from the preflight manifest",
+        )
+    replayed = _checker(lambda: checker.verify_rollback_provenance_v3_fd(root_fd, name))
+    if replayed != preflight:
+        _fail(
+            "post-publication-replay-drift",
+            "on-disk rollback manifest replay differs from its held-FD preflight",
+        )
+    return replayed
+
+
 def bind_raw_rollback_manifest_fd(
     root_fd: int,
     bind_request_path: str,
@@ -555,39 +612,7 @@ def bind_raw_rollback_manifest_fd(
     name = _manifest_name(manifest_name)
     _lock_output(root_fd)
     try:
-        _assert_output_absent(root_fd, name)
-        manifest = _manifest_from_request(root_fd, bind_request_path, name)
-        raw_manifest = _common(lambda: common.canonical_json_bytes(manifest))
-        draft_descriptor = _common(
-            lambda: common.descriptor_for_bytes(name, raw_manifest, "rollback v3 draft manifest")
-        )
-        preflight = _checker(
-            lambda: checker.verify_rollback_provenance_v3_bytes_fd(
-                root_fd,
-                draft_descriptor,
-                raw_manifest,
-            )
-        )
-        created = _common(
-            lambda: common.write_create_only_json(
-                root_fd,
-                name,
-                manifest,
-                "rollback v3 raw manifest",
-            )
-        )
-        if created.descriptor(name, "rollback v3 created manifest") != draft_descriptor:
-            _fail(
-                "published-manifest-descriptor-mismatch",
-                "create-only publication bytes differ from the preflight manifest",
-            )
-        replayed = _checker(lambda: checker.verify_rollback_provenance_v3_fd(root_fd, name))
-        if replayed != preflight:
-            _fail(
-                "post-publication-replay-drift",
-                "on-disk rollback manifest replay differs from its held-FD preflight",
-            )
-        return replayed
+        return _bind_raw_rollback_manifest_held_locked_fd(root_fd, bind_request_path, name)
     finally:
         try:
             fcntl.flock(root_fd, fcntl.LOCK_UN)

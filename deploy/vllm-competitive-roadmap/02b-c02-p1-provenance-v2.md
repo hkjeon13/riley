@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, 그리고 held-FD artifact-exchange transaction은 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, 그리고 same-invocation rollback terminal-provenance v4는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -362,7 +362,28 @@ producer-success/terminal authority가 아니다. future authenticated binder/ru
 invocation·held lock에서 normal return한 branch만 소비해야 하며, ambiguous error 뒤에
 filesystem을 다시 읽어 bind나 operational action을 재개하면 안 된다.
 
-이것은 artifact-exchange subtransaction만 닫는다. complete reconstructed-baseline,
+### Same-invocation rollback terminal provenance v4
+
+`check_rc3_rollback_provenance_v4.py`는 held root/switch FD에서 v3 manifest와 fixed
+transaction closure를 구조적으로 replay하는 diagnostic helper다. v3 candidate/rollback
+artifact descriptor maps는 preparation session의 immutable snapshot maps와, v3의 다섯
+atomic-switch descriptors는 atomic child session과 각각 **path·SHA-256·byte length까지**
+일치해야 한다. transaction의 session descriptor와 pre/post runtime inode/hash join도
+같이 replay한다. 결과는 여전히 `bound`/`not-run` raw report이고 source/config/HTTP의
+semantic meaning, host lifecycle, GPU, deployment 또는 rollback success는 주장하지 않는다.
+
+`bind_raw_rc3_rollback_terminal_v4.py`에는 path-based CLI, 기존 preparation/transaction을
+reopen하는 wrapper, 또는 held-FD publisher API가 없다. 유일한 public raw producer는 새
+`PreparationRequest`로 fixed preparation을 만든 뒤, **같은 held exclusive root/switch FD
+stack의 nested normal-return closure**에서만 transaction → nonterminal v3 → v4 publication을
+연결한다. 따라서 fresh v4 checker나 visible preparation/transaction completion pair는 다음
+단계를 시작할 권한을 만들지 못한다. preparation, transaction, v4 중 어느 단계든 post-link
+directory `fsync` ambiguity가 나면 `ambiguous-terminal-publication`으로 실패하고 뒤 callback은
+실행되지 않는다. v4 own manifest는 full held-FD replay, create-only JSON, self replay,
+durable `.intent`, hard-linked `.complete` 순서로 publish하며, 보이는 pair도 structural
+evidence일 뿐 이후 process가 successful rollback/terminal authority로 재해석할 수 없다.
+
+이것은 artifact-exchange subtransaction과 그 narrow raw v4 join까지만 닫는다. complete reconstructed-baseline,
 candidate/rollback phase, source audit/shutdown/config bridge를 연결하는 authenticated
 host runner는 아직 없고 v3 binder도 이 transaction session을 소비하지 않는다. future
 runner는 해당 terminal session, 각각의 `capture-incomplete.json` 부재, 그리고

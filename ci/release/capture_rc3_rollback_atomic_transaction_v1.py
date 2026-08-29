@@ -22,6 +22,7 @@ import argparse
 import fcntl
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, Sequence, TypeVar
 
@@ -82,6 +83,24 @@ PREPARATION_LAYOUT_FIELDS = frozenset({"candidate", "rollback"})
 
 class RollbackAtomicTransactionError(ValueError):
     """The raw held-FD rollback transaction cannot safely become terminal."""
+
+
+@dataclass(frozen=True)
+class AtomicTransactionReplay:
+    """Structurally replayed fixed child sessions through held FDs.
+
+    This is deliberately raw evidence only.  It establishes no producer
+    success edge: a fresh replay may legitimately observe a completion pair
+    left visible by a prior ``ambiguous-terminal-publication`` failure.
+    """
+
+    session: Mapping[str, Any]
+    session_descriptor: common.EvidenceDescriptor
+    preparation_session: Mapping[str, Any]
+    preparation_descriptor: common.EvidenceDescriptor
+    atomic_switch_session: Mapping[str, Any]
+    atomic_switch_descriptor: common.EvidenceDescriptor
+    atomic_switch_replay: atomic.AtomicSwitchReplay
 
 
 def _fail(message: str, *, code: str = "unsafe-evidence") -> NoReturn:
@@ -550,7 +569,13 @@ def _replay_linked_sessions(
     root_fd: int,
     switch_fd: int,
     session: Mapping[str, Any],
-) -> tuple[Mapping[str, Any], atomic.AtomicSwitchReplay]:
+) -> tuple[
+    Mapping[str, Any],
+    common.EvidenceDescriptor,
+    Mapping[str, Any],
+    common.EvidenceDescriptor,
+    atomic.AtomicSwitchReplay,
+]:
     """Replay fixed child sessions and cross-bind their immutable identities."""
 
     row = _exact(session, SESSION_FIELDS, "atomic transaction session")
@@ -658,19 +683,25 @@ def _replay_linked_sessions(
                 "held atomic switch capture directory",
             )
         )
-        return preparation_document, exchange
+        return (
+            preparation_document,
+            preparation_descriptor,
+            atomic_document,
+            atomic_descriptor,
+            exchange,
+        )
     finally:
         _close_quietly(atomic_fd)
         _close_quietly(preparation_fd)
 
 
-def verify_atomic_transaction_on_held_switch_fd(
+def replay_atomic_transaction_on_held_switch_fd(
     root_fd: int,
     switch_fd: int,
     *,
     require_terminal: bool = True,
-) -> dict[str, Any]:
-    """Replay one transaction while the caller retains its switch lock.
+) -> AtomicTransactionReplay:
+    """Replay fixed transaction evidence while the caller retains its switch FD.
 
     The verifier only establishes structurally replayable raw artifact/inode
     exchange evidence. It does not report a service, deployment, qualification,
@@ -708,7 +739,13 @@ def verify_atomic_transaction_on_held_switch_fd(
             initial_session_descriptor,
             require_terminal=require_terminal,
         )
-        _replay_linked_sessions(root_fd, switch_fd, session)
+        (
+            preparation_session,
+            preparation_descriptor,
+            atomic_switch_session,
+            atomic_switch_descriptor,
+            atomic_switch_replay,
+        ) = _replay_linked_sessions(root_fd, switch_fd, session)
         _check_incomplete_marker(transaction_fd, require_terminal=require_terminal)
         _raw, terminal_session = _common(
             lambda: common.read_private_descriptor_json_leaf(
@@ -734,9 +771,38 @@ def verify_atomic_transaction_on_held_switch_fd(
                 "held atomic transaction capture directory",
             )
         )
-        return dict(session)
+        return AtomicTransactionReplay(
+            session=dict(session),
+            session_descriptor=common.EvidenceDescriptor(
+                path=f"{TRANSACTION_DIRECTORY_NAME}/session.json",
+                sha256=initial_session_descriptor.sha256,
+                byte_length=initial_session_descriptor.byte_length,
+            ),
+            preparation_session=dict(preparation_session),
+            preparation_descriptor=preparation_descriptor,
+            atomic_switch_session=dict(atomic_switch_session),
+            atomic_switch_descriptor=atomic_switch_descriptor,
+            atomic_switch_replay=atomic_switch_replay,
+        )
     finally:
         _close_quietly(transaction_fd)
+
+
+def verify_atomic_transaction_on_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+    *,
+    require_terminal: bool = True,
+) -> dict[str, Any]:
+    """Compatibility wrapper returning only the replayed raw session."""
+
+    return dict(
+        replay_atomic_transaction_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            require_terminal=require_terminal,
+        ).session
+    )
 
 
 def verify_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
@@ -761,32 +827,25 @@ def verify_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
         _close_quietly(root_fd)
 
 
-def capture_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
-    """Create the fixed raw pre-replay → exchange → post-replay transaction.
+def _capture_atomic_transaction_on_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+) -> AtomicTransactionReplay:
+    """Capture one transaction through caller-held exclusive root/switch FDs.
 
-    A successful return is the only producer-success signal. A post-link
-    ``ambiguous-terminal-publication`` may leave structurally replayable raw
-    evidence, but callers must stop rather than retry or consume it as this
-    invocation's completed transaction.
+    The caller must retain one exclusive lock on both descriptors for this
+    entire call. This private primitive returns only after a normal producer
+    return; its private continuation helper invokes the downstream callback
+    before this call stack can be resumed from a fresh replay.
     """
 
-    _assert_external_to_source(evidence_root)
-    root_fd = _common(lambda: common.open_private_evidence_directory(evidence_root, "--evidence-root"))
-    switch_fd: int | None = None
     transaction_fd: int | None = None
     preparation_fd: int | None = None
     atomic_fd: int | None = None
     try:
-        _lock(root_fd, fcntl.LOCK_EX, "exclusive evidence-root")
+        _require_held_switch_fd(root_fd, switch_fd)
         _assert_absent(root_fd, TRANSACTION_DIRECTORY_NAME, "atomic transaction capture directory")
         _assert_absent(root_fd, ATOMIC_CAPTURE_DIRECTORY_NAME, "atomic switch capture directory")
-        switch_fd = _open_terminal_child(
-            root_fd,
-            prepare.SWITCH_DIRECTORY_NAME,
-            "isolated rollback switch directory",
-        )
-        _lock(switch_fd, fcntl.LOCK_EX, "exclusive rollback switch")
-        _require_held_switch_fd(root_fd, switch_fd)
         preparation_fd = _open_terminal_child(
             root_fd,
             prepare.SNAPSHOT_DIRECTORY_NAME,
@@ -927,11 +986,62 @@ def capture_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
             )
         )
         _publish_completion_marker(transaction_fd, marker, session_created)
-        return verify_atomic_transaction_on_held_switch_fd(root_fd, switch_fd)
+        replay = replay_atomic_transaction_on_held_switch_fd(root_fd, switch_fd)
+        _require_held_switch_fd(root_fd, switch_fd)
+        return replay
     finally:
         _close_quietly(atomic_fd)
         _close_quietly(preparation_fd)
         _close_quietly(transaction_fd)
+
+
+def _capture_atomic_transaction_then_on_success_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+    continuation: Callable[[AtomicTransactionReplay], T],
+) -> T:
+    """Invoke one trusted internal continuation after a normal held-FD capture.
+
+    The transaction completion pair itself is never a public handoff or a
+    serializable capability.  If the producer raises
+    ``ambiguous-terminal-publication``, this continuation is not called.
+    The narrow v4 compositor owns the callback and retains its exclusive root
+    and switch locks for its full duration; a later standalone replay is not
+    equivalent.
+    """
+
+    if not callable(continuation):
+        _fail("transaction success continuation must be callable", code="invalid-continuation")
+    replay = _capture_atomic_transaction_on_held_switch_fd(root_fd, switch_fd)
+    _require_held_switch_fd(root_fd, switch_fd)
+    result = continuation(replay)
+    _require_held_switch_fd(root_fd, switch_fd)
+    return result
+
+
+def capture_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
+    """Create the fixed raw pre-replay → exchange → post-replay transaction.
+
+    A successful return is the only producer-success signal. A post-link
+    ``ambiguous-terminal-publication`` may leave structurally replayable raw
+    evidence, but callers must stop rather than retry or consume it as this
+    invocation's completed transaction.
+    """
+
+    _assert_external_to_source(evidence_root)
+    root_fd = _common(lambda: common.open_private_evidence_directory(evidence_root, "--evidence-root"))
+    switch_fd: int | None = None
+    try:
+        _lock(root_fd, fcntl.LOCK_EX, "exclusive evidence-root")
+        switch_fd = _open_terminal_child(
+            root_fd,
+            prepare.SWITCH_DIRECTORY_NAME,
+            "isolated rollback switch directory",
+        )
+        _lock(switch_fd, fcntl.LOCK_EX, "exclusive rollback switch")
+        replay = _capture_atomic_transaction_on_held_switch_fd(root_fd, switch_fd)
+        return dict(replay.session)
+    finally:
         _unlock_quietly(switch_fd)
         _close_quietly(switch_fd)
         _unlock_quietly(root_fd)
