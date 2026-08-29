@@ -22,6 +22,13 @@ same reviewed literal is independently used by the active release
 preflight/bundle/manifest contract; it is not imported into the Python-3.10
 held-FD checker, and either contract must fail closed on future source drift.
 
+The landed RC3 freeze-input structural admission is likewise CPU/static
+mechanism code only. It replays the clean source pre-freeze contract before
+and after reading a private external request, rehashes the declared external
+input leaves, and returns only bound/not-frozen/not-run. It neither creates nor
+authorizes a candidate freeze, GPU capture, Gate E result, semantic receipt,
+or qualification decision.
+
 ## Boundary to preserve
 
 The v2 raw binder returns only `status: "bound"` and
@@ -31,6 +38,33 @@ failure/KV/quiescence threshold.  A later semantic checker is the only layer
 that may replay the reviewed workload/Gate E and issue a pass/fail result.
 This prevents a Python wrapper or a self-authored trace from becoming the
 audit source of truth.
+
+### Landed RC3 freeze-input structural admission
+
+check_rc3_freeze_input_admission.py accepts one direct canonical
+riley.rc3-freeze-input-request.v1 leaf below an external exact-0700 root while
+holding a nonblocking shared FD lock. It requires bytecode caches to have been
+disabled at startup and module entry, reruns check_rc3_prefreeze.py around the
+external replay, and derives workspace/default source facts only from that
+fresh report. External Cargo.lock and extension registry descriptors must match
+the reviewed source bytes by SHA-256 and length.
+
+The checker stream-rehashes opaque external inputs, checks the two ordered
+launch maps against the remote runner's owned C02 options and self-reference
+keys, and parses only the reconstructed baseline's closed vocabulary after
+hash-binding its canonical manifest bytes. The baseline tag must be the
+candidate's immediately preceding RC with the same semver, and that declared
+tag plus baseline ID are emitted as a structural binding. This does not prove
+Git history or replay nested baseline leaves. It does not replay nested baseline
+leaves, emit a producer output, or accept raw/semantic/Gate E/finalizer
+evidence. Its closed request/report schemas live in benchmarks/release/candidates.
+The output authority is freeze-input-structural-only, not a freeze or
+qualification authority; later writers and finalizers must replay the original
+request and leaves.
+
+The request is also capped at 8,192 external descriptors and 1 TiB total
+declared bytes before streaming rehash begins. This is a hostile-input resource
+boundary, not a semantic evidence threshold.
 
 ### Landed v4/v5 raw structural soak precheck
 

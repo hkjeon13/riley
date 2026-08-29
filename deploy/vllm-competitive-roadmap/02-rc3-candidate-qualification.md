@@ -90,6 +90,36 @@ release-contract PR이 새 exact pin을 승인해야 하며, pre-freeze checker�
 적용된다. 두 checker를 import로 결합하지 않으며, Python 3.10 held-FD pre-freeze boundary와
 build-oriented release helper는 각각의 고정 pin이 drift에서 fail-closed해야 한다.
 
+check_rc3_freeze_input_admission.py는 이 source-only pre-freeze report를 actual freeze로
+바꾸지 않는 별도 structural admission이다. 이것은 python3 -B 또는
+PYTHONDONTWRITEBYTECODE=1을 요구하고, source checkout 밖의 exact-0700 evidence root를
+held-FD shared lock으로 열어 canonical riley.rc3-freeze-input-request.v1 하나와 external
+archive, release ELF, container inspect, toolchain probe, model/tokenizer/config/weights,
+two-profile args/env, correctness descriptors, reconstructed baseline manifest를 재해시한다.
+external Cargo.lock과 extension registry는 source pre-freeze report가 방금 읽은 bytes와
+SHA-256 및 byte length 모두 같아야 한다. workspace manifests와 reviewed server-defaults
+source는 request가 대체할 수 없다.
+
+이 admission의 reconstructed baseline 처리는 canonical manifest descriptor와
+reconstructed-v1 vocabulary의 structural check까지만 수행한다. nested baseline leaves,
+Gate E, semantic receipt 또는 qualification을 replay하지 않는다. runner-owned C02 launch
+identity와 freeze/Gate E/configuration self-reference는 args/env에서 거부한다. output은
+riley.rc3-freeze-input-admission.v1의 bound/not-frozen/not-run,
+freeze-input-structural-only뿐이며 freeze writer, marker, candidate result, Gate E report,
+semantic result를 만들지 않는다. 따라서 이 output은 actual candidate freeze 또는 outer
+finalizer의 semantic input이 아니며 후속 단계는 original request와 raw leaves를 다시
+replay해야 한다.
+
+baseline manifest가 어휘상 valid하더라도 arbitrary historical 또는 future tag를 candidate
+baseline으로 바꿔치기할 수는 없다. 이 admission은 candidate와 같은 semver의 바로 앞 RC tag
+및 그 reconstructed baseline ID를 요구하고 output에 그 structural relationship을 기록한다.
+이는 canonical manifest의 declared tag-name/ID 비교일 뿐 Git tag object/target, source
+archive, nested baseline leaves의 history proof를 replay하거나 주장하지 않는다.
+
+hostile request가 rehash I/O를 무제한 증폭하지 않도록 이 checker는 최대 8,192개 external
+descriptor와 총 1 TiB declared byte budget을 구조적 admission 한계로 둔다. 이 cap은
+candidate freeze, evidence completeness 또는 semantic success 판정이 아니다.
+
 `ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의
 `/proc` RSS/start-tick, 지정 GPU UUID/compute-apps 원본을 새 external evidence directory에
@@ -219,6 +249,14 @@ reconstructed-tag rollback baseline manifest hash
 ```
 
 `main`이 이후 이동해도 candidate는 바뀌지 않는다. 하나의 gate라도 다른 revision/binary를 사용하면 final report는 `incomparable`이다.
+
+create-only freeze writer를 호출하기 전에는 위 admission으로 proposed external input envelope를
+structurally bind할 수 있다. request와 report의 closed schema는 각각
+benchmarks/release/candidates/rc3-freeze-input-request-v1.schema.json 및
+rc3-freeze-input-admission-v1.schema.json이다. 이 절차는 입력을 읽고 bound diagnostic만
+stdout으로 반환하며 evidence root나 source checkout에 output을 쓰지 않는다. 특히
+not-frozen/not-run 결과는 freeze가 가능하다는 판정, GPU capture의 성공, Gate E replay,
+correctness/soak/rollback semantic 성공, release promotion을 뜻하지 않는다.
 
 ## 3. 범위
 
