@@ -475,6 +475,21 @@ sync ambiguity만 pair가 남은 채 반환값과 후속 receipt를 만들지 �
 path reopen/CLI/resume 또는 future semantic checker가 독립 input으로 수용할 수 없으며, 같은
 authenticated runner normal-return stack만 이 함수의 성공 반환을 소비할 수 있다.
 
+후속 authenticated runner가 고정 rollback source bridge를 만들 때 필요한 좁은
+`materialize_rc3_rollback_candidate_config_v1.py`도 landed 되었다. private
+`_initialize_candidate_config_directory()`는 preexisting private evidence root 아래에만 새
+mode-0700 `config/` child를 만들고, candidate launch 뒤 observer가
+`config-bridge/raw/config-endpoint.json`을 capture하고 server가 `config/startup.json`을
+create-only로 남긴 뒤에만 `_materialize_candidate_config_bridge()`가 실행된다. 이 helper는
+`stable-default` profile만 받아 먼저 raw observer endpoint로 held-FD config bridge를 replay하고,
+exact private inventory `{startup.json}`을 확인한 뒤 raw body를 새
+`config/endpoint.json`으로 create-only projection한다. 그 다음
+`{startup.json, endpoint.json}` inventory와 fixed endpoint bridge를 다시 replay해 candidate,
+profile, endpoint/startup/session/effective-config/target descriptor drift를 거절한다. 이는
+endpoint observer·startup artifact·process·GPU·HTTP lifecycle을 만들거나 성공을 판정하지 않는다.
+따라서 visible fixed config leaf는 standalone runner/rollback/semantic authority가 아니며, 미래
+authenticated runner의 같은 held-FD normal-return sequence 안에서만 raw capture와 함께 소비되어야 한다.
+
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
