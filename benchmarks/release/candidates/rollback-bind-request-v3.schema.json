@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rollback-bind-request-v3.schema.json",
+  "title": "Riley reconstructed-baseline rollback raw bind request v3",
+  "description": "Closed path-only input for bind_raw_rc3_rollback_capture.py. The binder derives descriptors, process targets, and the stable-default binding profile from held-FD evidence. This request contains no descriptor, SHA-256, target tuple, audit availability, qualification result, or operational action.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "candidate_id", "binding_evidence", "reconstructed_baseline", "candidate", "rollback", "candidate_artifacts", "rollback_artifacts", "atomic_switch"],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-rollback-bind-request.v3"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "binding_evidence": {"$ref": "#/$defs/bindingEvidence"},
+    "reconstructed_baseline": {"$ref": "#/$defs/reconstructedBaseline"},
+    "candidate": {"$ref": "#/$defs/candidatePhase"},
+    "rollback": {"$ref": "#/$defs/rollbackPhase"},
+    "candidate_artifacts": {"$ref": "#/$defs/artifacts"},
+    "rollback_artifacts": {"$ref": "#/$defs/artifacts"},
+    "atomic_switch": {"$ref": "#/$defs/atomicSwitch"}
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?(?:/|$))[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "candidateId": {
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindingEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_path", "base_release_candidate_report_path", "configuration_path"],
+      "properties": {
+        "freeze_path": {"$ref": "#/$defs/relativePath"},
+        "base_release_candidate_report_path": {"$ref": "#/$defs/relativePath"},
+        "configuration_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "reconstructedBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest_path"],
+      "properties": {
+        "manifest_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "processEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre_stat_path", "post_stat_path", "pre_tcp_path", "post_tcp_path", "pre_fd_sockets_path", "post_fd_sockets_path", "status_path", "gpu_selection_path", "gpu_compute_apps_path"],
+      "properties": {
+        "pre_stat_path": {"$ref": "#/$defs/relativePath"},
+        "post_stat_path": {"$ref": "#/$defs/relativePath"},
+        "pre_tcp_path": {"$ref": "#/$defs/relativePath"},
+        "post_tcp_path": {"$ref": "#/$defs/relativePath"},
+        "pre_fd_sockets_path": {"$ref": "#/$defs/relativePath"},
+        "post_fd_sockets_path": {"$ref": "#/$defs/relativePath"},
+        "status_path": {"$ref": "#/$defs/relativePath"},
+        "gpu_selection_path": {"$ref": "#/$defs/relativePath"},
+        "gpu_compute_apps_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "httpExchange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_path", "response_head_path", "response_body_path"],
+      "properties": {
+        "request_path": {"$ref": "#/$defs/relativePath"},
+        "response_head_path": {"$ref": "#/$defs/relativePath"},
+        "response_body_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "candidatePhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["process_evidence", "health", "generation", "generation_audit_index_path", "shutdown_artifact_path", "shutdown_marker_path"],
+      "properties": {
+        "process_evidence": {"$ref": "#/$defs/processEvidence"},
+        "health": {"$ref": "#/$defs/httpExchange"},
+        "generation": {"$ref": "#/$defs/httpExchange"},
+        "generation_audit_index_path": {"$ref": "#/$defs/relativePath"},
+        "shutdown_artifact_path": {"$ref": "#/$defs/relativePath"},
+        "shutdown_marker_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "rollbackPhase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["process_evidence", "health", "generation"],
+      "properties": {
+        "process_evidence": {"$ref": "#/$defs/processEvidence"},
+        "health": {"$ref": "#/$defs/httpExchange"},
+        "generation": {"$ref": "#/$defs/httpExchange"}
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary_path", "bundle_path", "image_inspect_path"],
+      "properties": {
+        "binary_path": {"$ref": "#/$defs/relativePath"},
+        "bundle_path": {"$ref": "#/$defs/relativePath"},
+        "image_inspect_path": {"$ref": "#/$defs/relativePath"}
+      }
+    },
+    "atomicSwitch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pre_active_stat_path", "post_active_stat_path", "candidate_staged_stat_path", "rollback_staged_stat_path", "rename_transcript_path"],
+      "properties": {
+        "pre_active_stat_path": {"$ref": "#/$defs/relativePath"},
+        "post_active_stat_path": {"$ref": "#/$defs/relativePath"},
+        "candidate_staged_stat_path": {"$ref": "#/$defs/relativePath"},
+        "rollback_staged_stat_path": {"$ref": "#/$defs/relativePath"},
+        "rename_transcript_path": {"$ref": "#/$defs/relativePath"}
+      }
+    }
+  }
+}

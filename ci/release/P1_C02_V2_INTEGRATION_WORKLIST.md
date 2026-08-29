@@ -422,11 +422,22 @@ runtime configuration field or a trace counter.
    `ci/release/bind_raw_rc3_rollback_capture.py` (new)
    - Capture candidate/rollback target tuples and reject equal
      `(pid,start_ticks)` identities.
+   - Publish `rollback-bind-request-v3.schema.json` as a closed path-only
+     local binder input. The binder derives every manifest descriptor and both
+     target tuples through one private held root FD; it does not accept a
+     caller target, descriptor, hash, audit availability, profile, verdict,
+     or operational action.
    - Bind rollback evidence only to `stable-default`; max-performance-exact
      is opt-in soak evidence, never a rollback arm.
    - Bind candidate shutdown artifact+marker, both phase artifact maps, and
      all raw atomic-switch leaves.  It still returns `not-run`; the later
      semantic checker owns filesystem and health/generation interpretation.
+   - The raw v3 manifest preserves the three binding inputs only as SHA-256
+     scalars because that retained schema predates this binder. The binder
+     derives those scalars from raw leaves at bind time, but v3 does not retain
+     their descriptors for independently replaying those input files. It
+     publishes no completion marker and reserves matching `.complete` and
+     `.intent` names against stale terminal-looking siblings.
 
 6. `ci/release/check_soak_v2_receipt.py`,
    `ci/release/check_rc3_rollback_receipt.py`, and

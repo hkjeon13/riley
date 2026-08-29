@@ -363,6 +363,8 @@ benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json
 benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json
 benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json
 benchmarks/release/candidates/rollback-receipt-v2.schema.json
+benchmarks/release/candidates/rollback-receipt-v3.schema.json
+benchmarks/release/candidates/rollback-bind-request-v3.schema.json
 ci/release/check_reconstructed_prior_baseline.py
 ci/release/run_remote_c02_soak_v2.sh
 ci/release/bind_raw_c02_soak_v2.py
@@ -375,6 +377,7 @@ ci/release/run_remote_c02_config_endpoint_observation_v1.sh
 ci/release/check_soak_v2_receipt_v2.py
 ci/release/run_remote_rc3_rollback_capture.sh
 ci/release/bind_raw_rc3_rollback_capture.py
+ci/release/check_rc3_rollback_provenance_v3.py
 ci/release/check_rc3_rollback_receipt_v2.py
 ```
 
@@ -385,6 +388,16 @@ set에 request 전후 모두 존재하는지 확인하고, `/proc/net/tcp`·PID 
 `0700` evidence parent 아래 새로 만들며, `capture-incomplete.json` marker가 남아 있으면
 `session.json`이 존재해도 incomplete/nonqualifying이다. 이 관측은 freeze, Gate E, soak,
 rollback, qualification을 대체하지 않는다.
+
+재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
+단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서
+descriptor와 candidate/rollback target을 derive하고 `stable-default`를 강제한다. raw v3
+manifest는 binding input의 descriptor가 아니라 SHA-256 scalar만 유지하므로 binder 시점의
+binding은 exact raw leaf에서 derive되지만 이후 v3 replay만으로 그 세 input file을 다시
+독립 검증할 수는 없다. 이 단계의 output은 `captured/not-run` nonterminal manifest 하나뿐이며
+`.complete`/`.intent` sibling은 publish하지 않고 collision으로만 예약한다. HTTP,
+generation, atomic rename, rollback success, historical shipment, 또는 qualification을
+주장하지 않으며, 그 해석은 이후 semantic checker의 책임이다.
 
 C02 실행은 새 frozen candidate manifest, 두 configuration arm의 endpoint/startup raw captures, reconstructed-tag baseline manifest, 그리고 `startup_configuration`, Qwen, routing, fault-extension, soak-v2, rollback-v2의 semantic receipts를 append-only result directory와 승인된 외부 evidence root에 남긴다. source-tree의 schema/checker fixture나 template candidate는 실제 raw evidence를 대신할 수 없다.
 
