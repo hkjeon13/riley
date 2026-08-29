@@ -1,12 +1,15 @@
 # C02-P1 v2 raw-provenance integration worklist
 
 Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
-sampling fallback event/marker, raw source-pair capture v2, and the separate
-terminal fallback binder v5 are implemented with CPU/static hostile-path
-coverage; this worklist remains design and integration material, not a
-qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
-receipt, or semantic qualification has been performed, and this file must not
-be copied into a candidate result directory as evidence.
+sampling fallback event/marker, raw source-pair capture v2, the separate
+terminal fallback binder v5, and the C02 source pre-freeze checker are
+implemented with CPU/static hostile-path coverage; this worklist remains
+design and integration material, not a qualification report. No actual GPU
+capture, candidate freeze, lifecycle-v5 receipt, or semantic qualification has
+been performed, and this file must not be copied into a candidate result
+directory as evidence. The pre-freeze checker leaves the existing reviewed
+server-defaults hash mismatch fail-closed; resolving that release-contract
+change is a separate approved PR, not a checker exception.
 
 ## Boundary to preserve
 

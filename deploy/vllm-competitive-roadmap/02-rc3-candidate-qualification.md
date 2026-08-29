@@ -67,14 +67,17 @@ compatibility-closed public `/metrics`를 바꾸지 않는다. raw response는
 allocation snapshot을 얻지 못하거나 degraded이면 `503`으로 fail-closed한다. raw
 schema/binder는 field type만 확인하고 threshold나 qualification result를 만들지 않는다.
 
-새 `ci/release/check_rc3_prefreeze.py`는 freeze를 쓰기 전 clean source snapshot만
-fail-closed로 확인하는 별도 도구다. `HEAD` 별칭이 아닌 full SHA와 proposed RC ID를 받고,
-현재 HEAD 일치, tracked/untracked를 모두 포함한 clean checkout, release metadata/default,
-workspace version, `Cargo.lock`·extension registry의 no-follow hash를 확인한다. 성공 JSON은
+`ci/release/check_rc3_prefreeze.py`는 freeze를 쓰기 전 clean source snapshot만
+fail-closed로 확인하는 별도 도구로 구현됐다. `HEAD` 별칭이 아닌 full SHA와 proposed RC ID를 받고,
+현재 HEAD 일치, tracked/untracked를 모두 포함한 clean checkout 및 ordinary-visible Git
+index(assume-unchanged·skip-worktree 거부), release metadata/default, workspace version,
+`Cargo.lock`·extension registry의 no-follow hash를 확인한다. 성공 JSON은
 `scope: source-pre-freeze-only`, `candidate_status: not-frozen`,
 `qualification_status: not-run`만 기록한다. archive/image/ELF/Gate E/raw receipt/freeze SHA를
 생성하거나 검증했다고 주장하지 않으며, actual frozen candidate 또는 C02 qualification의 대체물이
-아니다.
+아니다. 이 checker는 fixture와 hostile-path 범위만 통과했으며 actual candidate freeze는 아직
+수행하지 않았다. 현재 source의 reviewed server-defaults hash 불일치는 별도 release-contract
+update PR이 해결해야 하며, pre-freeze checker가 이를 임의로 허용하거나 hash를 갱신하지 않는다.
 
 `ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의
