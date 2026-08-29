@@ -136,17 +136,14 @@ SHA256SUM_LINE = re.compile(r"^([0-9a-f]{64})  ([A-Za-z0-9][A-Za-z0-9._-]*)$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 IMAGE_ID_RE = re.compile(r"^sha256:([0-9a-f]{64})$")
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{64}$")
-FORBIDDEN_IMAGE_ENVIRONMENT_NAMES = {
-    "LD_PRELOAD",
-    "LD_AUDIT",
-    "LD_DEBUG",
-    "LD_DEBUG_OUTPUT",
-    "LD_PROFILE",
-    "PYTHONHOME",
-    "PYTHONPATH",
-    "PYTHONSTARTUP",
-    "BASH_ENV",
-    "ENV",
+# The final image is a closed runtime recipe. A blacklist is not sufficient:
+# an inherited loader, allocator, interpreter, shell, or application setting
+# can alter behavior without using one of the currently known names. Require
+# the recipe's exact three entries instead.
+EXPECTED_IMAGE_ENVIRONMENT = {
+    "PATH": "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "NVIDIA_VISIBLE_DEVICES": "all",
+    "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
 }
 CONTAINER_EMPTY_HOST_FIELDS = (
     "Binds",
@@ -1085,21 +1082,19 @@ def _validate_image_inspect(raw: bytes, external: ExternalFacts, image_id: str) 
         if not name or name in parsed_environment:
             _fail("invalid-image-inspect", "captured image environment has an empty or duplicate name")
         parsed_environment[name] = value
-    forbidden_environment = sorted(FORBIDDEN_IMAGE_ENVIRONMENT_NAMES & set(parsed_environment))
-    if forbidden_environment:
-        _fail(
-            "forbidden-image-environment",
-            "captured image config contains forbidden loader or interpreter environment: "
-            + ", ".join(forbidden_environment),
+    if parsed_environment != EXPECTED_IMAGE_ENVIRONMENT:
+        missing_environment = sorted(set(EXPECTED_IMAGE_ENVIRONMENT) - set(parsed_environment))
+        extra_environment = sorted(set(parsed_environment) - set(EXPECTED_IMAGE_ENVIRONMENT))
+        mismatched_environment = sorted(
+            name
+            for name in set(EXPECTED_IMAGE_ENVIRONMENT) & set(parsed_environment)
+            if parsed_environment[name] != EXPECTED_IMAGE_ENVIRONMENT[name]
         )
-    expected_environment = {
-        "PATH": "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-        "NVIDIA_VISIBLE_DEVICES": "all",
-        "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
-    }
-    for name, expected in expected_environment.items():
-        if parsed_environment.get(name) != expected:
-            _fail("image-config-mismatch", f"captured image environment {name!r} differs from the reviewed recipe")
+        _fail(
+            "image-environment-mismatch",
+            "captured image config must contain exactly the reviewed runtime environment; "
+            f"missing={missing_environment}, extra={extra_environment}, mismatched={mismatched_environment}",
+        )
     if config.get("WorkingDir") not in (None, ""):
         _fail("image-config-mismatch", "captured image config must not add a working directory")
     if not _empty_container_option(config.get("Volumes")):

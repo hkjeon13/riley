@@ -406,7 +406,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         self.assertEqual(archive_limit, prepare.MAX_CAPTURE_ARCHIVE_BYTES)
         self.assertEqual(prepare.MAX_CANONICAL_TAR_TRAILER_BYTES, 20 * prepare.TAR_BLOCK_BYTES)
 
-    def test_rejects_loader_injection_and_hidden_tmpfs_in_raw_records(self) -> None:
+    def test_rejects_unreviewed_image_environment_and_hidden_tmpfs_in_raw_records(self) -> None:
         external = self._unit_external()
         image_id = external.image_id
         image = common.canonical_json_bytes(
@@ -424,14 +424,14 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
                             "PATH=/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                             "NVIDIA_VISIBLE_DEVICES=all",
                             "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-                            "LD_PRELOAD=/tmp/evil.so",
+                            "LD_LIBRARY_PATH=/tmp/evil-libraries",
                         ],
                     },
                 }
             ]
         )
         self.assert_reason(
-            "forbidden-image-environment",
+            "image-environment-mismatch",
             lambda: prepare._validate_image_inspect(image, external, image_id),
         )
         container = common.canonical_json_bytes(
