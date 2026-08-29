@@ -7,11 +7,13 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 HERE = Path(__file__).resolve().parent
@@ -225,6 +227,54 @@ class RawC02RuntimeConfigValidatorTests(unittest.TestCase):
         self.fixture.server_artifact_path.write_bytes(b"{}")
         self._assert_fails("startup-artifact-copy-mismatch")
 
+    def test_missing_open_safety_flag_fails_closed(self) -> None:
+        for flag in ("O_NOFOLLOW", "O_CLOEXEC", "O_NONBLOCK"):
+            with self.subTest(flag=flag), mock.patch.object(raw.os, flag, 0):
+                with self.assertRaises(raw.RawC02ValidationError) as raised:
+                    raw.read_regular_path(self.fixture.endpoint_path, "captured endpoint")
+                self.assertEqual(raised.exception.reason_code, "missing-open-safety-flag")
+
+    def test_same_inode_mutation_during_read_fails_closed(self) -> None:
+        original_read_fd = raw._read_fd
+        original_length = self.fixture.endpoint_path.stat().st_size
+        calls = 0
+
+        def mutate_before_read(fd: int, label: str) -> bytes:
+            nonlocal calls
+            result = original_read_fd(fd, label)
+            if calls == 0:
+                self.fixture.endpoint_path.write_bytes(b"x" * original_length)
+            calls += 1
+            return result
+
+        with mock.patch.object(raw, "_read_fd", side_effect=mutate_before_read):
+            with self.assertRaises(raw.RawC02ValidationError) as raised:
+                raw.read_regular_path(self.fixture.endpoint_path, "captured endpoint")
+        self.assertEqual(raised.exception.reason_code, "mutated-input")
+
+    def test_path_replacement_after_read_fails_closed(self) -> None:
+        original_read_fd = raw._read_fd
+        original_bytes = self.fixture.endpoint_path.read_bytes()
+
+        def replace_after_read(fd: int, label: str) -> bytes:
+            result = original_read_fd(fd, label)
+            replacement = self.fixture.root / "replacement-endpoint.json"
+            replacement.write_bytes(original_bytes)
+            os.replace(replacement, self.fixture.endpoint_path)
+            return result
+
+        with mock.patch.object(raw, "_read_fd", side_effect=replace_after_read):
+            with self.assertRaises(raw.RawC02ValidationError) as raised:
+                raw.read_regular_path(self.fixture.endpoint_path, "captured endpoint")
+        self.assertEqual(raised.exception.reason_code, "mutated-input")
+
+    def test_non_regular_path_fails_before_opening(self) -> None:
+        fifo = self.fixture.root / "endpoint.fifo"
+        os.mkfifo(fifo)
+        with self.assertRaises(raw.RawC02ValidationError) as raised:
+            raw.read_regular_path(fifo, "captured endpoint")
+        self.assertEqual(raised.exception.reason_code, "unsafe-evidence-path")
+
     def test_source_is_self_contained_and_tracks_raw_contract_inventory(self) -> None:
         source = VALIDATOR.read_text(encoding="utf-8")
         for required in (
@@ -235,11 +285,16 @@ class RawC02RuntimeConfigValidatorTests(unittest.TestCase):
             "canonical_json_bytes",
             "duplicate-json-key",
             "validate_raw_capture",
+            "_required_open_flag",
+            "_stable_stat",
+            "missing-open-safety-flag",
+            "O_NONBLOCK",
         ):
             self.assertIn(required, source)
         self.assertNotIn("import check_rc3_qualification", source)
         self.assertNotIn("import check_effective_runtime_config_receipt", source)
         self.assertNotIn("import tomllib", source)
+        self.assertNotIn('getattr(os, "O_NOFOLLOW", 0)', source)
 
 
 if __name__ == "__main__":

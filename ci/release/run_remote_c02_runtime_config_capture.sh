@@ -16,6 +16,7 @@ readonly DEFAULT_MAX_GPU_MEMORY_MIB=256
 readonly DEFAULT_STARTUP_TIMEOUT_SECONDS=60
 readonly DEFAULT_REQUEST_TIMEOUT_SECONDS=15
 readonly DEFAULT_SHUTDOWN_TIMEOUT_SECONDS=30
+readonly MAX_RAW_CAPTURE_BYTES=$((8 * 1024 * 1024))
 readonly CONTAINER_MODEL_DIR='/riley-c02/model'
 readonly CONTAINER_SERVER_OUTPUT_DIR='/riley-c02/server-output'
 readonly CONTAINER_VISIBLE_GPU_INDEX=0
@@ -488,30 +489,213 @@ import os
 import stat
 import sys
 
+MAX_CAPTURE_BYTES = 8 * 1024 * 1024
 source, destination = sys.argv[1:]
-source_stat = os.lstat(source)
-if not stat.S_ISREG(source_stat.st_mode):
-    raise SystemExit(f"capture source is not a regular file: {source}")
-parent_stat = os.lstat(os.path.dirname(destination))
-if not stat.S_ISDIR(parent_stat.st_mode):
-    raise SystemExit(f"capture destination parent is not a directory: {destination}")
-flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
-if hasattr(os, "O_NOFOLLOW"):
-    flags |= os.O_NOFOLLOW
-fd = os.open(destination, flags, 0o600)
+
+
+def required_open_flag(name):
+    flag = getattr(os, name, None)
+    if not isinstance(flag, int) or flag == 0:
+        raise SystemExit(f"capture requires os.{name}")
+    return flag
+
+
+def stable_stat(metadata):
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def directory_identity(metadata):
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+    )
+
+
+def open_private_directory(path, label):
+    try:
+        before = os.lstat(path)
+    except OSError as error:
+        raise SystemExit(f"{label} cannot be inspected: {path}: {error}")
+    if (
+        not stat.S_ISDIR(before.st_mode)
+        or before.st_uid != os.geteuid()
+        or stat.S_IMODE(before.st_mode) != 0o700
+        or before.st_nlink < 2
+    ):
+        raise SystemExit(f"{label} is not an effective-UID-owned mode-0700 directory: {path}")
+    flags = (
+        os.O_RDONLY
+        | required_open_flag("O_DIRECTORY")
+        | required_open_flag("O_CLOEXEC")
+        | required_open_flag("O_NOFOLLOW")
+        | required_open_flag("O_NONBLOCK")
+    )
+    try:
+        fd = os.open(path, flags)
+    except OSError as error:
+        raise SystemExit(f"{label} cannot be opened safely: {path}: {error}")
+    try:
+        opened = os.fstat(fd)
+        if (
+            not stat.S_ISDIR(opened.st_mode)
+            or opened.st_uid != os.geteuid()
+            or stat.S_IMODE(opened.st_mode) != 0o700
+            or opened.st_nlink < 2
+            or directory_identity(before) != directory_identity(opened)
+        ):
+            raise SystemExit(f"{label} changed while it was opened: {path}")
+        return fd, before
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def require_private_output(metadata, label, expected_size):
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_nlink != 1
+        or metadata.st_size != expected_size
+    ):
+        raise SystemExit(f"{label} is not a stable effective-UID-owned mode-0600 single-link file")
+
+
+destination_parent = os.path.dirname(destination)
+destination_name = os.path.basename(destination)
+if destination_name in {"", ".", ".."}:
+    raise SystemExit(f"capture destination has an unsafe filename: {destination}")
 try:
-    with open(source, "rb", buffering=0) as handle:
-        while True:
-            block = handle.read(1024 * 1024)
+    source_before = os.lstat(source)
+except OSError as error:
+    raise SystemExit(f"capture source cannot be inspected: {source}: {error}")
+if not stat.S_ISREG(source_before.st_mode):
+    raise SystemExit(f"capture source is not a regular file: {source}")
+if source_before.st_size > MAX_CAPTURE_BYTES:
+    raise SystemExit(f"capture source exceeds {MAX_CAPTURE_BYTES} bytes: {source}")
+source_flags = (
+    os.O_RDONLY
+    | required_open_flag("O_CLOEXEC")
+    | required_open_flag("O_NOFOLLOW")
+    | required_open_flag("O_NONBLOCK")
+)
+try:
+    source_fd = os.open(source, source_flags)
+except OSError as error:
+    raise SystemExit(f"capture source cannot be opened safely: {source}: {error}")
+destination_parent_fd = None
+try:
+    source_opened = os.fstat(source_fd)
+    if not stat.S_ISREG(source_opened.st_mode):
+        raise SystemExit(f"capture source is not a regular file: {source}")
+    if stable_stat(source_before) != stable_stat(source_opened):
+        raise SystemExit(f"capture source changed while it was opened: {source}")
+    if source_opened.st_size > MAX_CAPTURE_BYTES:
+        raise SystemExit(f"capture source exceeds {MAX_CAPTURE_BYTES} bytes: {source}")
+    destination_parent_fd, destination_parent_before = open_private_directory(
+        destination_parent, "capture destination parent"
+    )
+    destination_flags = (
+        os.O_WRONLY
+        | os.O_CREAT
+        | os.O_EXCL
+        | required_open_flag("O_CLOEXEC")
+        | required_open_flag("O_NOFOLLOW")
+        | required_open_flag("O_NONBLOCK")
+    )
+    try:
+        destination_fd = os.open(
+            destination_name, destination_flags, 0o600, dir_fd=destination_parent_fd
+        )
+    except OSError as error:
+        raise SystemExit(f"capture destination cannot be created safely: {destination}: {error}")
+    try:
+        try:
+            os.fchmod(destination_fd, 0o600)
+        except OSError as error:
+            raise SystemExit(f"capture destination cannot be made private: {destination}: {error}")
+        destination_opened = os.fstat(destination_fd)
+        require_private_output(destination_opened, "capture destination", 0)
+        remaining = source_opened.st_size
+        while remaining:
+            try:
+                block = os.read(source_fd, min(1024 * 1024, remaining))
+            except OSError as error:
+                raise SystemExit(f"capture source cannot be read: {source}: {error}")
             if not block:
-                break
+                raise SystemExit(f"capture source was truncated while it was read: {source}")
             view = memoryview(block)
             while view:
-                written = os.write(fd, view)
+                try:
+                    written = os.write(destination_fd, view)
+                except OSError as error:
+                    raise SystemExit(f"capture destination cannot be written: {destination}: {error}")
+                if written <= 0:
+                    raise SystemExit(f"capture destination short write: {destination}")
                 view = view[written:]
-    os.fsync(fd)
+            remaining -= len(block)
+        try:
+            if os.read(source_fd, 1):
+                raise SystemExit(f"capture source grew while it was read: {source}")
+        except OSError as error:
+            raise SystemExit(f"capture source cannot be re-read: {source}: {error}")
+        try:
+            os.fsync(destination_fd)
+        except OSError as error:
+            raise SystemExit(f"capture destination cannot be synced: {destination}: {error}")
+        destination_stable = os.fstat(destination_fd)
+        require_private_output(destination_stable, "capture destination", source_opened.st_size)
+        if (destination_opened.st_dev, destination_opened.st_ino) != (
+            destination_stable.st_dev,
+            destination_stable.st_ino,
+        ):
+            raise SystemExit(f"capture destination changed while it was written: {destination}")
+    finally:
+        os.close(destination_fd)
+    source_after = os.fstat(source_fd)
+    if stable_stat(source_opened) != stable_stat(source_after):
+        raise SystemExit(f"capture source changed while it was read: {source}")
+    try:
+        source_path_after = os.lstat(source)
+    except OSError as error:
+        raise SystemExit(f"capture source disappeared while it was read: {source}: {error}")
+    if stable_stat(source_before) != stable_stat(source_path_after):
+        raise SystemExit(f"capture source changed while it was read: {source}")
+    try:
+        destination_visible = os.lstat(destination_name, dir_fd=destination_parent_fd)
+    except OSError as error:
+        raise SystemExit(f"capture destination cannot be re-inspected: {destination}: {error}")
+    require_private_output(destination_visible, "capture destination", source_opened.st_size)
+    if (destination_visible.st_dev, destination_visible.st_ino) != (
+        destination_stable.st_dev,
+        destination_stable.st_ino,
+    ):
+        raise SystemExit(f"capture destination changed before it could be published: {destination}")
+    try:
+        os.fsync(destination_parent_fd)
+    except OSError as error:
+        raise SystemExit(f"capture destination parent cannot be synced: {destination_parent}: {error}")
+    try:
+        destination_parent_after = os.lstat(destination_parent)
+    except OSError as error:
+        raise SystemExit(f"capture destination parent disappeared: {destination_parent}: {error}")
+    if directory_identity(destination_parent_before) != directory_identity(destination_parent_after):
+        raise SystemExit(f"capture destination parent changed while it was used: {destination_parent}")
 finally:
-    os.close(fd)
+    if destination_parent_fd is not None:
+        os.close(destination_parent_fd)
+    os.close(source_fd)
 PY
 }
 
@@ -536,9 +720,77 @@ import sys
     host_gpu_uuid,
     container_user,
 ) = sys.argv[1:]
-parent_stat = os.lstat(os.path.dirname(destination))
-if not stat.S_ISDIR(parent_stat.st_mode):
-    raise SystemExit(f"container receipt parent is not a directory: {destination}")
+def required_open_flag(name):
+    flag = getattr(os, name, None)
+    if not isinstance(flag, int) or flag == 0:
+        raise SystemExit(f"container receipt requires os.{name}")
+    return flag
+
+
+def directory_identity(metadata):
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_uid,
+    )
+
+
+def open_private_directory(path):
+    try:
+        before = os.lstat(path)
+    except OSError as error:
+        raise SystemExit(f"container receipt parent cannot be inspected: {path}: {error}")
+    if (
+        not stat.S_ISDIR(before.st_mode)
+        or before.st_uid != os.geteuid()
+        or stat.S_IMODE(before.st_mode) != 0o700
+        or before.st_nlink < 2
+    ):
+        raise SystemExit(f"container receipt parent is not an effective-UID-owned mode-0700 directory: {path}")
+    flags = (
+        os.O_RDONLY
+        | required_open_flag("O_DIRECTORY")
+        | required_open_flag("O_CLOEXEC")
+        | required_open_flag("O_NOFOLLOW")
+        | required_open_flag("O_NONBLOCK")
+    )
+    try:
+        fd = os.open(path, flags)
+    except OSError as error:
+        raise SystemExit(f"container receipt parent cannot be opened safely: {path}: {error}")
+    try:
+        opened = os.fstat(fd)
+        if (
+            not stat.S_ISDIR(opened.st_mode)
+            or opened.st_uid != os.geteuid()
+            or stat.S_IMODE(opened.st_mode) != 0o700
+            or opened.st_nlink < 2
+            or directory_identity(before) != directory_identity(opened)
+        ):
+            raise SystemExit(f"container receipt parent changed while it was opened: {path}")
+        return fd, before
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def require_private_output(metadata, expected_size):
+    if (
+        not stat.S_ISREG(metadata.st_mode)
+        or metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o600
+        or metadata.st_nlink != 1
+        or metadata.st_size != expected_size
+    ):
+        raise SystemExit("container receipt is not a stable effective-UID-owned mode-0600 single-link file")
+
+
+destination_parent = os.path.dirname(destination)
+destination_name = os.path.basename(destination)
+if destination_name in {"", ".", ".."}:
+    raise SystemExit(f"container receipt has an unsafe filename: {destination}")
 payload = {
     "binary_sha256": binary_sha256,
     "container_binary": binary_path,
@@ -552,18 +804,67 @@ payload = {
     "schema_version": 1,
 }
 encoded = json.dumps(payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True).encode("ascii") + b"\n"
-flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
-if hasattr(os, "O_NOFOLLOW"):
-    flags |= os.O_NOFOLLOW
-fd = os.open(destination, flags, 0o600)
+
+
+flags = (
+    os.O_WRONLY
+    | os.O_CREAT
+    | os.O_EXCL
+    | required_open_flag("O_CLOEXEC")
+    | required_open_flag("O_NOFOLLOW")
+    | required_open_flag("O_NONBLOCK")
+)
+parent_fd, parent_before = open_private_directory(destination_parent)
 try:
-    view = memoryview(encoded)
-    while view:
-        written = os.write(fd, view)
-        view = view[written:]
-    os.fsync(fd)
+    try:
+        fd = os.open(destination_name, flags, 0o600, dir_fd=parent_fd)
+    except OSError as error:
+        raise SystemExit(f"container receipt cannot be created safely: {destination}: {error}")
+    try:
+        try:
+            os.fchmod(fd, 0o600)
+        except OSError as error:
+            raise SystemExit(f"container receipt cannot be made private: {destination}: {error}")
+        metadata = os.fstat(fd)
+        require_private_output(metadata, 0)
+        view = memoryview(encoded)
+        while view:
+            try:
+                written = os.write(fd, view)
+            except OSError as error:
+                raise SystemExit(f"container receipt cannot be written: {destination}: {error}")
+            if written <= 0:
+                raise SystemExit(f"container receipt short write: {destination}")
+            view = view[written:]
+        try:
+            os.fsync(fd)
+        except OSError as error:
+            raise SystemExit(f"container receipt cannot be synced: {destination}: {error}")
+        stable = os.fstat(fd)
+        require_private_output(stable, len(encoded))
+        if (metadata.st_dev, metadata.st_ino) != (stable.st_dev, stable.st_ino):
+            raise SystemExit(f"container receipt changed while it was written: {destination}")
+    finally:
+        os.close(fd)
+    try:
+        visible = os.lstat(destination_name, dir_fd=parent_fd)
+    except OSError as error:
+        raise SystemExit(f"container receipt cannot be re-inspected: {destination}: {error}")
+    require_private_output(visible, len(encoded))
+    if (visible.st_dev, visible.st_ino) != (stable.st_dev, stable.st_ino):
+        raise SystemExit(f"container receipt changed before it could be published: {destination}")
+    try:
+        os.fsync(parent_fd)
+    except OSError as error:
+        raise SystemExit(f"container receipt parent cannot be synced: {destination_parent}: {error}")
+    try:
+        parent_after = os.lstat(destination_parent)
+    except OSError as error:
+        raise SystemExit(f"container receipt parent disappeared: {destination_parent}: {error}")
+    if directory_identity(parent_before) != directory_identity(parent_after):
+        raise SystemExit(f"container receipt parent changed while it was used: {destination_parent}")
 finally:
-    os.close(fd)
+    os.close(parent_fd)
 PY
 }
 
@@ -679,6 +980,7 @@ capture_arm() {
     wait_for_ready "$port"
     if ! status=$(/usr/bin/curl --noproxy '*' --http1.1 --silent --show-error \
         --connect-timeout 2 --max-time "$request_timeout_seconds" \
+        --max-filesize "$MAX_RAW_CAPTURE_BYTES" \
         --dump-header "$endpoint_headers" --output "$endpoint_temporary" --write-out '%{http_code}' \
         --request GET "http://127.0.0.1:${port}/v1/config"); then
         die "GET /v1/config failed for $profile"

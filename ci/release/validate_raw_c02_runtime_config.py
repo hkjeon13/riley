@@ -449,8 +449,31 @@ def _read_fd(fd: int, label: str) -> bytes:
     return b"".join(chunks)
 
 
+def _required_open_flag(name: str) -> int:
+    """Return one required race-hardening flag or reject the host."""
+
+    flag = getattr(os, name, None)
+    if not isinstance(flag, int) or flag == 0:
+        _fail("missing-open-safety-flag", f"raw C02 evidence requires os.{name}")
+    return flag
+
+
+def _stable_stat(metadata: os.stat_result) -> tuple[int, int, int, int, int, int, int]:
+    """Facts that must not change while a raw evidence leaf is read."""
+
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
 def read_regular_path(path: Path, label: str) -> bytes:
-    """Read a bounded regular non-symlink path without following a race."""
+    """Read one stable regular non-symlink path without following a race."""
 
     try:
         before = path.lstat()
@@ -458,18 +481,41 @@ def read_regular_path(path: Path, label: str) -> bytes:
         _fail("missing-input", f"{label} cannot be inspected: {error}")
     if not stat.S_ISREG(before.st_mode):
         _fail("unsafe-evidence-path", f"{label} must be a regular non-link file")
-    flags = os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0)
+    flags = (
+        os.O_RDONLY
+        | _required_open_flag("O_CLOEXEC")
+        | _required_open_flag("O_NOFOLLOW")
+        | _required_open_flag("O_NONBLOCK")
+    )
     try:
         fd = os.open(path, flags)
     except OSError as error:
         _fail("missing-input", f"{label} cannot be opened safely: {error}")
     try:
-        after = os.fstat(fd)
-        if (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino):
+        opened = os.fstat(fd)
+        if not stat.S_ISREG(opened.st_mode):
+            _fail("unsafe-evidence-path", f"{label} must be a regular non-link file")
+        if _stable_stat(before) != _stable_stat(opened):
             _fail("raced-input", f"{label} changed while it was opened")
-        return _read_fd(fd, label)
+        raw = _read_fd(fd, label)
+        try:
+            os.lseek(fd, 0, os.SEEK_SET)
+        except OSError as error:
+            _fail("unsafe-evidence-path", f"{label} cannot be replayed safely: {error}")
+        if raw != _read_fd(fd, label):
+            _fail("mutated-input", f"{label} content changed while it was read")
+        terminal = os.fstat(fd)
+        if _stable_stat(opened) != _stable_stat(terminal):
+            _fail("mutated-input", f"{label} changed while it was read")
     finally:
         os.close(fd)
+    try:
+        path_after = path.lstat()
+    except OSError as error:
+        _fail("raced-input", f"{label} disappeared while it was read: {error}")
+    if _stable_stat(before) != _stable_stat(path_after):
+        _fail("raced-input", f"{label} changed while it was read")
+    return raw
 
 
 def validate_raw_capture(
