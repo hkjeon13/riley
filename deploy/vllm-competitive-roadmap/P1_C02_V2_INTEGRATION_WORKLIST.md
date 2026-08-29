@@ -30,6 +30,20 @@ same reviewed literal is independently used by the active release
 preflight/bundle/manifest contract; it is not imported into the Python-3.10
 held-FD checker, and either contract must fail closed on future source drift.
 
+The next C02-P1 provenance prerequisite is now source-only mechanism code:
+`prepare_reconstructed_repro_build_inputs_v1.py` snapshots two pre-existing
+PR16 `repro-build-{a,b}.tar` inputs into one fresh private A/B closure and
+replays the reviewed RC2 source-input receipt plus the complete PR16 raw
+evidence semantics over fresh private checker copies. Its receipt stores only
+the raw tar, selected `build.json`, `riley`, and `riley.tar.gz` leaves per arm;
+it validates source/archive and A/B binary/bundle equality plus independent
+build-container/workspace facts, but makes no runtime-image, OCI,
+source-to-image, bundle-to-image, rollback, freeze, or qualification claim.
+It does not execute Docker, a compiler, GPU code, a service, or network work.
+The later arm-specific same-invocation runtime-image assembly/capture receipt
+must consume this closure before any v2 materializer can promote those missing
+image bindings.
+
 ## Boundary to preserve
 
 The v2 raw binder returns only `status: "bound"` and

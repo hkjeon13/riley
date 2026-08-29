@@ -1323,6 +1323,156 @@ def validate_single_evidence(
         )
 
 
+def derive_source_date_epoch(source_archive: Path, source_revision: str) -> int:
+    """Derive and validate the deterministic Git-archive timestamp.
+
+    Consumers that receive a reviewed source archive through another evidence
+    closure must not accept a producer-supplied ``SOURCE_DATE_EPOCH``.  This
+    helper obtains that value from the held archive's first member, then
+    replays the complete canonical-source grammar with the derived value.
+    Callers are expected to give it a private, immutable materialization of
+    the source descriptor rather than an untrusted host pathname.
+    """
+
+    if REVISION_PATTERN.fullmatch(source_revision) is None:
+        _fail("source revision must be a full lowercase Git SHA")
+    _regular_path(source_archive, "canonical source archive")
+    try:
+        with tarfile.open(source_archive, mode="r:") as archive:
+            if archive.pax_headers != {"comment": source_revision}:
+                _fail("source archive does not embed the exact git archive revision")
+            first = next(iter(archive), None)
+    except tarfile.TarError as error:
+        raise ReleaseContractError(f"source archive is not an uncompressed git tar: {error}") from error
+    if first is None:
+        _fail("source archive is empty")
+    epoch = first.mtime
+    if not isinstance(epoch, int) or isinstance(epoch, bool) or not 0 <= epoch <= 0xFFFFFFFF:
+        _fail("source archive member timestamp is outside the supported range")
+    _validate_source_archive(source_archive, source_revision, epoch)
+    return epoch
+
+
+def validate_reproducibility_inputs(
+    *,
+    evidence_a: Path,
+    evidence_b: Path,
+    source_archive: Path,
+    expected_source_archive_sha256: str,
+    source_revision: str,
+    source_date_epoch: int,
+    build_image_id: str,
+) -> dict[str, Any]:
+    """Replay the closed PR16 A/B inputs without selecting a ``final/`` arm.
+
+    The ordinary release gate compares each arm to a separately materialized
+    final artifact set.  A later runtime-image assembly cannot rely on that
+    mutable convenience projection, so this helper validates the complete
+    raw A/B evidence pair and reports only facts derived from those two
+    archives.  It deliberately makes no runtime-image or qualification claim.
+    """
+
+    if REVISION_PATTERN.fullmatch(source_revision) is None:
+        _fail("source revision must be a full lowercase Git SHA")
+    if IMAGE_ID_PATTERN.fullmatch(build_image_id) is None:
+        _fail("build image must be an immutable sha256 OCI image ID")
+    if SHA256_PATTERN.fullmatch(expected_source_archive_sha256) is None:
+        _fail("expected source archive SHA-256 must be a lowercase digest")
+    if not 0 <= source_date_epoch <= 0xFFFFFFFF:
+        _fail("SOURCE_DATE_EPOCH must fit an unsigned 32-bit timestamp")
+    _validate_source_archive(source_archive, source_revision, source_date_epoch)
+    source_digest = _sha256_file(source_archive)
+    if source_digest != expected_source_archive_sha256:
+        _fail("canonical source archive differs from the trusted expected SHA-256")
+
+    with tempfile.TemporaryDirectory(prefix="riley-repro-inputs-check-") as temporary:
+        temporary_root = Path(temporary)
+        build_a = _load_evidence(
+            evidence_a,
+            temporary_root,
+            expected_build_id="A",
+            source_revision=source_revision,
+            source_archive=source_archive,
+            source_archive_sha256=source_digest,
+            source_date_epoch=source_date_epoch,
+            build_image_id=build_image_id,
+        )
+        build_b = _load_evidence(
+            evidence_b,
+            temporary_root,
+            expected_build_id="B",
+            source_revision=source_revision,
+            source_archive=source_archive,
+            source_archive_sha256=source_digest,
+            source_date_epoch=source_date_epoch,
+            build_image_id=build_image_id,
+        )
+        if build_a.container_id == build_b.container_id:
+            _fail("A/B evidence came from the same Docker container identity")
+        if build_a.workspace_volume == build_b.workspace_volume:
+            _fail("A/B evidence reused the same Docker workspace volume")
+        if build_a.workspace_source == build_b.workspace_source:
+            _fail("A/B evidence reused the same Docker workspace source")
+        builder_a = build_a.files["logs/builder-image-inspect.json"]
+        builder_b = build_b.files["logs/builder-image-inspect.json"]
+        if builder_a.read_bytes() != builder_b.read_bytes():
+            _fail("A/B evidence used different Docker builder image configurations")
+        builder_image_inspect_sha256 = _sha256_file(builder_a)
+        artifact_rows: dict[str, dict[str, dict[str, Any]]] = {"a": {}, "b": {}}
+        for relative, name, label in (
+            ("bin/riley", "binary", "release binary A/B"),
+            ("bin/riley-profile", "profile_binary", "release profile binary A/B"),
+            ("bundle/riley.tar.gz", "bundle", "deterministic bundle A/B"),
+            ("manifest/native-dependencies.txt", "native_manifest", "native dependency manifest A/B"),
+        ):
+            _files_equal(build_a.files[relative], build_b.files[relative], label)
+            for arm, build in (("a", build_a), ("b", build_b)):
+                artifact = build.files[relative]
+                artifact_rows[arm][name] = {
+                    "sha256": _sha256_file(artifact),
+                    "byte_length": artifact.stat().st_size,
+                }
+        if build_a.files["logs/toolchain.txt"].read_bytes() != build_b.files["logs/toolchain.txt"].read_bytes():
+            _fail("A/B toolchain command outputs differ")
+
+        return {
+            "schema_version": SCHEMA_VERSION,
+            "gate_id": GATE_ID,
+            "status": "passed",
+            "source": {
+                "revision": source_revision,
+                "archive_sha256": source_digest,
+                "source_date_epoch": source_date_epoch,
+            },
+            "build": {
+                "image_id": build_image_id,
+                "image_inspect_sha256": builder_image_inspect_sha256,
+                "platform": PLATFORM,
+                "network": "none",
+                "independent_clean_containers": 2,
+            },
+            "reproductions": {
+                arm: {
+                    "evidence_archive_sha256": _sha256_file(build.archive),
+                    "container_id": build.container_id,
+                    "workspace_volume": build.workspace_volume,
+                    "workspace_source": build.workspace_source,
+                    "started_at": build.started_at,
+                    "finished_at": build.finished_at,
+                    "artifacts": artifact_rows[arm],
+                }
+                for arm, build in (("a", build_a), ("b", build_b))
+            },
+            "comparisons": {
+                "binary_a_b_byte_exact": True,
+                "profile_binary_a_b_byte_exact": True,
+                "bundle_a_b_byte_exact": True,
+                "native_manifest_a_b_byte_exact": True,
+                "source_archive_a_b_byte_exact": True,
+            },
+        }
+
+
 def check_reproducible_build(
     *,
     evidence_a: Path,
