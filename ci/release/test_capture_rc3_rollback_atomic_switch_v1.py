@@ -186,6 +186,76 @@ class AtomicSwitchCaptureTests(unittest.TestCase):
         self.assertTrue((capture_root / "session.json").is_file())
         self.assertTrue((capture_root / capture.INCOMPLETE_MARKER_NAME).is_file())
 
+    def test_terminal_verifier_replays_the_exact_exchange_and_rejects_mode_marker_or_current_drift(self) -> None:
+        with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange):
+            session = capture.capture_atomic_switch(self.request)
+        self.assertEqual(
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            ),
+            session,
+        )
+        capture_root = self.root / self.request.capture_name
+        os.chmod(capture_root / "session.json", 0o644)
+        with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "mode 0600"):
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )
+        os.chmod(capture_root / "session.json", 0o600)
+        (capture_root / capture.INCOMPLETE_MARKER_NAME).write_bytes(b"incomplete")
+        os.chmod(capture_root / capture.INCOMPLETE_MARKER_NAME, 0o600)
+        with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "incomplete marker"):
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )
+        (capture_root / capture.INCOMPLETE_MARKER_NAME).unlink()
+        replacement = self.switch / "replacement-active"
+        replacement.write_bytes(b"different")
+        os.chmod(replacement, 0o700)
+        os.replace(replacement, self.switch / capture.ACTIVE_NAME)
+        with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "current held switch"):
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )
+
+    def test_terminal_verifier_rejects_capture_child_replacement_after_its_fd_is_held(self) -> None:
+        with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange):
+            capture.capture_atomic_switch(self.request)
+        original = capture.common.read_private_canonical_json_leaf
+        swapped = False
+
+        def read_then_replace_visible_capture(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal swapped
+            document = original(*args, **kwargs)  # type: ignore[arg-type]
+            if not swapped:
+                swapped = True
+                capture_root = self.root / self.request.capture_name
+                moved = self.root / "old-atomic-capture"
+                os.rename(capture_root, moved)
+                capture_root.mkdir(mode=0o700)
+                os.chmod(capture_root, 0o700)
+            return document
+
+        with mock.patch.object(
+            capture.common,
+            "read_private_canonical_json_leaf",
+            side_effect=read_then_replace_visible_capture,
+        ):
+            with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "held atomic switch capture"):
+                capture.verify_atomic_switch_capture(
+                    self.root,
+                    self.request.switch_dir_name,
+                    self.request.capture_name,
+                )
+
     def test_cli_help_and_source_require_linux_renameat2_without_fallback(self) -> None:
         completed = subprocess.run(
             [sys.executable, "-B", "-S", str(Path(capture.__file__)), "--help"],

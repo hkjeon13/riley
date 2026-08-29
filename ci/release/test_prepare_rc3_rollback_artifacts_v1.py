@@ -239,6 +239,60 @@ class ArtifactPreparationTests(unittest.TestCase):
             with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "incomplete marker"):
                 prepare.verify_artifact_preparation(self.root)
 
+    def test_terminal_replay_rejects_private_session_mode_and_held_child_replacement(self) -> None:
+        prepare.prepare_artifacts(self.request)
+        session_path = self.root / prepare.SNAPSHOT_DIRECTORY_NAME / "session.json"
+        os.chmod(session_path, 0o644)
+        with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "mode 0600"):
+            prepare.verify_artifact_preparation(self.root)
+        os.chmod(session_path, 0o600)
+
+        original = common.verify_private_snapshot_descriptor_file
+        swapped = False
+
+        def verify_then_replace_visible_artifacts(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            original(*args, **kwargs)  # type: ignore[arg-type]
+            if not swapped:
+                swapped = True
+                artifacts = self.root / prepare.ARTIFACT_DIRECTORY_NAME
+                moved = self.root / "old-artifacts"
+                os.rename(artifacts, moved)
+                artifacts.mkdir(mode=0o700)
+                os.chmod(artifacts, 0o700)
+
+        with mock.patch.object(
+            common,
+            "verify_private_snapshot_descriptor_file",
+            side_effect=verify_then_replace_visible_artifacts,
+        ):
+            with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "held immutable artifact"):
+                prepare.verify_artifact_preparation(self.root)
+
+    def test_held_switch_replacement_is_rejected_after_runtime_replay(self) -> None:
+        prepare.prepare_artifacts(self.request)
+        original = common.verify_private_runtime_descriptor_file
+        swapped = False
+
+        def verify_then_replace_visible_switch(*args: object, **kwargs: object) -> None:
+            nonlocal swapped
+            original(*args, **kwargs)  # type: ignore[arg-type]
+            if not swapped:
+                swapped = True
+                switch = self.root / prepare.SWITCH_DIRECTORY_NAME
+                moved = self.root / "old-switch"
+                os.rename(switch, moved)
+                switch.mkdir(mode=0o700)
+                os.chmod(switch, 0o700)
+
+        with mock.patch.object(
+            common,
+            "verify_private_runtime_descriptor_file",
+            side_effect=verify_then_replace_visible_switch,
+        ):
+            with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "held rollback switch"):
+                prepare.verify_artifact_preparation(self.root)
+
     def test_nonexecutable_binary_fails_closed_with_incomplete_marker(self) -> None:
         os.chmod(self.candidate_binary, 0o600)
         with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "owner must be able to execute"):

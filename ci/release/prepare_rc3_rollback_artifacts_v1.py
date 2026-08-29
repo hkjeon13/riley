@@ -217,6 +217,19 @@ def _unlock_switch_quietly(switch_fd: int) -> None:
         pass
 
 
+def _require_held_switch_fd(root_fd: int, switch_fd: int) -> None:
+    """Bind one caller-held switch FD to the fixed root direct child."""
+
+    _common(
+        lambda: common.require_private_child_directory_fd(
+            root_fd,
+            switch_fd,
+            SWITCH_DIRECTORY_NAME,
+            "held rollback switch directory",
+        )
+    )
+
+
 def _parse_exact(value: Any, fields: set[str], label: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping) or set(value) != fields:
         actual = sorted(value) if isinstance(value, Mapping) else []
@@ -225,17 +238,10 @@ def _parse_exact(value: Any, fields: set[str], label: str) -> Mapping[str, Any]:
 
 
 def _read_canonical_leaf(directory_fd: int, name: str, label: str) -> Mapping[str, Any]:
-    raw = _common(
-        lambda: common.read_bounded_regular_relative(
+    document = _common(
+        lambda: common.read_private_canonical_json_leaf(
             directory_fd,
             name,
-            label,
-            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
-        )
-    )
-    document = _common(
-        lambda: common.parse_canonical_json(
-            raw,
             label,
             maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
         )
@@ -270,7 +276,7 @@ def _check_marker(snapshot_fd: int, *, require_terminal: bool) -> None:
 
 
 def _artifact_map(
-    root_fd: int,
+    artifacts_fd: int,
     value: Any,
     arm: str,
 ) -> dict[str, common.EvidenceDescriptor]:
@@ -286,9 +292,17 @@ def _artifact_map(
         if descriptor.path != expected[name] or descriptor.byte_length < 1:
             _fail("invalid-artifact-snapshot", f"{arm}.{name} must use its fixed nonempty snapshot path")
         maximum = MAX_IMAGE_INSPECT_BYTES if name == "image_inspect" else common.DEFAULT_MAX_ARTIFACT_BYTES
+        held_descriptor = _common(
+            lambda descriptor=descriptor, name=name: common.rebase_descriptor_to_held_leaf(
+                descriptor,
+                expected_root_relative_path=expected[name],
+                leaf_name=f"{arm}-{'image-inspect.json' if name == 'image_inspect' else name}",
+                label=f"{arm}.{name}",
+            )
+        )
         _common(
-            lambda descriptor=descriptor, name=name, maximum=maximum: common.verify_private_snapshot_descriptor_file(
-                root_fd,
+            lambda descriptor=held_descriptor, name=name, maximum=maximum: common.verify_private_snapshot_descriptor_file(
+                artifacts_fd,
                 descriptor,
                 f"{arm}.{name}",
                 maximum_bytes=maximum,
@@ -339,7 +353,6 @@ def _snapshot_identity_map(
 
 
 def _runtime_row(
-    root_fd: int,
     switch_fd: int,
     artifacts_fd: int,
     value: Any,
@@ -400,10 +413,18 @@ def _runtime_row(
         sha256=binary.sha256,
         byte_length=binary.byte_length,
     )
+    held_runtime_descriptor = _common(
+        lambda: common.rebase_descriptor_to_held_leaf(
+            runtime_descriptor,
+            expected_root_relative_path=f"{SWITCH_DIRECTORY_NAME}/{visible_entry_name}",
+            leaf_name=visible_entry_name,
+            label=f"{arm} runtime copy",
+        )
+    )
     _common(
         lambda: common.verify_private_runtime_descriptor_file(
-            root_fd,
-            runtime_descriptor,
+            switch_fd,
+            held_runtime_descriptor,
             f"{arm} runtime copy",
             maximum_bytes=common.DEFAULT_MAX_ARTIFACT_BYTES,
         )
@@ -426,28 +447,30 @@ def _runtime_row(
         _fail("runtime-copy-mismatch", f"{arm} runtime/snapshot identity changed during replay")
 
 
-def verify_artifact_preparation_fd(
+def verify_artifact_preparation_on_held_switch_fd(
     root_fd: int,
+    switch_fd: int,
     *,
     require_terminal: bool = True,
     runtime_layout: str = "pre-switch",
 ) -> dict[str, Any]:
-    """Replay the fixed snapshot/runtime mapping through a held private root FD.
+    """Replay preparation using one caller-held switch FD without relocking it.
 
     ``require_terminal=False`` exists only for the producer's pre-removal
     self-check.  ``runtime_layout`` is ``pre-switch`` by default, matching the
     session's recorded entry names.  ``post-switch`` verifies the same two
     immutable binary bytes/inodes under their exchanged names, but does not
     establish that an exchange happened; callers must independently replay
-    the atomic switch's terminal session for that claim.  The shared switch
-    lock below protects this individual replay only; it is not a substitute
-    for the future runner's one held-FD exclusive transaction across replay
-    and exchange.
+    the atomic switch's terminal session for that claim.  This entry point
+    intentionally neither opens nor locks the switch FD, so an authenticated
+    runner can hold one exclusive lock across pre-switch replay, exchange, and
+    post-switch replay.
     """
 
     if runtime_layout not in {"pre-switch", "post-switch"}:
         _fail("invalid-runtime-layout", "runtime layout must be pre-switch or post-switch")
     _common(lambda: common.require_private_evidence_directory_fd(root_fd, "artifact preparation evidence root"))
+    _require_held_switch_fd(root_fd, switch_fd)
     snapshot_fd = _common(
         lambda: common.open_private_child_directory(
             root_fd,
@@ -456,8 +479,15 @@ def verify_artifact_preparation_fd(
         )
     )
     artifacts_fd: int | None = None
-    switch_fd: int | None = None
     try:
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                root_fd,
+                snapshot_fd,
+                SNAPSHOT_DIRECTORY_NAME,
+                "held artifact preparation session directory",
+            )
+        )
         _check_marker(snapshot_fd, require_terminal=require_terminal)
         session = _read_canonical_leaf(snapshot_fd, "session.json", "artifact preparation session")
         row = _parse_exact(
@@ -485,17 +515,17 @@ def verify_artifact_preparation_fd(
                 "artifact snapshot directory",
             )
         )
-        switch_fd = _common(
-            lambda: common.open_private_child_directory(
+        _common(
+            lambda: common.require_private_child_directory_fd(
                 root_fd,
-                SWITCH_DIRECTORY_NAME,
-                "isolated rollback switch directory",
+                artifacts_fd,
+                ARTIFACT_DIRECTORY_NAME,
+                "held immutable artifact snapshot directory",
             )
         )
-        _lock_shared_switch(switch_fd)
         snapshots = _parse_exact(row["artifact_snapshots"], {"candidate", "rollback"}, "artifact snapshots")
-        candidate = _artifact_map(root_fd, snapshots["candidate"], "candidate")
-        rollback = _artifact_map(root_fd, snapshots["rollback"], "rollback")
+        candidate = _artifact_map(artifacts_fd, snapshots["candidate"], "candidate")
+        rollback = _artifact_map(artifacts_fd, snapshots["rollback"], "rollback")
         identities = _parse_exact(
             row["snapshot_identities"],
             {"candidate", "rollback"},
@@ -519,7 +549,6 @@ def verify_artifact_preparation_fd(
             "runtime materializations",
         )
         _runtime_row(
-            root_fd,
             switch_fd,
             artifacts_fd,
             runtimes["candidate"],
@@ -530,7 +559,6 @@ def verify_artifact_preparation_fd(
             snapshot_identity=candidate_identities["binary"],
         )
         _runtime_row(
-            root_fd,
             switch_fd,
             artifacts_fd,
             runtimes["rollback"],
@@ -548,14 +576,57 @@ def verify_artifact_preparation_fd(
         ):
             _fail("runtime-copy-mismatch", "candidate and rollback runtime files must be distinct same-filesystem leaves")
         _check_marker(snapshot_fd, require_terminal=require_terminal)
+        _require_held_switch_fd(root_fd, switch_fd)
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                root_fd,
+                artifacts_fd,
+                ARTIFACT_DIRECTORY_NAME,
+                "held immutable artifact snapshot directory",
+            )
+        )
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                root_fd,
+                snapshot_fd,
+                SNAPSHOT_DIRECTORY_NAME,
+                "held artifact preparation session directory",
+            )
+        )
         return dict(session)
     finally:
-        if switch_fd is not None:
-            _unlock_switch_quietly(switch_fd)
-            os.close(switch_fd)
         if artifacts_fd is not None:
             os.close(artifacts_fd)
         os.close(snapshot_fd)
+
+
+def verify_artifact_preparation_fd(
+    root_fd: int,
+    *,
+    require_terminal: bool = True,
+    runtime_layout: str = "pre-switch",
+) -> dict[str, Any]:
+    """Replay one layout while holding a short shared lock on a fresh switch FD."""
+
+    _common(lambda: common.require_private_evidence_directory_fd(root_fd, "artifact preparation evidence root"))
+    switch_fd = _common(
+        lambda: common.open_private_child_directory(
+            root_fd,
+            SWITCH_DIRECTORY_NAME,
+            "isolated rollback switch directory",
+        )
+    )
+    try:
+        _lock_shared_switch(switch_fd)
+        return verify_artifact_preparation_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            require_terminal=require_terminal,
+            runtime_layout=runtime_layout,
+        )
+    finally:
+        _unlock_switch_quietly(switch_fd)
+        os.close(switch_fd)
 
 
 def verify_artifact_preparation(

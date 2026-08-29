@@ -547,6 +547,71 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             finally:
                 os.close(root_fd)
 
+    def test_held_child_rebinding_and_private_rebased_json_replay_are_strict(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            child_fd: int | None = None
+            try:
+                child_fd = common.create_private_child_directory(root_fd, "capture", "capture directory")
+                raw = common.canonical_json_bytes({"result": "captured"})
+                common.write_create_only(child_fd, "session.json", raw, "session")
+                root_descriptor = common.descriptor_for_bytes("capture/session.json", raw, "session")
+                held_descriptor = common.rebase_descriptor_to_held_leaf(
+                    root_descriptor,
+                    expected_root_relative_path="capture/session.json",
+                    leaf_name="session.json",
+                    label="session",
+                )
+                self.assertEqual(held_descriptor.path, "session.json")
+                received, document = common.read_private_descriptor_json_leaf(
+                    child_fd,
+                    held_descriptor,
+                    "session",
+                )
+                self.assertEqual(received, raw)
+                self.assertEqual(document, {"result": "captured"})
+                self.assertEqual(
+                    common.read_private_canonical_json_leaf(child_fd, "session.json", "session"),
+                    {"result": "captured"},
+                )
+
+                for expected, leaf in (
+                    ("other/session.json", "session.json"),
+                    ("capture/session.json", "other.json"),
+                ):
+                    with self.subTest(expected=expected, leaf=leaf), self.assertRaises(common.ProvenanceV2Error) as raised:
+                        common.rebase_descriptor_to_held_leaf(
+                            root_descriptor,
+                            expected_root_relative_path=expected,
+                            leaf_name=leaf,
+                            label="session",
+                        )
+                    self.assert_reason(raised, "invalid-descriptor")
+
+                os.chmod(root / "capture" / "session.json", 0o644)
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.read_private_descriptor_json_leaf(child_fd, held_descriptor, "session")
+                self.assert_reason(raised, "unsafe-output-mode")
+                os.chmod(root / "capture" / "session.json", 0o600)
+
+                moved = root / "capture-old"
+                os.rename(root / "capture", moved)
+                (root / "capture").mkdir(mode=0o700)
+                os.chmod(root / "capture", 0o700)
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.require_private_child_directory_fd(
+                        root_fd,
+                        child_fd,
+                        "capture",
+                        "capture directory",
+                    )
+                self.assert_reason(raised, "raced-input")
+            finally:
+                if child_fd is not None:
+                    os.close(child_fd)
+                os.close(root_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

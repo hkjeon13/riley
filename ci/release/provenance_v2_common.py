@@ -604,6 +604,49 @@ def open_private_child_directory(parent_fd: int, name: str, label: str) -> int:
         raise
 
 
+def require_private_child_directory_fd(
+    parent_fd: int,
+    child_fd: int,
+    name: str,
+    label: str,
+) -> None:
+    """Bind a caller-held private child FD to one visible parent leaf.
+
+    ``open_private_child_directory`` is the path-opening counterpart to this
+    helper.  Callers which must keep a directory FD open across several
+    evidence replays use this function before and after the operation so a
+    same-UID replacement of the visible root child cannot silently mix an old
+    held directory with newly reopened path components.
+    """
+
+    _require_directory_fd(parent_fd, f"{label} parent")
+    child_name = _validate_leaf_name(name, f"{label} name")
+    try:
+        before = os.lstat(child_name, dir_fd=parent_fd)
+        metadata = _require_directory_fd(child_fd, label)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect held {label}: {error}")
+    if (
+        metadata.st_uid != os.geteuid()
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or metadata.st_nlink < 2
+        or (before.st_dev, before.st_ino, before.st_mode, before.st_nlink)
+        != (metadata.st_dev, metadata.st_ino, metadata.st_mode, metadata.st_nlink)
+    ):
+        _fail("raced-input", f"held {label} is not the declared private child")
+    try:
+        after = os.lstat(child_name, dir_fd=parent_fd)
+    except OSError as error:
+        _fail("raced-input", f"cannot re-inspect held {label}: {error}")
+    if (after.st_dev, after.st_ino, after.st_mode, after.st_nlink) != (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_nlink,
+    ):
+        _fail("raced-input", f"declared {label} changed while its FD was checked")
+
+
 def _open_relative_directory_chain(
     root_fd: int,
     components: Sequence[str],
@@ -667,15 +710,28 @@ def _read_regular_at(
     label: str,
     *,
     maximum_bytes: int,
+    expected_mode: int | None = None,
+    require_euid_owned: bool = False,
 ) -> bytes:
     _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
     _require_directory_fd(directory_fd, f"{label} parent")
     name = _validate_leaf_name(name, f"{label} name")
+
+    if expected_mode is not None and (type(expected_mode) is not int or expected_mode < 0 or expected_mode > 0o777):
+        _fail("unsafe-output-mode", f"{label} expected mode is invalid")
+
+    def require_identity(metadata: os.stat_result) -> None:
+        _require_regular_single_link(metadata, label)
+        if expected_mode is not None and stat.S_IMODE(metadata.st_mode) != expected_mode:
+            _fail("unsafe-output-mode", f"{label} must have exact mode {expected_mode:04o}")
+        if require_euid_owned and metadata.st_uid != os.geteuid():
+            _fail("unsafe-evidence-owner", f"{label} must be owned by the effective UID")
+
     try:
         before = os.lstat(name, dir_fd=directory_fd)
     except OSError as error:
         _fail("missing-input", f"cannot inspect {label}: {error}")
-    _require_regular_single_link(before, label)
+    require_identity(before)
     if before.st_size > maximum_bytes:
         _fail("input-too-large", f"{label} exceeds its byte bound")
     try:
@@ -684,12 +740,12 @@ def _read_regular_at(
         _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
     try:
         opened = os.fstat(descriptor)
-        _require_regular_single_link(opened, label)
+        require_identity(opened)
         if _stable_stat(before) != _stable_stat(opened):
             _fail("raced-input", f"{label} changed while it was opened")
         raw = _read_exact_bounded(descriptor, opened.st_size, maximum_bytes, label)
         after = os.fstat(descriptor)
-        _require_regular_single_link(after, label)
+        require_identity(after)
         if _stable_stat(opened) != _stable_stat(after):
             _fail("mutated-input", f"{label} changed while it was read")
     finally:
@@ -698,7 +754,7 @@ def _read_regular_at(
         path_after = os.lstat(name, dir_fd=directory_fd)
     except OSError as error:
         _fail("raced-input", f"cannot re-inspect {label}: {error}")
-    _require_regular_single_link(path_after, label)
+    require_identity(path_after)
     if _stable_stat(before) != _stable_stat(path_after):
         _fail("raced-input", f"{label} changed while it was read")
     return raw
@@ -909,6 +965,103 @@ def parse_descriptor(value: Any, label: str) -> EvidenceDescriptor:
     if type(byte_length) is not int or byte_length < 0:
         _fail("invalid-descriptor", f"{label}.byte_length must be a non-negative integer")
     return EvidenceDescriptor(path=path, sha256=digest, byte_length=byte_length)
+
+
+def rebase_descriptor_to_held_leaf(
+    value: EvidenceDescriptor | Mapping[str, Any],
+    *,
+    expected_root_relative_path: str,
+    leaf_name: str,
+    label: str,
+) -> EvidenceDescriptor:
+    """Bind one root-relative descriptor to a leaf below a caller-held FD.
+
+    The returned descriptor is deliberately suitable only for a helper whose
+    directory FD already pins the parent of ``leaf_name``.  Its digest and
+    length are unchanged, while its path is reduced to that leaf.  Callers
+    must retain the original descriptor for serialized evidence; rebasing is
+    a verifier-local operation that prevents reopening the parent through a
+    root path after the parent FD has been pinned.
+    """
+
+    candidate = value.as_json() if isinstance(value, EvidenceDescriptor) else value
+    parsed = parse_descriptor(candidate, label)
+    expected = validate_relative_path(
+        expected_root_relative_path,
+        f"{label} expected root-relative path",
+    )
+    leaf = _validate_leaf_name(leaf_name, f"{label} held leaf name")
+    if parsed.path != expected:
+        _fail(
+            "invalid-descriptor",
+            f"{label} path must be the fixed root-relative leaf {expected!r}",
+        )
+    if PurePosixPath(expected).name != leaf:
+        _fail(
+            "invalid-descriptor",
+            f"{label} held leaf name does not match its fixed root-relative path",
+        )
+    return EvidenceDescriptor(path=leaf, sha256=parsed.sha256, byte_length=parsed.byte_length)
+
+
+def read_private_canonical_json_leaf(
+    directory_fd: int,
+    name: str,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
+) -> dict[str, Any]:
+    """Read canonical JSON from an euid-owned mode-0600 held-directory leaf."""
+
+    raw = _read_regular_at(
+        directory_fd,
+        name,
+        label,
+        maximum_bytes=maximum_bytes,
+        expected_mode=0o600,
+        require_euid_owned=True,
+    )
+    parsed = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def read_private_descriptor_json_leaf(
+    directory_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
+) -> tuple[bytes, dict[str, Any]]:
+    """Replay one rebased private JSON descriptor through its held parent FD.
+
+    ``descriptor.path`` must be a direct-child leaf produced by
+    :func:`rebase_descriptor_to_held_leaf`.  The mode/owner, single-link,
+    digest, length, and canonical JSON checks all occur in the same
+    before/open/after/path-after replay, so a replacement or permission drift
+    cannot be hidden between a separate descriptor verification and JSON read.
+    """
+
+    candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
+    parsed = parse_descriptor(candidate, label)
+    leaf = _validate_leaf_name(parsed.path, f"{label} held descriptor path")
+    if parsed.byte_length > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+    raw = _read_regular_at(
+        directory_fd,
+        leaf,
+        label,
+        maximum_bytes=maximum_bytes,
+        expected_mode=0o600,
+        require_euid_owned=True,
+    )
+    if len(raw) != parsed.byte_length:
+        _fail("evidence-length-mismatch", f"{label} byte length differs from descriptor")
+    if hashlib.sha256(raw).hexdigest() != parsed.sha256:
+        _fail("evidence-hash-mismatch", f"{label} SHA-256 differs from descriptor")
+    document = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
+    assert isinstance(document, dict)
+    return raw, document
 
 
 def require_unique_descriptors(
