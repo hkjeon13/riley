@@ -345,22 +345,29 @@ non-stream generation exchanges. It is a pure structural replay/input-derivation
 helper, not a CLI or operational action, and it confers no terminal, rollback,
 or qualification authority.
 
-The next writer prerequisite is a separate held-FD **candidate-source join**;
-phase replay alone is deliberately insufficient. The v1 serial-scenario
-replayer must expose only its already-verified request, response-head, and
-response-body descriptors as typed `ReplayedScenario` fields, so a later writer
-never reopens guessed ledger paths. That join must replay exactly one
-stable-default source scenario, require its PID/start-tick/listener tuple to
-equal the candidate phase tuple, require the candidate phase to have no local
-generation exchange, and derive the candidate generation and audit-index inputs
-only from that source replay. It must separately replay the source-owned
-shutdown-v2 artifact/marker against the same derived target and replay the
-config bridge so its full PID/start-tick/listener/GPU tuple agrees with the
-candidate phase. The static snapshot digest is not the runtime `/v1/config`
-launch-identity SHA-256. The landed
+The landed held-FD-only private
+`replay_rc3_rollback_candidate_source_v1.py` now closes the separate
+**candidate-source join** prerequisite; phase replay alone remains deliberately
+insufficient. Its sole callable entry,
+`_replay_candidate_source_join_on_held_root_fd()`, accepts only an
+already-held private root FD and fixed names for the candidate phase, serial
+source capture, source audit/shutdown pair, and config bridge. It exposes no
+CLI or caller-selected path surface. The v1 serial-scenario replayer exposes
+only its already-verified request, response-head, and response-body descriptors
+as typed `ReplayedScenario` fields, so a later writer never reopens guessed
+ledger paths. The join replays exactly one stable-default source scenario,
+requires its PID/start-tick/listener tuple to equal the candidate phase tuple,
+rejects any candidate-local generation exchange, and derives the candidate
+generation and audit-index inputs only from that source replay. It separately
+replays the source-owned shutdown-v2 artifact/marker against the same derived
+target and requires the config bridge's full PID/start-tick/listener/GPU tuple
+to agree with the candidate phase. It performs a second complete held-FD replay
+and rejects any drift before returning typed raw inputs; it neither writes a
+bind request nor publishes terminal evidence. The static snapshot digest is not
+the runtime `/v1/config` launch-identity SHA-256. The landed
 `rc3-static-effective-config-v1.schema.json` and held-FD-only
-`replay_static_effective_config_v1_fd()` make that relationship explicit for a
-future writer: the fixed static snapshot must contain canonical
+`replay_static_effective_config_v1_fd()` make that relationship explicit inside
+the join: the fixed static snapshot must contain canonical
 `riley.rc3-static-effective-config.v1` intent, including the candidate,
 stable-default profile, every effective-config dimension, and the canonical
 effective-config digest. The helper derives candidate/profile only from the
@@ -377,6 +384,9 @@ and again before a later terminal publication. Rehashing caller-controlled
 paths alone is not enough: without that comparison, same-EUID mutation after
 the static replay could bind bytes unrelated to its completed preparation
 receipt.
+The landed candidate-source replay detects only same-invocation raw join drift;
+it is not a substitute for that publication-bound static TOCTOU closure, a
+v3/v4 manifest, a writer, or a finalizer.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures

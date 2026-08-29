@@ -393,20 +393,25 @@ leaf에서 target tuple을 재derive하여 session 값과 교차검증하고, he
 non-stream completion HTTP exchange는 bounded fixed grammar로만 replay한다. 이는
 raw structural input을 derive할 뿐 service/GPU/network/SSH/Docker/rename을 실행하거나
 terminal·rollback authority를 만들지 않는다.
-그 다음 fixed-name writer의 선행 조건은 별도 held-FD **candidate-source join**이다.
-phase replay만으로는 충분하지 않다. v1 serial-scenario replayer는 이미 검증한
-request·response-head·response-body descriptor만 typed `ReplayedScenario` field로
-노출하여 후속 writer가 추측한 ledger path를 다시 열지 않게 해야 한다. 이 join은
-정확히 하나의 stable-default source scenario를 replay하고 그 PID/start-tick/listener
-tuple이 candidate phase와 같은지 확인하며, candidate phase에는 local generation
-exchange가 없음을 요구하고 candidate generation/audit-index를 source replay에서만
-derive한다. source-owned shutdown-v2 artifact/marker도 같은 derived target에 대해
-별도 replay하고, config bridge의 PID/start-tick/listener/GPU tuple도 candidate phase와
-일치해야 한다. static snapshot digest는 runtime `/v1/config`의 launch-identity
-SHA-256과 다른 hash domain이다. landed
+그 다음 fixed-name writer의 선행 조건인 held-FD **candidate-source join**은 이제
+`replay_rc3_rollback_candidate_source_v1.py`로 landed 되었다. 유일한 callable entry
+`_replay_candidate_source_join_on_held_root_fd()`는 이미 보유한 private root FD와
+fixed candidate-phase·serial-capture·source-audit/shutdown·config-bridge 이름만 쓰며,
+CLI나 caller-selected path surface를 노출하지 않는다. phase replay만으로는 여전히
+충분하지 않다. v1 serial-scenario replayer는 이미 검증한 request·response-head·
+response-body descriptor만 typed `ReplayedScenario` field로 노출하여 후속 writer가
+추측한 ledger path를 다시 열지 않게 한다. join은 정확히 하나의 stable-default
+source scenario를 replay하고 그 PID/start-tick/listener tuple이 candidate phase와
+같은지 확인하며, candidate phase의 local generation exchange를 거부하고 candidate
+generation/audit-index를 source replay에서만 derive한다. source-owned shutdown-v2
+artifact/marker도 같은 derived target에 대해 별도 replay하고, config bridge의
+PID/start-tick/listener/GPU tuple도 candidate phase와 일치해야 한다. 전체 held-FD
+replay를 한 번 더 수행하여 drift를 거부한 뒤 typed raw input만 반환하며, bind request나
+terminal evidence는 만들지 않는다. static snapshot digest는 runtime `/v1/config`의
+launch-identity SHA-256과 다른 hash domain이다. landed
 `rc3-static-effective-config-v1.schema.json`와 held-FD-only
-`replay_static_effective_config_v1_fd()`는 future writer가 이 관계를 좁게
-cross-bind하게 한다. fixed static snapshot은 canonical
+`replay_static_effective_config_v1_fd()`는 join 안에서 이 관계를 좁게 cross-bind한다.
+fixed static snapshot은 canonical
 `riley.rc3-static-effective-config.v1` intent로 candidate, stable-default profile,
 모든 effective-config dimension과 canonical effective-config digest를 담아야 한다.
 helper는 terminal static preparation에서만 candidate/profile을 derive하고 independent
@@ -418,6 +423,9 @@ fail closed한다.
 snapshot descriptor를 v3 publication 직전과 이후 terminal publication 직전에 다시
 비교해야 한다. 단순 path rehash만으로는 static replay 뒤 같은 EUID가 바꾼 bytes가
 완료 preparation receipt와 무관하게 bind되는 것을 막지 못한다.
+landed candidate-source replay는 같은 invocation 안의 raw join drift만 닫으며, 이
+publication-bound static TOCTOU closure, v3/v4 manifest, writer 또는 finalizer를
+대체하지 않는다.
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
@@ -531,10 +539,10 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    GPU capture나 qualification을 실행하지 않는다.
 6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
    baseline rollback v3 raw verifier/schema, strict held-FD phase replay와 typed
-   source HTTP descriptor replay, versioned static-to-effective-config replay를 먼저
-   추가한다. 그 뒤 candidate-source/config/shutdown join과 static descriptor TOCTOU
-   closure를 추가한 뒤에만 fixed-name raw bind-request writer와 private normal-return
-   finalizer를 추가한다.
+   source HTTP descriptor replay, versioned static-to-effective-config replay 및 fixed
+   held-FD candidate-source/config/shutdown join을 먼저 추가한다. 그 뒤 static
+   descriptor TOCTOU closure를 fixed-name writer 내부에 넣은 뒤에만 raw bind-request
+   writer와 private normal-return finalizer를 추가한다.
 7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
    v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
