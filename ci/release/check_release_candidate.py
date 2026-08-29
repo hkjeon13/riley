@@ -22,6 +22,7 @@ import check_cuda_fault_evidence as cuda_fault_evidence
 import check_native_correctness_evidence as native_correctness_evidence
 import check_optimization_evidence as optimization_evidence
 import check_reproducible_build as reproducible_build_evidence
+import optimizer_e0_semantic_contract as optimizer_contract
 from release_common import ReleaseContractError, canonical_json_bytes
 from verify_release_bundle import verify_bundle
 
@@ -129,13 +130,6 @@ CUDA_FAULT_CHECKS = {
     "production_fault_symbols_absent",
 }
 OPTIMIZATION_LOGS = optimization_evidence.LOG_FILES
-FIXED37_PRODUCTION_BATCH_GATE = (
-    optimization_evidence.FIXED37_PRODUCTION_BATCH_GATE_ID
-)
-EXPECTED_OPTIMIZATION_TOKENS = [
-    4052, 2025, 284, 965, 6497, 288, 1492, 418,
-    260, 16438, 30, 198, 198, 504, 16438, 314,
-]
 SOAK_CONTRACT_ID = "pr16-release-soak-v1"
 SOAK_TEMPLATE_CANONICAL_SHA256 = (
     "ef8d50d07aba2e7b8c0c3f3f157bf242452ac62be9dc22080baff8023278e0f3"
@@ -798,18 +792,6 @@ def _validate_correctness(
                     )
 
 
-def _optimization_test(
-    value: Any, path: str, test_id: str, expected: dict[str, Any]
-) -> str:
-    row = _exact(value, {"id", "result", "log_sha256", *expected}, path)
-    if row["id"] != test_id or row["result"] != "passed":
-        _fail(path, "test id/result mismatch")
-    for key, expected_value in expected.items():
-        if row[key] != expected_value:
-            _fail(f"{path}.{key}", f"must be {expected_value!r}")
-    return _sha256(row["log_sha256"], f"{path}.log_sha256")
-
-
 def _performance_raw_replay(
     path: Path,
 ) -> tuple[list[tuple[str, bytes]], dict[str, Any], str]:
@@ -862,223 +844,16 @@ def _validate_optimization_correctness(
     revision: str,
     archive_sha256: str,
 ) -> str:
-    row = _exact(
-        report,
-        {
-            "schema_version", "gate_id", "recorded_at_utc", "status", "semantic_class",
-            "source", "build", "gpu", "model", "implementations", "tests",
-        },
-        path,
-    )
-    if row["schema_version"] != 1 or row["gate_id"] != OPTIMIZATION_GATE:
-        _fail(path, "optimizer equivalence schema/gate mismatch")
-    if row["status"] != "passed" or row["semantic_class"] != "E0":
-        _fail(path, "optimizer equivalence must be a passed E0 gate")
-    _string(row["recorded_at_utc"], f"{path}.recorded_at_utc")
-    source = _exact(
-        row["source"], {"git_commit", "git_dirty", "archive_sha256"}, f"{path}.source"
-    )
-    if source != {
-        "git_commit": revision,
-        "git_dirty": False,
-        "archive_sha256": archive_sha256,
-    }:
-        _fail(f"{path}.source", "does not exactly match candidate source")
-    build = _exact(
-        row["build"],
-        {
-            "container_image_sha256", "network", "cargo_locked", "cargo_offline",
-            "rustc", "cuda_toolkit", "cuda_architecture",
-        },
-        f"{path}.build",
-    )
-    profile_image_sha256 = _sha256(
-        build["container_image_sha256"], f"{path}.build.container_image_sha256"
-    )
-    expected_build = {
-        "network": "none",
-        "cargo_locked": True,
-        "cargo_offline": True,
-        "cuda_architecture": "89",
-    }
-    for key, expected in expected_build.items():
-        if build[key] != expected:
-            _fail(f"{path}.build.{key}", f"must be {expected!r}")
-    _string(build["rustc"], f"{path}.build.rustc")
-    _string(build["cuda_toolkit"], f"{path}.build.cuda_toolkit")
-    gpu = _exact(
-        row["gpu"],
-        {"model", "uuid", "pci_bus_id", "compute_capability", "vram_mib", "driver_version"},
-        f"{path}.gpu",
-    )
-    for key in ("model", "uuid", "pci_bus_id", "compute_capability", "driver_version"):
-        _string(gpu[key], f"{path}.gpu.{key}")
-    if not isinstance(gpu["vram_mib"], int) or isinstance(gpu["vram_mib"], bool) or gpu["vram_mib"] <= 0:
-        _fail(f"{path}.gpu.vram_mib", "must be a positive integer")
-    model = _exact(
-        row["model"],
-        {"model_id", "revision", "dtype", "manifest_sha256", "weights_sha256", "tokenizer_sha256"},
-        f"{path}.model",
-    )
-    expected_model = {
-        "model_id": "HuggingFaceTB/SmolLM2-135M",
-        "revision": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2",
-        "dtype": "bf16",
-        "weights_sha256": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1",
-        "tokenizer_sha256": "9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c",
-    }
-    for key, expected in expected_model.items():
-        if model[key] != expected:
-            _fail(f"{path}.model.{key}", f"must be {expected!r}")
-    _sha256(model["manifest_sha256"], f"{path}.model.manifest_sha256")
-    implementations = _exact(
-        row["implementations"],
-        {"baseline", "candidate", "residual_rmsnorm", "rollback"},
-        f"{path}.implementations",
-    )
-    expected_implementations = {
-        "baseline": "per-operation",
-        "candidate": "iteration-batch",
-        "residual_rmsnorm": "separate",
-        "rollback": "--execution-completion per-operation",
-    }
-    if implementations != expected_implementations:
-        _fail(f"{path}.implementations", "runtime flag/rollback contract mismatch")
-    tests = row["tests"]
-    if not isinstance(tests, list) or len(tests) != len(OPTIMIZATION_LOGS):
-        _fail(f"{path}.tests", "exact optimizer test inventory is required")
-    by_id: dict[str, dict[str, Any]] = {}
-    for index, raw in enumerate(tests):
-        test = _object(raw, f"{path}.tests[{index}]")
-        test_id = _string(test.get("id"), f"{path}.tests[{index}].id", ID_RE)
-        if test_id in by_id:
-            _fail(f"{path}.tests[{index}].id", "duplicate test id")
-        by_id[test_id] = test
-    if set(by_id) != set(OPTIMIZATION_LOGS):
-        _fail(f"{path}.tests", f"test id set mismatch: {sorted(by_id)}")
-    fixed37_row = by_id["fixed37-production-batch-e0"]
-    fixed37_compile_log_sha256 = _sha256(
-        fixed37_row.get("compile_log_sha256"),
-        f"{path}.tests.fixed37-production-batch-e0.compile_log_sha256",
-    )
-    fixed37_test_binary_sha256 = _sha256(
-        fixed37_row.get("test_binary_sha256"),
-        f"{path}.tests.fixed37-production-batch-e0.test_binary_sha256",
-    )
-    fixed37_worst_cosine = _finite_number(
-        fixed37_row.get("fixed_cached_growing_worst_cosine"),
-        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_cosine",
-        minimum=0.0,
-    )
-    fixed37_worst_max_abs = _finite_number(
-        fixed37_row.get("fixed_cached_growing_worst_max_abs"),
-        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_max_abs",
-        minimum=0.0,
-    )
-    fixed37_worst_mean_abs = _finite_number(
-        fixed37_row.get("fixed_cached_growing_worst_mean_abs"),
-        f"{path}.tests.fixed37-production-batch-e0.fixed_cached_growing_worst_mean_abs",
-        minimum=0.0,
-    )
-    if (
-        fixed37_worst_cosine
-        < optimization_evidence.FIXED37_CACHED_GROWING_COSINE_MIN
-        or fixed37_worst_max_abs
-        > optimization_evidence.FIXED37_CACHED_GROWING_MAX_ABS_MAX
-        or fixed37_worst_mean_abs
-        > optimization_evidence.FIXED37_CACHED_GROWING_MEAN_ABS_MAX
-    ):
-        _fail(
-            f"{path}.tests.fixed37-production-batch-e0",
-            "cached/growing metrics exceed the immutable E0 bounds",
+    """Apply the shared closed optimizer E0 report contract."""
+
+    try:
+        return optimizer_contract.validate_final_candidate_report(
+            report,
+            source_revision=revision,
+            source_archive_sha256=archive_sha256,
         )
-    _ = {
-        "cuda-compile-only": _optimization_test(
-            by_id["cuda-compile-only"], f"{path}.tests.cuda-compile-only",
-            "cuda-compile-only", {},
-        ),
-        "workspace-all-features-all-targets": _optimization_test(
-            by_id["workspace-all-features-all-targets"],
-            f"{path}.tests.workspace-all-features-all-targets",
-            "workspace-all-features-all-targets", {},
-        ),
-        "command-batch-lifecycle": _optimization_test(
-            by_id["command-batch-lifecycle"], f"{path}.tests.command-batch-lifecycle",
-            "command-batch-lifecycle",
-            {"one_shot_finish": True, "drop_restores_stream": True},
-        ),
-        "command-batch-resource-ledger": _optimization_test(
-            by_id["command-batch-resource-ledger"],
-            f"{path}.tests.command-batch-resource-ledger",
-            "command-batch-resource-ledger",
-            {
-                "validation_fail_closed": True,
-                "queued_chain_raw_byte_mismatches": 0,
-                "cuda_live_allocation_delta": 0,
-                "stream_reuse_after_finish": True,
-                "owner_close_live_allocation_count": 0,
-            },
-        ),
-        "smollm2-multi-step-greedy-exact": _optimization_test(
-            by_id["smollm2-multi-step-greedy-exact"],
-            f"{path}.tests.smollm2-multi-step-greedy-exact",
-            "smollm2-multi-step-greedy-exact",
-            {
-                "decode_steps": 16,
-                "committed_iterations": 16,
-                "raw_logit_mismatches": 0,
-                "generated_token_ids": EXPECTED_OPTIMIZATION_TOKENS,
-                "token_id_mismatches": 0,
-                "cuda_live_allocation_delta": 0,
-                "owner_close_live_allocation_count": 0,
-            },
-        ),
-        "fixed37-production-batch-e0": _optimization_test(
-            fixed37_row,
-            f"{path}.tests.fixed37-production-batch-e0",
-            "fixed37-production-batch-e0",
-            {
-                "gate_id": FIXED37_PRODUCTION_BATCH_GATE,
-                "fixture_sha256": (
-                    optimization_evidence.EXPECTED_FIXED37_FIXTURE_SHA256
-                ),
-                "generated_token_ids_sha256": (
-                    optimization_evidence.EXPECTED_FIXED37_TOKEN_IDS_SHA256
-                ),
-                "cases": 31,
-                "compared_steps": 481,
-                "exact_window": 16,
-                "fixed_profile": "fixed-contiguous-37-balanced-v1",
-                "canonical_profile": "canonical-v1",
-                "residual_rmsnorm": "separate",
-                "execution_completion": "iteration-batch",
-                "fixed_prefill_raw_logit_mismatches": 0,
-                "fixed_cached_growing_token_id_mismatches": 0,
-                "fixed_cached_growing_cosine_min": (
-                    optimization_evidence.FIXED37_CACHED_GROWING_COSINE_MIN
-                ),
-                "fixed_cached_growing_max_abs_max": (
-                    optimization_evidence.FIXED37_CACHED_GROWING_MAX_ABS_MAX
-                ),
-                "fixed_cached_growing_mean_abs_max": (
-                    optimization_evidence.FIXED37_CACHED_GROWING_MEAN_ABS_MAX
-                ),
-                "fixed_cached_growing_worst_cosine": fixed37_worst_cosine,
-                "fixed_cached_growing_worst_max_abs": fixed37_worst_max_abs,
-                "fixed_cached_growing_worst_mean_abs": fixed37_worst_mean_abs,
-                "fixed_cached_growing_threshold_violations": 0,
-                "fixed_golden_token_id_mismatches": 0,
-                "canonical_golden_token_id_mismatches": 0,
-                "cuda_live_allocation_delta": 0,
-                "owner_close_live_allocation_count": 0,
-                "compile_command_id": "compile-fixed37-production-batch-e0",
-                "execute_command_id": "fixed37-production-batch-e0",
-                "compile_log_sha256": fixed37_compile_log_sha256,
-                "test_binary_sha256": fixed37_test_binary_sha256,
-            },
-        ),
-    }
-    return profile_image_sha256
+    except optimizer_contract.OptimizerE0SemanticContractError as error:
+        _fail(path, str(error))
 
 
 def _validate_performance(

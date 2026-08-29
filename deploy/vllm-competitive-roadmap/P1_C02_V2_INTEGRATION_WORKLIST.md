@@ -854,10 +854,27 @@ runtime configuration field or a trace counter.
      the calibration executable as distinct from the release/profile binary.
      On the current Python 3.10 host the real raw replayer requires Python
      3.11+ or the reviewed `run_release_python.py` compatibility wrapper.
+   - `replay_rc3_gate_e_optimizer_e0_v1.py` now snapshots the fixed optimizer
+     raw/report/profile leaves under one pinned private root and passes only
+     those scratch paths to the legacy optimizer replayer. It rejects the
+     raw-archive/report/profile/scratch limits before full streaming and
+     rechecks every scratch identity after replay. Scratch ignores caller
+     `TMPDIR`: it is created below the fixed external `/var/tmp` parent only
+     after that parent is topology-disjoint from all four replay roots. Its mandatory
+     `--expected-optimizer-build-image-id` is an externally supplied trust
+     input, not a value copied from the self-authored report or receipt; frozen
+     source archive/revision, all three Gate descriptors, and that value are
+     cross-bound. The adapter also uses the same pure final-candidate optimizer
+     report contract (closed model/GPU/implementation/test/fixed37 fields) as
+     the legacy final checker. It establishes equality to the supplied value,
+     not independent review approval for that value. `optimizer_e0_status:
+     passed` remains component-only and leaves native E0, optimizer image-review
+     approval, Python-free, performance, soak, aggregate Gate E, semantic
+     receipt, qualification, and deployment `not-established`.
    - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
-     still add FD-native semantic components for optimizer E0, Python-free,
-     performance, and soak, then a separate aggregate Gate E replayer over
-     those exact results. The legacy path-based `check_release_candidate.py`
+     still add FD-native semantic components for Python-free, performance, and
+     soak, then a separate aggregate Gate E replayer over the two canonical-E0
+     and three remaining component results. The legacy path-based `check_release_candidate.py`
      is not that replayer and must not be consumed by a same-stack semantic
      finalizer. Only after full Gate E is fixed may a distinct same-stack v2
      semantic receipt be emitted; the outer qualification checker must accept

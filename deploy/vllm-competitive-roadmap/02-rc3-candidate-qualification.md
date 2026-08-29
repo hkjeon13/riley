@@ -351,6 +351,34 @@ raw replayer는 Python 3.11+ 또는 reviewed `run_release_python.py` compatibili
 실행할 수 있다. 이 source-level component은 actual GPU capture나 actual candidate의 Gate E
 pass를 기록하지 않는다.
 
+`replay_rc3_gate_e_optimizer_e0_v1.py`는 optimizer report/raw와 release profile binary의 세
+direct leaf를 모두 held FD에서 private `0700` scratch로 복사한 뒤 기존 optimizer raw
+replayer에 전달한다. raw archive(USTAR padding 포함) 2,151,677,952 bytes, report 8 MiB,
+profile binary 512 MiB 및 합산 scratch 한계는 full Gate E artifact stream 전에 거부된다.
+scratch root와 세 leaf의 mode/inode/SHA-256/length는 legacy replayer 전후에 다시 검증된다.
+scratch는 caller `TMPDIR`가 아니라 고정 external `/var/tmp` parent 아래에 만들며, public
+wrapper는 그 parent까지 source/input/frozen/Gate E roots와 held-FD ancestry 및 Linux mount
+coordinate 수준에서 disjoint한지 먼저 확인한다.
+frozen source revision/archive SHA, 세 inventory descriptor hash, 그리고 caller가 별도로
+제공한 `--expected-optimizer-build-image-id`가 결과에 모두 교차 결속된다. report의
+top-level/model/GPU/implementation/six-test/fixed37 contract는 legacy final checker와 같은
+stdlib-only validator로 다시 검사한다.
+
+이 external image ID는 optimizer report나 raw receipt에서 발견해선 안 되는 caller-supplied
+trust input이다. Gate E v1 inventory의 14 leaf와 frozen manifest에는 이 builder image ID가
+없으므로, 자기기재 report 값을 anchor처럼 재사용하면 안 된다. 이 adapter는 supplied value와
+report/receipt의 equality만 검증할 뿐 그 value가 독립 review에서 승인됐다는 provenance는
+증명하지 않는다. 그러한 approval을 Gate E input으로 만들려면 future versioned held-FD policy
+artifact가 필요하다. `native_candidate_executable`과 마찬가지로 optimizer의 `profile_binary`는
+release bundle/production binary와는 별도 역할이다.
+
+optimizer component output도 `bound/frozen/not-run`, `optimizer_e0_status: passed`,
+`gate-e-optimizer-e0-semantic-replay-only`만 뜻한다. native E0, Python-free, performance,
+soak, aggregate Gate E pass, semantic receipt, qualification, deployment 및 optimizer build-image
+review approval은 명시적으로 `not-established`다. 현재 원격 host에서는 actual raw replay에 Python 3.11+ 또는 reviewed
+`run_release_python.py` compatibility wrapper가 필요하며, source-level component은 actual GPU
+capture나 actual candidate의 Gate E pass를 기록하지 않는다.
+
 ## 3. 범위
 
 ### 포함
