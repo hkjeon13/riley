@@ -707,6 +707,89 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                     os.close(child_fd)
                 os.close(root_fd)
 
+    def test_held_descriptor_consumer_rehashes_an_ordinary_gate_leaf(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve(strict=True) / "gate-e"
+            root.mkdir(mode=0o700)
+            root.chmod(0o700)
+            raw = b"ordinary gate artifact" * 4096
+            artifact = root / "artifact.tar"
+            artifact.write_bytes(raw)
+            artifact.chmod(0o644)
+            descriptor = common.descriptor_for_bytes("artifact.tar", raw, "artifact")
+            root_fd = common.open_private_evidence_directory(root, "Gate E root")
+            try:
+                self.assertEqual(
+                    common.consume_descriptor_file(
+                        root_fd,
+                        descriptor,
+                        "Gate E artifact",
+                        lambda source: source.read(19),
+                        maximum_bytes=len(raw),
+                    ),
+                    raw[:19],
+                )
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_descriptor_file(
+                        root_fd,
+                        {**descriptor.as_json(), "byte_length": len(raw) - 1},
+                        "Gate E artifact",
+                        lambda source: source.read(1),
+                        maximum_bytes=len(raw),
+                    )
+                self.assert_reason(raised, "evidence-length-mismatch")
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_descriptor_file(
+                        root_fd,
+                        {**descriptor.as_json(), "path": "nested/artifact.tar"},
+                        "Gate E artifact",
+                        lambda source: source.read(1),
+                        maximum_bytes=len(raw),
+                    )
+                self.assert_reason(raised, "invalid-evidence-name")
+
+                def read_then_chmod(source: object) -> bytes:
+                    result = source.read(1)  # type: ignore[union-attr]
+                    artifact.chmod(0o600)
+                    return result
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_descriptor_file(
+                        root_fd,
+                        descriptor,
+                        "Gate E artifact",
+                        read_then_chmod,
+                        maximum_bytes=len(raw),
+                    )
+                self.assert_reason(raised, "mutated-input")
+                artifact.chmod(0o644)
+
+                replacement = root.parent / "replacement.tar"
+                replacement.write_bytes(raw)
+                replacement.chmod(0o644)
+
+                def read_then_swap(source: object) -> bytes:
+                    result = source.read(1)  # type: ignore[union-attr]
+                    os.replace(replacement, artifact)
+                    return result
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_descriptor_file(
+                        root_fd,
+                        descriptor,
+                        "Gate E artifact",
+                        read_then_swap,
+                        maximum_bytes=len(raw),
+                    )
+                self.assertIn(
+                    getattr(raised.exception, "reason_code", None),
+                    {"raced-input", "mutated-input", "nonunique-evidence-inode"},
+                )
+            finally:
+                os.close(root_fd)
+
 
 if __name__ == "__main__":
     unittest.main()
