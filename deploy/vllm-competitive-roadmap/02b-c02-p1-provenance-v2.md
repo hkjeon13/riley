@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, 그리고 same-invocation rollback terminal-provenance v4는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, 그리고 same-invocation rollback terminal-provenance v4는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -187,10 +187,13 @@ validated `effective_config.sampling_backend == "gpu-greedy"`, config bridge, C0
 observation PID/start-tick/listener/GPU tuple까지 같을 때만 v5 raw terminal manifest를
 발행한다. v5의 source audit/fallback marker는 ordinary one-link evidence이고 terminal
 manifest의 `.intent`/`.complete`만 paired hardlink이다. public v5 binder는 자체 output
-lock을 잡지만 future authenticated lifecycle compositor를 위해 private held-lock core를
-가진다. 그 core는 outer root FD를 열거나 lock/unlock하지 않고 normal return 전후를
-callback/resume API로 노출하지도 않는다. 따라서 v5 marker의 post-link `fsync` ambiguity는
-여전히 terminal authority가 아니며, core 자체도 lifecycle receipt가 아니다. v1/v4/lifecycle receipt는 계속
+lock을 잡지만 private held-lock core는 outer root FD를 열거나 lock/unlock하지 않는다.
+`compose_c02_lifecycle_v5_raw.py`는 public CLI/path reopen/callback 없이, caller-held
+root FD와 EX lock에서만 fixed `c02-lifecycle-v5-bind-request.json` → fixed
+`c02-lifecycle-v5-raw-manifest.json` normal-return chain을 만든다. request 전에 root
+path를 no-follow ancestor policy로 다시 열어 held FD의 dev/inode와 비교하고, request와
+terminal pair의 모든 fixed name을 reserve한다. post-link `fsync` ambiguity는 raw report나
+후속 receipt를 만들지 않으며, visible pair의 structural replay로 재개할 수 없다. v1/v4/lifecycle receipt는 계속
 fallback을 거부하며, v5도 `bound`/`not-run`만 반환하고 service/GPU/SSH를 조작하거나
 semantic/C02 qualification을 판정하지 않는다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
 → source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host

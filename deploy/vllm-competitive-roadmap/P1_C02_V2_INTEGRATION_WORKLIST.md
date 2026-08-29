@@ -2,9 +2,9 @@
 
 Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
 sampling fallback event/marker, raw source-pair capture v2, the fresh v5
-lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, and
-the separate terminal fallback binder v5 with its private held-lock core are
-implemented with CPU/static hostile-path
+lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
+separate terminal fallback binder v5 with its private held-lock core, and the
+fixed-name private raw compositor are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -96,10 +96,13 @@ request. `write_c02_lifecycle_bind_request_v5.py` then creates only the fixed
 `riley.soak-v2-bind-request.v5` path-only leaf after held-FD replay of the
 same bridge, capture-v2, effective `gpu-greedy` endpoint, and fallback
 observation. It cannot bind a manifest, publish a terminal marker, or issue a
-receipt. The v5 binder's private held-lock core likewise has no public resume
-or callback surface: it is solely a future authenticated runner's lexical
-normal-return building block, so it cannot unlock an outer lifecycle root lock.
-Both remain `qualification_status: not-run`; lifecycle-v5 receipt, semantic
+receipt. `compose_c02_lifecycle_v5_raw.py` is the only fixed-name private raw
+chain: an outer authenticated runner must retain its root FD and EX lock while
+it securely reopens and inode-matches the path, reserves the request and every
+terminal sibling, then calls the private writer and binder in normal-return
+order. It has no CLI, reopen/resume, or callback surface; final-marker fsync
+ambiguity emits no raw return or receipt. Its result remains
+`qualification_status: not-run`; lifecycle-v5 receipt, semantic
 workload replay, Gate E, and candidate promotion remain later work.
 
 ### Landed initial lifecycle supervisor and receipt
