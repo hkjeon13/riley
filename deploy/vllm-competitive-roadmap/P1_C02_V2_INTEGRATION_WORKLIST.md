@@ -324,6 +324,20 @@ RC2-compatible `capture_rc3_rollback_phase_v1.py` companion appends a new raw
 phase directory to that same prepopulated root and never creates a root or
 claims source audit for RC2. Its candidate no-generation mode deliberately
 leaves source-owned generation/audit capture to the existing scenario producer.
+Before those dynamic phase paths exist, the separate
+`prepare_rc3_rollback_evidence_v1.py` static preparer can admit an already
+complete private reconstructed RC2 root without importing or copying that
+closure. It replays the full baseline through one held root FD, requires the
+reviewed `riley-0.1.0-rc2` tag/target and only its immediate same-version RC
+successor, and snapshots three distinct external opaque inputs (freeze,
+base-release-candidate report, and stable-default configuration) into fixed
+mode-0600 single-link leaves below `rollback-v3-evidence-inputs/`. Its separate
+mode-0700 preparation child stores a closed `captured/not-run`,
+`raw-static-preparation-only` session plus the same session-bound two-link
+completion pair. It neither creates a baseline root, parses the opaque inputs
+as an actual runtime observation, starts a service, captures a GPU, builds a
+v3 bind request, nor performs a rollback. A visible terminal pair remains raw
+static evidence only and does not authorize an operational runner.
 The fixed-layout `prepare_rc3_rollback_artifacts_v1.py` companion is also
 landed.  It accepts six absolute host artifact inputs, opens every source
 parent through no-follow FDs, and streams each trusted nonempty single-link

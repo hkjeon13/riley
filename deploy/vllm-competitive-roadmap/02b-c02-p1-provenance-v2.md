@@ -362,6 +362,19 @@ non-stream completion, PID/TCP/FD-socket/GPU raw leaves를 같은 prepopulated
 private baseline root의 새 capture child에만 append한다. candidate source-audit
 generation은 여전히 별도의 source-owned scenario producer가 담당하고, RC2에는
 audit을 합성하지 않는다.
+dynamic phase/source-audit path가 정해지기 전에는
+`prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
+RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
+`riley-0.1.0-rc2` tag/target만 admit한다. 이 helper는 same-semver immediate RC
+candidate ID와 서로 다른 세 absolute opaque input(freeze, base release candidate
+report, stable-default configuration)만 받고, external host path를 session에
+기록하지 않은 채 fixed `rollback-v3-evidence-inputs/`의 immutable 0600 leaves와
+`rollback-v3-evidence-preparation/`의 closed `captured/not-run`,
+`raw-static-preparation-only` session/paired completion receipt를 create-only로
+남긴다. baseline을 import·copy·생성하지 않고 opaque input을 actual config/freeze
+evidence로 해석하지도 않으며 service/GPU/network/rename/bind request/qualification을
+조작하지 않는다. 따라서 완료 pair는 raw static preparation일 뿐 authenticated
+runner나 rollback authority가 아니다.
 `capture_rc3_rollback_atomic_switch_v1.py`는 같은 root 안 runner-owned
 isolated switch child의 이미 staged된 private runtime files에만 Linux
 `renameat2(RENAME_EXCHANGE)`를 적용하고, active 전후·rollback/candidate staged

@@ -27,6 +27,7 @@ class BaselineFixture:
         self,
         root: Path,
         *,
+        target_commit_sha1: str = "b" * 40,
         target_output_commit_sha1: str | None = None,
         recipe_bundle_mismatch: bool = False,
         image_b_mismatch: bool = False,
@@ -42,7 +43,7 @@ class BaselineFixture:
         self.oci_archive_b_mismatch = oci_archive_b_mismatch
         self.baseline_id = "reconstructed-riley-0.1.0-rc2"
         self.tag_object_sha1 = "a" * 40
-        self.target_commit_sha1 = "b" * 40
+        self.target_commit_sha1 = target_commit_sha1
         self.tag_name = "riley-0.1.0-rc2"
         self.tag_ref = f"refs/tags/{self.tag_name}"
         self.tag_object = self.write_json(

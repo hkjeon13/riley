@@ -187,7 +187,12 @@ mechanism과 adversarial test를 닫아야 한다.
   없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
   실제 deployment rollback을 실행하거나 주장하지 않는다.
 - fixed artifact preparation raw producer, isolated atomic-switch raw producer, held-FD artifact-exchange transaction, 그리고
-  same-invocation rollback terminal-provenance v4는 landed했다. preparation은 여섯 absolute host artifact를 no-follow streaming으로
+  same-invocation rollback terminal-provenance v4는 landed했다. pre-existing complete
+  reconstructed RC2 root를 new root에 import하지 않고 held-FD replay로 admit한 뒤,
+  future v3 binding의 freeze/base-report/stable-default configuration 세 opaque external
+  input을 fixed private snapshot으로 고정하는 `prepare_rc3_rollback_evidence_v1.py`도
+  landed했다. 이것은 `captured/not-run`, `raw-static-preparation-only` raw evidence일
+  뿐 actual freeze/config observation/rollback authority가 아니다. artifact preparation은 여섯 absolute host artifact를 no-follow streaming으로
   immutable 0600 `rollback-v3-artifacts/` leaf에 snapshot하고, candidate/rollback
   binary snapshot에서만 distinct 0700 `rollback-v3-switch/active`와
   `rollback-staged`를 materialize한다. fixed create-only session은 두 runtime inode를
