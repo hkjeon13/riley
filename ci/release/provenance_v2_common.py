@@ -784,11 +784,11 @@ def _require_private_paired_hardlinks(
     intent: os.stat_result,
     label: str,
 ) -> None:
-    """Require the one explicit two-name marker exception used by v4.
+    """Require the explicit two-name terminal-marker exception.
 
-    General evidence leaves stay single-linked.  A v4 completion marker uses a
+    General evidence leaves stay single-linked. A completion marker uses a
     previously durable nonterminal intent leaf and a create-only hard link so
-    a file-sync failure cannot expose a final marker.  Both names must remain
+    a file-sync failure cannot expose a final marker. Both names must remain
     direct siblings of the same private root and resolve to exactly one
     mode-0600 regular inode with exactly two links.
     """
@@ -808,6 +808,11 @@ def _require_private_paired_hardlinks(
             _fail(
                 "unsafe-output-mode",
                 f"{label} {role} must be mode 0600",
+            )
+        if metadata.st_uid != os.geteuid():
+            _fail(
+                "unsafe-evidence-owner",
+                f"{label} {role} must be owned by the effective UID",
             )
     if (primary.st_dev, primary.st_ino) != (intent.st_dev, intent.st_ino):
         _fail(
@@ -841,7 +846,7 @@ def read_bounded_paired_hardlink(
     *,
     maximum_bytes: int = DEFAULT_MAX_JSON_BYTES,
 ) -> bytes:
-    """Read one v4-style final/intent hard-link pair without weakening reads.
+    """Read one terminal final/intent hard-link pair without weakening reads.
 
     This is deliberately not a replacement for ``read_bounded_regular_*``:
     ordinary evidence continues to require exactly one link.  The two supplied
@@ -1931,7 +1936,10 @@ def publish_create_only_hardlink(
     On success both source and destination remain an explicit two-link pair;
     callers that use this protocol must verify that pair with
     :func:`read_bounded_paired_hardlink` rather than weakening ordinary
-    single-link evidence reads.
+    single-link evidence reads. If an error occurs after ``os.link`` succeeds,
+    the visible pair is an ``ambiguous-terminal-publication``: callers must
+    stop their producer-success branch and must not clean up or retry it as if
+    they could prove whether the directory sync had committed.
     """
 
     _require_directory_fd(directory_fd, f"{label} parent")
@@ -1948,6 +1956,7 @@ def publish_create_only_hardlink(
     _require_regular_single_link(source_before, f"{label} source")
     if stat.S_IMODE(source_before.st_mode) != 0o600:
         _fail("unsafe-output-mode", f"{label} source must be mode 0600")
+    linked = False
     try:
         os.link(
             source_name,
@@ -1962,32 +1971,45 @@ def publish_create_only_hardlink(
         _fail("missing-hardlink-safety-support", f"host cannot safely publish {label}: {error}")
     except OSError as error:
         _fail("link-publication-failure", f"cannot publish new {label}: {error}")
-    primary_after, intent_after = _paired_hardlink_stats(
-        directory_fd,
-        destination_name,
-        source_name,
-        label,
-    )
-    if (
-        (primary_after.st_dev, primary_after.st_ino, primary_after.st_mode, primary_after.st_size, primary_after.st_mtime_ns)
-        != (
-            source_before.st_dev,
-            source_before.st_ino,
-            source_before.st_mode,
-            source_before.st_size,
-            source_before.st_mtime_ns,
+    linked = True
+    try:
+        primary_after, intent_after = _paired_hardlink_stats(
+            directory_fd,
+            destination_name,
+            source_name,
+            label,
         )
-        or (intent_after.st_dev, intent_after.st_ino, intent_after.st_mode, intent_after.st_size, intent_after.st_mtime_ns)
-        != (
-            source_before.st_dev,
-            source_before.st_ino,
-            source_before.st_mode,
-            source_before.st_size,
-            source_before.st_mtime_ns,
-        )
-    ):
-        _fail("raced-output", f"{label} source changed while it was published")
-    _fsync_checked(directory_fd, f"{label} parent directory")
+        if (
+            (primary_after.st_dev, primary_after.st_ino, primary_after.st_mode, primary_after.st_size, primary_after.st_mtime_ns)
+            != (
+                source_before.st_dev,
+                source_before.st_ino,
+                source_before.st_mode,
+                source_before.st_size,
+                source_before.st_mtime_ns,
+            )
+            or (intent_after.st_dev, intent_after.st_ino, intent_after.st_mode, intent_after.st_size, intent_after.st_mtime_ns)
+            != (
+                source_before.st_dev,
+                source_before.st_ino,
+                source_before.st_mode,
+                source_before.st_size,
+                source_before.st_mtime_ns,
+            )
+        ):
+            _fail("raced-output", f"{label} source changed while it was published")
+        _fsync_checked(directory_fd, f"{label} parent directory")
+    except ProvenanceV2Error as error:
+        # A final hard link may already be visible when validation or the
+        # post-link directory sync fails. No later filesystem-only verifier
+        # can distinguish a successful sync from that ambiguous outcome, so
+        # callers must never continue their producer-success branch from it.
+        if linked:
+            _fail(
+                "ambiguous-terminal-publication",
+                f"{label} final marker may be visible after a failed durability check: {error}",
+            )
+        raise
 
 
 def create_incomplete_marker(

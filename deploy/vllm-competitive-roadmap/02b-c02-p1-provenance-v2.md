@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, isolated atomic-switch producer, 그리고 immutable artifact snapshot→separate runtime-copy preparation은 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, 그리고 held-FD artifact-exchange transaction은 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -337,23 +337,38 @@ create-only `rollback-v3-artifact-snapshot/`, `rollback-v3-artifacts/`,
 streaming으로 immutable 0600 snapshot에 복제한 뒤 candidate/rollback binary
 snapshot에서만 distinct 0700 `active`/`rollback-staged` runtime copy를 만든다.
 terminal session verifier는 snapshot/runtime hash·length·inode mapping을
-재생하지만 runtime path를 artifact descriptor로 승격하지 않는다. source
+재생하지만 runtime path를 artifact descriptor로 승격하지 않는다. 세 raw producer의
+terminal state는 `capture-incomplete.json` 부재만으로 결정되지 않는다. 각 session의
+SHA-256/byte length에 bind된 mode-0600 two-link
+`capture-complete.intent`/`capture-complete.json` receipt pair를 held-FD reader가
+함께 검증해야 하며, unlink/fsync/복구 중단으로 pair가 없거나 반쪽만 남으면 fail closed한다. source
 checkout/deployment/GPU/network/Docker/rename는 건드리지 않는다.
 verifier의 `pre-switch`/`post-switch` layout은 각각 그 순간의 bytes/inode mapping만
-재생한다. `post-switch`는 exchange 발생을 주장하지 않으며, helper가 잡는 shared
-switch lock도 replay 동안만 유지된다. 현재 atomic helper는 별도 FD를 열어 exclusive
-lock을 잡으므로 둘은 아직 하나의 authenticated transaction이 아니다. future runner는
-pre-switch replay → same held-FD exclusive transaction → exchange/atomic-session replay를
-닫힌 한 transaction으로 추가해야 한다.
+재생한다. `post-switch`는 단독으로 exchange 발생을 주장하지 않는다. 새
+`capture_rc3_rollback_atomic_transaction_v1.py`는 one exclusive root/switch FD 아래
+pre-switch replay → isolated `renameat2` capture → terminal atomic replay → post-switch
+replay를 하나의 raw subtransaction으로 묶는다. create-only transaction session은
+preparation/atomic terminal session descriptor를 bind하고, 두 runtime의 pre/post
+SHA-256·inode·mode·link·size·time layout과 atomic pre/post stat 방향을 직접 join한다.
+atomic helper는 exchange 직전과 직후 private staged bytes를 hash해 same-inode/same-size
+in-place mutation도 reject한다. held child FD와 0600/euid session JSON, incomplete-marker
+부재 및 completion receipt pair를 terminal replayer가 다시 확인하며 결과는 계속
+`captured/not-run`이다.
 
-아직 이 셋을 하나의 authenticated host transaction으로 연결하는 v3 remote
-runner는 없다. 그 runner는 complete reconstructed-baseline closure 위에서 terminal
-preparation/phase/switch session과 각각의 `capture-incomplete.json` 부재를 별도로
-replay한 뒤에만 raw path를 bind request에 넣어야 한다. v3 manifest 자체는 이
-session/marker closure를 bind하지 않으므로 이는 runner-only transaction rule이며,
-independent semantic/terminal closure는 후속 version에서 추가한다. 따라서
-actual GPU rollback drill, candidate freeze, rollback success verdict를 실행하거나
-주장하지 않는다.
+completion hardlink의 post-link parent-directory `fsync`가 오류를 반환하면 helper는
+`ambiguous-terminal-publication`으로 실패하고 captured return을 내지 않는다. pair가 disk에
+남아 fresh raw verifier로 structural replay될 수 있어도, 그것은 failed invocation의
+producer-success/terminal authority가 아니다. future authenticated binder/runner는 같은
+invocation·held lock에서 normal return한 branch만 소비해야 하며, ambiguous error 뒤에
+filesystem을 다시 읽어 bind나 operational action을 재개하면 안 된다.
+
+이것은 artifact-exchange subtransaction만 닫는다. complete reconstructed-baseline,
+candidate/rollback phase, source audit/shutdown/config bridge를 연결하는 authenticated
+host runner는 아직 없고 v3 binder도 이 transaction session을 소비하지 않는다. future
+runner는 해당 terminal session, 각각의 `capture-incomplete.json` 부재, 그리고
+session-bound completion receipt pair를 replay한 뒤에만 raw path를 bind request에 넣어야 한다.
+따라서 actual GPU rollback drill, candidate
+freeze, deployment rollback success verdict를 실행하거나 주장하지 않는다.
 
 새 binder가 input replay → create-only manifest publication → self-verification을
 중간 root 재open 없이 수행할 수 있도록, existing v2 raw verifier also exposes a

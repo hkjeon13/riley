@@ -22,6 +22,7 @@ import argparse
 import ctypes
 import errno
 import fcntl
+import hashlib
 import os
 import re
 import stat
@@ -35,11 +36,14 @@ import provenance_v2_common as common
 
 sys.dont_write_bytecode = True
 
-SWITCH_VERSION = "riley.rc3-rollback-atomic-switch.v1"
-STAT_VERSION = "riley.rc3-rollback-switch-stat.v1"
-SESSION_VERSION = "riley.rc3-rollback-atomic-switch-capture.v1"
-INCOMPLETE_MARKER_VERSION = "riley.rc3-rollback-atomic-switch-incomplete.v1"
+SWITCH_VERSION = "riley.rc3-rollback-atomic-switch.v2"
+STAT_VERSION = "riley.rc3-rollback-switch-stat.v2"
+SESSION_VERSION = "riley.rc3-rollback-atomic-switch-capture.v2"
+INCOMPLETE_MARKER_VERSION = "riley.rc3-rollback-atomic-switch-incomplete.v2"
 INCOMPLETE_MARKER_NAME = "capture-incomplete.json"
+COMPLETE_MARKER_VERSION = "riley.rc3-rollback-atomic-switch-complete.v2"
+COMPLETE_INTENT_NAME = "capture-complete.intent"
+COMPLETE_MARKER_NAME = "capture-complete.json"
 ACTIVE_NAME = "active"
 ROLLBACK_STAGED_NAME = "rollback-staged"
 RENAME_EXCHANGE = 0x2
@@ -53,6 +57,7 @@ STAT_FIELDS = frozenset(
         "mode",
         "nlink",
         "byte_length",
+        "sha256",
         "mtime_ns",
         "ctime_ns",
     }
@@ -98,8 +103,12 @@ class AtomicSwitchCaptureError(ValueError):
     """The isolated atomic switch cannot safely publish raw evidence."""
 
 
-def _fail(message: str) -> NoReturn:
-    raise AtomicSwitchCaptureError(message)
+def _fail(message: str, *, code: str = "unsafe-evidence") -> NoReturn:
+    if code == "ambiguous-terminal-publication":
+        message = f"{code}: {message}"
+    error = AtomicSwitchCaptureError(message)
+    error.reason_code = code  # type: ignore[attr-defined]
+    raise error
 
 
 T = TypeVar("T")
@@ -109,7 +118,7 @@ def _common(call: Callable[[], T]) -> T:
     try:
         return call()
     except common.ProvenanceV2Error as error:
-        _fail(str(error))
+        _fail(str(error), code=getattr(error, "reason_code", "unsafe-evidence"))
 
 
 def _leaf(value: str, label: str) -> str:
@@ -268,17 +277,19 @@ class StagedIdentity:
     mode: int
     nlink: int
     byte_length: int
+    sha256: str
     mtime_ns: int
     ctime_ns: int
 
     @classmethod
-    def from_stat(cls, metadata: os.stat_result) -> "StagedIdentity":
+    def from_stat(cls, metadata: os.stat_result, sha256: str) -> "StagedIdentity":
         return cls(
             device=metadata.st_dev,
             inode=metadata.st_ino,
             mode=stat.S_IMODE(metadata.st_mode),
             nlink=metadata.st_nlink,
             byte_length=metadata.st_size,
+            sha256=sha256,
             mtime_ns=metadata.st_mtime_ns,
             ctime_ns=metadata.st_ctime_ns,
         )
@@ -292,6 +303,7 @@ class StagedIdentity:
             "mode": self.mode,
             "nlink": self.nlink,
             "byte_length": self.byte_length,
+            "sha256": self.sha256,
             "mtime_ns": self.mtime_ns,
             "ctime_ns": self.ctime_ns,
         }
@@ -309,6 +321,7 @@ def _read_staged_identity(directory_fd: int, name: str, label: str) -> StagedIde
         or before.st_uid != os.geteuid()
         or stat.S_IMODE(before.st_mode) != 0o700
         or before.st_size < 1
+        or before.st_size > common.DEFAULT_MAX_ARTIFACT_BYTES
     ):
         _fail(f"{label} must be a nonempty effective-UID-owned single-link mode 0700 regular file")
     try:
@@ -323,11 +336,56 @@ def _read_staged_identity(directory_fd: int, name: str, label: str) -> StagedIde
             or opened.st_uid != os.geteuid()
             or stat.S_IMODE(opened.st_mode) != 0o700
             or opened.st_size < 1
+            or opened.st_size > common.DEFAULT_MAX_ARTIFACT_BYTES
             or (before.st_dev, before.st_ino, before.st_mode, before.st_nlink, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
             != (opened.st_dev, opened.st_ino, opened.st_mode, opened.st_nlink, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
         ):
             _fail(f"{label} changed while it was opened")
-        result = StagedIdentity.from_stat(opened)
+        digest = hashlib.sha256()
+        remaining = opened.st_size
+        while remaining:
+            try:
+                chunk = os.read(descriptor, min(common.DEFAULT_READ_CHUNK_BYTES, remaining))
+            except OSError as error:
+                _fail(f"cannot read {label}: {error}")
+            if not chunk:
+                _fail(f"{label} changed while it was hashed")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        try:
+            if os.read(descriptor, 1):
+                _fail(f"{label} grew while it was hashed")
+        except OSError as error:
+            _fail(f"cannot re-read {label}: {error}")
+        opened_after = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened_after.st_mode)
+            or opened_after.st_nlink != 1
+            or opened_after.st_uid != os.geteuid()
+            or stat.S_IMODE(opened_after.st_mode) != 0o700
+            or opened_after.st_size < 1
+            or opened_after.st_size > common.DEFAULT_MAX_ARTIFACT_BYTES
+            or (
+                opened.st_dev,
+                opened.st_ino,
+                opened.st_mode,
+                opened.st_nlink,
+                opened.st_size,
+                opened.st_mtime_ns,
+                opened.st_ctime_ns,
+            )
+            != (
+                opened_after.st_dev,
+                opened_after.st_ino,
+                opened_after.st_mode,
+                opened_after.st_nlink,
+                opened_after.st_size,
+                opened_after.st_mtime_ns,
+                opened_after.st_ctime_ns,
+            )
+        ):
+            _fail(f"{label} changed while it was hashed")
+        result = StagedIdentity.from_stat(opened_after, digest.hexdigest())
     finally:
         _close_quietly(descriptor)
     try:
@@ -379,7 +437,35 @@ def _rename_exchange(directory_fd: int) -> None:
         _fail(f"renameat2(RENAME_EXCHANGE) failed without fallback: {error}")
 
 
-def _remove_marker(capture_fd: int, marker: dict[str, Any]) -> None:
+def _restore_marker(capture_fd: int, marker: Mapping[str, Any]) -> None:
+    try:
+        _common(
+            lambda: common.write_create_only_json(
+                capture_fd,
+                INCOMPLETE_MARKER_NAME,
+                dict(marker),
+                "restored atomic switch incomplete marker",
+            )
+        )
+    except AtomicSwitchCaptureError:
+        pass
+
+
+def _publish_completion_marker(
+    capture_fd: int,
+    marker: Mapping[str, Any],
+    session: common.CreatedEvidence,
+) -> None:
+    """Publish an exact paired terminal receipt after durable marker removal.
+
+    Missing ``capture-incomplete.json`` is intentionally not terminal proof.
+    An interrupted removal, failed directory sync, or failed restoration leaves
+    no completion pair, and terminal replay therefore rejects it. A post-link
+    directory-sync failure is ``ambiguous-terminal-publication``: a visible
+    pair remains structural raw evidence only and cannot continue this
+    producer's success branch.
+    """
+
     try:
         os.unlink(INCOMPLETE_MARKER_NAME, dir_fd=capture_fd)
     except OSError as error:
@@ -387,15 +473,31 @@ def _remove_marker(capture_fd: int, marker: dict[str, Any]) -> None:
     try:
         _fsync(capture_fd, "capture directory after incomplete marker removal")
     except AtomicSwitchCaptureError:
-        try:
-            _common(
-                lambda: common.write_create_only_json(
-                    capture_fd, INCOMPLETE_MARKER_NAME, marker, "restored incomplete marker"
-                )
-            )
-        except AtomicSwitchCaptureError:
-            pass
+        _restore_marker(capture_fd, marker)
         raise
+    completion = {
+        "schema_version": COMPLETE_MARKER_VERSION,
+        "capture_status": "captured",
+        "qualification_status": "not-run",
+        "session_sha256": session.sha256,
+        "session_byte_length": session.byte_length,
+    }
+    _common(
+        lambda: common.write_create_only_json(
+            capture_fd,
+            COMPLETE_INTENT_NAME,
+            completion,
+            "atomic switch completion intent",
+        )
+    )
+    _common(
+        lambda: common.publish_create_only_hardlink(
+            capture_fd,
+            COMPLETE_INTENT_NAME,
+            COMPLETE_MARKER_NAME,
+            "atomic switch completion marker",
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -403,6 +505,17 @@ class SwitchRequest:
     evidence_root: Path
     switch_dir_name: str
     capture_name: str
+
+
+@dataclass(frozen=True)
+class AtomicSwitchReplay:
+    """Verified raw inode identities retained for an outer held-FD join."""
+
+    session: Mapping[str, Any]
+    pre_active: StagedIdentity
+    pre_rollback_staged: StagedIdentity
+    post_active: StagedIdentity
+    post_candidate_staged: StagedIdentity
 
 
 def capture_atomic_switch_on_held_switch_fd(
@@ -416,7 +529,10 @@ def capture_atomic_switch_on_held_switch_fd(
     This FD-native entry point owns only its new capture-child FD.  It does
     not reopen or lock ``switch_fd``: a runner may therefore retain one
     exclusive switch lock across preparation replay, this exchange, and its
-    post-switch replay.  Callers must hold that lock before entry.
+    post-switch replay. Callers must hold that lock before entry. A successful
+    return is the only producer-success signal; a post-link
+    ``ambiguous-terminal-publication`` leaves inspectable raw evidence but
+    must not be retried or treated as a completed invocation.
     """
 
     switch_name = _leaf(switch_name, "held switch directory name")
@@ -446,6 +562,27 @@ def capture_atomic_switch_on_held_switch_fd(
             _fail("active and rollback staged artifacts must be on one filesystem")
         if pre_active.inode == pre_rollback.inode:
             _fail("active and rollback staged artifacts must be distinct single-link files")
+        # Hash both runtime inodes immediately before the exchange.  Writing
+        # evidence is intentionally deferred until after the syscall so no
+        # create-only I/O widens this pre-hash → exchange handoff.
+        _rename_exchange(switch_fd)
+        _fsync(switch_fd, "isolated rollback switch directory after exchange")
+        post_active = _read_staged_identity(switch_fd, ACTIVE_NAME, "post-switch rollback active artifact")
+        candidate_staged = _read_staged_identity(
+            switch_fd, ROLLBACK_STAGED_NAME, "post-switch candidate staged artifact"
+        )
+        if (
+            post_active.device != pre_rollback.device
+            or post_active.inode != pre_rollback.inode
+            or post_active.sha256 != pre_rollback.sha256
+        ):
+            _fail("renameat2 exchange did not place rollback staged inode at active")
+        if (
+            candidate_staged.device != pre_active.device
+            or candidate_staged.inode != pre_active.inode
+            or candidate_staged.sha256 != pre_active.sha256
+        ):
+            _fail("renameat2 exchange did not place candidate active inode at rollback staged name")
         pre_active_created = _common(
             lambda: common.write_create_only_json(
                 capture_fd,
@@ -462,16 +599,6 @@ def capture_atomic_switch_on_held_switch_fd(
                 "pre-switch rollback staged stat",
             )
         )
-        _rename_exchange(switch_fd)
-        _fsync(switch_fd, "isolated rollback switch directory after exchange")
-        post_active = _read_staged_identity(switch_fd, ACTIVE_NAME, "post-switch rollback active artifact")
-        candidate_staged = _read_staged_identity(
-            switch_fd, ROLLBACK_STAGED_NAME, "post-switch candidate staged artifact"
-        )
-        if post_active.device != pre_rollback.device or post_active.inode != pre_rollback.inode:
-            _fail("renameat2 exchange did not place rollback staged inode at active")
-        if candidate_staged.device != pre_active.device or candidate_staged.inode != pre_active.inode:
-            _fail("renameat2 exchange did not place candidate active inode at rollback staged name")
         post_active_created = _common(
             lambda: common.write_create_only_json(
                 capture_fd,
@@ -524,18 +651,28 @@ def capture_atomic_switch_on_held_switch_fd(
             "switch_directory": switch_name,
             "atomic_switch": atomic_switch,
         }
-        _common(lambda: common.write_create_only_json(capture_fd, "session.json", session, "atomic switch session"))
-        _require_held_switch_fd(root_fd, switch_fd, switch_name)
-        _common(
-            lambda: common.require_private_child_directory_fd(
-                root_fd,
+        session_created = _common(
+            lambda: common.write_create_only_json(
                 capture_fd,
-                capture_name,
-                "held atomic switch capture directory",
+                "session.json",
+                session,
+                "atomic switch session",
             )
         )
-        _remove_marker(capture_fd, marker)
-        return session
+        replay_atomic_switch_capture_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            switch_name,
+            capture_name,
+            require_terminal=False,
+        )
+        _publish_completion_marker(capture_fd, marker, session_created)
+        return verify_atomic_switch_capture_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            switch_name,
+            capture_name,
+        )
     finally:
         _close_quietly(capture_fd)
 
@@ -587,22 +724,95 @@ def _parse_stat_document(value: Any, label: str, entry_name: str) -> StagedIdent
         mode=_nonnegative_int(row["mode"], f"{label}.mode"),
         nlink=_nonnegative_int(row["nlink"], f"{label}.nlink"),
         byte_length=_nonnegative_int(row["byte_length"], f"{label}.byte_length"),
+        sha256=row["sha256"],
         mtime_ns=_nonnegative_int(row["mtime_ns"], f"{label}.mtime_ns"),
         ctime_ns=_nonnegative_int(row["ctime_ns"], f"{label}.ctime_ns"),
     )
-    if identity.mode != 0o700 or identity.nlink != 1 or identity.byte_length < 1:
+    if (
+        identity.mode != 0o700
+        or identity.nlink != 1
+        or identity.byte_length < 1
+        or type(identity.sha256) is not str
+        or len(identity.sha256) != 64
+        or any(character not in "0123456789abcdef" for character in identity.sha256)
+    ):
         _fail(f"{label} is not a nonempty single-link mode-0700 staged artifact")
     return identity
 
 
-def _marker_absent(capture_fd: int) -> None:
+def _check_incomplete_marker(capture_fd: int, *, require_terminal: bool) -> None:
     try:
         os.lstat(INCOMPLETE_MARKER_NAME, dir_fd=capture_fd)
     except FileNotFoundError:
-        return
+        if require_terminal:
+            return
+        _fail("preterminal atomic switch capture must retain its incomplete marker")
     except OSError as error:
         _fail(f"cannot inspect atomic switch incomplete marker: {error}")
-    _fail("atomic switch incomplete marker is still present")
+    if require_terminal:
+        _fail("atomic switch incomplete marker is still present")
+    document = _common(
+        lambda: common.read_private_canonical_json_leaf(
+            capture_fd,
+            INCOMPLETE_MARKER_NAME,
+            "atomic switch incomplete marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    if set(document) != {"schema_version", "capture_status", "qualification_status"} or (
+        document["schema_version"] != INCOMPLETE_MARKER_VERSION
+        or document["capture_status"] != "incomplete"
+        or document["qualification_status"] != "not-run"
+    ):
+        _fail("atomic switch incomplete marker is not the exact v2 marker")
+
+
+def _check_completion_marker(
+    capture_fd: int,
+    session: common.EvidenceDescriptor,
+    *,
+    require_terminal: bool,
+) -> None:
+    if not require_terminal:
+        for name in (COMPLETE_INTENT_NAME, COMPLETE_MARKER_NAME):
+            try:
+                os.lstat(name, dir_fd=capture_fd)
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                _fail(f"cannot inspect atomic switch completion marker: {error}")
+            _fail("preterminal atomic switch capture has a completion marker")
+        return
+    raw = _common(
+        lambda: common.read_bounded_paired_hardlink(
+            capture_fd,
+            COMPLETE_MARKER_NAME,
+            COMPLETE_INTENT_NAME,
+            "atomic switch completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    document = _common(
+        lambda: common.parse_canonical_json(
+            raw,
+            "atomic switch completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    if not isinstance(document, Mapping) or set(document) != {
+        "schema_version",
+        "capture_status",
+        "qualification_status",
+        "session_sha256",
+        "session_byte_length",
+    } or (
+        document["schema_version"] != COMPLETE_MARKER_VERSION
+        or document["capture_status"] != "captured"
+        or document["qualification_status"] != "not-run"
+        or document["session_sha256"] != session.sha256
+        or document["session_byte_length"] != session.byte_length
+    ):
+        _fail("atomic switch completion marker does not bind session.json")
 
 
 def _atomic_descriptors(
@@ -653,18 +863,23 @@ def _atomic_descriptors(
     return result
 
 
-def verify_atomic_switch_capture_on_held_switch_fd(
+def replay_atomic_switch_capture_on_held_switch_fd(
     root_fd: int,
     switch_fd: int,
     switch_name: str,
     capture_name: str,
-) -> dict[str, Any]:
+    *,
+    require_terminal: bool = True,
+) -> AtomicSwitchReplay:
     """Replay one terminal atomic-switch capture through caller-held FDs.
 
     This is raw mechanism replay, not a rollback-success verdict.  It checks
     fixed descriptor paths, exact canonical session/stat/transcript grammar,
     inode exchange relationships, the current held switch names, and the
-    absence of the capture marker.  It never opens or locks ``switch_fd``;
+    exact terminal completion receipt. The result is structural raw evidence,
+    not authorization to resume a producer after an earlier
+    ``ambiguous-terminal-publication``. ``require_terminal=False`` is only
+    for the producer's pre-publication self-check. It never opens or locks ``switch_fd``;
     transaction callers retain their exclusive lock across this replay.
     """
 
@@ -689,16 +904,28 @@ def verify_atomic_switch_capture_on_held_switch_fd(
                 "held atomic switch capture directory",
             )
         )
-        _marker_absent(capture_fd)
-        session = _common(
-            lambda: common.read_private_canonical_json_leaf(
+        _check_incomplete_marker(capture_fd, require_terminal=require_terminal)
+        initial_session_descriptor = _common(
+            lambda: common.describe_regular_relative(
                 capture_fd,
                 "session.json",
                 "atomic switch session",
                 maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
             )
         )
-        assert isinstance(session, Mapping)
+        _raw, session = _common(
+            lambda: common.read_private_descriptor_json_leaf(
+                capture_fd,
+                initial_session_descriptor,
+                "atomic switch session",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+        _check_completion_marker(
+            capture_fd,
+            initial_session_descriptor,
+            require_terminal=require_terminal,
+        )
         row = _exact(session, SESSION_FIELDS, "atomic switch session")
         if (
             row["schema_version"] != SESSION_VERSION
@@ -749,8 +976,10 @@ def verify_atomic_switch_capture_on_held_switch_fd(
         if (
             pre_active.device != pre_rollback.device
             or pre_active.inode == pre_rollback.inode
-            or (post_active.device, post_active.inode) != (pre_rollback.device, pre_rollback.inode)
-            or (candidate_staged.device, candidate_staged.inode) != (pre_active.device, pre_active.inode)
+            or (post_active.device, post_active.inode, post_active.sha256)
+            != (pre_rollback.device, pre_rollback.inode, pre_rollback.sha256)
+            or (candidate_staged.device, candidate_staged.inode, candidate_staged.sha256)
+            != (pre_active.device, pre_active.inode, pre_active.sha256)
         ):
             _fail("atomic switch stat leaves do not prove the declared inode exchange")
         current_active = _read_staged_identity(switch_fd, ACTIVE_NAME, "current post-switch active artifact")
@@ -761,7 +990,22 @@ def verify_atomic_switch_capture_on_held_switch_fd(
         )
         if current_active != post_active or current_candidate_staged != candidate_staged:
             _fail("current held switch entries disagree with the terminal atomic switch record")
-        _marker_absent(capture_fd)
+        _check_incomplete_marker(capture_fd, require_terminal=require_terminal)
+        _raw, terminal_session = _common(
+            lambda: common.read_private_descriptor_json_leaf(
+                capture_fd,
+                initial_session_descriptor,
+                "atomic switch session",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+        if terminal_session != session:
+            _fail("atomic switch session changed during replay")
+        _check_completion_marker(
+            capture_fd,
+            initial_session_descriptor,
+            require_terminal=require_terminal,
+        )
         _require_held_switch_fd(root_fd, switch_fd, switch_name)
         _common(
             lambda: common.require_private_child_directory_fd(
@@ -771,9 +1015,33 @@ def verify_atomic_switch_capture_on_held_switch_fd(
                 "held atomic switch capture directory",
             )
         )
-        return dict(session)
+        return AtomicSwitchReplay(
+            session=dict(session),
+            pre_active=pre_active,
+            pre_rollback_staged=pre_rollback,
+            post_active=post_active,
+            post_candidate_staged=candidate_staged,
+        )
     finally:
         _close_quietly(capture_fd)
+
+
+def verify_atomic_switch_capture_on_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+    switch_name: str,
+    capture_name: str,
+) -> dict[str, Any]:
+    """Replay a terminal atomic capture and return only its raw session."""
+
+    return dict(
+        replay_atomic_switch_capture_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            switch_name,
+            capture_name,
+        ).session
+    )
 
 
 def verify_atomic_switch_capture(

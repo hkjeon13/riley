@@ -39,6 +39,9 @@ sys.dont_write_bytecode = True
 SESSION_VERSION = "riley.rc3-rollback-artifact-preparation.v1"
 INCOMPLETE_MARKER_VERSION = "riley.rc3-rollback-artifact-preparation-incomplete.v1"
 INCOMPLETE_MARKER_NAME = "capture-incomplete.json"
+COMPLETE_MARKER_VERSION = "riley.rc3-rollback-artifact-preparation-complete.v1"
+COMPLETE_INTENT_NAME = "capture-complete.intent"
+COMPLETE_MARKER_NAME = "capture-complete.json"
 SNAPSHOT_DIRECTORY_NAME = "rollback-v3-artifact-snapshot"
 ARTIFACT_DIRECTORY_NAME = "rollback-v3-artifacts"
 SWITCH_DIRECTORY_NAME = "rollback-v3-switch"
@@ -52,6 +55,8 @@ class RollbackArtifactPreparationError(ValueError):
 
 
 def _fail(code: str, message: str) -> NoReturn:
+    if code == "ambiguous-terminal-publication":
+        message = f"{code}: {message}"
     error = RollbackArtifactPreparationError(message)
     error.reason_code = code  # type: ignore[attr-defined]
     raise error
@@ -76,6 +81,41 @@ class PreparationRequest:
     rollback_binary: Path
     rollback_bundle: Path
     rollback_image_inspect: Path
+
+
+@dataclass(frozen=True)
+class RuntimeReplay:
+    """One hash-verified runtime state observed through a held switch FD."""
+
+    sha256: str
+    byte_length: int
+    device: int
+    inode: int
+    mode: int
+    nlink: int
+    mtime_ns: int
+    ctime_ns: int
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "sha256": self.sha256,
+            "byte_length": self.byte_length,
+            "device": self.device,
+            "inode": self.inode,
+            "mode": self.mode,
+            "nlink": self.nlink,
+            "mtime_ns": self.mtime_ns,
+            "ctime_ns": self.ctime_ns,
+        }
+
+
+@dataclass(frozen=True)
+class ArtifactPreparationReplay:
+    """Terminal replay state available to an outer held-FD transaction."""
+
+    session: Mapping[str, Any]
+    candidate_runtime: RuntimeReplay
+    rollback_runtime: RuntimeReplay
 
 
 def _source_root() -> Path:
@@ -250,7 +290,7 @@ def _read_canonical_leaf(directory_fd: int, name: str, label: str) -> Mapping[st
     return document
 
 
-def _check_marker(snapshot_fd: int, *, require_terminal: bool) -> None:
+def _check_incomplete_marker(snapshot_fd: int, *, require_terminal: bool) -> None:
     try:
         os.lstat(INCOMPLETE_MARKER_NAME, dir_fd=snapshot_fd)
     except FileNotFoundError:
@@ -273,6 +313,67 @@ def _check_marker(snapshot_fd: int, *, require_terminal: bool) -> None:
         or marker["qualification_status"] != "not-run"
     ):
         _fail("invalid-incomplete-marker", "artifact preparation incomplete marker is not the exact v1 marker")
+
+
+def _check_completion_marker(
+    snapshot_fd: int,
+    session: common.EvidenceDescriptor,
+    *,
+    require_terminal: bool,
+) -> None:
+    """Require a durable paired terminal marker only for terminal replay."""
+
+    if not require_terminal:
+        for name in (COMPLETE_INTENT_NAME, COMPLETE_MARKER_NAME):
+            try:
+                os.lstat(name, dir_fd=snapshot_fd)
+            except FileNotFoundError:
+                continue
+            except OSError as error:
+                _fail("unsafe-evidence-path", f"cannot inspect artifact preparation terminal marker: {error}")
+            _fail("unexpected-terminal-marker", "preterminal artifact preparation has a completion marker")
+        return
+    raw = _common(
+        lambda: common.read_bounded_paired_hardlink(
+            snapshot_fd,
+            COMPLETE_MARKER_NAME,
+            COMPLETE_INTENT_NAME,
+            "artifact preparation completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    marker = _common(
+        lambda: common.parse_canonical_json(
+            raw,
+            "artifact preparation completion marker",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
+    assert isinstance(marker, Mapping)
+    _parse_exact(
+        marker,
+        {"schema_version", "capture_status", "qualification_status", "session_sha256", "session_byte_length"},
+        "artifact preparation completion marker",
+    )
+    if (
+        marker["schema_version"] != COMPLETE_MARKER_VERSION
+        or marker["capture_status"] != "captured"
+        or marker["qualification_status"] != "not-run"
+        or marker["session_sha256"] != session.sha256
+        or marker["session_byte_length"] != session.byte_length
+    ):
+        _fail("invalid-completion-marker", "artifact preparation completion marker does not bind session.json")
+
+
+def _session_descriptor(snapshot_fd: int) -> common.EvidenceDescriptor:
+    return _common(
+        lambda: common.describe_regular_relative(
+            snapshot_fd,
+            "session.json",
+            "artifact preparation session",
+            maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+        )
+    )
 
 
 def _artifact_map(
@@ -362,7 +463,7 @@ def _runtime_row(
     visible_entry_name: str,
     binary: common.EvidenceDescriptor,
     snapshot_identity: tuple[int, int],
-) -> None:
+) -> RuntimeReplay:
     row = _parse_exact(
         value,
         {
@@ -408,6 +509,16 @@ def _runtime_row(
         or (runtime_stat.st_dev, runtime_stat.st_ino) == snapshot_identity
     ):
         _fail("runtime-copy-mismatch", f"{arm} runtime file does not match its recorded distinct inode")
+    runtime_before = RuntimeReplay(
+        sha256=binary.sha256,
+        byte_length=runtime_stat.st_size,
+        device=runtime_stat.st_dev,
+        inode=runtime_stat.st_ino,
+        mode=stat.S_IMODE(runtime_stat.st_mode),
+        nlink=runtime_stat.st_nlink,
+        mtime_ns=runtime_stat.st_mtime_ns,
+        ctime_ns=runtime_stat.st_ctime_ns,
+    )
     runtime_descriptor = common.EvidenceDescriptor(
         path=f"{SWITCH_DIRECTORY_NAME}/{visible_entry_name}",
         sha256=binary.sha256,
@@ -445,15 +556,28 @@ def _runtime_row(
         or (runtime_after.st_dev, runtime_after.st_ino) == snapshot_identity
     ):
         _fail("runtime-copy-mismatch", f"{arm} runtime/snapshot identity changed during replay")
+    runtime_after_replay = RuntimeReplay(
+        sha256=binary.sha256,
+        byte_length=runtime_after.st_size,
+        device=runtime_after.st_dev,
+        inode=runtime_after.st_ino,
+        mode=stat.S_IMODE(runtime_after.st_mode),
+        nlink=runtime_after.st_nlink,
+        mtime_ns=runtime_after.st_mtime_ns,
+        ctime_ns=runtime_after.st_ctime_ns,
+    )
+    if runtime_before != runtime_after_replay:
+        _fail("runtime-copy-mismatch", f"{arm} runtime identity changed during hash replay")
+    return runtime_after_replay
 
 
-def verify_artifact_preparation_on_held_switch_fd(
+def replay_artifact_preparation_on_held_switch_fd(
     root_fd: int,
     switch_fd: int,
     *,
     require_terminal: bool = True,
     runtime_layout: str = "pre-switch",
-) -> dict[str, Any]:
+) -> ArtifactPreparationReplay:
     """Replay preparation using one caller-held switch FD without relocking it.
 
     ``require_terminal=False`` exists only for the producer's pre-removal
@@ -488,8 +612,21 @@ def verify_artifact_preparation_on_held_switch_fd(
                 "held artifact preparation session directory",
             )
         )
-        _check_marker(snapshot_fd, require_terminal=require_terminal)
-        session = _read_canonical_leaf(snapshot_fd, "session.json", "artifact preparation session")
+        _check_incomplete_marker(snapshot_fd, require_terminal=require_terminal)
+        initial_session_descriptor = _session_descriptor(snapshot_fd)
+        _raw, session = _common(
+            lambda: common.read_private_descriptor_json_leaf(
+                snapshot_fd,
+                initial_session_descriptor,
+                "artifact preparation session",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+        _check_completion_marker(
+            snapshot_fd,
+            initial_session_descriptor,
+            require_terminal=require_terminal,
+        )
         row = _parse_exact(
             session,
             {
@@ -548,7 +685,7 @@ def verify_artifact_preparation_on_held_switch_fd(
             {"candidate", "rollback"},
             "runtime materializations",
         )
-        _runtime_row(
+        candidate_runtime_replay = _runtime_row(
             switch_fd,
             artifacts_fd,
             runtimes["candidate"],
@@ -558,7 +695,7 @@ def verify_artifact_preparation_on_held_switch_fd(
             binary=candidate["binary"],
             snapshot_identity=candidate_identities["binary"],
         )
-        _runtime_row(
+        rollback_runtime_replay = _runtime_row(
             switch_fd,
             artifacts_fd,
             runtimes["rollback"],
@@ -575,7 +712,22 @@ def verify_artifact_preparation_on_held_switch_fd(
             or candidate_runtime.st_ino == rollback_runtime.st_ino
         ):
             _fail("runtime-copy-mismatch", "candidate and rollback runtime files must be distinct same-filesystem leaves")
-        _check_marker(snapshot_fd, require_terminal=require_terminal)
+        _check_incomplete_marker(snapshot_fd, require_terminal=require_terminal)
+        _raw, terminal_session = _common(
+            lambda: common.read_private_descriptor_json_leaf(
+                snapshot_fd,
+                initial_session_descriptor,
+                "artifact preparation session",
+                maximum_bytes=common.DEFAULT_MAX_JSON_BYTES,
+            )
+        )
+        if terminal_session != session:
+            _fail("raced-input", "artifact preparation session changed during replay")
+        _check_completion_marker(
+            snapshot_fd,
+            initial_session_descriptor,
+            require_terminal=require_terminal,
+        )
         _require_held_switch_fd(root_fd, switch_fd)
         _common(
             lambda: common.require_private_child_directory_fd(
@@ -593,11 +745,34 @@ def verify_artifact_preparation_on_held_switch_fd(
                 "held artifact preparation session directory",
             )
         )
-        return dict(session)
+        return ArtifactPreparationReplay(
+            session=dict(session),
+            candidate_runtime=candidate_runtime_replay,
+            rollback_runtime=rollback_runtime_replay,
+        )
     finally:
         if artifacts_fd is not None:
             os.close(artifacts_fd)
         os.close(snapshot_fd)
+
+
+def verify_artifact_preparation_on_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+    *,
+    require_terminal: bool = True,
+    runtime_layout: str = "pre-switch",
+) -> dict[str, Any]:
+    """Replay preparation and return only its raw terminal session."""
+
+    return dict(
+        replay_artifact_preparation_on_held_switch_fd(
+            root_fd,
+            switch_fd,
+            require_terminal=require_terminal,
+            runtime_layout=runtime_layout,
+        ).session
+    )
 
 
 def verify_artifact_preparation_fd(
@@ -660,7 +835,22 @@ def _restore_marker(snapshot_fd: int, marker: Mapping[str, Any]) -> None:
         pass
 
 
-def _remove_marker(snapshot_fd: int, marker: Mapping[str, Any]) -> None:
+def _publish_completion_marker(
+    snapshot_fd: int,
+    marker: Mapping[str, Any],
+    session: common.CreatedEvidence,
+) -> None:
+    """Durably replace the incomplete marker with a paired terminal receipt.
+
+    The successful terminal state is the exact two-name hard-link pair, not
+    the absence of ``capture-incomplete.json``. Therefore an unlink/fsync or
+    restore failure leaves no terminal receipt and every terminal verifier
+    fails closed instead of mistaking a partially published capture for one
+    that completed. A post-link directory-sync error is deliberately raised
+    as ``ambiguous-terminal-publication``: its pair remains raw structurally
+    replayable evidence, but the producer-success branch must stop.
+    """
+
     try:
         os.unlink(INCOMPLETE_MARKER_NAME, dir_fd=snapshot_fd)
     except OSError as error:
@@ -670,10 +860,39 @@ def _remove_marker(snapshot_fd: int, marker: Mapping[str, Any]) -> None:
     except OSError as error:
         _restore_marker(snapshot_fd, marker)
         _fail("durability-failure", f"cannot synchronize artifact preparation marker removal: {error}")
+    completion = {
+        "schema_version": COMPLETE_MARKER_VERSION,
+        "capture_status": "captured",
+        "qualification_status": "not-run",
+        "session_sha256": session.sha256,
+        "session_byte_length": session.byte_length,
+    }
+    _common(
+        lambda: common.write_create_only_json(
+            snapshot_fd,
+            COMPLETE_INTENT_NAME,
+            completion,
+            "artifact preparation completion intent",
+        )
+    )
+    _common(
+        lambda: common.publish_create_only_hardlink(
+            snapshot_fd,
+            COMPLETE_INTENT_NAME,
+            COMPLETE_MARKER_NAME,
+            "artifact preparation completion marker",
+        )
+    )
 
 
 def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
-    """Snapshot six host artifacts then stage two linked private runtime copies."""
+    """Snapshot six host artifacts then stage two linked private runtime copies.
+
+    A successful return is the only producer-success signal. In particular,
+    ``ambiguous-terminal-publication`` after completion-pair linking leaves
+    raw on-disk evidence that a later structural verifier may inspect, but it
+    must never be retried or consumed as a successful producer invocation.
+    """
 
     _assert_external_to_source_checkout(request.evidence_root)
     root_fd = _common(
@@ -855,7 +1074,7 @@ def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
                 ),
             },
         }
-        _common(
+        session_created = _common(
             lambda: common.write_create_only_json(
                 snapshot_fd,
                 "session.json",
@@ -864,12 +1083,8 @@ def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:
             )
         )
         verify_artifact_preparation_fd(root_fd, require_terminal=False)
-        _remove_marker(snapshot_fd, marker)
-        try:
-            return verify_artifact_preparation_fd(root_fd)
-        except RollbackArtifactPreparationError:
-            _restore_marker(snapshot_fd, marker)
-            raise
+        _publish_completion_marker(snapshot_fd, marker, session_created)
+        return verify_artifact_preparation_fd(root_fd)
     finally:
         if switch_fd is not None:
             os.close(switch_fd)

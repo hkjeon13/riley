@@ -547,6 +547,39 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             finally:
                 os.close(root_fd)
 
+    def test_paired_hardlink_post_link_sync_failure_is_explicitly_ambiguous(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            original = common._fsync_checked
+
+            def fail_final_parent(descriptor: int, label: str) -> None:
+                if label == "marker parent directory":
+                    error = common.ProvenanceV2Error("fixture final marker directory sync failure")
+                    error.reason_code = "durability-failure"  # type: ignore[attr-defined]
+                    raise error
+                original(descriptor, label)
+
+            try:
+                common.write_create_only(root_fd, "marker.intent", b"marker", "marker intent")
+                with mock.patch.object(common, "_fsync_checked", side_effect=fail_final_parent):
+                    with self.assertRaises(common.ProvenanceV2Error) as raised:
+                        common.publish_create_only_hardlink(
+                            root_fd,
+                            "marker.intent",
+                            "marker.complete",
+                            "marker",
+                        )
+                self.assert_reason(raised, "ambiguous-terminal-publication")
+                self.assertTrue((root / "marker.intent").is_file())
+                self.assertTrue((root / "marker.complete").is_file())
+                self.assertEqual(
+                    (root / "marker.intent").stat().st_ino,
+                    (root / "marker.complete").stat().st_ino,
+                )
+            finally:
+                os.close(root_fd)
+
     def test_held_child_rebinding_and_private_rebased_json_replay_are_strict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

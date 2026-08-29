@@ -92,6 +92,17 @@ class ArtifactPreparationTests(unittest.TestCase):
         snapshot_dir = self.root / prepare.SNAPSHOT_DIRECTORY_NAME
         self.assertTrue((snapshot_dir / "session.json").is_file())
         self.assertFalse((snapshot_dir / prepare.INCOMPLETE_MARKER_NAME).exists())
+        completion = snapshot_dir / prepare.COMPLETE_MARKER_NAME
+        intent = snapshot_dir / prepare.COMPLETE_INTENT_NAME
+        self.assertTrue(completion.is_file())
+        self.assertTrue(intent.is_file())
+        self.assertEqual(
+            (completion.stat().st_dev, completion.stat().st_ino),
+            (intent.stat().st_dev, intent.stat().st_ino),
+        )
+        for marker in (completion, intent):
+            self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
+            self.assertEqual(marker.stat().st_nlink, 2)
         for directory in (
             self.root,
             snapshot_dir,
@@ -238,6 +249,60 @@ class ArtifactPreparationTests(unittest.TestCase):
         with mock.patch.object(common, "verify_private_runtime_descriptor_file", side_effect=verify_then_publish_marker):
             with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "incomplete marker"):
                 prepare.verify_artifact_preparation(self.root)
+
+    def test_terminal_replay_rejects_missing_completion_receipt(self) -> None:
+        prepare.prepare_artifacts(self.request)
+        snapshot_dir = self.root / prepare.SNAPSHOT_DIRECTORY_NAME
+        (snapshot_dir / prepare.COMPLETE_MARKER_NAME).unlink()
+        self.assertTrue((snapshot_dir / prepare.COMPLETE_INTENT_NAME).is_file())
+        with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "paired marker"):
+            prepare.verify_artifact_preparation(self.root)
+
+    def test_marker_sync_and_restore_failure_never_becomes_terminal(self) -> None:
+        original = prepare._publish_completion_marker
+
+        def fail_completion_sync(
+            snapshot_fd: int,
+            marker: object,
+            session: common.CreatedEvidence,
+        ) -> None:
+            with mock.patch.object(prepare.os, "fsync", side_effect=OSError("fixture marker sync failure")), mock.patch.object(
+                prepare,
+                "_restore_marker",
+                return_value=None,
+            ):
+                original(snapshot_fd, marker, session)  # type: ignore[arg-type]
+
+        with mock.patch.object(prepare, "_publish_completion_marker", side_effect=fail_completion_sync):
+            with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "marker removal"):
+                prepare.prepare_artifacts(self.request)
+        snapshot_dir = self.root / prepare.SNAPSHOT_DIRECTORY_NAME
+        self.assertTrue((snapshot_dir / "session.json").is_file())
+        self.assertFalse((snapshot_dir / prepare.INCOMPLETE_MARKER_NAME).exists())
+        self.assertFalse((snapshot_dir / prepare.COMPLETE_INTENT_NAME).exists())
+        self.assertFalse((snapshot_dir / prepare.COMPLETE_MARKER_NAME).exists())
+        with self.assertRaisesRegex(prepare.RollbackArtifactPreparationError, "paired marker"):
+            prepare.verify_artifact_preparation(self.root)
+
+    def test_completion_pair_sync_failure_is_explicitly_ambiguous(self) -> None:
+        original = common._fsync_checked
+
+        def fail_final_parent(descriptor: int, label: str) -> None:
+            if label == "artifact preparation completion marker parent directory":
+                common._fail("durability-failure", "fixture final marker directory sync failure")
+            original(descriptor, label)
+
+        with mock.patch.object(common, "_fsync_checked", side_effect=fail_final_parent):
+            with self.assertRaises(prepare.RollbackArtifactPreparationError) as raised:
+                prepare.prepare_artifacts(self.request)
+        self.assertEqual(getattr(raised.exception, "reason_code", None), "ambiguous-terminal-publication")
+        self.assertIn("ambiguous-terminal-publication", str(raised.exception))
+        snapshot_dir = self.root / prepare.SNAPSHOT_DIRECTORY_NAME
+        completion = snapshot_dir / prepare.COMPLETE_MARKER_NAME
+        intent = snapshot_dir / prepare.COMPLETE_INTENT_NAME
+        self.assertEqual((completion.stat().st_dev, completion.stat().st_ino), (intent.stat().st_dev, intent.stat().st_ino))
+        self.assertEqual(completion.stat().st_nlink, 2)
+        self.assertEqual(prepare.verify_artifact_preparation(self.root)["capture_status"], "captured")
 
     def test_terminal_replay_rejects_private_session_mode_and_held_child_replacement(self) -> None:
         prepare.prepare_artifacts(self.request)

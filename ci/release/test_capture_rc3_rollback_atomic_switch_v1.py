@@ -81,6 +81,17 @@ class AtomicSwitchCaptureTests(unittest.TestCase):
         self.assertEqual((self.switch / capture.ROLLBACK_STAGED_NAME).stat().st_ino, candidate_inode)
         self.assertTrue((capture_root / "session.json").is_file())
         self.assertFalse((capture_root / capture.INCOMPLETE_MARKER_NAME).exists())
+        completion = capture_root / capture.COMPLETE_MARKER_NAME
+        intent = capture_root / capture.COMPLETE_INTENT_NAME
+        self.assertTrue(completion.is_file())
+        self.assertTrue(intent.is_file())
+        self.assertEqual(
+            (completion.stat().st_dev, completion.stat().st_ino),
+            (intent.stat().st_dev, intent.stat().st_ino),
+        )
+        for marker in (completion, intent):
+            self.assertEqual(stat.S_IMODE(marker.stat().st_mode), 0o600)
+            self.assertEqual(marker.stat().st_nlink, 2)
         self.assertEqual(session["schema_version"], capture.SESSION_VERSION)
         self.assertEqual(session["qualification_status"], "not-run")
         self.assertEqual(
@@ -186,6 +197,104 @@ class AtomicSwitchCaptureTests(unittest.TestCase):
         self.assertTrue((capture_root / "session.json").is_file())
         self.assertTrue((capture_root / capture.INCOMPLETE_MARKER_NAME).is_file())
 
+    def test_marker_sync_and_restore_failure_never_becomes_terminal(self) -> None:
+        original = capture._fsync
+
+        def fail_completion_sync(descriptor: int, label: str) -> None:
+            if label == "capture directory after incomplete marker removal":
+                raise capture.AtomicSwitchCaptureError("fixture marker sync failure")
+            original(descriptor, label)
+
+        with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange), mock.patch.object(
+            capture, "_fsync", side_effect=fail_completion_sync
+        ), mock.patch.object(capture, "_restore_marker", return_value=None):
+            with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "marker sync failure"):
+                capture.capture_atomic_switch(self.request)
+        capture_root = self.root / self.request.capture_name
+        self.assertTrue((capture_root / "session.json").is_file())
+        self.assertFalse((capture_root / capture.INCOMPLETE_MARKER_NAME).exists())
+        self.assertFalse((capture_root / capture.COMPLETE_INTENT_NAME).exists())
+        self.assertFalse((capture_root / capture.COMPLETE_MARKER_NAME).exists())
+        with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "paired marker"):
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )
+
+    def test_terminal_verifier_rejects_missing_completion_receipt(self) -> None:
+        with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange):
+            capture.capture_atomic_switch(self.request)
+        capture_root = self.root / self.request.capture_name
+        (capture_root / capture.COMPLETE_MARKER_NAME).unlink()
+        self.assertTrue((capture_root / capture.COMPLETE_INTENT_NAME).is_file())
+        with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "paired marker"):
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )
+
+    def test_completion_pair_sync_failure_is_explicitly_ambiguous(self) -> None:
+        original = capture.common._fsync_checked
+
+        def fail_final_parent(descriptor: int, label: str) -> None:
+            if label == "atomic switch completion marker parent directory":
+                capture.common._fail("durability-failure", "fixture final marker directory sync failure")
+            original(descriptor, label)
+
+        with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange), mock.patch.object(
+            capture.common,
+            "_fsync_checked",
+            side_effect=fail_final_parent,
+        ):
+            with self.assertRaises(capture.AtomicSwitchCaptureError) as raised:
+                capture.capture_atomic_switch(self.request)
+        self.assertEqual(getattr(raised.exception, "reason_code", None), "ambiguous-terminal-publication")
+        self.assertIn("ambiguous-terminal-publication", str(raised.exception))
+        capture_root = self.root / self.request.capture_name
+        completion = capture_root / capture.COMPLETE_MARKER_NAME
+        intent = capture_root / capture.COMPLETE_INTENT_NAME
+        self.assertEqual((completion.stat().st_dev, completion.stat().st_ino), (intent.stat().st_dev, intent.stat().st_ino))
+        self.assertEqual(completion.stat().st_nlink, 2)
+        self.assertEqual(
+            capture.verify_atomic_switch_capture(
+                self.root,
+                self.request.switch_dir_name,
+                self.request.capture_name,
+            )["capture_status"],
+            "captured",
+        )
+
+    def test_same_inode_size_mutation_between_hash_and_exchange_is_rejected(self) -> None:
+        original = (self.switch / capture.ACTIVE_NAME).read_bytes()
+        altered = b"altered!!"
+        self.assertEqual(len(altered), len(original))
+
+        def mutate_then_exchange(directory_fd: int) -> None:
+            before = os.lstat(capture.ACTIVE_NAME, dir_fd=directory_fd)
+            descriptor = os.open(capture.ACTIVE_NAME, os.O_RDWR, dir_fd=directory_fd)
+            try:
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                os.write(descriptor, altered)
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+            after = os.lstat(capture.ACTIVE_NAME, dir_fd=directory_fd)
+            self.assertEqual(
+                (after.st_dev, after.st_ino, after.st_size),
+                (before.st_dev, before.st_ino, before.st_size),
+            )
+            self.assertNotEqual((self.switch / capture.ACTIVE_NAME).read_bytes(), original)
+            fake_exchange(directory_fd)
+
+        with mock.patch.object(capture, "_rename_exchange", side_effect=mutate_then_exchange):
+            with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "did not place candidate active inode"):
+                capture.capture_atomic_switch(self.request)
+        capture_root = self.root / self.request.capture_name
+        self.assertTrue((capture_root / capture.INCOMPLETE_MARKER_NAME).is_file())
+        self.assertFalse((capture_root / "session.json").exists())
+
     def test_terminal_verifier_replays_the_exact_exchange_and_rejects_mode_marker_or_current_drift(self) -> None:
         with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange):
             session = capture.capture_atomic_switch(self.request)
@@ -229,24 +338,27 @@ class AtomicSwitchCaptureTests(unittest.TestCase):
     def test_terminal_verifier_rejects_capture_child_replacement_after_its_fd_is_held(self) -> None:
         with mock.patch.object(capture, "_rename_exchange", side_effect=fake_exchange):
             capture.capture_atomic_switch(self.request)
-        original = capture.common.read_private_canonical_json_leaf
+        original = capture.common.read_private_descriptor_json_leaf
         swapped = False
 
-        def read_then_replace_visible_capture(*args: object, **kwargs: object) -> dict[str, object]:
+        def read_then_replace_visible_capture(
+            *args: object,
+            **kwargs: object,
+        ) -> tuple[bytes, dict[str, object]]:
             nonlocal swapped
-            document = original(*args, **kwargs)  # type: ignore[arg-type]
-            if not swapped:
+            result = original(*args, **kwargs)  # type: ignore[arg-type]
+            if not swapped and len(args) >= 3 and args[2] == "atomic switch session":
                 swapped = True
                 capture_root = self.root / self.request.capture_name
                 moved = self.root / "old-atomic-capture"
                 os.rename(capture_root, moved)
                 capture_root.mkdir(mode=0o700)
                 os.chmod(capture_root, 0o700)
-            return document
+            return result
 
         with mock.patch.object(
             capture.common,
-            "read_private_canonical_json_leaf",
+            "read_private_descriptor_json_leaf",
             side_effect=read_then_replace_visible_capture,
         ):
             with self.assertRaisesRegex(capture.AtomicSwitchCaptureError, "held atomic switch capture"):

@@ -231,26 +231,44 @@ mode-0700 `rollback-v3-switch/{active,rollback-staged}` copies only from the
 two new binary snapshots, not by reopening the host sources.  Its fixed
 create-only children and terminal session verifier record the runtime-to-
 snapshot hash/length/inode mapping; runtime paths are deliberately not v3
-artifact descriptors.  It does not replay the reconstructed baseline or make
-a bind request, so an authenticated runner must still require the full
-prepopulated baseline closure and replay this session plus its absent marker.
+artifact descriptors. Terminal evidence requires both an absent incomplete
+marker and a mode-0600 two-link `capture-complete.intent`/
+`capture-complete.json` receipt pair bound to `session.json` SHA-256 and byte
+length—absence alone is not completion. It does not replay the reconstructed
+baseline or make a bind request, so an authenticated runner must still require
+the full prepopulated baseline closure and replay this session plus its
+completion receipt.
 Its verifier takes a short shared switch lock only while replaying one explicit
 `pre-switch` or `post-switch` layout; `post-switch` proves byte/inode mapping,
-not that an exchange occurred.  The current atomic helper independently opens
-and exclusively locks its switch FD, so this is deliberately **not** one
-authenticated transaction.  The future runner must add a single held-FD
-exclusive transaction spanning pre-switch replay, atomic exchange, and
-atomic-session replay before treating either raw helper as a rollback action.
+not that an exchange occurred. Both helpers now also expose held-switch-FD
+cores. `capture_rc3_rollback_atomic_transaction_v1.py` holds one exclusive
+evidence-root and switch FD across pre-switch preparation replay, the isolated
+exchange, terminal atomic replay, and post-switch preparation replay. It
+create-only records `rollback-v3-atomic-transaction/session.json`, binds the
+two terminal child sessions, and joins the candidate/rollback pre/post runtime
+SHA-256·identity layouts to the atomic pre/post stat leaves. The atomic helper
+hashes private runtime bytes on both sides of the exchange, so a same-inode,
+same-size in-place mutation cannot become terminal evidence. Its replayer
+rechecks the session-bound completion receipt, incomplete state, and child-FD
+identity; all records remain `captured/not-run`.
+If the completion hardlink's post-link parent-directory sync fails, the helper
+raises `ambiguous-terminal-publication` and returns no producer success. A
+visible pair after that error is structurally replayable raw evidence only;
+the future authenticated binder/runner must consume only the normal-return
+branch of the same invocation under its held locks, never resume from a fresh
+verification of that ambiguous on-disk pair.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures
-the five opaque v3 switch leaves. Neither raw helper is an authenticated host
-supervisor. A future runner must replay terminal preparation/phase/switch
-sessions and the absence of their `capture-incomplete.json` markers before
-constructing the bind request; the raw v3 binder does not infer those
-transaction boundaries from arbitrary leaf paths. The v3 manifest also does
-not retain the session/marker descriptors, so a later semantic/terminal
-version must close them.
+the five opaque raw switch leaves. This closes only the artifact-exchange
+subtransaction: it is not an authenticated host supervisor and does not bind
+phase/source/config evidence, launch or stop a service, or touch a deployment
+path. A future runner must still replay terminal phase/source/config sessions,
+their absent `capture-incomplete.json` markers, and their session-bound paired
+completion receipts before constructing a bind request; the raw v3 binder does
+not infer those boundaries from arbitrary leaf paths. The v3 manifest also does
+not retain their closure, so a later
+semantic/terminal version must close it.
 
 Before an actual runner exists,
 `verify_rollback_provenance_fd()` keeps v2 replay on one held private root FD,
