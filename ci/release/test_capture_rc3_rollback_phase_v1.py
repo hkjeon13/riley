@@ -106,6 +106,7 @@ class RollbackPhaseCaptureTests(unittest.TestCase):
         )
         health_head, health_body = response(b"ready\n", "text/plain")
         generation_head, generation_body = response(canonical({"id": "cmpl-fixture"}))
+        assert self.request.generation_body is not None
         return [
             mock.patch.object(capture, "_preflight_target", return_value=self.target),
             mock.patch.object(
@@ -129,11 +130,41 @@ class RollbackPhaseCaptureTests(unittest.TestCase):
                 capture,
                 "_capture_exchange",
                 side_effect=[
-                    (b"GET /readyz HTTP/1.1\r\n\r\n", health_head, health_body),
-                    (b"POST /v1/completions HTTP/1.1\r\nfixture", generation_head, generation_body),
+                    (
+                        capture._request_bytes("GET", self.endpoint, "/readyz", b""),
+                        health_head,
+                        health_body,
+                    ),
+                    (
+                        capture._request_bytes(
+                            "POST",
+                            self.endpoint,
+                            "/v1/completions",
+                            self.request.generation_body,
+                        ),
+                        generation_head,
+                        generation_body,
+                    ),
                 ],
             ),
         ]
+
+    def _capture_completed(self, request: capture.CaptureRequest | None = None) -> dict[str, object]:
+        patches = self._runtime_patches()
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
+            return capture.capture_phase(request or self.request)
+
+    def _replay(self, capture_name: str) -> capture.ReplayedPhaseCapture:
+        root_fd = capture.common.open_private_evidence_directory(self.root, "fixture evidence root")
+        try:
+            return capture.replay_rc3_rollback_phase_v1_fd(root_fd, capture_name)
+        finally:
+            os.close(root_fd)
+
+    def _replace_session(self, capture_name: str, document: object) -> None:
+        session_path = self.root / capture_name / "session.json"
+        session_path.write_bytes(canonical(document))
+        os.chmod(session_path, 0o600)
 
     def test_endpoint_is_literal_loopback_base_only(self) -> None:
         self.assertEqual(self.endpoint.url, "http://127.0.0.1:18080")
@@ -166,9 +197,7 @@ class RollbackPhaseCaptureTests(unittest.TestCase):
                 capture._open_capture_directories(self.request, capture._marker())
 
     def test_capture_writes_closed_leaf_inventory_and_derives_target(self) -> None:
-        patches = self._runtime_patches()
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6]:
-            session = capture.capture_phase(self.request)
+        session = self._capture_completed()
         directory = self.root / self.request.capture_name
         expected = {
             "pre-stat",
@@ -202,6 +231,99 @@ class RollbackPhaseCaptureTests(unittest.TestCase):
                 self.assertEqual(len(raw), descriptor["byte_length"])
         for private_directory in (self.root, directory, directory / "raw"):
             self.assertEqual(stat.S_IMODE(private_directory.stat().st_mode), 0o700)
+
+    def test_held_fd_replay_returns_closed_terminal_phase(self) -> None:
+        session = self._capture_completed()
+
+        replayed = self._replay(self.request.capture_name)
+
+        self.assertEqual(replayed.capture_name, self.request.capture_name)
+        self.assertEqual(replayed.endpoint, self.endpoint)
+        self.assertEqual(replayed.target, self.target)
+        self.assertEqual(
+            replayed.process_evidence["pre_stat"].as_json(),
+            session["process_evidence"]["pre_stat"],  # type: ignore[index]
+        )
+        self.assertEqual(
+            replayed.health["request"].as_json(),
+            session["health"]["request"],  # type: ignore[index]
+        )
+        assert replayed.generation is not None
+        self.assertEqual(
+            replayed.generation["response_body"].as_json(),
+            session["generation"]["response_body"],  # type: ignore[index]
+        )
+
+    def test_held_fd_replay_derives_target_from_the_consumed_raw_snapshot(self) -> None:
+        self._capture_completed()
+
+        with mock.patch.object(
+            capture.rollback_v3,
+            "derive_phase_target_from_raw_evidence_fd",
+            side_effect=AssertionError("root-relative raw reopen must not occur"),
+        ):
+            replayed = self._replay(self.request.capture_name)
+
+        self.assertEqual(replayed.target, self.target)
+
+    def test_held_fd_replay_allows_candidate_host_phase_without_generation(self) -> None:
+        request = capture.CaptureRequest(
+            **{**self.request.__dict__, "capture_name": "candidate-host-replay", "generation_body": None}
+        )
+        self._capture_completed(request)
+
+        replayed = self._replay(request.capture_name)
+
+        self.assertEqual(replayed.target, self.target)
+        self.assertIsNone(replayed.generation)
+
+    def test_held_fd_replay_rejects_incomplete_or_extra_inventory(self) -> None:
+        incomplete_request = capture.CaptureRequest(
+            **{**self.request.__dict__, "capture_name": "incomplete-replay"}
+        )
+        self._capture_completed(incomplete_request)
+        marker = self.root / incomplete_request.capture_name / capture.INCOMPLETE_MARKER_NAME
+        marker.write_bytes(capture._marker())
+        os.chmod(marker, 0o600)
+        with self.assertRaises(capture.RollbackPhaseCaptureError):
+            self._replay(incomplete_request.capture_name)
+
+        extra_request = capture.CaptureRequest(
+            **{**self.request.__dict__, "capture_name": "extra-raw-replay"}
+        )
+        self._capture_completed(extra_request)
+        extra = self.root / extra_request.capture_name / "raw" / "unexpected"
+        extra.write_bytes(b"unexpected\n")
+        os.chmod(extra, 0o600)
+        with self.assertRaises(capture.RollbackPhaseCaptureError):
+            self._replay(extra_request.capture_name)
+
+    def test_held_fd_replay_rejects_declared_target_or_canonical_request_drift(self) -> None:
+        self._capture_completed()
+        session_path = self.root / self.request.capture_name / "session.json"
+        target_drift = json.loads(session_path.read_text(encoding="utf-8"))
+        target_drift["target"]["listener_inode"] = 43
+        self._replace_session(self.request.capture_name, target_drift)
+        with self.assertRaises(capture.RollbackPhaseCaptureError) as target_error:
+            self._replay(self.request.capture_name)
+        self.assertEqual(getattr(target_error.exception, "reason_code", None), "phase-target-raw-mismatch")
+
+        request_drift = capture.CaptureRequest(
+            **{**self.request.__dict__, "capture_name": "request-drift"}
+        )
+        session = self._capture_completed(request_drift)
+        raw_path = self.root / request_drift.capture_name / "raw" / "health-request.http"
+        raw = capture._request_bytes("GET", self.endpoint, "/wrong", b"")
+        raw_path.write_bytes(raw)
+        os.chmod(raw_path, 0o600)
+        request_document = json.loads(canonical(session))
+        request_document["health"]["request"] = capture._descriptor(
+            f"{request_drift.capture_name}/raw/health-request.http", raw
+        )
+        self._replace_session(request_drift.capture_name, request_document)
+        with self.assertRaises(capture.RollbackPhaseCaptureError) as request_error:
+            self._replay(request_drift.capture_name)
+        self.assertEqual(getattr(request_error.exception, "reason_code", None), "invalid-http-request")
 
     def test_candidate_host_snapshot_has_no_extra_unaudited_generation(self) -> None:
         request = capture.CaptureRequest(
@@ -315,6 +437,23 @@ class RollbackPhaseCaptureTests(unittest.TestCase):
             "qualification_status\": \"passed",
         ):
             self.assertNotIn(forbidden, source)
+        replay_source = source[
+            source.index("def replay_rc3_rollback_phase_v1_fd(") : source.index(
+                "\ndef capture_phase(", source.index("def replay_rc3_rollback_phase_v1_fd(")
+            )
+        ]
+        for forbidden in (
+            "argparse",
+            "socket.",
+            "subprocess",
+            "docker",
+            "ssh ",
+            "_capture_exchange",
+            "_preflight_target",
+            "derive_phase_target_from_raw_evidence_fd",
+        ):
+            self.assertNotIn(forbidden, replay_source)
+        self.assertIn("derive_phase_target_from_raw_bytes", replay_source)
 
 
 if __name__ == "__main__":

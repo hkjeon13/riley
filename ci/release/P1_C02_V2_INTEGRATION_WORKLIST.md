@@ -333,17 +333,31 @@ RC2-compatible `capture_rc3_rollback_phase_v1.py` companion appends a new raw
 phase directory to that same prepopulated root and never creates a root or
 claims source audit for RC2. Its candidate no-generation mode deliberately
 leaves source-owned generation/audit capture to the existing scenario producer.
+Before a fixed-name v3 bind-request writer or authenticated finalizer is added,
+`replay_rc3_rollback_phase_v1_fd()` replays one direct phase child through the
+already-held private root FD. It admits only canonical
+`riley.rc3-rollback-raw-phase-capture.v1` session JSON, an exact fixed raw
+inventory and descriptor path/SHA-256/byte-length bindings, exact private
+`0700`/`0600` euid-owned directories/leaves, and an absent
+`capture-incomplete.json`; it derives the target again from the held `/proc`,
+TCP, FD-socket, and GPU leaves and checks the bounded health and optional
+non-stream generation exchanges. It is a pure structural replay/input-derivation
+helper, not a CLI or operational action, and it confers no terminal, rollback,
+or qualification authority.
 The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
 same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
 isolated evidence-root child, never an external deployment path, and captures
 the five opaque v3 switch leaves. It does not by itself bind private runtime
 copies to artifact-map bytes; a runner must create immutable snapshots and
 separate runtime copies through a later FD-safe mapping. Neither helper is an authenticated host
-supervisor. A future runner must replay terminal phase/switch sessions and the
-absence of their `capture-incomplete.json` markers before constructing the
-bind request; the raw v3 binder does not infer those transaction boundaries
-from arbitrary leaf paths. The v3 manifest also does not retain the switch
-session/marker descriptor, so a later semantic/terminal version must close it.
+supervisor. The phase capture's terminal condition is its canonical session plus
+removal of `capture-incomplete.json`; it does not publish a paired completion
+receipt. A future runner must use the strict phase replay for both phases and
+separately replay the paired preparation/artifact/atomic transaction receipts
+before constructing the bind request; the raw v3 binder must not infer those
+transaction boundaries from arbitrary leaf paths. The v3 manifest also does not
+retain the switch session/marker descriptor, so a later semantic/terminal version
+must close it.
 
 Before an actual runner exists,
 `verify_rollback_provenance_fd()` keeps v2 replay on one held private root FD,
@@ -611,8 +625,10 @@ runtime configuration field or a trace counter.
 4. Land the one-scenario v2 observation/remote lifecycle runner and its
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
 5. Land raw capture v2 and its separate terminal binder v5 for the
-   already-published native fallback source leaf (complete), then add rollback
-   raw capture/binding and a separately versioned lifecycle/semantic closure.
+   already-published native fallback source leaf (complete), then land rollback
+   raw phase capture and strict held-FD phase replay before the fixed-name v3
+   bind-request writer/private normal-return finalizer and separately versioned
+   lifecycle/semantic closure.
 6. Land semantic soak/rollback replay and outer qualification v2-only policy.
 7. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.

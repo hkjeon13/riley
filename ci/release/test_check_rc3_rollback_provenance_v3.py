@@ -349,6 +349,10 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             name: common.parse_descriptor(value, f"candidate process {name}")
             for name, value in document["candidate"]["process_evidence"].items()
         }
+        raw_process = {
+            name: (self.root / descriptor.path).read_bytes()
+            for name, descriptor in process_evidence.items()
+        }
         root_fd = common.open_private_evidence_directory(
             self.root,
             "rollback v3 held evidence root",
@@ -365,10 +369,15 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
                     process_evidence,
                     "candidate raw target",
                 )
+                derived_from_bytes = checker.derive_phase_target_from_raw_bytes(
+                    raw_process,
+                    "candidate raw target bytes",
+                )
         finally:
             os.close(root_fd)
         self.assertEqual(actual, expected)
         self.assertEqual(derived.as_json(), document["candidate"]["target"])
+        self.assertEqual(derived_from_bytes, derived)
 
     def test_bytes_core_rejects_a_laundered_manifest_descriptor(self) -> None:
         document = self.fixture.document()

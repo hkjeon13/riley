@@ -490,42 +490,29 @@ def _bound_loopback_listener_from_tcp(
     return next(iter(candidates))
 
 
-def derive_phase_target_from_raw_evidence_fd(
-    root_fd: int,
-    process_evidence: Mapping[str, common.EvidenceDescriptor],
+def derive_phase_target_from_raw_bytes(
+    process_evidence: Mapping[str, bytes],
     label: str,
 ) -> Target:
-    """Derive one phase target only from held-FD process/socket/GPU leaves.
+    """Derive one phase target from one already-pinned raw-byte snapshot.
 
-    This is provenance identity parsing, not HTTP/audit/rollback semantics.
-    The leaf grammars intentionally reuse the already versioned C02 raw
-    `/proc`, FD-socket, GPU-selection, and GPU-compute-app contracts.  It is
-    intentionally public to the path-only binder: that producer must never
-    accept a caller-declared target tuple.
+    The caller owns acquisition and descriptor verification.  This pure parser
+    exists so an FD-only replayer can derive the target from the same leaf bytes
+    it just consumed, rather than verifying a held child and then reopening its
+    root-relative names.  It is provenance identity parsing, not HTTP/audit or
+    rollback semantics.
     """
 
-    _common(
-        lambda: common.require_private_evidence_directory_fd(
-            root_fd,
-            "rollback v3 raw phase evidence root",
-        )
-    )
     if set(process_evidence) != set(RAW_PROCESS_FIELDS) or any(
-        not isinstance(descriptor, common.EvidenceDescriptor)
-        for descriptor in process_evidence.values()
+        type(raw) is not bytes for raw in process_evidence.values()
     ):
         _fail(
             "unknown-or-missing-field",
-            f"{label}.process_evidence must contain the closed raw field set",
+            f"{label}.process_evidence must contain the closed raw byte field set",
         )
 
     def raw(name: str) -> bytes:
-        return c02._read_bytes(  # noqa: SLF001 - shared closed raw grammar
-            root_fd,
-            process_evidence[name],
-            f"{label}.process_evidence.{name}",
-            maximum_bytes=MAX_RAW_LEAF_BYTES,
-        )
+        return process_evidence[name]
 
     def derive() -> Target:
         before_process = c02._parse_proc_stat(  # noqa: SLF001 - shared closed raw grammar
@@ -597,6 +584,46 @@ def derive_phase_target_from_raw_evidence_fd(
         )
 
     return _c02_raw(derive)
+
+
+def derive_phase_target_from_raw_evidence_fd(
+    root_fd: int,
+    process_evidence: Mapping[str, common.EvidenceDescriptor],
+    label: str,
+) -> Target:
+    """Derive one phase target only from held-FD process/socket/GPU leaves.
+
+    This is the path-descriptor adapter for the path-only v3 binder.  It first
+    admits the root and replays every descriptor, then passes the resulting
+    immutable byte snapshot to the shared parser.  A caller which already owns
+    a more specific held child FD should use :func:`derive_phase_target_from_raw_bytes`
+    after consuming that child directly.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "rollback v3 raw phase evidence root",
+        )
+    )
+    if set(process_evidence) != set(RAW_PROCESS_FIELDS) or any(
+        not isinstance(descriptor, common.EvidenceDescriptor)
+        for descriptor in process_evidence.values()
+    ):
+        _fail(
+            "unknown-or-missing-field",
+            f"{label}.process_evidence must contain the closed raw field set",
+        )
+    raw = {
+        name: c02._read_bytes(  # noqa: SLF001 - shared closed raw grammar
+            root_fd,
+            process_evidence[name],
+            f"{label}.process_evidence.{name}",
+            maximum_bytes=MAX_RAW_LEAF_BYTES,
+        )
+        for name in RAW_PROCESS_FIELDS
+    }
+    return derive_phase_target_from_raw_bytes(raw, label)
 
 
 def _verify_phase_target_raw_evidence(

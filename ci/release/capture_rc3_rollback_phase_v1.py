@@ -25,11 +25,13 @@ import socket
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, NoReturn, Sequence, TypeVar
+from typing import Any, Callable, Mapping, NoReturn, Sequence, TypeVar
 from urllib.parse import urlsplit
 
+import check_rc3_rollback_provenance_v3 as rollback_v3
 import capture_c02_observations_v2 as c02
 import capture_c02_raw_soak_scenarios_v1 as scenarios
+import provenance_v2_common as common
 
 
 sys.dont_write_bytecode = True
@@ -43,13 +45,49 @@ MAX_HTTP_BODY_BYTES = 16 * 1024 * 1024
 PID_RE = re.compile(r"^[1-9][0-9]*$")
 UINT_RE = re.compile(r"^[0-9]+$")
 
+_SESSION_FIELDS = frozenset(
+    {
+        "schema_version",
+        "capture_status",
+        "qualification_status",
+        "endpoint",
+        "target",
+        "process_evidence",
+        "health",
+        "generation",
+    }
+)
+_PROCESS_RAW_FILENAMES = {
+    "pre_stat": "pre-stat",
+    "post_stat": "post-stat",
+    "pre_tcp": "pre-tcp",
+    "post_tcp": "post-tcp",
+    "pre_fd_sockets": "pre-fd-sockets.json",
+    "post_fd_sockets": "post-fd-sockets.json",
+    "status": "status",
+    "gpu_selection": "gpu-selection.csv",
+    "gpu_compute_apps": "gpu-compute-apps.csv",
+}
+_HEALTH_RAW_FILENAMES = {
+    "request": "health-request.http",
+    "response_head": "health-response-head.http",
+    "response_body": "health-response-body.bin",
+}
+_GENERATION_RAW_FILENAMES = {
+    "request": "generation-request.http",
+    "response_head": "generation-response-head.http",
+    "response_body": "generation-response-body.bin",
+}
+
 
 class RollbackPhaseCaptureError(ValueError):
     """One rollback phase cannot safely publish raw evidence."""
 
 
-def _fail(message: str) -> NoReturn:
-    raise RollbackPhaseCaptureError(message)
+def _fail(message: str, *, code: str = "invalid-rollback-phase") -> NoReturn:
+    error = RollbackPhaseCaptureError(message)
+    error.reason_code = code  # type: ignore[attr-defined]
+    raise error
 
 
 T = TypeVar("T")
@@ -66,7 +104,21 @@ def _scenario(call: Callable[[], T]) -> T:
     try:
         return call()
     except scenarios.RawScenarioCaptureError as error:
-        _fail(str(error))
+        _fail(str(error), code=getattr(error, "reason_code", "invalid-raw-scenario"))
+
+
+def _common(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except common.ProvenanceV2Error as error:
+        _fail(str(error), code=getattr(error, "reason_code", "unsafe-evidence"))
+
+
+def _rollback_v3(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except rollback_v3.RollbackV3ProvenanceError as error:
+        _fail(str(error), code=getattr(error, "reason_code", "invalid-raw-process-evidence"))
 
 
 @dataclass(frozen=True)
@@ -111,6 +163,24 @@ class CaptureDirectories:
     root_fd: int
     capture_fd: int
     raw_fd: int
+
+
+@dataclass(frozen=True)
+class ReplayedPhaseCapture:
+    """One terminal rollback phase replayed through caller-held FDs only.
+
+    This is intentionally a structural/raw replay.  It proves that the
+    capture's exact raw inventory, descriptors, HTTP framing, and declared
+    target agree; it does not interpret either HTTP response as a rollback
+    verdict or operate a service.
+    """
+
+    capture_name: str
+    endpoint: Endpoint
+    target: TargetIdentity
+    process_evidence: Mapping[str, common.EvidenceDescriptor]
+    health: Mapping[str, common.EvidenceDescriptor]
+    generation: Mapping[str, common.EvidenceDescriptor] | None
 
 
 def parse_endpoint(value: str) -> Endpoint:
@@ -453,6 +523,354 @@ def _capture_raw_files(
             "response_body": _descriptor(f"{prefix}/generation-response-body.bin", generation_body),
         }
     return tuple(raw_files), document
+
+
+def _exact_object(value: Any, fields: set[str] | frozenset[str], label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or set(value) != set(fields):
+        actual = sorted(value) if isinstance(value, Mapping) else []
+        _fail(
+            f"{label} fields differ; expected={sorted(fields)}, actual={actual}",
+            code="unknown-or-missing-field",
+        )
+    return value
+
+
+def _positive(value: Any, label: str, *, maximum: int = 2**63 - 1) -> int:
+    if type(value) is not int or value < 1 or value > maximum:
+        _fail(f"{label} must be a positive integer in range", code="invalid-integer")
+    return value
+
+
+def _nonnegative(value: Any, label: str, *, maximum: int = 2**31 - 1) -> int:
+    if type(value) is not int or value < 0 or value > maximum:
+        _fail(f"{label} must be a non-negative integer in range", code="invalid-integer")
+    return value
+
+
+def _replay_endpoint(value: Any, label: str) -> Endpoint:
+    if type(value) is not str:
+        _fail(f"{label} must be a canonical endpoint URL", code="invalid-endpoint")
+    endpoint = parse_endpoint(value)
+    if endpoint.url != value:
+        _fail(f"{label} must be canonical literal loopback text", code="invalid-endpoint")
+    return endpoint
+
+
+def _replay_target(value: Any, label: str) -> TargetIdentity:
+    row = _exact_object(
+        value,
+        {
+            "server_pid",
+            "server_start_ticks",
+            "listener_port",
+            "listener_inode",
+            "gpu_index",
+            "gpu_uuid",
+        },
+        label,
+    )
+    gpu_uuid = row["gpu_uuid"]
+    if (
+        type(gpu_uuid) is not str
+        or len(gpu_uuid) > 128
+        or c02.GPU_UUID_RE.fullmatch(gpu_uuid) is None
+    ):
+        _fail(f"{label}.gpu_uuid must be a canonical GPU UUID", code="invalid-gpu-uuid")
+    return TargetIdentity(
+        server_pid=_positive(row["server_pid"], f"{label}.server_pid"),
+        server_start_ticks=_positive(row["server_start_ticks"], f"{label}.server_start_ticks"),
+        listener_port=_positive(
+            row["listener_port"], f"{label}.listener_port", maximum=65535
+        ),
+        listener_inode=_positive(row["listener_inode"], f"{label}.listener_inode"),
+        gpu_index=_nonnegative(row["gpu_index"], f"{label}.gpu_index"),
+        gpu_uuid=gpu_uuid,
+    )
+
+
+def _replay_descriptor_map(
+    value: Any,
+    filenames: Mapping[str, str],
+    *,
+    capture_name: str,
+    label: str,
+) -> dict[str, common.EvidenceDescriptor]:
+    row = _exact_object(value, set(filenames), label)
+    descriptors: dict[str, common.EvidenceDescriptor] = {}
+    for field, filename in filenames.items():
+        descriptor = _common(
+            lambda field=field: common.parse_descriptor(row[field], f"{label}.{field}")
+        )
+        _common(
+            lambda descriptor=descriptor, field=field, filename=filename: common.rebase_descriptor_to_held_leaf(
+                descriptor,
+                expected_root_relative_path=f"{capture_name}/raw/{filename}",
+                leaf_name=filename,
+                label=f"{label}.{field}",
+            )
+        )
+        descriptors[field] = descriptor
+    return descriptors
+
+
+def _consume_replayed_raw_leaf(
+    raw_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    capture_name: str,
+    filename: str,
+    label: str,
+    maximum_bytes: int,
+) -> bytes:
+    rebased = _common(
+        lambda: common.rebase_descriptor_to_held_leaf(
+            descriptor,
+            expected_root_relative_path=f"{capture_name}/raw/{filename}",
+            leaf_name=filename,
+            label=label,
+        )
+    )
+    return _common(
+        lambda: common.consume_private_snapshot_descriptor_file(
+            raw_fd,
+            rebased,
+            label,
+            lambda raw_file: raw_file.read(),
+            maximum_bytes=maximum_bytes,
+        )
+    )
+
+
+def _consume_replayed_raw_group(
+    raw_fd: int,
+    descriptors: Mapping[str, common.EvidenceDescriptor],
+    filenames: Mapping[str, str],
+    *,
+    capture_name: str,
+    label: str,
+) -> dict[str, bytes]:
+    raw: dict[str, bytes] = {}
+    for field, filename in filenames.items():
+        if filenames is _PROCESS_RAW_FILENAMES:
+            maximum = c02.MAX_GPU_BYTES if field.startswith("gpu_") else c02.MAX_PROC_BYTES
+        elif field == "response_head":
+            maximum = MAX_HTTP_HEAD_BYTES
+        elif field == "request":
+            maximum = MAX_HTTP_BODY_BYTES + MAX_HTTP_HEAD_BYTES
+        else:
+            maximum = MAX_HTTP_BODY_BYTES
+        raw[field] = _consume_replayed_raw_leaf(
+            raw_fd,
+            descriptors[field],
+            capture_name=capture_name,
+            filename=filename,
+            label=f"{label}.{field}",
+            maximum_bytes=maximum,
+        )
+    return raw
+
+
+def _replay_http_exchange(
+    raw: Mapping[str, bytes],
+    endpoint: Endpoint,
+    *,
+    method: str,
+    target: str,
+    label: str,
+    require_json: bool,
+) -> None:
+    request = raw["request"]
+    if method == "GET":
+        expected_request = _request_bytes("GET", endpoint, target, b"")
+    elif method == "POST":
+        split = _split_head(request)
+        if split is None:
+            _fail(f"{label}.request lacks one HTTP header terminator", code="invalid-http-request")
+        _head, body = split
+        checked_body = _validate_generation_body(body, f"{label}.request body")
+        expected_request = _request_bytes("POST", endpoint, target, checked_body)
+    else:
+        _fail("internal unsupported replay HTTP method")
+    if request != expected_request:
+        _fail(f"{label}.request does not match the fixed canonical exchange", code="invalid-http-request")
+    expected_length = _response_length(raw["response_head"], label, require_json=require_json)
+    if len(raw["response_body"]) != expected_length:
+        _fail(f"{label}.response_body does not match Content-Length", code="invalid-http-response")
+
+
+def _assert_exact_directory_inventory(directory_fd: int, expected: set[str], label: str) -> None:
+    try:
+        actual = set(os.listdir(directory_fd))
+    except OSError as error:
+        _fail(f"cannot list {label}: {error}", code="unreadable-input")
+    if actual != expected:
+        _fail(
+            f"{label} inventory differs; expected={sorted(expected)}, actual={sorted(actual)}",
+            code="unknown-or-missing-leaf",
+        )
+
+
+def replay_rc3_rollback_phase_v1_fd(root_fd: int, capture_name: str) -> ReplayedPhaseCapture:
+    """Strictly replay one terminal raw phase below an already-held root FD.
+
+    This helper deliberately has no path-opening wrapper or CLI mode.  A later
+    authenticated compositor must call it while retaining its private root FD,
+    so no arbitrary raw-path list can be supplied to the bind-request writer.
+    """
+
+    _c02(lambda: c02._validate_leaf_name(capture_name, "rollback phase capture name"))  # noqa: SLF001
+    _common(lambda: common.require_private_evidence_directory_fd(root_fd, "rollback phase root"))
+    capture_fd: int | None = None
+    raw_fd: int | None = None
+    try:
+        capture_fd = _common(
+            lambda: common.open_private_child_directory(
+                root_fd, capture_name, "rollback phase capture directory"
+            )
+        )
+        raw_fd = _common(
+            lambda: common.open_private_child_directory(
+                capture_fd, "raw", "rollback phase raw directory"
+            )
+        )
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                root_fd, capture_fd, capture_name, "rollback phase capture directory"
+            )
+        )
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                capture_fd, raw_fd, "raw", "rollback phase raw directory"
+            )
+        )
+        _assert_exact_directory_inventory(
+            capture_fd,
+            {"raw", "session.json"},
+            "rollback phase capture directory",
+        )
+        session = _common(
+            lambda: common.read_private_canonical_json_leaf(
+                capture_fd,
+                "session.json",
+                "rollback phase session",
+            )
+        )
+        row = _exact_object(session, _SESSION_FIELDS, "rollback phase session")
+        if row["schema_version"] != SESSION_VERSION:
+            _fail("rollback phase session has an unsupported schema version", code="invalid-schema-version")
+        if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+            _fail("rollback phase session has an invalid terminal state", code="invalid-terminal-state")
+        endpoint = _replay_endpoint(row["endpoint"], "rollback phase session.endpoint")
+        target = _replay_target(row["target"], "rollback phase session.target")
+        if target.listener_port != endpoint.port:
+            _fail(
+                "rollback phase session target port differs from its endpoint",
+                code="phase-target-endpoint-mismatch",
+            )
+        process_evidence = _replay_descriptor_map(
+            row["process_evidence"],
+            _PROCESS_RAW_FILENAMES,
+            capture_name=capture_name,
+            label="rollback phase session.process_evidence",
+        )
+        health = _replay_descriptor_map(
+            row["health"],
+            _HEALTH_RAW_FILENAMES,
+            capture_name=capture_name,
+            label="rollback phase session.health",
+        )
+        generation_value = row["generation"]
+        generation: dict[str, common.EvidenceDescriptor] | None
+        if generation_value is None:
+            generation = None
+        else:
+            generation = _replay_descriptor_map(
+                generation_value,
+                _GENERATION_RAW_FILENAMES,
+                capture_name=capture_name,
+                label="rollback phase session.generation",
+            )
+        expected_raw = set(_PROCESS_RAW_FILENAMES.values()) | set(_HEALTH_RAW_FILENAMES.values())
+        if generation is not None:
+            expected_raw.update(_GENERATION_RAW_FILENAMES.values())
+        _assert_exact_directory_inventory(raw_fd, expected_raw, "rollback phase raw directory")
+        raw_process = _consume_replayed_raw_group(
+            raw_fd,
+            process_evidence,
+            _PROCESS_RAW_FILENAMES,
+            capture_name=capture_name,
+            label="rollback phase process evidence",
+        )
+        raw_health = _consume_replayed_raw_group(
+            raw_fd,
+            health,
+            _HEALTH_RAW_FILENAMES,
+            capture_name=capture_name,
+            label="rollback phase health",
+        )
+        _replay_http_exchange(
+            raw_health,
+            endpoint,
+            method="GET",
+            target="/readyz",
+            label="rollback phase health",
+            require_json=False,
+        )
+        if generation is not None:
+            raw_generation = _consume_replayed_raw_group(
+                raw_fd,
+                generation,
+                _GENERATION_RAW_FILENAMES,
+                capture_name=capture_name,
+                label="rollback phase generation",
+            )
+            _replay_http_exchange(
+                raw_generation,
+                endpoint,
+                method="POST",
+                target="/v1/completions",
+                label="rollback phase generation",
+                require_json=True,
+            )
+        observed = _rollback_v3(
+            lambda: rollback_v3.derive_phase_target_from_raw_bytes(
+                raw_process,
+                "rollback phase raw target",
+            )
+        )
+        if observed.as_json() != target.as_json():
+            _fail(
+                "rollback phase session target differs from held raw process evidence",
+                code="phase-target-raw-mismatch",
+            )
+        _common(lambda: common.require_private_evidence_directory_fd(root_fd, "rollback phase root"))
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                root_fd, capture_fd, capture_name, "rollback phase capture directory"
+            )
+        )
+        _common(
+            lambda: common.require_private_child_directory_fd(
+                capture_fd, raw_fd, "raw", "rollback phase raw directory"
+            )
+        )
+        _assert_exact_directory_inventory(
+            capture_fd,
+            {"raw", "session.json"},
+            "rollback phase capture directory",
+        )
+        _assert_exact_directory_inventory(raw_fd, expected_raw, "rollback phase raw directory")
+        return ReplayedPhaseCapture(
+            capture_name=capture_name,
+            endpoint=endpoint,
+            target=target,
+            process_evidence=process_evidence,
+            health=health,
+            generation=generation,
+        )
+    finally:
+        c02._close_quietly(raw_fd)  # noqa: SLF001
+        c02._close_quietly(capture_fd)  # noqa: SLF001
 
 
 def capture_phase(request: CaptureRequest) -> dict[str, Any]:

@@ -382,6 +382,17 @@ non-stream completion, PID/TCP/FD-socket/GPU raw leaves를 같은 prepopulated
 private baseline root의 새 capture child에만 append한다. candidate source-audit
 generation은 여전히 별도의 source-owned scenario producer가 담당하고, RC2에는
 audit을 합성하지 않는다.
+fixed-name v3 bind-request writer 또는 authenticated finalizer를 추가하기 전에,
+`capture_rc3_rollback_phase_v1.py`의 strict held-FD replay API
+`replay_rc3_rollback_phase_v1_fd()`가 phase session을 먼저 재생한다. 이
+replayer는 같은 private root FD 아래 exact capture/raw child를 no-follow로 열고
+canonical `riley.rc3-rollback-raw-phase-capture.v1` session, fixed raw inventory,
+descriptor의 path/SHA-256/byte length, exact private `0700`/`0600` euid ownership,
+`capture-incomplete.json` 부재를 재검증한다. `/proc`·TCP·FD-socket·GPU raw
+leaf에서 target tuple을 재derive하여 session 값과 교차검증하고, health 및 optional
+non-stream completion HTTP exchange는 bounded fixed grammar로만 replay한다. 이는
+raw structural input을 derive할 뿐 service/GPU/network/SSH/Docker/rename을 실행하거나
+terminal·rollback authority를 만들지 않는다.
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
@@ -467,8 +478,12 @@ evidence일 뿐 이후 process가 successful rollback/terminal authority로 재�
 이것은 artifact-exchange subtransaction과 그 narrow raw v4 join까지만 닫는다. complete reconstructed-baseline,
 candidate/rollback phase, source audit/shutdown/config bridge를 연결하는 authenticated
 host runner는 아직 없고 v3 binder도 이 transaction session을 소비하지 않는다. future
-runner는 해당 terminal session, 각각의 `capture-incomplete.json` 부재, 그리고
-session-bound completion receipt pair를 replay한 뒤에만 raw path를 bind request에 넣어야 한다.
+runner는 `replay_rc3_rollback_phase_v1_fd()`로 candidate/rollback phase 각각의
+exact session/raw inventory/derived target와 `capture-incomplete.json` 부재를 먼저
+replay하고, static preparation·artifact preparation·atomic transaction에 대해서만
+session-bound completion receipt pair를 별도로 replay한 뒤에만 raw path를 bind
+request에 넣어야 한다. phase collector 자체는 paired completion receipt를 publish하지
+않으므로 replayer가 이를 합성하거나 추론해서는 안 된다.
 따라서 actual GPU rollback drill, candidate
 freeze, deployment rollback success verdict를 실행하거나 주장하지 않는다.
 
@@ -490,7 +505,8 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    v4/shutdown receipt closure와 hostile/static tests를 추가한다. 이 구현만으로는
    GPU capture나 qualification을 실행하지 않는다.
 6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
-   baseline rollback v3 raw verifier/schema를 추가하고, 별도 raw runner/binder를 추가한다.
+   baseline rollback v3 raw verifier/schema, strict held-FD phase replay를 먼저
+   추가한 뒤 fixed-name raw bind-request writer와 private normal-return finalizer를 추가한다.
 7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
    v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
