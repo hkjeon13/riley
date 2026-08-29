@@ -393,6 +393,18 @@ class NativeCorrectnessEvidenceTests(unittest.TestCase):
         self.assertEqual(result.case_count, 31)
         self.assertEqual(result.failure_count, 0)
         self.assertEqual(result.candidate_executable_sha256, sha256(self.fixture.executable))
+        self.assertEqual(
+            result.source_archive_byte_length,
+            self.fixture.candidate_source.stat().st_size,
+        )
+        self.assertEqual(
+            result.correctness_report_byte_length,
+            self.fixture.correctness_report.stat().st_size,
+        )
+        self.assertEqual(
+            result.candidate_executable_byte_length,
+            self.fixture.executable.stat().st_size,
+        )
 
     def test_historical_v2_two_variant_raw_bundle_still_replays(self) -> None:
         report = self.fixture.rewrite_as_historical_v2()
@@ -422,6 +434,11 @@ class NativeCorrectnessEvidenceTests(unittest.TestCase):
         self.assertEqual(report["status"], "fail")
         diagnostic = self.fixture.replay()
         self.assertGreater(diagnostic.failure_count, 0)
+        with self.assertRaisesRegex(
+            checker.NativeCorrectnessEvidenceError,
+            "status: must be pass for evidence packaging",
+        ):
+            self.fixture.replay(require_passing_report=True)
 
         rejected = self.fixture.root / "rejected.tar"
         with self.assertRaisesRegex(

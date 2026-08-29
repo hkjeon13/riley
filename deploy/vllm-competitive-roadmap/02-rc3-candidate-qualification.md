@@ -333,6 +333,24 @@ profile runtime config, rollback은 four-gate v1 inventory에 넣지 않으며 �
 semantic boundary에서 다뤄야 한다. legacy path-based `check_release_candidate.py`는 별도
 final release checker일 뿐 이 boundary 또는 same-stack Gate E input을 대체하지 않는다.
 
+그 다음의 `replay_rc3_gate_e_native_e0_v1.py`는 이 고정 inventory의 native canonical-E0
+한 component만 held FD에서 scratch copy로 옮겨 기존 31-case tensor replayer에 넘긴다. native
+raw의 16 GiB 상한은 전체 Gate E artifact streaming 전에 control-plane descriptor로 먼저
+거부하고, inventory와 frozen source/input closure는 semantic replay 전후에 다시 replay한다.
+scratch bytes는 SHA-256/length/mode까지 재검증하며 native raw result의 source archive, native
+report, calibration executable은 모두 SHA-256 **및** length로 frozen/inventory descriptor에
+교차 결속된다. failed diagnostic report는 semantic consumer에서 거부된다. 여기의
+`native_candidate_executable`은 production/profile binary가 아니라 source-bound calibration
+executable이며 둘을 동일시하지 않는다.
+
+이 component output은 `bound/frozen/not-run`, `native_e0_status: passed`,
+`gate-e-native-e0-semantic-replay-only`만 뜻한다. optimizer E0, Python-free, performance,
+soak, aggregate Gate E pass, semantic receipt, qualification, deployment은 모두 명시적으로
+`not-established`다. 현재 원격 host의 기본 Python 3.10에서는 `tomllib`가 없으므로 실제 native
+raw replayer는 Python 3.11+ 또는 reviewed `run_release_python.py` compatibility wrapper로만
+실행할 수 있다. 이 source-level component은 actual GPU capture나 actual candidate의 Gate E
+pass를 기록하지 않는다.
+
 ## 3. 범위
 
 ### 포함

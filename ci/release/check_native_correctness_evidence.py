@@ -1091,9 +1091,12 @@ class NativeReplayResult:
     schema_version: str
     source_revision: str
     source_archive_sha256: str
+    source_archive_byte_length: int
     oracle_source_revision: str
     correctness_report_sha256: str
+    correctness_report_byte_length: int
     candidate_executable_sha256: str
+    candidate_executable_byte_length: int
     case_count: int
     failure_count: int
 
@@ -1105,9 +1108,16 @@ def replay_raw_evidence(
     source_archive: Path | None = None,
     correctness_report: Path | None = None,
     candidate_executable: Path | None = None,
+    require_passing_report: bool = False,
     oracle_trust_anchors: OracleTrustAnchors = PRODUCTION_ORACLE_TRUST_ANCHORS,
 ) -> NativeReplayResult:
-    """Replay raw tensors and optionally bind independent candidate artifacts."""
+    """Replay raw tensors and optionally bind independent candidate artifacts.
+
+    ``require_passing_report`` is for a semantic consumer that must reject a
+    replay-valid failed diagnostic.  It remains opt-in so forensic/raw
+    consumers can still inspect a faithfully replayed failure without turning
+    it into promotion evidence.
+    """
 
     mappings: list[_PureSafeTensorMapping] = []
 
@@ -1187,6 +1197,8 @@ def replay_raw_evidence(
             report, report_raw = _json_bytes(
                 files["correctness-report.json"], "correctness-report.json"
             )
+            if require_passing_report:
+                _require_passing_native_e0_report(report)
             roots = _SourceRoots(
                 candidate=candidate_source_root,
                 candidate_revision=candidate_revision,
@@ -1231,6 +1243,13 @@ def replay_raw_evidence(
                 "candidate-source.tar",
                 MAX_SOURCE_ARCHIVE_BYTES,
             )
+            try:
+                source_length = files["candidate-source.tar"].stat().st_size
+                executable_length = files["candidate-executable"].stat().st_size
+            except OSError as error:
+                _fail("raw_evidence", f"cannot stat replayed bound artifact: {error}")
+            if type(source_length) is not int or type(executable_length) is not int:
+                _fail("raw_evidence", "replayed bound artifact length is not an integer")
 
             if source_revision is not None and source_revision != candidate_revision:
                 _fail("source_revision", "does not match replayed candidate source")
@@ -1267,9 +1286,12 @@ def replay_raw_evidence(
                 schema_version=SCHEMA_VERSION,
                 source_revision=candidate_revision,
                 source_archive_sha256=source_sha,
+                source_archive_byte_length=source_length,
                 oracle_source_revision=oracle_revision,
                 correctness_report_sha256=report_sha,
+                correctness_report_byte_length=len(report_raw),
                 candidate_executable_sha256=candidate_sha,
+                candidate_executable_byte_length=executable_length,
                 case_count=int(summary["case_count"]),
                 failure_count=int(summary["failure_count"]),
             )

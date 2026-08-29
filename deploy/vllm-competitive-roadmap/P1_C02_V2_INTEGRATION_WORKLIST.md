@@ -843,11 +843,23 @@ runtime configuration field or a trace counter.
      not inspect report pass fields, thresholds, GPU observations, CUDA-fault
      or reproducible-build legacy-superset evidence, Qwen, runtime-config,
      rollback, or qualification.
+   - `replay_rc3_gate_e_native_e0_v1.py` now consumes only the fixed native
+     canonical-E0 leaves through a held-FD scratch snapshot. It preflights the
+     16-GiB raw limit before full inventory streaming, requires a passing
+     31-case native replay, and cross-binds source archive, native report, and
+     calibration executable SHA-256 **and** length. Its
+     `native_e0_status: passed` remains a component result: optimizer E0, Python-free,
+     performance, soak, aggregate Gate E, semantic receipt, qualification, and
+     deployment are mechanically `not-established`. It deliberately treats
+     the calibration executable as distinct from the release/profile binary.
+     On the current Python 3.10 host the real raw replayer requires Python
+     3.11+ or the reviewed `run_release_python.py` compatibility wrapper.
    - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
-     still add a **separate FD-native Gate E semantic replayer** on that
-     fixed inventory. The legacy path-based `check_release_candidate.py` is
-     not that replayer and must not be consumed by a same-stack semantic
-     finalizer. Only after Gate E is fixed may a distinct same-stack v2
+     still add FD-native semantic components for optimizer E0, Python-free,
+     performance, and soak, then a separate aggregate Gate E replayer over
+     those exact results. The legacy path-based `check_release_candidate.py`
+     is not that replayer and must not be consumed by a same-stack semantic
+     finalizer. Only after full Gate E is fixed may a distinct same-stack v2
      semantic receipt be emitted; the outer qualification checker must accept
      only that exact version and reject historical v1 before generic gate
      failure.
