@@ -19,6 +19,7 @@ import compose_rc3_rollback_finalizer_receipt_v1 as composer
 import finalize_rc3_rollback_candidate_source_v4 as fixed_finalizer
 import prepare_rc3_rollback_artifacts_v1 as prepare
 import provenance_v2_common as common
+import replay_rc3_rollback_candidate_source_v1 as candidate_source
 import test_replay_rc3_rollback_candidate_source_v1 as candidate_fixtures
 import test_write_rc3_rollback_candidate_source_bind_request_v1 as writer_fixtures
 import write_rc3_rollback_finalizer_receipt_v1 as receipt
@@ -160,6 +161,24 @@ class ComposeRollbackFinalizerReceiptTests(
             with self.assertRaises(composer.RollbackFinalizerReceiptComposeError) as raised:
                 self._compose()
         self.assert_reason(raised, "output-name-collision")
+        self.assertFalse((self.root / prepare.SNAPSHOT_DIRECTORY_NAME).exists())
+        self.assertFalse((self.root / transaction.TRANSACTION_DIRECTORY_NAME).exists())
+
+    def test_dynamic_preflight_stops_before_artifact_preparation(self) -> None:
+        failure = candidate_source.CandidateSourceJoinError("fixture dynamic evidence failure")
+        failure.reason_code = "fixture-dynamic-preflight"  # type: ignore[attr-defined]
+        with mock.patch.object(
+            candidate_source,
+            "_replay_candidate_source_join_on_held_root_fd",
+            side_effect=failure,
+        ), mock.patch.object(
+            prepare,
+            "_prepare_artifacts_then_terminal_success_held_root_fd",
+            side_effect=AssertionError("preparation must not run after dynamic preflight failure"),
+        ):
+            with self.assertRaises(composer.RollbackFinalizerReceiptComposeError) as raised:
+                self._compose()
+        self.assert_reason(raised, "fixture-dynamic-preflight")
         self.assertFalse((self.root / prepare.SNAPSHOT_DIRECTORY_NAME).exists())
         self.assertFalse((self.root / transaction.TRANSACTION_DIRECTORY_NAME).exists())
 

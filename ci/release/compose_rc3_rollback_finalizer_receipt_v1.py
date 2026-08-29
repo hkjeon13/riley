@@ -22,9 +22,12 @@ import fcntl
 from typing import Any, Callable, NoReturn, TypeVar
 
 import capture_rc3_rollback_atomic_transaction_v1 as transaction
+import capture_rc3_rollback_phase_v1 as phase_capture
 import finalize_rc3_rollback_candidate_source_v4 as fixed_finalizer
 import prepare_rc3_rollback_artifacts_v1 as prepare
 import provenance_v2_common as common
+import replay_rc3_rollback_candidate_source_v1 as candidate_source
+import write_rc3_rollback_candidate_source_bind_request_v1 as writer
 import write_rc3_rollback_finalizer_receipt_v1 as receipt
 
 
@@ -71,6 +74,27 @@ def _fixed_finalizer(call: Callable[[], T]) -> T:
         _fail(getattr(error, "reason_code", "invalid-fixed-finalizer"), str(error))
 
 
+def _candidate_source(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except candidate_source.CandidateSourceJoinError as error:
+        _fail(getattr(error, "reason_code", "invalid-candidate-source"), str(error))
+
+
+def _phase(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except phase_capture.RollbackPhaseCaptureError as error:
+        _fail(getattr(error, "reason_code", "invalid-rollback-phase"), str(error))
+
+
+def _writer(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except writer.RollbackCandidateSourceBindRequestError as error:
+        _fail(getattr(error, "reason_code", "invalid-fixed-bind-request"), str(error))
+
+
 def _receipt(call: Callable[[], T]) -> T:
     try:
         return call()
@@ -101,6 +125,77 @@ def _preflight_fixed_terminal_outputs(root_fd: int) -> None:
     _receipt(lambda: receipt._assert_receipt_outputs_absent(root_fd))  # noqa: SLF001
 
 
+def _replay_dynamic_raw_evidence_once(
+    root_fd: int,
+) -> tuple[candidate_source.ReplayedCandidateSourceJoin, phase_capture.ReplayedPhaseCapture]:
+    """Replay every live input the fixed writer can validate before mutation."""
+
+    joined = _candidate_source(
+        lambda: candidate_source._replay_candidate_source_join_on_held_root_fd(  # noqa: SLF001
+            root_fd
+        )
+    )
+    rollback = _phase(
+        lambda: phase_capture.replay_rc3_rollback_phase_v1_fd(
+            root_fd,
+            writer.ROLLBACK_PHASE_CAPTURE_NAME,
+        )
+    )
+    if (
+        joined.candidate_phase.target.server_pid,
+        joined.candidate_phase.target.server_start_ticks,
+    ) == (rollback.target.server_pid, rollback.target.server_start_ticks):
+        _fail(
+            "reused-candidate-process",
+            "candidate and rollback phase must use distinct PID/start-tick identities",
+        )
+    _candidate_request, candidate_descriptors = _writer(
+        lambda: writer._candidate_request(joined)  # noqa: SLF001
+    )
+    _rollback_request, rollback_descriptors = _writer(
+        lambda: writer._rollback_request(rollback)  # noqa: SLF001
+    )
+    candidate_paths = _writer(
+        lambda: writer._candidate_source_consumed_paths(  # noqa: SLF001
+            joined,
+            candidate_descriptors,
+        )
+    )
+    _writer(
+        lambda: writer._assert_no_cross_role_path_reuse(  # noqa: SLF001
+            candidate_paths,
+            (("rollback raw evidence", rollback_descriptors),),
+        )
+    )
+    return joined, rollback
+
+
+def _preflight_dynamic_raw_evidence(root_fd: int) -> None:
+    """Admit the fixed live closure before preparation can mutate the root.
+
+    The future writer/finalizer must replay these inputs again after the
+    preparation and atomic transaction exist, because those later products
+    are themselves part of the final closure.  This earlier, read-only pass
+    intentionally covers the dynamic candidate/config/source and rollback
+    phase inputs that already exist: malformed live evidence must not leave a
+    fresh snapshot, artifact, or switch surface behind.
+    """
+
+    initial = _replay_dynamic_raw_evidence_once(root_fd)
+    terminal = _replay_dynamic_raw_evidence_once(root_fd)
+    if terminal != initial:
+        _fail(
+            "dynamic-evidence-replay-drift",
+            "dynamic candidate/config/source/rollback evidence changed during held-FD preflight",
+        )
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "rollback finalizer receipt evidence root",
+        )
+    )
+
+
 def _prepare_transaction_and_write_fixed_receipt_on_held_root_fd(
     root_fd: int,
     request: prepare.PreparationRequest,
@@ -127,6 +222,7 @@ def _prepare_transaction_and_write_fixed_receipt_on_held_root_fd(
     # output must not leave a new preparation/transaction that another call
     # might try to pair with a later terminal receipt.
     _preflight_fixed_terminal_outputs(root_fd)
+    _preflight_dynamic_raw_evidence(root_fd)
 
     def after_normal_preparation(
         _preparation_replay: prepare.ArtifactPreparationReplay,

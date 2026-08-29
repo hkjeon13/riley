@@ -753,8 +753,8 @@ runtime configuration field or a trace counter.
      no caller-supplied SHA or target tuple and performs no operational action.
      Publish its closed canonical stdout report schema alongside the helper.
 
-5. `ci/release/run_remote_rc3_rollback_capture.sh` (new) and
-   `ci/release/bind_raw_rc3_rollback_capture.py` (new)
+5. `ci/release/run_remote_rc3_rollback_capture.sh` (landed) and
+   fixed private RC3 raw finalizer chain
    - Capture candidate/rollback target tuples and reject equal
      `(pid,start_ticks)` identities.
    - Publish `rollback-bind-request-v3.schema.json` as a closed path-only
@@ -778,6 +778,15 @@ runtime configuration field or a trace counter.
      their descriptors for independently replaying those input files. It
      publishes no completion marker and reserves matching `.complete` and
      `.intent` names against stale terminal-looking siblings.
+   - The landed runner accepts only the full static/candidate/rollback host
+     input set, forces `stable-default`, owns all dynamic evidence names, and
+     rejects caller profile/hash/PID/target/receipt controls. It validates one
+     standard serial scenario and one canonical rollback generation request
+     before GPU preflight, uses authenticated `env -i` candidate and RC2
+     launches on distinct loopback ports, and reaches only the private
+     preparation→transaction→v3/v4→receipt normal-return finalizer. It has
+     CPU/static tests only; no GPU capture, freeze, deployment mutation,
+     semantic receipt, or qualification result is claimed.
 
 6. a separate soak v2 semantic receipt checker (not
    `ci/release/check_soak_v2_receipt.py`), `ci/release/check_rc3_rollback_receipt.py`, and
@@ -826,7 +835,8 @@ runtime configuration field or a trace counter.
    already-published native fallback source leaf (complete), then add rollback
    raw capture/binding, the fixed candidate/source v3/v4 finalizer, its
    same-stack normal-return receipt v1, and the private fixed-topology
-   preparation→transaction→receipt compositor/wrapper (complete), before a separately
+   preparation→transaction→receipt compositor/wrapper plus authenticated RC3
+   raw runner (complete; CPU/static scope only), before a separately
    versioned lifecycle/semantic closure. Its final closure replay finishes
    before any receipt leaf and a successful terminal hardlink returns
    immediately. A receipt pair is not a path-replay success token or semantic
@@ -864,9 +874,10 @@ runtime configuration field or a trace counter.
   rollback v4 and returns raw-structural-only `bound/not-run`; it is not a
   rollback receipt or qualification input.
 - `check_rc3_rollback_receipt.py` still consumes self-authored v1 timeline
-  fields; no authenticated operational rollback raw-capture runner exists.
-  The landed private fixed-topology compositor can only consume already captured
-  dynamic evidence in one held-FD normal-return chain and cannot create it.
+  fields and remains historical-only. The landed authenticated RC3 raw runner
+  can produce the fixed raw topology and receipt chain, but no semantic
+  rollback/qualification checker may consume its output yet; CPU/static tests
+  are not a GPU capture result.
 - `check_rc3_qualification.py` imports those v1 report versions and also has
   fallback open flags.
 - `C02ShutdownArtifactWriter` v1 is close to safe but records PID without

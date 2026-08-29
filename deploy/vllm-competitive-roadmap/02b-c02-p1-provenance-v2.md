@@ -505,6 +505,43 @@ capture하거나 process·GPU·network·deployment을 실행하지 않는다. �
 operational rollback runner가 아니며 preexisting fixed raw topology를 같은 invocation에서 소비하는
 CPU-only closure일 뿐이다.
 
+#### Authenticated RC3 rollback raw-capture runner
+
+`run_remote_rc3_rollback_capture.sh`는 위 fixed topology를 실제 dynamic raw
+producer와 연결하는 유일한 authenticated host runner다. outer clean Python
+supervisor가 canonical no-follow GPU lock을 보유하고 child는 parent PID/executable,
+inherited lock FD, kernel flock 및 random token을 모두 검증한 뒤 lock FD를 닫는다.
+runner는 caller server command, profile/configuration SHA, PID/start tick,
+listener/GPU UUID, capture/audit/manifest/receipt path를 받지 않는다. legacy
+`--id=...`를 포함한 unknown option도 lock/GPU/filesystem 접근 전에 거절한다.
+
+한 successful invocation은 preexisting private reconstructed RC2 root의 static
+preparation과 fixed `config/` child를 먼저 create-only로 만든다. candidate는
+runner-owned `stable-default` C02 identity/startup/source-audit/shutdown paths로만
+`env -i` launch된다. config observer 뒤 private projector가
+`config/endpoint.json`을 materialize하고, candidate health-only phase와 정확히 하나의
+source-owned serial scenario를 capture한 뒤 guarded shutdown을 수행한다. reconstructed
+RC2 arm은 C02 option 없이 별도 loopback port에서 launch되어 canonical non-stream
+generation request를 가진 rollback phase만 capture한다. candidate/rollback host binary와
+model tree는 launch 전후 다시 hash-verified되며, PID reuse 방지는 every capture edge와
+guarded TERM/KILL path에서 유지된다.
+
+serial contract는 GPU preflight 전에 canonical stable-default standard grammar와 **exactly
+one** scenario를 재검증하고, rollback request도 같은 시점에 canonical non-stream grammar로
+revalidate한다. 두 port는 서로 달라야 한다. dynamic evidence가 모두 normal-return하고 두
+server identity가 제거된 뒤에만 shell은 private
+`_finalize_authenticated_rollback_raw_once(PreparationRequest(...))`를 `exec`한다.
+그 held-FD compositor는 artifact preparation 전에 candidate/config/source와 rollback phase
+전체를 read-only로 두 번 replay하여 malformed·drifting·cross-role-reused evidence가 새
+artifact/atomic surface를 남기지 못하게 한다.
+그 final process는 fixed artifact preparation → atomic transaction → v3/v4 →
+finalizer-receipt chain 외의 binder/writer/checker를 호출하지 않으며 successful receipt 뒤
+post-return I/O를 하지 않는다. scratch logs는 evidence root 밖에 두고 failure 때만 보존한다.
+
+이 runner의 landed scope는 **CPU/static contract validation**이다. 실제 GPU capture,
+candidate freeze, deployment-path mutation, semantic rollback decision, Gate E 또는
+qualification result는 아직 생성하거나 주장하지 않는다.
+
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
