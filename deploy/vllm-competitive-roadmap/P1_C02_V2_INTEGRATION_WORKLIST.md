@@ -4,8 +4,8 @@ Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
 sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
-fixed-name private raw compositor, and the authenticated native-fallback
-raw-v5 runner are implemented with CPU/static hostile-path
+fixed-name private raw compositor, the authenticated native-fallback raw-v5
+runner, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -20,6 +20,18 @@ failure/KV/quiescence threshold.  A later semantic checker is the only layer
 that may replay the reviewed workload/Gate E and issue a pass/fail result.
 This prevents a Python wrapper or a self-authored trace from becoming the
 audit source of truth.
+
+### Landed v4/v5 raw structural soak precheck
+
+`ci/release/check_soak_v2_receipt.py` is deliberately narrower than the later
+semantic receipt checker. It opens one external exact-0700 evidence root under
+nonblocking `LOCK_SH`, accepts only direct completed raw v4/v5 manifest pairs,
+and emits canonical `bound`/`not-run` with
+`authority: "raw-structural-only"`. It neither writes evidence nor accepts
+v1/v2/v3, raw reports, markers, bind requests, aliases, candidate/freeze/Gate E
+or threshold inputs. A visible completion pair can remain after a final
+directory-sync ambiguity, so this result is never producer/lifecycle success,
+a semantic receipt, or an outer qualification/finalizer input.
 
 Every v2 descriptor is exactly:
 
@@ -532,10 +544,12 @@ runtime configuration field or a trace counter.
      publishes no completion marker and reserves matching `.complete` and
      `.intent` names against stale terminal-looking siblings.
 
-6. `ci/release/check_soak_v2_receipt.py`,
-   `ci/release/check_rc3_rollback_receipt.py`, and
+6. a separate soak v2 semantic receipt checker (not
+   `ci/release/check_soak_v2_receipt.py`), `ci/release/check_rc3_rollback_receipt.py`, and
    `ci/release/check_rc3_qualification.py`
    - Keep v1 checkers/schemas historical but do not upconvert or accept them.
+   - The landed structural precheck is admission-only and must never be
+     upgraded in place or accepted as an outer qualification/finalizer input.
    - Add v2 raw-binder invocation first, then v2 semantic replay.  The outer
      qualification checker accepts only exact v2 report versions and produces
      an explicit historical-v1 rejection reason before generic gate failure.
@@ -546,6 +560,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/soak-v2-receipt-v4.schema.json`,
    `benchmarks/release/candidates/soak-v2-bind-request-v5.schema.json`, and
    `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
+   `benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
@@ -590,9 +605,11 @@ runtime configuration field or a trace counter.
 
 - `capture_c02_observations.py` is raw-only v1 and has `getattr(..., 0)` open
   flag construction despite other private-root checks.
-- `check_soak_v2_receipt.py` and `check_rc3_rollback_receipt.py` consume
-  self-authored v1 trace/timeline fields; no remote soak or rollback raw
-  producer exists.
+- Earlier v1 soak receipt/timeline inputs remain historical. The landed
+  `check_soak_v2_receipt.py` consumes none of them: it replays only completed
+  raw v4/v5 pairs and returns raw-structural-only `bound/not-run` diagnostics.
+- `check_rc3_rollback_receipt.py` still consumes self-authored v1 timeline
+  fields; no authenticated rollback raw producer exists.
 - `check_rc3_qualification.py` imports those v1 report versions and also has
   fallback open flags.
 - `C02ShutdownArtifactWriter` v1 is close to safe but records PID without

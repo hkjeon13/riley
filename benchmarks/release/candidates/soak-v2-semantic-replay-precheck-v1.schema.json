@@ -1,0 +1,326 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json",
+  "title": "Riley C02 soak semantic-replay input precheck v1",
+  "description": "Read-only structural admission for one completed raw soak provenance v4 or v5 manifest. It is not a semantic receipt, producer-success assertion, lifecycle authority, or candidate qualification result.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "candidate_id",
+    "bindings",
+    "raw_manifest",
+    "raw_manifest_version",
+    "targets",
+    "checks",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.soak-v2-semantic-replay-precheck.v1"
+    },
+    "status": {
+      "const": "bound"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "authority": {
+      "const": "raw-structural-only"
+    },
+    "candidate_id": {
+      "$ref": "#/$defs/candidateId"
+    },
+    "bindings": {
+      "$ref": "#/$defs/bindings"
+    },
+    "raw_manifest": {
+      "$ref": "#/$defs/rawManifest"
+    },
+    "raw_manifest_version": {
+      "enum": [
+        "riley.soak-v2-raw-provenance.v4",
+        "riley.soak-v2-raw-provenance.v5"
+      ]
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/targetBinding"
+      }
+    },
+    "checks": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/check"
+      }
+    },
+    "reason_codes": {
+      "const": []
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "raw_manifest_version": {
+          "const": "riley.soak-v2-raw-provenance.v4"
+        },
+        "targets": {
+          "not": {
+            "contains": {
+              "type": "object",
+              "required": [
+                "scenario_id"
+              ],
+              "properties": {
+                "scenario_id": {
+                  "const": "exact-backend-fallback"
+                }
+              }
+            }
+          }
+        },
+        "checks": {
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/v4PrimaryCheck"
+            },
+            {
+              "$ref": "#/$defs/headerDescriptorCheck"
+            }
+          ],
+          "items": false
+        }
+      }
+    },
+    {
+      "properties": {
+        "raw_manifest_version": {
+          "const": "riley.soak-v2-raw-provenance.v5"
+        },
+        "bindings": {
+          "properties": {
+            "configuration_profile": {
+              "const": "max-performance-exact"
+            }
+          }
+        },
+        "targets": {
+          "maxItems": 1,
+          "prefixItems": [
+            {
+              "type": "object",
+              "required": [
+                "scenario_id"
+              ],
+              "properties": {
+                "scenario_id": {
+                  "const": "exact-backend-fallback"
+                }
+              }
+            }
+          ],
+          "items": false
+        },
+        "checks": {
+          "prefixItems": [
+            {
+              "$ref": "#/$defs/v5PrimaryCheck"
+            },
+            {
+              "$ref": "#/$defs/headerDescriptorCheck"
+            }
+          ],
+          "items": false
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {
+        "const": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "base_release_candidate_report_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "configuration_profile": {
+          "enum": [
+            "stable-default",
+            "max-performance-exact"
+          ]
+        },
+        "configuration_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "rawManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 246,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*\\.json$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "server_pid",
+        "server_start_ticks",
+        "gpu_index",
+        "gpu_uuid"
+      ],
+      "properties": {
+        "server_pid": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "server_start_ticks": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "gpu_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gpu_uuid": {
+          "type": "string",
+          "pattern": "^GPU-[0-9A-Fa-f-]+$"
+        }
+      }
+    },
+    "targetBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scenario_id",
+        "target"
+      ],
+      "properties": {
+        "scenario_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "target": {
+          "$ref": "#/$defs/target"
+        }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "enum": [
+            "completed-v4-raw-provenance",
+            "completed-v5-raw-provenance",
+            "header-to-completed-replay-descriptor-binding"
+          ]
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    },
+    "v4PrimaryCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "const": "completed-v4-raw-provenance"
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    },
+    "v5PrimaryCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "const": "completed-v5-raw-provenance"
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    },
+    "headerDescriptorCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "bound"
+      ],
+      "properties": {
+        "name": {
+          "const": "header-to-completed-replay-descriptor-binding"
+        },
+        "bound": {
+          "const": true
+        }
+      }
+    }
+  }
+}

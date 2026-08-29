@@ -415,6 +415,7 @@ ci/release/verify_c02_lifecycle_launch_inputs_v1.py
 ci/release/verify_c02_lifecycle_shutdown_v1.py
 ci/release/capture_c02_config_endpoint_observation_v1.py
 ci/release/run_remote_c02_config_endpoint_observation_v1.sh
+ci/release/check_soak_v2_receipt.py
 ci/release/check_soak_v2_receipt_v2.py
 ci/release/run_remote_rc3_rollback_capture.sh
 ci/release/bind_raw_rc3_rollback_capture.py
@@ -437,6 +438,12 @@ set에 request 전후 모두 존재하는지 확인하고, `/proc/net/tcp`·PID 
 `0700` evidence parent 아래 새로 만들며, `capture-incomplete.json` marker가 남아 있으면
 `session.json`이 존재해도 incomplete/nonqualifying이다. 이 관측은 freeze, Gate E, soak,
 rollback, qualification을 대체하지 않는다.
+
+현재 landed `check_soak_v2_receipt.py`는 completed raw v4/v5 marker pair를 strict FD
+replay로 읽는 precheck일 뿐이며 `bound`/`not-run`과 `raw-structural-only` authority만
+출력한다. 이는 listed future `check_soak_v2_receipt_v2.py` semantic receipt가 아니고,
+outer RC3 finalizer 또는 C02 qualification checker는 이를 semantic receipt input으로
+수용해서는 안 된다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
 단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서

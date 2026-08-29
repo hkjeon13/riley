@@ -310,6 +310,18 @@ derive하고 모든 scenario observation tuple과 일치시킨다. 따라서 con
 scenario **process identity**는 raw layer에서 닫히지만, workload/Gate E와
 sampling semantic verdict는 여전히 later semantic replay만 담당한다.
 
+현재 `check_soak_v2_receipt.py`는 이 later checker의 이름을 선점하거나 semantic
+receipt를 내지 않는다. source checkout 밖의 private `0700` evidence root를 하나의
+held FD와 nonblocking shared lock으로 열어 direct nonhidden completed raw v4/v5
+manifest만 exact raw verifier로 replay하고, canonical
+`riley.soak-v2-semantic-replay-precheck.v1`의 `bound`/`not-run`,
+`authority: raw-structural-only` diagnostic만 stdout으로 낸다. v1/v2/v3, raw report,
+marker, bind request, nested/alias input은 거부한다. marker pair는 post-link `fsync`
+ambiguity 뒤에도 visible할 수 있으므로 이것은 producer/lifecycle success나 fallback,
+rollback, freeze, Gate E, threshold, campaign, interval/monotonicity semantic 결과를
+뜻하지 않는다. outer RC3 finalizer는 이 precheck를 semantic receipt input으로
+수용해서는 안 된다.
+
 `check_soak_v2_receipt_v2.py`는 summary counter나 free-form backend event를 믿지 않고 위 leaf에서 identity, interval order, request/audit binding, metrics monotonicity, actual typed sampling selection을 재구성한다.
 
 ### Rollback v2
@@ -436,7 +448,8 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    GPU capture나 qualification을 실행하지 않는다.
 6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
    baseline rollback v3 raw verifier/schema를 추가하고, 별도 raw runner/binder를 추가한다.
-7. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
+7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
+   v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
 ## 7. 완료 조건
