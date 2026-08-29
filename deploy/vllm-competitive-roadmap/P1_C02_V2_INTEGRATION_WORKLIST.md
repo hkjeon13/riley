@@ -82,6 +82,20 @@ same-invocation capture, source/bundle-to-image, A/B, runtime/GPU/service,
 rollback, freeze, or qualification claim. A later bridge, not this closure,
 must bind a raw runtime image export normalization root to an assembly capture.
 
+`prepare_reconstructed_runtime_image_export_assembly_content_bridge_v1.py`
+is that later receipt-only bridge for one arm. It replays the source-input,
+repro-build, image-export-normalization, runtime-OCI-input, and
+assembly-capture roots through held FDs, with the reviewer source SHA-256 and
+builder image ID required by the capture verifier. It compares only
+`(sha256, byte_length)`: normalization inspect/canonical OCI/derived JSON to
+the OCI closure, and that closure to the capture's embedded inspect/OCI
+members. The raw image-export archive remains a retained normalization input;
+it is not asserted equal to the canonical OCI archive. The resulting
+`riley.reconstructed-runtime-image-export-assembly-content-bridge.v1`
+receipt has no raw capture payload and makes no Docker execution,
+same-invocation, source/bundle-to-image, capture-provenance/independence,
+A/B-equality, rollback, freeze, service/GPU, or qualification claim.
+
 That post-capture mechanism is now landed as
 `ci/release/prepare_reconstructed_runtime_assembly_capture_v1.py` plus
 `benchmarks/release/candidates/reconstructed-runtime-assembly-capture-v1.schema.json`.

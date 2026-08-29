@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-runtime-image-export-assembly-content-bridge-v1.schema.json",
+  "title": "Reconstructed runtime image-export assembly content bridge v1",
+  "description": "A receipt-only, create-only cross-root bridge for one reconstruction arm. It replays image-export normalization v1, runtime OCI inputs v1, and runtime assembly capture v1 with the source/reproducibility roots required by the capture verifier. It establishes only exact byte-content bindings from normalized OCI to runtime OCI to captured OCI/inspect bytes; it does not establish Docker export/build execution, same invocation, capture provenance or independence, source/bundle-to-image, rollback, freeze, service/GPU execution, historical distribution, or qualification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "authority",
+    "capture_scope",
+    "reconstruction_id",
+    "platform",
+    "image_id",
+    "assembly_replay_inputs",
+    "image_export_normalization",
+    "runtime_oci_inputs",
+    "assembly_capture",
+    "binding_status",
+    "not_established"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.reconstructed-runtime-image-export-assembly-content-bridge.v1"},
+    "status": {"const": "bound"},
+    "qualification_status": {"const": "not-run"},
+    "authority": {"const": "cross-root-runtime-image-export-assembly-content-bridge-only"},
+    "capture_scope": {"const": "single-arm-normalized-runtime-oci-and-assembly-content-binding"},
+    "reconstruction_id": {"enum": ["a", "b"]},
+    "platform": {"$ref": "#/$defs/platform"},
+    "image_id": {"$ref": "#/$defs/ociDigest"},
+    "assembly_replay_inputs": {"$ref": "#/$defs/assemblyReplayInputs"},
+    "image_export_normalization": {"$ref": "#/$defs/imageExportNormalization"},
+    "runtime_oci_inputs": {"$ref": "#/$defs/runtimeOciInputs"},
+    "assembly_capture": {"$ref": "#/$defs/assemblyCapture"},
+    "binding_status": {"const": {
+      "image_export_normalization": "replayed-runtime-image-export-oci-normalization-v1",
+      "runtime_oci_inputs": "replayed-runtime-oci-inputs-v1",
+      "assembly_capture": "replayed-runtime-assembly-capture-v1",
+      "normalized_oci_to_runtime_oci_content": "validated-sha256-and-byte-length-equality",
+      "runtime_oci_to_assembly_capture_content": "validated-sha256-and-byte-length-equality"
+    }},
+    "not_established": {"const": {
+      "image_export_and_assembly_capture_same_invocation": "not-established",
+      "docker_image_export_execution": "not-established",
+      "runtime_build_execution": "not-established",
+      "container_filesystem_capture_provenance": "not-established",
+      "bundle_to_runtime_image": "not-established",
+      "source_to_runtime_image": "not-established",
+      "runtime_capture_independence": "not-established",
+      "a_b_runtime_image_equality": "not-established",
+      "rollback": "not-established",
+      "freeze": "not-established",
+      "qualification": "not-run",
+      "service_execution": "not-run",
+      "gpu_execution": "not-run",
+      "historical_distribution": "not-attested"
+    }}
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}
+    },
+    "ociDigest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "not": {"const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 4398046511104}
+      }
+    },
+    "fingerprint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256", "byte_length"],
+      "properties": {
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 4398046511104}
+      }
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architecture"],
+      "properties": {"os": {"const": "linux"}, "architecture": {"const": "amd64"}}
+    },
+    "assemblyReplayInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expected_source_archive_sha256", "expected_build_image_id"],
+      "properties": {
+        "expected_source_archive_sha256": {"$ref": "#/$defs/sha256"},
+        "expected_build_image_id": {"$ref": "#/$defs/ociDigest"}
+      }
+    },
+    "imageExportNormalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "receipt", "reconstruction_id", "image_id", "source_layout", "image_inspect",
+        "image_export_archive", "oci_archive", "layout", "index", "manifest", "config"
+      ],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/normalizationReceipt"},
+        "reconstruction_id": {"enum": ["a", "b"]},
+        "image_id": {"$ref": "#/$defs/ociDigest"},
+        "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars"]},
+        "image_inspect": {"$ref": "#/$defs/normalizationImageInspect"},
+        "image_export_archive": {"$ref": "#/$defs/imageExportArchive"},
+        "oci_archive": {"$ref": "#/$defs/normalizationOciArchive"},
+        "layout": {"$ref": "#/$defs/normalizationLayout"},
+        "index": {"$ref": "#/$defs/normalizationIndex"},
+        "manifest": {"$ref": "#/$defs/normalizationManifest"},
+        "config": {"$ref": "#/$defs/normalizationConfig"}
+      }
+    },
+    "runtimeOciInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "reconstruction_id", "image_id", "image_inspect", "archive", "layout", "index", "manifest", "config"],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/runtimeOciReceipt"},
+        "reconstruction_id": {"enum": ["a", "b"]},
+        "image_id": {"$ref": "#/$defs/ociDigest"},
+        "image_inspect": {"$ref": "#/$defs/runtimeOciImageInspect"},
+        "archive": {"$ref": "#/$defs/runtimeOciArchive"},
+        "layout": {"$ref": "#/$defs/runtimeOciLayout"},
+        "index": {"$ref": "#/$defs/runtimeOciIndex"},
+        "manifest": {"$ref": "#/$defs/runtimeOciManifest"},
+        "config": {"$ref": "#/$defs/runtimeOciConfig"}
+      }
+    },
+    "assemblyCapture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "reconstruction_id", "image_id", "capture_archive", "capture_members"],
+      "properties": {
+        "receipt": {"$ref": "#/$defs/assemblyCaptureReceipt"},
+        "reconstruction_id": {"enum": ["a", "b"]},
+        "image_id": {"$ref": "#/$defs/ociDigest"},
+        "capture_archive": {"$ref": "#/$defs/assemblyCaptureArchive"},
+        "capture_members": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["image-inspect.json", "oci-image-layout.tar"],
+          "properties": {
+            "image-inspect.json": {"$ref": "#/$defs/fingerprint"},
+            "oci-image-layout.tar": {"$ref": "#/$defs/fingerprint"}
+          }
+        }
+      }
+    },
+    "normalizationReceipt": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "reconstructed-runtime-image-export-oci-normalization.json"}}}]},
+    "normalizationImageInspect": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "image-export/runtime-image-inspect.json"}}}]},
+    "imageExportArchive": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "image-export/runtime-image-export.tar"}}}]},
+    "normalizationOciArchive": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "normalized-oci/oci-image-layout.tar"}}}]},
+    "normalizationLayout": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "normalized-oci/oci-layout"}}}]},
+    "normalizationIndex": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "normalized-oci/index.json"}}}]},
+    "normalizationManifest": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "normalized-oci/manifest.json"}}}]},
+    "normalizationConfig": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "normalized-oci/config.json"}}}]},
+    "runtimeOciReceipt": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "reconstructed-runtime-oci-inputs.json"}}}]},
+    "runtimeOciImageInspect": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/docker-image-inspect.json"}}}]},
+    "runtimeOciArchive": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/oci-image-layout.tar"}}}]},
+    "runtimeOciLayout": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/oci-layout"}}}]},
+    "runtimeOciIndex": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/index.json"}}}]},
+    "runtimeOciManifest": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/manifest.json"}}}]},
+    "runtimeOciConfig": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-image/config.json"}}}]},
+    "assemblyCaptureReceipt": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "reconstructed-runtime-assembly-capture.json"}}}]},
+    "assemblyCaptureArchive": {"allOf": [{"$ref": "#/$defs/descriptor"}, {"properties": {"path": {"const": "runtime-assembly-capture/assembly-capture.tar"}}}]}
+  }
+}
