@@ -101,7 +101,8 @@ SHA-256 및 byte length 모두 같아야 한다. workspace manifests와 reviewed
 source는 request가 대체할 수 없다.
 
 이 admission의 reconstructed baseline 처리는 canonical manifest descriptor와
-reconstructed-v1 vocabulary의 structural check까지만 수행한다. nested baseline leaves,
+binary-bound reconstructed-v2 vocabulary의 structural check까지만 수행한다. legacy
+binary-unbound reconstructed-v1 manifest는 explicit rejection이다. nested baseline leaves,
 Gate E, semantic receipt 또는 qualification을 replay하지 않는다. runner-owned C02 launch
 identity와 freeze/Gate E/configuration self-reference는 args/env에서 거부한다. output은
 riley.rc3-freeze-input-admission.v1의 bound/not-frozen/not-run,
@@ -181,7 +182,10 @@ mechanism과 adversarial test를 닫아야 한다.
   semantic receipt 또는 C02 verdict가 아니다.
 - v3 path-only rollback binder와 RC2-compatible raw phase collector는 landed했다.
   binder는 same held private root FD에서 descriptor/target과 reconstructed baseline을
-  replay하고 nonterminal `captured/not-run` manifest만 publish한다. phase collector는
+  replay하고 nonterminal `captured/not-run` manifest만 publish한다. rollback binary는
+  reconstructed baseline v2의 independently captured A/B server-binary descriptor와
+  SHA-256·byte length가 같아야 하며, bundle/Docker image-ID binding도 함께 유지한다.
+  binary-unbound v1 baseline은 phase evidence 전에 거부된다. phase collector는
   existing baseline root의 create-only child에 loopback health/optional generation 및
   process/socket/GPU raw leaves를 남긴다. 아직 authenticated remote rollback runner는
   없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
@@ -451,6 +455,7 @@ ci/release/check_fault_extension_receipt.py
 ci/release/run_remote_c02_fault_capture.sh
 ci/release/bind_raw_c02_fault_capture.py
 benchmarks/release/candidates/reconstructed-prior-baseline-v1.schema.json
+benchmarks/release/candidates/reconstructed-prior-baseline-v2.schema.json
 benchmarks/release/candidates/soak-v2-receipt-v3.schema.json
 benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json
 benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json
@@ -461,6 +466,7 @@ benchmarks/release/candidates/rollback-receipt-v3.schema.json
 benchmarks/release/candidates/rollback-bind-request-v3.schema.json
 benchmarks/release/candidates/rollback-receipt-v4.schema.json
 ci/release/check_reconstructed_prior_baseline.py
+ci/release/check_reconstructed_prior_baseline_v2.py
 ci/release/run_remote_c02_soak_v2.sh
 ci/release/bind_raw_c02_soak_v2.py
 ci/release/write_c02_lifecycle_supervisor_receipt_v1.py

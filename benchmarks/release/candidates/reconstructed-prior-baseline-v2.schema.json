@@ -1,0 +1,302 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-prior-baseline-v2.schema.json",
+  "title": "Riley C02-P1 binary-bound reconstructed tag baseline v2",
+  "description": "A checksummed A/B reconstruction from an annotated Git tag, including a server-binary descriptor that is independently captured for A and B, recipe-bound, streamed, and required to agree by digest and byte length. It also retains opaque, fully checksummed source and OCI archive descriptors and an original Docker image-inspect capture for each reconstruction. This contract deliberately does not attest historical distribution or availability of a stable artifact: it fixes provenance_class=reconstructed-from-source, historical_distribution=not-attested, historical_stable_artifact_status=unavailable, and was_previously_shipped=false. The checker does not replay source-archive generation from the tag target, parse Docker-save members, or establish that an OCI archive Config digest equals the raw Docker Id; those content-level claims require separately reviewed builder-stage or streaming archive validation.",
+  "oneOf": [
+    { "$ref": "#/$defs/baseline" },
+    { "$ref": "#/$defs/buildReceipt" },
+    { "$ref": "#/$defs/gitTagObjectObservation" },
+    { "$ref": "#/$defs/gitTagTargetObservation" },
+    { "$ref": "#/$defs/recipeInspect" },
+    { "$ref": "#/$defs/imageInspect" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "gitSha1": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{40}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000" } }
+      ]
+    },
+    "tagName": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "baselineId": {
+      "type": "string",
+      "pattern": "^reconstructed-riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "byte_length": { "type": "integer", "minimum": 1, "maximum": 4398046511104 }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tag_name", "tag_object", "tag_target", "archive"],
+      "properties": {
+        "tag_name": { "$ref": "#/$defs/tagName" },
+        "tag_object": { "$ref": "#/$defs/descriptor" },
+        "tag_target": { "$ref": "#/$defs/descriptor" },
+        "archive": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "ociArtifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "layout", "manifest"],
+      "properties": {
+        "archive": { "$ref": "#/$defs/descriptor" },
+        "layout": { "$ref": "#/$defs/descriptor" },
+        "manifest": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary", "bundle", "oci"],
+      "properties": {
+        "binary": { "$ref": "#/$defs/descriptor" },
+        "bundle": { "$ref": "#/$defs/descriptor" },
+        "oci": { "$ref": "#/$defs/ociArtifacts" }
+      }
+    },
+    "gitTagObjectObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tag_ref", "object_type", "object_sha1", "target_object_type", "target_object_sha1"],
+      "properties": {
+        "schema_version": { "const": "riley.git-tag-object-observation.v1" },
+        "tag_ref": { "type": "string", "pattern": "^refs/tags/riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$" },
+        "object_type": { "const": "tag" },
+        "object_sha1": { "$ref": "#/$defs/gitSha1" },
+        "target_object_type": { "const": "commit" },
+        "target_object_sha1": { "$ref": "#/$defs/gitSha1" }
+      }
+    },
+    "gitTagTargetObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "tag_ref", "tag_object_sha1", "target_commit_sha1"],
+      "properties": {
+        "schema_version": { "const": "riley.git-tag-target-observation.v1" },
+        "tag_ref": { "type": "string", "pattern": "^refs/tags/riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$" },
+        "tag_object_sha1": { "$ref": "#/$defs/gitSha1" },
+        "target_commit_sha1": { "$ref": "#/$defs/gitSha1" }
+      }
+    },
+    "buildReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "baseline_id", "reconstruction_id", "source", "recipe_inspect", "image_inspect", "runtime_image_inspect_raw", "artifacts"],
+      "properties": {
+        "schema_version": { "const": "riley.reconstructed-prior-build.v2" },
+        "baseline_id": { "$ref": "#/$defs/baselineId" },
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "source": { "$ref": "#/$defs/source" },
+        "recipe_inspect": { "$ref": "#/$defs/descriptor" },
+        "image_inspect": { "$ref": "#/$defs/descriptor" },
+        "runtime_image_inspect_raw": { "$ref": "#/$defs/descriptor" },
+        "artifacts": { "$ref": "#/$defs/artifacts" }
+      }
+    },
+    "recipeInspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "baseline_id", "reconstruction_id", "source", "recipe", "binary", "bundle"],
+      "properties": {
+        "schema_version": { "const": "riley.reconstructed-build-recipe-inspect.v2" },
+        "baseline_id": { "$ref": "#/$defs/baselineId" },
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "source": { "$ref": "#/$defs/source" },
+        "recipe": { "$ref": "#/$defs/descriptor" },
+        "binary": { "$ref": "#/$defs/descriptor" },
+        "bundle": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "imageInspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "baseline_id", "reconstruction_id", "source", "runtime_image_inspect_raw", "oci_archive", "oci_layout", "oci_manifest", "image_id"],
+      "properties": {
+        "schema_version": { "const": "riley.reconstructed-oci-image-inspect.v1" },
+        "baseline_id": { "$ref": "#/$defs/baselineId" },
+        "reconstruction_id": { "enum": ["a", "b"] },
+        "source": { "$ref": "#/$defs/source" },
+        "runtime_image_inspect_raw": { "$ref": "#/$defs/descriptor" },
+        "oci_archive": { "$ref": "#/$defs/descriptor" },
+        "oci_layout": { "$ref": "#/$defs/descriptor" },
+        "oci_manifest": { "$ref": "#/$defs/descriptor" },
+        "image_id": {
+          "type": "string",
+          "allOf": [
+            { "pattern": "^sha256:[0-9a-f]{64}$" },
+            { "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" } }
+          ]
+        }
+      }
+    },
+    "equalityDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "b", "sha256"],
+      "properties": {
+        "a": { "$ref": "#/$defs/descriptor" },
+        "b": { "$ref": "#/$defs/descriptor" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "ociImageEquality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "b", "image_id"],
+      "properties": {
+        "a": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "b": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "image_id": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+      }
+    },
+    "equality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binary", "bundle", "oci_archive", "oci_layout", "oci_manifest", "oci_image"],
+      "properties": {
+        "binary": { "$ref": "#/$defs/equalityDescriptor" },
+        "bundle": { "$ref": "#/$defs/equalityDescriptor" },
+        "oci_archive": { "$ref": "#/$defs/equalityDescriptor" },
+        "oci_layout": { "$ref": "#/$defs/equalityDescriptor" },
+        "oci_manifest": { "$ref": "#/$defs/equalityDescriptor" },
+        "oci_image": { "$ref": "#/$defs/ociImageEquality" }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "baseline_id", "baseline_kind", "provenance_class", "historical_distribution", "historical_stable_artifact_status", "was_previously_shipped", "source", "reproductions", "equality"],
+      "properties": {
+        "schema_version": { "const": "riley.reconstructed-prior-baseline.v2" },
+        "baseline_id": { "$ref": "#/$defs/baselineId" },
+        "baseline_kind": { "const": "reconstructed-tag-baseline" },
+        "provenance_class": { "const": "reconstructed-from-source" },
+        "historical_distribution": { "const": "not-attested" },
+        "historical_stable_artifact_status": { "const": "unavailable" },
+        "was_previously_shipped": { "const": false },
+        "source": { "$ref": "#/$defs/source" },
+        "reproductions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["a", "b"],
+          "properties": {
+            "a": { "$ref": "#/$defs/descriptor" },
+            "b": { "$ref": "#/$defs/descriptor" }
+          }
+        },
+        "equality": { "$ref": "#/$defs/equality" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {
+          "enum": [
+            "reconstructed-tag-baseline-only",
+            "provenance-class-reconstructed-from-source",
+            "historical-distribution-not-attested",
+            "historical-stable-artifact-unavailable",
+            "not-previously-shipped",
+            "git-tag-object-target-binding",
+            "source-archive-binding",
+            "independent-a-b-reconstruction",
+            "recipe-inspect-binding",
+            "runtime-image-inspect-raw-binding",
+            "oci-image-inspect-binding",
+            "binary-a-b-equality",
+            "bundle-a-b-equality",
+            "oci-archive-a-b-equality",
+            "oci-layout-a-b-equality",
+            "oci-manifest-a-b-equality",
+            "oci-image-a-b-equality"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "passed", "baseline_id", "baseline_kind", "provenance_class", "historical_distribution", "historical_stable_artifact_status", "was_previously_shipped", "source_archive_content_binding", "oci_archive_content_binding", "source", "git_identity", "reproductions", "equality", "checks", "reason_codes"],
+      "properties": {
+        "schema_version": { "const": "riley.reconstructed-prior-baseline-check.v2" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "baseline_id": { "$ref": "#/$defs/baselineId" },
+        "baseline_kind": { "const": "reconstructed-tag-baseline" },
+        "provenance_class": { "const": "reconstructed-from-source" },
+        "historical_distribution": { "const": "not-attested" },
+        "historical_stable_artifact_status": { "const": "unavailable" },
+        "was_previously_shipped": { "const": false },
+        "source_archive_content_binding": { "const": "not-validated" },
+        "oci_archive_content_binding": { "const": "not-validated" },
+        "source": { "$ref": "#/$defs/source" },
+        "git_identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tag_name", "tag_ref", "tag_object_sha1", "target_commit_sha1"],
+          "properties": {
+            "tag_name": { "$ref": "#/$defs/tagName" },
+            "tag_ref": { "type": "string", "pattern": "^refs/tags/riley-" },
+            "tag_object_sha1": { "$ref": "#/$defs/gitSha1" },
+            "target_commit_sha1": { "$ref": "#/$defs/gitSha1" }
+          }
+        },
+        "reproductions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["a", "b"],
+          "properties": {
+            "a": { "$ref": "#/$defs/checkReproduction" },
+            "b": { "$ref": "#/$defs/checkReproduction" }
+          }
+        },
+        "equality": { "$ref": "#/$defs/equality" },
+        "checks": { "type": "array", "minItems": 17, "maxItems": 17, "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": { "const": [] }
+      }
+    },
+    "checkReproduction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["receipt", "recipe_inspect", "image_inspect", "runtime_image_inspect_raw", "artifacts"],
+      "properties": {
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "recipe_inspect": { "$ref": "#/$defs/descriptor" },
+        "image_inspect": { "$ref": "#/$defs/descriptor" },
+        "runtime_image_inspect_raw": { "$ref": "#/$defs/descriptor" },
+        "artifacts": { "$ref": "#/$defs/artifacts" }
+      }
+    }
+  }
+}

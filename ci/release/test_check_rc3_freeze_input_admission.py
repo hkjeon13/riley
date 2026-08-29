@@ -8,6 +8,7 @@ import hashlib
 import io
 import json
 import os
+import copy
 import subprocess
 import sys
 import tempfile
@@ -21,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import check_rc3_freeze_input_admission as checker  # noqa: E402
 import check_rc3_prefreeze as prefreeze  # noqa: E402
 import provenance_v2_common as common  # noqa: E402
+from test_check_reconstructed_prior_baseline_v2 import BaselineV2Fixture  # noqa: E402
 
 
 CANDIDATE_ID = "riley-0.1.0-rc3"
@@ -59,6 +61,7 @@ class AdmissionFixture:
         self.evidence.mkdir(mode=0o700)
         self.evidence.chmod(0o700)
         self.request_name = "freeze-input-request.json"
+        self.baseline_fixture = BaselineV2Fixture(self.evidence)
         self.baseline_document = self._baseline_document()
         self.request = self._request_document()
         self.write_request()
@@ -122,41 +125,7 @@ class AdmissionFixture:
         }
 
     def _baseline_document(self) -> dict[str, object]:
-        tag_name = "riley-0.1.0-rc2"
-        source = {
-            "tag_name": tag_name,
-            "tag_object": self.synthetic_descriptor("historic/tag-object", "tag-object"),
-            "tag_target": self.synthetic_descriptor("historic/tag-target", "tag-target"),
-            "archive": self.synthetic_descriptor("historic/source-archive", "source-archive"),
-        }
-
-        def pair(name: str) -> dict[str, object]:
-            left = self.synthetic_descriptor(f"historic/{name}-a", name)
-            right = self.synthetic_descriptor(f"historic/{name}-b", name)
-            return {"a": left, "b": right, "sha256": left["sha256"]}
-
-        image = "sha256:" + _sha256(b"historic-image")
-        return {
-            "schema_version": "riley.reconstructed-prior-baseline.v1",
-            "baseline_id": f"reconstructed-{tag_name}",
-            "baseline_kind": "reconstructed-tag-baseline",
-            "provenance_class": "reconstructed-from-source",
-            "historical_distribution": "not-attested",
-            "historical_stable_artifact_status": "unavailable",
-            "was_previously_shipped": False,
-            "source": source,
-            "reproductions": {
-                "a": self.synthetic_descriptor("historic/reproduction-a", "receipt-a"),
-                "b": self.synthetic_descriptor("historic/reproduction-b", "receipt-b"),
-            },
-            "equality": {
-                "bundle": pair("bundle"),
-                "oci_archive": pair("oci-archive"),
-                "oci_layout": pair("oci-layout"),
-                "oci_manifest": pair("oci-manifest"),
-                "oci_image": {"a": image, "b": image, "image_id": image},
-            },
-        }
+        return copy.deepcopy(self.baseline_fixture.manifest)
 
     def write_baseline(self) -> dict[str, object]:
         return self.put(
@@ -512,6 +481,15 @@ class CheckRc3FreezeInputAdmissionTests(unittest.TestCase):
         with self.assertRaises(checker.FreezeInputAdmissionError) as raised:
             malformed.run()
         self.assert_reason(raised, "invalid-descriptor")
+
+        legacy = AdmissionFixture(self.base / "baseline-v1")
+        legacy.baseline_document["schema_version"] = "riley.reconstructed-prior-baseline.v1"
+        del legacy.baseline_document["equality"]["binary"]
+        legacy.request["rollback"]["reconstructed_baseline_manifest"] = legacy.write_baseline()
+        legacy.write_request()
+        with self.assertRaises(checker.FreezeInputAdmissionError) as raised:
+            legacy.run()
+        self.assert_reason(raised, "rollback-binary-provenance-required")
 
     def test_rejects_descriptor_reuse_and_request_leaf_reuse(self) -> None:
         self.fixture.request["release"]["elf"] = self.fixture.request["source"]["archive"]

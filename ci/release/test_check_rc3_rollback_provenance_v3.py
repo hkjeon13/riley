@@ -14,7 +14,8 @@ from unittest import mock
 import check_c02_provenance_v2 as c02
 import check_rc3_rollback_provenance_v3 as checker
 import provenance_v2_common as common
-from test_check_reconstructed_prior_baseline import BaselineFixture
+from test_check_reconstructed_prior_baseline import BaselineFixture as LegacyBaselineFixture
+from test_check_reconstructed_prior_baseline_v2 import BaselineV2Fixture
 
 
 def metrics() -> dict[str, object]:
@@ -57,7 +58,7 @@ class RollbackV3Fixture:
 
     def __init__(self, root: Path) -> None:
         self.root = root
-        self.baseline = BaselineFixture(root)
+        self.baseline = BaselineV2Fixture(root)
 
     def put(self, relative: str, value: bytes | dict[str, object]) -> dict[str, object]:
         path = self.root / relative
@@ -200,7 +201,11 @@ class RollbackV3Fixture:
     def artifacts(self, phase: str) -> dict[str, object]:
         result: dict[str, object] = {}
         for name in sorted(checker.ARTIFACT_FIELDS):
-            if phase == "rollback" and name == "bundle":
+            if phase == "rollback" and name == "binary":
+                raw = (
+                    self.root / self.baseline.a_artifacts["binary"]["path"]
+                ).read_bytes()
+            elif phase == "rollback" and name == "bundle":
                 raw = (
                     self.root / self.baseline.a_artifacts["bundle"]["path"]
                 ).read_bytes()
@@ -307,6 +312,10 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
         )
         self.assertIn(
             "active-baseline-bundle-and-image-binding",
+            [row["name"] for row in report["checks"]],
+        )
+        self.assertIn(
+            "active-baseline-binary-binding",
             [row["name"] for row in report["checks"]],
         )
 
@@ -583,7 +592,19 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             checker.verify_rollback_provenance_v3(self.root, manifest)
         self.assert_reason(raised, "historical-distribution-claim")
 
-    def test_rejects_baseline_bundle_or_image_identity_drift(self) -> None:
+    def test_rejects_baseline_binary_bundle_or_image_identity_drift(self) -> None:
+        document = self.fixture.document()
+        document["rollback_artifacts"]["binary"] = self.fixture.put(
+            "capture/rollback/forged-binary.raw",
+            b"not the reconstructed server binary",
+        )
+        manifest = self.fixture.write_manifest(document)
+        with self.pinned_baseline(), self.assertRaises(
+            checker.RollbackV3ProvenanceError
+        ) as raised:
+            checker.verify_rollback_provenance_v3(self.root, manifest)
+        self.assert_reason(raised, "baseline-binary-binding-mismatch")
+
         document = self.fixture.document()
         document["rollback_artifacts"]["bundle"] = self.fixture.put(
             "capture/rollback/forged-bundle.raw",
@@ -607,6 +628,19 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
         ) as raised:
             checker.verify_rollback_provenance_v3(self.root, manifest)
         self.assert_reason(raised, "baseline-image-binding-mismatch")
+
+    def test_rejects_legacy_binary_unbound_baseline_before_phase_evidence(self) -> None:
+        document = self.fixture.document()
+        LegacyBaselineFixture(self.root)
+        document["reconstructed_baseline"]["manifest"] = self.fixture.descriptor(
+            "baseline.json"
+        )
+        manifest = self.fixture.write_manifest(document)
+        with self.pinned_baseline(), self.assertRaises(
+            checker.RollbackV3ProvenanceError
+        ) as raised:
+            checker.verify_rollback_provenance_v3(self.root, manifest)
+        self.assert_reason(raised, "rollback-binary-provenance-required")
 
     def test_rejects_another_reconstructed_tag_target(self) -> None:
         manifest = self.fixture.write_manifest(self.fixture.document())

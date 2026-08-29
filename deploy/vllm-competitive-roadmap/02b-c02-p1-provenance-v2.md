@@ -108,7 +108,7 @@ stable-default arm이 CPU sampling이면 이 evidence를 재사용할 수 없다
 
 `riley-0.1.0-rc2`는 owner-approved prerelease이고 prior stable shipped binary/bundle/OCI image가 아니다. 원격 cache와 published RC2 release에도 serving artifact가 없으므로, C02-P1은 그것을 `previous_stable` 또는 `historical_shipped`로 표기하지 않는다.
 
-P1은 pinned annotated tag와 target commit에서 독립 clean A/B network-none build를 수행해 `riley.reconstructed-prior-baseline.v1` manifest를 만든다.
+P1은 pinned annotated tag와 target commit에서 독립 clean A/B network-none build를 수행해 `riley.reconstructed-prior-baseline.v2` manifest를 만든다. v2는 각 arm의 실제 server binary를 별도 raw descriptor로 보존하고, build receipt와 recipe inspect에 같은 descriptor를 exact-bind한 뒤 A/B SHA-256·byte length equality와 distinct-path replay를 요구한다.
 
 ```text
 baseline_kind = reconstructed-tag-baseline
@@ -118,7 +118,7 @@ was_previously_shipped = false
 historical_stable_artifact_status = unavailable
 ```
 
-manifest는 tag object/target, source archive, exact build recipe and image inspect, A/B binary/profile/bundle equality, runtime OCI inspect/archive, final artifact descriptors를 create-only로 bind한다. 공개 RC2 release API raw response는 mutable information이므로 보존할 수 있지만 trusted expected digest는 reviewer-provided input으로 따로 비교한다.
+manifest는 tag object/target, source archive, exact build recipe and image inspect, A/B server-binary/profile/bundle equality, runtime OCI inspect/archive, final artifact descriptors를 create-only로 bind한다. legacy `riley.reconstructed-prior-baseline.v1`은 binary equality가 없는 historical checker input으로만 남고 RC3 freeze admission, static rollback evidence preparation, raw rollback v3/v4 chain에는 수용하지 않는다. 공개 RC2 release API raw response는 mutable information이므로 보존할 수 있지만 trusted expected digest는 reviewer-provided input으로 따로 비교한다.
 
 이 baseline으로 가능한 판정은 `reconstructed_operational_rollback`뿐이다. `historical_stable_binary_rollback`은 `not-established`로 유지한다. 실제 historical stable bundle이 나중에 제공되면 새 immutable manifest/version과 별도 gate로 추가한다.
 

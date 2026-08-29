@@ -352,7 +352,16 @@ class BindRawRc3RollbackCaptureTests(unittest.TestCase):
         self.assert_reason(raised, "duplicate-evidence-path")
         self.assertFalse((self.root / "baseline-alias.json").exists())
 
-    def test_replays_baseline_binding_before_publication(self) -> None:
+    def test_replays_binary_and_bundle_baseline_bindings_before_publication(self) -> None:
+        request_path, request = self._request(request_path="requests/baseline-binary-drift.json")
+        self.fixture.put("capture/rollback/forged-binary.raw", b"forged rollback binary")
+        request["rollback_artifacts"]["binary_path"] = "capture/rollback/forged-binary.raw"
+        self._rewrite_request(request_path, request)
+        with self.assertRaises(binder.RollbackBindError) as raised:
+            self._bind(request_path, "baseline-binary-drift.json")
+        self.assert_reason(raised, "baseline-binary-binding-mismatch")
+        self.assertFalse((self.root / "baseline-binary-drift.json").exists())
+
         request_path, request = self._request()
         self.fixture.put("capture/rollback/forged-bundle.raw", b"forged rollback bundle")
         request["rollback_artifacts"]["bundle_path"] = "capture/rollback/forged-bundle.raw"

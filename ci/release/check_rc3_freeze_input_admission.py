@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any, Callable, NoReturn, Sequence, TypeVar
 
 import check_rc3_prefreeze as prefreeze
-import check_reconstructed_prior_baseline as baseline
+import check_reconstructed_prior_baseline_v2 as baseline
 import provenance_v2_common as common
 
 
@@ -825,6 +825,11 @@ def _validate_reconstructed_baseline(
         )
     )
     assert isinstance(document, dict)
+    if document.get("schema_version") == baseline.LEGACY_MANIFEST_VERSION:
+        _fail(
+            "rollback-binary-provenance-required",
+            "freeze-input admission requires reconstructed baseline v2 with A/B server-binary binding",
+        )
     manifest = _baseline(lambda: baseline.parse_manifest(document))
     expected_tag = _expected_reconstructed_baseline_tag(candidate_id)
     if manifest.source.tag_name != expected_tag:

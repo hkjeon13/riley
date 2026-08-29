@@ -8,12 +8,13 @@ it validates the raw process/socket/GPU identity carried by those leaves but
 does not interpret HTTP health or generation responses, attest an atomic
 switch, accept a candidate, or emit a rollback verdict.
 
-The baseline is represented by its existing reconstructed-prior-baseline v1
-manifest.  This raw layer replays that manifest through the same held root FD
-before it binds the rollback phases.  It still does not interpret a rollback
-as successful or claim that a reconstructed tag was a historical shipped
-release.  The candidate audit index is likewise an exact raw descriptor here;
-its source-audit content is replayed only by a later semantic/provenance layer.
+The baseline is represented by its binary-bound reconstructed-prior-baseline
+v2 manifest.  This raw layer replays that manifest through the same held root
+FD before it binds the rollback phases.  It still does not interpret a
+rollback as successful or claim that a reconstructed tag was a historical
+shipped release.  The candidate audit index is likewise an exact raw
+descriptor here; its source-audit content is replayed only by a later
+semantic/provenance layer.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, Sequence, TypeVar
 
 import check_c02_provenance_v2 as c02
-import check_reconstructed_prior_baseline as baseline
+import check_reconstructed_prior_baseline_v2 as baseline
 import provenance_v2_common as common
 
 
@@ -326,13 +327,12 @@ def _bind_reconstructed_baseline_artifacts(
     rollback_artifacts: Mapping[str, common.EvidenceDescriptor],
     baseline_report: Mapping[str, Any],
 ) -> None:
-    """Bind active baseline bundle and image-inspect bytes to A/B reconstruction.
+    """Bind active rollback artifacts to the A/B binary-bound reconstruction.
 
-    The baseline checker intentionally does not attest archive or binary
-    content equivalence.  This raw rollback layer therefore limits the
-    cross-binding to the facts already established by that checker: equal A/B
-    bundle digest/length and one Docker image ID.  It does not extrapolate
-    either fact into a historical-release or rollback-success claim.
+    The v2 baseline establishes equal A/B server-binary and bundle descriptor
+    bytes plus one Docker image ID. This raw layer joins those exact facts to
+    the active rollback leaves without making a historical-release or
+    rollback-success claim.
     """
 
     equality = baseline_report.get("equality")
@@ -341,12 +341,31 @@ def _bind_reconstructed_baseline_artifacts(
             "invalid-reconstructed-baseline-report",
             "reconstructed baseline report lacks its equality section",
         )
+    binary = equality.get("binary")
     bundle = equality.get("bundle")
     oci_image = equality.get("oci_image")
-    if not isinstance(bundle, Mapping) or not isinstance(oci_image, Mapping):
+    if (
+        not isinstance(binary, Mapping)
+        or not isinstance(bundle, Mapping)
+        or not isinstance(oci_image, Mapping)
+    ):
         _fail(
             "invalid-reconstructed-baseline-report",
-            "reconstructed baseline report lacks bundle or OCI image equality",
+            "reconstructed baseline report lacks binary, bundle, or OCI image equality",
+        )
+    expected_binary = _common(
+        lambda: common.parse_descriptor(
+            binary.get("a"),
+            "reconstructed baseline equality binary A",
+        )
+    )
+    if (
+        rollback_artifacts["binary"].sha256 != expected_binary.sha256
+        or rollback_artifacts["binary"].byte_length != expected_binary.byte_length
+    ):
+        _fail(
+            "baseline-binary-binding-mismatch",
+            "rollback active binary does not match the reconstructed A/B server binary",
         )
     expected_bundle = _common(
         lambda: common.parse_descriptor(
@@ -782,6 +801,11 @@ def _baseline_manifest(
             maximum_bytes=MAX_MANIFEST_BYTES,
         )
     )
+    if document.get("schema_version") == baseline.LEGACY_MANIFEST_VERSION:
+        _fail(
+            "rollback-binary-provenance-required",
+            "rollback v3 requires a reconstructed baseline v2 with A/B server-binary binding",
+        )
     report = _baseline(lambda: baseline.evaluate(root_fd, document))
     if (
         not isinstance(report, Mapping)
@@ -1034,6 +1058,7 @@ def verify_rollback_provenance_v3_bytes_fd(
             {"name": "canonical-descriptor-binding", "bound": True},
             {"name": "reconstructed-baseline-a-b-replay-binding", "bound": True},
             {"name": "active-baseline-bundle-and-image-binding", "bound": True},
+            {"name": "active-baseline-binary-binding", "bound": True},
             {"name": "distinct-candidate-and-baseline-process-tuples", "bound": True},
             {"name": "candidate-shutdown-v2-marker-binding", "bound": True},
             {"name": "declared-candidate-audit-availability-and-index-inventory", "bound": True},

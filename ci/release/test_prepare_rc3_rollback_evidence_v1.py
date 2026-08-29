@@ -19,7 +19,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 import check_rc3_rollback_provenance_v3 as rollback  # noqa: E402
 import prepare_rc3_rollback_evidence_v1 as prepare  # noqa: E402
 import provenance_v2_common as common  # noqa: E402
-from test_check_reconstructed_prior_baseline import BaselineFixture  # noqa: E402
+from test_check_reconstructed_prior_baseline import BaselineFixture as LegacyBaselineFixture  # noqa: E402
+from test_check_reconstructed_prior_baseline_v2 import BaselineV2Fixture  # noqa: E402
 
 
 class RollbackEvidencePreparationTests(unittest.TestCase):
@@ -53,7 +54,7 @@ class RollbackEvidencePreparationTests(unittest.TestCase):
         root = self.base / name
         root.mkdir(mode=0o700)
         os.chmod(root, 0o700)
-        BaselineFixture(
+        BaselineV2Fixture(
             root,
             target_commit_sha1=(rollback.RECONSTRUCTED_ROLLBACK_TARGET if reviewed_target else "b" * 40),
         )
@@ -143,6 +144,21 @@ class RollbackEvidencePreparationTests(unittest.TestCase):
         )
         self.assertFalse((bad_root / prepare.PREPARATION_DIRECTORY_NAME).exists())
         self.assertFalse((bad_root / prepare.INPUTS_DIRECTORY_NAME).exists())
+
+    def test_rejects_legacy_binary_unbound_baseline_before_any_output(self) -> None:
+        legacy_root = self.base / "legacy"
+        legacy_root.mkdir(mode=0o700)
+        os.chmod(legacy_root, 0o700)
+        LegacyBaselineFixture(
+            legacy_root,
+            target_commit_sha1=rollback.RECONSTRUCTED_ROLLBACK_TARGET,
+        )
+        self.assert_reason(
+            "rollback-binary-provenance-required",
+            lambda: prepare.prepare_rollback_evidence(self._request(legacy_root)),
+        )
+        self.assertFalse((legacy_root / prepare.PREPARATION_DIRECTORY_NAME).exists())
+        self.assertFalse((legacy_root / prepare.INPUTS_DIRECTORY_NAME).exists())
 
     def test_rejects_nonadjacent_or_different_version_candidate_before_opening_root(self) -> None:
         for candidate in ("riley-0.1.0-rc2", "riley-0.1.0-rc4", "riley-0.1.1-rc3"):

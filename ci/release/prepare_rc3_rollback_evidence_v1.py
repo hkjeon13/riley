@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Prepare static RC3 rollback binding inputs without operating a server.
 
-This producer accepts an already complete reconstructed RC2 A/B baseline
-evidence root.  It replays that baseline through one held private root FD,
-requires the reviewed RC2 tag/target identity, and creates exactly three
-immutable copies of future v3 binding inputs.  It deliberately does not
+This producer accepts an already complete binary-bound reconstructed RC2 A/B
+baseline evidence root. It replays that v2 baseline through one held private
+root FD, requires the reviewed RC2 tag/target identity, and creates exactly
+three immutable copies of future v3 binding inputs. It deliberately does not
 materialize a baseline, start or stop a process, contact an endpoint, inspect
 a GPU, execute an artifact, exchange a runtime file, create a freeze, or
 qualify a candidate.  Its terminal session is only raw static preparation
@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, NoReturn, Sequence, TypeVar
 
 import check_rc3_rollback_provenance_v3 as rollback
-import check_reconstructed_prior_baseline as baseline
+import check_reconstructed_prior_baseline_v2 as baseline
 import provenance_v2_common as common
 
 
@@ -380,6 +380,11 @@ def _read_and_replay_baseline(root_fd: int, manifest_path: str) -> dict[str, Any
     )
     if not isinstance(document, dict):  # pragma: no cover - common parser contract
         _fail("invalid-reconstructed-baseline", "reconstructed baseline manifest must be a JSON object")
+    if document.get("schema_version") == baseline.LEGACY_MANIFEST_VERSION:
+        _fail(
+            "rollback-binary-provenance-required",
+            "static rollback preparation requires a baseline v2 with A/B server-binary binding",
+        )
     report = _baseline(lambda: baseline.evaluate(root_fd, document))
     after = _common(
         lambda: common.describe_regular_relative(

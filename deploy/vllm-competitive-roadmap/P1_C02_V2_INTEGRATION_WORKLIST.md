@@ -52,8 +52,9 @@ the reviewed source bytes by SHA-256 and length.
 
 The checker stream-rehashes opaque external inputs, checks the two ordered
 launch maps against the remote runner's owned C02 options and self-reference
-keys, and parses only the reconstructed baseline's closed vocabulary after
-hash-binding its canonical manifest bytes. The baseline tag must be the
+keys, and parses only the binary-bound reconstructed-baseline v2 closed
+vocabulary after hash-binding its canonical manifest bytes. It explicitly
+rejects the binary-unbound v1 baseline before any freeze admission result. The baseline tag must be the
 candidate's immediately preceding RC with the same semver, and that declared
 tag plus baseline ID are emitted as a structural binding. This does not prove
 Git history or replay nested baseline leaves. It does not replay nested baseline
@@ -615,6 +616,11 @@ runtime configuration field or a trace counter.
    - Bind candidate shutdown artifact+marker, both phase artifact maps, and
      all raw atomic-switch leaves.  It still returns `not-run`; the later
      semantic checker owns filesystem and health/generation interpretation.
+   - Require `riley.reconstructed-prior-baseline.v2` replay before publication:
+     the rollback binary SHA-256 and byte length must match the independently
+     captured A/B server-binary equality descriptor. Retain the existing
+     bundle and Docker image-ID bindings; v1 reconstructed baselines are
+     historical-only and fail before phase evidence is accepted.
    - The raw v3 manifest preserves the three binding inputs only as SHA-256
      scalars because that retained schema predates this binder. The binder
      derives those scalars from raw leaves at bind time, but v3 does not retain
