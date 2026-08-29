@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, 그리고 same-invocation rollback terminal-provenance v4는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fixed lifecycle bind-request writer v5, private held-lock terminal binder core v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, 그리고 same-invocation rollback terminal-provenance v4는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -171,12 +171,21 @@ ordered selection을 재현할 때만 v2 raw session/index descriptor를 쓴다.
 wrapper fallback을 합성하지 않고 `qualification_status: "not-run"`만 남긴다.
 
 capture v2도 endpoint가 실제 GPU-greedy arm이었다는 사실이나 terminal fallback을
-증명하지 않는다. 별도 `bind_raw_c02_soak_v5.py`는 이제 canonical path-only request에서
+증명하지 않는다. `write_c02_lifecycle_bind_request_v5.py`는 external canonical bridge
+stdout와 held-FD bridge/capture-v2/effective `gpu-greedy` endpoint/fallback observation을
+먼저 다시 join하여 고정 `fallback-capture/session.json` 및
+`fallback-observation/session.json`만 담은 canonical v5 path-only request를 create-only로
+쓴다. 이 helper는 binder, terminal marker, receipt, lifecycle success를 만들지 않는다.
+별도 `bind_raw_c02_soak_v5.py`는 이제 canonical path-only request에서
 capture-v2의 단일 scenario와 두 source pair를 replay하고, held-FD `/v1/config` endpoint의
 validated `effective_config.sampling_backend == "gpu-greedy"`, config bridge, C02
 observation PID/start-tick/listener/GPU tuple까지 같을 때만 v5 raw terminal manifest를
 발행한다. v5의 source audit/fallback marker는 ordinary one-link evidence이고 terminal
-manifest의 `.intent`/`.complete`만 paired hardlink이다. v1/v4/lifecycle receipt는 계속
+manifest의 `.intent`/`.complete`만 paired hardlink이다. public v5 binder는 자체 output
+lock을 잡지만 future authenticated lifecycle compositor를 위해 private held-lock core를
+가진다. 그 core는 outer root FD를 열거나 lock/unlock하지 않고 normal return 전후를
+callback/resume API로 노출하지도 않는다. 따라서 v5 marker의 post-link `fsync` ambiguity는
+여전히 terminal authority가 아니며, core 자체도 lifecycle receipt가 아니다. v1/v4/lifecycle receipt는 계속
 fallback을 거부하며, v5도 `bound`/`not-run`만 반환하고 service/GPU/SSH를 조작하거나
 semantic/C02 qualification을 판정하지 않는다. initial lifecycle runner는 config bridge → scenario producer → C02 observer
 → source shutdown marker → same-process v4/receipt finalizer 순서를 하나의 held host

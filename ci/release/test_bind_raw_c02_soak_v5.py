@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import os
@@ -454,6 +455,55 @@ class BindRawC02SoakV5Tests(unittest.TestCase):
             )["status"],
             "bound",
         )
+
+    def test_private_held_lock_core_never_relocks_or_unlocks_the_root(self) -> None:
+        request_path, _request = self._request()
+        root_fd = common.open_private_evidence_directory(self.fixture.root, "test root")
+        try:
+            fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with mock.patch.object(
+                binder.fcntl,
+                "flock",
+                side_effect=AssertionError("private held-lock core must not change the root lock"),
+            ):
+                report = binder._bind_raw_soak_manifest_held_locked_fd(  # noqa: SLF001
+                    root_fd,
+                    request_path,
+                    "held-lock-v5.json",
+                )
+        finally:
+            fcntl.flock(root_fd, fcntl.LOCK_UN)
+            os.close(root_fd)
+        self.assertEqual(report["status"], "bound")
+        self.assertTrue((self.fixture.root / "held-lock-v5.json.complete").is_file())
+
+    def test_private_held_lock_core_keeps_final_marker_sync_failure_ambiguous(self) -> None:
+        request_path, _request = self._request()
+        original = common._fsync_checked
+
+        def fail_final_parent(descriptor: int, label: str) -> None:
+            if label == "v5 soak raw manifest completion marker parent directory":
+                error = common.ProvenanceV2Error("fixture final marker directory sync failure")
+                error.reason_code = "durability-failure"  # type: ignore[attr-defined]
+                raise error
+            original(descriptor, label)
+
+        root_fd = common.open_private_evidence_directory(self.fixture.root, "test root")
+        try:
+            fcntl.flock(root_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with mock.patch.object(common, "_fsync_checked", side_effect=fail_final_parent):
+                with self.assertRaises(binder.RawSoakBindError) as raised:
+                    binder._bind_raw_soak_manifest_held_locked_fd(  # noqa: SLF001
+                        root_fd,
+                        request_path,
+                        "held-lock-ambiguous-v5.json",
+                    )
+        finally:
+            fcntl.flock(root_fd, fcntl.LOCK_UN)
+            os.close(root_fd)
+        self.assert_reason(raised, "ambiguous-terminal-publication")
+        self.assertTrue((self.fixture.root / "held-lock-ambiguous-v5.json.complete").is_file())
+        self.assertTrue((self.fixture.root / "held-lock-ambiguous-v5.json.intent").is_file())
 
     def test_keeps_v4_and_v5_capture_manifest_versions_isolated(self) -> None:
         request_path, request = self._request()

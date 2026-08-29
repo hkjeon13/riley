@@ -1,8 +1,9 @@
 # C02-P1 v2 raw-provenance integration worklist
 
 Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
-sampling fallback event/marker, raw source-pair capture v2, and the separate
-terminal fallback binder v5 are implemented with CPU/static hostile-path
+sampling fallback event/marker, raw source-pair capture v2, the fixed v5
+lifecycle bind-request writer, and the separate terminal fallback binder v5
+with its private held-lock core are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -87,6 +88,13 @@ v1 capture, v4 binder, and the lifecycle runner/receipt still may not
 synthesize or consume it. The separate raw capture-v2 branch records the two
 source marker pairs as descriptors, and the separate v5 terminal binder now
 replays them together with a bound effective `gpu-greedy` `/v1/config` arm.
+`write_c02_lifecycle_bind_request_v5.py` now creates only the fixed
+`riley.soak-v2-bind-request.v5` path-only leaf after held-FD replay of the
+same bridge, capture-v2, effective `gpu-greedy` endpoint, and fallback
+observation. It cannot bind a manifest, publish a terminal marker, or issue a
+receipt. The v5 binder's private held-lock core likewise has no public resume
+or callback surface: it is solely a future authenticated runner's lexical
+normal-return building block, so it cannot unlock an outer lifecycle root lock.
 Both remain `qualification_status: not-run`; lifecycle-v5 receipt, semantic
 workload replay, Gate E, and candidate promotion remain later work.
 

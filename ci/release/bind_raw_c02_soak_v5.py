@@ -216,12 +216,19 @@ def _manifest_from_request(
     }
 
 
-def bind_raw_soak_manifest_fd(
+def _bind_raw_soak_manifest_held_locked_fd(
     root_fd: int,
     bind_request_path: str,
     manifest_name: str,
 ) -> dict[str, Any]:
-    """Publish one v5 terminal manifest with a durable paired marker.
+    """Publish one v5 terminal manifest under a caller-held exclusive root lock.
+
+    This is intentionally private infrastructure for a future authenticated
+    same-invocation lifecycle compositor.  The caller owns the live private
+    root FD and exclusive lock for its full lexical continuation.  This core
+    must not open, lock, unlock, or close that FD: an inner ``LOCK_UN`` would
+    release the outer lifecycle lock before its successor can bind the normal
+    return edge.
 
     The manifest is only created after full config/capture/audit/fallback and
     observation replay succeeds.  A visible marker after an unsynced final
@@ -234,52 +241,80 @@ def bind_raw_soak_manifest_fd(
             root_fd, "v5 raw soak evidence root"
         )
     )
-    v4._lock_terminal_output_pair(root_fd)  # noqa: SLF001
-    try:
-        v4._assert_terminal_output_pair_absent(root_fd, name)  # noqa: SLF001
-        manifest = _manifest_from_request(root_fd, bind_request_path, name)
-        created = v4._common(  # noqa: SLF001
-            lambda: common.write_create_only_json(
-                root_fd,
-                name,
-                manifest,
-                "v5 soak raw manifest",
-            )
+    v4._assert_terminal_output_pair_absent(root_fd, name)  # noqa: SLF001
+    manifest = _manifest_from_request(root_fd, bind_request_path, name)
+    created = v4._common(  # noqa: SLF001
+        lambda: common.write_create_only_json(
+            root_fd,
+            name,
+            manifest,
+            "v5 soak raw manifest",
         )
-        v4._checker(lambda: checker.verify_soak_provenance_v5_fd(root_fd, name))  # noqa: SLF001
-        marker = {
-            "schema_version": checker.SOAK_V5_COMPLETION_MARKER_VERSION,
-            "artifact_filename": name,
-            "artifact_sha256": created.sha256,
-        }
-        intent_name = f"{name}.intent"
+    )
+    v4._checker(lambda: checker.verify_soak_provenance_v5_fd(root_fd, name))  # noqa: SLF001
+    marker = {
+        "schema_version": checker.SOAK_V5_COMPLETION_MARKER_VERSION,
+        "artifact_filename": name,
+        "artifact_sha256": created.sha256,
+    }
+    intent_name = f"{name}.intent"
+    v4._common(  # noqa: SLF001
+        lambda: common.write_create_only_json(
+            root_fd,
+            intent_name,
+            marker,
+            "v5 soak raw manifest completion marker intent",
+        )
+    )
+    try:
         v4._common(  # noqa: SLF001
-            lambda: common.write_create_only_json(
+            lambda: common.publish_create_only_hardlink(
                 root_fd,
                 intent_name,
-                marker,
-                "v5 soak raw manifest completion marker intent",
+                f"{name}.complete",
+                "v5 soak raw manifest completion marker",
             )
         )
-        try:
-            v4._common(  # noqa: SLF001
-                lambda: common.publish_create_only_hardlink(
-                    root_fd,
-                    intent_name,
-                    f"{name}.complete",
-                    "v5 soak raw manifest completion marker",
-                )
+    except RawSoakBindError:
+        if v4._completion_marker_pair_is_visible(root_fd, name):  # noqa: SLF001
+            _fail(
+                "ambiguous-terminal-publication",
+                "completion marker became visible but its final directory sync failed; "
+                "no lifecycle success receipt may be emitted",
             )
-        except RawSoakBindError:
-            if v4._completion_marker_pair_is_visible(root_fd, name):  # noqa: SLF001
-                _fail(
-                    "ambiguous-terminal-publication",
-                    "completion marker became visible but its final directory sync failed; "
-                    "no lifecycle success receipt may be emitted",
-                )
-            raise
-        return v4._checker(  # noqa: SLF001
-            lambda: checker.verify_completed_soak_provenance_v5_fd(root_fd, name)
+        raise
+    return v4._checker(  # noqa: SLF001
+        lambda: checker.verify_completed_soak_provenance_v5_fd(root_fd, name)
+    )
+
+
+def bind_raw_soak_manifest_fd(
+    root_fd: int,
+    bind_request_path: str,
+    manifest_name: str,
+) -> dict[str, Any]:
+    """Publish one v5 terminal manifest with a durable paired marker.
+
+    This retained public raw-binder entry point acquires and releases its own
+    root lock.  A future lifecycle composer must instead use the private core
+    above while it already holds that lock, so its normal-return branch never
+    crosses an unlock/relock boundary.
+    """
+
+    # Preserve the established public preflight order even though the private
+    # core validates both facts again before it writes any output.
+    v4._manifest_name(manifest_name)  # noqa: SLF001
+    v4._common(  # noqa: SLF001
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "v5 raw soak evidence root"
+        )
+    )
+    v4._lock_terminal_output_pair(root_fd)  # noqa: SLF001
+    try:
+        return _bind_raw_soak_manifest_held_locked_fd(
+            root_fd,
+            bind_request_path,
+            manifest_name,
         )
     finally:
         try:
