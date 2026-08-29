@@ -4,7 +4,8 @@ Status: initial v4 lifecycle-supervisor/receipt, the source-owned native
 sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
-fixed-name private raw compositor, and the C02 source pre-freeze checker are
+fixed-name private raw compositor, the authenticated native-fallback raw-v5
+runner, and the C02 source pre-freeze checker are
 implemented with CPU/static hostile-path coverage; this worklist remains
 design and integration material, not a qualification report. No actual GPU
 capture, candidate freeze, lifecycle-v5 receipt, or semantic qualification has
@@ -100,13 +101,23 @@ request. `write_c02_lifecycle_bind_request_v5.py` then creates only the fixed
 same bridge, capture-v2, effective `gpu-greedy` endpoint, and fallback
 observation. It cannot bind a manifest, publish a terminal marker, or issue a
 receipt. `compose_c02_lifecycle_v5_raw.py` is the only fixed-name private raw
-chain: an outer authenticated runner must retain its root FD and EX lock while
-it securely reopens and inode-matches the path, reserves the request and every
-terminal sibling, then calls the private writer and binder in normal-return
-order. It has no CLI, reopen/resume, or callback surface; final-marker fsync
-ambiguity emits no raw return or receipt. Its result remains
-`qualification_status: not-run`; lifecycle-v5 receipt, semantic
-workload replay, Gate E, and candidate promotion remain later work.
+chain: a private terminal finalizer opens one fresh root FD, holds its
+nonblocking EX lock, securely reopens and inode-matches the path, reserves the
+request and every terminal sibling, then calls the private writer and binder in
+normal-return order. It has no CLI, reopen/resume, or callback surface;
+final-marker fsync ambiguity emits no raw return or receipt.
+`run_remote_c02_soak_v5.sh` is the only outer authenticated host-binary raw
+producer for this chain. When explicitly executed, it takes the canonical GPU
+lock and clean `env -i`, creates a fresh root with the frozen one-scenario
+fallback-v2 contract, forces runner-owned `--sampling-backend gpu-greedy`,
+and rejects both args-file spellings of that option. It then connects config
+bridge → source-pair capture → immediate observation → shutdown check → the
+private finalizer's same-invocation normal-return edge. It permits at most one
+v5 raw manifest and `qualification_status: not-run`; public resume/retry,
+lifecycle-v5 receipt, candidate freeze, semantic/Gate E qualification, and
+Docker/SSH/system-service/privileged actions remain absent. This is currently
+CPU/static hostile-path-tested mechanism code only: no actual GPU capture or
+qualification result has been produced.
 
 ### Landed initial lifecycle supervisor and receipt
 
