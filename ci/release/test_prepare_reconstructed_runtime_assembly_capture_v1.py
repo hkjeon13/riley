@@ -200,6 +200,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         started: bool = False,
         extra_runtime_file: bool = False,
         drift_invocation: bool = False,
+        iid_trailing_newline: bool = False,
     ) -> None:
         context = self._context_tar()
         runtime_tree = self._runtime_tree_tar()
@@ -253,7 +254,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
             ]
         )
         raw: dict[str, bytes] = {
-            "build.iid": (self.image_id + "\n").encode("ascii"),
+            "build.iid": (self.image_id + ("\n" if iid_trailing_newline else "")).encode("ascii"),
             "build.log": b"fixture build log\n",
             "capture-invocation.json": invocation,
             "container-inspect.json": container,
@@ -371,6 +372,12 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         self._write_capture(self.raw_capture, drift_invocation=True)
         root = self.base / "invocation-root"
         self.assert_reason("build-invocation-mismatch", lambda: self._prepare(root))
+        self.assertFalse((root / prepare.RUNTIME_ASSEMBLY_CAPTURE_NAME).exists())
+
+    def test_rejects_a_non_docker_iidfile_trailing_newline_before_receipt(self) -> None:
+        self._write_capture(self.raw_capture, iid_trailing_newline=True)
+        root = self.base / "newline-iid-root"
+        self.assert_reason("iidfile-image-mismatch", lambda: self._prepare(root))
         self.assertFalse((root / prepare.RUNTIME_ASSEMBLY_CAPTURE_NAME).exists())
 
     def test_rejects_ustar_extensions_before_any_tarfile_parser(self) -> None:

@@ -9,10 +9,12 @@ and output evidence.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import os
 import re
 from pathlib import Path
+from typing import Sequence
 
 DOCKERFILE = Path(__file__).with_name("ReconstructedRuntimeAssembly.Dockerfile")
 PINNED_RUNTIME = (
@@ -147,9 +149,17 @@ def _fail(message: str) -> None:
 
 def verify_reconstructed_runtime_assembly_dockerfile(
     path: Path = DOCKERFILE,
-) -> None:
-    """Verify the fixed source-free runtime-image assembly recipe."""
-    contents = path.read_text(encoding="utf-8")
+) -> str:
+    """Verify the recipe and return the exact raw Dockerfile SHA-256 bytes."""
+
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise RuntimeAssemblyContractError(f"cannot read assembly Dockerfile: {error}") from error
+    try:
+        contents = raw.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise RuntimeAssemblyContractError("assembly Dockerfile must be UTF-8") from error
     if re.search(r"(?im)^\s*#\s*syntax\s*=", contents):
         _fail("assembly Dockerfile must not depend on an external syntax frontend")
     if re.search(r"(?im)^\s*(?:ADD|ONBUILD|HEALTHCHECK|SHELL|STOPSIGNAL)\b", contents):
@@ -229,14 +239,25 @@ def verify_reconstructed_runtime_assembly_dockerfile(
     ):
         if marker not in normalized:
             _fail(f"assembly Dockerfile lacks required boundary marker: {marker}")
+    return hashlib.sha256(raw).hexdigest()
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--print-source-sha256",
+        action="store_true",
+        help="verify the reviewed Dockerfile and print its exact raw SHA-256",
+    )
+    args = parser.parse_args(argv)
     try:
-        verify_reconstructed_runtime_assembly_dockerfile()
+        source_sha256 = verify_reconstructed_runtime_assembly_dockerfile()
     except (OSError, RuntimeAssemblyContractError) as error:
         print(f"reconstructed runtime assembly Dockerfile verification failed: {error}", file=os.sys.stderr)
         return 1
+    if args.print_source_sha256:
+        print(source_sha256)
+        return 0
     print("reconstructed runtime assembly Dockerfile contract passed")
     return 0
 

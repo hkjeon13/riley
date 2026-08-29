@@ -1325,7 +1325,10 @@ def _parse_capture_archive(stream: BinaryIO, external: ExternalFacts) -> Capture
         member_digests["context.tar"],
     )
     iid_raw = _read_member(stream, members["build.iid"], "captured build iidfile", maximum_bytes=80)
-    expected_iid = (external.image_id + "\n").encode("ascii")
+    # Docker's --iidfile contains the immutable image ID bytes themselves,
+    # without a line terminator. Preserve that raw Docker format rather than
+    # inventing a canonical newline that a real host runner would not emit.
+    expected_iid = external.image_id.encode("ascii")
     if iid_raw != expected_iid:
         _fail("iidfile-image-mismatch", "captured iidfile differs from the runtime OCI image ID")
     if (

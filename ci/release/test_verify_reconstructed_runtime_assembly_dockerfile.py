@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -23,7 +24,21 @@ from verify_reconstructed_runtime_assembly_dockerfile import (  # noqa: E402
 
 class ReconstructedRuntimeAssemblyDockerfileTests(unittest.TestCase):
     def test_reviewed_recipe_passes_without_building_an_image(self) -> None:
-        verify_reconstructed_runtime_assembly_dockerfile()
+        self.assertEqual(
+            verify_reconstructed_runtime_assembly_dockerfile(),
+            hashlib.sha256(DOCKERFILE.read_bytes()).hexdigest(),
+        )
+
+    def test_verified_raw_dockerfile_hash_is_available_to_the_held_context_builder(self) -> None:
+        completed = subprocess.run(
+            [sys.executable, "-B", str(Path(assembly_contract.__file__).resolve()), "--print-source-sha256"],
+            text=True,
+            capture_output=True,
+            check=False,
+            env={"PATH": "/usr/bin:/bin", "LC_ALL": "C", "TZ": "UTC", "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, hashlib.sha256(DOCKERFILE.read_bytes()).hexdigest() + "\n")
 
     def test_recipe_rejects_source_build_context_and_provenance_drift(self) -> None:
         original = DOCKERFILE.read_text(encoding="utf-8")
