@@ -386,7 +386,9 @@ a qualification decision.
 
 ### Rollback raw compatibility boundary
 
-No authenticated rollback runner or semantic checker is landed yet. The
+An authenticated rollback **raw** runner and a private held-FD raw operational
+semantics core are landed, but no public semantic receipt, frozen-candidate
+replay, Gate E replayer, or qualification checker is landed yet. The
 existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
 replayer: it binds stable-default, distinct candidate/rollback process tuples,
 the candidate shutdown-v2 pair, artifact maps, and five opaque switch leaves.
@@ -788,16 +790,29 @@ runtime configuration field or a trace counter.
      CPU/static tests only; no GPU capture, freeze, deployment mutation,
      semantic receipt, or qualification result is claimed.
 
-6. a separate soak v2 semantic receipt checker (not
-   `ci/release/check_soak_v2_receipt.py`), `ci/release/check_rc3_rollback_receipt.py`, and
-   `ci/release/check_rc3_qualification.py`
+6. separate semantic closure, in two explicit boundaries
    - Keep v1 checkers/schemas historical but do not upconvert or accept them.
    - The landed soak and rollback structural prechecks are admission-only and
      must never be upgraded in place or accepted as an outer
      qualification/finalizer input.
-   - Add v2 raw-binder invocation first, then v2 semantic replay.  The outer
-     qualification checker accepts only exact v2 report versions and produces
-     an explicit historical-v1 rejection reason before generic gate failure.
+   - The landed private held-FD
+     `replay_rc3_rollback_operational_semantics_v1.py` is intended to be
+     nested in the authenticated runner's same root/switch EX normal-return
+     stack. It replays original candidate/source/rollback/atomic raw leaves
+     and returns an in-memory `passed/not-run`
+     `raw-operational-semantics-only` diagnostic. It uses the v4 **raw
+     manifest** only to cross-bind the v3/session closure; it neither reads a
+     v4 completion pair/finalizer receipt/precheck as a semantic input nor
+     writes a semantic receipt, freeze, Gate E, deployment, or qualification
+     result. Its FDs cannot prove prior finalizer normal-return lineage, so
+     this diagnostic can never replace a same-stack capability or receipt.
+   - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
+     add a create-only frozen-candidate manifest plus FD-safe frozen-candidate
+     and Gate E replayers. `freeze.raw` and the current freeze-input admission
+     are opaque/not-frozen inputs and must never be promoted to a semantic
+     pin. Only then may a distinct same-stack v2 semantic receipt be emitted;
+     the outer qualification checker must accept only that exact version and
+     reject historical v1 before generic gate failure.
    - Replace all existing no-follow fallback flag patterns.
 
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
@@ -811,6 +826,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
+   `benchmarks/release/candidates/rc3-rollback-operational-semantics-v1.schema.json`,
    `benchmarks/release/candidates/README.md`, and
    `deploy/vllm-competitive-roadmap/02-rc3-candidate-qualification.md`
    - Publish v4 serial raw-manifest/raw-binding schemas and the separate
@@ -873,11 +889,13 @@ runtime configuration field or a trace counter.
 - `check_rc3_rollback_structural_precheck.py` consumes only completed raw
   rollback v4 and returns raw-structural-only `bound/not-run`; it is not a
   rollback receipt or qualification input.
-- `check_rc3_rollback_receipt.py` still consumes self-authored v1 timeline
-  fields and remains historical-only. The landed authenticated RC3 raw runner
-  can produce the fixed raw topology and receipt chain, but no semantic
-  rollback/qualification checker may consume its output yet; CPU/static tests
-  are not a GPU capture result.
+- No current-tree `check_rc3_rollback_receipt.py` is a semantic input. The
+  landed authenticated RC3 raw runner can produce the fixed raw topology and
+  receipt chain, but v4/receipt pairs remain non-authoritative path-replay
+  material. The landed private operational-semantic replay consumes original
+  held-FD raw leaves only; frozen-candidate/Gate E-backed semantic receipt and
+  qualification remain later work. CPU/static tests are not a GPU capture
+  result.
 - `check_rc3_qualification.py` imports those v1 report versions and also has
   fallback open flags.
 - `C02ShutdownArtifactWriter` v1 is close to safe but records PID without

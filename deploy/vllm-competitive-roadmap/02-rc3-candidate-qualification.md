@@ -239,10 +239,17 @@ mechanism과 adversarial test를 닫아야 한다.
   standalone rollback/lifecycle authority 또는 semantic checker input이 될 수 없다.
   authenticated runner의 same-stack normal-return branch만 이 helper의 반환을 소비할 수
   있으며, 이 코드 역시 service/GPU/deployment를 실행하지 않는다.
-- native fallback leaf, authenticated rollback raw runner, soak/rollback semantic contract와
-  checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
-  필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
-  provenance closure는 명시적 새 version으로 추가한다.
+- native fallback leaf, soak/rollback semantic receipt contract와 qualification checker는
+  후속 work다. authenticated rollback raw runner와 private held-FD
+  `replay_rc3_rollback_operational_semantics_v1.py`는 landed했으며, 후자는 original
+  raw leaves와 v4 raw-manifest cross-binding만 다시 읽어 in-memory
+  `passed/not-run`, `raw-operational-semantics-only` diagnostic을 낸다. v4 completion
+  pair/finalizer receipt/precheck를 semantic input으로 승격하지 않으며 freeze, Gate E,
+  deployment 또는 qualification authority가 없다. caller-held FD 자체는 prior finalizer
+  normal-return lineage를 증명하지 않으므로 same-stack capability나 receipt를 대체할 수
+  없다. 이후 semantic receipt checker도 위
+  descriptor를 no-follow hash replay로 필수 검증하고, 기존 v1 public schema를
+  불명확하게 약화하지 않은 호환 불가 새 version으로 추가해야 한다.
 
 이 단계는 actual GPU raw receipt나 semantic report, candidate freeze, qualification decision을
 미리 만들거나 backfill하지 않는다. 구현과 테스트가 끝난 clean C02 source revision만
@@ -499,7 +506,7 @@ ci/release/run_capture_rc3_rollback_atomic_transaction_v1.sh
 ci/release/check_rc3_rollback_provenance_v4.py
 ci/release/bind_raw_rc3_rollback_terminal_v4.py
 ci/release/check_rc3_rollback_structural_precheck.py
-ci/release/check_rc3_rollback_receipt_v2.py
+ci/release/replay_rc3_rollback_operational_semantics_v1.py
 ```
 
 C02 raw-only observation은 frozen candidate나 semantic receipt를 만들지 않는다. 이미 실행 중인
@@ -523,6 +530,14 @@ visible v4 pair는 prior final-directory-sync ambiguity 뒤에도 남을 수 있
 precheck는 rollback success·lifecycle·freeze·Gate E·semantic receipt·qualification이 아니고,
 future rollback receipt checker와 outer RC3 finalizer는 이를 semantic input으로
 수용해서는 안 된다.
+
+다음 semantic 단계는 public `check_rc3_rollback_receipt_v2.py`가 아니라
+authenticated runner의 same-stack held-FD private core
+`replay_rc3_rollback_operational_semantics_v1.py`다. 이 core는 original raw
+candidate/source/rollback/atomic leaves를 재해석해 operational consistency만
+`passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate manifest와
+Gate E FD-safe replayer가 아직 없으므로, 이 단계는 semantic receipt, candidate
+freeze, Gate E 또는 qualification을 만들거나 주장하지 않는다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
 단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서

@@ -300,8 +300,9 @@ bind한다. schema 상태는 정확히 `status: "completed"`와
 `qualification_status: "not-run"`이다. 이는 좁은 raw lifecycle이 완료됐다는 뜻일
 뿐 fallback event의 존재, rollback 성공, candidate freeze, Gate E, semantic
 workload 판정 또는 C02 pass를 뜻하지 않는다. native fallback **capture/binder**,
-rollback raw runner, semantic checker/finalizer, clean candidate freeze와 실제 GPU
-capture는 이후 versioned work로 남는다.
+rollback raw runner와 private raw operational replay는 landed했지만, semantic
+receipt/finalizer, clean candidate freeze와 실제 GPU capture는 이후 versioned work로
+남는다.
 
 lifecycle runner보다 먼저 `check_c02_config_bridge_v1.py`를 추가한다. 이 helper는
 private evidence root와 endpoint/startup/direct `<capture>/session.json` path, expected
@@ -348,7 +349,24 @@ rollback, freeze, Gate E, threshold, campaign, interval/monotonicity semantic �
 
 `run_remote_rc3_rollback_capture.sh`와 `bind_raw_rc3_rollback_capture.py`는 candidate와 reconstructed baseline 각각의 PID/start tick, listener inode, health/generation/audit raw bytes, candidate shutdown artifact+marker, atomic rename 전후 device/inode/stat evidence를 보존한다. label 문자열이나 `atomic-rename` declaration은 증거가 아니다.
 
-`check_rc3_rollback_receipt_v2.py`는 frozen candidate가 pin한 baseline manifest를 replay하고, candidate drain/zero ownership, replacement process/socket, generation response, shutdown marker, filesystem switch를 raw leaf에서 재구성한다.
+현재 raw closure 위의 다음 단계는 public path receipt checker가 아니라 private
+`replay_rc3_rollback_operational_semantics_v1.py`다. 이 landed helper는 authenticated
+runner가 같은 root/switch EX와 normal-return stack에 nested하여 original
+candidate/source/rollback/atomic raw leaf를 다시 해석해 candidate drain/zero
+ownership, replacement process/socket, generation response, shutdown marker와
+isolated filesystem switch를 재구성한다. v4 raw manifest는 v3/session closure
+cross-bind에만 쓰고 v4 completion pair, finalizer receipt, structural precheck를
+semantic input으로 읽지 않는다. 반환값은 in-memory
+`passed/not-run`, `raw-operational-semantics-only` diagnostic이며 semantic receipt,
+freeze, Gate E, deployment rollback 또는 qualification authority가 아니다. caller-held
+FD만으로 prior finalizer normal-return lineage는 증명되지 않으므로, 이 diagnostic은
+same-stack capability나 receipt를 대체할 수 없다.
+
+`check_rc3_rollback_receipt_v2.py`와 outer qualification은 **후속** frozen-candidate
+manifest 및 Gate E FD-safe replayer가 landed한 뒤에만 만들 수 있다. 현재
+`freeze.raw`와 freeze-input admission은 opaque/not-frozen binding이므로 frozen
+candidate pin으로 승격할 수 없으며, v4 completion pair, structural precheck와 raw
+finalizer receipt도 post-link ambiguity 때문에 그 semantic input을 대체할 수 없다.
 
 #### Reconstructed RC2 compatibility boundary
 
