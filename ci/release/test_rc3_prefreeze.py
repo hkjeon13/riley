@@ -378,6 +378,16 @@ class Rc3PrefreezeTests(unittest.TestCase):
             second.run(defaults_sha256="f" * 64)
         self.assert_reason(raised, "server-defaults-source-mismatch")
 
+    def test_checked_in_reviewed_server_defaults_pin_matches_source(self) -> None:
+        repository_root = Path(__file__).resolve().parents[2]
+        source = repository_root / checker.SERVER_DEFAULTS_SOURCE_PATH
+        self.assertEqual(
+            _sha256(source.read_bytes()),
+            checker.SERVER_DEFAULTS_SOURCE_SHA256,
+            "changing reviewed server defaults requires an explicit "
+            "release-contract pin update",
+        )
+
     def test_rejects_table_shaped_metadata_hidden_inside_a_multiline_string(self) -> None:
         cargo = self.fixture.root / "Cargo.toml"
         cargo.write_text(

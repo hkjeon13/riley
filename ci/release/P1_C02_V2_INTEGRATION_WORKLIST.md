@@ -10,9 +10,14 @@ structural precheck are implemented with CPU/static hostile-path coverage; this 
 design and integration material, not a qualification report. No actual GPU
 capture, candidate freeze, lifecycle-v5 receipt, or semantic qualification has
 been performed, and this file must not be copied into a candidate result
-directory as evidence. The pre-freeze checker leaves the existing reviewed
-server-defaults hash mismatch fail-closed; resolving that release-contract
-change is a separate approved PR, not a checker exception.
+directory as evidence. The reviewed server-defaults contract pin now covers
+`crates/riley-server/src/main.rs` at source commit `21f445f4870a140346509144c36c7294f2f677f3`
+(SHA-256 `47990249835eed190ee73521ede239841eae0eb73f20e71577258790f1734e4b`).
+The review compared the prior `1195cf20` pin: ordinary serve defaults are
+unchanged and the C02 runtime-config/audit/shutdown/native-fallback additions
+are opt-in and fail closed. Future source drift must fail pre-freeze until a
+separate reviewed release-contract pin update; this checker never derives or
+widens the pin and this update is not a candidate freeze or qualification.
 
 ## Boundary to preserve
 

@@ -76,8 +76,16 @@ index(assume-unchanged·skip-worktree 거부), release metadata/default, workspa
 `qualification_status: not-run`만 기록한다. archive/image/ELF/Gate E/raw receipt/freeze SHA를
 생성하거나 검증했다고 주장하지 않으며, actual frozen candidate 또는 C02 qualification의 대체물이
 아니다. 이 checker는 fixture와 hostile-path 범위만 통과했으며 actual candidate freeze는 아직
-수행하지 않았다. 현재 source의 reviewed server-defaults hash 불일치는 별도 release-contract
-update PR이 해결해야 하며, pre-freeze checker가 이를 임의로 허용하거나 hash를 갱신하지 않는다.
+수행하지 않았다. reviewed server-defaults pin은 `21f445f4870a140346509144c36c7294f2f677f3`의
+`crates/riley-server/src/main.rs` SHA-256
+`47990249835eed190ee73521ede239841eae0eb73f20e71577258790f1734e4b`로 갱신됐다.
+이전 `1195cf20` pin과 대조해 기존 serve 기본값(루프백 bind, device 0, 8/64 scheduler
+capacity, 512 token budget/prefill, iteration-batch, fixed-max, synchronous, CPU,
+canonical-v1)은 변하지 않았고, 추가된 C02 runtime-config/audit/shutdown/native-fallback
+경로는 모두 명시 opt-in·fail-closed임을 검토했다. 이후 이 source가 바뀌면 별도 reviewed
+release-contract PR이 새 exact pin을 승인해야 하며, pre-freeze checker는 hash를 자동 발견,
+허용 또는 갱신하지 않는다. 이 갱신도 candidate freeze나 Gate E/semantic qualification을
+수행하거나 승인하지 않는다.
 
 `ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의
