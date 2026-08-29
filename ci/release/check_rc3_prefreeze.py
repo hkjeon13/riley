@@ -598,40 +598,42 @@ def _root_still_matches(repository_root: Path, held_root_fd: int) -> None:
         _fail("raced-repository-root", "--repository-root changed while it was checked")
 
 
-def check_prefreeze(
+def check_prefreeze_on_held_root_fd(
     repository_root: Path,
+    root_fd: int,
     expected_revision: str,
     candidate_id: str,
 ) -> dict[str, Any]:
-    """Return only source-pre-freeze facts for one clean, exact source revision."""
+    """Replay pre-freeze facts through a caller-held source-root directory FD.
+
+    This is intentionally a no-write/no-close primitive.  A higher-level
+    frozen-candidate writer or replayer can keep the source checkout pinned
+    while it also holds its external input roots.  The lexical path remains an
+    explicit argument only because Git's top-level identity check needs it;
+    ``_root_still_matches`` binds that path to ``root_fd`` before and after
+    every replay.
+    """
 
     root = _repository_path(repository_root)
     revision = _revision(expected_revision)
     candidate, candidate_version = _candidate_id(candidate_id)
-    root_fd = -1
-    try:
-        root_fd = _common(
-            lambda: common.open_absolute_directory(root, "repository root")
+    _root_still_matches(root, root_fd)
+    _check_git_snapshot(root, root_fd, revision)
+    workspace_version, workspace_manifests = _validate_workspace_metadata(root_fd)
+    if workspace_version != candidate_version:
+        _fail(
+            "candidate-workspace-version-mismatch",
+            f"candidate version {candidate_version} differs from workspace version {workspace_version}",
         )
-        _check_git_snapshot(root, root_fd, revision)
-        workspace_version, workspace_manifests = _validate_workspace_metadata(root_fd)
-        if workspace_version != candidate_version:
-            _fail(
-                "candidate-workspace-version-mismatch",
-                f"candidate version {candidate_version} differs from workspace version {workspace_version}",
-            )
-        _cargo_lock_raw, cargo_lock = _read_source_leaf(root_fd, "Cargo.lock", "Cargo.lock")
-        _registry_raw, extension_registry = _read_source_leaf(
-            root_fd,
-            "deploy/extensions/registry.json",
-            "extension registry",
-        )
-        server_defaults = _validate_server_defaults(root_fd)
-        _check_git_snapshot(root, root_fd, revision)
-        _root_still_matches(root, root_fd)
-    finally:
-        if root_fd >= 0:
-            os.close(root_fd)
+    _cargo_lock_raw, cargo_lock = _read_source_leaf(root_fd, "Cargo.lock", "Cargo.lock")
+    _registry_raw, extension_registry = _read_source_leaf(
+        root_fd,
+        "deploy/extensions/registry.json",
+        "extension registry",
+    )
+    server_defaults = _validate_server_defaults(root_fd)
+    _check_git_snapshot(root, root_fd, revision)
+    _root_still_matches(root, root_fd)
 
     return {
         "schema_version": PREFREEZE_REPORT_VERSION,
@@ -656,6 +658,30 @@ def check_prefreeze(
             {"name": "no-follow-source-input-hashes", "satisfied": True},
         ],
     }
+
+
+def check_prefreeze(
+    repository_root: Path,
+    expected_revision: str,
+    candidate_id: str,
+) -> dict[str, Any]:
+    """Return only source-pre-freeze facts for one clean, exact source revision."""
+
+    root = _repository_path(repository_root)
+    root_fd = -1
+    try:
+        root_fd = _common(
+            lambda: common.open_absolute_directory(root, "repository root")
+        )
+        return check_prefreeze_on_held_root_fd(
+            root,
+            root_fd,
+            expected_revision,
+            candidate_id,
+        )
+    finally:
+        if root_fd >= 0:
+            os.close(root_fd)
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:

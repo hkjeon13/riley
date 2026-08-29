@@ -1,0 +1,254 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-frozen-candidate-v1.schema.json",
+  "title": "Riley RC3 frozen candidate v1",
+  "description": "A create-only RC3 input-identity pin. It rebinds an original freeze-input request to a clean source pre-freeze view and a replayed reconstructed prior baseline. It is not a source-to-artifact provenance statement, a Gate E result, a semantic receipt, a deployment action, a rollback result, or a qualification decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scope",
+    "status",
+    "authority",
+    "candidate_status",
+    "qualification_status",
+    "candidate_id",
+    "source_revision",
+    "workspace_version",
+    "freeze_input_request",
+    "source_pre_freeze",
+    "bound_inputs",
+    "reconstructed_baseline",
+    "not_established",
+    "checks",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-frozen-candidate.v1"},
+    "scope": {"const": "frozen-candidate-input-identity-only"},
+    "status": {"const": "frozen"},
+    "authority": {"const": "frozen-candidate-input-identity-only"},
+    "candidate_status": {"const": "frozen"},
+    "qualification_status": {"const": "not-run"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "source_revision": {"$ref": "#/$defs/gitRevision"},
+    "workspace_version": {"$ref": "#/$defs/text"},
+    "freeze_input_request": {"$ref": "#/$defs/requestDescriptor"},
+    "source_pre_freeze": {"$ref": "#/$defs/sourcePreFreeze"},
+    "bound_inputs": {"$ref": "rc3-freeze-input-request-v1.schema.json"},
+    "reconstructed_baseline": {"$ref": "#/$defs/reconstructedBaseline"},
+    "not_established": {"$ref": "#/$defs/notEstablished"},
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {"$ref": "#/$defs/checkOriginalRequest"},
+        {"$ref": "#/$defs/checkDescriptors"},
+        {"$ref": "#/$defs/checkSourceCrossBinding"},
+        {"$ref": "#/$defs/checkLaunch"},
+        {"$ref": "#/$defs/checkBaseline"},
+        {"$ref": "#/$defs/checkClosureBudget"},
+        {"$ref": "#/$defs/checkPathDisjoint"},
+        {"$ref": "#/$defs/checkIdentityOnly"}
+      ],
+      "items": false
+    },
+    "reason_codes": {
+      "type": "array",
+      "maxItems": 0
+    }
+  },
+  "$defs": {
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{40}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000"}}
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{64}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 0, "maximum": 4398046511104}
+      }
+    },
+    "requestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {
+          "properties": {
+            "path": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,122}\\.json$"
+            }
+          }
+        }
+      ]
+    },
+    "sourceInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workspace_manifests",
+        "cargo_lock",
+        "extension_registry",
+        "server_defaults_source"
+      ],
+      "properties": {
+        "workspace_manifests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 129,
+          "items": {"$ref": "#/$defs/descriptor"}
+        },
+        "cargo_lock": {"$ref": "#/$defs/descriptor"},
+        "extension_registry": {"$ref": "#/$defs/descriptor"},
+        "server_defaults_source": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "sourcePreFreeze": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "source_inputs"],
+      "properties": {
+        "schema_version": {"const": "riley.rc3-prefreeze-check.v1"},
+        "source_inputs": {"$ref": "#/$defs/sourceInputs"}
+      }
+    },
+    "reconstructedBaseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseline_id",
+        "tag_name",
+        "target_commit_sha1",
+        "relationship",
+        "provenance_class",
+        "historical_distribution"
+      ],
+      "properties": {
+        "baseline_id": {"$ref": "#/$defs/text"},
+        "tag_name": {"$ref": "#/$defs/candidateId"},
+        "target_commit_sha1": {"$ref": "#/$defs/gitRevision"},
+        "relationship": {"const": "immediately-prior-rc-same-semver"},
+        "provenance_class": {"const": "reconstructed-from-source"},
+        "historical_distribution": {"const": "not-attested"}
+      }
+    },
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "writer_normal_return",
+        "input_root_immutability",
+        "source_archive_content",
+        "release_binary_provenance",
+        "release_container_content",
+        "toolchain_probe_semantics",
+        "model_content",
+        "correctness_gate",
+        "gate_e",
+        "semantic_receipt",
+        "deployment",
+        "rollback_result"
+      ],
+      "properties": {
+        "writer_normal_return": {"const": "not-established"},
+        "input_root_immutability": {"const": "not-established"},
+        "source_archive_content": {"const": "not-established"},
+        "release_binary_provenance": {"const": "not-established"},
+        "release_container_content": {"const": "not-established"},
+        "toolchain_probe_semantics": {"const": "not-established"},
+        "model_content": {"const": "not-established"},
+        "correctness_gate": {"const": "not-established"},
+        "gate_e": {"const": "not-established"},
+        "semantic_receipt": {"const": "not-established"},
+        "deployment": {"const": "not-established"},
+        "rollback_result": {"const": "not-established"}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {
+        "name": {"type": "string"},
+        "satisfied": {"const": true}
+      }
+    },
+    "checkOriginalRequest": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "original-freeze-input-request-replayed"}}}
+      ]
+    },
+    "checkDescriptors": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "declared-external-input-descriptors-rehashed"}}}
+      ]
+    },
+    "checkSourceCrossBinding": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "source-prefreeze-and-live-source-lock-registry-cross-bound"}}}
+      ]
+    },
+    "checkLaunch": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "launch-input-self-reference-rejected"}}}
+      ]
+    },
+    "checkBaseline": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "reconstructed-prior-baseline-v2-replayed"}}}
+      ]
+    },
+    "checkClosureBudget": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "complete-frozen-input-closure-within-fixed-byte-budget"}}}
+      ]
+    },
+    "checkPathDisjoint": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "candidate-and-baseline-raw-evidence-paths-disjoint"}}}
+      ]
+    },
+    "checkIdentityOnly": {
+      "allOf": [
+        {"$ref": "#/$defs/check"},
+        {"properties": {"name": {"const": "manifest-is-input-identity-only"}}}
+      ]
+    }
+  }
+}

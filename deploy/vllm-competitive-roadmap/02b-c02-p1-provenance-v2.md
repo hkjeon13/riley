@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, 그리고 source-free arm별 raw runtime-assembly host runner/USTAR composer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual Docker/GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, source-free arm별 raw runtime-assembly host runner/USTAR composer, 그리고 original freeze-input closure를 full reconstructed-baseline-v2 replay와 함께 bind하는 create-only frozen-candidate input-identity manifest/FD-safe replayer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual Docker/GPU capture·actual candidate freeze·lifecycle-v5 receipt·Gate E semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -362,11 +362,33 @@ freeze, Gate E, deployment rollback 또는 qualification authority가 아니다.
 FD만으로 prior finalizer normal-return lineage는 증명되지 않으므로, 이 diagnostic은
 same-stack capability나 receipt를 대체할 수 없다.
 
-`check_rc3_rollback_receipt_v2.py`와 outer qualification은 **후속** frozen-candidate
-manifest 및 Gate E FD-safe replayer가 landed한 뒤에만 만들 수 있다. 현재
-`freeze.raw`와 freeze-input admission은 opaque/not-frozen binding이므로 frozen
-candidate pin으로 승격할 수 없으며, v4 completion pair, structural precheck와 raw
-finalizer receipt도 post-link ambiguity 때문에 그 semantic input을 대체할 수 없다.
+`write_rc3_frozen_candidate_v1.py`와
+`replay_rc3_frozen_candidate_v1.py`는 이제 separate fresh `0700` root의 exact one-leaf
+`riley.rc3-frozen-candidate.v1` manifest를 만들고 held-FD로 다시 검증한다. writer는
+freeze-input admission output이나 `freeze.raw`를 input으로 승격하지 않고, original canonical
+request와 all declared raw leaf를 직접 replay한다. reconstructed baseline은 structural
+vocabulary만 보지 않고 v2 raw graph 전체를 replay하며 candidate/baseline 간 raw descriptor
+path reuse를 거부한다. 이 manifest의 authority는
+`frozen-candidate-input-identity-only`, status는 `frozen/not-run`뿐이다. model weight를
+복사하지 않는 input pin이므로 모든 future consumer는 original input root도 다시 hash해야
+하며, visible manifest는 writer normal-return, source→archive/ELF/image/model provenance,
+Gate E, rollback/deployment, semantic receipt 또는 qualification을 증명하지 않는다.
+
+full frozen-candidate replay는 bounded control-plane JSON을 먼저 읽은 뒤 original request와
+정확히 23개 nested baseline physical leaf의 combined closure를 최대 8,192 descriptor/1 TiB로
+제한하고서만 raw recipe·artifact streaming을 시작한다. candidate/baseline path reuse는 그
+budget preflight에서 fail-closed한다. source/input/frozen root는 held FD ancestry와 Linux mount
+backing coordinate까지 disjoint해야 하고, writer는 create와 self-replay 뒤 visible output path를
+held root FD에 다시 bind한다. private Python code는 caller FD를 직접 mutate하지 않지만 pinned
+FD를 이용하는 trusted read-only Git source oracle에 의존하므로 configured Git executable/PATH와
+그 behavior는 explicit trusted boundary다. schema의 not-established object는 writer
+normal-return과 input-root immutability도 machine-readable하게 보존한다.
+
+따라서 `check_rc3_rollback_receipt_v2.py`와 outer qualification은 여전히 **후속** closed
+Gate E FD-safe replayer가 landed한 뒤에만 만들 수 있다. legacy path-based
+`check_release_candidate.py`는 RC3 Gate E replayer가 아니며 same-stack finalizer input으로
+수용할 수 없다. `freeze.raw`, freeze-input admission, v4 completion pair, structural precheck와
+raw finalizer receipt도 semantic input을 대체할 수 없다.
 
 #### Reconstructed RC2 compatibility boundary
 

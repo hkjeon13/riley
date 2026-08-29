@@ -159,8 +159,9 @@ qualification authority; later writers and finalizers must replay the original
 request and leaves.
 
 The request is also capped at 8,192 external descriptors and 1 TiB total
-declared bytes before streaming rehash begins. This is a hostile-input resource
-boundary, not a semantic evidence threshold.
+declared bytes before streaming rehash begins. This is the request-only
+admission boundary, not a semantic evidence threshold or a nested-baseline
+full-replay budget.
 
 ### Landed v4/v5 raw structural soak precheck
 
@@ -386,9 +387,12 @@ a qualification decision.
 
 ### Rollback raw compatibility boundary
 
-An authenticated rollback **raw** runner and a private held-FD raw operational
-semantics core are landed, but no public semantic receipt, frozen-candidate
-replay, Gate E replayer, or qualification checker is landed yet. The
+An authenticated rollback **raw** runner, a private held-FD raw operational
+semantics core, and a create-only frozen-candidate **input-identity** manifest
+with its FD-safe replayer are landed. No public semantic receipt, RC3 Gate E
+replayer, or qualification checker is landed yet. The frozen manifest is not
+an execution or normal-return receipt: it rereads the original request/raw
+leaves and records only `frozen/not-run` identity binding. The
 existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
 replayer: it binds stable-default, distinct candidate/rollback process tuples,
 the candidate shutdown-v2 pair, artifact maps, and five opaque switch leaves.
@@ -806,13 +810,35 @@ runtime configuration field or a trace counter.
      writes a semantic receipt, freeze, Gate E, deployment, or qualification
      result. Its FDs cannot prove prior finalizer normal-return lineage, so
      this diagnostic can never replace a same-stack capability or receipt.
+   - `write_rc3_frozen_candidate_v1.py`,
+     `replay_rc3_frozen_candidate_v1.py`, and
+     `rc3-frozen-candidate-v1.schema.json` now create/replay one separate
+     input-identity pin. The writer derives it directly from the original
+     request and held raw leaves, replays reconstructed baseline v2 fully,
+     rejects candidate/baseline path reuse, and writes one create-only
+     `frozen-candidate.json` in a fresh external `0700` root. The replayer
+     rereads both roots twice and returns only `bound/frozen/not-run`; neither
+     a visible manifest nor its replayer proves writer normal-return lineage.
+     `freeze.raw` and the current freeze-input admission remain opaque/
+     not-frozen inputs and cannot substitute for this exact version.
+     Before any raw recipe/artifact streaming, the frozen replayer obtains the
+     exact 23-leaf baseline closure from bounded control-plane JSON and applies
+     one combined 8,192-descriptor/1-TiB limit plus candidate/baseline path
+     uniqueness. Public wrappers also reject held-FD ancestry and Linux mount
+     backing aliases, then re-open the visible frozen root after creation and
+     replay. The private Python core has no direct caller-FD mutation surface,
+     but its source pre-freeze step relies on the configured trusted read-only
+     Git source oracle; Git/PATH behavior is therefore an explicit trusted
+     boundary. The manifest says writer normal-return and input-root
+     immutability are not established.
    - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
-     add a create-only frozen-candidate manifest plus FD-safe frozen-candidate
-     and Gate E replayers. `freeze.raw` and the current freeze-input admission
-     are opaque/not-frozen inputs and must never be promoted to a semantic
-     pin. Only then may a distinct same-stack v2 semantic receipt be emitted;
-     the outer qualification checker must accept only that exact version and
-     reject historical v1 before generic gate failure.
+     still add a **separate FD-safe Gate E replayer** with a closed RC3 gate
+     inventory. The legacy path-based `check_release_candidate.py` is not
+     that replayer and must not be consumed by a same-stack semantic
+     finalizer. Only after Gate E is fixed may a distinct same-stack v2
+     semantic receipt be emitted; the outer qualification checker must accept
+     only that exact version and reject historical v1 before generic gate
+     failure.
    - Replace all existing no-follow fallback flag patterns.
 
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
@@ -893,7 +919,8 @@ runtime configuration field or a trace counter.
   landed authenticated RC3 raw runner can produce the fixed raw topology and
   receipt chain, but v4/receipt pairs remain non-authoritative path-replay
   material. The landed private operational-semantic replay consumes original
-  held-FD raw leaves only; frozen-candidate/Gate E-backed semantic receipt and
+  held-FD raw leaves only. The landed frozen-candidate identity replayer is a
+  separate prerequisite, while Gate-E-backed semantic receipt and
   qualification remain later work. CPU/static tests are not a GPU capture
   result.
 - `check_rc3_qualification.py` imports those v1 report versions and also has

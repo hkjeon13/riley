@@ -37,7 +37,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NoReturn, Sequence
+from typing import Any, Callable, NoReturn, Sequence
 
 try:
     import provenance_v2_common as common
@@ -648,7 +648,7 @@ def _require_global_unique_descriptors(
     b: BuildReceipt,
     recipe_a: RecipeInspect,
     recipe_b: RecipeInspect,
-) -> None:
+) -> tuple[Descriptor, ...]:
     """Reject a path alias across every independently captured evidence leaf.
 
     Descriptor copies in receipts/inspect documents are intentionally not
@@ -658,37 +658,35 @@ def _require_global_unique_descriptors(
     independent.
     """
 
-    common.require_unique_descriptors(
-        (
-            manifest.source.tag_object,
-            manifest.source.tag_target,
-            manifest.source.archive,
-            manifest.a_receipt,
-            manifest.b_receipt,
-            a.recipe_inspect,
-            a.image_inspect,
-            a.runtime_image_inspect_raw,
-            recipe_a.recipe,
-            a.artifacts.binary,
-            a.artifacts.bundle,
-            a.artifacts.oci.archive,
-            a.artifacts.oci.layout,
-            a.artifacts.oci.manifest,
-            b.recipe_inspect,
-            b.image_inspect,
-            b.runtime_image_inspect_raw,
-            recipe_b.recipe,
-            b.artifacts.binary,
-            b.artifacts.bundle,
-            b.artifacts.oci.archive,
-            b.artifacts.oci.layout,
-            b.artifacts.oci.manifest,
-        ),
-        "baseline raw evidence",
+    descriptors = (
+        manifest.source.tag_object,
+        manifest.source.tag_target,
+        manifest.source.archive,
+        manifest.a_receipt,
+        manifest.b_receipt,
+        a.recipe_inspect,
+        a.image_inspect,
+        a.runtime_image_inspect_raw,
+        recipe_a.recipe,
+        a.artifacts.binary,
+        a.artifacts.bundle,
+        a.artifacts.oci.archive,
+        a.artifacts.oci.layout,
+        a.artifacts.oci.manifest,
+        b.recipe_inspect,
+        b.image_inspect,
+        b.runtime_image_inspect_raw,
+        recipe_b.recipe,
+        b.artifacts.binary,
+        b.artifacts.bundle,
+        b.artifacts.oci.archive,
+        b.artifacts.oci.layout,
+        b.artifacts.oci.manifest,
     )
+    return common.require_unique_descriptors(descriptors, "baseline raw evidence")
 
 
-def _validate_inspects(
+def _read_and_validate_inspects(
     root_fd: int,
     manifest: BaselineManifest,
     receipt: BuildReceipt,
@@ -722,6 +720,17 @@ def _validate_inspects(
     # builder-provided recipe/image capture is accepted.
     if recipe.source.tag_name != tag_identity.tag_name or image.source.tag_name != tag_identity.tag_name:
         _fail("git-tag-binding-mismatch", "inspect source names a different raw Git tag")
+    return recipe, image
+
+
+def _verify_inspect_raw_leaves(
+    root_fd: int,
+    receipt: BuildReceipt,
+    recipe: RecipeInspect,
+    image: ImageInspect,
+) -> None:
+    """Verify the raw inspect/recipe leaves only after closure preflight."""
+
     raw_image_id = _read_runtime_image_inspect_id(
         root_fd,
         receipt.runtime_image_inspect_raw,
@@ -735,7 +744,6 @@ def _validate_inspects(
     _verify_raw_descriptor(
         root_fd, recipe.recipe, f"reconstruction {receipt.reconstruction_id} raw recipe"
     )
-    return recipe, image
 
 
 def _verify_artifact_leaves(root_fd: int, manifest: BaselineManifest, a: BuildReceipt, b: BuildReceipt) -> None:
@@ -749,8 +757,20 @@ def _verify_artifact_leaves(root_fd: int, manifest: BaselineManifest, a: BuildRe
         _verify_raw_descriptor(root_fd, receipt.artifacts.oci.manifest, f"{prefix} OCI manifest")
 
 
-def evaluate(root_fd: int, document: dict[str, Any]) -> dict[str, Any]:
-    """Validate a canonical manifest using an already pinned evidence-root FD."""
+def evaluate(
+    root_fd: int,
+    document: dict[str, Any],
+    *,
+    descriptor_preflight: Callable[[tuple[Descriptor, ...]], None] | None = None,
+) -> dict[str, Any]:
+    """Validate a canonical manifest using an already pinned evidence-root FD.
+
+    An optional caller callback receives the exact 23-leaf baseline closure
+    after all bounded control-plane JSON and descriptor cross-bindings are
+    validated, but before raw recipes, artifacts, and Docker inspect bytes
+    are streamed.  The callback cannot weaken this baseline checker; it can
+    only impose an additional resource or cross-role boundary.
+    """
 
     manifest = parse_manifest(document)
     tag_identity = _read_tag_identity(root_fd, manifest.source)
@@ -769,9 +789,9 @@ def evaluate(root_fd: int, document: dict[str, Any]) -> dict[str, Any]:
             _fail("baseline-binding-mismatch", "build receipt belongs to another baseline")
         _assert_source_equal(receipt.source, manifest.source, "build receipt source")
     _assert_independent_paths(manifest, a, b)
-    recipe_a, image_a = _validate_inspects(root_fd, manifest, a, tag_identity)
-    recipe_b, image_b = _validate_inspects(root_fd, manifest, b, tag_identity)
-    _require_global_unique_descriptors(manifest, a, b, recipe_a, recipe_b)
+    recipe_a, image_a = _read_and_validate_inspects(root_fd, manifest, a, tag_identity)
+    recipe_b, image_b = _read_and_validate_inspects(root_fd, manifest, b, tag_identity)
+    descriptors = _require_global_unique_descriptors(manifest, a, b, recipe_a, recipe_b)
     _assert_equality(a.artifacts.binary, b.artifacts.binary, manifest.equality.binary, "server binary")
     _assert_equality(a.artifacts.bundle, b.artifacts.bundle, manifest.equality.bundle, "bundle")
     _assert_equality(
@@ -784,6 +804,10 @@ def evaluate(root_fd: int, document: dict[str, Any]) -> dict[str, Any]:
     _assert_equality(a.artifacts.oci.manifest, b.artifacts.oci.manifest, manifest.equality.oci_manifest, "OCI manifest")
     if image_a.image_id != image_b.image_id or image_a.image_id != manifest.equality.oci_image_id:
         _fail("a-b-equality-mismatch", "OCI image inspect leaves do not bind one exact image ID")
+    if descriptor_preflight is not None:
+        descriptor_preflight(descriptors)
+    _verify_inspect_raw_leaves(root_fd, a, recipe_a, image_a)
+    _verify_inspect_raw_leaves(root_fd, b, recipe_b, image_b)
     _verify_artifact_leaves(root_fd, manifest, a, b)
     return {
         "schema_version": CHECK_REPORT_VERSION,

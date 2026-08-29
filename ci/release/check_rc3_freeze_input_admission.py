@@ -20,6 +20,7 @@ import fcntl
 import os
 import re
 import sys
+from dataclasses import dataclass
 
 _BYTECODE_DISABLED_AT_STARTUP = bool(sys.flags.dont_write_bytecode)
 _BYTECODE_DISABLED_ON_MODULE_ENTRY = sys.dont_write_bytecode
@@ -90,6 +91,40 @@ class FreezeInputAdmissionError(ValueError):
 
 
 T = TypeVar("T")
+
+
+@dataclass(frozen=True)
+class FreezeInputReplay:
+    """One no-write replay of the original RC3 freeze-input request.
+
+    This is deliberately not an admission report and is never persisted by
+    this module.  Create-only frozen-candidate producers may consume it only
+    while retaining the caller-held source and evidence-root descriptors.
+    """
+
+    request_descriptor: common.EvidenceDescriptor
+    request: dict[str, Any]
+    descriptors: tuple[common.EvidenceDescriptor, ...]
+    source_prefreeze: dict[str, Any]
+    reconstructed_baseline: baseline.BaselineManifest
+
+
+@dataclass(frozen=True)
+class FreezeInputReplayPreflight:
+    """Bounded control-plane facts collected before candidate raw streaming.
+
+    This in-memory capability is intentionally not a report or a persisted
+    admission result.  A caller that needs a cross-closure resource boundary
+    may inspect the parsed request descriptors before asking the matching
+    completion routine to rehash any candidate raw leaf.
+    """
+
+    request_descriptor: common.EvidenceDescriptor
+    request_document: dict[str, Any]
+    request: dict[str, Any]
+    descriptors: tuple[common.EvidenceDescriptor, ...]
+    source_prefreeze_before: dict[str, Any]
+    reconstructed_baseline: baseline.BaselineManifest
 
 
 def _fail(code: str, message: str) -> NoReturn:
@@ -626,12 +661,14 @@ def _descriptor_bytes_equal(
 
 def _source_prefreeze_report(
     repository_root: Path,
+    repository_root_fd: int,
     expected_revision: str,
     candidate_id: str,
 ) -> dict[str, Any]:
     report = _prefreeze(
-        lambda: prefreeze.check_prefreeze(
+        lambda: prefreeze.check_prefreeze_on_held_root_fd(
             repository_root,
+            repository_root_fd,
             expected_revision,
             candidate_id,
         )
@@ -904,6 +941,238 @@ def _report(
     }
 
 
+def prepare_rc3_freeze_input_request_on_held_root_fd(
+    repository_root: Path,
+    repository_root_fd: int,
+    expected_revision: str,
+    candidate_id: str,
+    evidence_root_fd: int,
+    request_name: str,
+) -> FreezeInputReplayPreflight:
+    """Collect bounded request facts before any candidate raw leaf is read.
+
+    The primitive does not open, close, lock, or write either caller-owned
+    root descriptor.  It reads only the bounded request/baseline control
+    plane and the source pre-freeze oracle, returning an in-memory capability
+    that a same-stack caller can use to impose cross-closure limits.
+    """
+
+    _require_bytecode_cache_disabled()
+    source_root = _repository_root(repository_root)
+    revision = _revision(expected_revision, "--expected-revision")
+    candidate, _candidate_version = _candidate_id(candidate_id, "--candidate-id")
+    direct_request_name = _request_name(request_name)
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            evidence_root_fd,
+            "freeze-input evidence root",
+        )
+    )
+
+    before_prefreeze = _source_prefreeze_report(
+        source_root,
+        repository_root_fd,
+        revision,
+        candidate,
+    )
+    _request_raw, request_descriptor, document = _read_request(
+        evidence_root_fd,
+        direct_request_name,
+    )
+    request, descriptors = _parse_request(document)
+    if request["candidate_id"] != candidate:
+        _fail(
+            "candidate-id-mismatch",
+            "request.candidate_id must equal --candidate-id",
+        )
+    if request["source"]["git_revision"] != revision:
+        _fail(
+            "source-revision-mismatch",
+            "request.source.git_revision must equal --expected-revision",
+        )
+    if request_descriptor.path in {descriptor.path for descriptor in descriptors}:
+        _fail(
+            "request-descriptor-path-reused",
+            "the request leaf must not be reused as an external input descriptor",
+        )
+    reconstructed_baseline = _validate_reconstructed_baseline(
+        evidence_root_fd,
+        request["rollback"]["reconstructed_baseline_manifest"],
+        candidate,
+    )
+    return FreezeInputReplayPreflight(
+        request_descriptor=request_descriptor,
+        request_document=document,
+        request=request,
+        descriptors=descriptors,
+        source_prefreeze_before=before_prefreeze,
+        reconstructed_baseline=reconstructed_baseline,
+    )
+
+
+def complete_rc3_freeze_input_request_on_held_root_fd(
+    repository_root: Path,
+    repository_root_fd: int,
+    expected_revision: str,
+    candidate_id: str,
+    evidence_root_fd: int,
+    request_name: str,
+    preflight: FreezeInputReplayPreflight,
+) -> FreezeInputReplay:
+    """Rehash raw candidate leaves and finish one prepared held-FD replay.
+
+    The caller owns all root FDs and any locks.  This routine deliberately
+    runs only after a same-stack caller accepted the prepared descriptor
+    closure; it neither opens, closes, locks, nor writes caller-owned roots.
+    """
+
+    _require_bytecode_cache_disabled()
+    source_root = _repository_root(repository_root)
+    revision = _revision(expected_revision, "--expected-revision")
+    candidate, _candidate_version = _candidate_id(candidate_id, "--candidate-id")
+    direct_request_name = _request_name(request_name)
+    if type(preflight) is not FreezeInputReplayPreflight:
+        _fail("invalid-freeze-input-preflight", "preflight capability has an unexpected type")
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            evidence_root_fd,
+            "freeze-input evidence root",
+        )
+    )
+    if preflight.request_descriptor.path != direct_request_name:
+        _fail(
+            "request-preflight-mismatch",
+            "preflight request descriptor does not name the requested root leaf",
+        )
+    if preflight.request.get("candidate_id") != candidate:
+        _fail(
+            "candidate-id-mismatch",
+            "preflight request candidate_id must equal --candidate-id",
+        )
+    source = preflight.request.get("source")
+    if type(source) is not dict or source.get("git_revision") != revision:
+        _fail(
+            "source-revision-mismatch",
+            "preflight request source.git_revision must equal --expected-revision",
+        )
+    _request_raw_start, request_descriptor_start, document_start = _read_request(
+        evidence_root_fd,
+        direct_request_name,
+    )
+    if (
+        request_descriptor_start != preflight.request_descriptor
+        or document_start != preflight.request_document
+    ):
+        _fail(
+            "request-preflight-mismatch",
+            "the request changed after preflight and before raw inputs were read",
+        )
+    parsed_request_start, descriptors_start = _parse_request(document_start)
+    if (
+        parsed_request_start != preflight.request
+        or descriptors_start != preflight.descriptors
+    ):
+        _fail(
+            "request-preflight-mismatch",
+            "preflight parsed inputs do not match the current request leaf",
+        )
+    _verify_opaque_inputs(evidence_root_fd, parsed_request_start)
+    for profile in preflight.request["launch_profiles"]:
+        _validate_launch_arguments(
+            evidence_root_fd,
+            profile["arguments"],
+            f"{profile['profile']} launch arguments",
+        )
+        _validate_launch_environment(
+            evidence_root_fd,
+            profile["environment"],
+            f"{profile['profile']} launch environment",
+        )
+    after_prefreeze = _source_prefreeze_report(
+        source_root,
+        repository_root_fd,
+        revision,
+        candidate,
+    )
+    if (
+        common.canonical_json_bytes(preflight.source_prefreeze_before)
+        != common.canonical_json_bytes(after_prefreeze)
+    ):
+        _fail(
+            "source-prefreeze-changed-during-admission",
+            "reviewed source pre-freeze report changed while inputs were read",
+        )
+    before_inputs = preflight.source_prefreeze_before["source_inputs"]
+    _descriptor_bytes_equal(
+        preflight.request["source"]["cargo_lock"],
+        _common(
+            lambda: common.parse_descriptor(
+                before_inputs["cargo_lock"],
+                "source pre-freeze Cargo.lock",
+            )
+        ),
+        "request.source.cargo_lock",
+    )
+    _descriptor_bytes_equal(
+        preflight.request["source"]["extension_registry"],
+        _common(
+            lambda: common.parse_descriptor(
+                before_inputs["extension_registry"],
+                "source pre-freeze extension registry",
+            )
+        ),
+        "request.source.extension_registry",
+    )
+    _request_raw_end, request_descriptor_end, document_end = _read_request(
+        evidence_root_fd,
+        direct_request_name,
+    )
+    if (
+        request_descriptor_end != preflight.request_descriptor
+        or document_end != preflight.request_document
+    ):
+        _fail(
+            "request-changed-during-admission",
+            "freeze-input request changed while its inputs were rehashed",
+        )
+    return FreezeInputReplay(
+        request_descriptor=preflight.request_descriptor,
+        request=preflight.request,
+        descriptors=preflight.descriptors,
+        source_prefreeze=after_prefreeze,
+        reconstructed_baseline=preflight.reconstructed_baseline,
+    )
+
+
+def replay_rc3_freeze_input_request_on_held_root_fd(
+    repository_root: Path,
+    repository_root_fd: int,
+    expected_revision: str,
+    candidate_id: str,
+    evidence_root_fd: int,
+    request_name: str,
+) -> FreezeInputReplay:
+    """Fully replay one request through caller-held source/input root FDs."""
+
+    preflight = prepare_rc3_freeze_input_request_on_held_root_fd(
+        repository_root,
+        repository_root_fd,
+        expected_revision,
+        candidate_id,
+        evidence_root_fd,
+        request_name,
+    )
+    return complete_rc3_freeze_input_request_on_held_root_fd(
+        repository_root,
+        repository_root_fd,
+        expected_revision,
+        candidate_id,
+        evidence_root_fd,
+        request_name,
+        preflight,
+    )
+
+
 def check_rc3_freeze_input_admission(
     repository_root: Path,
     expected_revision: str,
@@ -915,102 +1184,35 @@ def check_rc3_freeze_input_admission(
 
     _require_bytecode_cache_disabled()
     source_root = _repository_root(repository_root)
-    revision = _revision(expected_revision, "--expected-revision")
-    candidate, _candidate_version = _candidate_id(candidate_id, "--candidate-id")
     root = _evidence_root(evidence_root, source_root)
-    direct_request_name = _request_name(request_name)
-
-    before_prefreeze = _source_prefreeze_report(source_root, revision, candidate)
-    root_fd = _common(
-        lambda: common.open_private_evidence_directory(root, "--evidence-root")
-    )
+    source_root_fd: int | None = None
+    root_fd: int | None = None
     try:
+        source_root_fd = _common(
+            lambda: common.open_absolute_directory(source_root, "repository root")
+        )
+        root_fd = _common(
+            lambda: common.open_private_evidence_directory(root, "--evidence-root")
+        )
         _shared_lock(root_fd, "evidence-root-lock-unavailable", "evidence-root")
-        _request_raw, request_descriptor, document = _read_request(root_fd, direct_request_name)
-        request, descriptors = _parse_request(document)
-        if request["candidate_id"] != candidate:
-            _fail(
-                "candidate-id-mismatch",
-                "request.candidate_id must equal --candidate-id",
-            )
-        if request["source"]["git_revision"] != revision:
-            _fail(
-                "source-revision-mismatch",
-                "request.source.git_revision must equal --expected-revision",
-            )
-        if request_descriptor.path in {descriptor.path for descriptor in descriptors}:
-            _fail(
-                "request-descriptor-path-reused",
-                "the request leaf must not be reused as an external input descriptor",
-            )
-        _verify_opaque_inputs(root_fd, request)
-        for profile in request["launch_profiles"]:
-            _validate_launch_arguments(
-                root_fd,
-                profile["arguments"],
-                f"{profile['profile']} launch arguments",
-            )
-            _validate_launch_environment(
-                root_fd,
-                profile["environment"],
-                f"{profile['profile']} launch environment",
-            )
-        reconstructed_baseline = _validate_reconstructed_baseline(
+        replay = replay_rc3_freeze_input_request_on_held_root_fd(
+            source_root,
+            source_root_fd,
+            expected_revision,
+            candidate_id,
             root_fd,
-            request["rollback"]["reconstructed_baseline_manifest"],
-            candidate,
+            request_name,
         )
-        after_prefreeze = _source_prefreeze_report(source_root, revision, candidate)
-        if (
-            common.canonical_json_bytes(before_prefreeze)
-            != common.canonical_json_bytes(after_prefreeze)
-        ):
-            _fail(
-                "source-prefreeze-changed-during-admission",
-                "reviewed source pre-freeze report changed while inputs were read",
-            )
-        before_inputs = before_prefreeze["source_inputs"]
-        _descriptor_bytes_equal(
-            request["source"]["cargo_lock"],
-            _common(
-                lambda: common.parse_descriptor(
-                    before_inputs["cargo_lock"],
-                    "source pre-freeze Cargo.lock",
-                )
-            ),
-            "request.source.cargo_lock",
-        )
-        _descriptor_bytes_equal(
-            request["source"]["extension_registry"],
-            _common(
-                lambda: common.parse_descriptor(
-                    before_inputs["extension_registry"],
-                    "source pre-freeze extension registry",
-                )
-            ),
-            "request.source.extension_registry",
-        )
-        _request_raw_end, request_descriptor_end, document_end = _read_request(
-            root_fd,
-            direct_request_name,
-        )
-        if (
-            request_descriptor_end != request_descriptor
-            or document_end != document
-        ):
-            _fail(
-                "request-changed-during-admission",
-                "freeze-input request changed while its inputs were rehashed",
-            )
         return _report(
-            request_descriptor=request_descriptor,
-            request=request,
-            source_prefreeze=after_prefreeze,
-            reconstructed_baseline=reconstructed_baseline,
+            request_descriptor=replay.request_descriptor,
+            request=replay.request,
+            source_prefreeze=replay.source_prefreeze,
+            reconstructed_baseline=replay.reconstructed_baseline,
         )
     finally:
         _unlock_quietly(root_fd)
         _close_quietly(root_fd)
+        _close_quietly(source_root_fd)
 
 
 def _parser() -> argparse.ArgumentParser:

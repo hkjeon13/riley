@@ -357,6 +357,63 @@ class ReconstructedPriorBaselineTests(unittest.TestCase):
         self.assertIn("runtime_image_inspect_raw", report["reproductions"]["a"])
         self.assertEqual([row["name"] for row in report["checks"]], list(checker.CHECK_NAMES))
 
+    def test_descriptor_preflight_sees_exact_closure_before_raw_streaming(self) -> None:
+        root_fd = common.open_private_evidence_directory(self.root, "fixture evidence")
+        seen: list[tuple[common.EvidenceDescriptor, ...]] = []
+
+        class StopBeforeRawStreaming(Exception):
+            pass
+
+        def preflight(descriptors: tuple[common.EvidenceDescriptor, ...]) -> None:
+            seen.append(descriptors)
+            raise StopBeforeRawStreaming()
+
+        try:
+            with mock.patch.object(
+                checker,
+                "_verify_raw_descriptor",
+                side_effect=AssertionError("preflight must precede raw streaming"),
+            ), self.assertRaises(StopBeforeRawStreaming):
+                checker.evaluate(
+                    root_fd,
+                    self.fixture.manifest,
+                    descriptor_preflight=preflight,
+                )
+        finally:
+            os.close(root_fd)
+        self.assertEqual(len(seen), 1)
+        descriptors = seen[0]
+        self.assertEqual(len(descriptors), 23)
+        self.assertEqual(len({descriptor.path for descriptor in descriptors}), 23)
+        self.assertEqual(
+            {descriptor.path for descriptor in descriptors},
+            {
+                "source/git-tag-object.json",
+                "source/git-tag-target.json",
+                "source/riley-0.1.0-rc2.tar.zst",
+                "reproductions/a/build-receipt.json",
+                "reproductions/b/build-receipt.json",
+                "reproductions/a/recipe-inspect.json",
+                "reproductions/a/image-inspect.json",
+                "reproductions/a/docker-image-inspect.json",
+                "reproductions/a/build-recipe.txt",
+                "reproductions/a/riley-server",
+                "reproductions/a/riley.bundle.tar.zst",
+                "reproductions/a/oci-image.tar",
+                "reproductions/a/oci-layout.tar",
+                "reproductions/a/oci-manifest.json",
+                "reproductions/b/recipe-inspect.json",
+                "reproductions/b/image-inspect.json",
+                "reproductions/b/docker-image-inspect.json",
+                "reproductions/b/build-recipe.txt",
+                "reproductions/b/riley-server",
+                "reproductions/b/riley.bundle.tar.zst",
+                "reproductions/b/oci-image.tar",
+                "reproductions/b/oci-layout.tar",
+                "reproductions/b/oci-manifest.json",
+            },
+        )
+
     def test_rejects_historical_distribution_or_shipment_claim(self) -> None:
         changed = copy.deepcopy(self.fixture.manifest)
         changed["historical_distribution"] = "attested"

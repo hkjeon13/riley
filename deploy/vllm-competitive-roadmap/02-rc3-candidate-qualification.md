@@ -1,6 +1,6 @@
 # C02 — RC3 Candidate-bound Qualification
 
-**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt도 CPU/static hostile-path 범위로 구현됐지만, provenance v2/reconstructed baseline 전체, frozen candidate, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
+**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt와 create-only frozen-candidate **input-identity** manifest/FD-safe replay도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, closed Gate E replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 
@@ -118,8 +118,9 @@ baseline으로 바꿔치기할 수는 없다. 이 admission은 candidate와 같�
 archive, nested baseline leaves의 history proof를 replay하거나 주장하지 않는다.
 
 hostile request가 rehash I/O를 무제한 증폭하지 않도록 이 checker는 최대 8,192개 external
-descriptor와 총 1 TiB declared byte budget을 구조적 admission 한계로 둔다. 이 cap은
-candidate freeze, evidence completeness 또는 semantic success 판정이 아니다.
+descriptor와 총 1 TiB declared byte budget을 구조적 admission 한계로 둔다. 이 request-only
+cap에는 nested baseline raw graph의 full replay가 포함되지 않으며, candidate freeze, evidence
+completeness 또는 semantic success 판정도 아니다.
 
 `ci/release/capture_c02_observations_v2.py`는 이미 loopback C02 audit server로 실행 중인
 process에 attach하는 raw-only sampler다. `GET /v1/c02/metrics` 원본 bytes와 같은 PID의
@@ -283,6 +284,40 @@ rc3-freeze-input-admission-v1.schema.json이다. 이 절차는 입력을 읽고 
 stdout으로 반환하며 evidence root나 source checkout에 output을 쓰지 않는다. 특히
 not-frozen/not-run 결과는 freeze가 가능하다는 판정, GPU capture의 성공, Gate E replay,
 correctness/soak/rollback semantic 성공, release promotion을 뜻하지 않는다.
+
+### Frozen-candidate input-identity boundary
+
+`write_rc3_frozen_candidate_v1.py`는 `--frozen-candidate-root`로 지정되는 source/input tree
+밖의 새 private `0700` root에 정확히 하나의 `frozen-candidate.json`을 create-only로 쓴다.
+`replay_rc3_frozen_candidate_v1.py`는 해당 root와 original freeze-input root, source checkout을
+caller-held FD로 유지한 채 manifest와 original request/raw leaves를 두 번 재생한다. 이 경계는
+admission JSON 또는 `freeze.raw`를 input으로 쓰지 않으며, original request의 all declared
+descriptors, source pre-freeze/Cargo.lock/registry binding, two profile self-reference rejection,
+그리고 reconstructed baseline v2 raw graph를 다시 확인한다. candidate request와 baseline raw
+leaf가 같은 path를 재사용하면 fail-closed한다.
+
+결과 manifest schema는 `riley.rc3-frozen-candidate.v1`
+(`benchmarks/release/candidates/rc3-frozen-candidate-v1.schema.json`)이며 authority는
+`frozen-candidate-input-identity-only`, candidate status는 `frozen`, qualification status는
+`not-run`이다. 대용량 model/weight를 복사하지 않는 recheckable identity pin이므로 source
+archive→revision, ELF/container/toolchain/model/correctness의 의미적 provenance, Gate E,
+semantic receipt, deployment/rollback result, promotion/qualification을 전혀 주장하지 않는다.
+manifest가 남아 있어도 writer normal-return lineage는 증명되지 않는다. future same-stack
+semantic producer는 exact manifest **및** original input root를 다시 replay해야 한다.
+
+full frozen-candidate replay는 bounded control-plane JSON을 먼저 검증한 뒤 original request와
+정확히 23개 baseline physical leaf의 union에 같은 8,192 descriptor/1 TiB 한계를 적용하고,
+그 뒤에만 raw recipe와 artifact를 stream-hash한다. candidate/baseline path alias도 이 지점에서
+거부된다. source/input/frozen root는 normalized spelling만이 아니라 held-FD ancestry와 Linux
+mount backing coordinate까지 disjoint해야 하며, writer/replayer public wrapper는 visible frozen
+root가 held FD를 계속 가리키는지 create와 replay 전후에 확인한다. private Python core는 caller
+FD를 직접 mutate하지 않지만 pinned FD를 통한 trusted read-only Git source oracle에 의존하므로
+configured Git executable/PATH와 그 behavior는 trusted boundary다. manifest의 not-established
+object는 writer normal-return과 input-root immutability도 명시한다.
+
+RC3 Gate E의 exact closed inventory와 FD-safe replayer는 아직 구현되지 않았다. legacy
+path-based `check_release_candidate.py`는 별도 final release checker일 뿐 이 boundary 또는
+same-stack Gate E input을 대체하지 않는다.
 
 ## 3. 범위
 
@@ -535,9 +570,10 @@ future rollback receipt checker와 outer RC3 finalizer는 이를 semantic input�
 authenticated runner의 same-stack held-FD private core
 `replay_rc3_rollback_operational_semantics_v1.py`다. 이 core는 original raw
 candidate/source/rollback/atomic leaves를 재해석해 operational consistency만
-`passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate manifest와
-Gate E FD-safe replayer가 아직 없으므로, 이 단계는 semantic receipt, candidate
-freeze, Gate E 또는 qualification을 만들거나 주장하지 않는다.
+`passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate input-identity
+manifest/FD-safe replayer는 별도로 landed했지만, closed Gate E replayer가 아직 없으므로 이
+단계는 semantic receipt, actual candidate freeze, Gate E 또는 qualification을 만들거나
+주장하지 않는다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
 단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서
