@@ -36,6 +36,7 @@ ROLLBACK_V3_MANIFEST_VERSION = "riley.rc3-rollback-raw-provenance.v3"
 ROLLBACK_V3_REPORT_VERSION = "riley.rc3-rollback-provenance-check.v3"
 STABLE_DEFAULT_PROFILE = "stable-default"
 RECONSTRUCTED_ROLLBACK_TAG = "riley-0.1.0-rc2"
+RECONSTRUCTED_ROLLBACK_TAG_OBJECT = "a3f5203c3a72122e9da818c1e441c2a789f7aa8c"
 RECONSTRUCTED_ROLLBACK_TARGET = "6093006ec2b01b784b01ba278296b676f2dfd03a"
 RECONSTRUCTED_ROLLBACK_BASELINE_ID = f"reconstructed-{RECONSTRUCTED_ROLLBACK_TAG}"
 MAX_MANIFEST_BYTES = common.DEFAULT_MAX_JSON_BYTES
@@ -831,6 +832,11 @@ def _baseline_manifest(
         _fail(
             "unsupported-reconstructed-baseline",
             "rollback v3 is pinned to the reviewed reconstructed RC2 tag target",
+        )
+    if git_identity.get("tag_object_sha1") != RECONSTRUCTED_ROLLBACK_TAG_OBJECT:
+        _fail(
+            "reviewed-reconstructed-tag-object-mismatch",
+            "rollback v3 is pinned to the reviewed reconstructed RC2 annotated tag object",
         )
     baseline_paths: dict[str, common.EvidenceDescriptor] = {}
     _baseline_report_descriptors(

@@ -309,7 +309,7 @@ up-converting an old trace would violate the provenance boundary.
 The distinct v3 raw schema/checker is now landed for the reconstructed-tag
 case rather than widening v2. `check_rc3_rollback_provenance_v3.py` replays
 the full reconstructed baseline A/B manifest through one held FD, pins the
-reviewed RC2 tag target, and checks each declared phase PID/start tick,
+reviewed RC2 annotated tag object and target (not a signature-validation claim), and checks each declared phase PID/start tick,
 listener port/inode, and GPU tuple against its held-FD `/proc`, TCP/FD-socket,
 and GPU raw leaves. It records declared candidate audit availability plus its
 opaque audit-index descriptor separately from the baseline's explicit
@@ -329,7 +329,7 @@ Before those dynamic phase paths exist, the separate
 `prepare_rc3_rollback_evidence_v1.py` static preparer can admit an already
 complete private reconstructed RC2 root without importing or copying that
 closure. It replays the full baseline through one held root FD, requires the
-reviewed `riley-0.1.0-rc2` tag/target and only its immediate same-version RC
+reviewed `riley-0.1.0-rc2` annotated tag object/target and only its immediate same-version RC
 successor, and snapshots three distinct external opaque inputs (freeze,
 base-release-candidate report, and stable-default configuration) into fixed
 mode-0600 single-link leaves below `rollback-v3-evidence-inputs/`. Its separate

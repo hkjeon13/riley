@@ -42,10 +42,10 @@ class BindRawRc3RollbackCaptureTests(unittest.TestCase):
         self.assertEqual(getattr(raised.exception, "reason_code", None), code)
 
     def pinned_baseline(self) -> mock._patch:
-        return mock.patch.object(
+        return mock.patch.multiple(
             checker,
-            "RECONSTRUCTED_ROLLBACK_TARGET",
-            self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TARGET=self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TAG_OBJECT=self.fixture.baseline.tag_object_sha1,
         )
 
     @staticmethod

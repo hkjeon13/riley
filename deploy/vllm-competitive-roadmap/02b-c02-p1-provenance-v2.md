@@ -108,7 +108,7 @@ stable-default arm이 CPU sampling이면 이 evidence를 재사용할 수 없다
 
 `riley-0.1.0-rc2`는 owner-approved prerelease이고 prior stable shipped binary/bundle/OCI image가 아니다. 원격 cache와 published RC2 release에도 serving artifact가 없으므로, C02-P1은 그것을 `previous_stable` 또는 `historical_shipped`로 표기하지 않는다.
 
-P1은 pinned annotated tag와 target commit에서 독립 clean A/B network-none build를 수행해 `riley.reconstructed-prior-baseline.v2` manifest를 만든다. v2는 각 arm의 실제 server binary를 별도 raw descriptor로 보존하고, build receipt와 recipe inspect에 같은 descriptor를 exact-bind한 뒤 A/B SHA-256·byte length equality와 distinct-path replay를 요구한다.
+P1은 pinned annotated tag object (`a3f5203c3a72122e9da818c1e441c2a789f7aa8c`)와 target commit에서 독립 clean A/B network-none build를 수행해 `riley.reconstructed-prior-baseline.v2` manifest를 만든다. v2는 각 arm의 실제 server binary를 별도 raw descriptor로 보존하고, build receipt와 recipe inspect에 같은 descriptor를 exact-bind한 뒤 A/B SHA-256·byte length equality와 distinct-path replay를 요구한다. 이 object pin은 같은 tag name/target으로 annotation만 교체하는 경우를 막는 reviewed value이며, 현재 unsigned tag의 signature validation 주장은 아니다.
 
 ```text
 baseline_kind = reconstructed-tag-baseline
@@ -332,7 +332,7 @@ rollback, freeze, Gate E, threshold, campaign, interval/monotonicity semantic �
 
 #### Reconstructed RC2 compatibility boundary
 
-현재 reconstructed `riley-0.1.0-rc2` tag target (`6093006…`)에는
+현재 reconstructed `riley-0.1.0-rc2` annotated tag object (`a3f5203…`)와 tag target (`6093006…`)에는
 `/v1/c02/metrics`, `--c02-audit-dir`, generation-audit-v2, shutdown-v2
 artifact surface가 없다. 반면 published rollback raw-provenance **v2**는 candidate와
 rollback 양쪽에 그 C02 observation-session-v2 grammar를 요구한다. 따라서
@@ -341,7 +341,7 @@ metrics/audit를 합성하거나 v1 receipt를 v2로 up-convert하는 것도 금
 
 v2의 closed schema를 이 legacy case에 맞춰 넓히지 않는다. 새
 `rollback-receipt-v3.schema.json`과 `check_rc3_rollback_provenance_v3.py`는
-reconstructed RC2 target `6093006ec2b01b784b01ba278296b676f2dfd03a`에 pin된
+reconstructed RC2 annotated tag object `a3f5203c3a72122e9da818c1e441c2a789f7aa8c`와 target `6093006ec2b01b784b01ba278296b676f2dfd03a`에 pin된
 별도 raw-only surface를 정의한다. v3는 same held private root FD로 existing
 reconstructed-baseline A/B checker를 replay한다. 선언된 phase PID/start tick,
 listener port/inode, GPU tuple은 `/proc` stat/status, TCP/FD-socket, GPU selection/
@@ -365,7 +365,7 @@ audit을 합성하지 않는다.
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed
-`riley-0.1.0-rc2` tag/target만 admit한다. 이 helper는 same-semver immediate RC
+`riley-0.1.0-rc2` annotated tag object/target만 admit한다. 이 helper는 same-semver immediate RC
 candidate ID와 서로 다른 세 absolute opaque input(freeze, base release candidate
 report, stable-default configuration)만 받고, external host path를 session에
 기록하지 않은 채 fixed `rollback-v3-evidence-inputs/`의 immutable 0600 leaves와

@@ -50,13 +50,24 @@ class RollbackEvidencePreparationTests(unittest.TestCase):
         self.prepare_root_patch.stop()
         self.temporary.cleanup()
 
-    def _new_baseline_root(self, name: str, *, reviewed_target: bool = True) -> Path:
+    def _new_baseline_root(
+        self,
+        name: str,
+        *,
+        reviewed_target: bool = True,
+        reviewed_tag_object: bool = True,
+    ) -> Path:
         root = self.base / name
         root.mkdir(mode=0o700)
         os.chmod(root, 0o700)
         BaselineV2Fixture(
             root,
             target_commit_sha1=(rollback.RECONSTRUCTED_ROLLBACK_TARGET if reviewed_target else "b" * 40),
+            tag_object_sha1=(
+                rollback.RECONSTRUCTED_ROLLBACK_TAG_OBJECT
+                if reviewed_tag_object
+                else "a" * 40
+            ),
         )
         return root
 
@@ -140,6 +151,15 @@ class RollbackEvidencePreparationTests(unittest.TestCase):
         bad_root = self._new_baseline_root("unreviewed", reviewed_target=False)
         self.assert_reason(
             "unsupported-reconstructed-baseline",
+            lambda: prepare.prepare_rollback_evidence(self._request(bad_root)),
+        )
+        self.assertFalse((bad_root / prepare.PREPARATION_DIRECTORY_NAME).exists())
+        self.assertFalse((bad_root / prepare.INPUTS_DIRECTORY_NAME).exists())
+
+    def test_rejects_unreviewed_baseline_tag_object_before_any_output(self) -> None:
+        bad_root = self._new_baseline_root("unreviewed-tag-object", reviewed_tag_object=False)
+        self.assert_reason(
+            "reviewed-reconstructed-tag-object-mismatch",
             lambda: prepare.prepare_rollback_evidence(self._request(bad_root)),
         )
         self.assertFalse((bad_root / prepare.PREPARATION_DIRECTORY_NAME).exists())

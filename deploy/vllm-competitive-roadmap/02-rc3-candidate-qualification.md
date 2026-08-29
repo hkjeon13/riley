@@ -181,7 +181,7 @@ mechanism과 adversarial test를 닫아야 한다.
   hostile-path 검증만 마쳤으며, actual GPU capture, candidate freeze, Gate E replay,
   semantic receipt 또는 C02 verdict가 아니다.
 - v3 path-only rollback binder와 RC2-compatible raw phase collector는 landed했다.
-  binder는 same held private root FD에서 descriptor/target과 reconstructed baseline을
+  binder는 same held private root FD에서 descriptor/target과 reviewed RC2 annotated tag object를 포함한 reconstructed baseline을
   replay하고 nonterminal `captured/not-run` manifest만 publish한다. rollback binary는
   reconstructed baseline v2의 independently captured A/B server-binary descriptor와
   SHA-256·byte length가 같아야 하며, bundle/Docker image-ID binding도 함께 유지한다.

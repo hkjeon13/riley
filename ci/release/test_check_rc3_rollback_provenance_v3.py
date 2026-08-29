@@ -56,9 +56,9 @@ class RollbackV3Fixture:
         "configuration_sha256": "3" * 64,
     }
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, tag_object_sha1: str = "a" * 40) -> None:
         self.root = root
-        self.baseline = BaselineV2Fixture(root)
+        self.baseline = BaselineV2Fixture(root, tag_object_sha1=tag_object_sha1)
 
     def put(self, relative: str, value: bytes | dict[str, object]) -> dict[str, object]:
         path = self.root / relative
@@ -281,10 +281,10 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
         self.assertEqual(getattr(raised.exception, "reason_code", None), code)
 
     def pinned_baseline(self) -> mock._patch:
-        return mock.patch.object(
+        return mock.patch.multiple(
             checker,
-            "RECONSTRUCTED_ROLLBACK_TARGET",
-            self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TARGET=self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TAG_OBJECT=self.fixture.baseline.tag_object_sha1,
         )
 
     def test_binds_reconstructed_baseline_with_explicit_legacy_audit_boundary(self) -> None:
@@ -647,6 +647,20 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
         with self.assertRaises(checker.RollbackV3ProvenanceError) as raised:
             checker.verify_rollback_provenance_v3(self.root, manifest)
         self.assert_reason(raised, "unsupported-reconstructed-baseline")
+
+    def test_rejects_reconstructed_tag_object_that_is_not_reviewed(self) -> None:
+        root = self.root / "unreviewed-tag-object"
+        root.mkdir(mode=0o700)
+        os.chmod(root, 0o700)
+        fixture = RollbackV3Fixture(root, tag_object_sha1="c" * 40)
+        manifest = fixture.write_manifest(fixture.document())
+        with mock.patch.object(
+            checker,
+            "RECONSTRUCTED_ROLLBACK_TARGET",
+            fixture.baseline.target_commit_sha1,
+        ), self.assertRaises(checker.RollbackV3ProvenanceError) as raised:
+            checker.verify_rollback_provenance_v3(root, manifest)
+        self.assert_reason(raised, "reviewed-reconstructed-tag-object-mismatch")
 
     def test_published_schema_preserves_the_v3_legacy_boundary(self) -> None:
         repository_schema = (

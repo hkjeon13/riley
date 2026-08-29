@@ -3,7 +3,7 @@
 
 This producer accepts an already complete binary-bound reconstructed RC2 A/B
 baseline evidence root. It replays that v2 baseline through one held private
-root FD, requires the reviewed RC2 tag/target identity, and creates exactly
+root FD, requires the reviewed RC2 annotated tag-object/target identity, and creates exactly
 three immutable copies of future v3 binding inputs. It deliberately does not
 materialize a baseline, start or stop a process, contact an endpoint, inspect
 a GPU, execute an artifact, exchange a runtime file, create a freeze, or
@@ -407,6 +407,11 @@ def _read_and_replay_baseline(root_fd: int, manifest_path: str) -> dict[str, Any
         _fail(
             "unsupported-reconstructed-baseline",
             "reconstructed baseline is not the reviewed RC2 tag/target identity",
+        )
+    if identity.get("tag_object_sha1") != rollback.RECONSTRUCTED_ROLLBACK_TAG_OBJECT:
+        _fail(
+            "reviewed-reconstructed-tag-object-mismatch",
+            "reconstructed baseline does not use the reviewed RC2 annotated tag object",
         )
     return {
         "manifest": before.as_json(),

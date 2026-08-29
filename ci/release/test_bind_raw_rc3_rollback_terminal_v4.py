@@ -66,15 +66,15 @@ class RollbackV4TerminalTests(unittest.TestCase):
         self.document = self.fixture.document()
         self.preparation_request = self._preparation_request()
         self.request_path, self.bind_request = self._bind_request()
-        self.pinned_target = mock.patch.object(
+        self.pinned_baseline = mock.patch.multiple(
             v3,
-            "RECONSTRUCTED_ROLLBACK_TARGET",
-            self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TARGET=self.fixture.baseline.target_commit_sha1,
+            RECONSTRUCTED_ROLLBACK_TAG_OBJECT=self.fixture.baseline.tag_object_sha1,
         )
-        self.pinned_target.start()
+        self.pinned_baseline.start()
 
     def tearDown(self) -> None:
-        self.pinned_target.stop()
+        self.pinned_baseline.stop()
         for patch in reversed(self.source_patches):
             patch.stop()
         self.temporary.cleanup()
