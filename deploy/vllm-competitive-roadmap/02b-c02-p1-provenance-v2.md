@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 그리고 별도 terminal binder v5는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, 그리고 reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, actual rollback runner/binder, GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -301,18 +301,29 @@ rollback 양쪽에 그 C02 observation-session-v2 grammar를 요구한다. 따�
 reconstructed RC2를 v2 rollback runner에 직접 넣을 수 없으며, wrapper가 C02
 metrics/audit를 합성하거나 v1 receipt를 v2로 up-convert하는 것도 금지한다.
 
-v2의 closed schema를 이 legacy case에 맞춰 넓히지 않는다. v2 raw binder는
-C02-instrumented baseline만 raw descriptor binding으로 다룰 수 있고, actual
-reconstructed-tag rollback은 baseline-side health/generation/proc/socket/GPU raw
-surface를 명시하는 별도 versioned v3 contract로 추가한다. 그 semantic checker는
-후속 단계에서 baseline manifest, device/inode transition, health/generation bytes를
-재구성한다. 이 boundary가 닫히기 전에는 actual GPU rollback drill, candidate
+v2의 closed schema를 이 legacy case에 맞춰 넓히지 않는다. 새
+`rollback-receipt-v3.schema.json`과 `check_rc3_rollback_provenance_v3.py`는
+reconstructed RC2 target `6093006ec2b01b784b01ba278296b676f2dfd03a`에 pin된
+별도 raw-only surface를 정의한다. v3는 same held private root FD로 existing
+reconstructed-baseline A/B checker를 replay한다. 선언된 phase PID/start tick,
+listener port/inode, GPU tuple은 `/proc` stat/status, TCP/FD-socket, GPU selection/
+compute-app raw leaves와 교차검증한다. candidate의 `source-owned` audit은
+availability와 audit-index **opaque descriptor inventory**만 이 단계에서 bind하며,
+index content/source replay는 후속 layer의 책임이다. baseline은 명시적으로
+`not-supported` audit 상태만 가진다. candidate shutdown-v2 pair, active baseline
+bundle/image ID, raw atomic-switch material도 bind한다. 이는 `bound`/`not-run` raw
+report만 내며 HTTP/rename의 의미, rollback success, historical stable status는
+semantic checker가 후속 단계에서 재구성한다.
+
+아직 v3 raw runner/binder는 없다. 그러므로 actual GPU rollback drill, candidate
 freeze, rollback success verdict를 실행하거나 주장하지 않는다.
 
 새 binder가 input replay → create-only manifest publication → self-verification을
 중간 root 재open 없이 수행할 수 있도록, existing v2 raw verifier also exposes a
 held-FD replay entry point. 그것은 raw descriptor 안전성만 보강하며 legacy RC2를
-v2-compatible하다고 바꾸거나 terminal/semantic authority를 만들지 않는다.
+v2-compatible하다고 바꾸거나 terminal/semantic authority를 만들지 않는다. v3
+path wrapper는 source checkout 내부 evidence root를 거부하며, 향후 FD-only binder도
+root를 열기 전 같은 preflight를 수행해야 한다.
 
 ## 6. 변경 순서
 
@@ -324,8 +335,8 @@ v2-compatible하다고 바꾸거나 terminal/semantic authority를 만들지 않
 5. config endpoint process bridge, initial one-scenario lifecycle runner, same-process
    v4/shutdown receipt closure와 hostile/static tests를 추가한다. 이 구현만으로는
    GPU capture나 qualification을 실행하지 않는다.
-6. landed native fallback source leaf를 replay하는 capture/binder와 rollback raw
-   runner/binder를 추가한다.
+6. landed native fallback source leaf를 replay하는 capture/binder와 reconstructed
+   baseline rollback v3 raw verifier/schema를 추가하고, 별도 raw runner/binder를 추가한다.
 7. soak/rollback v2 semantic checker를 추가하고 outer RC3 finalizer를 v2-only로 바꾼다.
 8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 

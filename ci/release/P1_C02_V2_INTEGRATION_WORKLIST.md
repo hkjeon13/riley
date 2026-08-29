@@ -203,14 +203,24 @@ surface. It is therefore incompatible with a direct v2 rollback capture.
 Synthesizing those leaves around the legacy binary, accepting a v1 receipt, or
 up-converting an old trace would violate the provenance boundary.
 
-The next rollback path must introduce a distinct, versioned baseline-observation
-contract (v3) for the reconstructed-tag case rather than widening v2. Its
-future runner may collect explicit baseline health/generation plus proc/socket/
-GPU raw leaves, but must not publish a rollback verdict. Before that binder is
-implemented, `verify_rollback_provenance_fd()` keeps all v2 input replay and
-self-verification on one held private root FD; the public path API remains only
-the safe open/close wrapper. This is a mechanical safety boundary, not
-compatibility approval or qualification evidence.
+The distinct v3 raw schema/checker is now landed for the reconstructed-tag
+case rather than widening v2. `check_rc3_rollback_provenance_v3.py` replays
+the full reconstructed baseline A/B manifest through one held FD, pins the
+reviewed RC2 tag target, and checks each declared phase PID/start tick,
+listener port/inode, and GPU tuple against its held-FD `/proc`, TCP/FD-socket,
+and GPU raw leaves. It records declared candidate audit availability plus its
+opaque audit-index descriptor separately from the baseline's explicit
+`not-supported` audit state; source-audit content remains a later replay
+responsibility. It also binds candidate shutdown-v2, active baseline
+bundle/image, and raw atomic-switch material. It returns only `bound`/`not-run`;
+it does not evaluate HTTP or rename meaning and has no terminal marker.
+
+A path-only v3 binder and actual runner remain later. Before they exist,
+`verify_rollback_provenance_fd()` keeps v2 replay on one held private root FD,
+and the v3 verifier does the same for its own full baseline replay. Its path
+wrapper also rejects a root under this source checkout; an FD-only caller must
+perform that preflight before passing the held FD. Neither API is compatibility
+approval or qualification evidence.
 
 ## Required raw evidence inventory
 
