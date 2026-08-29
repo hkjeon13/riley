@@ -222,10 +222,17 @@ RC2-compatible `capture_rc3_rollback_phase_v1.py` companion appends a new raw
 phase directory to that same prepopulated root and never creates a root or
 claims source audit for RC2. Its candidate no-generation mode deliberately
 leaves source-owned generation/audit capture to the existing scenario producer.
-Neither helper is an authenticated host supervisor. A future runner must
-replay a terminal phase session and the absence of its
-`capture-incomplete.json` before constructing the bind request; the raw v3
-binder does not infer that boundary from arbitrary leaf paths.
+The companion `capture_rc3_rollback_atomic_switch_v1.py` applies one
+same-directory Linux `renameat2(RENAME_EXCHANGE)` only inside a runner-owned
+isolated evidence-root child, never an external deployment path, and captures
+the five opaque v3 switch leaves. It does not by itself bind private runtime
+copies to artifact-map bytes; a runner must create immutable snapshots and
+separate runtime copies through a later FD-safe mapping. Neither helper is an authenticated host
+supervisor. A future runner must replay terminal phase/switch sessions and the
+absence of their `capture-incomplete.json` markers before constructing the
+bind request; the raw v3 binder does not infer those transaction boundaries
+from arbitrary leaf paths. The v3 manifest also does not retain the switch
+session/marker descriptor, so a later semantic/terminal version must close it.
 
 Before an actual runner exists,
 `verify_rollback_provenance_fd()` keeps v2 replay on one held private root FD,

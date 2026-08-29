@@ -142,6 +142,14 @@ mechanism과 adversarial test를 닫아야 한다.
   process/socket/GPU raw leaves를 남긴다. 아직 authenticated remote rollback runner는
   없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
   실제 deployment rollback을 실행하거나 주장하지 않는다.
+- isolated atomic-switch raw producer는 landed했다. 이는 evidence root 내부에
+  이미 staged된 private runtime files만 same-directory
+  `renameat2(RENAME_EXCHANGE)`로 교환하고 v3의 다섯 opaque switch leaf를 남긴다.
+  실제 deployment path, `mv`/ordinary rename fallback, rollback success verdict는
+  범위 밖이다. runtime copy와 artifact-map bytes linkage도 이 raw helper만으로는
+  성립하지 않는다. v3 manifest는 switch session/marker closure를 bind하지 않으므로,
+  future runner가 그것을 replay하는 transaction rule과 후속 semantic/terminal version이
+  필요하다.
 - native fallback leaf, authenticated rollback raw runner, soak/rollback semantic contract와
   checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
   필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
@@ -383,6 +391,8 @@ ci/release/bind_raw_rc3_rollback_capture.py
 ci/release/check_rc3_rollback_provenance_v3.py
 ci/release/capture_rc3_rollback_phase_v1.py
 ci/release/run_capture_rc3_rollback_phase_v1.sh
+ci/release/capture_rc3_rollback_atomic_switch_v1.py
+ci/release/run_capture_rc3_rollback_atomic_switch_v1.sh
 ci/release/check_rc3_rollback_receipt_v2.py
 ```
 

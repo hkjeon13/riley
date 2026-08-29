@@ -324,10 +324,21 @@ non-stream completion, PID/TCP/FD-socket/GPU raw leaves를 같은 prepopulated
 private baseline root의 새 capture child에만 append한다. candidate source-audit
 generation은 여전히 별도의 source-owned scenario producer가 담당하고, RC2에는
 audit을 합성하지 않는다.
+`capture_rc3_rollback_atomic_switch_v1.py`는 같은 root 안 runner-owned
+isolated switch child의 이미 staged된 private runtime files에만 Linux
+`renameat2(RENAME_EXCHANGE)`를 적용하고, active 전후·rollback/candidate staged
+stat과 transcript 다섯 raw leaf를 create-only capture child에 남긴다. 실제
+deployment path에는 rename하지 않으며 `mv`/ordinary rename fallback도 없다. 이
+raw helper만으로 runtime copy와 artifact-map binary/bundle/image bytes의 content
+linkage는 주장하지 않는다. future runner는 immutable artifact snapshot에서
+별도의 private runtime copy를 materialize하고 그 mapping을 남겨야 한다.
 
 아직 이 둘을 하나의 authenticated host transaction으로 연결하는 v3 remote
-runner는 없다. 그 runner는 terminal phase session과 `capture-incomplete.json`
-부재를 별도로 replay한 뒤에만 raw path를 bind request에 넣어야 한다. 따라서
+runner는 없다. 그 runner는 terminal phase/switch session과
+`capture-incomplete.json` 부재를 별도로 replay한 뒤에만 raw path를 bind request에
+넣어야 한다. v3 manifest 자체는 switch session/marker closure를 bind하지 않으므로
+이는 runner-only transaction rule이며, independent semantic/terminal closure는 후속
+version에서 추가한다. 따라서
 actual GPU rollback drill, candidate freeze, rollback success verdict를 실행하거나
 주장하지 않는다.
 
