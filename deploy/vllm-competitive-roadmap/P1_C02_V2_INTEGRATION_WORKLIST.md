@@ -30,7 +30,7 @@ same reviewed literal is independently used by the active release
 preflight/bundle/manifest contract; it is not imported into the Python-3.10
 held-FD checker, and either contract must fail closed on future source drift.
 
-The next C02-P1 provenance prerequisite is now source-only mechanism code:
+The A/B reproducibility provenance prerequisite is now source-only mechanism code:
 `prepare_reconstructed_repro_build_inputs_v1.py` snapshots two pre-existing
 PR16 `repro-build-{a,b}.tar` inputs into one fresh private A/B closure and
 replays the reviewed RC2 source-input receipt plus the complete PR16 raw
@@ -44,7 +44,7 @@ The later arm-specific same-invocation runtime-image assembly/capture receipt
 must consume this closure before any v2 materializer can promote those missing
 image bindings.
 
-Before that raw receipt is introduced, the separate
+The separate
 `ci/release/ReconstructedRuntimeAssembly.Dockerfile` is a static, reviewed
 assembly-tool contract. Its later canonical build context is exactly
 `Dockerfile`, `input/riley`, and `input/riley.tar.gz`; it uses two identical
@@ -60,6 +60,31 @@ build or a source/bundle-to-image, OCI, capture-independence, rollback, freeze,
 or qualification claim. A later receipt must bind its exact canonical context
 tar, invocation, output image/OCI bytes, and never-started-container filesystem
 capture before any of those claims can be promoted.
+
+That post-capture mechanism is now landed as
+`ci/release/prepare_reconstructed_runtime_assembly_capture_v1.py` plus
+`benchmarks/release/candidates/reconstructed-runtime-assembly-capture-v1.schema.json`.
+It accepts one already-produced, uncompressed USTAR capture for arm `a` or
+`b`, snapshots it only into a fresh private root, and replays held reviewed
+RC2 source, PR16 reproducibility, matching-arm OCI, and static recipe facts on
+every verify. The fixed raw inventory binds `SHA256SUMS`, the three-leaf build
+context, an exact stdin `docker build` logical argv with exactly seven
+provenance args, iidfile, raw image inspect, OCI export record/archive,
+created-but-never-started unprivileged no-mount/network-none container inspect,
+and rootless `/opt/riley` filesystem tar with final numeric `65532:65532`
+ownership. Because USTAR cannot represent a
+single regular member above 8 GiB−1, the v1 raw capture accepts only an OCI v1
+closure archive within that bound; it must not enable PAX/GNU as a workaround.
+The parser rejects PAX/GNU/sparse,
+links/special files, traversal, duplicate entries, noncanonical raw-capture
+metadata, and nonzero tar trailers before a tar parser sees extension data;
+the captured OCI/archive and inspect must byte-match the OCI v1 closure and
+the captured runtime tree must byte-match the selected verified bundle tree.
+`bound/not-run` means only that structural cross-check. It is neither a Docker
+or GPU action nor evidence that Docker build/container copy actually ran,
+source/bundle-to-image provenance, A/B independence, image equality,
+service/GPU execution, rollback, freeze, historical distribution, or
+qualification.
 
 ## Boundary to preserve
 
@@ -762,11 +787,11 @@ runtime configuration field or a trace counter.
    already-published native fallback source leaf (complete), then add rollback
    raw capture/binding and a separately versioned lifecycle/semantic closure.
 6. Land source-only reviewed RC2 inputs, per-arm OCI image-layout input
-   closures, the narrow held-FD cross-root content bridge, and the static
-   source-free runtime assembly recipe; retain their
-   `prepared/not-run`/`bound/not-run`/source-contract scope until an explicit
-   A/B materializer consumes them with a same-invocation runtime-image
-   assembly/capture receipt.
+   closures, the narrow held-FD cross-root content bridge, A/B reproducibility
+   closure, static source-free runtime assembly recipe, and per-arm raw
+   assembly/capture structural receipt; retain their
+   `prepared/not-run`/`bound/not-run` scope until an
+   explicit A/B materializer consumes two independently produced captures.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
 8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
