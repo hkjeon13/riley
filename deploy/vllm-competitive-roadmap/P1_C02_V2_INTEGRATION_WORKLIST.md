@@ -316,6 +316,29 @@ is not an input accepted by the v3 binder, freeze admission, or qualification.
 Its receipt is source-only; a future A/B materializer must receive the same
 external SHA anchor and replay the held leaves under its own build contract.
 
+Runtime image content has a separate per-reconstruction preparation boundary:
+`prepare_reconstructed_runtime_oci_inputs_v1.py` accepts only an already
+captured raw one-image inspect response, an already captured **uncompressed OCI
+image-layout tar**, a fresh external evidence root, and reconstruction ID `a`
+or `b`. It snapshots the raw inputs and exact `oci-layout`, `index.json`,
+selected manifest, and config bytes. Through one held archive FD it requires
+one index manifest; exact descriptor hash/size for manifest, config, and every
+layer; a closed blob inventory; and raw inspect `Id` equal to the OCI config
+SHA-256. Raw inspect/config must be `linux/amd64`; an optional declared index
+platform must match it, and optional index/manifest top-level media types are
+verified when present. Docker-save is a distinct format and is rejected rather
+than being treated as an OCI layout. The `prepared/not-run` receipt makes only
+this per-image content binding; source, bundle, build invocation, A/B
+independence, rollback, and qualification remain `not-established`.
+
+This preparer never starts a container, build, GPU workload, or service. It
+does not change the existing v2 baseline's deliberately opaque
+`oci_archive_content_binding: not-validated` field. The eventual order is:
+reviewed source inputs, the existing clean A/B reproducibility run, runtime OCI
+capture for each arm, then one new materializer that explicitly consumes all of
+those independently prepared closures. A per-image OCI receipt alone is not a
+baseline producer and is not accepted by freeze admission or qualification.
+
 The distinct v3 raw schema/checker is now landed for the reconstructed-tag
 case rather than widening v2. `check_rc3_rollback_provenance_v3.py` replays
 the full reconstructed baseline A/B manifest through one held FD, pins the
@@ -673,7 +696,8 @@ runtime configuration field or a trace counter.
 
 ## Implementation order
 
-1. Land strict common primitives plus focused hostile tests.
+1. Land strict common primitives plus focused hostile tests, including the
+   held-FD large-snapshot consumer used by OCI archive parsers.
 2. Land Rust private-FD v2 audit/shutdown producer and unit tests.
 3. Land the v4 serial-session binder/schema and hostile fixture tests before
    the initial lifecycle runner.
@@ -682,8 +706,11 @@ runtime configuration field or a trace counter.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then add rollback
    raw capture/binding and a separately versioned lifecycle/semantic closure.
-6. Land semantic soak/rollback replay and outer qualification v2-only policy.
-7. Freeze only the clean source revision after all mechanism tests pass; then
+6. Land source-only reviewed RC2 inputs and per-arm OCI image-layout input
+   closures; retain their `prepared/not-run` scope until an explicit A/B
+   materializer consumes them.
+7. Land semantic soak/rollback replay and outer qualification v2-only policy.
+8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
 
 ## Minimum adversarial tests

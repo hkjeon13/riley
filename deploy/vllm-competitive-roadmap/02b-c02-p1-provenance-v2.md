@@ -112,6 +112,8 @@ P1은 pinned annotated tag object (`a3f5203c3a72122e9da818c1e441c2a789f7aa8c`)�
 
 그 A/B reconstruction의 앞단계로 `ci/release/prepare_reconstructed_rc2_inputs_v1.py`는 local Git object store에서 위 reviewed annotated tag object/target을 확인하고, direct target의 bounded uncompressed `git archive` tar grammar를 검증한다. caller가 **independently reviewed** source-archive SHA-256을 제공해 생성된 tar와 일치할 때만 새 normalized external mode-0700 root에 `source/git-tag-object.json`, `source/git-tag-target.json`, `source/riley-0.1.0-rc2.tar`, `reconstructed-rc2-source-inputs.json`을 create-only로 발행한다. receipt/schema (`riley.reconstructed-rc2-source-inputs.v1`, `benchmarks/release/candidates/reconstructed-rc2-source-inputs-v1.schema.json`)는 `prepared/not-run` source-input closure일 뿐 baseline manifest, build, OCI image, service/GPU observation, rollback 또는 qualification을 만들거나 주장하지 않는다. observed archive digest를 source default/pin으로 넣지 않으며, producer와 모든 후속 replay caller는 같은 reviewer-provided SHA-256을 다시 제공해야 한다. source-date epoch은 self-authored receipt field로 보존하지 않고 후속 A/B builder가 held archive bytes에서 직접 derive/replay한다.
 
+Runtime image content는 별도 per-arm closure로 준비한다. `ci/release/prepare_reconstructed_runtime_oci_inputs_v1.py`는 이미 캡처된 raw runtime image inspect와 **uncompressed OCI image-layout tar**만 받고 `--reconstruction-id {a,b}`별 새 external private root에 raw inspect/tar 및 tar 내부의 정확한 `oci-layout`, `index.json`, selected manifest/config bytes를 create-only로 저장한다. 같은 held archive FD에서 `inspect[0].Id == sha256(config raw bytes)`, 단일 index manifest, raw inspect/config의 필수 `linux/amd64` platform, 선언된 경우 exact `linux/amd64`여야 하는 index platform, manifest/config/layer descriptor의 hash·size, 모든 referenced layer blob, 그리고 정확한 blob closure를 replay한다. tarfile parser보다 앞선 raw header preflight는 bounded regular file/zero-payload directory만 허용해 PAX/GNU longname/sparse/link/special payload를 메모리화하기 전에 거절한다. OCI spec에서 optional인 index/manifest top-level media type은 존재할 경우만 exact OCI value로 검증한다. Docker-save는 OCI layout이 아니므로 이 contract에서 명시적으로 거절한다. receipt/schema (`riley.reconstructed-runtime-oci-inputs.v1`, `benchmarks/release/candidates/reconstructed-runtime-oci-inputs-v1.schema.json`)는 `prepared/not-run` content-binding만 뜻하며 source/bundle/build invocation/A-B independence/rollback/qualification은 모두 `not-established`로 유지한다. 이 preparer는 Docker·build·GPU·service를 실행하지 않고, existing v2 baseline의 `oci_archive_content_binding: not-validated`도 변경하지 않는다. 후속 A/B materializer만 source inputs, independently built artifacts, 그리고 두 OCI closures를 명시적으로 함께 소비해 그 경계를 승격할 수 있다.
+
 ```text
 baseline_kind = reconstructed-tag-baseline
 provenance_class = reconstructed-from-source
@@ -464,7 +466,7 @@ root를 열기 전 같은 preflight를 수행해야 한다.
 ## 6. 변경 순서
 
 1. v2 schemas와 strict shared evidence primitive를 추가하고 v1 rejection policy를 문서화한다.
-2. reviewed RC2 source-input preparer를 추가한 뒤 reconstructed baseline builder/checker와 adversarial tests를 추가한다.
+2. reviewed RC2 source-input preparer와 per-arm OCI image-layout input preparer를 추가한 뒤 reconstructed baseline builder/checker와 adversarial tests를 추가한다. 두 preparer 자체는 build/capture/qualification을 실행하지 않는다.
 3. typed sampling selection, private-FD generation audit, 그리고 source-owned
    shutdown v2 artifact/marker producer를 Rust source에 추가한다.
 4. v4 serial capture-session binder/schema와 hostile fixture tests를 추가한다.

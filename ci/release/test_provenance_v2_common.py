@@ -645,6 +645,68 @@ class ProvenanceV2CommonTests(unittest.TestCase):
                     os.close(child_fd)
                 os.close(root_fd)
 
+    def test_held_snapshot_consumer_binds_one_private_large_leaf_without_reopen(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary).resolve(strict=True)
+            root_fd = common.create_private_evidence_directory(parent / "evidence", "evidence root")
+            child_fd: int | None = None
+            try:
+                child_fd = common.create_private_child_directory(root_fd, "capture", "capture directory")
+                raw = b"large immutable artifact" * 4096
+                common.write_create_only(child_fd, "archive.tar", raw, "archive")
+                root_descriptor = common.descriptor_for_bytes("capture/archive.tar", raw, "archive")
+                held_descriptor = common.rebase_descriptor_to_held_leaf(
+                    root_descriptor,
+                    expected_root_relative_path="capture/archive.tar",
+                    leaf_name="archive.tar",
+                    label="archive",
+                )
+                self.assertEqual(
+                    common.consume_private_snapshot_descriptor_file(
+                        child_fd,
+                        held_descriptor,
+                        "archive",
+                        lambda source: source.read(17),
+                        maximum_bytes=len(raw),
+                    ),
+                    raw[:17],
+                )
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_private_snapshot_descriptor_file(
+                        child_fd,
+                        {**held_descriptor.as_json(), "byte_length": len(raw) - 1},
+                        "archive",
+                        lambda source: source.read(1),
+                        maximum_bytes=len(raw),
+                    )
+                self.assert_reason(raised, "evidence-length-mismatch")
+
+                replacement = parent / "replacement.tar"
+                replacement.write_bytes(raw)
+                os.chmod(replacement, 0o600)
+
+                def read_then_swap(source: object) -> bytes:
+                    result = source.read(1)  # type: ignore[union-attr]
+                    os.replace(replacement, parent / "evidence" / "capture" / "archive.tar")
+                    return result
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.consume_private_snapshot_descriptor_file(
+                        child_fd,
+                        held_descriptor,
+                        "archive",
+                        read_then_swap,
+                        maximum_bytes=len(raw),
+                    )
+                self.assertIn(
+                    getattr(raised.exception, "reason_code", None),
+                    {"raced-input", "mutated-input", "nonunique-evidence-inode"},
+                )
+            finally:
+                if child_fd is not None:
+                    os.close(child_fd)
+                os.close(root_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

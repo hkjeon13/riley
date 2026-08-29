@@ -21,7 +21,7 @@ import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, Mapping, NoReturn, Sequence
+from typing import Any, BinaryIO, Callable, Mapping, NoReturn, Sequence, TypeVar
 
 
 DEFAULT_MAX_JSON_BYTES = 8 * 1024 * 1024
@@ -30,6 +30,7 @@ DEFAULT_READ_CHUNK_BYTES = 1024 * 1024
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SAFE_LEAF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 SAFE_RELATIVE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+_ConsumedValue = TypeVar("_ConsumedValue")
 
 
 class ProvenanceV2Error(ValueError):
@@ -1067,6 +1068,105 @@ def read_private_descriptor_json_leaf(
     document = parse_canonical_json(raw, label, maximum_bytes=maximum_bytes)
     assert isinstance(document, dict)
     return raw, document
+
+
+def consume_private_snapshot_descriptor_file(
+    directory_fd: int,
+    descriptor: EvidenceDescriptor | Mapping[str, Any],
+    label: str,
+    consumer: Callable[[BinaryIO], _ConsumedValue],
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> _ConsumedValue:
+    """Consume one rebased private snapshot through a single held file FD.
+
+    This is for bounded-but-large immutable leaves (for example an OCI tar)
+    that cannot safely be read into memory.  ``descriptor.path`` must be a
+    direct child leaf produced by :func:`rebase_descriptor_to_held_leaf`.
+    The callback receives a read-only duplicate of the held descriptor; after
+    it returns, this helper rewinds *the same opened inode* and streams its
+    exact SHA-256/length before checking the opened and visible identities
+    again.  Callers therefore must not first verify a path and then reopen it
+    for a parser.  The callback should only read/seek its supplied file.
+    """
+
+    _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
+    candidate = descriptor.as_json() if isinstance(descriptor, EvidenceDescriptor) else descriptor
+    parsed = parse_descriptor(candidate, label)
+    leaf = _validate_leaf_name(parsed.path, f"{label} held descriptor path")
+    if parsed.byte_length < 1 or parsed.byte_length > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+    if not callable(consumer):
+        _fail("invalid-evidence-consumer", f"{label} consumer must be callable")
+    _require_directory_fd(directory_fd, f"{label} parent")
+
+    def require_identity(metadata: os.stat_result) -> None:
+        _require_regular_single_link(metadata, label)
+        if stat.S_IMODE(metadata.st_mode) != 0o600:
+            _fail("unsafe-output-mode", f"{label} must have exact mode 0600")
+        if metadata.st_uid != os.geteuid():
+            _fail("unsafe-evidence-owner", f"{label} must be owned by the effective UID")
+        if metadata.st_size != parsed.byte_length:
+            _fail("evidence-length-mismatch", f"{label} byte length differs from descriptor")
+
+    try:
+        before = os.lstat(leaf, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect {label}: {error}")
+    require_identity(before)
+    try:
+        held_fd = os.open(leaf, _file_open_flags(), dir_fd=directory_fd)
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
+    try:
+        opened = os.fstat(held_fd)
+        require_identity(opened)
+        if _stable_stat(before) != _stable_stat(opened):
+            _fail("raced-input", f"{label} changed while it was opened")
+        try:
+            callback_fd = os.dup(held_fd)
+            with os.fdopen(callback_fd, "rb", buffering=0) as callback_file:
+                result = consumer(callback_file)
+        except ProvenanceV2Error:
+            raise
+        except OSError as error:
+            _fail("unreadable-input", f"cannot consume {label}: {error}")
+        try:
+            os.lseek(held_fd, 0, os.SEEK_SET)
+        except OSError as error:
+            _fail("unreadable-input", f"cannot rewind {label}: {error}")
+        digest = hashlib.sha256()
+        remaining = opened.st_size
+        while remaining:
+            try:
+                chunk = os.read(held_fd, min(DEFAULT_READ_CHUNK_BYTES, remaining))
+            except OSError as error:
+                _fail("unreadable-input", f"cannot read {label}: {error}")
+            if not chunk:
+                _fail("truncated-input", f"{label} changed while it was consumed")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        try:
+            if os.read(held_fd, 1):
+                _fail("mutated-input", f"{label} grew while it was consumed")
+        except OSError as error:
+            _fail("unreadable-input", f"cannot re-read {label}: {error}")
+        if digest.hexdigest() != parsed.sha256:
+            _fail("evidence-hash-mismatch", f"{label} SHA-256 differs from descriptor")
+        after = os.fstat(held_fd)
+        require_identity(after)
+        if _stable_stat(opened) != _stable_stat(after):
+            _fail("mutated-input", f"{label} changed while it was consumed")
+    finally:
+        _close_quietly(held_fd)
+    try:
+        path_after = os.lstat(leaf, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("raced-input", f"cannot re-inspect {label}: {error}")
+    require_identity(path_after)
+    if _stable_stat(before) != _stable_stat(path_after):
+        _fail("raced-input", f"{label} changed while it was consumed")
+    return result
 
 
 def require_unique_descriptors(
