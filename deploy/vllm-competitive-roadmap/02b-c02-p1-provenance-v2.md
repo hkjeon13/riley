@@ -490,6 +490,21 @@ endpoint observer·startup artifact·process·GPU·HTTP lifecycle을 만들거�
 따라서 visible fixed config leaf는 standalone runner/rollback/semantic authority가 아니며, 미래
 authenticated runner의 같은 held-FD normal-return sequence 안에서만 raw capture와 함께 소비되어야 한다.
 
+그 fixed topology를 실제 finalizer receipt까지 끊기지 않게 잇는 private
+`compose_rc3_rollback_finalizer_receipt_v1.py`와 runner-only wrapper
+`finalize_rc3_rollback_finalizer_receipt_v1.py`도 landed 되었다. wrapper는 preexisting private root를
+no-follow로 열어 EX를 한 번만 잡고, core는 **artifact preparation → atomic transaction → fixed
+candidate/source v3/v4 finalizer → finalizer receipt**를 한 lexical callback chain으로만 호출한다.
+fixed request/v3/v4/receipt 및 모든 reserved sibling은 artifact preparation 전에 preflight하며,
+terminal receipt branch는 별도 caller-supplied candidate/config/phase target, fixed evidence
+path/name, descriptor, continuation을 받지 않는다.
+receipt hardlink가 성공한 뒤에는 transaction의 ordinary post-callback FD recheck를 쓰지 않고
+terminal-only continuation과 quiet cleanup만 남겨 visible receipt를 later cleanup failure로 failed
+return으로 바꾸지 않는다. 이 compositor/wrapper는 dynamic config/phase/source/HTTP evidence를
+capture하거나 process·GPU·network·deployment을 실행하지 않는다. 따라서 아직 authenticated
+operational rollback runner가 아니며 preexisting fixed raw topology를 같은 invocation에서 소비하는
+CPU-only closure일 뿐이다.
+
 dynamic phase/source-audit path가 정해지기 전에는
 `prepare_rc3_rollback_evidence_v1.py`가 이미 complete한 private reconstructed
 RC2 root와 root-relative manifest를 held-FD로 full replay해 reviewed

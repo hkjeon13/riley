@@ -150,6 +150,16 @@ def _unlock_quietly(root_fd: int) -> None:
         pass
 
 
+def _close_quietly(descriptor: int | None) -> None:
+    """Release one caller-owned FD without changing a terminal success edge."""
+
+    if descriptor is not None:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+
+
 def _assert_root_children_absent(root_fd: int) -> None:
     """Reserve every fixed direct child before any append-only mutation."""
 
@@ -890,6 +900,51 @@ def _prepare_artifacts_then_on_success_held_root_fd(
     root_fd: int,
     continuation: Callable[[ArtifactPreparationReplay, int], T],
 ) -> T:
+    """Run preparation followed by a nonterminal trusted continuation.
+
+    This ordinary continuation remains suitable for raw producers that have
+    their own post-continuation checks.  A nested writer whose final hardlink
+    is the invocation's terminal operation must use the separate private
+    terminal helper below instead.
+    """
+
+    return _prepare_artifacts_then_held_root_fd(
+        request,
+        root_fd,
+        continuation,
+        terminal_continuation=False,
+    )
+
+
+def _prepare_artifacts_then_terminal_success_held_root_fd(
+    request: PreparationRequest,
+    root_fd: int,
+    continuation: Callable[[ArtifactPreparationReplay, int], T],
+) -> T:
+    """Run preparation into one terminal normal-return continuation.
+
+    This private variant is for a same-stack successor whose successful final
+    hardlink is the entire invocation's last fallible operation.  Once that
+    successor returns, only quiet FD release remains; it never turns a visible
+    terminal receipt into a failed producer return because a close happened to
+    report an error.
+    """
+
+    return _prepare_artifacts_then_held_root_fd(
+        request,
+        root_fd,
+        continuation,
+        terminal_continuation=True,
+    )
+
+
+def _prepare_artifacts_then_held_root_fd(
+    request: PreparationRequest,
+    root_fd: int,
+    continuation: Callable[[ArtifactPreparationReplay, int], T],
+    *,
+    terminal_continuation: bool,
+) -> T:
     """Run one preparation and its trusted continuation in the same lock stack.
 
     This private compositor is the only continuation boundary for preparation.
@@ -1123,11 +1178,20 @@ def _prepare_artifacts_then_on_success_held_root_fd(
     finally:
         if switch_fd is not None:
             _unlock_switch_quietly(switch_fd)
-            os.close(switch_fd)
+            if terminal_continuation:
+                _close_quietly(switch_fd)
+            else:
+                os.close(switch_fd)
         if artifacts_fd is not None:
-            os.close(artifacts_fd)
+            if terminal_continuation:
+                _close_quietly(artifacts_fd)
+            else:
+                os.close(artifacts_fd)
         if snapshot_fd is not None:
-            os.close(snapshot_fd)
+            if terminal_continuation:
+                _close_quietly(snapshot_fd)
+            else:
+                os.close(snapshot_fd)
 
 
 def prepare_artifacts(request: PreparationRequest) -> dict[str, Any]:

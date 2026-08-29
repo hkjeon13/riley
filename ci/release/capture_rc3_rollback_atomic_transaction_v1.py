@@ -1019,6 +1019,29 @@ def _capture_atomic_transaction_then_on_success_held_switch_fd(
     return result
 
 
+def _capture_atomic_transaction_then_terminal_success_held_switch_fd(
+    root_fd: int,
+    switch_fd: int,
+    continuation: Callable[[AtomicTransactionReplay], T],
+) -> T:
+    """Invoke one terminal same-stack continuation after a normal capture.
+
+    A successful terminal continuation may publish a hard-linked receipt whose
+    success must remain the enclosing invocation's final fallible action.
+    Unlike the ordinary continuation helper, this variant deliberately makes
+    no post-continuation held-FD replay: an error observed after that receipt
+    was published could otherwise turn a visible terminal pair into a failed
+    producer return.  The callback is private and lexical; it receives no
+    resumable path capability.
+    """
+
+    if not callable(continuation):
+        _fail("transaction terminal continuation must be callable", code="invalid-continuation")
+    replay = _capture_atomic_transaction_on_held_switch_fd(root_fd, switch_fd)
+    _require_held_switch_fd(root_fd, switch_fd)
+    return continuation(replay)
+
+
 def capture_atomic_transaction(evidence_root: Path) -> dict[str, Any]:
     """Create the fixed raw pre-replay → exchange → post-replay transaction.
 

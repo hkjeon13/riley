@@ -824,8 +824,9 @@ runtime configuration field or a trace counter.
    same-process v4/shutdown receipt closure; retain CPU/static-only scope.
 5. Land raw capture v2 and its separate terminal binder v5 for the
    already-published native fallback source leaf (complete), then add rollback
-   raw capture/binding, the fixed candidate/source v3/v4 finalizer and its
-   same-stack normal-return receipt v1 (complete), before a separately
+   raw capture/binding, the fixed candidate/source v3/v4 finalizer, its
+   same-stack normal-return receipt v1, and the private fixed-topology
+   preparation→transaction→receipt compositor/wrapper (complete), before a separately
    versioned lifecycle/semantic closure. Its final closure replay finishes
    before any receipt leaf and a successful terminal hardlink returns
    immediately. A receipt pair is not a path-replay success token or semantic
@@ -863,7 +864,9 @@ runtime configuration field or a trace counter.
   rollback v4 and returns raw-structural-only `bound/not-run`; it is not a
   rollback receipt or qualification input.
 - `check_rc3_rollback_receipt.py` still consumes self-authored v1 timeline
-  fields; no authenticated rollback raw producer exists.
+  fields; no authenticated operational rollback raw-capture runner exists.
+  The landed private fixed-topology compositor can only consume already captured
+  dynamic evidence in one held-FD normal-return chain and cannot create it.
 - `check_rc3_qualification.py` imports those v1 report versions and also has
   fallback open flags.
 - `C02ShutdownArtifactWriter` v1 is close to safe but records PID without
