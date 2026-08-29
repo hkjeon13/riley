@@ -412,6 +412,46 @@ class ProvenanceV2CommonTests(unittest.TestCase):
             finally:
                 os.close(root_fd)
 
+    def test_describe_regular_relative_streams_a_safe_artifact_without_materializing_it(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            root_fd = self.open_root(root)
+            try:
+                payload = b"artifact-bytes" * (2 * 1024 * 1024)
+                common.write_create_only(root_fd, "artifact.bin", payload, "artifact")
+                with mock.patch.object(
+                    common,
+                    "_read_exact_bounded",
+                    side_effect=AssertionError("descriptor derivation must stream"),
+                ):
+                    descriptor = common.describe_regular_relative(
+                        root_fd,
+                        "artifact.bin",
+                        "artifact",
+                    )
+                self.assertEqual(descriptor.path, "artifact.bin")
+                self.assertEqual(descriptor.byte_length, len(payload))
+                self.assertEqual(descriptor.sha256, common.descriptor_for_bytes(
+                    "artifact.bin", payload, "artifact"
+                ).sha256)
+                common.verify_descriptor_file(root_fd, descriptor, "artifact")
+
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.describe_regular_relative(
+                        root_fd,
+                        "artifact.bin",
+                        "artifact",
+                        maximum_bytes=len(payload) - 1,
+                    )
+                self.assert_reason(raised, "input-too-large")
+
+                os.link(root / "artifact.bin", root / "artifact-alias.bin")
+                with self.assertRaises(common.ProvenanceV2Error) as raised:
+                    common.describe_regular_relative(root_fd, "artifact.bin", "artifact")
+                self.assert_reason(raised, "nonunique-evidence-inode")
+            finally:
+                os.close(root_fd)
+
     def test_paired_hardlink_publication_and_reader_remain_strict(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

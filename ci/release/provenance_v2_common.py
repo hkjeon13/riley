@@ -918,6 +918,107 @@ def _verify_regular_at(
         _fail("evidence-hash-mismatch", f"{label} SHA-256 differs from descriptor")
 
 
+def _describe_regular_at(
+    directory_fd: int,
+    name: str,
+    label: str,
+    *,
+    maximum_bytes: int,
+) -> tuple[str, int]:
+    """Stream one safe leaf and return its digest and exact byte length.
+
+    This is the producer counterpart to :func:`_verify_regular_at`: a
+    path-only binder can derive a descriptor for a potentially large artifact
+    without first materializing it in memory.  It preserves the same
+    no-follow, single-link, before/open/after stat checks as verifier reads.
+    """
+
+    _validate_maximum(maximum_bytes, f"{label} maximum byte bound")
+    _require_directory_fd(directory_fd, f"{label} parent")
+    name = _validate_leaf_name(name, f"{label} name")
+    try:
+        before = os.lstat(name, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("missing-input", f"cannot inspect {label}: {error}")
+    _require_regular_single_link(before, label)
+    if before.st_size > maximum_bytes:
+        _fail("input-too-large", f"{label} exceeds its byte bound")
+    try:
+        opened_fd = os.open(name, _file_open_flags(), dir_fd=directory_fd)
+    except OSError as error:
+        _fail("unsafe-evidence-path", f"cannot open {label} without following links: {error}")
+    try:
+        opened = os.fstat(opened_fd)
+        _require_regular_single_link(opened, label)
+        if _stable_stat(before) != _stable_stat(opened):
+            _fail("raced-input", f"{label} changed while it was opened")
+        digest = hashlib.sha256()
+        remaining = opened.st_size
+        while remaining:
+            try:
+                chunk = os.read(opened_fd, min(DEFAULT_READ_CHUNK_BYTES, remaining))
+            except OSError as error:
+                _fail("unreadable-input", f"cannot read {label}: {error}")
+            if not chunk:
+                _fail("truncated-input", f"{label} changed while it was read")
+            digest.update(chunk)
+            remaining -= len(chunk)
+        try:
+            if os.read(opened_fd, 1):
+                _fail("mutated-input", f"{label} grew while it was read")
+        except OSError as error:
+            _fail("unreadable-input", f"cannot re-read {label}: {error}")
+        after = os.fstat(opened_fd)
+        _require_regular_single_link(after, label)
+        if _stable_stat(opened) != _stable_stat(after):
+            _fail("mutated-input", f"{label} changed while it was read")
+    finally:
+        _close_quietly(opened_fd)
+    try:
+        path_after = os.lstat(name, dir_fd=directory_fd)
+    except OSError as error:
+        _fail("raced-input", f"cannot re-inspect {label}: {error}")
+    _require_regular_single_link(path_after, label)
+    if _stable_stat(before) != _stable_stat(path_after):
+        _fail("raced-input", f"{label} changed while it was read")
+    return digest.hexdigest(), opened.st_size
+
+
+def describe_regular_relative(
+    root_fd: int,
+    relative_path: str,
+    label: str,
+    *,
+    maximum_bytes: int = DEFAULT_MAX_ARTIFACT_BYTES,
+) -> EvidenceDescriptor:
+    """Derive a descriptor through a held FD without loading a large leaf.
+
+    The returned descriptor is suitable for a later
+    :func:`verify_descriptor_file` replay.  Like all other relative readers,
+    every directory component and the final file are opened with no-follow
+    safety checks; only the artifact digest is streamed.
+    """
+
+    relative = validate_relative_path(relative_path, f"{label} path")
+    parts = PurePosixPath(relative).parts
+    parent_fd, owned = _open_relative_directory_chain(root_fd, parts[:-1], label)
+    try:
+        digest, byte_length = _describe_regular_at(
+            parent_fd,
+            parts[-1],
+            label,
+            maximum_bytes=maximum_bytes,
+        )
+    finally:
+        for owned_fd in reversed(owned):
+            _close_quietly(owned_fd)
+    return EvidenceDescriptor(
+        path=relative,
+        sha256=digest,
+        byte_length=byte_length,
+    )
+
+
 def verify_descriptor_file(
     root_fd: int,
     descriptor: EvidenceDescriptor | Mapping[str, Any],

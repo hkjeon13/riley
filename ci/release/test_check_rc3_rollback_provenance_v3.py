@@ -329,6 +329,66 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             os.close(root_fd)
         self.assertEqual(actual, expected)
 
+    def test_bytes_core_and_raw_target_deriver_match_the_file_replay(self) -> None:
+        document = self.fixture.document()
+        manifest = self.fixture.write_manifest(document)
+        with self.pinned_baseline():
+            expected = checker.verify_rollback_provenance_v3(self.root, manifest)
+        raw = (self.root / manifest).read_bytes()
+        descriptor = common.descriptor_for_bytes(manifest, raw, "rollback manifest")
+        process_evidence = {
+            name: common.parse_descriptor(value, f"candidate process {name}")
+            for name, value in document["candidate"]["process_evidence"].items()
+        }
+        root_fd = common.open_private_evidence_directory(
+            self.root,
+            "rollback v3 held evidence root",
+        )
+        try:
+            with self.pinned_baseline():
+                actual = checker.verify_rollback_provenance_v3_bytes_fd(
+                    root_fd,
+                    descriptor,
+                    raw,
+                )
+                derived = checker.derive_phase_target_from_raw_evidence_fd(
+                    root_fd,
+                    process_evidence,
+                    "candidate raw target",
+                )
+        finally:
+            os.close(root_fd)
+        self.assertEqual(actual, expected)
+        self.assertEqual(derived.as_json(), document["candidate"]["target"])
+
+    def test_bytes_core_rejects_a_laundered_manifest_descriptor(self) -> None:
+        document = self.fixture.document()
+        manifest = self.fixture.write_manifest(document)
+        raw = (self.root / manifest).read_bytes()
+        descriptor = common.descriptor_for_bytes(
+            manifest,
+            raw,
+            "laundered manifest descriptor",
+        )
+        changed = copy.deepcopy(document)
+        changed["candidate_id"] = "riley-9.9.9-rc9"
+        root_fd = common.open_private_evidence_directory(
+            self.root,
+            "rollback v3 held evidence root",
+        )
+        try:
+            with self.pinned_baseline(), self.assertRaises(
+                checker.RollbackV3ProvenanceError
+            ) as raised:
+                checker.verify_rollback_provenance_v3_bytes_fd(
+                    root_fd,
+                    descriptor,
+                    common.canonical_json_bytes(changed),
+                )
+        finally:
+            os.close(root_fd)
+        self.assert_reason(raised, "manifest-document-descriptor-mismatch")
+
     def test_rejects_nonprivate_held_root_before_manifest_read(self) -> None:
         self.root.chmod(0o755)
         try:
@@ -359,12 +419,20 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             checker.RollbackV3ProvenanceError
         ) as raised:
             checker.verify_rollback_provenance_v3(self.root, manifest)
-        self.assert_reason(raised, "pid-start-tick-mismatch")
+        self.assert_reason(raised, "phase-target-raw-mismatch")
 
         document = self.fixture.document()
         document["rollback"]["process_evidence"]["pre_tcp"] = self.fixture.put(
             "capture/rollback/process-pre_tcp.raw",
             self.fixture.proc_tcp(8081, 7999),
+        )
+        document["rollback"]["process_evidence"]["pre_fd_sockets"] = self.fixture.put(
+            "capture/rollback/process-pre_fd_sockets.raw",
+            {
+                "schema_version": c02.SOCKET_SNAPSHOT_VERSION,
+                "server_pid": 3333,
+                "socket_inodes": [7999],
+            },
         )
         manifest = self.fixture.write_manifest(document)
         with self.pinned_baseline(), self.assertRaises(
@@ -387,7 +455,7 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             checker.RollbackV3ProvenanceError
         ) as raised:
             checker.verify_rollback_provenance_v3(self.root, manifest)
-        self.assert_reason(raised, "listener-proof-mismatch")
+        self.assert_reason(raised, "listener-proof-missing")
 
         document = self.fixture.document()
         document["candidate"]["process_evidence"]["gpu_selection"] = self.fixture.put(
@@ -399,7 +467,7 @@ class RollbackV3ProvenanceTests(unittest.TestCase):
             checker.RollbackV3ProvenanceError
         ) as raised:
             checker.verify_rollback_provenance_v3(self.root, manifest)
-        self.assert_reason(raised, "gpu-tuple-mismatch")
+        self.assert_reason(raised, "phase-target-raw-mismatch")
 
         document = self.fixture.document()
         document["candidate"]["process_evidence"]["status"] = self.fixture.put(

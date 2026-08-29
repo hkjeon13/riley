@@ -46,6 +46,7 @@ CANDIDATE_RE = re.compile(
     r"^riley-(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
 )
 GPU_UUID_RE = re.compile(r"^GPU-[0-9A-Fa-f-]+$")
+UINT_RE = re.compile(r"^(?:0|[1-9][0-9]*)$")
 
 RAW_PROCESS_FIELDS = frozenset(
     {
@@ -418,27 +419,85 @@ def _audit(
     return {"availability": "not-supported"}
 
 
-def _verify_phase_target_raw_evidence(
+def _bound_loopback_listener_from_tcp(
+    raw: bytes,
+    socket_inodes: set[int],
+    label: str,
+) -> tuple[int, int]:
+    """Derive the one loopback listener owned by the captured server FD set."""
+
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as error:
+        _fail("invalid-proc-net-tcp", f"{label} is not ASCII: {error}")
+    lines = text.splitlines()
+    if not lines or not lines[0].lstrip().startswith("sl"):
+        _fail("invalid-proc-net-tcp", f"{label} has no valid header")
+    candidates: set[tuple[int, int]] = set()
+    for line in lines[1:]:
+        fields = line.split()
+        if not fields:
+            continue
+        if len(fields) < 10:
+            _fail("invalid-proc-net-tcp", f"{label} has a malformed socket row")
+        local, remote, state, inode_text = fields[1], fields[2], fields[3], fields[9]
+        if remote.upper() != "00000000:0000" or state.upper() != "0A":
+            continue
+        if ":" not in local or UINT_RE.fullmatch(inode_text) is None:
+            _fail("invalid-proc-net-tcp", f"{label} has a malformed listener row")
+        address, port_text = local.upper().rsplit(":", 1)
+        if re.fullmatch(r"[0-9A-F]{4}", port_text) is None:
+            _fail("invalid-proc-net-tcp", f"{label} listener has an invalid port")
+        inode = int(inode_text)
+        port = int(port_text, 16)
+        if inode < 1 or port < 1:
+            _fail("invalid-proc-net-tcp", f"{label} listener has a zero port or inode")
+        if inode not in socket_inodes:
+            continue
+        if address == "00000000":
+            _fail("wildcard-listener", f"{label} contains a wildcard server listener")
+        if address != "0100007F":
+            continue
+        candidate = (port, inode)
+        if candidate in candidates:
+            _fail("invalid-proc-net-tcp", f"{label} repeats a listener tuple")
+        candidates.add(candidate)
+    if len(candidates) != 1:
+        _fail(
+            "listener-proof-missing",
+            f"{label} must prove exactly one loopback listener owned by the server",
+        )
+    return next(iter(candidates))
+
+
+def derive_phase_target_from_raw_evidence_fd(
     root_fd: int,
-    target: Target,
     process_evidence: Mapping[str, common.EvidenceDescriptor],
     label: str,
-) -> None:
-    """Require every structured raw process leaf to corroborate ``target``.
+) -> Target:
+    """Derive one phase target only from held-FD process/socket/GPU leaves.
 
     This is provenance identity parsing, not HTTP/audit/rollback semantics.
     The leaf grammars intentionally reuse the already versioned C02 raw
-    `/proc`, FD-socket, GPU-selection, and GPU-compute-app contracts.  A
-    caller-provided phase target is therefore accepted only after the held-FD
-    leaves agree on its PID/start tick, listener port/inode, and GPU tuple.
+    `/proc`, FD-socket, GPU-selection, and GPU-compute-app contracts.  It is
+    intentionally public to the path-only binder: that producer must never
+    accept a caller-declared target tuple.
     """
 
-    expected = c02.TargetTuple(
-        pid=target.pid,
-        start_ticks=target.start_ticks,
-        gpu_index=target.gpu_index,
-        gpu_uuid=target.gpu_uuid,
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "rollback v3 raw phase evidence root",
+        )
     )
+    if set(process_evidence) != set(RAW_PROCESS_FIELDS) or any(
+        not isinstance(descriptor, common.EvidenceDescriptor)
+        for descriptor in process_evidence.values()
+    ):
+        _fail(
+            "unknown-or-missing-field",
+            f"{label}.process_evidence must contain the closed raw field set",
+        )
 
     def raw(name: str) -> bytes:
         return c02._read_bytes(  # noqa: SLF001 - shared closed raw grammar
@@ -448,33 +507,35 @@ def _verify_phase_target_raw_evidence(
             maximum_bytes=MAX_RAW_LEAF_BYTES,
         )
 
-    def verify() -> None:
-        expected_process = (target.pid, target.start_ticks)
-        if c02._parse_proc_stat(  # noqa: SLF001 - shared closed raw grammar
+    def derive() -> Target:
+        before_process = c02._parse_proc_stat(  # noqa: SLF001 - shared closed raw grammar
             raw("pre_stat"),
             f"{label}.process_evidence.pre_stat",
-        ) != expected_process or c02._parse_proc_stat(  # noqa: SLF001
+        )
+        after_process = c02._parse_proc_stat(  # noqa: SLF001
             raw("post_stat"),
             f"{label}.process_evidence.post_stat",
-        ) != expected_process:
+        )
+        if before_process != after_process:
             _fail(
                 "pid-start-tick-mismatch",
-                f"{label} raw /proc stat differs from the phase target",
+                f"{label} pre/post raw /proc stat tuples differ",
             )
+        pid, start_ticks = before_process
         c02._parse_proc_status_pid(  # noqa: SLF001 - shared closed raw grammar
             raw("status"),
-            target.pid,
+            pid,
             f"{label}.process_evidence.status",
         )
-        before_tcp = c02._parse_listener_inodes(  # noqa: SLF001
-            raw("pre_tcp"),
-            target.listener_port,
-            f"{label}.process_evidence.pre_tcp",
+        selected_index, selected_uuid = c02._parse_gpu_selection(  # noqa: SLF001
+            raw("gpu_selection"),
+            f"{label}.process_evidence.gpu_selection",
         )
-        after_tcp = c02._parse_listener_inodes(  # noqa: SLF001
-            raw("post_tcp"),
-            target.listener_port,
-            f"{label}.process_evidence.post_tcp",
+        expected = c02.TargetTuple(
+            pid=pid,
+            start_ticks=start_ticks,
+            gpu_index=selected_index,
+            gpu_uuid=selected_uuid,
         )
         before_sockets = c02._parse_socket_snapshot(  # noqa: SLF001
             raw("pre_fd_sockets"),
@@ -486,32 +547,54 @@ def _verify_phase_target_raw_evidence(
             expected,
             f"{label}.process_evidence.post_fd_sockets",
         )
-        if (
-            before_tcp != {target.listener_inode}
-            or after_tcp != {target.listener_inode}
-            or target.listener_inode not in before_sockets
-            or target.listener_inode not in after_sockets
-        ):
+        before_listener = _bound_loopback_listener_from_tcp(
+            raw("pre_tcp"),
+            before_sockets,
+            f"{label}.process_evidence.pre_tcp",
+        )
+        after_listener = _bound_loopback_listener_from_tcp(
+            raw("post_tcp"),
+            after_sockets,
+            f"{label}.process_evidence.post_tcp",
+        )
+        if before_listener != after_listener:
             _fail(
                 "listener-proof-mismatch",
-                f"{label} raw TCP/FD socket leaves do not bind the phase listener",
-            )
-        selected_index, selected_uuid = c02._parse_gpu_selection(  # noqa: SLF001
-            raw("gpu_selection"),
-            f"{label}.process_evidence.gpu_selection",
-        )
-        if (selected_index, selected_uuid) != (target.gpu_index, target.gpu_uuid):
-            _fail(
-                "gpu-tuple-mismatch",
-                f"{label} raw GPU selection differs from the phase target",
+                f"{label} pre/post raw TCP/FD listener tuples differ",
             )
         c02._parse_compute_apps(  # noqa: SLF001 - shared closed raw grammar
             raw("gpu_compute_apps"),
-            target.pid,
+            pid,
             f"{label}.process_evidence.gpu_compute_apps",
         )
+        return Target(
+            pid=pid,
+            start_ticks=start_ticks,
+            listener_port=before_listener[0],
+            listener_inode=before_listener[1],
+            gpu_index=selected_index,
+            gpu_uuid=selected_uuid,
+        )
 
-    _c02_raw(verify)
+    return _c02_raw(derive)
+
+
+def _verify_phase_target_raw_evidence(
+    root_fd: int,
+    target: Target,
+    process_evidence: Mapping[str, common.EvidenceDescriptor],
+    label: str,
+) -> None:
+    observed = derive_phase_target_from_raw_evidence_fd(
+        root_fd,
+        process_evidence,
+        label,
+    )
+    if observed != target:
+        _fail(
+            "phase-target-raw-mismatch",
+            f"{label} declared target differs from held-FD raw process evidence",
+        )
 
 
 def _phase(
@@ -615,7 +698,7 @@ def _phase(
 def _manifest(
     root_fd: int,
     manifest_path: str,
-) -> tuple[common.EvidenceDescriptor, Mapping[str, Any]]:
+) -> tuple[common.EvidenceDescriptor, bytes]:
     relative = _relative_path(manifest_path, "rollback v3 manifest path")
     raw = _common(
         lambda: common.read_bounded_regular_relative(
@@ -625,14 +708,6 @@ def _manifest(
             maximum_bytes=MAX_MANIFEST_BYTES,
         )
     )
-    document = _common(
-        lambda: common.parse_canonical_json(
-            raw,
-            "rollback v3 raw manifest",
-            maximum_bytes=MAX_MANIFEST_BYTES,
-        )
-    )
-    assert isinstance(document, Mapping)
     return (
         _common(
             lambda: common.descriptor_for_bytes(
@@ -641,7 +716,7 @@ def _manifest(
                 "rollback v3 raw manifest",
             )
         ),
-        document,
+        raw,
     )
 
 
@@ -792,11 +867,19 @@ def _as_json(value: Any) -> Any:
     return value
 
 
-def verify_rollback_provenance_v3_fd(
+def verify_rollback_provenance_v3_bytes_fd(
     root_fd: int,
-    manifest_path: str,
+    manifest_descriptor: common.EvidenceDescriptor,
+    raw_document: bytes,
 ) -> dict[str, Any]:
-    """Replay one v3 rollback manifest through the exact caller-held root FD."""
+    """Replay canonical v3 manifest bytes through the exact caller-held FD.
+
+    The path-only binder uses this bounded-bytes core before publication with
+    a descriptor derived from the exact canonical output bytes. It
+    intentionally does not read ``manifest_descriptor.path``; the file
+    wrapper below owns that read, and the binder self-verifies the on-disk
+    leaf after create-only publication.
+    """
 
     _common(
         lambda: common.require_private_evidence_directory_fd(
@@ -804,7 +887,38 @@ def verify_rollback_provenance_v3_fd(
             "rollback v3 provenance evidence root",
         )
     )
-    manifest_descriptor, document = _manifest(root_fd, manifest_path)
+    if not isinstance(manifest_descriptor, common.EvidenceDescriptor):
+        _fail("invalid-descriptor", "rollback v3 manifest descriptor has an invalid type")
+    manifest_descriptor = _common(
+        lambda: common.parse_descriptor(
+            manifest_descriptor.as_json(),
+            "rollback v3 manifest descriptor",
+        )
+    )
+    manifest_path = _relative_path(
+        manifest_descriptor.path,
+        "rollback v3 manifest descriptor.path",
+    )
+    document = _common(
+        lambda: common.parse_canonical_json(
+            raw_document,
+            "rollback v3 parsed manifest",
+            maximum_bytes=MAX_MANIFEST_BYTES,
+        )
+    )
+    assert isinstance(document, Mapping)
+    document_descriptor = _common(
+        lambda: common.descriptor_for_bytes(
+            manifest_path,
+            raw_document,
+            "rollback v3 parsed manifest",
+        )
+    )
+    if document_descriptor != manifest_descriptor:
+        _fail(
+            "manifest-document-descriptor-mismatch",
+            "rollback v3 manifest descriptor does not bind the supplied canonical document",
+        )
     row = _exact(
         document,
         {
@@ -930,6 +1044,26 @@ def verify_rollback_provenance_v3_fd(
         ],
         "reason_codes": [],
     }
+
+
+def verify_rollback_provenance_v3_fd(
+    root_fd: int,
+    manifest_path: str,
+) -> dict[str, Any]:
+    """Replay one canonical v3 rollback manifest through one held root FD."""
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd,
+            "rollback v3 provenance evidence root",
+        )
+    )
+    manifest_descriptor, raw_document = _manifest(root_fd, manifest_path)
+    return verify_rollback_provenance_v3_bytes_fd(
+        root_fd,
+        manifest_descriptor,
+        raw_document,
+    )
 
 
 def verify_rollback_provenance_v3(
