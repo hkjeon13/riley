@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, 그리고 reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema는 구현됐지만 현재 검증 범위는 CPU/static hostile-path뿐이며, actual rollback runner/binder, GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, 별도 terminal binder v5, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, 그리고 RC2-compatible raw phase collector는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, actual GPU capture·candidate freeze·lifecycle-v5 receipt·semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -315,8 +315,21 @@ bundle/image ID, raw atomic-switch material도 bind한다. 이는 `bound`/`not-r
 report만 내며 HTTP/rename의 의미, rollback success, historical stable status는
 semantic checker가 후속 단계에서 재구성한다.
 
-아직 v3 raw runner/binder는 없다. 그러므로 actual GPU rollback drill, candidate
-freeze, rollback success verdict를 실행하거나 주장하지 않는다.
+`bind_raw_rc3_rollback_capture.py`는 이제 closed path-only request에서 full
+reconstructed baseline replay와 raw target derivation을 마친 뒤 create-only
+nonterminal v3 manifest 하나를 self-verify해 publish한다. service/GPU/SSH,
+rename, qualification을 조작하지 않으며 `.complete`/`.intent`는 만들지 않는다.
+`capture_rc3_rollback_phase_v1.py`는 legacy-compatible `/readyz`, optional
+non-stream completion, PID/TCP/FD-socket/GPU raw leaves를 같은 prepopulated
+private baseline root의 새 capture child에만 append한다. candidate source-audit
+generation은 여전히 별도의 source-owned scenario producer가 담당하고, RC2에는
+audit을 합성하지 않는다.
+
+아직 이 둘을 하나의 authenticated host transaction으로 연결하는 v3 remote
+runner는 없다. 그 runner는 terminal phase session과 `capture-incomplete.json`
+부재를 별도로 replay한 뒤에만 raw path를 bind request에 넣어야 한다. 따라서
+actual GPU rollback drill, candidate freeze, rollback success verdict를 실행하거나
+주장하지 않는다.
 
 새 binder가 input replay → create-only manifest publication → self-verification을
 중간 root 재open 없이 수행할 수 있도록, existing v2 raw verifier also exposes a

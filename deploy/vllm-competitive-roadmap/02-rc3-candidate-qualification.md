@@ -135,11 +135,14 @@ mechanism과 adversarial test를 닫아야 한다.
   `qualification_status: not-run` receipt를 publish한다. 현재 이 경로는 CPU/static
   hostile-path 검증만 마쳤으며, actual GPU capture, candidate freeze, Gate E replay,
   semantic receipt 또는 C02 verdict가 아니다.
-- `run_remote_rc3_rollback_capture`와 binder는 candidate/rollback PID+start tick,
-  listener/health/generation/audit raw bytes, shutdown artifact와 completion marker,
-  atomic rename 전후 inode/stat provenance를 보존한다. worker/model 이름만 다른
-  self-authored JSON은 증명이 아니다.
-- native fallback leaf, rollback raw runner/binder, soak/rollback semantic contract와
+- v3 path-only rollback binder와 RC2-compatible raw phase collector는 landed했다.
+  binder는 same held private root FD에서 descriptor/target과 reconstructed baseline을
+  replay하고 nonterminal `captured/not-run` manifest만 publish한다. phase collector는
+  existing baseline root의 create-only child에 loopback health/optional generation 및
+  process/socket/GPU raw leaves를 남긴다. 아직 authenticated remote rollback runner는
+  없으므로 candidate source audit/shutdown join, atomic rename, terminal-session replay,
+  실제 deployment rollback을 실행하거나 주장하지 않는다.
+- native fallback leaf, authenticated rollback raw runner, soak/rollback semantic contract와
   checker는 후속 work다. semantic checker는 위 descriptor를 no-follow hash replay로
   필수 검증해야 하며, 기존 v1 public schema를 불명확하게 약화하지 않고 호환되지 않는
   provenance closure는 명시적 새 version으로 추가한다.
@@ -378,6 +381,8 @@ ci/release/check_soak_v2_receipt_v2.py
 ci/release/run_remote_rc3_rollback_capture.sh
 ci/release/bind_raw_rc3_rollback_capture.py
 ci/release/check_rc3_rollback_provenance_v3.py
+ci/release/capture_rc3_rollback_phase_v1.py
+ci/release/run_capture_rc3_rollback_phase_v1.sh
 ci/release/check_rc3_rollback_receipt_v2.py
 ```
 

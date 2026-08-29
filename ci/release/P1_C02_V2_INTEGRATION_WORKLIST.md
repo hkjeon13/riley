@@ -189,8 +189,8 @@ a qualification decision.
 
 ### Rollback raw compatibility boundary
 
-No rollback runner, binder, or semantic checker is landed yet. The existing
-`riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
+No authenticated rollback runner or semantic checker is landed yet. The
+existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
 replayer: it binds stable-default, distinct candidate/rollback process tuples,
 the candidate shutdown-v2 pair, artifact maps, and five opaque switch leaves.
 It does not interpret health/generation/audit bytes, baseline identity, or
@@ -215,7 +215,19 @@ responsibility. It also binds candidate shutdown-v2, active baseline
 bundle/image, and raw atomic-switch material. It returns only `bound`/`not-run`;
 it does not evaluate HTTP or rename meaning and has no terminal marker.
 
-A path-only v3 binder and actual runner remain later. Before they exist,
+The path-only v3 binder is landed: it derives every descriptor and phase tuple
+from one held private root FD, replays the full reconstructed baseline, and
+publishes only a self-verified nonterminal `captured/not-run` manifest. The
+RC2-compatible `capture_rc3_rollback_phase_v1.py` companion appends a new raw
+phase directory to that same prepopulated root and never creates a root or
+claims source audit for RC2. Its candidate no-generation mode deliberately
+leaves source-owned generation/audit capture to the existing scenario producer.
+Neither helper is an authenticated host supervisor. A future runner must
+replay a terminal phase session and the absence of its
+`capture-incomplete.json` before constructing the bind request; the raw v3
+binder does not infer that boundary from arbitrary leaf paths.
+
+Before an actual runner exists,
 `verify_rollback_provenance_fd()` keeps v2 replay on one held private root FD,
 and the v3 verifier does the same for its own full baseline replay. Its path
 wrapper also rejects a root under this source checkout; an FD-only caller must
