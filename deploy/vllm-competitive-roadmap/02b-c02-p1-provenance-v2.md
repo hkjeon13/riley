@@ -410,6 +410,16 @@ atomic-switch descriptors는 atomic child session과 각각 **path·SHA-256·byt
 같이 replay한다. 결과는 여전히 `bound`/`not-run` raw report이고 source/config/HTTP의
 semantic meaning, host lifecycle, GPU, deployment 또는 rollback success는 주장하지 않는다.
 
+`check_rc3_rollback_structural_precheck.py`는 completed v4 manifest와 paired
+`.intent`/`.complete`를 같은 held private root→switch shared-lock FD stack에서 다시
+읽는 좁은 admission diagnostic이다. direct v4 root leaf만 allowlist로 수용하고 v1/v2,
+의도적으로 nonterminal인 v3, raw report/marker/bind request 및 alias를 거부한다. 출력은
+canonical `riley.rc3-rollback-raw-structural-precheck.v1`의 `bound`/`not-run`,
+`authority: raw-structural-only`뿐이다. visible pair가 `ambiguous-terminal-publication`
+뒤에 남아도 producer success, host rollback, lifecycle, freeze, Gate E, semantic receipt나
+qualification 결과가 아니며 future `check_rc3_rollback_receipt_v2.py`와 outer RC3
+finalizer는 이를 semantic input으로 수용해서는 안 된다.
+
 `bind_raw_rc3_rollback_terminal_v4.py`에는 path-based CLI, 기존 preparation/transaction을
 reopen하는 wrapper, 또는 held-FD publisher API가 없다. 유일한 public raw producer는 새
 `PreparationRequest`로 fixed preparation을 만든 뒤, **같은 held exclusive root/switch FD

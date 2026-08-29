@@ -36,6 +36,24 @@ or threshold inputs. A visible completion pair can remain after a final
 directory-sync ambiguity, so this result is never producer/lifecycle success,
 a semantic receipt, or an outer qualification/finalizer input.
 
+### Landed completed rollback v4 raw structural precheck
+
+`ci/release/check_rc3_rollback_structural_precheck.py` accepts only one direct
+completed `riley.rc3-rollback-terminal-provenance.v4` root manifest. It holds
+the external exact-0700 root then its fixed switch child under nonblocking
+shared locks and replays the paired v4 completion marker through that FD stack.
+It returns canonical `bound`/`not-run` with `authority: "raw-structural-only"`.
+Its CLI/API refuses evidence access unless Python bytecode-cache writes were
+disabled at startup and at module entry (`python3 -B` or
+`PYTHONDONTWRITEBYTECODE=1`); an embedding caller that flips the runtime flag
+before import is rejected.
+v1/v2, nonterminal v3, raw reports, markers, bind requests, aliases and all
+caller-supplied freeze/Gate E/threshold inputs are rejected. A visible pair can
+remain after final-directory-sync ambiguity, so this is never producer success,
+host rollback/lifecycle authority, a semantic receipt, or an outer
+qualification/finalizer input. Future rollback receipt and qualification
+consumers must explicitly reject this schema/version/authority.
+
 Every v2 descriptor is exactly:
 
 ```json
@@ -503,8 +521,9 @@ runtime configuration field or a trace counter.
    `ci/release/check_soak_v2_receipt.py`), `ci/release/check_rc3_rollback_receipt.py`, and
    `ci/release/check_rc3_qualification.py`
    - Keep v1 checkers/schemas historical but do not upconvert or accept them.
-   - The landed structural precheck is admission-only and must never be
-     upgraded in place or accepted as an outer qualification/finalizer input.
+   - The landed soak and rollback structural prechecks are admission-only and
+     must never be upgraded in place or accepted as an outer
+     qualification/finalizer input.
    - Add v2 raw-binder invocation first, then v2 semantic replay.  The outer
      qualification checker accepts only exact v2 report versions and produces
      an explicit historical-v1 rejection reason before generic gate failure.
@@ -516,6 +535,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/soak-v2-bind-request-v5.schema.json`, and
    `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
    `benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json`,
+   `benchmarks/release/candidates/rollback-raw-structural-precheck-v1.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json`,
    `benchmarks/release/candidates/rollback-receipt-v2.schema.json`,
@@ -563,6 +583,9 @@ runtime configuration field or a trace counter.
 - Earlier v1 soak receipt/timeline inputs remain historical. The landed
   `check_soak_v2_receipt.py` consumes none of them: it replays only completed
   raw v4/v5 pairs and returns raw-structural-only `bound/not-run` diagnostics.
+- `check_rc3_rollback_structural_precheck.py` consumes only completed raw
+  rollback v4 and returns raw-structural-only `bound/not-run`; it is not a
+  rollback receipt or qualification input.
 - `check_rc3_rollback_receipt.py` still consumes self-authored v1 timeline
   fields; no authenticated rollback raw producer exists.
 - `check_rc3_qualification.py` imports those v1 report versions and also has

@@ -1,6 +1,6 @@
 # Riley vLLM 경쟁력 로드맵
 
-**상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure와 C02 source pre-freeze check가 candidate freeze 전에 진행 중이다. initial one-scenario lifecycle supervisor/receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh native-fallback lifecycle-evidence preparer v5, fixed native-fallback lifecycle bind-request writer v5, 별도 terminal binder v5의 private held-lock core와 fixed-name private raw compositor, authenticated native-fallback raw-v5 runner, same-invocation rollback terminal-provenance v4, held-FD source pre-freeze checker, 그리고 completed v4/v5 raw manifest의 read-only structural precheck는 CPU/static hostile-path 범위로 구현됐다. 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·authenticated rollback runner·semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — C01과 C02-P0는 clean remote branch에 별도 커밋됐고, C02-P1 provenance closure와 C02 source pre-freeze check가 candidate freeze 전에 진행 중이다. initial one-scenario lifecycle supervisor/receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh native-fallback lifecycle-evidence preparer v5, fixed native-fallback lifecycle bind-request writer v5, 별도 terminal binder v5의 private held-lock core와 fixed-name private raw compositor, authenticated native-fallback raw-v5 runner, same-invocation rollback terminal-provenance v4, held-FD source pre-freeze checker, completed v4/v5 soak raw manifest의 read-only structural precheck, 그리고 completed rollback v4 raw manifest의 read-only structural precheck는 CPU/static hostile-path 범위로 구현됐다. 실제 GPU capture·candidate freeze·lifecycle-v5 receipt·authenticated rollback runner·semantic qualification은 아직 수행하지 않았다.
 **작성 기준:** `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`
 **목표:** Riley가 제한된 우선 지원 범위에서 vLLM보다 더 낮은 지연, 더 높은 SLO goodput, 더 예측 가능한 오류 격리와 복구를 제공하도록 후속 작업을 독립 PR로 분해한다.
 
@@ -122,6 +122,10 @@ known limitations
 ```
 
 승격하지 않은 후보도 append-only evidence에 보존한다. 실패한 실험을 삭제하거나 성공 결과로 덮어쓰지 않는다.
+
+### C02-P1 read-only structural prechecks
+
+`check_soak_v2_receipt.py`와 `check_rc3_rollback_structural_precheck.py`는 각각 completed raw soak v4/v5와 completed rollback terminal provenance v4를 held private-FD replay로 읽는 admission diagnostic이다. 두 output 모두 정확히 `bound`/`not-run`, `authority: raw-structural-only`이며 producer/lifecycle/rollback success, semantic receipt, candidate freeze, Gate E 또는 qualification을 주장하지 않는다. rollback precheck CLI/API는 `python3 -B` 또는 `PYTHONDONTWRITEBYTECODE=1` 없이 evidence를 읽지 않으며, embedding caller가 import 직전 bytecode-write flag를 바꾼 경우도 거부한다. post-link `fsync` ambiguity 뒤에도 visible completion pair가 남을 수 있으므로, future semantic checker와 outer C02/RC3 finalizer는 이 두 schema/version을 semantic input으로 수용해서는 안 된다.
 
 ## 8. 권장 착수 순서
 

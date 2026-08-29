@@ -428,6 +428,7 @@ ci/release/capture_rc3_rollback_atomic_transaction_v1.py
 ci/release/run_capture_rc3_rollback_atomic_transaction_v1.sh
 ci/release/check_rc3_rollback_provenance_v4.py
 ci/release/bind_raw_rc3_rollback_terminal_v4.py
+ci/release/check_rc3_rollback_structural_precheck.py
 ci/release/check_rc3_rollback_receipt_v2.py
 ```
 
@@ -443,6 +444,14 @@ rollback, qualification을 대체하지 않는다.
 replay로 읽는 precheck일 뿐이며 `bound`/`not-run`과 `raw-structural-only` authority만
 출력한다. 이는 listed future `check_soak_v2_receipt_v2.py` semantic receipt가 아니고,
 outer RC3 finalizer 또는 C02 qualification checker는 이를 semantic receipt input으로
+수용해서는 안 된다.
+
+현재 landed `check_rc3_rollback_structural_precheck.py`도 completed terminal rollback
+raw v4 pair의 strict root→switch held-FD replay만 수행하고 `bound`/`not-run`,
+`raw-structural-only` authority만 출력한다. v3는 nonterminal이라 명시적으로 거부하며,
+visible v4 pair는 prior final-directory-sync ambiguity 뒤에도 남을 수 있다. 따라서 이
+precheck는 rollback success·lifecycle·freeze·Gate E·semantic receipt·qualification이 아니고,
+future rollback receipt checker와 outer RC3 finalizer는 이를 semantic input으로
 수용해서는 안 된다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
