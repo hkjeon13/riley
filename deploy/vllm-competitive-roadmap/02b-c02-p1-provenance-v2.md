@@ -110,6 +110,8 @@ stable-default arm이 CPU sampling이면 이 evidence를 재사용할 수 없다
 
 P1은 pinned annotated tag object (`a3f5203c3a72122e9da818c1e441c2a789f7aa8c`)와 target commit에서 독립 clean A/B network-none build를 수행해 `riley.reconstructed-prior-baseline.v2` manifest를 만든다. v2는 각 arm의 실제 server binary를 별도 raw descriptor로 보존하고, build receipt와 recipe inspect에 같은 descriptor를 exact-bind한 뒤 A/B SHA-256·byte length equality와 distinct-path replay를 요구한다. 이 object pin은 같은 tag name/target으로 annotation만 교체하는 경우를 막는 reviewed value이며, 현재 unsigned tag의 signature validation 주장은 아니다.
 
+그 A/B reconstruction의 앞단계로 `ci/release/prepare_reconstructed_rc2_inputs_v1.py`는 local Git object store에서 위 reviewed annotated tag object/target을 확인하고, direct target의 bounded uncompressed `git archive` tar grammar를 검증한다. caller가 **independently reviewed** source-archive SHA-256을 제공해 생성된 tar와 일치할 때만 새 normalized external mode-0700 root에 `source/git-tag-object.json`, `source/git-tag-target.json`, `source/riley-0.1.0-rc2.tar`, `reconstructed-rc2-source-inputs.json`을 create-only로 발행한다. receipt/schema (`riley.reconstructed-rc2-source-inputs.v1`, `benchmarks/release/candidates/reconstructed-rc2-source-inputs-v1.schema.json`)는 `prepared/not-run` source-input closure일 뿐 baseline manifest, build, OCI image, service/GPU observation, rollback 또는 qualification을 만들거나 주장하지 않는다. observed archive digest를 source default/pin으로 넣지 않으며, producer와 모든 후속 replay caller는 같은 reviewer-provided SHA-256을 다시 제공해야 한다. source-date epoch은 self-authored receipt field로 보존하지 않고 후속 A/B builder가 held archive bytes에서 직접 derive/replay한다.
+
 ```text
 baseline_kind = reconstructed-tag-baseline
 provenance_class = reconstructed-from-source
@@ -462,7 +464,7 @@ root를 열기 전 같은 preflight를 수행해야 한다.
 ## 6. 변경 순서
 
 1. v2 schemas와 strict shared evidence primitive를 추가하고 v1 rejection policy를 문서화한다.
-2. reconstructed baseline builder/checker와 adversarial tests를 추가한다.
+2. reviewed RC2 source-input preparer를 추가한 뒤 reconstructed baseline builder/checker와 adversarial tests를 추가한다.
 3. typed sampling selection, private-FD generation audit, 그리고 source-owned
    shutdown v2 artifact/marker producer를 Rust source에 추가한다.
 4. v4 serial capture-session binder/schema와 hostile fixture tests를 추가한다.

@@ -306,6 +306,16 @@ surface. It is therefore incompatible with a direct v2 rollback capture.
 Synthesizing those leaves around the legacy binary, accepting a v1 receipt, or
 up-converting an old trace would violate the provenance boundary.
 
+Before an A/B reconstructed baseline can exist, the separate
+`prepare_reconstructed_rc2_inputs_v1.py` source-input preparer verifies only
+the reviewed RC2 annotated tag object/target and a caller-supplied,
+independently reviewed archive SHA-256, then create-only snapshots the three
+source leaves plus a `prepared/not-run` receipt in a new external private
+root. It neither imports nor creates a final reconstructed baseline root, and
+is not an input accepted by the v3 binder, freeze admission, or qualification.
+Its receipt is source-only; a future A/B materializer must receive the same
+external SHA anchor and replay the held leaves under its own build contract.
+
 The distinct v3 raw schema/checker is now landed for the reconstructed-tag
 case rather than widening v2. `check_rc3_rollback_provenance_v3.py` replays
 the full reconstructed baseline A/B manifest through one held FD, pins the

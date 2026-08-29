@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-rc2-source-inputs-v1.schema.json",
+  "title": "Riley reviewed reconstructed RC2 source inputs v1",
+  "description": "A source-only, create-only receipt for the reviewed riley-0.1.0-rc2 annotated tag object and direct target. It is not a reconstructed baseline, build receipt, OCI artifact, service observation, rollback result, or qualification. The producer creates the source archive with local Git only after a caller supplies an independently reviewed SHA-256. Every later replay must receive that reviewed SHA-256 again; this schema cannot express the required descriptor-to-anchor equality or the Python verifier's held-FD/filesystem and Git archive checks.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "status",
+    "qualification_status",
+    "baseline_id",
+    "source",
+    "git_identity",
+    "expected_source_archive_sha256",
+    "archive_generation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.reconstructed-rc2-source-inputs.v1"
+    },
+    "status": {
+      "const": "prepared"
+    },
+    "qualification_status": {
+      "const": "not-run"
+    },
+    "baseline_id": {
+      "const": "reconstructed-riley-0.1.0-rc2"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "git_identity": {
+      "$ref": "#/$defs/gitIdentity"
+    },
+    "expected_source_archive_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "archive_generation": {
+      "const": "git-archive-target-commit"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "gitSha1": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "byte_length"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8606711808
+        }
+      }
+    },
+    "tagObjectDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "source/git-tag-object.json"
+            }
+          }
+        }
+      ]
+    },
+    "tagTargetDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "source/git-tag-target.json"
+            }
+          }
+        }
+      ]
+    },
+    "archiveDescriptor": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/descriptor"
+        },
+        {
+          "properties": {
+            "path": {
+              "const": "source/riley-0.1.0-rc2.tar"
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag_name",
+        "tag_object",
+        "tag_target",
+        "archive"
+      ],
+      "properties": {
+        "tag_name": {
+          "const": "riley-0.1.0-rc2"
+        },
+        "tag_object": {
+          "$ref": "#/$defs/tagObjectDescriptor"
+        },
+        "tag_target": {
+          "$ref": "#/$defs/tagTargetDescriptor"
+        },
+        "archive": {
+          "$ref": "#/$defs/archiveDescriptor"
+        }
+      }
+    },
+    "gitIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tag_ref",
+        "tag_object_sha1",
+        "target_commit_sha1"
+      ],
+      "properties": {
+        "tag_ref": {
+          "const": "refs/tags/riley-0.1.0-rc2"
+        },
+        "tag_object_sha1": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/gitSha1"
+            },
+            {
+              "const": "a3f5203c3a72122e9da818c1e441c2a789f7aa8c"
+            }
+          ]
+        },
+        "target_commit_sha1": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/gitSha1"
+            },
+            {
+              "const": "6093006ec2b01b784b01ba278296b676f2dfd03a"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
