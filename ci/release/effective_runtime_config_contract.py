@@ -215,7 +215,15 @@ def _choice(value: Any, allowed: set[str], label: str) -> str:
     return value
 
 
-def _validate_effective_config(value: Any, label: str) -> dict[str, Any]:
+def validate_effective_config(value: Any, label: str = "effective config") -> dict[str, Any]:
+    """Validate and normalize the closed effective-runtime configuration map.
+
+    C02 consumers that bind a pre-launch configuration intent to a captured
+    ``/v1/config`` fact must use this same semantic grammar rather than only a
+    JSON-schema shape check.  In particular, bucket, transport, and fallback
+    invariants are enforced here.
+    """
+
     row = _exact(value, set(CONFIG_DIMENSIONS), label)
 
     completion = _choice(
@@ -362,7 +370,10 @@ def validate_endpoint_payload(document: dict[str, Any], label: str = "endpoint p
     )
     if row["schema_version"] != ENDPOINT_VERSION:
         _fail("unsupported-endpoint-version", f"{label}.schema_version is unsupported")
-    effective_config = _validate_effective_config(row["effective_config"], f"{label}.effective_config")
+    effective_config = validate_effective_config(
+        row["effective_config"],
+        f"{label}.effective_config",
+    )
     expected_effective_config_sha256 = hashlib.sha256(
         canonical_json_bytes(effective_config)
     ).hexdigest()

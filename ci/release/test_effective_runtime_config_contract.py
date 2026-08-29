@@ -93,6 +93,14 @@ class EffectiveRuntimeConfigContractTests(unittest.TestCase):
         self.assertEqual(result.path, self.fixture.artifact_path)
         self.assertEqual(result.startup_artifact_sha256, digest(artifact_raw))
 
+    def test_public_effective_config_validator_preserves_endpoint_normalization(self) -> None:
+        endpoint_raw = self.fixture.endpoint_path.read_bytes()
+        _document, endpoint = contract.validate_endpoint_bytes(endpoint_raw)
+        self.assertEqual(
+            contract.validate_effective_config(self.fixture.effective_config),
+            endpoint.effective_config,
+        )
+
     def test_raw_endpoint_rejects_future_freeze_binding(self) -> None:
         endpoint = copy.deepcopy(self.fixture.endpoint)
         identity = endpoint["runtime_identity"]

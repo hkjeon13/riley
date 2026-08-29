@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-static-effective-config-v1.schema.json",
+  "title": "RC3 static effective configuration intent v1",
+  "description": "Canonical pre-launch intent used only to cross-bind a terminal static rollback snapshot to an independently captured C02 /v1/config effective fact. The snapshot digest and runtime launch-identity digest are distinct values.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "configuration_profile",
+    "expected_effective_config",
+    "expected_effective_config_sha256"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.rc3-static-effective-config.v1"
+    },
+    "candidate_id": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "configuration_profile": {
+      "const": "stable-default"
+    },
+    "expected_effective_config": {
+      "$ref": "effective-runtime-config-evidence-v1.schema.json#/$defs/effectiveConfig"
+    },
+    "expected_effective_config_sha256": {
+      "type": "string",
+      "pattern": "^(?!0{64}$)[0-9a-f]{64}$"
+    }
+  }
+}

@@ -356,11 +356,19 @@ generation exchange, and derive the candidate generation and audit-index inputs
 only from that source replay. It must separately replay the source-owned
 shutdown-v2 artifact/marker against the same derived target and replay the
 config bridge so its full PID/start-tick/listener/GPU tuple agrees with the
-candidate phase. The opaque static `stable-default-configuration.raw` snapshot
-is not the runtime `/v1/config` SHA-256: a versioned static-to-effective-config
-cross-binding must be added before a writer can claim that relationship. The
-writer must otherwise treat the static configuration as opaque and fail closed
-rather than equating their hashes.
+candidate phase. The static snapshot digest is not the runtime `/v1/config`
+launch-identity SHA-256. The landed
+`rc3-static-effective-config-v1.schema.json` and held-FD-only
+`replay_static_effective_config_v1_fd()` make that relationship explicit for a
+future writer: the fixed static snapshot must contain canonical
+`riley.rc3-static-effective-config.v1` intent, including the candidate,
+stable-default profile, every effective-config dimension, and the canonical
+effective-config digest. The helper derives candidate/profile only from the
+terminal static preparation, replays the independent config bridge, and
+requires its effective-config value/digest to agree. It retains the distinct
+bridge-derived launch-identity digest without comparing it to the snapshot
+digest. Historical opaque static snapshots are not up-converted and fail closed
+on this new path.
 
 The later fixed-name writer/finalizer must retain the terminal static-preparation
 session descriptors through v3 publication and compare the replayed baseline

@@ -126,6 +126,8 @@ class ReplayedConfigBridge:
     endpoint: common.EvidenceDescriptor
     startup_artifact: common.EvidenceDescriptor
     endpoint_observation: common.EvidenceDescriptor
+    effective_config: dict[str, Any]
+    effective_config_sha256: str
     target: checker.ObservedTarget
 
     def report(self) -> dict[str, Any]:
@@ -248,6 +250,8 @@ def replay_config_bridge_v1_fd(
         endpoint=endpoint_descriptor,
         startup_artifact=startup_descriptor,
         endpoint_observation=session_descriptor,
+        effective_config=endpoint.effective_config,
+        effective_config_sha256=endpoint.effective_config_sha256,
         target=target,
     )
 

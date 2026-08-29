@@ -65,6 +65,16 @@ class CheckC02ConfigBridgeV1Tests(unittest.TestCase):
                 "configuration_sha256": self.fixture.bindings["configuration_sha256"],
             },
         )
+        endpoint_document = common.parse_canonical_json(
+            (self.root / self._paths()["endpoint_path"]).read_bytes(),
+            "fixture endpoint",
+        )
+        assert isinstance(endpoint_document, dict)
+        self.assertEqual(replayed.effective_config, endpoint_document["effective_config"])
+        self.assertEqual(
+            replayed.effective_config_sha256,
+            endpoint_document["effective_config_sha256"],
+        )
         self.assertEqual(report["target"]["server_pid"], 1111)
         self.assertEqual(report["target"]["listener_port"], 8080)
         schema_path = (
