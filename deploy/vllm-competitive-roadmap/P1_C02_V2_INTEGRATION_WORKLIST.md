@@ -311,7 +311,7 @@ cannot be turned into a later successful lifecycle receipt. The published
 `qualification_status: not-run`.
 
 This is CPU/static hostile-path-tested mechanism code only. Receipt presence
-does not establish a GPU capture, candidate freeze, Gate E replay, native
+does not establish a GPU capture, candidate freeze, Gate E semantic replay, native
 fallback event, rollback result, semantic qualification, or C02 decision.
 Native fallback/rollback flows, semantic checker/finalizer work, clean freeze,
 and remote GPU qualification remain subsequent gates.
@@ -388,9 +388,10 @@ a qualification decision.
 ### Rollback raw compatibility boundary
 
 An authenticated rollback **raw** runner, a private held-FD raw operational
-semantics core, and a create-only frozen-candidate **input-identity** manifest
-with its FD-safe replayer are landed. No public semantic receipt, RC3 Gate E
-replayer, or qualification checker is landed yet. The frozen manifest is not
+semantics core, a create-only frozen-candidate **input-identity** manifest
+with its FD-safe replayer, and a closed four-gate input-inventory replayer are
+landed. No public semantic receipt, RC3 Gate E **semantic** replayer, or
+qualification checker is landed yet. The frozen manifest is not
 an execution or normal-return receipt: it rereads the original request/raw
 leaves and records only `frozen/not-run` identity binding. The
 existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
@@ -831,10 +832,21 @@ runtime configuration field or a trace counter.
      Git source oracle; Git/PATH behavior is therefore an explicit trusted
      boundary. The manifest says writer normal-return and input-root
      immutability are not established.
+   - `replay_rc3_gate_e_input_inventory_v1.py` and its two schemas now close
+     the four common Gate E input roles in a separate private `0700` root:
+     release bundle; native/optimizer canonical-E0; Python-free;
+     performance; and soak. The canonical inventory has exactly 14 direct
+     descriptor leaves plus `gate-e-inputs.json`; the replayer checks their
+     byte/path closure before streaming, replays the frozen source/input
+     identity before and after those leaves, and returns only
+     `bound/frozen/not-run`, `gate-e-input-inventory-replay-only`. It does
+     not inspect report pass fields, thresholds, GPU observations, CUDA-fault
+     or reproducible-build legacy-superset evidence, Qwen, runtime-config,
+     rollback, or qualification.
    - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
-     still add a **separate FD-safe Gate E replayer** with a closed RC3 gate
-     inventory. The legacy path-based `check_release_candidate.py` is not
-     that replayer and must not be consumed by a same-stack semantic
+     still add a **separate FD-native Gate E semantic replayer** on that
+     fixed inventory. The legacy path-based `check_release_candidate.py` is
+     not that replayer and must not be consumed by a same-stack semantic
      finalizer. Only after Gate E is fixed may a distinct same-stack v2
      semantic receipt be emitted; the outer qualification checker must accept
      only that exact version and reject historical v1 before generic gate

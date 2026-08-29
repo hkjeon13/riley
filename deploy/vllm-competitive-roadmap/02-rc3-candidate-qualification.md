@@ -1,6 +1,6 @@
 # C02 — RC3 Candidate-bound Qualification
 
-**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt와 create-only frozen-candidate **input-identity** manifest/FD-safe replay도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, closed Gate E replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
+**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt, create-only frozen-candidate **input-identity** manifest/FD-safe replay, four-gate closed input-inventory replay도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 
@@ -44,7 +44,7 @@ Fault raw producer는 `riley c02-fault-capture --format canonical-json`의 featu
 fixture를 read-only, network-none, GPU-free container에서 실행하고 parent capture, child marker
 log, test ELF를 create-only external evidence root에 보존한다. 현재 development capture의 raw
 receipt는 `riley.c02-fault-raw-capture.v1` 및 `qualification_status: not-run`이다. 따라서 이는
-injectable-synthetic producer mechanism 확인일 뿐, frozen candidate binding, Gate E replay,
+injectable-synthetic producer mechanism 확인일 뿐, frozen candidate binding, Gate E semantic replay,
 `riley.fault-extension-receipt.v3` semantic input/report, C02 verdict 또는 C03 시작 조건이
 아니다. future v3 replay는 test ELF도 frozen source archive/revision, frozen reproducible
 build/execution image, exact feature build command에 결박한다. v2 fault-extension receipt/schema는
@@ -179,7 +179,7 @@ mechanism과 adversarial test를 닫아야 한다.
   같지 않으면 fail closed한다. same-process receipt finalizer만 successful v4 bind 뒤
   source-owned shutdown-v2 artifact/marker를 replay하여 `completed`/
   `qualification_status: not-run` receipt를 publish한다. 현재 이 경로는 CPU/static
-  hostile-path 검증만 마쳤으며, actual GPU capture, candidate freeze, Gate E replay,
+  hostile-path 검증만 마쳤으며, actual GPU capture, candidate freeze, Gate E semantic replay,
   semantic receipt 또는 C02 verdict가 아니다.
 - v3 path-only rollback binder와 RC2-compatible raw phase collector는 landed했다.
   binder는 same held private root FD에서 descriptor/target과 reviewed RC2 annotated tag object를 포함한 reconstructed baseline을
@@ -282,7 +282,7 @@ structurally bind할 수 있다. request와 report의 closed schema는 각각
 benchmarks/release/candidates/rc3-freeze-input-request-v1.schema.json 및
 rc3-freeze-input-admission-v1.schema.json이다. 이 절차는 입력을 읽고 bound diagnostic만
 stdout으로 반환하며 evidence root나 source checkout에 output을 쓰지 않는다. 특히
-not-frozen/not-run 결과는 freeze가 가능하다는 판정, GPU capture의 성공, Gate E replay,
+not-frozen/not-run 결과는 freeze가 가능하다는 판정, GPU capture의 성공, Gate E semantic replay,
 correctness/soak/rollback semantic 성공, release promotion을 뜻하지 않는다.
 
 ### Frozen-candidate input-identity boundary
@@ -315,9 +315,23 @@ FD를 직접 mutate하지 않지만 pinned FD를 통한 trusted read-only Git so
 configured Git executable/PATH와 그 behavior는 trusted boundary다. manifest의 not-established
 object는 writer normal-return과 input-root immutability도 명시한다.
 
-RC3 Gate E의 exact closed inventory와 FD-safe replayer는 아직 구현되지 않았다. legacy
-path-based `check_release_candidate.py`는 별도 final release checker일 뿐 이 boundary 또는
-same-stack Gate E input을 대체하지 않는다.
+`riley.rc3-gate-e-input-inventory.v1`와
+`replay_rc3_gate_e_input_inventory_v1.py`는 **이미 landed된** 후속 Gate E semantic adapter용 첫
+closed inventory boundary다. 별도 private `0700` root는 canonical `gate-e-inputs.json`과
+정확히 14 direct regular leaf만 포함한다: release bundle, canonical E0의 native
+31-case report/raw·candidate executable 및 optimizer report/raw·profile binary,
+Python-free report/raw/golden, performance report/raw, soak report/raw. wrapper는
+frozen candidate와 original source/input closure를 held FD로 Gate E artifact 전후에 다시
+replay하고, frozen manifest descriptor/candidate/source identity, root topology, exact entry
+set, unique direct paths, 1 TiB byte budget을 확인한다.
+
+이 output은 `bound/frozen/not-run`,
+`gate-e-input-inventory-replay-only` structural authority뿐이다. report의 `passed`,
+threshold, GPU 결과를 해석하지 않으므로 Gate E semantic replay, pass, promotion 또는
+qualification을 만들지 않는다. CUDA fault/reproducible-build legacy superset, Qwen, two
+profile runtime config, rollback은 four-gate v1 inventory에 넣지 않으며 별도 versioned
+semantic boundary에서 다뤄야 한다. legacy path-based `check_release_candidate.py`는 별도
+final release checker일 뿐 이 boundary 또는 same-stack Gate E input을 대체하지 않는다.
 
 ## 3. 범위
 
@@ -571,8 +585,9 @@ authenticated runner의 same-stack held-FD private core
 `replay_rc3_rollback_operational_semantics_v1.py`다. 이 core는 original raw
 candidate/source/rollback/atomic leaves를 재해석해 operational consistency만
 `passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate input-identity
-manifest/FD-safe replayer는 별도로 landed했지만, closed Gate E replayer가 아직 없으므로 이
-단계는 semantic receipt, actual candidate freeze, Gate E 또는 qualification을 만들거나
+manifest/FD-safe replayer와 closed Gate E **input-inventory** replayer는 별도로 landed했지만,
+Gate E **semantic** replayer가 아직 없으므로 이 단계는 semantic receipt, actual candidate
+freeze, Gate E pass 또는 qualification을 만들거나
 주장하지 않는다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only

@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-gate-e-input-inventory-v1.schema.json",
+  "title": "Riley RC3 Gate E input inventory v1",
+  "description": "A closed, direct-leaf inventory for the four common RC3 Gate E evidence groups. It is structural input only: the descriptors do not assert Gate E pass, semantic replay, promotion, or qualification.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "candidate_id",
+    "source_revision",
+    "frozen_candidate_manifest",
+    "release",
+    "canonical_e0",
+    "python_free",
+    "performance",
+    "soak"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-gate-e-input-inventory.v1"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "source_revision": {"$ref": "#/$defs/gitRevision"},
+    "frozen_candidate_manifest": {"$ref": "#/$defs/frozenManifestDescriptor"},
+    "release": {"$ref": "#/$defs/release"},
+    "canonical_e0": {"$ref": "#/$defs/canonicalE0"},
+    "python_free": {"$ref": "#/$defs/pythonFree"},
+    "performance": {"$ref": "#/$defs/performance"},
+    "soak": {"$ref": "#/$defs/soak"}
+  },
+  "$defs": {
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{40}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000"}}
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{64}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    },
+    "directDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+          "not": {"const": "gate-e-inputs.json"}
+        },
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 1099511627776}
+      }
+    },
+    "frozenManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"path": {"const": "frozen-candidate.json"}}}
+      ]
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bundle", "profile_binary", "native_candidate_executable"],
+      "properties": {
+        "bundle": {"$ref": "#/$defs/directDescriptor"},
+        "profile_binary": {"$ref": "#/$defs/directDescriptor"},
+        "native_candidate_executable": {"$ref": "#/$defs/directDescriptor"}
+      }
+    },
+    "canonicalE0": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["native_report", "native_raw_evidence", "optimizer_report", "optimizer_raw_evidence"],
+      "properties": {
+        "native_report": {"$ref": "#/$defs/directDescriptor"},
+        "native_raw_evidence": {"$ref": "#/$defs/directDescriptor"},
+        "optimizer_report": {"$ref": "#/$defs/directDescriptor"},
+        "optimizer_raw_evidence": {"$ref": "#/$defs/directDescriptor"}
+      }
+    },
+    "pythonFree": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_evidence", "correctness_golden"],
+      "properties": {
+        "report": {"$ref": "#/$defs/directDescriptor"},
+        "raw_evidence": {"$ref": "#/$defs/directDescriptor"},
+        "correctness_golden": {"$ref": "#/$defs/directDescriptor"}
+      }
+    },
+    "performance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_evidence"],
+      "properties": {
+        "report": {"$ref": "#/$defs/directDescriptor"},
+        "raw_evidence": {"$ref": "#/$defs/directDescriptor"}
+      }
+    },
+    "soak": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_evidence"],
+      "properties": {
+        "report": {"$ref": "#/$defs/directDescriptor"},
+        "raw_evidence": {"$ref": "#/$defs/directDescriptor"}
+      }
+    }
+  }
+}

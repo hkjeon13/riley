@@ -83,14 +83,22 @@ def _close_quietly(directory_fd: int | None) -> None:
 
 
 def _assert_exact_entries(directory_fd: int, expected: set[str], label: str) -> None:
+    actual: set[str] = set()
     try:
-        entries = set(os.listdir(directory_fd))
+        with os.scandir(directory_fd) as entries:
+            for entry in entries:
+                actual.add(entry.name)
+                if entry.name not in expected or len(actual) > len(expected):
+                    _fail(
+                        "unexpected-evidence-entry",
+                        f"{label} entries differ; expected={sorted(expected)}, actual_prefix={sorted(actual)}",
+                    )
     except OSError as error:
         _fail("unsafe-evidence-directory", f"cannot list {label}: {error}")
-    if entries != expected:
+    if actual != expected:
         _fail(
             "unexpected-evidence-entry",
-            f"{label} entries differ; expected={sorted(expected)}, actual={sorted(entries)}",
+            f"{label} entries differ; expected={sorted(expected)}, actual={sorted(actual)}",
         )
 
 
@@ -150,6 +158,15 @@ def _replay_rc3_frozen_candidate_v1_on_held_fds(
     )
     _frozen(
         lambda: frozen.require_distinct_root_fds(
+            {
+                "frozen candidate root": frozen_candidate_root_fd,
+                "freeze-input evidence root": input_evidence_root_fd,
+                "source checkout": repository_root_fd,
+            }
+        )
+    )
+    _topology(
+        lambda: topology.assert_held_root_fds_disjoint(
             {
                 "frozen candidate root": frozen_candidate_root_fd,
                 "freeze-input evidence root": input_evidence_root_fd,

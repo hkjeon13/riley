@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Path/FD topology checks around RC3 frozen-candidate public wrappers.
 
-The frozen-candidate private cores receive already-held descriptors and do not
-perform path topology discovery.  This module is deliberately used only by
-the public writer/replayer wrappers before they enter those cores.  It closes
-ordinary lexical overlap, directory-FD ancestry, Linux bind-mount backing
-coordinate overlap, and output-path replacement gaps.
+The public writer/replayer wrappers use this module before entering their
+private held-FD cores.  Those wrappers close ordinary lexical overlap,
+directory-FD ancestry, Linux bind-mount backing-coordinate overlap, and
+output-path replacement gaps.  Private cores additionally use the held-FD
+helper below to reject physical directory ancestry without re-opening caller
+paths or attempting mount-alias discovery.
 """
 
 from __future__ import annotations
@@ -244,6 +245,20 @@ def _assert_fd_regions_disjoint(
             "frozen-candidate-root-overlap",
             f"{left_label} and {right_label} overlap through held directory ancestry",
         )
+
+
+def assert_held_root_fds_disjoint(roots: Mapping[str, int]) -> None:
+    """Require caller-held directory FDs to have no physical ancestry overlap.
+
+    This is the private-core counterpart to :func:`assert_existing_roots_disjoint`.
+    It intentionally does not resolve visible paths or Linux mount aliases:
+    callers that have paths must use the public assertion as well.
+    """
+
+    rows = tuple(roots.items())
+    for index, (left_label, left_fd) in enumerate(rows):
+        for right_label, right_fd in rows[index + 1 :]:
+            _assert_fd_regions_disjoint(left_fd, left_label, right_fd, right_label)
 
 
 def _require_visible_roots(roots: Mapping[str, tuple[Path, int]]) -> None:
