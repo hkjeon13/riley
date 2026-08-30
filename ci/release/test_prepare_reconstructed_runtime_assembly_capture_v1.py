@@ -123,11 +123,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
                 "Config": {
                     "Cmd": ["--help"],
                     "Entrypoint": ["/opt/riley/bin/riley"],
-                    "Env": [
-                        "PATH=/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                        "NVIDIA_VISIBLE_DEVICES=all",
-                        "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-                    ],
+                    "Env": self._runtime_environment(),
                     "Labels": self._labels(),
                     "User": "65532:65532",
                 },
@@ -144,12 +140,11 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
             "User": prepare.EXPECTED_RUNTIME_USER,
             "Entrypoint": list(prepare.EXPECTED_RUNTIME_ENTRYPOINT),
             "Cmd": list(prepare.EXPECTED_RUNTIME_COMMAND),
-            "Env": [
-                f"PATH={prepare.EXPECTED_IMAGE_ENVIRONMENT['PATH']}",
-                f"NVIDIA_VISIBLE_DEVICES={prepare.EXPECTED_IMAGE_ENVIRONMENT['NVIDIA_VISIBLE_DEVICES']}",
-                f"NVIDIA_DRIVER_CAPABILITIES={prepare.EXPECTED_IMAGE_ENVIRONMENT['NVIDIA_DRIVER_CAPABILITIES']}",
-            ],
+            "Env": self._runtime_environment(),
         }
+
+    def _runtime_environment(self) -> list[str]:
+        return [f"{name}={value}" for name, value in prepare.EXPECTED_IMAGE_ENVIRONMENT.items()]
 
     def _runtime_tree_tar(self) -> bytes:
         bundle = self.repro_root / "repro-builds" / "a" / "riley.tar.gz"
@@ -438,9 +433,26 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         self.assertEqual(archive_limit, prepare.MAX_CAPTURE_ARCHIVE_BYTES)
         self.assertEqual(prepare.MAX_CANONICAL_TAR_TRAILER_BYTES, 20 * prepare.TAR_BLOCK_BYTES)
 
+    def test_pins_the_complete_cuda_base_and_recipe_environment_map(self) -> None:
+        self.assertEqual(len(prepare.EXPECTED_IMAGE_ENVIRONMENT), 21)
+        self.assertEqual(
+            _sha256(common.canonical_json_bytes(prepare.EXPECTED_IMAGE_ENVIRONMENT)),
+            prepare.EXPECTED_IMAGE_ENVIRONMENT_CANONICAL_SHA256,
+        )
+        self.assertEqual(
+            prepare.EXPECTED_IMAGE_ENVIRONMENT["PATH"],
+            "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        )
+        self.assertEqual(prepare.EXPECTED_IMAGE_ENVIRONMENT["CUDA_VERSION"], "12.8.1")
+        self.assertEqual(prepare.EXPECTED_IMAGE_ENVIRONMENT["LD_LIBRARY_PATH"], "/usr/local/cuda/lib64")
+
     def test_rejects_unreviewed_image_environment_and_hidden_tmpfs_in_raw_records(self) -> None:
         external = self._unit_external()
         image_id = external.image_id
+        changed_environment = self._runtime_environment()
+        changed_environment[changed_environment.index("LD_LIBRARY_PATH=/usr/local/cuda/lib64")] = (
+            "LD_LIBRARY_PATH=/tmp/evil-libraries"
+        )
         image = common.canonical_json_bytes(
             [
                 {
@@ -452,12 +464,28 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
                         "User": "65532:65532",
                         "Entrypoint": ["/opt/riley/bin/riley"],
                         "Cmd": ["--help"],
-                        "Env": [
-                            "PATH=/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-                            "NVIDIA_VISIBLE_DEVICES=all",
-                            "NVIDIA_DRIVER_CAPABILITIES=compute,utility",
-                            "LD_LIBRARY_PATH=/tmp/evil-libraries",
-                        ],
+                        "Env": changed_environment,
+                    },
+                }
+            ]
+        )
+        self.assert_reason(
+            "image-environment-mismatch",
+            lambda: prepare._validate_image_inspect(image, external, image_id),
+        )
+        extra_environment = self._runtime_environment() + ["RILEY_UNREVIEWED_ENVIRONMENT=1"]
+        image = common.canonical_json_bytes(
+            [
+                {
+                    "Id": image_id,
+                    "Os": "linux",
+                    "Architecture": "amd64",
+                    "Config": {
+                        "Labels": prepare._image_labels(external),
+                        "User": "65532:65532",
+                        "Entrypoint": ["/opt/riley/bin/riley"],
+                        "Cmd": ["--help"],
+                        "Env": extra_environment,
                     },
                 }
             ]

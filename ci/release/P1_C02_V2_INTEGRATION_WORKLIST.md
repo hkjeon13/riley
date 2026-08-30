@@ -61,8 +61,18 @@ runner-owned 0700 Docker CLI config child below the private scratch root; that
 child is neither caller input nor evidence and is removed by the same cleanup.
 It creates but never starts a network-none container and
 byte-compares pre/post-copy inspect output. This is not a Docker execution
-attestation, capture receipt, freeze, or qualification result; no remote Docker
-or GPU capture has been run for this worklist update.
+attestation, capture receipt, freeze, or qualification result; a separately
+retained remote raw Docker capture still cannot create those claims, and no GPU
+execution is implied.
+
+The corresponding post-capture replayer keeps the Dockerfile's three owned
+`ENV` instructions fixed and separately requires the full 21-entry final
+environment map inherited from the same digest-pinned CUDA base, plus those
+overrides. Its canonical-map SHA-256 is
+`b4192ae0e6a063fd9eb049f9204c75928ffaaa6c854ce4a2a2901752afae96ac`;
+unknown names, duplicate names, missing entries, and every value drift remain
+fail-closed. This records only raw-image configuration content, not Docker,
+GPU, or service execution.
 
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before

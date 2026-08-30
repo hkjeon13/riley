@@ -190,7 +190,10 @@ every verify. The fixed raw inventory binds `SHA256SUMS`, the three-leaf build
 context, an exact stdin `docker build` logical argv with exactly seven
 provenance args, iidfile, raw image inspect, OCI export record/archive,
 created-but-never-started unprivileged no-mount/network-none private-namespace
-container inspect with the exact reviewed runtime config,
+container inspect with the exact reviewed runtime config, including the complete
+21-entry canonical environment map (SHA-256
+`b4192ae0e6a063fd9eb049f9204c75928ffaaa6c854ce4a2a2901752afae96ac`) from
+the digest-pinned CUDA base plus the recipe-owned PATH/NVIDIA overrides,
 and rootless `/opt/riley` filesystem tar with final numeric `65532:65532`
 ownership. Because USTAR cannot represent a
 single regular member above 8 GiB−1, the v1 raw capture accepts only an OCI v1
@@ -198,7 +201,8 @@ closure archive within that bound; it must not enable PAX/GNU as a workaround.
 The parser rejects PAX/GNU/sparse,
 links/special files, traversal, duplicate entries, noncanonical raw-capture
 metadata, and nonzero tar trailers before a tar parser sees extension data;
-image/container healthcheck, volume, deferred OnBuild, and host/container
+image/container healthcheck, volume, deferred OnBuild, unknown environment
+names or inherited-environment value drift, and host/container
 namespace drift are rejected alongside bind/tmpfs/device/capability/security
 options. The captured OCI/archive and inspect must byte-match the OCI v1 closure and
 the captured runtime tree must byte-match the selected verified bundle tree.

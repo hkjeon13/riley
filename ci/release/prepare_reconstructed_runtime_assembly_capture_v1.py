@@ -138,13 +138,64 @@ IMAGE_ID_RE = re.compile(r"^sha256:([0-9a-f]{64})$")
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{64}$")
 # The final image is a closed runtime recipe. A blacklist is not sufficient:
 # an inherited loader, allocator, interpreter, shell, or application setting
-# can alter behavior without using one of the currently known names. Require
-# the recipe's exact three entries instead.
-EXPECTED_IMAGE_ENVIRONMENT = {
-    "PATH": "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+# can alter behavior without using one of the currently known names. Docker
+# cannot unset a base image ENV, so this is the complete reviewed final map:
+# the exact linux/amd64 environment inherited from the digest-pinned CUDA base
+# plus the recipe-owned PATH override and two NVIDIA declarations. It is not a
+# prefix or family allowlist; additions, removals, duplicate names, and value
+# drift all remain failures.
+EXPECTED_PINNED_CUDA_RUNTIME_BASE_ENVIRONMENT = {
+    "NVARCH": "x86_64",
+    "NVIDIA_REQUIRE_CUDA": (
+        "cuda>=12.8 brand=unknown,driver>=470,driver<471 brand=grid,driver>=470,driver<471 brand=tesla,"
+        "driver>=470,driver<471 brand=nvidia,driver>=470,driver<471 brand=quadro,driver>=470,driver<471 "
+        "brand=quadrortx,driver>=470,driver<471 brand=nvidiartx,driver>=470,driver<471 brand=vapps,"
+        "driver>=470,driver<471 brand=vpc,driver>=470,driver<471 brand=vcs,driver>=470,driver<471 "
+        "brand=vws,driver>=470,driver<471 brand=cloudgaming,driver>=470,driver<471 brand=unknown,"
+        "driver>=535,driver<536 brand=grid,driver>=535,driver<536 brand=tesla,driver>=535,driver<536 "
+        "brand=nvidia,driver>=535,driver<536 brand=quadro,driver>=535,driver<536 brand=quadrortx,"
+        "driver>=535,driver<536 brand=nvidiartx,driver>=535,driver<536 brand=vapps,driver>=535,driver<536 "
+        "brand=vpc,driver>=535,driver<536 brand=vcs,driver>=535,driver<536 brand=vws,driver>=535,"
+        "driver<536 brand=cloudgaming,driver>=535,driver<536 brand=unknown,driver>=550,driver<551 "
+        "brand=grid,driver>=550,driver<551 brand=tesla,driver>=550,driver<551 brand=nvidia,driver>=550,"
+        "driver<551 brand=quadro,driver>=550,driver<551 brand=quadrortx,driver>=550,driver<551 "
+        "brand=nvidiartx,driver>=550,driver<551 brand=vapps,driver>=550,driver<551 brand=vpc,driver>=550,"
+        "driver<551 brand=vcs,driver>=550,driver<551 brand=vws,driver>=550,driver<551 brand=cloudgaming,"
+        "driver>=550,driver<551 brand=unknown,driver>=560,driver<561 brand=grid,driver>=560,driver<561 "
+        "brand=tesla,driver>=560,driver<561 brand=nvidia,driver>=560,driver<561 brand=quadro,driver>=560,"
+        "driver<561 brand=quadrortx,driver>=560,driver<561 brand=nvidiartx,driver>=560,driver<561 "
+        "brand=vapps,driver>=560,driver<561 brand=vpc,driver>=560,driver<561 brand=vcs,driver>=560,"
+        "driver<561 brand=vws,driver>=560,driver<561 brand=cloudgaming,driver>=560,driver<561 brand=unknown,"
+        "driver>=565,driver<566 brand=grid,driver>=565,driver<566 brand=tesla,driver>=565,driver<566 "
+        "brand=nvidia,driver>=565,driver<566 brand=quadro,driver>=565,driver<566 brand=quadrortx,"
+        "driver>=565,driver<566 brand=nvidiartx,driver>=565,driver<566 brand=vapps,driver>=565,driver<566 "
+        "brand=vpc,driver>=565,driver<566 brand=vcs,driver>=565,driver<566 brand=vws,driver>=565,"
+        "driver<566 brand=cloudgaming,driver>=565,driver<566"
+    ),
+    "NV_CUDA_CUDART_VERSION": "12.8.90-1",
+    "CUDA_VERSION": "12.8.1",
+    "LD_LIBRARY_PATH": "/usr/local/cuda/lib64",
     "NVIDIA_VISIBLE_DEVICES": "all",
     "NVIDIA_DRIVER_CAPABILITIES": "compute,utility",
+    "NV_CUDA_LIB_VERSION": "12.8.1-1",
+    "NV_NVTX_VERSION": "12.8.90-1",
+    "NV_LIBNPP_VERSION": "12.3.3.100-1",
+    "NV_LIBNPP_PACKAGE": "libnpp-12-8=12.3.3.100-1",
+    "NV_LIBCUSPARSE_VERSION": "12.5.8.93-1",
+    "NV_LIBCUBLAS_PACKAGE_NAME": "libcublas-12-8",
+    "NV_LIBCUBLAS_VERSION": "12.8.4.1-1",
+    "NV_LIBCUBLAS_PACKAGE": "libcublas-12-8=12.8.4.1-1",
+    "NV_LIBNCCL_PACKAGE_NAME": "libnccl2",
+    "NV_LIBNCCL_PACKAGE_VERSION": "2.25.1-1",
+    "NCCL_VERSION": "2.25.1-1",
+    "NV_LIBNCCL_PACKAGE": "libnccl2=2.25.1-1+cuda12.8",
+    "NVIDIA_PRODUCT_NAME": "CUDA",
 }
+EXPECTED_IMAGE_ENVIRONMENT = {
+    "PATH": "/opt/riley/bin:/usr/local/nvidia/bin:/usr/local/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    **EXPECTED_PINNED_CUDA_RUNTIME_BASE_ENVIRONMENT,
+}
+EXPECTED_IMAGE_ENVIRONMENT_CANONICAL_SHA256 = "b4192ae0e6a063fd9eb049f9204c75928ffaaa6c854ce4a2a2901752afae96ac"
 EXPECTED_RUNTIME_USER = "65532:65532"
 EXPECTED_RUNTIME_ENTRYPOINT = ("/opt/riley/bin/riley",)
 EXPECTED_RUNTIME_COMMAND = ("--help",)
@@ -1056,6 +1107,12 @@ def _validate_expected_runtime_environment(
     invalid_code: str,
     mismatch_code: str,
 ) -> None:
+    reviewed_digest = hashlib.sha256(common.canonical_json_bytes(EXPECTED_IMAGE_ENVIRONMENT)).hexdigest()
+    if reviewed_digest != EXPECTED_IMAGE_ENVIRONMENT_CANONICAL_SHA256:
+        _fail(
+            "invalid-reviewed-runtime-environment",
+            "the reviewed pinned CUDA runtime environment map does not match its canonical SHA-256",
+        )
     environment = _string_list(value, label, invalid_code=invalid_code)
     parsed_environment: dict[str, str] = {}
     for item in environment:
