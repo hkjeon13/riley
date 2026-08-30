@@ -11,6 +11,15 @@ qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
 be copied into a candidate result directory as evidence.
 
+The public legacy performance Bash entry and its historical internal sentinel
+are now fail-closed. `run_remote_rc3_gate_e_session_v2.py
+--performance-source-contract-probe` is separate isolated-Python,
+fixed-root-FD/sealed-source mechanism code only: it snapshots the retired
+no-action stub bytes
+but creates no child, lock, GPU/Docker action, evidence, receipt, or
+qualification authority. A future actual producer must introduce a new
+versioned private core rather than reactivate the legacy body.
+
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before
 and after reading a private external request, rehashes the declared external

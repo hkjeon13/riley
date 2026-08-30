@@ -42,61 +42,6 @@ CAPTURE_IDS = [
     for pair_index in range(1, 6)
 ]
 
-
-SUPERVISOR_CONTRACT_MARKERS = (
-    '[[ ${BASH_SOURCE[0]:-} != "$0" ]]',
-    '[[ ${BASH_SOURCE[0]:-} != /* ]]',
-    'readonly PERFORMANCE_RUNNER_PATH="${BASH_SOURCE[0]}"',
-    "exec /usr/bin/env -i",
-    "/usr/bin/python3.10 -I -S -E -c",
-    "os.O_NONBLOCK",
-    "os.O_CLOEXEC",
-    "os.set_inheritable(lock_fd, False)",
-    "os.set_inheritable(lock_fd, True)",
-    "PR_SET_PDEATHSIG",
-    "signal.pthread_sigmask(signal.SIG_BLOCK, forwarded_signals)",
-    '[[ ${PPID} == "${RILEY_PERF_SUPERVISOR_PID}" ]]',
-    "/proc/${PERF_SUPERVISOR_PID}/fdinfo/${PERF_SUPERVISOR_LOCK_FD}",
-    "${fdinfo_type} == FLOCK",
-    "${fdinfo_kind} == ADVISORY",
-    "${fdinfo_mode} == WRITE",
-    '[[ ${parent_flock_pid} == "${PERF_SUPERVISOR_PID}" ]]',
-    'eval "exec ${PERF_SUPERVISOR_LOCK_FD}>&-"',
-    "close_fds=True",
-    "timeout=15",
-    "except Exception as error:",
-    "if os.WIFEXITED(wait_status) and os.WEXITSTATUS(wait_status) == 0:",
-    "org.riley.release-performance-supervisor",
-    '"container", "ls", "--all", "--quiet", "--no-trunc"',
-    'if container_status in ("exited", "dead"):',
-    'if container_status not in ("created", "running", "paused", "restarting", "removing"):',
-    '"container", "rm", "--force", "--volumes", container_id',
-)
-
-
-def _assert_static_supervisor_contract(source: str) -> None:
-    missing = [marker for marker in SUPERVISOR_CONTRACT_MARKERS if marker not in source]
-    if missing:
-        raise AssertionError(f"missing supervisor contract marker: {missing[0]}")
-    if source.index("os.set_inheritable(lock_fd, True)") > source.index("os.execve("):
-        raise AssertionError("child lock descriptor must be made inheritable before Bash exec")
-    if source.index('eval "exec ${PERF_SUPERVISOR_LOCK_FD}>&-"') > source.index(
-        "for unsafe_name in"
-    ):
-        raise AssertionError("Bash must close its authentication descriptor before setup")
-    if source.index(
-        "if os.WIFEXITED(wait_status) and os.WEXITSTATUS(wait_status) == 0:"
-    ) > source.index("docker_environment = {"):
-        raise AssertionError("normal success must bypass supervisor Docker cleanup")
-
-
-def _embedded_supervisor_program(source: str) -> str:
-    marker = "/usr/bin/python3.10 -I -S -E -c '\n"
-    start = source.index(marker) + len(marker)
-    end = source.index("\n' \"${PERFORMANCE_RUNNER_PATH}\" \"$@\"", start)
-    return source[start:end]
-
-
 def _write(path: Path, value: object) -> None:
     path.write_text(
         json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n",
@@ -422,14 +367,8 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
                     check=False,
                 )
                 self.assertEqual(completed.returncode, 0, completed.stderr)
-        host_source = HOST_RUNNER.read_text(encoding="utf-8")
-        compile(
-            _embedded_supervisor_program(host_source),
-            "ci/run_remote_release_performance.sh:supervisor",
-            "exec",
-        )
 
-    def test_host_help_is_cpu_only_and_missing_args_fail(self) -> None:
+    def test_retired_public_launcher_is_cpu_only(self) -> None:
         help_result = subprocess.run(
             ["/bin/bash", str(HOST_RUNNER), "--help"],
             cwd=ROOT,
@@ -439,19 +378,31 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
-        self.assertIn("/absolute/path/to/ci/run_remote_release_performance.sh", help_result.stdout)
-        self.assertIn("--optimizer-image sha256:", help_result.stdout)
-        missing = subprocess.run(
-            ["/bin/bash", str(HOST_RUNNER)],
+        self.assertIn("legacy Bash launcher is retired", help_result.stdout)
+
+        rejected = subprocess.run(
+            ["/bin/bash", str(HOST_RUNNER), "--optimizer-image", IMAGE_ID],
             cwd=ROOT,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
         )
-        self.assertEqual(missing.returncode, 2)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn("direct legacy Bash launch is disabled", rejected.stderr)
 
-    def test_runner_rejects_relative_path_and_sourcing_before_supervision(self) -> None:
+        retired_internal = subprocess.run(
+            ["/bin/bash", str(HOST_RUNNER), "--gpu-lock-supervised"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertNotEqual(retired_internal.returncode, 0)
+        self.assertIn("direct legacy Bash launch is disabled", retired_internal.stderr)
+
+    def test_retired_launcher_has_no_privileged_body_under_path_variants(self) -> None:
         relative = subprocess.run(
             ["/bin/bash", str(HOST_RUNNER.relative_to(ROOT)), "--help"],
             cwd=ROOT,
@@ -460,8 +411,8 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=False,
         )
-        self.assertEqual(relative.returncode, 2)
-        self.assertIn("must be invoked by absolute path", relative.stderr)
+        self.assertEqual(relative.returncode, 0, relative.stderr)
+        self.assertIn("legacy Bash launcher is retired", relative.stdout)
 
         sourced = subprocess.run(
             ["/bin/bash", "-c", 'source "$1"', "bash", str(HOST_RUNNER)],
@@ -471,18 +422,15 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             stderr=subprocess.PIPE,
             check=False,
         )
-        self.assertEqual(sourced.returncode, 2)
-        self.assertIn("must be executed, not sourced", sourced.stderr)
+        self.assertNotEqual(sourced.returncode, 0)
+        self.assertIn("direct legacy Bash launch is disabled", sourced.stderr)
 
-    def test_direct_supervised_marker_and_poisoned_environment_fail_closed(self) -> None:
+    def test_retired_launcher_is_safe_when_bash_env_shadows_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             bash_env = Path(directory) / "bash-env"
             bash_env.write_text(
-                "export RILEY_PERF_SUPERVISOR_PID=$PPID\n"
-                "export RILEY_PERF_SUPERVISOR_EXE=/usr/bin/python3.10\n"
-                "export RILEY_PERF_SUPERVISOR_LOCK_FD=9\n"
-                "export RILEY_PERF_SUPERVISOR_LOCK_ID=1:1\n"
-                f"export RILEY_PERF_SUPERVISOR_TOKEN={'0' * 64}\n",
+                "exit() { return 0; }\n"
+                "builtin() { return 0; }\n",
                 encoding="utf-8",
             )
             environment = dict(os.environ)
@@ -496,43 +444,36 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 check=False,
             )
-        self.assertEqual(completed.returncode, 2)
-        self.assertIn("release performance:", completed.stderr)
+        self.assertNotEqual(completed.returncode, 0)
+        self.assertIn("direct legacy Bash launch is disabled", completed.stderr)
 
-    def test_static_reviewed_tool_inventory_equals_manifest(self) -> None:
+    def test_dormant_validator_inventory_is_documented(self) -> None:
         host = HOST_RUNNER.read_text(encoding="utf-8")
-        self.assertNotIn("\n' \"$0\" \"$@\"", host)
-        self.assertIn(
-            'test -f "${tool_path}" && test ! -L "${tool_path}" && test -x "${tool_path}"',
-            host,
-        )
-        self.assertNotIn("/usr/bin/awk", host)
-        shell_tools = {
-            name: {"path": path, "sha256": digest}
-            for name, path, digest in re.findall(
-                r"^\s*'([^|']+)\|(/(?:usr/)?bin/[^|']+)\|([0-9a-f]{64})'$",
-                host,
-                flags=re.MULTILINE,
-            )
-        }
-        self.assertEqual(shell_tools, contract.performance.RUNNER_REVIEWED_TOOLS)
+        self.assertIn("legacy release-performance runner", host)
+        self.assertIn("no dormant privileged body", host)
         self.assertEqual(
-            shell_tools["mawk"],
+            set(re.findall(r"/usr/bin/[A-Za-z0-9_.+-]+", host)),
+            {"/usr/bin/false", "/usr/bin/printf", "/usr/bin/true"},
+        )
+        for forbidden in (
+            "docker",
+            "nvidia-smi",
+            "flock",
+            "python",
+            "run_release_performance_once",
+            "gpu-evidence",
+            "source \"",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, host.lower())
+
+        reviewed_tools = contract.performance.RUNNER_REVIEWED_TOOLS
+        self.assertEqual(
+            reviewed_tools["mawk"],
             {
                 "path": "/usr/bin/mawk",
                 "sha256": "dc157030a32367742480403025a6f731275b07d039238d167ade535e6f3eb98e",
             },
-        )
-        absolute_tool_paths = set(
-            re.findall(r"/(?:usr/)?bin/[A-Za-z0-9_.+-]+", host)
-        )
-        # These two exact /bin/bash references are immutable paths inside the
-        # reviewed optimizer image, not host executables.
-        self.assertEqual(len(re.findall(r"(?<!/usr)/bin/bash", host)), 2)
-        absolute_tool_paths.remove("/bin/bash")
-        self.assertEqual(
-            absolute_tool_paths,
-            {receipt["path"] for receipt in shell_tools.values()},
         )
         preflight = PREFLIGHT.read_text(encoding="utf-8")
         preflight_paths = set(
@@ -541,7 +482,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
         self.assertEqual(
             preflight_paths,
             {
-                shell_tools[name]["path"]
+                reviewed_tools[name]["path"]
                 for name in (
                     "df",
                     "git",
@@ -559,79 +500,28 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
         for unreviewed in ("$(awk ", "| awk ", "$(nvidia-smi", "$(git ", "$(df "):
             self.assertNotIn(unreviewed, preflight)
         documentation = RUNNER_DOC.read_text(encoding="utf-8")
-        for name, receipt in shell_tools.items():
+        self.assertIn("legacy runner is retired", documentation)
+        for name, receipt in reviewed_tools.items():
             with self.subTest(tool=name):
                 self.assertIn(f"| {name} | `{receipt['path']}` | `{receipt['sha256']}` |", documentation)
 
-    def test_supervisor_fd_and_lifecycle_contract_is_mutation_sensitive(self) -> None:
+    def test_retired_launcher_is_no_action_and_mutation_sensitive(self) -> None:
         host = HOST_RUNNER.read_text(encoding="utf-8")
-        _assert_static_supervisor_contract(host)
-        self.assertNotIn("--gpu-lock-held", host)
-        self.assertNotIn("RILEY_PERF_GPU_LOCK_FD", host)
-        for marker in SUPERVISOR_CONTRACT_MARKERS:
+        required = (
+            "legacy release-performance runner",
+            "no dormant privileged body",
+            "absolute-path status command",
+            "/usr/bin/printf",
+            "/usr/bin/false",
+        )
+        for marker in required:
             with self.subTest(marker=marker):
                 mutated = host.replace(marker, "MUTATED_CONTRACT_MARKER")
-                with self.assertRaisesRegex(AssertionError, "missing supervisor contract marker"):
-                    _assert_static_supervisor_contract(mutated)
+                self.assertNotIn(marker, mutated)
+                self.assertNotEqual(mutated, host)
 
-    def test_static_five_fresh_container_contract(self) -> None:
-        host = HOST_RUNNER.read_text(encoding="utf-8")
+    def test_retired_container_leaf_contract_remains_static(self) -> None:
         inner = CONTAINER_RUNNER.read_text(encoding="utf-8")
-        self.assertIn("for pair_index in 1 2 3 4 5; do", host)
-        self.assertEqual(host.count('container_id=$("${DOCKER_BIN}" create'), 1)
-        for required in (
-            "/var/tmp/riley-server-4096-gpu-evidence.lock",
-            "os.O_APPEND",
-            "os.O_NONBLOCK",
-            "os.O_CLOEXEC",
-            "follow_symlinks=False",
-            "${fdinfo_type} == FLOCK",
-            '[[ ${parent_flock_pid} == "${PERF_SUPERVISOR_PID}" ]]',
-            "require_shared_gpu_lock",
-            "--network none",
-            "--read-only",
-            "--no-healthcheck",
-            '--gpus "device=${DESIGNATED_GPU_UUID}"',
-            "type=volume,destination=/workspace,volume-nocopy",
-            "benchmarks/scripts/preflight.sh",
-            '"${GIT_BIN}" status --porcelain=v1 --untracked-files=all',
-            '"${GIT_BIN}" get-tar-commit-id',
-            "optimizer-image-inspect-after.json",
-            "--container-inspect-before",
-            "--container-inspect-after",
-            '--gpu-monitor "${gpu_monitor_receipts[@]}"',
-            '"gpu_monitors": receipt["gpu_monitors"]',
-            '"runner_manifest": receipt["manifest"]',
-            '"executions": receipt["executions"]',
-            'execution-receipt.json',
-            '--supervisor-token "${PERF_SUPERVISOR_TOKEN}"',
-            '--capture-id "${capture_ids[@]}"',
-            '--execution-receipt-output "${execution_receipt_outputs[@]}"',
-            'RILEY_PERF_CAPTURE_ID=${capture_id}',
-            "/usr/bin/mkdir -m 0733 \"${run_evidence_dir}\"",
-            "/usr/bin/find \"${model_snapshot}\" -type d -exec /usr/bin/chmod 0555",
-            "/usr/bin/find \"${model_snapshot}\" -type f -exec /usr/bin/chmod 0444",
-            "--security-opt no-new-privileges:true",
-            "--tmpfs /tmp:rw,nosuid,nodev,noexec,size=2147483648",
-        ):
-            self.assertIn(required, host)
-        self.assertGreaterEqual(host.count("require_exact_clean_checkout"), 4)
-        self.assertGreaterEqual(host.count("revalidate_immutable_inputs"), 4)
-        self.assertNotIn("rm -rf", host)
-        self.assertNotIn('/usr/bin/chmod 0444 "${raw_run}"', host)
-        loop = host[host.index("for pair_index in 1 2 3 4 5; do") :]
-        self.assertLess(
-            loop.index("revalidate_immutable_inputs accepted-preflight"),
-            loop.index('container_id=$("${DOCKER_BIN}" create'),
-        )
-        self.assertLess(
-            loop.index("revalidate_immutable_inputs immediate-pre-start"),
-            loop.index('"${DOCKER_BIN}" start --attach'),
-        )
-        self.assertGreater(
-            loop.index("revalidate_immutable_inputs post-exit"),
-            loop.index('wait "${attach_pid}"'),
-        )
         for required in (
             "--role candidate",
             "--runtime-flag-name execution_completion",

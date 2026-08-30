@@ -1,11 +1,26 @@
-# Remote five-run release performance runner
+# Retired legacy runner and source-binding successor
 
-`ci/run_remote_release_performance.sh` produces the five native candidate
-profile documents consumed by the PR16 release-performance packager. GPU work
-is allowed only on `server-4096` (host name `psyche-MS-7D91`) and only on GPU
-`GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0`. The script refuses a different
-host, a dirty checkout, a checkout at another revision, or an existing output
-path.
+The historical `ci/run_remote_release_performance.sh` body formerly acted as
+its own public Bash launcher. It is now a no-action retirement stub: it
+contains no GPU lock, Docker, evidence, child-process, or source-loading body.
+`BASH_ENV` is evaluated before Bash starts the file, so an in-file `exit` is
+not a trust anchor; removing the privileged body means even a shadowed shell
+builtin cannot fall through into an old capture path. The legacy runner is retired.
+The v3 contract text below remains only for audit and migration; it
+is not an executable child body or a future raw-producer template.
+
+`ci/release/run_remote_rc3_gate_e_session_v2.py
+--performance-source-contract-probe` is the replacement trust-boundary
+foundation. It requires the fixed remote checkout path and the reviewed
+`/usr/bin/python3.10 -I -S -E` interpreter, opens the private body with
+no-follow/nonblocking component traversal under a held root FD, copies the
+bounded bytes into a sealed `memfd`, and reports only source metadata. The
+probe establishes a fixed-source snapshot within the existing trusted-checkout
+boundary; it does not independently approve the body bytes. It intentionally does **not** open
+the GPU lock, invoke Bash/Docker, create evidence, run a performance capture,
+or make a qualification decision. It snapshots the retired no-action stub
+only to exercise the fixed-root/FD mechanism; a future versioned raw-envelope
+producer must introduce a new private core rather than re-enable this body.
 
 ## Trusted inputs
 
@@ -33,22 +48,16 @@ The model tree must contain the reviewed SmolLM2 revision
 and tokenizer SHA-256
 `9ca9acddb6525a194ec8ac7a87f24fbba7232a9a15ffa1af0c1224fcd888e47c`.
 
-## Run on server-4096
+## Archived v3 capture specification
 
+The arguments below describe the historical v3 contract. They are not a public
+command and no longer have an executable Bash entrypoint.
 The checkout must already be at the selected revision and completely clean.
 The output parent must exist, but the output directory itself must not exist
 and must be outside the checkout.
 
-Start from a scrubbed remote shell (`env -i` with only the reviewed `PATH`,
-locale, and argument values), and invoke the runner by its **absolute**
-filesystem path. The runner rejects sourcing and relative paths before it
-parses options or acquires the GPU lock. That makes the clean Python supervisor
-re-execute the original `BASH_SOURCE` path rather than ambient `$0`,
-which is not a stable script identity. The runner
-discards imported `BASH_FUNC_*` functions and rejects Git, Docker, Bash,
-Python, dynamic-loader, and audit overrides including `GIT_EXEC_PATH`,
-`GIT_CONFIG_PARAMETERS`, `LD_PRELOAD`, and `LD_AUDIT`. It uses the reviewed
-absolute paths below and requires their exact server-4096 bytes:
+For the current CPU-only source-bound probe, use the reviewed Python
+interpreter and this exact fixed `server-4096` checkout path:
 
 | Tool | Path | SHA-256 |
 |---|---|---|
@@ -102,23 +111,17 @@ alone therefore cannot enter the acceptance path, and no Bash, Docker,
 monitor, or candidate descendant inherits the lock.
 
 ```sh
-/usr/bin/env -i \
-  PATH=/usr/bin:/bin \
-  LC_ALL=C TZ=UTC HOME=/home/psyche \
-  /usr/bin/bash /absolute/path/to/ci/run_remote_release_performance.sh \
-  --optimizer-image sha256:<optimizer-image-digest> \
-  --source-revision <frozen-40-character-revision> \
-  --expected-source-archive-sha256 <reviewed-source-archive-sha256> \
-  --profile-binary /artifacts/reproducible/final/riley-profile \
-  --expected-profile-binary-sha256 <reviewed-profile-sha256> \
-  --model-dir /models/smollm2-135m-93efa2f0 \
-  --expected-model-tree-sha256 <reviewed-model-tree-sha256> \
-  --optimizer-correctness-report /artifacts/optimizer/optimization-correctness-report.json \
-  --expected-optimizer-correctness-report-sha256 <reviewed-optimizer-report-sha256> \
-  --output-dir /home/psyche/riley-artifacts/pr16/performance-<revision>
+/usr/bin/python3.10 -I -S -E \
+  /home/psyche/rustinfer-vllm-roadmap-serial/ci/release/run_remote_rc3_gate_e_session_v2.py \
+  --performance-source-contract-probe
 ```
 
-Before each independent run, the standard preflight captures and validates
+The probe output is a `source-bound-no-action` JSON document; it is neither a
+producer receipt nor a performance result. The historical v3 capture mechanics
+below are archived reference material only: there is no current callable child
+body, and a future producer must introduce a new versioned private core rather
+than reuse this specification. Before a future independent run, the standard
+preflight would capture and validate
 the actual host kernel, CPU topology, RAM, GPU identity and capacity, driver,
 clock state, power limit, idle VRAM, and temperature. The reviewed clock/power
 receipt is exactly `power_limit_w=450.00`, `graphics_clock_mhz=[N/A]`, and
@@ -266,6 +269,8 @@ These commands do not start Docker or CUDA:
 python3 -m unittest ci/release/test_release_performance_runner.py -v
 bash -n ci/run_remote_release_performance.sh
 bash -n ci/release/run_release_performance_once.sh
+PYTHONDONTWRITEBYTECODE=1 /usr/bin/python3.10 -B -m unittest \
+  ci/release/test_run_remote_rc3_gate_e_session_v2.py
 ```
 
 The mode test above needs neither Docker nor CUDA. A reviewer can additionally

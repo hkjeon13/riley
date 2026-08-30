@@ -46,7 +46,7 @@ SCOPE = "gate-e-performance-semantic-component-only"
 AUTHORITY = "gate-e-performance-semantic-replay-only"
 PERFORMANCE_POLICY_VERSION = "riley.release-performance-bound-semantic.v1"
 EXPECTED_PERFORMANCE_POLICY_SHA256 = (
-    "d342fe14170203cd2c1c029eb2f159d359778fb930d5faa4083a745e2b92cb7a"
+    "41181632225db3153b6bb5fa151626c8dac7e4c6a4237f9ba25bb40fb4afcd9a"
 )
 EXPECTED_OPTIMIZER_CONTRACT_POLICY_SHA256 = (
     "3efab239fa03631f10496109a4b04da1d6ef3caf2d9e0dfb1148138d3e0b9996"

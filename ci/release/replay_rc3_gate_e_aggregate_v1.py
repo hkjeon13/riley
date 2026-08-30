@@ -48,7 +48,7 @@ AUTHORITY = "gate-e-aggregate-semantic-replay-only"
 AGGREGATE_POLICY_VERSION = "riley.rc3-gate-e-aggregate-policy.v1"
 # This is the SHA-256 of ``_AGGREGATE_POLICY_PROJECTION`` below.  It pins the
 # aggregate's child-contract projection independently of any saved reports.
-AGGREGATE_POLICY_SHA256 = "05078a798753a5b9277548393170f235bf1e09b544a0d0f8e417f46bbd478cb0"
+AGGREGATE_POLICY_SHA256 = "71ca2c4413ce3939e072b7109a17f36873446eaf34a2cc6d7e076803551f49a8"
 EXTERNAL_SCRATCH_PARENT = Path("/var/tmp")
 
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")

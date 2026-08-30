@@ -276,7 +276,7 @@ RUNNER_REVIEWED_TOOLS = {
 RUNNER_REQUIRED_TOOLS = frozenset(RUNNER_REVIEWED_TOOLS)
 RUNNER_REVIEWED_SCRIPTS = {
     "host_script_sha256": (
-        "697739f7ed0d0c86138a63edd4c06276c7a61a57cfce49332da029220a46b907"
+        "f420ffca91c6f0bcc66d84eeb9cce88e718d9c615ad7cc85c5d960a28fecd5b5"
     ),
     "inner_script_sha256": (
         "0c7b98bfd1a33ad65065dc7360e39f1cf3a39cc5ed2880202bf47f5a35840246"
@@ -956,7 +956,7 @@ def bound_semantic_policy_sha256() -> str:
 
 # Updated only alongside a deliberate reviewed change to the map above.
 BOUND_SEMANTIC_POLICY_SHA256 = (
-    "d342fe14170203cd2c1c029eb2f159d359778fb930d5faa4083a745e2b92cb7a"
+    "41181632225db3153b6bb5fa151626c8dac7e4c6a4237f9ba25bb40fb4afcd9a"
 )
 
 

@@ -1,6 +1,11 @@
 # C02 — RC3 Candidate-bound Qualification
 
 **상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt, create-only frozen-candidate **input-identity** manifest/FD-safe replay, four-gate closed input-inventory replay, 그리고 no-action authenticated Gate E supervisor handoff probe도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
+**Gate E v2 source boundary:** public legacy performance Bash entry와 historical internal
+sentinel은 모두 fail-closed고 public Bash에는 privileged body가 남아 있지 않다. isolated
+Python v2 probe는 fixed root FD를 통해 retired no-action stub bytes만 sealed snapshot하며,
+actual child/GPU/Docker/evidence/receipt/qualification
+권한은 추가하지 않는다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 

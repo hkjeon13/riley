@@ -423,12 +423,17 @@ partial root에는 marker/receipt/temporary child를 만들지 않고 보존만 
 
 `run_remote_rc3_gate_e_session_v1.sh --supervisor-smoke-test`는 subsequent
 authenticated producer를 위해 scoped shared lock과 parent/child handoff만 verify하는
-no-action probe다. 기존 five-run performance supervisor도 source/relative invocation을
-parent lock 취득 전에 fail closed하고, clean child 재실행에는 ambient `$0` 대신
-absolute `BASH_SOURCE` identity만 넘긴다. 이 hardening은 outer Gate E session이
-future performance core를 안전하게 호출할 수 있게 하는 선행 조건일 뿐, 아직 core
-handoff 또는 producer authority를 추가하지 않는다. artifact, evidence-root, candidate, GPU-selection grammar가 없고
-Gate E-root entry, raw evidence, marker, receipt, serialized handoff도 만들지 않는다.
+no-action probe다. Bash는 `BASH_ENV` 평가 뒤에는 trust anchor가 될 수 없으므로,
+legacy five-run public Bash entry의 privileged body는 제거됐고 historical internal sentinel도
+no-action으로 끝난다.
+`run_remote_rc3_gate_e_session_v2.py --performance-source-contract-probe`는
+reviewed isolated Python에서 fixed private performance body를 no-follow/nonblocking으로
+열고 bounded bytes를 sealed `memfd`로 snapshot하는 별도 no-action foundation이다.
+v2도 GPU lock/Bash/Docker/evidence/receipt/qualification을 만들지 않으며, retired no-action
+stub bytes를 snapshot할 뿐이다. sealed source FD를 통해 new private raw core를 호출하는
+versioned producer/envelope은 후속 단계다.
+artifact, evidence-root, candidate, GPU-selection grammar가 없고 Gate E-root entry, raw
+evidence, marker, receipt, serialized handoff도 만들지 않는다.
 GPU query/selection, Docker, subproducer, aggregate replay, semantic receipt, qualification은
 모두 absent이며 zero exit는 authenticated-lock probe만 뜻한다. relative script path는
 parent handoff 전에 fail closed한다.
