@@ -158,6 +158,26 @@ Runtime image content는 별도 per-arm closure로 준비한다. `ci/release/pre
 
 이 full replay는 PR16 checker의 `tomllib` 때문에 Python 3.11+가 필요하다. 현재 remote host의 Python 3.10에서는 `unsupported-python-runtime`으로 fail-closed하며, 이번 CPU-only wrapper test는 held-FD/receipt boundary를 검증할 뿐 실제 captured evidence replay를 대체하지 않는다. pinned 3.11+ runtime provisioning은 actual materialization 전의 명시적 host prerequisite다.
 
+그 prerequisite를 installation 없이 점검하는 별도
+`ci/release/check_reconstructed_runtime_python_prerequisite_v1.py`는 existing
+Linux x86_64 CPython `3.13.15` executable pin을 explicit external `--python`
+path에서 no-follow held FD로 hash한 뒤, hash 직후 held-descriptor
+`/proc/self/fd/...` path로 clean Python configuration `-I -S -E -B` fixed stdlib probe를
+요청한다. probe는 CPython/Linux/x86_64/version과 `tomllib`, `tarfile`, `hashlib`,
+`lzma`, `bz2`, `sqlite3` availability를 확인하고 canonical transient `checked/not-run`
+stdout만 낸다. held FD는 pathname replacement를 줄일 뿐 hash 뒤 exact executable bytes,
+same-inode mutation, stdlib/dynamic-loader를 포함한 full runtime-tree integrity, 또는
+same-UID writer exclusion을 증명하지 않는다. Python flags도 sandbox가 아니며, controller
+자체가 download/uv/package install, output receipt/evidence, Docker/GPU/materializer를
+요청하지 않는다는 사실은 supplied runtime 실행의 network/Docker/GPU 격리를 보장하지
+않는다. 따라서 checker를 실행하기 **전** operator가 full runtime tree와 ancestor를
+외부에서 신뢰·검증하고 same-UID writer를 배제해야 한다. 이 transient output은 later
+materializer와 same-FD handoff, capture/materialization 또는 qualification도 주장하지
+않는다. `/tmp` 계열, source checkout, symlink/hardlink, unsafe executable과 128 MiB 초과
+executable은 거절하지만, 그 byte-volume 상한은 host resource/hashing-time isolation이 아니다.
+detailed operation boundary는
+`ci/release/RECONSTRUCTED_RUNTIME_PYTHON_PREREQUISITE.md`에 고정한다.
+
 그 후속 raw producer는 `ci/release/run_remote_reconstructed_runtime_assembly_capture_v1.sh`, filesystem-only `initialize_reconstructed_runtime_assembly_evidence_v1.py`, stdlib-only `compose_reconstructed_runtime_assembly_capture_v1.py`로 구현됐다. runner는 caller 환경을 `env -i`로 제거하고 authenticated no-follow Docker lock의 ready-handshaked process group 아래에서 동작한다. initializer는 no-follow ancestor FD로 fresh external `0700` root와 fixed `raw` child를 create-only로 만들고 source checkout의 lexical·mount alias 아래 출력을 거절한다. runner는 reviewed digest-pinned CUDA base가 daemon에 **이미 존재**하는지 pull 없는 inspect로 먼저 확인한다. 따라서 `--network none`은 Docker build-step network setting일 뿐 daemon/control-plane의 host egress 격리를 주장하지 않는다. Docker 명령 표면은 exact seven-argument `docker build` (`--network none`, `--pull=false`, `--no-cache`, no tag) → Docker raw-format(후행 newline 없음) iidfile의 held-FD exact parser → bounded raw `docker image inspect`/`docker image save` → existing normalizer의 canonical OCI → `docker create --network none --restart no` → pre-copy inspect/`docker cp`/post-copy inspect byte-equality 순서로 닫혀 있다. build log, JSON, raw image export, cp tar와 create ID stream에는 replayer와 같은 hard byte bound가 있으며, output cap/producer 오류는 success가 아니라 retained incomplete evidence다. container는 절대 start/run/exec하지 않으며 GPU, device, mount, privileged, secret, SSH, host namespace option을 받지 않는다. Docker cp tar는 extract하지 않고 canonical USTAR runtime tree로 재작성하고, outer capture도 fixed 11-member USTAR/completion/SHA256SUMS로 생성한다. remote Python 3.10에서는 PR16 bundle replay가 Python 3.11+를 요구하므로 runner가 assembly-capture/OCI/bridge full verifier를 호출하지 않는다. 이 raw producer는 same-invocation receipt, Docker execution attestation, source/bundle-to-image, capture provenance/independence, A/B equality, runtime/service/GPU execution, rollback, freeze, 또는 qualification claim을 만들지 않으며, current evidence는 CPU/static hostile-path 검증만 완료했다.
 
 ```text

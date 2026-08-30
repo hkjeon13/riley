@@ -1054,6 +1054,21 @@ runtime configuration field or a trace counter.
    content materializer replays both captures; that receipt still retains all
    execution, same-invocation, and capture-independence claims as
    `not-established` until a future authenticated lineage producer exists.
+   - Before an actual full replay, the separately landed
+     `check_reconstructed_runtime_python_prerequisite_v1.py` accepts one
+     already-provisioned external CPython 3.13.15 path only, hashes the held
+     executable pin, then requests a fixed Python-configuration-isolated
+     stdlib probe through its held-descriptor path. This prevents pathname
+     replacement, but it cannot establish exact post-hash executable bytes,
+     full runtime-tree integrity, or same-UID writer exclusion. It is not a
+     sandbox: although the controller itself creates no toolchain, evidence,
+     receipt, Docker/GPU action, or materialization result, executing the
+     supplied runtime has no network/Docker/GPU isolation guarantee. Before
+     invoking it, the operator must externally trust the complete runtime tree
+     and its ancestor directories and prevent same-UID mutation. Its transient
+     checked output is not a qualification input and cannot establish later
+     same-FD handoff. It rejects an executable leaf above 128 MiB before hash,
+     but that byte-volume cap is not host-resource or hashing-time isolation.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
    - The current-tree denial half is complete:
      `rc3_qualification_input_policy_v2.py` is stdlib-only, has no CLI,

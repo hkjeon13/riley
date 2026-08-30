@@ -184,6 +184,21 @@ check_soak_v2_receipt.py와 check_rc3_rollback_structural_precheck.py는 각각 
 
 full replay는 upstream PR16 checker의 `tomllib` 때문에 Python 3.11+가 필요하다. 현재 remote host의 3.10에서는 fail-closed하며, repository CPU-only test는 wrapper의 FD/receipt contract만 검증한다. actual captured-evidence replay 전에는 pinned 3.11+ runtime을 별도로 준비해야 한다.
 
+`check_reconstructed_runtime_python_prerequisite_v1.py`는 설치 전용 도구가 아니라,
+이미 provisioned 된 external CPython 3.13.15 executable을 no-follow held FD로 pin/hash하고
+hash 직후 held-descriptor path로 clean Python configuration `-I -S -E -B` stdlib probe를
+요청하는 readiness check다. held FD는 pathname replacement만 줄이며 exact post-hash
+executable bytes, full stdlib/dynamic-loader/runtime-tree integrity, same-UID writer exclusion,
+또는 later same-FD handoff를 보장하지 않는다. 이는 sandbox가 아니다. controller 자체는
+다운로드·uv/package install·Docker/GPU/materializer 작업을 요청하지 않지만 supplied runtime
+실행에 network/Docker/GPU 격리는 없다. checker를 실행하기 전에 operator가 complete runtime
+tree와 ancestor directories를 외부에서 신뢰·검증하고 same-UID mutation을 막아야 한다.
+128 MiB 초과 executable은 hash 전에 거절하지만, 이는 ordinary byte-volume 상한일 뿐 host
+resource 또는 hashing-time 격리를 보장하지 않는다.
+stdout의 `checked/not-run` 결과는 materializer/capture/evidence/GPU/qualification 결과가
+아니며, explicit provisioning approval 뒤의 사용 경계는
+[`RECONSTRUCTED_RUNTIME_PYTHON_PREREQUISITE.md`](../../ci/release/RECONSTRUCTED_RUNTIME_PYTHON_PREREQUISITE.md)에 있다.
+
 ### RC3 qualification input denial
 
 `rc3_qualification_input_policy_v2.py`는 현재 **입력을 하나도 승인하지 않는** pure

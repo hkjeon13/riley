@@ -54,6 +54,7 @@ class QualificationInputPolicyTests(unittest.TestCase):
             "riley.rc3-freeze-input-admission.v1": "freeze-input-admission-not-frozen-candidate",
             "riley.rc3-frozen-candidate.v1": "frozen-candidate-identity-not-semantic",
             "riley.reconstructed-runtime-a-b-materialization.v1": "reconstructed-materialization-not-qualification",
+            "riley.reconstructed-runtime-python-prerequisite.v1": "runtime-python-prerequisite-not-materialization",
             "riley.release-candidate-report.v2": "legacy-release-candidate-rejected",
         }
         for schema_version, expected in cases.items():
@@ -78,6 +79,7 @@ class QualificationInputPolicyTests(unittest.TestCase):
             "gate-e-aggregate-semantic-replay-only": "gate-e-aggregate-replay-not-durable",
             "freeze-input-structural-only": "freeze-input-admission-not-frozen-candidate",
             "held-fd-a-b-runtime-assembly-content-closure-only": "reconstructed-materialization-not-qualification",
+            "interpreter-readiness-only": "runtime-python-prerequisite-not-materialization",
             "not-authoritative": "non-authoritative-input-rejected",
         }
         for authority, expected in cases.items():

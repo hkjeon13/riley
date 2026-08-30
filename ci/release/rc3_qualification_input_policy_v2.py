@@ -75,6 +75,7 @@ REJECTED_SCHEMA_REASONS: Mapping[str, str] = MappingProxyType(
         "riley.rc3-frozen-candidate-replay.v1": "frozen-candidate-identity-not-semantic",
         "riley.reconstructed-prior-baseline-content-bridge.v1": "reconstructed-content-bridge-not-qualification",
         "riley.reconstructed-runtime-a-b-materialization.v1": "reconstructed-materialization-not-qualification",
+        "riley.reconstructed-runtime-python-prerequisite.v1": "runtime-python-prerequisite-not-materialization",
         "riley.release-candidate-manifest.v1": "legacy-release-candidate-rejected",
         "riley.release-candidate-manifest.v2": "legacy-release-candidate-rejected",
         "riley.release-candidate-report.v2": "legacy-release-candidate-rejected",
@@ -95,6 +96,7 @@ REJECTED_AUTHORITY_REASONS: Mapping[str, str] = MappingProxyType(
         "frozen-candidate-input-identity-only": "frozen-candidate-identity-not-semantic",
         "cross-root-content-bridge-only": "reconstructed-content-bridge-not-qualification",
         "held-fd-a-b-runtime-assembly-content-closure-only": "reconstructed-materialization-not-qualification",
+        "interpreter-readiness-only": "runtime-python-prerequisite-not-materialization",
         "not-authoritative": "non-authoritative-input-rejected",
     }
 )
