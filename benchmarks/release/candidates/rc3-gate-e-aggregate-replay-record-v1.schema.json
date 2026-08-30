@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-gate-e-aggregate-replay-record-v1.schema.json",
+  "title": "Riley RC3 Gate E aggregate semantic replay terminal record v1",
+  "description": "A private, same-held-FD record that two fresh aggregate semantic replays had identical canonical bytes. It establishes only aggregate-semantic-replay consistency. It is not actual GPU capture, an authenticated producer normal return, an actual candidate Gate E pass, a semantic receipt, qualification, deployment, or rollback success.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "scope", "status", "authority", "candidate_status",
+    "qualification_status", "candidate_id", "source_revision",
+    "expected_release_image_id", "expected_optimizer_build_image_id",
+    "expected_correctness_golden_sha256", "aggregate_policy_version",
+    "aggregate_policy_sha256", "gate_e_input_inventory",
+    "frozen_candidate_manifest", "aggregate_replay", "checks",
+    "not_established", "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.rc3-gate-e-aggregate-replay-record.v1"},
+    "scope": {"const": "gate-e-aggregate-semantic-replay-terminal-record-only"},
+    "status": {"const": "bound"},
+    "authority": {"const": "gate-e-aggregate-semantic-replay-only"},
+    "candidate_status": {"const": "frozen"},
+    "qualification_status": {"const": "not-run"},
+    "candidate_id": {"$ref": "#/$defs/candidateId"},
+    "source_revision": {"$ref": "#/$defs/gitRevision"},
+    "expected_release_image_id": {"$ref": "#/$defs/imageId"},
+    "expected_optimizer_build_image_id": {"$ref": "#/$defs/imageId"},
+    "expected_correctness_golden_sha256": {"$ref": "#/$defs/sha256"},
+    "aggregate_policy_version": {"const": "riley.rc3-gate-e-aggregate-policy.v1"},
+    "aggregate_policy_sha256": {"const": "05078a798753a5b9277548393170f235bf1e09b544a0d0f8e417f46bbd478cb0"},
+    "gate_e_input_inventory": {"$ref": "#/$defs/inventoryDescriptor"},
+    "frozen_candidate_manifest": {"$ref": "#/$defs/frozenManifestDescriptor"},
+    "aggregate_replay": {"$ref": "#/$defs/aggregateReplay"},
+    "checks": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        {"$ref": "#/$defs/checkTwice"},
+        {"$ref": "#/$defs/checkBytes"},
+        {"$ref": "#/$defs/checkEmpty"},
+        {"$ref": "#/$defs/checkScope"}
+      ],
+      "items": false
+    },
+    "not_established": {"$ref": "#/$defs/notEstablished"},
+    "reason_codes": {"type": "array", "maxItems": 0}
+  },
+  "$defs": {
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{40}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000"}}
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^[0-9a-f]{64}$"},
+        {"not": {"const": "0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    },
+    "imageId": {
+      "type": "string",
+      "allOf": [
+        {"pattern": "^sha256:[0-9a-f]{64}$"},
+        {"not": {"const": "sha256:0000000000000000000000000000000000000000000000000000000000000000"}}
+      ]
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "byte_length": {"type": "integer", "minimum": 1, "maximum": 1099511627776}
+      }
+    },
+    "directDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/descriptor"},
+        {"properties": {"path": {"maxLength": 128, "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"}}}
+      ]
+    },
+    "inventoryDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"path": {"const": "gate-e-inputs.json"}}}
+      ]
+    },
+    "frozenManifestDescriptor": {
+      "allOf": [
+        {"$ref": "#/$defs/directDescriptor"},
+        {"properties": {"path": {"const": "frozen-candidate.json"}}}
+      ]
+    },
+    "aggregateReplay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_sha256", "report_byte_length"],
+      "properties": {
+        "report_sha256": {"$ref": "#/$defs/sha256"},
+        "report_byte_length": {"type": "integer", "minimum": 1, "maximum": 8388608}
+      }
+    },
+    "checkTwice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {
+        "name": {"const": "aggregate-semantic-replay-ran-twice-on-one-held-fd-stack"},
+        "satisfied": {"const": true}
+      }
+    },
+    "checkBytes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {
+        "name": {"const": "aggregate-semantic-replay-canonical-bytes-match"},
+        "satisfied": {"const": true}
+      }
+    },
+    "checkEmpty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {
+        "name": {"const": "receipt-root-was-empty-before-fixed-publication"},
+        "satisfied": {"const": true}
+      }
+    },
+    "checkScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "satisfied"],
+      "properties": {
+        "name": {"const": "terminal-record-is-aggregate-semantic-replay-only"},
+        "satisfied": {"const": true}
+      }
+    },
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actual_gpu_capture", "actual_capture", "actual_candidate_gate_e_pass",
+        "frozen_candidate_writer_normal_return", "evidence_root_immutability",
+        "release_image_review", "optimizer_build_image_review",
+        "correctness_golden_review", "host_gpu_test_layer_review",
+        "release_binary_provenance", "release_container_content", "model_content",
+        "model_mount_provenance", "producer_sidecar_equality",
+        "source_archive_content", "startup_configuration", "qwen_regression",
+        "routing", "fault_extension", "reproducible_build", "dependency_manifest",
+        "semantic_receipt", "qualification", "deployment", "rollback_execution",
+        "rollback_success", "rollback_semantic_receipt", "rollback_result",
+        "authenticated_gate_e_producer_normal_return",
+        "actual_gate_e_producer_normal_return"
+      ],
+      "properties": {
+        "actual_gpu_capture": {"const": "not-established"},
+        "actual_capture": {"const": "not-established"},
+        "actual_candidate_gate_e_pass": {"const": "not-established"},
+        "frozen_candidate_writer_normal_return": {"const": "not-established"},
+        "evidence_root_immutability": {"const": "not-established"},
+        "release_image_review": {"const": "not-established"},
+        "optimizer_build_image_review": {"const": "not-established"},
+        "correctness_golden_review": {"const": "not-established"},
+        "host_gpu_test_layer_review": {"const": "not-established"},
+        "release_binary_provenance": {"const": "not-established"},
+        "release_container_content": {"const": "not-established"},
+        "model_content": {"const": "not-established"},
+        "model_mount_provenance": {"const": "not-established"},
+        "producer_sidecar_equality": {"const": "not-established"},
+        "source_archive_content": {"const": "not-established"},
+        "startup_configuration": {"const": "not-established"},
+        "qwen_regression": {"const": "not-established"},
+        "routing": {"const": "not-established"},
+        "fault_extension": {"const": "not-established"},
+        "reproducible_build": {"const": "not-established"},
+        "dependency_manifest": {"const": "not-established"},
+        "semantic_receipt": {"const": "not-established"},
+        "qualification": {"const": "not-established"},
+        "deployment": {"const": "not-established"},
+        "rollback_execution": {"const": "not-established"},
+        "rollback_success": {"const": "not-established"},
+        "rollback_semantic_receipt": {"const": "not-established"},
+        "rollback_result": {"const": "not-established"},
+        "authenticated_gate_e_producer_normal_return": {"const": "not-established"},
+        "actual_gate_e_producer_normal_return": {"const": "not-established"}
+      }
+    }
+  }
+}

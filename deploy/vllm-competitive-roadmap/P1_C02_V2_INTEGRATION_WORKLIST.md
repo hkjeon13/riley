@@ -5,7 +5,7 @@ sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
-runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, the no-action authenticated Gate E supervisor handoff probe, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
+runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, the no-action authenticated Gate E supervisor handoff probe, the private aggregate-replay-only Gate E terminal record, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -390,11 +390,14 @@ a qualification decision.
 An authenticated rollback **raw** runner, a private held-FD raw operational
 semantics core, a create-only frozen-candidate **input-identity** manifest
 with its FD-safe replayer, a fresh opaque fourteen-leaf Gate E input snapshot
-preparer, a closed four-gate input-inventory replayer, and the five-component
-RC3 Gate E aggregate semantic replayer are landed. The
-aggregate is a read-only replay only: no actual Gate E producer, public
-semantic receipt, same-stack producer normal-return closure, or qualification
-checker is landed yet. The frozen manifest is not
+preparer, a closed four-gate input-inventory replayer, the five-component RC3
+Gate E aggregate semantic replayer, and a private terminal record of two
+byte-identical aggregate replays are landed. The record has a separate
+fresh/empty receipt root and binds only the closed aggregate projection; it
+does not add an entry to the exact Gate E inventory. Both aggregate and record
+remain replay-only: no actual Gate E producer, durable semantic receipt,
+same-stack producer normal-return closure, or qualification checker is landed
+yet. The frozen manifest is not
 an execution or normal-return receipt: it rereads the original request/raw
 leaves and records only `frozen/not-run` identity binding. The
 existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor

@@ -171,6 +171,17 @@ normal-return이 아니다. script path가 relative이면 ambient shell hook이 
 바꾸지 못하도록 lock 전에 거부한다. 실제 producer는 raw capture를 private
 under-parent-lock child core에 직접 연결할 때에만 이 probe를 확장할 수 있다.
 
+write_rc3_gate_e_aggregate_replay_receipt_v1.py는 그 future producer가 lexical terminal
+continuation 안에서만 호출할 private replay-only record helper다. caller-held
+input/frozen/Gate-E/source FD와 fresh·empty 별도 0700 receipt root를 받고, aggregate
+private core를 두 번 다시 실행해 canonical bytes가 정확히 같을 때만 fixed JSON,
+.intent, .complete hardlink pair를 기록한다. record에는 candidate/source identity,
+inventory/frozen descriptor, aggregate policy·external anchor와 aggregate report의
+SHA-256/byte length만 들어가며 receipt-level gate_e_status나 producer closure는 없다.
+Gate E input root에 leaf를 추가하지 않으므로 closed fourteen-leaf inventory contract를
+바꾸지 않는다. 이것은 durable semantic receipt나 actual producer normal-return이 아니며,
+post-link durability ambiguity는 resume할 수 없는 failure다.
+
 이는 local snapshot/preparer일 뿐 source raw-capture origin, cross-leaf atomic coherence,
 snapshot writer 또는 actual producer normal-return, evidence-root immutability, actual GPU
 capture, Gate E semantic replay/pass, durable receipt, deployment, qualification을 확립하지

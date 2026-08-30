@@ -429,6 +429,17 @@ GPU query/selection, Docker, subproducer, aggregate replay, semantic receipt, qu
 모두 absent이며 zero exit는 authenticated-lock probe만 뜻한다. relative script path는
 parent handoff 전에 fail closed한다.
 
+write_rc3_gate_e_aggregate_replay_receipt_v1.py는 actual producer receipt가 아닌
+private aggregate-replay-only terminal record다. caller-held input/frozen/Gate-E/source FD와
+fresh·empty separate 0700 root를 exact topology로 다시 확인하고, aggregate private core
+두 invocation의 canonical bytes가 같을 때만 candidate/source, inventory/frozen descriptor,
+policy/anchor 및 aggregate digest/length projection을 fixed JSON/intent/completion pair로
+publish한다. Gate E root의 fixed fourteen-leaf closure에는 receipt leaf를 쓰지 않으며
+gate_e_status, raw capture, producer normal-return, durable semantic receipt, qualification은
+계속 not-established다. final hardlink 뒤 directory sync가 ambiguous하면 visible pair가
+남아도 resume하거나 actual producer authority로 해석할 수 없다. future actual producer는
+이 v1 record를 승격하지 않고 자체 same-stack v2 producer/semantic receipt를 작성해야 한다.
+
 따라서 이 writer는 immutable local copy와 structural input inventory 외에는 아무 것도
 증명하지 않는다. original raw producer, source-to-artifact provenance, 14 leaf의 atomic
 coherence, writer/producer normal-return, actual capture/GPU, evidence-root immutability,
@@ -446,9 +457,10 @@ caller가 주는 image/golden SHA는 동일성 anchor일 뿐이며, 그 승인 �
 model-mount/source/producer provenance, native/optimizer semantic pass, aggregate Gate E 및 qualification은
 명시적으로 아직 확립하지 않는다.
 
-따라서 `check_rc3_rollback_receipt_v2.py`와 outer qualification은 aggregate Gate E replay
-자체가 아니라, **후속** authenticated actual Gate E producer의 same-stack normal-return
-closure와 versioned durable semantic receipt가 생긴 뒤에만 만들 수 있다. inventory와
+따라서 check_rc3_rollback_receipt_v2.py와 outer qualification은 aggregate Gate E replay나
+이 replay-only terminal record 자체가 아니라, **후속** authenticated actual Gate E producer의
+same-stack normal-return closure와 versioned durable semantic receipt가 생긴 뒤에만 만들 수
+있다. inventory와
 aggregate replayer는 report의 `passed`/threshold를 해석해 actual Gate E pass를 만들지 않는다. legacy path-based
 `check_release_candidate.py`는 RC3 Gate E replayer가 아니며 same-stack finalizer input으로
 수용할 수 없다. `freeze.raw`, freeze-input admission, v4 completion pair, structural precheck와

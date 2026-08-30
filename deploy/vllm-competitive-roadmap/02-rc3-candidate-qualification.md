@@ -737,6 +737,17 @@ ambient shell hook이 relative child identity를 바꾸지 못하도록 absolute
 semantic receipt는 아직 없으므로, 이 단계는 semantic receipt, actual candidate freeze,
 actual Gate E pass 또는 qualification을 만들거나 주장하지 않는다.
 
+write_rc3_gate_e_aggregate_replay_receipt_v1.py는 이 gap을 public summary로 메우지
+않는다. future authenticated producer가 이미 보유한 ordered lock/FD stack에서만 호출할
+private helper이며, Gate E input root와 topology상 분리된 fresh·empty receipt root에
+aggregate replay two-pass의 canonical SHA-256/byte length와 closed identity projection만
+fixed completion pair로 기록한다. Gate E root에는 receipt leaf를 전혀 쓰지 않고,
+record-level gate_e_status, raw capture/producer normal-return 또는 semantic receipt
+authority도 만들지 않는다. visible pair가 final-directory-sync ambiguity 뒤 남아도
+actual producer 또는 durable semantic receipt로 해석하거나 새 path invocation으로 resume할
+수 없다. 이후 actual producer의 private terminal continuation은 이 replay-only record를
+승격하지 말고 별도 versioned producer/semantic receipt를 직접 만들어야 한다.
+
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
 단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서
 descriptor와 candidate/rollback target을 derive하고 `stable-default`를 강제한다. raw v3
