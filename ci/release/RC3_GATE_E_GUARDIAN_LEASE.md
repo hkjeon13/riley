@@ -251,6 +251,28 @@ reviewed static native guardian. It also does not install the future FD 31/32
 bootstrap/core leaves and is not a compatibility path for the old v3 FD
 7/8/9/10 Python template.
 
+## Native sealed leaf snapshot v1 — not a guardian
+
+`tools/native/gate-e-sealed-leaf-snapshot/` is a source-only C11 library
+primitive for one much narrower part of the future FD 31/32 model. Given an
+already authenticated and held regular source descriptor, it first pins a
+private `CLOEXEC` duplicate, copies bounded bytes with fixed-offset I/O, and
+returns only an anonymous data-only `MFD_NOEXEC_SEAL` memfd after exact
+`F_SEAL_EXEC|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK|F_SEAL_SEAL` verification.
+It closes its private source duplicate before publishing the result and never
+reopens a path. It requires the Linux 6.3+ no-exec memfd ABI; no weaker seal or
+temporary-file fallback exists.
+
+This is not integrated with the root-bundle authenticator, which deliberately
+closes its audit descriptors after read-only observation. The snapshot does not
+authenticate the source path/manifest/object token/owner/ACL/filesystem,
+interpreter or runtime closure, host namespace, loader boundary, or same-object
+execution. It creates no FD 31/32 arrangement, no child, lease, cgroup, PID1
+ledger, GPU/Docker action, evidence, receipt, freeze, rollback, or
+qualification result. A no-exec Python leaf remains data for a separately
+authenticated interpreter, never an `execveat` substitute. Thus it is only an
+audit implementation precursor, not a launch or authority edge.
+
 ## CPU-only verification
 
 Run from the repository after the source file is present:

@@ -88,6 +88,22 @@ input. The terminal-newline diagnostic is noncanonical and is rejected before
 policy schema dispatch; a canonical reserialization of its transient schema or
 the future root-bundle manifest schema receives the explicit policy denial.
 
+The next deliberately narrower native source-only precursor is the excluded
+C11 library `tools/native/gate-e-sealed-leaf-snapshot/`. It has no CLI, paths,
+JSON, or configuration: a future trusted guardian may provide it an already
+held/authenticated regular leaf FD, and it can return only a bounded anonymous
+`MFD_NOEXEC_SEAL` data copy after fixed-offset I/O, source identity rechecks,
+post-seal hashing, and the exact immutable
+`F_SEAL_EXEC|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK|F_SEAL_SEAL` mask. It
+requires Linux 6.3+ no-exec memfd support, fails closed without a weak-seal or
+temporary-file fallback, and never changes the caller source offset. It does
+not authenticate a pathname/manifest/owner/ACL/filesystem/interpreter/runtime
+closure, make an FD 31/32 handoff, execute Python, or create a guardian,
+lease/cgroup/PID1 ledger, child, GPU/Docker action, evidence, receipt, freeze,
+rollback, Gate E producer, or qualification. The existing authenticator still
+closes all audited FDs, so this library is not yet connected to it or to an
+installed root boundary.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

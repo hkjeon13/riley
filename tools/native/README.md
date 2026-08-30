@@ -25,3 +25,13 @@ execute a bundle, establish a pre-loader trust root, create a lock/cgroup,
 touch GPU/Docker/evidence, or become a release, Gate E, freeze, rollback, or
 qualification input. Its local README defines its one allowed invocation,
 fixed output boundary, and fixture-only C11 checks.
+
+`gate-e-sealed-leaf-snapshot/` is a third standalone C11 **library-only**
+precursor. It takes no paths or configuration and has no CLI/output protocol:
+given an already-held, upstream-authenticated regular leaf FD, it can create a
+bounded anonymous `MFD_NOEXEC_SEAL` data memfd with an exact immutable seal
+mask. It does not authenticate the source path or interpreter/runtime closure,
+install or execute a bundle, create a lock/cgroup/child, or touch
+GPU/Docker/evidence. It is not a guardian, launcher, release, Gate E, freeze,
+rollback, or qualification input; its local README defines the strict Linux
+kernel requirement and fixture-only checks.

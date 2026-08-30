@@ -61,6 +61,18 @@ freeze/rollback/qualification을 establish하지 않는다. old v3 FD 7/8/9/10 t
 연결되지 않는다. terminal-newline 출력은 qualification input policy의 canonical-byte
 gate에서 먼저 거절되고, 출력/manifest의 canonical 재직렬화도 exact schema reason으로
 거절된다.
+**Gate E native sealed-leaf snapshot precursor:**
+`tools/native/gate-e-sealed-leaf-snapshot/`는 future guardian이 이미 held/authenticated
+regular Python leaf를 immutable data FD로 옮기기 위한 excluded C11 library-only source
+primitive다. CLI/path/JSON/configuration이 없고 caller FD를 즉시 private `CLOEXEC`
+duplicate로 pin한 뒤 offset을 바꾸지 않는 fixed-offset I/O만 사용한다. Linux 6.3+의
+`MFD_NOEXEC_SEAL`과 exact
+`F_SEAL_EXEC|F_SEAL_WRITE|F_SEAL_GROW|F_SEAL_SHRINK|F_SEAL_SEAL`가 없으면 fail-closed하며
+weak seal·temporary file·executable fallback은 없다. 이는 source path/manifest/owner/ACL/
+filesystem/interpreter/runtime closure나 host namespace/loader boundary를 authenticate하지
+않고 FD 31/32 handoff·Python execution·guardian lease/PID1 ledger·GPU/Docker/evidence/
+receipt/freeze/rollback/qualification을 만들지 않는다. 기존 root-bundle authenticator는
+audit FD를 close하므로 아직 이 primitive와 연결되거나 installed root boundary가 되지 않았다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
