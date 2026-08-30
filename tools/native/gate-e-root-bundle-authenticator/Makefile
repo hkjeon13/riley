@@ -15,15 +15,30 @@ test:
 	@set -eu; \
 	build_dir="$$(mktemp -d "$${TMPDIR:-/tmp}/riley-gate-e-root-bundle-authenticator.XXXXXX")"; \
 	test_binary="$$build_dir/test_gate_e_root_bundle_authenticator"; \
+	api_test_binary="$$build_dir/test_gate_e_root_bundle_held_api"; \
+	library_object="$$build_dir/gate_e_root_bundle_held_v1.o"; \
 	tool_binary="$$build_dir/gate_e_root_bundle_authenticator"; \
 	invalid_stdout="$$build_dir/invalid.stdout"; \
 	invalid_stderr="$$build_dir/invalid.stderr"; \
 	dynamic_symbols="$$build_dir/dynamic-symbols.txt"; \
 	dynamic_symbol_names="$$build_dir/dynamic-symbol-names.txt"; \
-	cleanup() { rm -f "$$test_binary" "$$tool_binary" "$$invalid_stdout" "$$invalid_stderr" "$$dynamic_symbols" "$$dynamic_symbol_names"; rmdir "$$build_dir"; }; \
+	library_symbols="$$build_dir/library-symbols.txt"; \
+	library_symbol_names="$$build_dir/library-symbol-names.txt"; \
+	cleanup() { rm -f "$$test_binary" "$$api_test_binary" "$$library_object" "$$tool_binary" "$$invalid_stdout" "$$invalid_stderr" "$$dynamic_symbols" "$$dynamic_symbol_names" "$$library_symbols" "$$library_symbol_names"; rmdir "$$build_dir"; }; \
 	trap cleanup EXIT HUP INT TERM; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) "$(TOOL_DIRECTORY)test_gate_e_root_bundle_authenticator.c" -o "$$test_binary" $(LDFLAGS) $(REQUIRED_LDFLAGS); \
 	(cd "$(TOOL_DIRECTORY)" && "$$test_binary"); \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) -DGATE_E_ROOT_BUNDLE_AUTHENTICATOR_LIBRARY -c "$(TOOL_DIRECTORY)gate_e_root_bundle_authenticator.c" -o "$$library_object"; \
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) "$(TOOL_DIRECTORY)test_gate_e_root_bundle_held_api.c" "$$library_object" -o "$$api_test_binary" $(LDFLAGS) $(REQUIRED_LDFLAGS); \
+	(cd "$(TOOL_DIRECTORY)" && "$$api_test_binary"); \
+	$(NM) -g --defined-only "$$library_object" >"$$library_symbols"; \
+	awk '{print $$NF}' "$$library_symbols" >"$$library_symbol_names"; \
+	for required_symbol in gate_e_root_bundle_held_v1_init gate_e_root_bundle_acquire_fixed_v1 gate_e_root_bundle_held_v1_recheck gate_e_root_bundle_held_v1_close; do \
+		grep -Fx "$$required_symbol" "$$library_symbol_names" >/dev/null; \
+	done; \
+	if grep -Fx main "$$library_symbol_names" >/dev/null; then \
+		printf '%s\n' "library object unexpectedly exports main" >&2; exit 1; \
+	fi; \
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(REQUIRED_CFLAGS) "$(TOOL_DIRECTORY)gate_e_root_bundle_authenticator.c" -o "$$tool_binary" $(LDFLAGS) $(REQUIRED_LDFLAGS); \
 	$(NM) -D --undefined-only "$$tool_binary" >"$$dynamic_symbols"; \
 	awk '{sub(/@.*/, "", $$NF); print $$NF}' "$$dynamic_symbols" >"$$dynamic_symbol_names"; \

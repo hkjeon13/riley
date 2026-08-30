@@ -11,6 +11,19 @@ Its only public form is:
 gate_e_root_bundle_authenticator --authenticate-root-bundle-v1
 ```
 
+For a future separately reviewed native guardian, the source directory also
+exports the C11 `gate_e_root_bundle_held_v1.h` library ABI. Its only acquire
+entrypoint is `gate_e_root_bundle_acquire_fixed_v1()`: it accepts no path,
+owner, leaf, manifest, lock, GPU/Docker, or configuration input and returns
+caller-owned read-only `CLOEXEC` descriptors for the fixed root, descendants,
+manifest, bootstrap, and core only after the same policy checks succeed.
+`gate_e_root_bundle_held_v1_recheck()` retains the fixed parent/name and held
+object identity checks, while `gate_e_root_bundle_held_v1_close()` closes and
+clears every handle. The diagnostic CLI immediately closes its handle before
+printing the unchanged non-authoritative JSON report. This retained-object API
+does not execute any leaf or turn the checkout-built dynamic binary into a
+static guardian, secure-exec launcher, installation path, or producer.
+
 It takes no paths, owner IDs, manifest names, bootstrap names, lock paths,
 GPU/Docker/evidence arguments, or configuration. For a root caller it can only
 read the future audit tree rooted at `/opt/riley/rc3-gate-e-v1`. It opens `/`
@@ -58,12 +71,15 @@ make analyze
 a current-UID private fixture plus the fixed public CLI rejection, and removes
 those exact temporary files afterwards. It never invokes the valid root-path
 form. `make analyze` performs a separate C compiler static analysis build.
-The compiled authenticator binaries do not open a GPU, create a
-lock/cgroup/socket/child, install a bundle, write evidence, or start a Gate E
-workload. The Make recipes themselves naturally invoke the compiler and small
-test utilities only. `make test` needs an executable temporary filesystem; a
-deliberately `noexec` scratch mount can still run `make analyze`, but must use
-an explicitly supplied executable `TMPDIR` for the fixture binary.
+The compiled authenticator binaries and held-object library do not open a GPU,
+create a lock/cgroup/socket/child, install a bundle, write evidence, or start a
+Gate E workload. The Make recipes themselves naturally invoke the compiler and
+small test utilities only. `make test` also links the public header against a
+library-mode object, checks the four exported ABI symbols, and confirms that
+the library object does not export `main`. `make test` needs an executable
+temporary filesystem; a deliberately `noexec` scratch mount can still run
+`make analyze`, but must use an explicitly supplied executable `TMPDIR` for the
+fixture binary.
 
 A checkout-built dynamic executable necessarily starts after its own loader.
 It is therefore not the pre-loader trust root and cannot perform the future

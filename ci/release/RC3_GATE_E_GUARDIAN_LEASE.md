@@ -293,10 +293,17 @@ through the fixed manifest/bootstrap/core leaves. It requires `O_NOATIME`,
 root ownership, exact modes, single regular-file links, ACL absence, approved
 local filesystem type, bootstrap capability absence, exact canonical manifest
 grammar, held-object identity rechecks, and bounded SHA-256/length closure.
-It closes every descriptor afterwards and never installs or creates that
-directory.
+The diagnostic CLI closes every descriptor before it emits its report. The
+versioned `gate_e_root_bundle_held_v1.h` source-library API may instead return
+the same fixed, read-only `CLOEXEC` root/ancestor/manifest/bootstrap/core
+descriptors with their held metadata and SHA-256 values to a later reviewed
+static guardian. Its acquire entrypoint takes no caller path or policy input;
+its recheck retains the fixed parent/name and held-object identity checks; its
+close operation clears every caller-owned handle. It never installs or creates
+that directory.
 
-This is a read-only object observation only. Its JSON keeps top-level
+This remains a read-only object-authentication precursor only. The checkout
+CLI JSON keeps top-level
 `status` at `not-established`; an `object_observation_status` of `checked`
 records only one consistent observation. It does not establish host-initial
 namespace identity, dynamic-loader or pre-Python trust, same-object
@@ -325,9 +332,11 @@ It closes its private source duplicate before publishing the result and never
 reopens a path. It requires the Linux 6.3+ no-exec memfd ABI; no weaker seal or
 temporary-file fallback exists.
 
-This is not integrated with the root-bundle authenticator, which deliberately
-closes its audit descriptors after read-only observation. The snapshot does not
-authenticate the source path/manifest/object token/owner/ACL/filesystem,
+This is not yet integrated with the root-bundle authenticator. The retained
+object API can provide a future caller with an already authenticated source
+descriptor, but neither library invokes the other or creates an FD 31/32
+arrangement. The snapshot does not authenticate the source
+path/manifest/object token/owner/ACL/filesystem,
 interpreter or runtime closure, host namespace, loader boundary, or same-object
 execution. It creates no FD 31/32 arrangement, no child, lease, cgroup, PID1
 ledger, GPU/Docker action, evidence, receipt, freeze, rollback, or

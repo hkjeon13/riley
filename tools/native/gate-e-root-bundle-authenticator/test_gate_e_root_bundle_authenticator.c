@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 #endif
 #define GATE_E_ROOT_BUNDLE_AUTHENTICATOR_LIBRARY
+#define GATE_E_ROOT_BUNDLE_AUTHENTICATOR_TESTING
 #include "gate_e_root_bundle_authenticator.c"
 
 #include <assert.h>
@@ -207,14 +208,52 @@ static void destroy_fixture(const struct fixture *const fixture) {
     (void)rmdir(fixture->root);
 }
 
-static enum anchor_reason authenticate_fixture(const struct fixture *const fixture) {
+static enum anchor_reason acquire_fixture(
+    const struct fixture *const fixture,
+    struct gate_e_root_bundle_held_v1 *const held
+) {
     const int descriptor = open(fixture->root, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
     enum anchor_reason reason;
 
     assert(descriptor >= 0);
-    reason = authenticate_bundle_from_held_prefix_fd(descriptor, getuid(), getgid());
-    assert(close(descriptor) == 0);
+    reason = acquire_bundle_from_held_prefix_fd(descriptor, getuid(), getgid(), held);
+    if (close(descriptor) != 0 && reason == ANCHOR_OK) {
+        reason = ANCHOR_CLOSE_FAILED;
+    }
     return reason;
+}
+
+static enum anchor_reason authenticate_fixture(const struct fixture *const fixture) {
+    struct gate_e_root_bundle_held_v1 held;
+    enum anchor_reason reason;
+
+    gate_e_root_bundle_held_v1_init(&held);
+    reason = acquire_fixture(fixture, &held);
+    if (reason == ANCHOR_OK) {
+        reason = gate_e_root_bundle_held_v1_close(&held);
+    }
+    return reason;
+}
+
+static void assert_held_is_cleared(const struct gate_e_root_bundle_held_v1 *const held) {
+    static const unsigned char zero_digest[GATE_E_ROOT_BUNDLE_SHA256_DIGEST_BYTES_V1] = {0};
+
+    for (size_t index = 0; index < GATE_E_ROOT_BUNDLE_HELD_DIRECTORY_COUNT_V1; ++index) {
+        assert(held->directories[index].descriptor == -1);
+        assert(held->directories[index].identity.device == 0);
+        assert(held->directories[index].identity.inode == 0);
+        assert(held->directories[index].identity.mode == 0);
+        assert(held->directories[index].identity.links == 0);
+    }
+    assert(held->manifest.descriptor == -1);
+    assert(held->bootstrap.descriptor == -1);
+    assert(held->core.descriptor == -1);
+    assert(held->manifest.byte_length == 0);
+    assert(held->bootstrap.byte_length == 0);
+    assert(held->core.byte_length == 0);
+    assert(memcmp(held->manifest.digest, zero_digest, sizeof(zero_digest)) == 0);
+    assert(memcmp(held->bootstrap.digest, zero_digest, sizeof(zero_digest)) == 0);
+    assert(memcmp(held->core.digest, zero_digest, sizeof(zero_digest)) == 0);
 }
 
 static void test_sha256_and_filesystem_policy(void) {
@@ -277,6 +316,74 @@ static void test_valid_fixture_and_manifest_contract(void) {
     invoke_fgetxattr = absent_xattr;
     assert(authenticate_fixture(&fixture) == ANCHOR_OK);
     invoke_fgetxattr = fgetxattr;
+    invoke_fstatfs = saved_statfs;
+    destroy_fixture(&fixture);
+}
+
+static void test_held_bundle_api_retains_rechecks_and_closes(void) {
+    const struct fixture fixture = make_fixture();
+    struct gate_e_root_bundle_held_v1 held;
+    const statfs_invoker saved_statfs = invoke_fstatfs;
+    const xattr_invoker saved_xattr = invoke_fgetxattr;
+
+    gate_e_root_bundle_held_v1_init(&held);
+    assert_held_is_cleared(&held);
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_INVALID_ARGUMENT);
+    invoke_fstatfs = approved_filesystem;
+    invoke_fgetxattr = absent_xattr;
+    assert(acquire_fixture(&fixture, &held) == ANCHOR_OK);
+    for (size_t index = 0; index < GATE_E_ROOT_BUNDLE_HELD_DIRECTORY_COUNT_V1; ++index) {
+        const int descriptor_flags = fcntl(held.directories[index].descriptor, F_GETFD);
+
+        assert(held.directories[index].descriptor >= 3);
+        assert(descriptor_flags >= 0 && (descriptor_flags & FD_CLOEXEC) != 0);
+    }
+    assert(held.manifest.descriptor >= 3 && held.bootstrap.descriptor >= 3 && held.core.descriptor >= 3);
+    assert(held.manifest.byte_length > 0 && held.bootstrap.byte_length == strlen(BOOTSTRAP_CONTENTS));
+    assert(held.core.byte_length == strlen(CORE_CONTENTS));
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_OK);
+    assert(acquire_fixture(&fixture, &held) == ANCHOR_INVALID_ARGUMENT);
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_OK);
+    assert(gate_e_root_bundle_acquire_fixed_v1(&held) == ANCHOR_INVALID_ARGUMENT);
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_OK);
+
+    {
+        const int descriptor_flags = fcntl(held.bootstrap.descriptor, F_GETFD);
+
+        assert(descriptor_flags >= 0);
+        assert(fcntl(held.bootstrap.descriptor, F_SETFD, descriptor_flags & ~FD_CLOEXEC) == 0);
+        assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_INVALID_ARGUMENT);
+        assert(fcntl(held.bootstrap.descriptor, F_SETFD, descriptor_flags) == 0);
+    }
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_OK);
+    assert(chmod(fixture.core, 0600) == 0);
+    assert(gate_e_root_bundle_held_v1_recheck(&held) == ANCHOR_OBJECT_RACED);
+    assert(gate_e_root_bundle_held_v1_close(&held) == ANCHOR_OK);
+    assert_held_is_cleared(&held);
+    assert(gate_e_root_bundle_held_v1_close(&held) == ANCHOR_OK);
+    assert_held_is_cleared(&held);
+    invoke_fgetxattr = saved_xattr;
+    invoke_fstatfs = saved_statfs;
+    destroy_fixture(&fixture);
+}
+
+static void test_held_bundle_api_failure_clears_output(void) {
+    const struct fixture fixture = make_fixture();
+    struct gate_e_root_bundle_held_v1 held;
+    const openat2_invoker saved_openat2 = invoke_openat2;
+    const statfs_invoker saved_statfs = invoke_fstatfs;
+    const xattr_invoker saved_xattr = invoke_fgetxattr;
+
+    gate_e_root_bundle_held_v1_init(&held);
+    invoke_fstatfs = approved_filesystem;
+    invoke_fgetxattr = absent_xattr;
+    forced_enosys_calls = 0;
+    invoke_openat2 = forced_enosys_openat2;
+    assert(acquire_fixture(&fixture, &held) == ANCHOR_OPENAT2_UNAVAILABLE);
+    assert(forced_enosys_calls == 1);
+    assert_held_is_cleared(&held);
+    invoke_openat2 = saved_openat2;
+    invoke_fgetxattr = saved_xattr;
     invoke_fstatfs = saved_statfs;
     destroy_fixture(&fixture);
 }
@@ -463,6 +570,8 @@ int main(void) {
     test_sha256_and_filesystem_policy();
     test_report_and_cli_are_non_authoritative();
     test_valid_fixture_and_manifest_contract();
+    test_held_bundle_api_retains_rechecks_and_closes();
+    test_held_bundle_api_failure_clears_output();
     test_rejects_openat2_fallback_acl_and_capability();
     test_rejects_mode_link_manifest_and_digest_drift();
     test_rejects_symlink_and_exact_parser_drift();

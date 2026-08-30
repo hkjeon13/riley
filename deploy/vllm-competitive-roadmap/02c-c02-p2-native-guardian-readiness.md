@@ -30,6 +30,10 @@ C02-P1은 raw provenance, immutable input closure, source-only C11 matchers와 C
 5. **Cutover fault injection.** anchor authentication, secure-exec, ledger acquisition/commit, cgroup move/observation, controller restart, worker terminal, release의 모든 cutover에서 failure injection을 실행한다. unknown-after-acquire crash도 포함한다.
 6. **Operational authorization separation.** GPU, Docker, raw capture, evidence, receipt, candidate freeze, semantic replay, qualification은 native design review와 별도로 명시 승인한다. no-GPU acceptance는 이 승인이나 실제 producer 실행을 뜻하지 않는다.
 
+### 현재 source precursor
+
+`gate-e-root-bundle-authenticator`는 fixed future guardian bundle을 검사한 뒤 곧바로 닫던 기존 CLI 정책을 보존하면서, 같은 held root/ancestor/manifest/bootstrap/core `CLOEXEC` descriptor와 metadata/digest를 caller-owned handle로 돌려주는 `gate_e_root_bundle_held_v1` ABI를 추가했다. `recheck`와 single-owner `close`도 포함하지만, 이 source API는 checkout-built dynamic binary이며 `execveat`, FD 31/32 placement, interpreter/runtime closure, PID1/cgroup/ledger, launch 또는 GPU/Docker authority를 만들지 않는다. sealed-leaf snapshot과도 아직 연결하지 않는다.
+
 ## 3. 설계·리뷰 산출물
 
 native implementation 또는 root installation 전에 다음 산출물을 source review와 administrator review에서 각각 독립적으로 확인한다.

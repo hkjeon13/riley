@@ -6,10 +6,12 @@
  *
  * Its production invocation has no caller-controlled paths.  The only tree
  * it can observe is the future guardian audit bundle below /opt/riley.  It
- * uses held descriptors throughout one read-only check and closes them before
- * returning.  A later, separately reviewed static root guardian must still
- * authenticate its own loader/interpreter/runtime closure and perform the
- * same-object secure-exec, ledger, cgroup, and pidfd work.
+ * uses held descriptors throughout one read-only check.  Its CLI closes them
+ * before reporting; its versioned source-library API can return the same
+ * verified CLOEXEC descriptors to a later, separately reviewed static root
+ * guardian.  That future guardian must still authenticate its own
+ * loader/interpreter/runtime closure and perform the same-object secure-exec,
+ * ledger, cgroup, and pidfd work.
  */
 
 #ifndef _GNU_SOURCE
@@ -34,14 +36,40 @@
 #include <sys/xattr.h>
 #include <unistd.h>
 
+#include "gate_e_root_bundle_held_v1.h"
+
 enum {
     MAX_MANIFEST_BYTES = 64 * 1024,
     MAX_CODE_BYTES = 2 * 1024 * 1024,
     SHA256_BLOCK_BYTES = 64,
-    SHA256_DIGEST_BYTES = 32,
     SHA256_HEX_BYTES = 64,
-    BUNDLE_DIRECTORY_COUNT = 4,
 };
+
+#define SHA256_DIGEST_BYTES GATE_E_ROOT_BUNDLE_SHA256_DIGEST_BYTES_V1
+#define BUNDLE_DIRECTORY_COUNT GATE_E_ROOT_BUNDLE_HELD_DIRECTORY_COUNT_V1
+
+/* Keep the implementation's short names private while exposing versioned ABI. */
+#define anchor_reason gate_e_root_bundle_reason_v1
+#define ANCHOR_OK GATE_E_ROOT_BUNDLE_OK_V1
+#define ANCHOR_NOT_ROOT GATE_E_ROOT_BUNDLE_NOT_ROOT_V1
+#define ANCHOR_OPENAT2_UNAVAILABLE GATE_E_ROOT_BUNDLE_OPENAT2_UNAVAILABLE_V1
+#define ANCHOR_ROOT_UNREADABLE GATE_E_ROOT_BUNDLE_ROOT_UNREADABLE_V1
+#define ANCHOR_UNSAFE_DIRECTORY GATE_E_ROOT_BUNDLE_UNSAFE_DIRECTORY_V1
+#define ANCHOR_UNSAFE_FILESYSTEM GATE_E_ROOT_BUNDLE_UNSAFE_FILESYSTEM_V1
+#define ANCHOR_ACL_PRESENT GATE_E_ROOT_BUNDLE_ACL_PRESENT_V1
+#define ANCHOR_ACL_UNVERIFIABLE GATE_E_ROOT_BUNDLE_ACL_UNVERIFIABLE_V1
+#define ANCHOR_CAPABILITY_PRESENT GATE_E_ROOT_BUNDLE_CAPABILITY_PRESENT_V1
+#define ANCHOR_UNSAFE_FILE GATE_E_ROOT_BUNDLE_UNSAFE_FILE_V1
+#define ANCHOR_FILE_UNREADABLE GATE_E_ROOT_BUNDLE_FILE_UNREADABLE_V1
+#define ANCHOR_OBJECT_RACED GATE_E_ROOT_BUNDLE_OBJECT_RACED_V1
+#define ANCHOR_MANIFEST_INVALID GATE_E_ROOT_BUNDLE_MANIFEST_INVALID_V1
+#define ANCHOR_DIGEST_MISMATCH GATE_E_ROOT_BUNDLE_DIGEST_MISMATCH_V1
+#define ANCHOR_CLOSE_FAILED GATE_E_ROOT_BUNDLE_CLOSE_FAILED_V1
+#define ANCHOR_INVALID_ARGUMENT GATE_E_ROOT_BUNDLE_INVALID_ARGUMENT_V1
+#define object_identity gate_e_root_bundle_object_identity_v1
+#define held_directory gate_e_root_bundle_held_directory_v1
+#define held_file gate_e_root_bundle_held_file_v1
+#define bundle_handles gate_e_root_bundle_held_v1
 
 static const char *const ROOT_BUNDLE_COMPONENTS[BUNDLE_DIRECTORY_COUNT] = {
     "/", "opt", "riley", "rc3-gate-e-v1",
@@ -50,55 +78,6 @@ static const char *const MANIFEST_NAME = "gate-e-v3.manifest.json";
 static const char *const BOOTSTRAP_NAME = "rc3_gate_e_guardian_bootstrap_v1.py";
 static const char *const CORE_NAME = "rc3_gate_e_guardian_no_action_core_v1.py";
 static const char *const MANIFEST_SCHEMA = "riley.rc3-gate-e-root-bundle.v1";
-
-enum anchor_reason {
-    ANCHOR_OK,
-    ANCHOR_NOT_ROOT,
-    ANCHOR_OPENAT2_UNAVAILABLE,
-    ANCHOR_ROOT_UNREADABLE,
-    ANCHOR_UNSAFE_DIRECTORY,
-    ANCHOR_UNSAFE_FILESYSTEM,
-    ANCHOR_ACL_PRESENT,
-    ANCHOR_ACL_UNVERIFIABLE,
-    ANCHOR_CAPABILITY_PRESENT,
-    ANCHOR_UNSAFE_FILE,
-    ANCHOR_FILE_UNREADABLE,
-    ANCHOR_OBJECT_RACED,
-    ANCHOR_MANIFEST_INVALID,
-    ANCHOR_DIGEST_MISMATCH,
-    ANCHOR_CLOSE_FAILED,
-};
-
-struct object_identity {
-    dev_t device;
-    ino_t inode;
-    mode_t mode;
-    nlink_t links;
-    uid_t uid;
-    gid_t gid;
-    off_t size;
-    struct timespec mtime;
-    struct timespec ctime;
-};
-
-struct held_directory {
-    int descriptor;
-    struct object_identity identity;
-};
-
-struct held_file {
-    int descriptor;
-    struct object_identity identity;
-    unsigned char digest[SHA256_DIGEST_BYTES];
-    size_t byte_length;
-};
-
-struct bundle_handles {
-    struct held_directory directories[BUNDLE_DIRECTORY_COUNT];
-    struct held_file manifest;
-    struct held_file bootstrap;
-    struct held_file core;
-};
 
 struct manifest_spec {
     char bootstrap_sha256[SHA256_HEX_BYTES + 1];
@@ -410,6 +389,12 @@ static void initialize_bundle_handles(struct bundle_handles *const handles) {
     handles->core.descriptor = -1;
 }
 
+void gate_e_root_bundle_held_v1_init(struct gate_e_root_bundle_held_v1 *const held) {
+    if (held != NULL) {
+        initialize_bundle_handles(held);
+    }
+}
+
 static enum anchor_reason close_bundle_handles(struct bundle_handles *const handles) {
     enum anchor_reason result = ANCHOR_OK;
     int *const file_descriptors[] = {
@@ -431,7 +416,17 @@ static enum anchor_reason close_bundle_handles(struct bundle_handles *const hand
         }
         *descriptor = -1;
     }
+    initialize_bundle_handles(handles);
     return result;
+}
+
+enum gate_e_root_bundle_reason_v1 gate_e_root_bundle_held_v1_close(
+    struct gate_e_root_bundle_held_v1 *const held
+) {
+    if (held == NULL) {
+        return ANCHOR_INVALID_ARGUMENT;
+    }
+    return close_bundle_handles(held);
 }
 
 static enum anchor_reason inspect_opened_directory(
@@ -463,7 +458,6 @@ static enum anchor_reason inspect_opened_directory(
     return ANCHOR_OK;
 }
 
-#ifndef GATE_E_ROOT_BUNDLE_AUTHENTICATOR_LIBRARY
 static enum anchor_reason open_root_directory(
     const uid_t expected_uid,
     const gid_t expected_gid,
@@ -485,7 +479,6 @@ static enum anchor_reason open_root_directory(
     output->descriptor = descriptor;
     return ANCHOR_OK;
 }
-#endif
 
 static enum anchor_reason open_child_directory(
     const struct held_directory *const parent,
@@ -862,111 +855,204 @@ static enum anchor_reason recheck_held_file(
     return ANCHOR_OK;
 }
 
-static enum anchor_reason authenticate_bundle_from_held_prefix_fd(
+static bool held_descriptor_is_readonly_cloexec(const int descriptor) {
+    int descriptor_flags;
+    int status_flags;
+
+    if (descriptor < 3) {
+        return false;
+    }
+    descriptor_flags = fcntl(descriptor, F_GETFD);
+    status_flags = fcntl(descriptor, F_GETFL);
+
+    return descriptor_flags >= 0 && (descriptor_flags & FD_CLOEXEC) != 0 &&
+           status_flags >= 0 && (status_flags & O_ACCMODE) == O_RDONLY;
+}
+
+static bool bundle_handles_are_clear(const struct bundle_handles *const handles) {
+    if (handles == NULL) {
+        return false;
+    }
+    for (size_t index = 0; index < BUNDLE_DIRECTORY_COUNT; ++index) {
+        if (handles->directories[index].descriptor != -1) {
+            return false;
+        }
+    }
+    return handles->manifest.descriptor == -1 && handles->bootstrap.descriptor == -1 &&
+           handles->core.descriptor == -1;
+}
+
+static bool bundle_handles_are_complete(const struct bundle_handles *const handles) {
+    if (handles == NULL) {
+        return false;
+    }
+    for (size_t index = 0; index < BUNDLE_DIRECTORY_COUNT; ++index) {
+        if (!held_descriptor_is_readonly_cloexec(handles->directories[index].descriptor)) {
+            return false;
+        }
+    }
+    return held_descriptor_is_readonly_cloexec(handles->manifest.descriptor) &&
+           held_descriptor_is_readonly_cloexec(handles->bootstrap.descriptor) &&
+           held_descriptor_is_readonly_cloexec(handles->core.descriptor);
+}
+
+static enum anchor_reason recheck_bundle_handles(const struct bundle_handles *const handles) {
+    enum anchor_reason reason;
+
+    if (!bundle_handles_are_complete(handles)) {
+        return ANCHOR_INVALID_ARGUMENT;
+    }
+    for (size_t index = 0; index < BUNDLE_DIRECTORY_COUNT; ++index) {
+        reason = recheck_held_directory(
+            &handles->directories[index],
+            index == 0 ? NULL : &handles->directories[index - 1],
+            index == 0 ? NULL : ROOT_BUNDLE_COMPONENTS[index]
+        );
+        if (reason != ANCHOR_OK) {
+            return reason;
+        }
+    }
+    reason = recheck_held_file(
+        &handles->manifest, &handles->directories[BUNDLE_DIRECTORY_COUNT - 1], MANIFEST_NAME
+    );
+    if (reason != ANCHOR_OK) {
+        return reason;
+    }
+    reason = recheck_held_file(
+        &handles->bootstrap, &handles->directories[BUNDLE_DIRECTORY_COUNT - 1], BOOTSTRAP_NAME
+    );
+    if (reason != ANCHOR_OK) {
+        return reason;
+    }
+    return recheck_held_file(
+        &handles->core, &handles->directories[BUNDLE_DIRECTORY_COUNT - 1], CORE_NAME
+    );
+}
+
+enum gate_e_root_bundle_reason_v1 gate_e_root_bundle_held_v1_recheck(
+    const struct gate_e_root_bundle_held_v1 *const held
+) {
+    return recheck_bundle_handles(held);
+}
+
+static enum anchor_reason acquire_bundle_from_held_prefix_fd(
     const int prefix_fd,
     const uid_t expected_uid,
-    const gid_t expected_gid
+    const gid_t expected_gid,
+    struct bundle_handles *const output
 ) {
-    struct bundle_handles handles;
+    struct bundle_handles candidate;
     struct manifest_spec manifest_specification;
     unsigned char *manifest_raw = NULL;
     unsigned char *unused_raw = NULL;
     enum anchor_reason reason;
 
-    initialize_bundle_handles(&handles);
-    handles.directories[0].descriptor = fcntl(prefix_fd, F_DUPFD_CLOEXEC, 3);
-    if (handles.directories[0].descriptor < 0) {
+    if (!bundle_handles_are_clear(output)) {
+        return ANCHOR_INVALID_ARGUMENT;
+    }
+    initialize_bundle_handles(output);
+    initialize_bundle_handles(&candidate);
+    candidate.directories[0].descriptor = fcntl(prefix_fd, F_DUPFD_CLOEXEC, 3);
+    if (candidate.directories[0].descriptor < 0) {
         return ANCHOR_ROOT_UNREADABLE;
     }
     reason = inspect_opened_directory(
-        handles.directories[0].descriptor, expected_uid, expected_gid, 0755,
-        &handles.directories[0].identity
+        candidate.directories[0].descriptor, expected_uid, expected_gid, 0755,
+        &candidate.directories[0].identity
     );
     if (reason != ANCHOR_OK) {
         goto finish;
     }
     for (size_t index = 1; index < BUNDLE_DIRECTORY_COUNT; ++index) {
         reason = open_child_directory(
-            &handles.directories[index - 1], ROOT_BUNDLE_COMPONENTS[index], expected_uid, expected_gid,
-            &handles.directories[index]
+            &candidate.directories[index - 1], ROOT_BUNDLE_COMPONENTS[index], expected_uid, expected_gid,
+            &candidate.directories[index]
         );
         if (reason != ANCHOR_OK) {
             goto finish;
         }
     }
     reason = open_regular_file(
-        &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], MANIFEST_NAME, expected_uid, expected_gid,
-        0644, MAX_MANIFEST_BYTES, false, true, &handles.manifest, &manifest_raw
+        &candidate.directories[BUNDLE_DIRECTORY_COUNT - 1], MANIFEST_NAME, expected_uid, expected_gid,
+        0644, MAX_MANIFEST_BYTES, false, true, &candidate.manifest, &manifest_raw
     );
     if (reason != ANCHOR_OK) {
         goto finish;
     }
-    reason = parse_manifest(manifest_raw, handles.manifest.byte_length, &manifest_specification);
+    reason = parse_manifest(manifest_raw, candidate.manifest.byte_length, &manifest_specification);
     if (reason != ANCHOR_OK) {
         goto finish;
     }
     free(manifest_raw);
     manifest_raw = NULL;
     reason = open_regular_file(
-        &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], BOOTSTRAP_NAME, expected_uid, expected_gid,
-        0755, MAX_CODE_BYTES, true, false, &handles.bootstrap, &unused_raw
+        &candidate.directories[BUNDLE_DIRECTORY_COUNT - 1], BOOTSTRAP_NAME, expected_uid, expected_gid,
+        0755, MAX_CODE_BYTES, true, false, &candidate.bootstrap, &unused_raw
     );
     if (reason != ANCHOR_OK) {
         goto finish;
     }
     reason = open_regular_file(
-        &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], CORE_NAME, expected_uid, expected_gid,
-        0644, MAX_CODE_BYTES, false, false, &handles.core, &unused_raw
+        &candidate.directories[BUNDLE_DIRECTORY_COUNT - 1], CORE_NAME, expected_uid, expected_gid,
+        0644, MAX_CODE_BYTES, false, false, &candidate.core, &unused_raw
     );
     if (reason != ANCHOR_OK) {
         goto finish;
     }
     if (!file_matches_manifest(
-            &handles.bootstrap, manifest_specification.bootstrap_sha256,
+            &candidate.bootstrap, manifest_specification.bootstrap_sha256,
             manifest_specification.bootstrap_byte_length
         ) ||
         !file_matches_manifest(
-            &handles.core, manifest_specification.core_sha256,
+            &candidate.core, manifest_specification.core_sha256,
             manifest_specification.core_byte_length
         )) {
         reason = ANCHOR_DIGEST_MISMATCH;
         goto finish;
     }
-    for (size_t index = 0; index < BUNDLE_DIRECTORY_COUNT; ++index) {
-        reason = recheck_held_directory(
-            &handles.directories[index],
-            index == 0 ? NULL : &handles.directories[index - 1],
-            index == 0 ? NULL : ROOT_BUNDLE_COMPONENTS[index]
-        );
-        if (reason != ANCHOR_OK) {
-            goto finish;
-        }
-    }
-    reason = recheck_held_file(
-        &handles.manifest, &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], MANIFEST_NAME
-    );
-    if (reason != ANCHOR_OK) {
-        goto finish;
-    }
-    reason = recheck_held_file(
-        &handles.bootstrap, &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], BOOTSTRAP_NAME
-    );
-    if (reason != ANCHOR_OK) {
-        goto finish;
-    }
-    reason = recheck_held_file(
-        &handles.core, &handles.directories[BUNDLE_DIRECTORY_COUNT - 1], CORE_NAME
-    );
+    reason = recheck_bundle_handles(&candidate);
 
 finish:
     free(manifest_raw);
     free(unused_raw);
-    if (close_bundle_handles(&handles) != ANCHOR_OK && reason == ANCHOR_OK) {
+    if (reason != ANCHOR_OK) {
+        (void)close_bundle_handles(&candidate);
+        initialize_bundle_handles(output);
+        return reason;
+    }
+    *output = candidate;
+    initialize_bundle_handles(&candidate);
+    return ANCHOR_OK;
+}
+
+enum gate_e_root_bundle_reason_v1 gate_e_root_bundle_acquire_fixed_v1(
+    struct gate_e_root_bundle_held_v1 *const held
+) {
+    struct held_directory root = {.descriptor = -1};
+    enum anchor_reason reason;
+
+    if (!bundle_handles_are_clear(held)) {
+        return ANCHOR_INVALID_ARGUMENT;
+    }
+    initialize_bundle_handles(held);
+    if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0) {
+        return ANCHOR_NOT_ROOT;
+    }
+    reason = open_root_directory(0, 0, &root);
+    if (reason == ANCHOR_OK) {
+        reason = acquire_bundle_from_held_prefix_fd(root.descriptor, 0, 0, held);
+    }
+    if (root.descriptor >= 0 && close(root.descriptor) != 0 && reason == ANCHOR_OK) {
         reason = ANCHOR_CLOSE_FAILED;
+    }
+    if (reason != ANCHOR_OK) {
+        (void)close_bundle_handles(held);
     }
     return reason;
 }
 
+#if !defined(GATE_E_ROOT_BUNDLE_AUTHENTICATOR_LIBRARY) || \
+    defined(GATE_E_ROOT_BUNDLE_AUTHENTICATOR_TESTING)
 static const char *reason_code(const enum anchor_reason reason) {
     switch (reason) {
     case ANCHOR_OK:
@@ -999,6 +1085,8 @@ static const char *reason_code(const enum anchor_reason reason) {
         return "root-bundle-manifest-digest-mismatch";
     case ANCHOR_CLOSE_FAILED:
         return "root-bundle-held-fd-close-failed";
+    case ANCHOR_INVALID_ARGUMENT:
+        return "root-bundle-held-handle-invalid";
     }
     return "unknown-root-bundle-preflight-reason";
 }
@@ -1063,21 +1151,17 @@ static const char *program_name_for_usage(const int argc, const char *const argv
     }
     return "gate_e_root_bundle_authenticator";
 }
+#endif
 
 #ifndef GATE_E_ROOT_BUNDLE_AUTHENTICATOR_LIBRARY
 static enum anchor_reason authenticate_fixed_root_bundle_v1(void) {
-    struct held_directory root = {.descriptor = -1};
+    struct bundle_handles held;
     enum anchor_reason reason;
 
-    if (getuid() != 0 || geteuid() != 0 || getgid() != 0 || getegid() != 0) {
-        return ANCHOR_NOT_ROOT;
-    }
-    reason = open_root_directory(0, 0, &root);
+    gate_e_root_bundle_held_v1_init(&held);
+    reason = gate_e_root_bundle_acquire_fixed_v1(&held);
     if (reason == ANCHOR_OK) {
-        reason = authenticate_bundle_from_held_prefix_fd(root.descriptor, 0, 0);
-    }
-    if (root.descriptor >= 0 && close(root.descriptor) != 0 && reason == ANCHOR_OK) {
-        reason = ANCHOR_CLOSE_FAILED;
+        reason = gate_e_root_bundle_held_v1_close(&held);
     }
     return reason;
 }
