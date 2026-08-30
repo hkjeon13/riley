@@ -49,6 +49,21 @@ source template and CPU-only memfd/socketpair test are not an installed anchor
 or a path to invoke on `server-4096`; the root-installed bootstrap remains a
 separate prerequisite.
 
+`ci/release/run_remote_rc3_gate_e_session_v3.py` now supplies that matching
+**root-bound no-action bootstrap source template**, not a producer. The only
+future public invocation is the exact pinned interpreter plus fixed
+`/opt/riley/rc3-gate-e-v1` path and `--bootstrap-core-smoke-test`; checkout
+execution and all CLI overrides fail before anchor/lock/socket/fork work. An
+installed copy must independently verify its root service context, held
+no-follow/ACL-free anchor and preprovisioned root-only `gate-e-v3.lock`, then
+keep the lock only in parent FD 7 while passing sealed core/config FDs 8/9 and
+a credential-authenticated FD 10 socket to the child. Its CPU fixture proves
+only that no-action handoff and lock rejection/release. It cannot authorize a
+GPU producer: a future root-native secure-exec launcher must prevent dynamic
+loader injection, authenticate the bootstrap leaf before Python loads it, and
+a guardian/lease must close the parent-SIGKILL lock gap.
+No installed bundle exists on `server-4096` yet.
+
 ## Trusted inputs
 
 Select these values from reviewed evidence before starting the measurement.

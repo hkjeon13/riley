@@ -20,6 +20,17 @@ credential-authenticated socket handoff의 nonce/config-digest-bound
 `INIT → READY → RUN_NO_ACTION → COMPLETE`는
 CPU-only no-action protocol일 뿐이다. GPU/Docker/raw capture/evidence/semantic replay/
 receipt/qualification은 모두 여전히 없다.<br>
+**Gate E v3 root-bound no-action bootstrap template:**
+`run_remote_rc3_gate_e_session_v3.py`는 아직 설치되지 않은 root-owned parent-side
+source/audit template다. fixed `/opt` path·pinned isolated Python·단일 smoke argument만
+허용하도록 설계됐고 checkout/override는 anchor·lock·socket·fork 전에 fail-closed한다.
+future installed copy는 root service context, raw empty environment, unblocked
+HUP/INT/TERM/default `SIGCHLD`, PID 1 namespace/full initial UID/GID map, approved local filesystem 위의
+ACL-free held anchor와 pre-existing lock을 재검증해 parent FD 7와 core FDs 8/9/10을
+분리한다. CPU fixture 결과는 no-action protocol result일 뿐 GPU capture/evidence/receipt/
+qualification authority가 아니다. dynamic-loader injection 및 parent-SIGKILL lock gap은
+Python load 전 bootstrap leaf까지 authenticate하는 후속 native launcher·guardian/lease PR에서
+해소해야 한다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 

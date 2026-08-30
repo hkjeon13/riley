@@ -13,15 +13,21 @@ must provision the following fixed locations outside the checkout:
   run_remote_rc3_gate_e_session_v3.py
   rc3_gate_e_private_raw_core_v1.py
 /var/lib/riley/rc3-gate-e/lock/
+  gate-e-v3.lock
 ```
 
 Every ancestor from `/` through both final directories must be root-owned and
-not group/world writable. The anchor root must be mode `0755`, the lock
-directory mode `0700`, and all three files must be root-owned, single-link,
-regular files with no group/world write bit. The bootstrap must be owner
-executable. The manifest is canonical JSON with a terminal newline and
-contains exactly the fixed schema version, the bootstrap/core filename,
-SHA-256, byte length, and the fixed lock-directory path.
+not group/world writable and must carry no POSIX ACL. The anchor root must be
+mode `0755`, the lock directory mode `0700`, the bootstrap mode `0755`, and
+the core and manifest mode `0644`. Those three anchor files must be root-owned,
+single-link regular files. `gate-e-v3.lock` must already exist as a root-owned,
+single-link, zero-byte regular file with exact mode `0600`; the bootstrap never
+creates it. The manifest is canonical JSON with a terminal newline and contains
+exactly the fixed schema version, bootstrap/core filename, SHA-256, byte length,
+and fixed lock-directory path. The installed public bootstrap additionally
+allows only `ext4`, `xfs`, or `btrfs` for every held ancestor/final directory;
+network, overlay, and unknown rich-ACL filesystems fail closed rather than
+pretending the POSIX mode/xattr checks capture their write policy.
 
 `ci/release/verify_rc3_gate_e_execution_anchor_v1.py` accepts only this
 fixed contract, under the reviewed isolated interpreter:
@@ -53,6 +59,57 @@ reviewed bundle must carry its own core digest in the root-owned bootstrap,
 retain the parent-only lock, and use the locked FD stack directly; it must not
 reuse the retired Bash runner, the v1 smoke probe, the v2 source probe, or the
 aggregate replay record as authority.
+
+## v3 root-bound no-action bootstrap template
+
+`ci/release/run_remote_rc3_gate_e_session_v3.py` is the matching audit/source
+template for a future **root-installed** bootstrap. Its only public form is
+the exact fixed invocation below, launched by a reviewed root-owned service or
+narrow privileged launcher through an empty `execve` environment:
+
+```text
+/usr/bin/python3.10 -I -S -E -B \
+  /opt/riley/rc3-gate-e-v1/run_remote_rc3_gate_e_session_v3.py \
+  --bootstrap-core-smoke-test
+```
+
+The checkout copy is intentionally not callable: it rejects before opening an
+anchor, lock, socket, or child. The eventual installed copy independently
+checks the pinned interpreter, fixed argv/path, raw empty environment, initial
+`{0,1,2}` FD set, root UID, unblocked HUP/INT/TERM and default `SIGCHLD`, PID 1
+mount/user namespaces and the single full initial `0 0 4294967295` UID/GID
+identity maps. It then repeats held
+`openat`/no-follow/ACL checks for the anchor, authenticates
+the canonical manifest and bootstrap/core digests, and compares the core to a
+compiled-in SHA-256 and byte-length review pin. The mutable-checkout verifier
+is neither imported nor consulted by this path.
+
+For this template's no-action smoke path only, the parent opens the existing
+fixed lock on parent FD 7 and obtains a nonblocking exclusive `flock`. It
+copies the verified core and canonical configuration into independently sealed
+anonymous memfds on FDs 8 and 9, creates a credential-authenticated private
+`AF_UNIX SOCK_SEQPACKET` endpoint on FD 10, then forks. The child explicitly
+closes FD 7 and every unapproved inherited FD, restores default/unblocked
+termination signals, sets `PDEATHSIG(SIGTERM)`, and clean-environment-execs
+the sealed core. The parent forwards HUP/INT/TERM as child SIGTERM, reaps it,
+then releases the parent lock. A normal result is only
+`bootstrap-core-no-action-smoke-test-only`; it creates no receipt or evidence.
+
+This does not grant a privileged execution path or actual producer authority.
+`-I -S -E -B` begins only after the dynamic loader: it cannot neutralize
+`LD_PRELOAD`, `LD_AUDIT`, or another caller-supplied loader injection. The
+installation contract must therefore use a native secure-exec guardian or a
+root service/launcher that independently guarantees `execve(..., envp={})` and
+does not accept an untrusted caller environment. Because Python has to load the
+bootstrap leaf before this source can inspect it, that guardian or launcher
+must also authenticate the bootstrap's held leaf FD, approved local filesystem,
+and reviewed digest before it execs Python (or execute pre-sealed bytes); the
+in-Python bootstrap check is defense in depth for the core/manifest/lock, not
+the bootstrap's initial trust root. A parent-only `flock` can also be released
+after a parent SIGKILL before the child finishes its `PDEATHSIG` shutdown. Any
+future GPU/raw producer must use that separately reviewed launcher plus a
+guardian or lease design that closes the lifetime gap. It must not treat this
+template's `COMPLETE` as a capture, semantic receipt, or qualification result.
 
 ## v3 private-core no-action template
 
@@ -90,8 +147,8 @@ or a wrong nonce.
 This first core version has no lock acquisition, GPU query, Docker execution,
 filesystem output, raw producer, semantic replay, receipt, or qualification
 capability. Its CPU-only test copies the template into temporary sealed memfds
-and uses a test-only socketpair; it does not create `/opt` or `/var/lib/riley`
-paths and does not touch the shared GPU lock. A later root-installed bootstrap
-must independently enforce host mount-namespace and ACL policy, retain the
-parent-only lock, and treat a normal `COMPLETE` as no more than this protocol
-mechanism result—not producer authority, a receipt, or qualification evidence.
+and uses a test-only socketpair; the bootstrap's companion test instead uses a
+temporary current-UID anchor and lock fixture to prove the FD 7/8/9/10 handoff.
+Neither test creates `/opt` or `/var/lib/riley` paths or touches the shared GPU
+lock. A normal `COMPLETE` remains no more than a protocol-mechanism result—not
+producer authority, a receipt, or qualification evidence.

@@ -7,6 +7,18 @@ checkout path는 direct invocation을 FD/socket/lock/child action 전에 fail-cl
 sealed core/config memfd와 private credential-authenticated `SOCK_SEQPACKET`에서
 nonce/config-digest-bound `INIT → READY → RUN_NO_ACTION → COMPLETE`만 CPU-only로 검증하며, lock/GPU/Docker/raw
 producer/evidence/semantic replay/receipt/qualification capability는 추가하지 않는다.
+**Gate E v3 root-bound no-action bootstrap template:**
+`run_remote_rc3_gate_e_session_v3.py`는 이 child를 future installed bundle에서만
+parent-side로 넘기기 위한 source/audit template이다. fixed root invocation 외 checkout/CLI
+override는 FD/anchor/lock/socket/fork 전에 fail-closed하며, installed copy는 raw empty
+environment, unblocked termination signals/default `SIGCHLD`, PID 1 namespace, approved
+local filesystem 위 full initial UID/GID map/ACL-free held anchor, compiled core pin 및 pre-existing lock을
+독립적으로 검사한다. parent FD 7는 child에 전달되지 않고 sealed FDs 8/9와
+credential-authenticated FD 10만 전달된다. CPU fixture는 no-action handoff와 tamper/lock
+rejection만 검증하며, dynamic-loader injection/parent-SIGKILL lifetime gap은 future native
+secure-exec launcher가 Python load 전 bootstrap leaf를 authenticate하고 guardian/lease contract를
+함께 갖추지 않으면 해결되지 않는다. 따라서 이
+`COMPLETE`도 producer/receipt/qualification authority가 아니다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 

@@ -6,7 +6,8 @@ lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
 runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, the no-action authenticated Gate E supervisor handoff probe, the private aggregate-replay-only Gate E terminal record, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
-coverage; this worklist remains design and integration material, not a
+coverage. The sealed v3 private core and root-bound parent bootstrap templates
+now have CPU-only handoff coverage as well; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
 be copied into a candidate result directory as evidence.
@@ -42,6 +43,21 @@ with all GPU/Docker/evidence/replay/receipt/qualification guarantees false.
 The landed test uses temporary sealed memfds/socketpairs only; it neither
 installs `/opt` nor opens a real or shared GPU lock. A `COMPLETE` is no-action
 mechanism output, not actual producer authority or a semantic input.
+
+`run_remote_rc3_gate_e_session_v3.py` is the parent-side source/audit template,
+not an installed public runner. It allows only a future root service's fixed
+`/opt` invocation and no-action smoke argument; checkout paths and parameter
+overrides fail before touching anchor/lock/socket/fork. Its future installed
+copy rechecks raw empty environment, unblocked terminating signals/default
+`SIGCHLD`, PID 1 namespace context and full initial UID/GID map, approved local filesystem root-only
+ACL-free anchor files, compiled core pin, and a pre-existing `gate-e-v3.lock`,
+then keeps that parent-only lock on FD 7 while the private core sees only
+sealed FDs 8/9 and authenticated FD 10. The temporary-current-UID fixture
+covers successful no-action handoff and manifest/lock tampering without `/opt`,
+`/var/lib/riley`, GPU, Docker, evidence, replay, receipt, or qualification
+work. It is not an actual producer boundary: dynamic-loader injection requires
+a later native secure-exec launcher that authenticates the bootstrap leaf before
+Python loads it, and a guardian/lease must close the parent-SIGKILL lock gap.
 
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before

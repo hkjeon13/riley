@@ -22,6 +22,20 @@ FD 8/config FD 9/private `SOCK_SEQPACKET` FD 10으로 넘길 때만 nonce·confi
 Docker, evidence, raw producer, semantic replay, receipt, qualification capability가 없고,
 CPU-only memfd/socketpair test도 `/opt`·`/var/lib/riley` 또는 shared GPU lock을 만들거나
 열지 않는다.
+**Gate E v3 root-bound no-action bootstrap template:**
+`run_remote_rc3_gate_e_session_v3.py`는 future root-installed bundle의 parent-side
+source/audit template이다. public form은 pinned Python·fixed `/opt` path·단일
+`--bootstrap-core-smoke-test`만 허용하고 checkout/CLI override는 anchor·lock·socket·fork 전에
+거부한다. 설치본은 empty `execve` environment, unblocked HUP/INT/TERM/default `SIGCHLD`,
+PID 1 mount/user namespace와 full initial `0 0 4294967295` UID/GID map, approved local
+filesystem 위 root-owned ACL-free held anchor,
+preprovisioned `gate-e-v3.lock`을 독립 재검증한 뒤 parent lock FD 7와
+sealed core/config FD 8/9·credential socket FD 10만 core에 전달한다. CPU fixture는 이
+no-action handoff와 lock fail-closed만 검증한다. 현재 root-installed bundle은 없으며,
+`-I -S -E -B`만으로 dynamic-loader injection이나 parent-SIGKILL lock gap을 해결하지 않는다.
+따라서 future actual producer는 별도 native secure-exec launcher와 guardian/lease contract가
+필요하다. 특히 bootstrap source는 Python load 전에 native guardian이 held leaf/local-FS/digest를
+authenticate해야 하며, 이 template의 `COMPLETE`는 capture·receipt·qualification authority가 아니다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
