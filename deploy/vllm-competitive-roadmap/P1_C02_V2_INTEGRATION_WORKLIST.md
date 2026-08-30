@@ -389,8 +389,9 @@ a qualification decision.
 
 An authenticated rollback **raw** runner, a private held-FD raw operational
 semantics core, a create-only frozen-candidate **input-identity** manifest
-with its FD-safe replayer, a closed four-gate input-inventory replayer, and
-the five-component RC3 Gate E aggregate semantic replayer are landed. The
+with its FD-safe replayer, a fresh opaque fourteen-leaf Gate E input snapshot
+preparer, a closed four-gate input-inventory replayer, and the five-component
+RC3 Gate E aggregate semantic replayer are landed. The
 aggregate is a read-only replay only: no actual Gate E producer, public
 semantic receipt, same-stack producer normal-return closure, or qualification
 checker is landed yet. The frozen manifest is not
@@ -850,6 +851,14 @@ runtime configuration field or a trace counter.
      not inspect report pass fields, thresholds, GPU observations, CUDA-fault
      or reproducible-build legacy-superset evidence, Qwen, runtime-config,
      rollback, or qualification.
+   - `write_rc3_gate_e_input_snapshot_v1.py` is a fresh-root preparer only.
+     It snapshots the fourteen fixed opaque source roles into direct private
+     `0600` leaves, reserves the inventory control-plane budget before every
+     copy, writes `gate-e-inputs.json` last, and invokes the held-FD inventory
+     replay before returning. It records no source path/descriptor, producer
+     state, pass, receipt, marker, or qualification field; a partial root is
+     retained and never resumed. This is not actual capture or a same-stack
+     producer normal-return closure.
    - `replay_rc3_gate_e_native_e0_v1.py` now consumes only the fixed native
      canonical-E0 leaves through a held-FD scratch snapshot. It preflights the
      16-GiB raw limit before full inventory streaming, requires a passing

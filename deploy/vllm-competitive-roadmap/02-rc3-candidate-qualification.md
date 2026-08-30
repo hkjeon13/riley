@@ -721,6 +721,11 @@ candidate/source/rollback/atomic leaves를 재해석해 operational consistency�
 `passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate input-identity
 manifest/FD-safe replayer, closed Gate E **input-inventory** replayer, 그리고 다섯
 component를 묶는 read-only Gate E **aggregate semantic** replayer는 별도로 landed했다.
+`write_rc3_gate_e_input_snapshot_v1.py`는 fixed fourteen opaque artifact role을 fresh
+private root에 `0600` direct snapshot으로 copy하고 canonical inventory를 마지막으로
+self-replay하는 preparer일 뿐이다. source raw-producer provenance, source 간 atomic
+coherence, writer/producer normal-return, actual GPU capture, Gate E semantic pass 또는
+receipt를 기록하지 않으며 partial root는 resume하지 않는다.
 그러나 actual Gate E producer가 같은 held-FD stack에서 정상 반환한 closure와 durable
 semantic receipt는 아직 없으므로, 이 단계는 semantic receipt, actual candidate freeze,
 actual Gate E pass 또는 qualification을 만들거나 주장하지 않는다.

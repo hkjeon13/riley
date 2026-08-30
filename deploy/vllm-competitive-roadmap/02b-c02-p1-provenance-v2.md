@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, source-free arm별 raw runtime-assembly host runner/USTAR composer, original freeze-input closure를 full reconstructed-baseline-v2 replay와 함께 bind하는 create-only frozen-candidate input-identity manifest/FD-safe replayer, four-gate closed input-inventory replayer, native·optimizer canonical-E0, Python-free, performance, soak semantic component adapter와 aggregate Gate E semantic replayer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, authenticated actual Gate E producer, actual Docker/GPU capture·actual candidate freeze·lifecycle-v5 receipt·full Gate E semantic qualification은 아직 수행하지 않았다.
+**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, source-free arm별 raw runtime-assembly host runner/USTAR composer, original freeze-input closure를 full reconstructed-baseline-v2 replay와 함께 bind하는 create-only frozen-candidate input-identity manifest/FD-safe replayer, fresh opaque fourteen-leaf Gate E input snapshot preparer와 four-gate closed input-inventory replayer, native·optimizer canonical-E0, Python-free, performance, soak semantic component adapter와 aggregate Gate E semantic replayer는 구현됐다. 현재 검증 범위는 CPU/static hostile-path뿐이며, authenticated remote rollback runner, authenticated actual Gate E producer, actual Docker/GPU capture·actual candidate freeze·lifecycle-v5 receipt·full Gate E semantic qualification은 아직 수행하지 않았다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
@@ -411,6 +411,21 @@ stream-hash되고, frozen candidate/original source-input closure는 artifact re
 replay된다. root topology, exact entry set, path uniqueness, 1 TiB budget과 frozen
 manifest/candidate/source cross-binding은 확인하지만 output은
 `bound/frozen/not-run`, `gate-e-input-inventory-replay-only`일 뿐이다.
+
+`write_rc3_gate_e_input_snapshot_v1.py`는 이 exact root를 새로 만드는 static preparer다.
+14 fixed role의 already-produced opaque host file을 no-follow/single-link source policy 아래
+각각 direct private `0600` leaf로 copy하고, fixed total budget에서 inventory의 최대 control
+plane byte를 먼저 reserve한다. source checkout FD는 held 상태로 유지하고 input/frozen root에만
+shared lock을 잡아 frozen identity를 먼저 replay하며, fresh output root는 exclusive lock 아래 all snapshot private
+rehash → canonical inventory final leaf → held-FD structural self-replay 순서로만 진행한다.
+source path/source descriptor와 status/authority/producer field는 inventory에 넣지 않으며,
+partial root에는 marker/receipt/temporary child를 만들지 않고 보존만 한다.
+
+따라서 이 writer는 immutable local copy와 structural input inventory 외에는 아무 것도
+증명하지 않는다. original raw producer, source-to-artifact provenance, 14 leaf의 atomic
+coherence, writer/producer normal-return, actual capture/GPU, evidence-root immutability,
+semantic Gate E pass, durable receipt, qualification은 모두 not-established다. legacy public
+runner output을 사후 snapshot한 결과를 same-stack producer closure로 승격하는 것은 금지한다.
 
 `replay_rc3_gate_e_python_free_v1.py`는 full legacy E2E evaluator를 호출하지 않고 fixed
 inventory와 frozen input closure로 닫을 수 있는 raw semantic subset만 replay한다. raw tar와 release
