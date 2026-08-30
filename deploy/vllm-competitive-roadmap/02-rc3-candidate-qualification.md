@@ -1,6 +1,6 @@
 # C02 — RC3 Candidate-bound Qualification
 
-**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt, create-only frozen-candidate **input-identity** manifest/FD-safe replay, four-gate closed input-inventory replay도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
+**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt, create-only frozen-candidate **input-identity** manifest/FD-safe replay, four-gate closed input-inventory replay, 그리고 no-action authenticated Gate E supervisor handoff probe도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 
@@ -726,6 +726,13 @@ private root에 `0600` direct snapshot으로 copy하고 canonical inventory를 �
 self-replay하는 preparer일 뿐이다. source raw-producer provenance, source 간 atomic
 coherence, writer/producer normal-return, actual GPU capture, Gate E semantic pass 또는
 receipt를 기록하지 않으며 partial root는 resume하지 않는다.
+`run_remote_rc3_gate_e_session_v1.sh --supervisor-smoke-test`는 이 future
+authenticated producer의 host boundary만 점검한다. shared no-follow GPU-evidence lock을
+clean Python parent가 잡고 direct Bash child가 inherited FD와 kernel flock을 재검증한
+뒤 lock FD를 닫는다. Gate E root/session/marker/receipt를 만들지 않고, subproducer나
+replay를 호출하지 않으며 GPU를 조회하지도 않는다. 성공 stderr diagnostic은 Gate E
+action, capture, producer normal-return, qualification result가 아니다. script는
+ambient shell hook이 relative child identity를 바꾸지 못하도록 absolute path로만 실행한다.
 그러나 actual Gate E producer가 같은 held-FD stack에서 정상 반환한 closure와 durable
 semantic receipt는 아직 없으므로, 이 단계는 semantic receipt, actual candidate freeze,
 actual Gate E pass 또는 qualification을 만들거나 주장하지 않는다.

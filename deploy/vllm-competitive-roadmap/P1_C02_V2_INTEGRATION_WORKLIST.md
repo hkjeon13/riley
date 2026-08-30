@@ -5,7 +5,7 @@ sampling fallback event/marker, raw source-pair capture v2, the fresh v5
 lifecycle-evidence preparer, the fixed v5 lifecycle bind-request writer, the
 separate terminal fallback binder v5 with its private held-lock core, the
 fixed-name private raw compositor, the authenticated native-fallback raw-v5
-runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
+runner, the fixed rollback candidate/source v3/v4 finalizer and its private normal-return receipt v1, the no-action authenticated Gate E supervisor handoff probe, and the read-only v4/v5 raw-manifest structural precheck are implemented with CPU/static hostile-path
 coverage; this worklist remains design and integration material, not a
 qualification report. No actual GPU capture, candidate freeze, lifecycle-v5
 receipt, or semantic qualification has been performed, and this file must not
@@ -859,6 +859,15 @@ runtime configuration field or a trace counter.
      state, pass, receipt, marker, or qualification field; a partial root is
      retained and never resumed. This is not actual capture or a same-stack
      producer normal-return closure.
+   - `run_remote_rc3_gate_e_session_v1.sh --supervisor-smoke-test` accepts no
+     artifact, evidence-root, candidate, or GPU-selection grammar. It only
+     verifies a clean parent/child inherited-FD handoff under the shared
+     no-follow GPU-evidence flock, then prints a fixed stderr diagnostic and
+     returns. It creates no Gate E-root entry, output, marker, receipt, or
+     serialized session state; it runs no GPU query, Docker action, raw
+     subproducer, replay, or qualification. Its success is an authenticated
+     supervisor probe, never a producer normal-return or Gate E result. It
+     rejects a relative script path before it can enter the parent handoff.
    - `replay_rc3_gate_e_native_e0_v1.py` now consumes only the fixed native
      canonical-E0 leaves through a held-FD scratch snapshot. It preflights the
      16-GiB raw limit before full inventory streaming, requires a passing

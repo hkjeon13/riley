@@ -161,6 +161,16 @@ rehash가 끝난 뒤에만 `gate-e-inputs.json`을 마지막으로 쓴다. sourc
 output root는 exclusive lock으로 self-replay한다. source absolute path나 source descriptor는 inventory에 기록하지
 않으며, failure 뒤 partial root는 보존되고 resume할 수 없다.
 
+`run_remote_rc3_gate_e_session_v1.sh --supervisor-smoke-test`는 future
+authenticated Gate E runner에 필요한 shared host lock와 clean parent/child
+handoff만 fail-closed로 점검하는 probe다. 이 command는 GPU를 조회하거나 선택하지
+않고, evidence/session root·artifact·marker·receipt를 만들지 않으며, subproducer,
+semantic replay, qualification을 호출하지 않는다. stderr의 성공 진단은 오직
+authenticated supervisor handoff가 완료됐다는 뜻이지 Gate E action 또는 producer
+normal-return이 아니다. script path가 relative이면 ambient shell hook이 child identity를
+바꾸지 못하도록 lock 전에 거부한다. 실제 producer는 raw capture를 private
+under-parent-lock child core에 직접 연결할 때에만 이 probe를 확장할 수 있다.
+
 이는 local snapshot/preparer일 뿐 source raw-capture origin, cross-leaf atomic coherence,
 snapshot writer 또는 actual producer normal-return, evidence-root immutability, actual GPU
 capture, Gate E semantic replay/pass, durable receipt, deployment, qualification을 확립하지
