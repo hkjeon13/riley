@@ -439,6 +439,22 @@ scratch archive 상한은 613,556,224 bytes이며 JSON object expansion을 포�
 review approval 또는 actual capture authority가 아니다. aggregate Gate E, semantic receipt,
 qualification, deployment 및 actual GPU capture는 명시적으로 `not-established`다.
 
+`replay_rc3_gate_e_aggregate_v1.py`는 detached component JSON이나 legacy
+`check_release_candidate.py` 결과를 입력으로 합치지 않는다. 하나의 held-FD/공유-lock stack에서
+native E0, optimizer E0, Python-free, performance, soak의 private semantic core를 이 순서로 다시
+실행하고, 시작·종료의 닫힌 14-leaf Gate E inventory도 다시 대조한다. 모든 component의 candidate,
+source revision, inventory descriptor, frozen manifest는 exact-match해야 하며, canonical native report,
+optimizer report/profile binary, correctness golden, source archive, release image·optimizer image·golden
+external anchor도 교차 결합한다. native calibration executable과 frozen release ELF는 pathname이
+달라도 SHA-256와 byte length가 같아야 한다.
+
+aggregate의 `gate_e_status: passed`는 이 한 invocation에서 다섯 semantic component가 같은 frozen
+input closure에 대해 일치했다는 제한된 뜻이다. 결과는 Gate E evidence root에 쓰이지 않으며, actual
+GPU capture, frozen-candidate writer의 normal-return lineage, evidence-root immutability, 독립 image/
+golden review, release/model/source content provenance, semantic receipt, qualification, deployment,
+rollback success는 계속 `not-established`다. 이는 별도의 same-stack semantic receipt 이전 단계이며
+CPU/static replay 통과만으로 candidate qualification 또는 원격 GPU 실행을 주장하지 않는다.
+
 ## 3. 범위
 
 ### 포함
