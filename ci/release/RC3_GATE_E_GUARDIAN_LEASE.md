@@ -165,6 +165,15 @@ PID reuse, stale generation, stale nonce, a mismatched cgroup, boolean-as-
 integer generation, noncanonical JSON, or any packet shape drift drains rather
 than releasing admission.
 
+The separate C11 library in
+tools/native/gate-e-guardian-control-packet-validator consumes only the same
+raw canonical packet bytes plus caller-owned active-session digest/generation
+bindings. It recognizes no socket, sender address, credentials, ancillary FD,
+cgroup, phase, ledger, or process state, and it retains no accepted packet.
+Its successful result means only that the bytes match the supplied binding and
+required kind; it is not sender authentication, admission control, or a native
+guardian installation.
+
 The modeled durable ledger is deliberately strict: malformed or incomplete
 active records are rejected; a claimed empty ledger cannot retain a cgroup;
 and an active record always rehydrates closed.  These are CPU-only hostile-path

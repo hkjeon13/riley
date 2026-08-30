@@ -44,3 +44,12 @@ not extend the root-bundle grammar, create an FD handoff, inspect ELF or loader
 behavior, execute anything, or touch guardian/lease/GPU/Docker/evidence. It is
 not a guardian, launcher, release, Gate E, freeze, rollback, or qualification
 input; its local README defines the exact byte grammar and fixture-only checks.
+
+gate-e-guardian-control-packet-validator/ is a fifth standalone C11
+in-memory library-only precursor. It compares one bounded canonical READY or
+NO_ACTION_COMPLETE packet with caller-owned active-session digest/generation
+bindings and returns a reason only. It does not receive a socket message,
+authenticate a sender or phase, inspect credentials/cgroups/FDs, retain a
+lease/ledger, acquire a path, or execute anything. It is not a guardian,
+launcher, release, Gate E, freeze, rollback, or qualification input; its local
+README defines the fixed wire grammar and fixture-only checks.

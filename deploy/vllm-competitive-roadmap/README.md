@@ -90,6 +90,13 @@ guardian이 Python loader 전 exact canonical bytes와 raw closure SHA-256을
 열거나 ELF/loader dependency를 검사하지 않고, held-object authentication,
 secure exec, FD handoff, guardian lease, GPU/Docker 또는 qualification authority를
 추가하지 않는다.
+
+Guardian control channel도 별도 C11 in-memory validator를 추가했다. 이는
+READY 또는 NO_ACTION_COMPLETE의 4 KiB 이하 canonical byte span을 이미
+authenticated active-session binding과 비교하는 source-only precursor다.
+socket 수신, sender credential/cgroup/FD 검증, phase transition, durable ledger,
+path/ELF/loader, execution, guardian installation, GPU/Docker 또는 qualification
+authority는 전혀 추가하지 않는다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
