@@ -82,3 +82,13 @@ cgroup; retain an event/phase/ledger; change admission; or establish a lease.
 It is not a guardian, launcher, release, Gate E, freeze, rollback, or
 qualification input; its local README defines the fixed typed-claim boundary
 and fixture-only checks.
+
+gate-e-guardian-controller-restart-witness-matcher/ is a ninth standalone C11
+in-memory library-only precursor. It fieldwise matches a caller-normalized
+`CONTROLLER_RESTART` empty witness: a replacement PID1 controller distinct from
+the registered guardian/warden/worker, the same held cgroup, explicit empty
+population, and one registered worker terminal-token declaration. It does not
+receive or inspect a socket, cgroup, pidfd, or FD; retain an event/phase/ledger;
+change admission; or authorize controller release. It is not a guardian,
+launcher, release, Gate E, freeze, rollback, or qualification input; its local
+README defines the fixed typed-claim boundary and fixture-only checks.

@@ -116,6 +116,12 @@ empty-population declaration만 비교한다. cgroup을 create/reserve/inspect�
 freshness·emptiness를 증명하지 않고 phase·ledger·admission을 변경하거나 lease를 만들지 않는다.
 따라서 성공은 native acquisition 또는 preflight state transition 권한이 아니다.
 
+그 다음 C11 controller-restart-witness matcher는 `CONTROLLER_RESTART`의
+replacement PID1 controller가 registered guardian/warden/worker와 distinct한지,
+같은 held-cgroup·explicit empty-population·exactly-one worker terminal-token claim을
+비교한다. 실제 restart/cgroup/pidfd/socket/FD를 증명·inspect하지 않고 phase·ledger·admission을
+변경하거나 release를 허가하지 않으므로, 이 matcher의 성공도 state transition 권한이 아니다.
+
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

@@ -200,6 +200,15 @@ the cgroup is fresh or empty; retain phase/ledger state; change admission; or
 establish a lease. A future native controller must still authenticate and
 atomically persist acquisition before a preflight observation can advance.
 
+The separate C11 controller-restart-witness matcher covers the modeled
+`CONTROLLER_RESTART` empty branch only: it checks a declared replacement PID1
+controller is distinct from the registered guardian, warden, and worker; then
+matches the same held cgroup, explicit empty-population declaration, and the
+exactly-one registered worker terminal-token declaration. It does not prove a
+controller restart, inspect a live cgroup/pidfd/socket/FD, retain phase/ledger
+state, change admission, or authorize release. A future native controller must
+still authenticate and durably fence the restart before any phase change.
+
 The modeled durable ledger is deliberately strict: malformed or incomplete
 active records are rejected; a claimed empty ledger cannot retain a cgroup;
 and an active record always rehydrates closed.  These are CPU-only hostile-path
