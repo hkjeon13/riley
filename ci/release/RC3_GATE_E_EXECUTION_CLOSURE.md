@@ -16,6 +16,14 @@ replacement for `gate-e-root-bundle-manifest-v1.schema.json`. The existing
 root-bundle v1 grammar remains exactly bootstrap plus core; neither that C
 authenticator nor its checked diagnostic is changed by this contract.
 
+The separate C11 library in tools/native/gate-e-execution-closure-manifest-parser
+now consumes the same fixed v1 byte grammar before a future native guardian
+would cross the Python loader boundary. It returns only copied declaration
+metadata and the raw manifest SHA-256 in a caller-owned fixed-size structure.
+It has no CLI, filesystem, descriptor, ELF, loader, execution, or privilege
+operation, and does not make the Python parser, schema, root-bundle
+authenticator, or guardian lease model an execution authority.
+
 ## Exact bytes and closure identity
 
 The only accepted raw bytes are:
@@ -64,6 +72,23 @@ also bounds each leaf, number of leaves, and total declared closure bytes. It
 is a declaration of bytes and labels only; paths are never reopened by this
 module.
 
+## Native parser parity precursor
+
+The C11 parser accepts a raw byte pointer and length only. It recognizes the
+fixed canonical member order directly rather than providing a permissive JSON
+surface, rejects strings that would require escapes, and returns a bounded
+copy of every accepted label, declared byte length, decoded SHA-256, and the
+raw newline-inclusive closure SHA-256. It performs no allocation. On a failed
+parse, a valid initialized output is cleared to prevent stale declaration
+reuse.
+
+This is still parser parity, not object acquisition. In particular it does
+not read a sidecar from a path or FD, verify a sidecar owner/ACL/filesystem
+policy, hash a listed object, discover a dependency, parse ELF, establish an
+interpreter/loader closure, or arrange FD 31/32. A future guardian must bind
+the returned raw digest and independently authenticated held objects to the
+session under a later review.
+
 ## Boundaries that remain unestablished
 
 The manifest does **not** prove any declared path exists; that the file type,
@@ -106,5 +131,9 @@ Run the CPU-only checks without writing bytecode:
 ```
 
 The tests use only in-memory manifest fixtures plus a read of the checked-in
-schema. They do not inspect the current host's interpreter/loader/runtime,
-create `/opt`, request sudo, or run GPU/Docker work.
+schema. They do not inspect the current host's interpreter/loader/runtime.
+The native parser has its own source-only C11 checks in
+tools/native/gate-e-execution-closure-manifest-parser: make test and
+make analyze. Those checks compile only the parser and in-memory hostile
+fixtures; they do not inspect a host interpreter, loader, or runtime leaf.
+Neither suite creates `/opt`, requests sudo, or runs GPU/Docker work.

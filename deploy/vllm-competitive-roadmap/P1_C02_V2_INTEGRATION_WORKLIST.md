@@ -117,6 +117,13 @@ native guardian must independently authenticate held interpreter/loader/runtime
 objects and bind this sidecar digest to its session; `MFD_NOEXEC_SEAL` remains
 bootstrap/core data-only and cannot be used for interpreter or loader execution.
 
+The matching C11 in-memory parser is now a separate source-only parity
+precursor. It allows a future static guardian to consume the same fixed
+canonical bytes and raw closure SHA-256 before the Python loader boundary, but
+it does not open a declared path, inspect ELF or loader resolution, authenticate
+a held object, create an FD handoff, or establish a guardian, producer, GPU,
+Docker, evidence, receipt, freeze, rollback, or qualification authority.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

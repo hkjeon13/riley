@@ -35,3 +35,12 @@ install or execute a bundle, create a lock/cgroup/child, or touch
 GPU/Docker/evidence. It is not a guardian, launcher, release, Gate E, freeze,
 rollback, or qualification input; its local README defines the strict Linux
 kernel requirement and fixture-only checks.
+
+gate-e-execution-closure-manifest-parser/ is a fourth standalone C11
+in-memory library-only precursor. It receives raw canonical sidecar bytes only
+and returns bounded declared interpreter/loader/runtime labels plus their raw
+manifest SHA-256; it does not open or authenticate any declared path. It does
+not extend the root-bundle grammar, create an FD handoff, inspect ELF or loader
+behavior, execute anything, or touch guardian/lease/GPU/Docker/evidence. It is
+not a guardian, launcher, release, Gate E, freeze, rollback, or qualification
+input; its local README defines the exact byte grammar and fixture-only checks.

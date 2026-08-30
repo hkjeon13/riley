@@ -83,6 +83,13 @@ handoff·pre-Python trust를 establish하지 않는다. raw manifest line은 qua
 noncanonical으로 먼저 거절되고 canonical 재직렬화도 explicit denial을 받는다. interpreter/loader
 held-object authentication과 native secure-exec은 후속 별도 review이며, no-exec sealed leaf FD를
 interpreter/loader execution에 재사용할 수 없다.
+
+동일 sidecar의 C11 in-memory parser도 이제 존재한다. 이는 future static
+guardian이 Python loader 전 exact canonical bytes와 raw closure SHA-256을
+소비할 수 있도록 하는 source-only parity precursor일 뿐이다. declared path를
+열거나 ELF/loader dependency를 검사하지 않고, held-object authentication,
+secure exec, FD handoff, guardian lease, GPU/Docker 또는 qualification authority를
+추가하지 않는다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
