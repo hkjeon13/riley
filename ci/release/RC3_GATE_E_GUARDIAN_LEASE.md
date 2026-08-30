@@ -194,6 +194,31 @@ Until all six exist in a separately installed and reviewed native design,
 this contract must not be used as a launch, receipt, Gate E, or C02
 qualification input.
 
+## Native platform preflight v1 — not a guardian
+
+`tools/native/gate-e-platform-preflight/gate_e_platform_preflight.c` is a
+standalone C11 **platform-observation-only** inspection tool. It accepts only
+`--observe-linux-platform-v1`, has no caller path/configuration/anchor/lock
+input, and makes read-only observations of the fixed Linux `/proc` and `/sys`
+surfaces. In particular, it requires a full `0 0 4294967295` UID/GID map,
+compares the current user/mount/cgroup namespace objects with PID 1, checks PID
+1's `systemd` identity and a root-owned non-writable cgroup-v2 root, and probes
+the `openat2` ABI with no `openat` fallback. These are PID1-relative
+observations, not proof of a host-initial namespace. It does not create or mutate a
+cgroup, lock, socket, child, signal, GPU, Docker action, evidence root,
+receipt, or ledger.
+
+Its transient JSON has schema
+`riley.rc3-gate-e-native-platform-preflight.v1`, scope
+`platform-observation-only`, authority `not-authoritative`, installation
+`not-installed`, and qualification `not-run`. A `checked` observation means
+only that those fixed host traits were observed at that instant. It does not
+authenticate the immutable bootstrap, establish secure `execveat`, create the
+PID1 durable ledger, reserve or recheck a non-delegated worker cgroup, observe
+a worker pidfd, cover any crash cutover, or authorize GPU/Docker/evidence/
+receipt/freeze/semantic/qualification work. Thus all six future implementation
+requirements above remain **not established** by this tool.
+
 ## CPU-only verification
 
 Run from the repository after the source file is present:

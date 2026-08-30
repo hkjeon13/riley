@@ -59,6 +59,18 @@ work. It is not an actual producer boundary: dynamic-loader injection requires
 a later native secure-exec launcher that authenticates the bootstrap leaf before
 Python loads it, and a guardian/lease must close the parent-SIGKILL lock gap.
 
+The first native source/audit precursor is now the excluded standalone C11 tool
+`tools/native/gate-e-platform-preflight/gate_e_platform_preflight.c`. Its sole
+`--observe-linux-platform-v1` form is fixed-path, read-only platform inspection:
+it observes root identity, a full `0 0 4294967295` UID/GID map, PID1-relative
+namespace identity, systemd/cgroup-v2 facts, and the `openat2` ABI without a
+fallback. It does not prove a host-initial namespace. Its JSON is explicitly
+`platform-observation-only`/`not-authoritative`/`not-installed` and
+cannot install a service, authenticate an anchor, acquire a lease, create a
+cgroup or lock, launch a child, or perform GPU/Docker/evidence/receipt/freeze/
+qualification work. It is a host-precondition diagnostic only; the six native
+guardian requirements remain not established.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

@@ -13,4 +13,7 @@ non-default development workspace member `crates/riley-native`, not this
 directory. That member shares the root `Cargo.lock` but is not a production
 crate or a root default build target.
 
-PR 02 adds no executable here.
+`gate-e-platform-preflight/` is a standalone C11 inspection tool for the
+future RC3 Gate E root-boundary review. It is deliberately no-action and has
+no release, runtime, privilege, or qualification authority; its local
+README defines its one allowed invocation and fixture-only test command.
