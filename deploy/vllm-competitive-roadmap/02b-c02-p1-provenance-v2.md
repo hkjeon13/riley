@@ -423,7 +423,11 @@ partial root에는 marker/receipt/temporary child를 만들지 않고 보존만 
 
 `run_remote_rc3_gate_e_session_v1.sh --supervisor-smoke-test`는 subsequent
 authenticated producer를 위해 scoped shared lock과 parent/child handoff만 verify하는
-no-action probe다. artifact, evidence-root, candidate, GPU-selection grammar가 없고
+no-action probe다. 기존 five-run performance supervisor도 source/relative invocation을
+parent lock 취득 전에 fail closed하고, clean child 재실행에는 ambient `$0` 대신
+absolute `BASH_SOURCE` identity만 넘긴다. 이 hardening은 outer Gate E session이
+future performance core를 안전하게 호출할 수 있게 하는 선행 조건일 뿐, 아직 core
+handoff 또는 producer authority를 추가하지 않는다. artifact, evidence-root, candidate, GPU-selection grammar가 없고
 Gate E-root entry, raw evidence, marker, receipt, serialized handoff도 만들지 않는다.
 GPU query/selection, Docker, subproducer, aggregate replay, semantic receipt, qualification은
 모두 absent이며 zero exit는 authenticated-lock probe만 뜻한다. relative script path는

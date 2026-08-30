@@ -44,6 +44,9 @@ CAPTURE_IDS = [
 
 
 SUPERVISOR_CONTRACT_MARKERS = (
+    '[[ ${BASH_SOURCE[0]:-} != "$0" ]]',
+    '[[ ${BASH_SOURCE[0]:-} != /* ]]',
+    'readonly PERFORMANCE_RUNNER_PATH="${BASH_SOURCE[0]}"',
     "exec /usr/bin/env -i",
     "/usr/bin/python3.10 -I -S -E -c",
     "os.O_NONBLOCK",
@@ -90,7 +93,7 @@ def _assert_static_supervisor_contract(source: str) -> None:
 def _embedded_supervisor_program(source: str) -> str:
     marker = "/usr/bin/python3.10 -I -S -E -c '\n"
     start = source.index(marker) + len(marker)
-    end = source.index("\n' \"$0\" \"$@\"", start)
+    end = source.index("\n' \"${PERFORMANCE_RUNNER_PATH}\" \"$@\"", start)
     return source[start:end]
 
 
@@ -436,6 +439,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        self.assertIn("/absolute/path/to/ci/run_remote_release_performance.sh", help_result.stdout)
         self.assertIn("--optimizer-image sha256:", help_result.stdout)
         missing = subprocess.run(
             ["/bin/bash", str(HOST_RUNNER)],
@@ -446,6 +450,29 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             check=False,
         )
         self.assertEqual(missing.returncode, 2)
+
+    def test_runner_rejects_relative_path_and_sourcing_before_supervision(self) -> None:
+        relative = subprocess.run(
+            ["/bin/bash", str(HOST_RUNNER.relative_to(ROOT)), "--help"],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(relative.returncode, 2)
+        self.assertIn("must be invoked by absolute path", relative.stderr)
+
+        sourced = subprocess.run(
+            ["/bin/bash", "-c", 'source "$1"', "bash", str(HOST_RUNNER)],
+            cwd=ROOT,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        self.assertEqual(sourced.returncode, 2)
+        self.assertIn("must be executed, not sourced", sourced.stderr)
 
     def test_direct_supervised_marker_and_poisoned_environment_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -474,6 +501,7 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
 
     def test_static_reviewed_tool_inventory_equals_manifest(self) -> None:
         host = HOST_RUNNER.read_text(encoding="utf-8")
+        self.assertNotIn("\n' \"$0\" \"$@\"", host)
         self.assertIn(
             'test -f "${tool_path}" && test ! -L "${tool_path}" && test -x "${tool_path}"',
             host,

@@ -40,11 +40,15 @@ The output parent must exist, but the output directory itself must not exist
 and must be outside the checkout.
 
 Start from a scrubbed remote shell (`env -i` with only the reviewed `PATH`,
-locale, and argument values). The runner discards imported `BASH_FUNC_*`
-functions and rejects Git, Docker, Bash, Python, dynamic-loader, and audit
-overrides including `GIT_EXEC_PATH`, `GIT_CONFIG_PARAMETERS`, `LD_PRELOAD`,
-and `LD_AUDIT`. It uses the reviewed absolute paths below and requires their
-exact server-4096 bytes:
+locale, and argument values), and invoke the runner by its **absolute**
+filesystem path. The runner rejects sourcing and relative paths before it
+parses options or acquires the GPU lock. That makes the clean Python supervisor
+re-execute the original `BASH_SOURCE` path rather than ambient `$0`,
+which is not a stable script identity. The runner
+discards imported `BASH_FUNC_*` functions and rejects Git, Docker, Bash,
+Python, dynamic-loader, and audit overrides including `GIT_EXEC_PATH`,
+`GIT_CONFIG_PARAMETERS`, `LD_PRELOAD`, and `LD_AUDIT`. It uses the reviewed
+absolute paths below and requires their exact server-4096 bytes:
 
 | Tool | Path | SHA-256 |
 |---|---|---|
@@ -101,7 +105,7 @@ monitor, or candidate descendant inherits the lock.
 /usr/bin/env -i \
   PATH=/usr/bin:/bin \
   LC_ALL=C TZ=UTC HOME=/home/psyche \
-  /usr/bin/bash ci/run_remote_release_performance.sh \
+  /usr/bin/bash /absolute/path/to/ci/run_remote_release_performance.sh \
   --optimizer-image sha256:<optimizer-image-digest> \
   --source-revision <frozen-40-character-revision> \
   --expected-source-archive-sha256 <reviewed-source-archive-sha256> \

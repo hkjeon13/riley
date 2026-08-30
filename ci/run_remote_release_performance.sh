@@ -2,14 +2,28 @@
 # Produce the five native candidate runs for the PR-16 release performance
 # gate.  CUDA/model work is restricted to the designated server-4096 host.
 
+# Do this before even parsing --help.  The first Bash may have evaluated
+# BASH_ENV, so ambient $0 must not select the script that the clean Python
+# supervisor later executes while it owns the GPU lock.
+if [[ ${BASH_SOURCE[0]:-} != "$0" ]]; then
+    builtin printf '%s\n' 'release performance: runner must be executed, not sourced' >&2
+    return 2 2>/dev/null || exit 2
+fi
+if [[ ${BASH_SOURCE[0]:-} != /* ]]; then
+    builtin printf '%s\n' 'release performance: runner must be invoked by absolute path' >&2
+    exit 2
+fi
+
 set -euo pipefail
 set -o noclobber
 umask 022
 IFS=$' \t\n'
 
+readonly PERFORMANCE_RUNNER_PATH="${BASH_SOURCE[0]}"
+
 usage() {
     /bin/cat <<'EOF'
-usage: bash ci/run_remote_release_performance.sh \
+usage: bash /absolute/path/to/ci/run_remote_release_performance.sh \
   --optimizer-image sha256:... \
   --source-revision FULL_40_CHARACTER_COMMIT \
   --expected-source-archive-sha256 LOWERCASE_SHA256 \
@@ -241,7 +255,7 @@ if os.WIFEXITED(wait_status):
 if os.WIFSIGNALED(wait_status):
     raise SystemExit(128 + os.WTERMSIG(wait_status))
 raise SystemExit(125)
-' "$0" "$@"
+' "${PERFORMANCE_RUNNER_PATH}" "$@"
 fi
 shift
 
