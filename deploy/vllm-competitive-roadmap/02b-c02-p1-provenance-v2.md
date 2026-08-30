@@ -1,6 +1,13 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
 **상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, source-free arm별 raw runtime-assembly host runner/USTAR composer, original freeze-input closure를 full reconstructed-baseline-v2 replay와 함께 bind하는 create-only frozen-candidate input-identity manifest/FD-safe replayer, fresh opaque fourteen-leaf Gate E input snapshot preparer와 four-gate closed input-inventory replayer, no-action authenticated Gate E supervisor handoff probe, native·optimizer canonical-E0, Python-free, performance, soak semantic component adapter와 aggregate Gate E semantic replayer는 구현됐다. CPU/static hostile-path 검증과 Arm A의 source-free raw Docker capture/structural closure는 완료됐지만, 그것은 GPU/service 실행이나 qualification을 뜻하지 않는다. authenticated remote rollback runner, authenticated actual Gate E producer, actual GPU capture·actual candidate freeze·lifecycle-v5 receipt·full Gate E semantic qualification은 아직 수행하지 않았다.
+**Runtime assembly execution update:** Arm B raw Docker capture, OCI/assembly
+closure, and the A/B content-only materialization are also complete. The two
+arms' release binary, bundle, and captured `/opt/riley` tree match exactly;
+their OCI image IDs remain intentionally distinct because the recipe labels
+the reconstruction arm. This is still neither GPU/service execution nor a
+qualification result.
+
 **Gate E v3 private-core template:** `rc3_gate_e_private_raw_core_v1.py`는 root-installed
 external anchor가 나중에 hash-bind할 private child의 audit/source template이다. public
 checkout path는 direct invocation을 FD/socket/lock/child action 전에 fail-closed한다.
