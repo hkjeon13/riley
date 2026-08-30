@@ -19,7 +19,7 @@ import tarfile
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable
 
 from release_common import (
     CUDA_ARCHITECTURES,
@@ -31,6 +31,7 @@ from release_common import (
     validate_binary,
 )
 from verify_release_bundle import verify_bundle
+from verify_reconstructed_rc2_pr16_bundle_v1 import verify_reconstructed_rc2_pr16_bundle
 
 SCHEMA_VERSION = 1
 GATE_ID = "pr16-release-build-reproducibility-v1"
@@ -1035,9 +1036,13 @@ def _read_tar_member(archive: tarfile.TarFile, member: tarfile.TarInfo, limit: i
     return contents
 
 
-def _bundle_details(path: Path) -> BundleDetails:
+def _bundle_details(
+    path: Path,
+    *,
+    bundle_verifier: Callable[[Path], None] = verify_bundle,
+) -> BundleDetails:
     _regular_path(path, "release bundle")
-    verify_bundle(path)
+    bundle_verifier(path)
     binary: bytes | None = None
     native: bytes | None = None
     manifest_contents: bytes | None = None
@@ -1072,6 +1077,7 @@ def _load_evidence(
     source_archive_sha256: str,
     source_date_epoch: int,
     build_image_id: str,
+    bundle_verifier: Callable[[Path], None] = verify_bundle,
 ) -> Evidence:
     _regular_path(archive_path, f"build {expected_build_id} evidence archive")
     if archive_path.stat().st_size > MAX_EVIDENCE_ARCHIVE_SIZE:
@@ -1281,7 +1287,10 @@ def _load_evidence(
     validate_binary(binary)
     validate_binary(profile_binary)
     parse_native_manifest(native)
-    details = _bundle_details(file_paths["bundle/riley.tar.gz"])
+    details = _bundle_details(
+        file_paths["bundle/riley.tar.gz"],
+        bundle_verifier=bundle_verifier,
+    )
     if details.source_revision != source_revision or details.source_date_epoch != source_date_epoch:
         _fail(f"build {expected_build_id} bundle provenance differs from canonical source")
     if details.binary != binary:
@@ -1353,7 +1362,7 @@ def derive_source_date_epoch(source_archive: Path, source_revision: str) -> int:
     return epoch
 
 
-def validate_reproducibility_inputs(
+def _validate_reproducibility_inputs(
     *,
     evidence_a: Path,
     evidence_b: Path,
@@ -1362,6 +1371,7 @@ def validate_reproducibility_inputs(
     source_revision: str,
     source_date_epoch: int,
     build_image_id: str,
+    bundle_verifier: Callable[[Path], None],
 ) -> dict[str, Any]:
     """Replay the closed PR16 A/B inputs without selecting a ``final/`` arm.
 
@@ -1396,6 +1406,7 @@ def validate_reproducibility_inputs(
             source_archive_sha256=source_digest,
             source_date_epoch=source_date_epoch,
             build_image_id=build_image_id,
+            bundle_verifier=bundle_verifier,
         )
         build_b = _load_evidence(
             evidence_b,
@@ -1406,6 +1417,7 @@ def validate_reproducibility_inputs(
             source_archive_sha256=source_digest,
             source_date_epoch=source_date_epoch,
             build_image_id=build_image_id,
+            bundle_verifier=bundle_verifier,
         )
         if build_a.container_id == build_b.container_id:
             _fail("A/B evidence came from the same Docker container identity")
@@ -1471,6 +1483,54 @@ def validate_reproducibility_inputs(
                 "source_archive_a_b_byte_exact": True,
             },
         }
+
+
+def validate_reproducibility_inputs(
+    *,
+    evidence_a: Path,
+    evidence_b: Path,
+    source_archive: Path,
+    expected_source_archive_sha256: str,
+    source_revision: str,
+    source_date_epoch: int,
+    build_image_id: str,
+) -> dict[str, Any]:
+    """Replay A/B inputs under the active release-manifest contract."""
+
+    return _validate_reproducibility_inputs(
+        evidence_a=evidence_a,
+        evidence_b=evidence_b,
+        source_archive=source_archive,
+        expected_source_archive_sha256=expected_source_archive_sha256,
+        source_revision=source_revision,
+        source_date_epoch=source_date_epoch,
+        build_image_id=build_image_id,
+        bundle_verifier=verify_bundle,
+    )
+
+
+def validate_reconstructed_rc2_reproducibility_inputs(
+    *,
+    evidence_a: Path,
+    evidence_b: Path,
+    source_archive: Path,
+    expected_source_archive_sha256: str,
+    source_revision: str,
+    source_date_epoch: int,
+    build_image_id: str,
+) -> dict[str, Any]:
+    """Replay the exact reviewed RC2 PR16 pair under its frozen contract."""
+
+    return _validate_reproducibility_inputs(
+        evidence_a=evidence_a,
+        evidence_b=evidence_b,
+        source_archive=source_archive,
+        expected_source_archive_sha256=expected_source_archive_sha256,
+        source_revision=source_revision,
+        source_date_epoch=source_date_epoch,
+        build_image_id=build_image_id,
+        bundle_verifier=verify_reconstructed_rc2_pr16_bundle,
+    )
 
 
 def check_reproducible_build(

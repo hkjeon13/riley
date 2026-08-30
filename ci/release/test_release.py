@@ -18,10 +18,14 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
+import build_release_bundle as bundle_builder  # noqa: E402
+import release_common  # noqa: E402
+import verify_reconstructed_rc2_pr16_bundle_v1 as reconstructed_rc2_bundle  # noqa: E402
 from build_release_bundle import build_bundle  # noqa: E402
 from check_release_preflight import check_preflight  # noqa: E402
 from release_common import (  # noqa: E402
     ALLOWED_NATIVE_DEPENDENCIES,
+    canonical_json_bytes,
     MIT_LICENSE_BYTES,
     ReleaseContractError,
     SERVER_DEFAULTS_SOURCE_PATH,
@@ -128,6 +132,8 @@ def rewrite_archive(
     source: Path,
     destination: Path,
     mutate: Callable[[list[tuple[tarfile.TarInfo, bytes | None]]], None],
+    *,
+    gzip_mtime: int = EPOCH,
 ) -> None:
     with tarfile.open(source, "r:gz") as archive:
         entries = []
@@ -137,7 +143,12 @@ def rewrite_archive(
     mutate(entries)
     entries.sort(key=lambda entry: entry[0].name)
     with destination.open("wb") as raw:
-        with gzip.GzipFile(filename="", fileobj=raw, mode="wb", mtime=EPOCH) as compressed:
+        with gzip.GzipFile(
+            filename="",
+            fileobj=raw,
+            mode="wb",
+            mtime=gzip_mtime,
+        ) as compressed:
             with tarfile.open(fileobj=compressed, mode="w", format=tarfile.USTAR_FORMAT) as archive:
                 for member, contents in entries:
                     archive.addfile(member, io.BytesIO(contents) if contents is not None else None)
@@ -232,6 +243,92 @@ class ReleaseBundleTests(unittest.TestCase):
         second = self.build("second.tar.gz")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         verify_bundle(first)
+
+    def test_reconstructed_rc2_manifest_profile_is_closed_and_separate(self) -> None:
+        """The legacy baseline must not inherit the active candidate pin."""
+
+        bundle = self.root / "reconstructed-rc2.tar.gz"
+        with mock.patch.object(
+            release_common,
+            "SERVER_DEFAULTS_SOURCE_SHA256",
+            reconstructed_rc2_bundle.RECONSTRUCTED_RC2_SERVER_DEFAULTS_SOURCE_SHA256,
+        ), mock.patch.object(bundle_builder, "validate_server_defaults_source"):
+            bundle_builder.build_bundle(
+                binary_path=self.binary,
+                output=bundle,
+                repository_root=self.repository,
+                source_revision=reconstructed_rc2_bundle.RECONSTRUCTED_RC2_TARGET,
+                source_date_epoch=reconstructed_rc2_bundle.RECONSTRUCTED_RC2_SOURCE_DATE_EPOCH,
+            )
+
+        with tarfile.open(bundle, "r:gz") as archive:
+            member = archive.getmember(
+                "riley-0.1.0-linux-x86_64-cuda12.8/manifest/release.json"
+            )
+            source = archive.extractfile(member)
+            self.assertIsNotNone(source)
+            manifest_raw = source.read() if source is not None else b""
+        self.assertEqual(len(manifest_raw), reconstructed_rc2_bundle.RECONSTRUCTED_RC2_MANIFEST_BYTE_LENGTH)
+        self.assertEqual(
+            hashlib.sha256(manifest_raw).hexdigest(),
+            reconstructed_rc2_bundle.RECONSTRUCTED_RC2_MANIFEST_SHA256,
+        )
+        reconstructed_rc2_bundle.verify_reconstructed_rc2_pr16_bundle(bundle)
+        with self.assertRaisesRegex(ReleaseContractError, "release manifest"):
+            verify_bundle(bundle)
+
+        mutated = self.root / "reconstructed-rc2-mutated.tar.gz"
+
+        def mutate_source_contract(
+            entries: list[tuple[tarfile.TarInfo, bytes | None]],
+        ) -> None:
+            manifest_entry = next(
+                entry
+                for entry in entries
+                if entry[0].name.endswith("/manifest/release.json")
+            )
+            self.assertIsNotNone(manifest_entry[1])
+            manifest = json.loads(manifest_entry[1] or b"")
+            manifest["defaults"]["source_contract"]["sha256"] = "0" * 64
+            replace_archive_file(
+                entries,
+                "manifest/release.json",
+                canonical_json_bytes(manifest),
+                update_checksum=True,
+            )
+
+        rewrite_archive(
+            bundle,
+            mutated,
+            mutate_source_contract,
+            gzip_mtime=reconstructed_rc2_bundle.RECONSTRUCTED_RC2_SOURCE_DATE_EPOCH,
+        )
+        with self.assertRaisesRegex(ReleaseContractError, "reconstructed RC2 manifest"):
+            reconstructed_rc2_bundle.verify_reconstructed_rc2_pr16_bundle(mutated)
+
+        wrong_root = self.root / "reconstructed-rc2-wrong-root.tar.gz"
+
+        def mutate_root(
+            entries: list[tuple[tarfile.TarInfo, bytes | None]],
+        ) -> None:
+            for member, _ in entries:
+                member.name = member.name.replace(
+                    reconstructed_rc2_bundle.RECONSTRUCTED_RC2_ARCHIVE_ROOT,
+                    "riley-0.1.0-unreviewed-root",
+                    1,
+                )
+
+        rewrite_archive(
+            bundle,
+            wrong_root,
+            mutate_root,
+            gzip_mtime=reconstructed_rc2_bundle.RECONSTRUCTED_RC2_SOURCE_DATE_EPOCH,
+        )
+        with self.assertRaisesRegex(ReleaseContractError, "archive root"):
+            reconstructed_rc2_bundle.verify_reconstructed_rc2_pr16_bundle(wrong_root)
+
+        with mock.patch.object(release_common, "ARCHIVE_SUFFIX", "changed-by-active-contract"):
+            reconstructed_rc2_bundle.verify_reconstructed_rc2_pr16_bundle(bundle)
 
     def test_bundle_retained_cap_rejects_before_member_contents_are_read(self) -> None:
         bundle = self.build()

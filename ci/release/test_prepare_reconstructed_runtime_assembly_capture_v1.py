@@ -24,6 +24,8 @@ import provenance_v2_common as common  # noqa: E402
 import test_prepare_reconstructed_repro_build_inputs_v1 as repro_inputs_fixture  # noqa: E402
 import test_prepare_reconstructed_runtime_oci_inputs_v1 as oci_inputs_fixture  # noqa: E402
 import test_reproducible_build as reproducibility_fixture  # noqa: E402
+import verify_reconstructed_rc2_pr16_bundle_v1 as reconstructed_rc2_bundle  # noqa: E402
+import verify_release_bundle as active_bundle_verifier  # noqa: E402
 import verify_reconstructed_runtime_assembly_dockerfile as recipe  # noqa: E402
 
 
@@ -63,6 +65,15 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
     def setUp(self) -> None:
         self.previous_tempdir = tempfile.tempdir
         tempfile.tempdir = os.fspath(Path(tempfile.gettempdir()).resolve())
+        # These hostile fixtures intentionally use a synthetic current-contract
+        # bundle.  The fixed historical profile itself is covered separately;
+        # keep this test focused on assembly-capture FD and tar boundaries.
+        self.bundle_profile_patch = mock.patch.object(
+            reconstructed_rc2_bundle,
+            "verify_reconstructed_rc2_pr16_bundle",
+            side_effect=active_bundle_verifier.verify_bundle,
+        )
+        self.bundle_profile = self.bundle_profile_patch.start()
         self.repro_fixture = repro_inputs_fixture.ReconstructedReproBuildInputsTests(methodName="runTest")
         self.repro_fixture.setUp()
         self.base = self.repro_fixture.base
@@ -80,6 +91,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.oci_fixture_test.tearDown()
         self.repro_fixture.tearDown()
+        self.bundle_profile_patch.stop()
         tempfile.tempdir = self.previous_tempdir
 
     @property
@@ -349,6 +361,7 @@ class RuntimeAssemblyCaptureTests(unittest.TestCase):
         self.assertEqual(receipt["status"], "bound")
         self.assertEqual(receipt["qualification_status"], "not-run")
         self.assertEqual(receipt["reconstruction_id"], "a")
+        self.assertGreaterEqual(self.bundle_profile.call_count, 1)
         self.assertEqual(self._verify(root), receipt)
         self.assertEqual(set(os.listdir(root)), {prepare.RUNTIME_ASSEMBLY_CAPTURE_DIRECTORY, prepare.RUNTIME_ASSEMBLY_CAPTURE_NAME})
         archive = root / prepare.RUNTIME_ASSEMBLY_CAPTURE_DIRECTORY / prepare.RUNTIME_ASSEMBLY_CAPTURE_ARCHIVE

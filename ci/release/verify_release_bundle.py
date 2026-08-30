@@ -10,6 +10,7 @@ import stat
 import struct
 import tarfile
 from pathlib import Path, PurePosixPath
+from typing import Any, Callable
 
 from release_common import (
     FORBIDDEN_ARCHIVE_SUFFIXES,
@@ -29,6 +30,7 @@ MAX_MEMBER_SIZE = 512 * 1024 * 1024
 MAX_TOTAL_SIZE = 1024 * 1024 * 1024
 MAX_MEMBERS = 9
 CHECKSUM_PATTERN = re.compile(r"([0-9a-f]{64})  ([A-Za-z0-9_./+-]+)")
+ManifestContract = Callable[[bytes, dict[str, Any]], tuple[dict[str, Any], str]]
 
 
 def parse_args() -> argparse.Namespace:
@@ -97,16 +99,37 @@ def _gzip_mtime(bundle: Path) -> int:
     return struct.unpack_from("<I", header, 4)[0]
 
 
-def verify_bundle(
+def _active_manifest_contract(
+    raw: bytes,
+    manifest: dict[str, Any],
+) -> tuple[dict[str, Any], str]:
+    artifact = manifest.get("artifact")
+    if not isinstance(artifact, dict):
+        raise ReleaseContractError("release manifest artifact field is invalid")
+    source_date_epoch = artifact.get("source_date_epoch")
+    if not isinstance(source_date_epoch, int) or isinstance(source_date_epoch, bool):
+        raise ReleaseContractError("release manifest SOURCE_DATE_EPOCH must be an integer")
+    expected_manifest = release_manifest(
+        str(artifact.get("version", "")),
+        str(artifact.get("source_revision", "")),
+        source_date_epoch,
+    )
+    if manifest != expected_manifest or raw != canonical_json_bytes(expected_manifest):
+        raise ReleaseContractError("release manifest differs from the reviewed canonical contract")
+    return expected_manifest, release_root(expected_manifest["artifact"]["version"])
+
+
+def _verify_bundle(
     bundle: Path,
     *,
     max_total_bytes: int | None = None,
+    manifest_contract: ManifestContract = _active_manifest_contract,
 ) -> None:
-    """Verify one release bundle, optionally under a caller retained-byte cap.
+    """Verify one bundle with a caller-selected, internal manifest contract.
 
-    The default preserves the release format's reviewed 1 GiB uncompressed
-    bound.  A semantic component that keeps the parsed bundle in memory can
-    pass a lower cap before any archive payload is materialized.
+    ``manifest_contract`` is intentionally an internal hook.  The public
+    verifier below always retains the active release contract; a separately
+    reviewed historical wrapper may select its own closed implementation.
     """
 
     if (
@@ -206,20 +229,11 @@ def verify_bundle(
         raise ReleaseContractError("gzip and tar SOURCE_DATE_EPOCH values differ")
     manifest_path = f"{root}/manifest/release.json"
     manifest = load_json_object(file_contents[manifest_path], "release manifest")
-    artifact = manifest.get("artifact")
-    if not isinstance(artifact, dict):
-        raise ReleaseContractError("release manifest artifact field is invalid")
-    source_date_epoch = artifact.get("source_date_epoch")
-    if not isinstance(source_date_epoch, int) or isinstance(source_date_epoch, bool):
-        raise ReleaseContractError("release manifest SOURCE_DATE_EPOCH must be an integer")
-    expected_manifest = release_manifest(
-        str(artifact.get("version", "")),
-        str(artifact.get("source_revision", "")),
-        source_date_epoch,
+    expected_manifest, expected_root = manifest_contract(
+        file_contents[manifest_path],
+        manifest,
     )
-    if manifest != expected_manifest or file_contents[manifest_path] != canonical_json_bytes(expected_manifest):
-        raise ReleaseContractError("release manifest differs from the reviewed canonical contract")
-    if root != release_root(expected_manifest["artifact"]["version"]):
+    if root != expected_root:
         raise ReleaseContractError("archive root does not match the release manifest version")
     if expected_manifest["artifact"]["source_date_epoch"] != common_mtime:
         raise ReleaseContractError("release manifest SOURCE_DATE_EPOCH differs from archive metadata")
@@ -246,6 +260,16 @@ def verify_bundle(
         actual_digest = sha256_bytes(file_contents[f"{root}/{relative_path}"])
         if actual_digest != expected_digest:
             raise ReleaseContractError(f"SHA-256 mismatch: {relative_path}")
+
+
+def verify_bundle(
+    bundle: Path,
+    *,
+    max_total_bytes: int | None = None,
+) -> None:
+    """Verify one bundle under the active reviewed release contract."""
+
+    _verify_bundle(bundle, max_total_bytes=max_total_bytes)
 
 
 def main() -> int:

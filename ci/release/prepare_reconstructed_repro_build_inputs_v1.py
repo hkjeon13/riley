@@ -463,7 +463,7 @@ def _with_materialized_replay(
             )
             archives[arm] = checker_path / leaf
         facts = _reproducibility(
-            lambda: reproducibility.validate_reproducibility_inputs(
+            lambda: reproducibility.validate_reconstructed_rc2_reproducibility_inputs(
                 evidence_a=archives["a"],
                 evidence_b=archives["b"],
                 source_archive=source_path,

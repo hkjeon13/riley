@@ -24,6 +24,22 @@ same reviewed literal is independently used by the active release
 preflight/bundle/manifest contract; it is not imported into the Python-3.10
 held-FD checker, and either contract must fail closed on future source drift.
 
+Historical reconstructed RC2 PR16 replay has one separate closed compatibility
+profile in verify_reconstructed_rc2_pr16_bundle_v1.py, not a release-contract
+fallback. It admits only the reviewed target
+6093006ec2b01b784b01ba278296b676f2dfd03a, epoch 1787811743, version 0.1.0,
+archive root riley-0.1.0-linux-x86_64-cuda12.8, the exact 10,909-byte release
+manifest with SHA-256
+3da42b3d0bbf1a56ce8768a5cc7bfb175cc969d57c3727ee9b9b0cfd1df6028e, and the
+historical crates/riley-server/src/main.rs source-contract SHA-256
+1f50fec5b886703fe110c9f0c62560a51193baaaf1d498713c9ba8c17f00d9be. It is
+reachable only through reconstructed RC2 A/B reproducibility closure and the
+private selected-bundle replay used by reconstructed runtime-assembly capture.
+The active verifier and release CLI retain the current 479902 candidate
+contract. No generic legacy admission, archive-derived verifier, or historical
+source-code import/execution is permitted; tar, checksum, ELF, and
+native-dependency grammar remains the shared verifier's internal validation.
+
 The landed Gate E component surface now also includes native canonical-E0,
 optimizer canonical-E0, and Python-free replay adapters.  The Python-free
 adapter consumes only its closed raw/report/golden subset plus a native report,

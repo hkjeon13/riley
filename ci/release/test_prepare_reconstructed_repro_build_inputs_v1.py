@@ -89,11 +89,24 @@ class ReconstructedReproBuildInputsTests(unittest.TestCase):
                 "RECONSTRUCTED_RC2_TARGET",
                 repro_fixture.REVISION,
             ),
+            # The hostile fixture uses a synthetic active release bundle.  The
+            # historical verifier itself is exercised in test_release; keep
+            # this closure test focused on held-FD input behavior.
+            mock.patch.object(
+                prepare.reproducibility,
+                "validate_reconstructed_rc2_reproducibility_inputs",
+                side_effect=prepare.reproducibility.validate_reproducibility_inputs,
+            ),
         ]
-        for patch in self.patches:
+        self.reconstructed_validator = self.patches[-1].start()
+        for patch in self.patches[:-1]:
             patch.start()
         self.repro_a = self.fixture.package("A")
         self.repro_b = self.fixture.package("B")
+        # The preparer deliberately rejects mutable host inputs.  Do not let
+        # the invoking user's umask change this fixture's intended contract.
+        os.chmod(self.repro_a, 0o600)
+        os.chmod(self.repro_b, 0o600)
 
     def tearDown(self) -> None:
         for patch in reversed(self.patches):
@@ -146,6 +159,7 @@ class ReconstructedReproBuildInputsTests(unittest.TestCase):
         self.assertEqual(receipt["capture_scope"], prepare.CAPTURE_SCOPE)
         self.assertEqual(receipt["reproducibility_contract"]["source_revision"], repro_fixture.REVISION)
         self.assertEqual(receipt["reproducibility_contract"]["build_image_id"], repro_fixture.IMAGE_ID)
+        self.assertGreaterEqual(self.reconstructed_validator.call_count, 1)
         self.assertEqual(self._verify(root), receipt)
         self.assertEqual(set(os.listdir(root)), {prepare.REPRO_BUILDS_DIRECTORY_NAME, prepare.REPRO_BUILD_INPUTS_NAME})
         self.assertEqual(set(os.listdir(root / prepare.REPRO_BUILDS_DIRECTORY_NAME)), {"a", "b"})
@@ -235,6 +249,7 @@ class ReconstructedReproBuildInputsTests(unittest.TestCase):
             native=second_native,
             output_name="changed-b.tar",
         )
+        os.chmod(changed_b, 0o600)
         root = self._root()
         self.assert_reason(
             "invalid-pr16-reproducibility-evidence",

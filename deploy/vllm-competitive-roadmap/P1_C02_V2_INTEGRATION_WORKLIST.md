@@ -106,6 +106,20 @@ The later arm-specific same-invocation runtime-image assembly/capture receipt
 must consume this closure before any v2 materializer can promote those missing
 image bindings.
 
+This reconstruction uses the deliberately closed RC2 historical manifest
+profile in verify_reconstructed_rc2_pr16_bundle_v1.py. It accepts only revision
+6093006ec2b01b784b01ba278296b676f2dfd03a, epoch
+1787811743, version 0.1.0, archive root riley-0.1.0-linux-x86_64-cuda12.8, the
+exact 10,909-byte release manifest with SHA-256
+3da42b3d0bbf1a56ce8768a5cc7bfb175cc969d57c3727ee9b9b0cfd1df6028e, and the
+then-current crates/riley-server/src/main.rs source-contract SHA-256
+1f50fec5b886703fe110c9f0c62560a51193baaaf1d498713c9ba8c17f00d9be. Only the
+RC2 A/B closure and the private selected-bundle replay in the reconstructed
+assembly-capture preparer select it. The active release verifier and CLI still
+require the current 479902 candidate contract. This is not generic legacy
+admission and never loads verifier code from historical source; the common tar,
+checksum, ELF, and native-dependency checks stay shared.
+
 The separate
 `ci/release/ReconstructedRuntimeAssembly.Dockerfile` is a static, reviewed
 assembly-tool contract. Its later canonical build context is exactly

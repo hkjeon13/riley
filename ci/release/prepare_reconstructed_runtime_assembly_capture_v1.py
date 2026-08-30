@@ -856,14 +856,14 @@ def _bundle_runtime_tree(repro_root_fd: int, bundle: common.EvidenceDescriptor) 
     """Return the bundle's strip-root runtime tree after private verification."""
 
     try:
-        verify_release_bundle = importlib.import_module("verify_release_bundle")
+        verify_release_bundle = importlib.import_module("verify_reconstructed_rc2_pr16_bundle_v1")
     except ModuleNotFoundError as error:
         if error.name == "tomllib":
             _fail("unsupported-python-runtime", "release bundle replay requires Python 3.11+")
         raise
     with _materialized_private_bundle(repro_root_fd, bundle) as path:
         try:
-            verify_release_bundle.verify_bundle(path)
+            verify_release_bundle.verify_reconstructed_rc2_pr16_bundle(path)
         except Exception as error:  # The private copy is only useful if the reviewed bundle verifier accepts it.
             _fail("invalid-bundle", f"selected private release bundle does not replay: {error}")
         try:
