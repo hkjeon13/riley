@@ -20,10 +20,13 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, BinaryIO, Mapping, Sequence
 
 
 _NATIVE_CHECKER_PATH = Path(__file__).with_name("check_native_profile_pair.py")
+NATIVE_PROFILE_CONTRACT_SHA256 = (
+    "064b549c5555c4333f8bd14b17fd56af8e8d880a88e58429fa91047ca8b6990a"
+)
 _NATIVE_SPEC = importlib.util.spec_from_file_location(
     "riley_release_native_profile_contract", _NATIVE_CHECKER_PATH
 )
@@ -271,6 +274,14 @@ RUNNER_REVIEWED_TOOLS = {
     },
 }
 RUNNER_REQUIRED_TOOLS = frozenset(RUNNER_REVIEWED_TOOLS)
+RUNNER_REVIEWED_SCRIPTS = {
+    "host_script_sha256": (
+        "697739f7ed0d0c86138a63edd4c06276c7a61a57cfce49332da029220a46b907"
+    ),
+    "inner_script_sha256": (
+        "0c7b98bfd1a33ad65065dc7360e39f1cf3a39cc5ed2880202bf47f5a35840246"
+    ),
+}
 RUNNER_FORBIDDEN_ENV_NAMES = frozenset(
     {
         "BASH_ENV",
@@ -360,6 +371,23 @@ _RUNNER_RECEIPT_MAXIMUMS = {
 MAX_RAW_EVIDENCE_ARCHIVE_BYTES = (
     sum(_RUNNER_RECEIPT_MAXIMUMS.values()) + 2 * 1024 * 1024
 )
+# ``replay_raw_evidence_archive`` historically materializes the archive, its
+# member payloads, and a canonical re-encoding simultaneously.  Keep that
+# legacy behavior for existing callers, but give held-FD consumers an explicit
+# accounting bound for those three retained byte collections.  This is not a
+# whole-process RSS claim: JSON parsing and Python object overhead remain
+# separate from the raw-byte materialization budget.
+MAX_RAW_EVIDENCE_RETAINED_BYTES = (
+    2 * MAX_RAW_EVIDENCE_ARCHIVE_BYTES + sum(_RUNNER_RECEIPT_MAXIMUMS.values())
+)
+# The held-FD Gate E consumer deliberately does not use the legacy replay
+# above. It scans the USTAR once and then opens individual bounded members
+# through the already-held raw descriptor. This bounds retained raw member
+# bytes to one native-profile receipt at a time; it is not an absolute Python
+# RSS guarantee because strict JSON decoding can expand a retained byte string.
+MAX_BOUND_RAW_STREAM_MEMBER_BYTES = native_profile.MAX_EVIDENCE_BYTES
+MAX_BOUND_RAW_SCRATCH_BYTES = MAX_RAW_EVIDENCE_ARCHIVE_BYTES
+MAX_REVIEWED_BASELINE_BYTES = 1024 * 1024
 PACKAGE_CANDIDATE_NAME = "release-performance-candidate.json"
 PACKAGE_REPORT_NAME = "release-performance-report.json"
 PACKAGE_RAW_EVIDENCE_NAME = "release-performance-evidence.tar"
@@ -822,6 +850,76 @@ METRIC_FIELDS = {
     "e2e_median_ms",
     "throughput_median_output_tokens_per_second",
 }
+
+# This is the deliberately narrow public policy consumed by the held-FD Gate E
+# adapter.  Keep it independent of ``check_release_candidate.py``: that final
+# checker has a larger path-based responsibility and must not become a hidden
+# semantic dependency of a component replayer.
+BOUND_SEMANTIC_POLICY_VERSION = "riley.release-performance-bound-semantic.v1"
+BOUND_SEMANTIC_CHECKS = (
+    ("ttft_p95_regression", "ttft_p95_ms", "<=", "ttft_p95_ratio_max"),
+    ("tpot_p95_regression", "tpot_p95_ms", "<=", "tpot_p95_ratio_max"),
+    ("e2e_median_regression", "e2e_median_ms", "<=", "e2e_median_ratio_max"),
+    (
+        "throughput_median_regression",
+        "throughput_median_output_tokens_per_second",
+        ">=",
+        "throughput_median_ratio_min",
+    ),
+)
+
+
+def _bound_semantic_policy_document() -> dict[str, Any]:
+    """Return the versioned semantic policy used by bound evidence consumers."""
+
+    return {
+        "version": BOUND_SEMANTIC_POLICY_VERSION,
+        "baseline_schema": BASELINE_SCHEMA,
+        "candidate_schema": CANDIDATE_SCHEMA,
+        "report_schema": REPORT_SCHEMA,
+        "baseline_sha256": BASELINE_SHA256,
+        "request_identity_sha256": PR15_REQUEST_IDENTITY_SHA256,
+        "correctness_gate_id": CORRECTNESS_GATE_ID,
+        "runner_manifest_schema": RUNNER_MANIFEST_SCHEMA,
+        "runner_receipt_files": list(RUNNER_RECEIPT_FILES),
+        "runner_reviewed_tools": RUNNER_REVIEWED_TOOLS,
+        "runner_reviewed_scripts": RUNNER_REVIEWED_SCRIPTS,
+        "native_profile_contract_sha256": NATIVE_PROFILE_CONTRACT_SHA256,
+        "max_native_profile_evidence_bytes": native_profile.MAX_EVIDENCE_BYTES,
+        "max_raw_evidence_archive_bytes": MAX_RAW_EVIDENCE_ARCHIVE_BYTES,
+        "max_raw_evidence_retained_bytes": MAX_RAW_EVIDENCE_RETAINED_BYTES,
+        "max_bound_raw_stream_member_bytes": MAX_BOUND_RAW_STREAM_MEMBER_BYTES,
+        "max_bound_raw_scratch_bytes": MAX_BOUND_RAW_SCRATCH_BYTES,
+        "bound_raw_archive_format": "canonical-ustar-stream-v1",
+        "max_reviewed_baseline_bytes": MAX_REVIEWED_BASELINE_BYTES,
+        "metric_fields": sorted(METRIC_FIELDS),
+        "checks": [
+            {
+                "name": name,
+                "metric": metric,
+                "operator": operator,
+                "threshold_field": threshold_field,
+            }
+            for name, metric, operator, threshold_field in BOUND_SEMANTIC_CHECKS
+        ],
+    }
+
+
+def bound_semantic_policy_sha256() -> str:
+    """Hash the exact public policy so adapters fail closed on source drift."""
+
+    raw = json.dumps(
+        _bound_semantic_policy_document(),
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+# Updated only alongside a deliberate reviewed change to the map above.
+BOUND_SEMANTIC_POLICY_SHA256 = (
+    "d342fe14170203cd2c1c029eb2f159d359778fb930d5faa4083a745e2b92cb7a"
+)
 
 
 def _validate_model(value: Any, path: str) -> dict[str, Any]:
@@ -1650,6 +1748,7 @@ def derive_raw_run_payloads(
         "source": source,
         "model": raw_model,
         "environment": raw_environment,
+        "profile_image_sha256": environment["software"]["container_image_sha256"],
         "workload": raw_workload,
         "run_summary": derived_summary,
         "metrics": derived_metrics,
@@ -1682,17 +1781,41 @@ def validate_raw_run_payloads(
     """Validate five raw candidate runs supplied as immutable byte payloads."""
 
     derived = derive_raw_run_payloads(payloads)
-    loaded = derived["payloads"]
-    runs = derived["runs"]
+    return _validate_raw_derived_candidate(derived, candidate)
+
+
+def _validate_raw_derived_candidate(
+    derived: Mapping[str, Any], candidate: Mapping[str, Any]
+) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, float]]:
+    """Compare an already-replayed compact raw derivation to its candidate."""
+
+    required = {
+        "source",
+        "model",
+        "environment",
+        "workload",
+        "run_summary",
+        "metrics",
+        "raw_runs",
+    }
+    if not isinstance(derived, Mapping) or not required <= set(derived):
+        raise InputError("raw performance derivation has an incomplete result shape")
+    raw_bindings = derived["raw_runs"]
+    if not isinstance(raw_bindings, list):
+        raise InputError("raw performance derivation has malformed raw-run bindings")
     declared_by_pair = {
         binding["pair_index"]: binding for binding in candidate["raw_runs"]
     }
-    for (path, _), run, binding in zip(
-        loaded, runs, derived["raw_runs"], strict=True
-    ):
-        pair_index = run["pair_index"]
+    for binding in raw_bindings:
+        if not isinstance(binding, Mapping):
+            raise InputError("raw performance derivation has malformed raw-run binding")
+        pair_index = binding.get("pair_index")
+        if type(pair_index) is not int:
+            raise InputError("raw performance derivation raw-run pair index is invalid")
         if declared_by_pair.get(pair_index) != binding:
-            raise InputError(f"{path}: raw run binding does not match file contents")
+            raise InputError(
+                f"candidate-{pair_index}.json: raw run binding does not match file contents"
+            )
 
     candidate_source = candidate["source"]
     expected_source = {
@@ -1724,9 +1847,7 @@ def validate_raw_run_payloads(
             raise ComparabilityError(
                 f"candidate {name} does not match its raw native profile runs"
             )
-    if derived["runs"][0]["environment"]["software"][
-        "container_image_sha256"
-    ] != candidate_source["profile_image_sha256"]:
+    if derived.get("profile_image_sha256") != candidate_source["profile_image_sha256"]:
         raise InputError(
             "raw environment producer image does not match profile_image_sha256"
         )
@@ -1737,7 +1858,8 @@ def validate_raw_run_payloads(
         raise InputError("candidate.run_summary does not equal raw-derived summary")
     if candidate["metrics"] != derived_metrics:
         raise InputError("candidate.metrics do not equal raw-derived R7 metrics")
-    return runs, derived_summary, derived_metrics
+    runs = derived.get("runs")
+    return runs if isinstance(runs, list) else [], derived_summary, derived_metrics
 
 
 def _load_raw_runs(
@@ -1987,11 +2109,12 @@ def _validate_runner_execution_timeline(
         )
 
 
-def _runner_manifest(
+def _validate_runner_manifest(
     raw: bytes,
     *,
     image_environment: Mapping[str, str],
     image_labels: Mapping[str, str],
+    reviewed_scripts: Mapping[str, str],
 ) -> dict[str, Any]:
     document = _strict_json_payload(raw, "runner-manifest.json")
     root = _closed_object(
@@ -2035,18 +2158,11 @@ def _runner_manifest(
         {"revision", "host_script_sha256", "inner_script_sha256", "tools"},
     )
     _literal(runner["revision"], revision, "runner-manifest.runner.revision")
-    repository = Path(__file__).resolve().parents[2]
-    script_bindings = {
-        "host_script_sha256": repository / "ci" / "run_remote_release_performance.sh",
-        "inner_script_sha256": repository / "ci" / "release" / "run_release_performance_once.sh",
-    }
-    for name, path in script_bindings.items():
+    if set(reviewed_scripts) != {"host_script_sha256", "inner_script_sha256"}:
+        raise InputError("runner-manifest.runner: reviewed script policy is malformed")
+    for name, expected in reviewed_scripts.items():
         declared = _sha256(runner[name], f"runner-manifest.runner.{name}")
-        actual = _digest_bytes(
-            _read_bounded_regular(path, f"reviewed {name}", 2 * 1024 * 1024)
-        )
-        if declared != actual:
-            raise InputError(f"runner-manifest.runner.{name}: does not match reviewed source")
+        _literal(declared, expected, f"runner-manifest.runner.{name}")
     tools = runner["tools"]
     if not isinstance(tools, dict) or set(tools) != RUNNER_REQUIRED_TOOLS:
         raise InputError("runner-manifest.runner.tools: exact trusted tool inventory required")
@@ -2184,6 +2300,35 @@ def _runner_manifest(
     if len({value["container_id"] for value in parsed_executions}) != 5:
         raise InputError("runner-manifest.executions: five distinct container IDs required")
     return dict(document)
+
+
+def _runner_manifest(
+    raw: bytes,
+    *,
+    image_environment: Mapping[str, str],
+    image_labels: Mapping[str, str],
+) -> dict[str, Any]:
+    """Legacy path-based manifest validation with source-drift detection."""
+
+    repository = Path(__file__).resolve().parents[2]
+    script_paths = {
+        "host_script_sha256": repository / "ci" / "run_remote_release_performance.sh",
+        "inner_script_sha256": repository / "ci" / "release" / "run_release_performance_once.sh",
+    }
+    actual_scripts = {
+        name: _digest_bytes(
+            _read_bounded_regular(path, f"reviewed {name}", 2 * 1024 * 1024)
+        )
+        for name, path in script_paths.items()
+    }
+    if not _exact_json_value(actual_scripts, RUNNER_REVIEWED_SCRIPTS):
+        raise InputError("reviewed runner scripts drifted from the pinned performance policy")
+    return _validate_runner_manifest(
+        raw,
+        image_environment=image_environment,
+        image_labels=image_labels,
+        reviewed_scripts=RUNNER_REVIEWED_SCRIPTS,
+    )
 
 
 def _runner_container_document(raw: bytes, label: str) -> Mapping[str, Any]:
@@ -2839,6 +2984,46 @@ def write_raw_evidence_archive(
         os.close(descriptor)
 
 
+def _retained_raw_evidence_budget(value: int | None) -> int | None:
+    """Validate an optional logical raw-byte materialization budget."""
+
+    if value is None:
+        return None
+    if type(value) is not int or value < 1:
+        raise InputError("raw evidence retained-byte budget must be a positive integer")
+    return value
+
+
+def _canonical_raw_archive_size(member_sizes: Sequence[int]) -> int:
+    """Return the exact USTAR size for canonical regular-file members."""
+
+    total = 1024  # two end-of-archive blocks
+    for size in member_sizes:
+        if type(size) is not int or size < 0:
+            raise InputError("raw evidence canonical member size is invalid")
+        total += 512 + ((size + 511) // 512) * 512
+    return total
+
+
+def _require_retained_raw_evidence_budget(
+    budget: int | None,
+    *,
+    archive_bytes: int,
+    payload_bytes: int,
+    canonical_bytes: int,
+) -> None:
+    """Fail before member extraction when legacy retained bytes exceed a cap."""
+
+    if budget is None:
+        return
+    required = archive_bytes + payload_bytes + canonical_bytes
+    if required > budget:
+        raise InputError(
+            "raw evidence retained-byte budget is too small for archive, payload, "
+            f"and canonical materialization: {required} > {budget}"
+        )
+
+
 def _snapshot_raw_evidence_archive(path: Path) -> tuple[bytes, str]:
     label = "raw performance evidence archive"
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
@@ -2861,7 +3046,10 @@ def _snapshot_raw_evidence_archive(path: Path) -> tuple[bytes, str]:
 
 def _load_raw_evidence_archive_snapshot(
     path: Path,
+    *,
+    max_retained_bytes: int | None = None,
 ) -> tuple[list[tuple[str, bytes]], str, dict[str, Any]]:
+    retained_budget = _retained_raw_evidence_budget(max_retained_bytes)
     archive_raw, archive_digest = _snapshot_raw_evidence_archive(path)
     label = "raw performance evidence archive"
     try:
@@ -2871,7 +3059,6 @@ def _load_raw_evidence_archive_snapshot(
                 raise InputError(
                     f"{label}: exact ordered inventory required: {list(RUNNER_RECEIPT_FILES)}"
                 )
-            payloads: list[tuple[str, bytes]] = []
             for member in members:
                 name = member.name
                 if not member.isreg():
@@ -2889,10 +3076,22 @@ def _load_raw_evidence_archive_snapshot(
                     raise InputError(f"{label}: non-canonical metadata for {name}")
                 if member.size <= 0 or member.size > _RUNNER_RECEIPT_MAXIMUMS[name]:
                     raise InputError(f"{label}: invalid size for {name}")
+            _require_retained_raw_evidence_budget(
+                retained_budget,
+                archive_bytes=len(archive_raw),
+                payload_bytes=sum(member.size for member in members),
+                canonical_bytes=_canonical_raw_archive_size(
+                    [member.size for member in members]
+                ),
+            )
+            payloads: list[tuple[str, bytes]] = []
+            for member in members:
+                name = member.name
                 source = archive.extractfile(member)
                 if source is None:
                     raise InputError(f"{label}: cannot read {name}")
-                raw = source.read(_RUNNER_RECEIPT_MAXIMUMS[name] + 1)
+                with source:
+                    raw = source.read(_RUNNER_RECEIPT_MAXIMUMS[name] + 1)
                 if len(raw) != member.size:
                     raise InputError(f"{label}: truncated or oversized member {name}")
                 payloads.append((name, raw))
@@ -2913,22 +3112,1061 @@ def _load_raw_evidence_archive_snapshot(
 
 def load_raw_evidence_archive(
     path: Path | str,
+    *,
+    max_retained_bytes: int | None = None,
 ) -> list[tuple[str, bytes]]:
     """Replay v3 receipts and return only the five candidate payloads."""
 
-    payloads, _digest, _manifest = _load_raw_evidence_archive_snapshot(Path(path))
+    payloads, _digest, _manifest = _load_raw_evidence_archive_snapshot(
+        Path(path),
+        max_retained_bytes=max_retained_bytes,
+    )
     return payloads
 
 
-def replay_raw_evidence_archive(path: Path | str) -> dict[str, Any]:
+def replay_raw_evidence_archive(
+    path: Path | str,
+    *,
+    max_retained_bytes: int | None = None,
+) -> dict[str, Any]:
     """Replay raw field derivation from a canonical performance archive."""
 
-    payloads, archive_digest, manifest = _load_raw_evidence_archive_snapshot(Path(path))
+    payloads, archive_digest, manifest = _load_raw_evidence_archive_snapshot(
+        Path(path),
+        max_retained_bytes=max_retained_bytes,
+    )
     return {
         "archive_sha256": archive_digest,
         "derived": derive_raw_run_payloads(payloads),
         "payloads": payloads,
         "runner_manifest": manifest,
+    }
+
+
+@dataclass(frozen=True)
+class _BoundRawArchiveMember:
+    """One canonical USTAR member located without retaining its payload."""
+
+    name: str
+    data_offset: int
+    size: int
+    sha256: str
+
+
+def _bound_raw_stable_fields(metadata: os.stat_result) -> tuple[int, ...]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _bound_raw_read(
+    descriptor: int,
+    wanted: int,
+    *,
+    digest: Any,
+    label: str,
+) -> bytes:
+    """Read one nonempty stream chunk and account for the archive digest."""
+
+    try:
+        chunk = os.read(descriptor, wanted)
+    except OSError as error:
+        raise InputError(f"{label}: cannot read raw evidence: {error}") from error
+    if not chunk:
+        raise InputError(f"{label}: truncated raw evidence archive")
+    digest.update(chunk)
+    return chunk
+
+
+def _bound_raw_read_exact(
+    descriptor: int,
+    size: int,
+    *,
+    digest: Any,
+    label: str,
+) -> bytes:
+    """Read a small exact stream item, used only for USTAR headers."""
+
+    chunks: list[bytes] = []
+    remaining = size
+    while remaining:
+        chunk = _bound_raw_read(
+            descriptor,
+            remaining,
+            digest=digest,
+            label=label,
+        )
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def _bound_raw_consume(
+    descriptor: int,
+    size: int,
+    *,
+    digest: Any,
+    label: str,
+    member_digest: Any | None = None,
+    retain: bool = False,
+    require_zero: bool = False,
+) -> bytes:
+    """Stream one bounded region without retaining it unless explicitly asked."""
+
+    retained = bytearray() if retain else None
+    remaining = size
+    while remaining:
+        chunk = _bound_raw_read(
+            descriptor,
+            min(1024 * 1024, remaining),
+            digest=digest,
+            label=label,
+        )
+        if require_zero and any(chunk):
+            raise InputError(f"{label}: canonical USTAR padding must be zero")
+        if member_digest is not None:
+            member_digest.update(chunk)
+        if retained is not None:
+            retained.extend(chunk)
+        remaining -= len(chunk)
+    return bytes(retained) if retained is not None else b""
+
+
+def _bound_raw_pread_member(
+    descriptor: int,
+    member: _BoundRawArchiveMember,
+    *,
+    label: str,
+) -> bytes:
+    """Materialize exactly one checked receipt from the held archive FD."""
+
+    if member.size > _RUNNER_RECEIPT_MAXIMUMS[member.name]:
+        raise InputError(f"{label}: member exceeds its reviewed byte bound")
+    output = bytearray()
+    digest = hashlib.sha256()
+    offset = member.data_offset
+    remaining = member.size
+    while remaining:
+        try:
+            chunk = os.pread(descriptor, min(1024 * 1024, remaining), offset)
+        except OSError as error:
+            raise InputError(f"{label}: cannot reread raw receipt: {error}") from error
+        if not chunk:
+            raise InputError(f"{label}: raw receipt was truncated during replay")
+        output.extend(chunk)
+        digest.update(chunk)
+        offset += len(chunk)
+        remaining -= len(chunk)
+    raw = bytes(output)
+    if digest.hexdigest() != member.sha256:
+        raise InputError(f"{label}: raw receipt changed after archive stream validation")
+    return raw
+
+
+def _bound_raw_members_equal(
+    descriptor: int,
+    left: _BoundRawArchiveMember,
+    right: _BoundRawArchiveMember,
+    *,
+    label: str,
+) -> None:
+    """Compare two bounded members in chunks without keeping both receipts."""
+
+    if left.size != right.size:
+        raise InputError(f"{label}: before/after receipt sizes differ")
+    left_offset = left.data_offset
+    right_offset = right.data_offset
+    remaining = left.size
+    while remaining:
+        wanted = min(1024 * 1024, remaining)
+        try:
+            left_chunk = os.pread(descriptor, wanted, left_offset)
+            right_chunk = os.pread(descriptor, wanted, right_offset)
+        except OSError as error:
+            raise InputError(f"{label}: cannot compare before/after receipts: {error}") from error
+        if len(left_chunk) != wanted or len(right_chunk) != wanted:
+            raise InputError(f"{label}: before/after receipt was truncated during replay")
+        if left_chunk != right_chunk:
+            raise InputError(f"{label}: before/after receipts differ")
+        left_offset += wanted
+        right_offset += wanted
+        remaining -= wanted
+
+
+def _stream_bound_raw_archive(
+    descriptor: int,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+) -> tuple[dict[str, _BoundRawArchiveMember], bytes, bytes, str, tuple[int, ...]]:
+    """Validate canonical USTAR bytes while retaining only two small receipts.
+
+    The old archive helper intentionally retains a full archive, every receipt,
+    and a canonical re-encoding.  This held-FD path instead scans headers,
+    payload digests, padding, and record footer directly.  Only ``SHA256SUMS``
+    and the runner manifest are retained, both under their 256 KiB member cap.
+    """
+
+    if type(descriptor) is not int or descriptor < 0:
+        raise InputError("bound performance raw evidence: valid held file descriptor required")
+    if type(expected_byte_length) is not int or not (
+        0 < expected_byte_length <= MAX_BOUND_RAW_SCRATCH_BYTES
+    ):
+        raise InputError("bound performance raw evidence: invalid expected byte length")
+    expected_digest = _sha256(
+        expected_sha256, "bound performance raw evidence expected SHA-256"
+    )
+    try:
+        before = os.fstat(descriptor)
+    except OSError as error:
+        raise InputError(f"bound performance raw evidence: cannot stat held FD: {error}") from error
+    if not stat.S_ISREG(before.st_mode) or before.st_size != expected_byte_length:
+        raise InputError(
+            "bound performance raw evidence: held FD is not the expected bounded regular file"
+        )
+    try:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+    except OSError as error:
+        raise InputError(f"bound performance raw evidence: cannot rewind held FD: {error}") from error
+
+    label = "bound performance raw evidence"
+    archive_digest = hashlib.sha256()
+    members: dict[str, _BoundRawArchiveMember] = {}
+    retained: dict[str, bytes] = {}
+    offset = 0
+    member_index = 0
+    zero_block = b"\0" * tarfile.BLOCKSIZE
+    while True:
+        if offset + tarfile.BLOCKSIZE > before.st_size:
+            raise InputError(f"{label}: missing canonical USTAR end marker")
+        header = _bound_raw_read_exact(
+            descriptor,
+            tarfile.BLOCKSIZE,
+            digest=archive_digest,
+            label=label,
+        )
+        offset += tarfile.BLOCKSIZE
+        if header == zero_block:
+            if offset + tarfile.BLOCKSIZE > before.st_size:
+                raise InputError(f"{label}: incomplete canonical USTAR end marker")
+            second = _bound_raw_read_exact(
+                descriptor,
+                tarfile.BLOCKSIZE,
+                digest=archive_digest,
+                label=label,
+            )
+            offset += tarfile.BLOCKSIZE
+            if second != zero_block:
+                raise InputError(f"{label}: canonical USTAR requires two zero end blocks")
+            if member_index != len(RUNNER_RECEIPT_FILES):
+                raise InputError(f"{label}: archive ended before the exact receipt inventory")
+            expected_footer = (-offset) % tarfile.RECORDSIZE
+            if before.st_size - offset != expected_footer:
+                raise InputError(f"{label}: non-canonical USTAR record footer length")
+            _bound_raw_consume(
+                descriptor,
+                expected_footer,
+                digest=archive_digest,
+                label=label,
+                require_zero=True,
+            )
+            offset += expected_footer
+            break
+        if member_index >= len(RUNNER_RECEIPT_FILES):
+            raise InputError(f"{label}: archive has extra receipt members")
+        name = RUNNER_RECEIPT_FILES[member_index]
+        try:
+            info = tarfile.TarInfo.frombuf(header, "utf-8", "surrogateescape")
+        except (tarfile.TarError, UnicodeError, ValueError) as error:
+            raise InputError(f"{label}: invalid USTAR header for {name}: {error}") from error
+        if type(info.size) is not int or info.size <= 0 or info.size > _RUNNER_RECEIPT_MAXIMUMS[name]:
+            raise InputError(f"{label}: invalid bounded size for {name}")
+        try:
+            canonical_header = _canonical_tar_info(name, info.size).tobuf(
+                format=tarfile.USTAR_FORMAT
+            )
+        except (tarfile.TarError, UnicodeError, ValueError) as error:
+            raise InputError(f"{label}: cannot canonicalize USTAR header for {name}: {error}") from error
+        if header != canonical_header:
+            raise InputError(f"{label}: non-canonical USTAR header for {name}")
+        data_offset = offset
+        member_digest = hashlib.sha256()
+        member_raw = _bound_raw_consume(
+            descriptor,
+            info.size,
+            digest=archive_digest,
+            label=label,
+            member_digest=member_digest,
+            retain=name in {"SHA256SUMS", "runner-manifest.json"},
+        )
+        offset += info.size
+        padding = (-info.size) % tarfile.BLOCKSIZE
+        _bound_raw_consume(
+            descriptor,
+            padding,
+            digest=archive_digest,
+            label=label,
+            require_zero=True,
+        )
+        offset += padding
+        members[name] = _BoundRawArchiveMember(
+            name=name,
+            data_offset=data_offset,
+            size=info.size,
+            sha256=member_digest.hexdigest(),
+        )
+        if name in {"SHA256SUMS", "runner-manifest.json"}:
+            retained[name] = member_raw
+        member_index += 1
+    if offset != before.st_size:
+        raise InputError(f"{label}: archive stream length mismatch")
+    try:
+        after = os.fstat(descriptor)
+    except OSError as error:
+        raise InputError(f"{label}: cannot re-stat held FD: {error}") from error
+    if _bound_raw_stable_fields(before) != _bound_raw_stable_fields(after):
+        raise InputError(f"{label}: archive changed while it was stream-validated")
+    actual_digest = archive_digest.hexdigest()
+    if actual_digest != expected_digest:
+        raise InputError(f"{label}: archive SHA-256 does not match the held evidence descriptor")
+    expected_sums = "".join(
+        f"{members[name].sha256}  {name}\n"
+        for name in RUNNER_RECEIPT_FILES
+        if name != "SHA256SUMS"
+    ).encode("ascii")
+    if retained.get("SHA256SUMS") != expected_sums:
+        raise InputError(f"{label}: SHA256SUMS does not exactly bind every receipt")
+    manifest_raw = retained.get("runner-manifest.json")
+    if manifest_raw is None:
+        raise InputError(f"{label}: runner manifest was not retained")
+    return (
+        members,
+        retained["SHA256SUMS"],
+        manifest_raw,
+        actual_digest,
+        _bound_raw_stable_fields(before),
+    )
+
+
+def _compact_bound_raw_candidate(
+    raw: bytes,
+    *,
+    label: str,
+    sha256: str,
+) -> dict[str, Any]:
+    """Validate one native-profile receipt then retain only semantic facts."""
+
+    try:
+        run = json.loads(
+            raw,
+            object_pairs_hook=_pairs_no_duplicates,
+            parse_constant=_reject_nonfinite,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+        raise InputError(f"{label}: invalid strict native-profile JSON: {error}") from error
+    if type(run) is not dict:
+        raise InputError(f"{label}: native-profile root must be an object")
+    try:
+        native_profile._validate_run(run, label)
+    except native_profile.InputError as error:
+        raise InputError(str(error)) from error
+    if run["role"] != "candidate":
+        raise InputError(f"{label}.role: expected 'candidate', got {run['role']!r}")
+    requests = run["requests"]
+    return {
+        "pair_index": run["pair_index"],
+        "run_id": run["run_id"],
+        "recorded_at_utc": run["recorded_at_utc"],
+        "sha256": sha256,
+        "source": run["source"],
+        "environment": run["environment"],
+        "workload": run["workload"],
+        "request_identity": native_profile._request_identity(run),
+        "ttft": [request["ttft_ms"] for request in requests],
+        "tpot": [request["tpot_ms"] for request in requests],
+        "e2e": [request["e2e_ms"] for request in requests],
+        "throughput": native_profile._throughput(run),
+        "failure_count": run["failure_count"],
+        "dropped_trace_records": run["trace"]["dropped_records"],
+    }
+
+
+def _derive_bound_raw_candidates(compact_runs: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Derive the normal raw fields without retaining five parsed receipts."""
+
+    if len(compact_runs) != 5:
+        raise InputError("bound raw evidence: exactly five candidate receipts required")
+    rows = sorted(compact_runs, key=lambda row: row.get("pair_index", -1))
+    if [row.get("pair_index") for row in rows] != list(range(1, 6)):
+        raise InputError("bound raw evidence: candidate pair indexes must be exactly 1..5")
+    if len({row.get("run_id") for row in rows}) != 5:
+        raise InputError("bound raw evidence: candidate run IDs must be unique")
+    try:
+        source = native_profile._require_equal(
+            [row["source"] for row in rows], "release candidate raw source"
+        )
+        environment = native_profile._require_equal(
+            [row["environment"] for row in rows],
+            "release candidate raw environment",
+        )
+        workload = native_profile._require_equal(
+            [row["workload"] for row in rows], "release candidate raw workload"
+        )
+        request_identity = native_profile._require_equal(
+            [row["request_identity"] for row in rows],
+            "release candidate raw request identities",
+        )
+    except native_profile.ComparabilityError as error:
+        raise ComparabilityError(str(error)) from error
+    except native_profile.InputError as error:
+        raise InputError(str(error)) from error
+    requests_ttft = [value for row in rows for value in row["ttft"]]
+    requests_tpot = [value for row in rows for value in row["tpot"]]
+    requests_e2e = [value for row in rows for value in row["e2e"]]
+    raw_model = {
+        "model_id": workload["model_id"],
+        "model_revision": workload["model_revision"],
+        "dtype": workload["dtype"],
+        "weights_sha256": workload["weights_sha256"],
+        "tokenizer_sha256": workload["tokenizer_sha256"],
+    }
+    raw_environment = {
+        "environment_id": environment["host"]["environment_id"],
+        "gpu_uuid": environment["gpu"]["uuid"],
+        "compute_capability": environment["gpu"]["compute_capability"],
+        "driver_version": environment["software"]["nvidia_driver_version"],
+        "cuda_runtime_version": environment["software"]["cuda_runtime_version"],
+        "cuda_toolkit_version": environment["software"]["cuda_toolkit_version"],
+        "cuda_architecture": environment["gpu"]["compute_capability"].replace(
+            ".", ""
+        ),
+    }
+    raw_workload = {
+        "workload_id": workload["workload_id"],
+        "concurrency": workload["concurrency"],
+        "prompt_tokens": workload["prompt_tokens"],
+        "output_tokens": workload["output_tokens"],
+        "warmups_per_run": workload["warmups"],
+        "measured_iterations_per_run": workload["measured_iterations"],
+        "independent_runs": len(rows),
+        "sampling": workload["sampling_id"],
+        "execution_completion": "iteration-batch",
+        "residual_rmsnorm": "separate",
+    }
+    return {
+        "source": source,
+        "model": raw_model,
+        "environment": raw_environment,
+        "profile_image_sha256": environment["software"]["container_image_sha256"],
+        "workload": raw_workload,
+        "run_summary": {
+            "independent_runs": len(rows),
+            "warmups_per_run": workload["warmups"],
+            "measured_iterations_per_run": workload["measured_iterations"],
+            "failure_count": sum(row["failure_count"] for row in rows),
+            "dropped_trace_records": sum(
+                row["dropped_trace_records"] for row in rows
+            ),
+        },
+        "metrics": {
+            "ttft_p95_ms": native_profile.r7(requests_ttft, 0.95),
+            "tpot_p95_ms": native_profile.r7(requests_tpot, 0.95),
+            "e2e_median_ms": native_profile.r7(requests_e2e, 0.50),
+            "throughput_median_output_tokens_per_second": native_profile.r7(
+                [row["throughput"] for row in rows], 0.50
+            ),
+        },
+        "raw_runs": [
+            {
+                "pair_index": row["pair_index"],
+                "run_id": row["run_id"],
+                "sha256": row["sha256"],
+            }
+            for row in rows
+        ],
+        "request_identity_sha256": native_profile._sha256_json(request_identity),
+    }
+
+
+def _replay_bound_runner_receipts(
+    descriptor: int,
+    members: Mapping[str, _BoundRawArchiveMember],
+    manifest_raw: bytes,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Replay receipt semantics with one bounded archive member at a time."""
+
+    manifest_document = _strict_json_payload(manifest_raw, "runner-manifest.json")
+    if type(manifest_document) is not dict or type(manifest_document.get("candidate")) is not dict:
+        raise InputError("runner-manifest.json: malformed candidate binding")
+    image_id = manifest_document["candidate"].get("optimizer_image_id")
+    if type(image_id) is not str:
+        raise InputError("runner-manifest.json: missing optimizer image ID")
+    before_member = members["optimizer-image-inspect-before.json"]
+    after_member = members["optimizer-image-inspect-after.json"]
+    before_raw = _bound_raw_pread_member(
+        descriptor,
+        before_member,
+        label="optimizer-image-inspect-before.json",
+    )
+    before_image = _runner_image(
+        before_raw, "optimizer-image-inspect-before.json", image_id
+    )
+    del before_raw
+    after_raw = _bound_raw_pread_member(
+        descriptor,
+        after_member,
+        label="optimizer-image-inspect-after.json",
+    )
+    after_image = _runner_image(
+        after_raw, "optimizer-image-inspect-after.json", image_id
+    )
+    del after_raw
+    _bound_raw_members_equal(
+        descriptor,
+        before_member,
+        after_member,
+        label="optimizer image inspect",
+    )
+    if before_image != after_image:
+        raise InputError("optimizer image inspect: image environment or labels changed across run")
+    manifest = _validate_runner_manifest(
+        manifest_raw,
+        image_environment=before_image["environment"],
+        image_labels=before_image["labels"],
+        reviewed_scripts=RUNNER_REVIEWED_SCRIPTS,
+    )
+    revision = manifest["candidate"]["source_revision"]
+    gpu_raw = _bound_raw_pread_member(
+        descriptor, members["gpu.csv"], label="gpu.csv"
+    )
+    try:
+        gpu_newline_count = gpu_raw.count(b"\n")
+        gpu_line = gpu_raw.decode("utf-8", errors="strict").strip("\n")
+    except UnicodeDecodeError as error:
+        raise InputError("gpu.csv: must be strict UTF-8") from error
+    finally:
+        del gpu_raw
+    gpu_values = tuple(value.strip() for value in gpu_line.split(","))
+    if gpu_values != RUNNER_GPU_ROW or gpu_newline_count != 1:
+        raise InputError("gpu.csv: exact designated server-4096 GPU row required")
+
+    compact_runs: list[dict[str, Any]] = []
+    container_ids: list[str] = []
+    volume_names: list[str] = []
+    executions: list[dict[str, Any]] = []
+    for pair_index in range(1, 6):
+        prefix = f"run-{pair_index}"
+        execution_raw = _bound_raw_pread_member(
+            descriptor,
+            members[f"{prefix}/execution-receipt.json"],
+            label=f"{prefix}/execution-receipt.json",
+        )
+        execution = _runner_execution_payload(
+            execution_raw, f"{prefix}/execution-receipt.json"
+        )
+        del execution_raw
+        if not _exact_json_value(execution, manifest["executions"][pair_index - 1]):
+            raise InputError(f"{prefix}: execution receipt differs from runner manifest")
+        expected_hashes = {
+            "preflight": members[f"{prefix}/preflight.txt"].sha256,
+            "candidate": members[f"{prefix}/candidate.json"].sha256,
+            "gpu_monitor": members[f"{prefix}/gpu-monitor.csv"].sha256,
+            "container_inspect_before": members[
+                f"{prefix}/container-inspect-before.json"
+            ].sha256,
+            "container_inspect_after": members[
+                f"{prefix}/container-inspect-after.json"
+            ].sha256,
+        }
+        if execution["sha256"] != expected_hashes:
+            raise InputError(f"{prefix}: execution receipt SHA-256 cross-binding mismatch")
+        preflight_raw = _bound_raw_pread_member(
+            descriptor,
+            members[f"{prefix}/preflight.txt"],
+            label=f"{prefix}/preflight.txt",
+        )
+        _runner_preflight(preflight_raw, f"{prefix}/preflight.txt", revision)
+        del preflight_raw
+        before_raw = _bound_raw_pread_member(
+            descriptor,
+            members[f"{prefix}/container-inspect-before.json"],
+            label=f"{prefix}/container-inspect-before.json",
+        )
+        before = _runner_container_document(
+            before_raw, f"{prefix}/container-inspect-before.json"
+        )
+        before_facts = _validate_runner_container(
+            before,
+            label=f"{prefix}/container-inspect-before.json",
+            pair_index=pair_index,
+            manifest=manifest,
+            after=False,
+        )
+        del before, before_raw
+        after_raw = _bound_raw_pread_member(
+            descriptor,
+            members[f"{prefix}/container-inspect-after.json"],
+            label=f"{prefix}/container-inspect-after.json",
+        )
+        after = _runner_container_document(
+            after_raw, f"{prefix}/container-inspect-after.json"
+        )
+        after_facts = _validate_runner_container(
+            after,
+            label=f"{prefix}/container-inspect-after.json",
+            pair_index=pair_index,
+            manifest=manifest,
+            after=True,
+        )
+        del after, after_raw
+        if (
+            before_facts["container_id"] != after_facts["container_id"]
+            or before_facts["workspace_volume_name"]
+            != after_facts["workspace_volume_name"]
+            or before_facts["created_at_utc"] != after_facts["created_at_utc"]
+        ):
+            raise InputError(f"{prefix}: before/after container identity changed")
+        container_id = before_facts["container_id"]
+        if execution["container_id"] != container_id:
+            raise InputError(f"{prefix}: execution receipt container ID mismatch")
+        monitor_raw = _bound_raw_pread_member(
+            descriptor,
+            members[f"{prefix}/gpu-monitor.csv"],
+            label=f"{prefix}/gpu-monitor.csv",
+        )
+        _runner_gpu_monitor(
+            monitor_raw,
+            f"{prefix}/gpu-monitor.csv",
+            expected_capture_id=execution["capture_id"],
+            expected_container_id=container_id,
+        )
+        del monitor_raw
+        candidate_member = members[f"{prefix}/candidate.json"]
+        candidate_raw = _bound_raw_pread_member(
+            descriptor, candidate_member, label=f"{prefix}/candidate.json"
+        )
+        compact = _compact_bound_raw_candidate(
+            candidate_raw,
+            label=f"{prefix}/candidate.json",
+            sha256=candidate_member.sha256,
+        )
+        del candidate_raw
+        expected_run_id = _runner_run_id(revision, execution["capture_id"], pair_index)
+        if (
+            compact["pair_index"] != pair_index
+            or compact["run_id"] != expected_run_id
+            or compact["run_id"] != execution["run_id"]
+            or compact["recorded_at_utc"] != execution["candidate_recorded_at_utc"]
+        ):
+            raise InputError(f"{prefix}: raw candidate identity differs from execution receipt")
+        expected_docker = {
+            "created_at_utc": after_facts["created_at_utc"],
+            "started_at_utc": after_facts["started_at_utc"],
+            "finished_at_utc": after_facts["finished_at_utc"],
+            "exit_code": after_facts["exit_code"],
+            "oom_killed": after_facts["oom_killed"],
+        }
+        if not _exact_json_value(execution["docker"], expected_docker):
+            raise InputError(f"{prefix}: Docker timeline differs from execution receipt")
+        _validate_runner_execution_timeline(
+            execution, label=f"{prefix}/execution-receipt.json"
+        )
+        compact_runs.append(compact)
+        container_ids.append(container_id)
+        volume_names.append(before_facts["workspace_volume_name"])
+        executions.append(execution)
+    if len(set(container_ids)) != 5:
+        raise InputError("runner receipts: exactly five distinct container IDs required")
+    if len(set(volume_names)) != 5:
+        raise InputError("runner receipts: exactly five distinct workspace volumes required")
+    for previous, current in zip(executions, executions[1:], strict=False):
+        if _runner_timestamp_ns(
+            previous["docker"]["finished_at_utc"], "previous FinishedAt"
+        ) > _runner_timestamp_ns(current["docker"]["created_at_utc"], "next Created"):
+            raise InputError("runner receipts: sequential pair timelines overlap")
+    derived = _derive_bound_raw_candidates(compact_runs)
+    expected_source = {
+        "git_commit": manifest["candidate"]["source_revision"],
+        "git_dirty": False,
+        "executable_sha256": manifest["candidate"]["profile_binary_sha256"],
+        "implementation_id": "native-iteration-command-batch",
+        "runtime_flag": {"name": "execution_completion", "value": "iteration-batch"},
+        "semantic_class": "E0",
+        "correctness_gate_id": CORRECTNESS_GATE_ID,
+        "correctness_report_sha256": manifest["candidate"][
+            "optimizer_correctness_report_sha256"
+        ],
+    }
+    if not _exact_json_value(derived["source"], expected_source):
+        raise InputError("runner receipts: raw source does not match runner manifest")
+    if derived["profile_image_sha256"] != image_id.removeprefix("sha256:"):
+        raise InputError("runner receipts: raw profile image does not match inspected image")
+    if derived["run_summary"] != {
+        "independent_runs": 5,
+        "warmups_per_run": 5,
+        "measured_iterations_per_run": 30,
+        "failure_count": 0,
+        "dropped_trace_records": 0,
+    }:
+        raise InputError("runner receipts: exact 5 x (5 warmups + 30 measured) derivation required")
+    return manifest, derived
+
+
+def replay_bound_raw_evidence_fd(
+    raw_evidence_fd: int,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+) -> dict[str, Any]:
+    """Replay a canonical raw archive from one held, private scratch FD.
+
+    The caller owns the descriptor and is responsible for having copied the
+    Gate E artifact into a private scratch directory. This function does not
+    reopen a pathname and never calls the legacy full-buffer replay API.
+    """
+
+    members, _sha256s, manifest_raw, archive_sha256, before_identity = _stream_bound_raw_archive(
+        raw_evidence_fd,
+        expected_sha256=expected_sha256,
+        expected_byte_length=expected_byte_length,
+    )
+    manifest, derived = _replay_bound_runner_receipts(
+        raw_evidence_fd, members, manifest_raw
+    )
+    try:
+        after = os.fstat(raw_evidence_fd)
+    except OSError as error:
+        raise InputError(f"bound performance raw evidence: cannot re-stat replayed FD: {error}") from error
+    if _bound_raw_stable_fields(after) != before_identity:
+        raise InputError("bound performance raw evidence: archive changed during semantic replay")
+    return {
+        "archive_sha256": archive_sha256,
+        "runner_manifest": manifest,
+        "derived": derived,
+        "raw_stream_member_byte_limit": MAX_BOUND_RAW_STREAM_MEMBER_BYTES,
+        "scratch_disk_byte_limit": MAX_BOUND_RAW_SCRATCH_BYTES,
+    }
+
+
+def _require_bound_semantic_policy() -> None:
+    if bound_semantic_policy_sha256() != BOUND_SEMANTIC_POLICY_SHA256:
+        raise InputError(
+            "bound performance semantic policy changed without updating its "
+            "reviewed policy digest"
+        )
+    native_digest = _digest_bytes(
+        _read_bounded_regular(
+            _NATIVE_CHECKER_PATH,
+            "reviewed native performance derivation contract",
+            2 * 1024 * 1024,
+        )
+    )
+    if native_digest != NATIVE_PROFILE_CONTRACT_SHA256:
+        raise InputError(
+            "native performance derivation contract changed without updating "
+            "the reviewed bound policy"
+        )
+    repository = Path(__file__).resolve().parents[2]
+    script_paths = {
+        "host_script_sha256": repository / "ci" / "run_remote_release_performance.sh",
+        "inner_script_sha256": repository
+        / "ci"
+        / "release"
+        / "run_release_performance_once.sh",
+    }
+    actual_scripts = {
+        name: _digest_bytes(
+            _read_bounded_regular(path, f"reviewed {name}", 2 * 1024 * 1024)
+        )
+        for name, path in script_paths.items()
+    }
+    if not _exact_json_value(actual_scripts, RUNNER_REVIEWED_SCRIPTS):
+        raise InputError(
+            "reviewed runner scripts drifted from the pinned performance policy"
+        )
+
+
+def _validate_reviewed_baseline_bytes(raw: bytes) -> dict[str, Any]:
+    """Parse the reviewed baseline from caller-held bytes, never a pathname."""
+
+    if type(raw) is not bytes or not raw:
+        raise InputError("reviewed performance baseline must be nonempty bytes")
+    if len(raw) > MAX_REVIEWED_BASELINE_BYTES:
+        raise InputError("reviewed performance baseline exceeds its byte bound")
+    document = _strict_json_payload(raw, "reviewed performance baseline")
+    if type(document) is not dict:
+        raise InputError("reviewed performance baseline: root must be an object")
+    return _validate_baseline(document, raw)
+
+
+def _validate_bound_report_candidate(
+    report: Mapping[str, Any],
+    *,
+    baseline_sha256: str,
+) -> tuple[Mapping[str, Any], dict[str, Any]]:
+    """Validate the exact report envelope and recover its typed candidate."""
+
+    row = _closed_object(
+        report,
+        "performance report",
+        {
+            "schema_version",
+            "status",
+            "passed",
+            "baseline",
+            "candidate",
+            "ratios",
+            "checks",
+            "errors",
+        },
+    )
+    _literal(row["schema_version"], REPORT_SCHEMA, "performance report.schema_version")
+    _literal(row["status"], "passed", "performance report.status")
+    _literal(row["passed"], True, "performance report.passed")
+    _literal(row["errors"], [], "performance report.errors")
+    candidate = _closed_object(
+        row["candidate"],
+        "performance report.candidate",
+        {
+            "candidate_id",
+            "recorded_at_utc",
+            "source",
+            "model",
+            "environment",
+            "workload",
+            "metrics",
+            "run_summary",
+            "raw_runs",
+        },
+    )
+    validated = _validate_candidate(
+        {
+            "schema_version": CANDIDATE_SCHEMA,
+            "baseline_sha256": baseline_sha256,
+            "status": "success",
+            **candidate,
+        }
+    )
+    return row, validated
+
+
+def validate_bound_performance_evidence(
+    report: Mapping[str, Any],
+    raw_evidence_fd: int,
+    *,
+    reviewed_baseline_raw: bytes,
+    source_revision: str,
+    source_archive_sha256: str,
+    release_binary_sha256: str,
+    release_image_id: str,
+    profile_binary_sha256: str,
+    optimizer_report_sha256: str,
+    optimizer_image_id: str,
+    optimizer_model_tree_sha256: str,
+    candidate_id: str,
+    raw_evidence_sha256: str,
+    raw_evidence_byte_length: int,
+) -> dict[str, Any]:
+    """Validate one fully-bound performance component from held inputs.
+
+    ``report`` and ``reviewed_baseline_raw`` are caller-held values. The raw
+    archive is a caller-owned FD for a private scratch copy; this helper never
+    reopens it by pathname and intentionally performs no aggregate Gate E or
+    release-qualification decision.
+    """
+
+    _require_bound_semantic_policy()
+    revision = _string(source_revision, "bound performance source revision")
+    if GIT_RE.fullmatch(revision) is None:
+        raise InputError("bound performance source revision: invalid commit")
+    expected_candidate_id = _candidate_id(
+        candidate_id, "bound performance candidate ID"
+    )
+    expected_release_image = _image_digest(
+        release_image_id, "bound performance release image ID"
+    )
+    expected_optimizer_image = _image_digest(
+        optimizer_image_id, "bound performance optimizer image ID"
+    )
+    expected_digests = {
+        "source_archive_sha256": _sha256(
+            source_archive_sha256, "bound performance source archive SHA-256"
+        ),
+        "release_binary_sha256": _sha256(
+            release_binary_sha256, "bound performance release binary SHA-256"
+        ),
+        "profile_binary_sha256": _sha256(
+            profile_binary_sha256, "bound performance profile binary SHA-256"
+        ),
+        "correctness_report_sha256": _sha256(
+            optimizer_report_sha256,
+            "bound performance optimizer report SHA-256",
+        ),
+        "model_tree_sha256": _sha256(
+            optimizer_model_tree_sha256,
+            "bound performance optimizer model-tree SHA-256",
+        ),
+        "raw_evidence_sha256": _sha256(
+            raw_evidence_sha256, "bound performance raw-evidence SHA-256"
+        ),
+    }
+    baseline = _validate_reviewed_baseline_bytes(reviewed_baseline_raw)
+    row, candidate = _validate_bound_report_candidate(
+        report,
+        baseline_sha256=baseline["sha256"],
+    )
+    if candidate["candidate_id"] != expected_candidate_id:
+        raise InputError(
+            "performance report candidate ID does not match the frozen candidate"
+        )
+    expected_source = {
+        "git_commit": revision,
+        "git_dirty": False,
+        "source_archive_sha256": expected_digests["source_archive_sha256"],
+        "profile_binary_sha256": expected_digests["profile_binary_sha256"],
+        "release_binary_sha256": expected_digests["release_binary_sha256"],
+        "profile_image_sha256": expected_optimizer_image,
+        "release_image_sha256": expected_release_image,
+        "semantic_class": "E0",
+        "correctness_gate_id": CORRECTNESS_GATE_ID,
+        "correctness_report_sha256": expected_digests["correctness_report_sha256"],
+    }
+    if not _exact_json_value(candidate["source"], expected_source):
+        raise InputError(
+            "performance report candidate source does not bind the supplied "
+            "frozen/release/optimizer identities"
+        )
+    declared_baseline = _closed_object(
+        row["baseline"],
+        "performance report.baseline",
+        {"baseline_id", "sha256", "metrics"},
+    )
+    expected_baseline = {
+        "baseline_id": baseline["baseline_id"],
+        "sha256": baseline["sha256"],
+        "metrics": baseline["metrics"],
+    }
+    if not _exact_json_value(declared_baseline, expected_baseline):
+        raise InputError("performance report baseline does not equal reviewed baseline")
+    for field in ("model", "environment", "workload"):
+        if not _exact_json_value(candidate[field], baseline[field]):
+            raise ComparabilityError(
+                f"performance report candidate {field} differs from reviewed release lane"
+            )
+
+    replay = replay_bound_raw_evidence_fd(
+        raw_evidence_fd,
+        expected_sha256=expected_digests["raw_evidence_sha256"],
+        expected_byte_length=raw_evidence_byte_length,
+    )
+    if type(replay) is not dict:
+        raise InputError("bound performance raw replay did not return an object")
+    runner_manifest = replay.get("runner_manifest")
+    derived = replay.get("derived")
+    replayed_archive_sha256 = _sha256(
+        replay.get("archive_sha256"), "bound performance replayed raw-evidence SHA-256"
+    )
+    if replayed_archive_sha256 != expected_digests["raw_evidence_sha256"]:
+        raise InputError("performance raw replay digest does not match bound raw evidence")
+    if type(runner_manifest) is not dict or not isinstance(derived, Mapping):
+        raise InputError("bound performance raw replay returned malformed semantic facts")
+    _require_request_identity_sha256(
+        derived,
+        baseline["request_identity_sha256"],
+        "bound performance raw request identity",
+    )
+    runner_candidate = _closed_object(
+        runner_manifest.get("candidate"),
+        "bound performance runner manifest candidate",
+        {
+            "source_revision",
+            "source_archive_sha256",
+            "profile_binary_sha256",
+            "model_tree_sha256",
+            "optimizer_correctness_report_sha256",
+            "optimizer_image_id",
+        },
+    )
+    expected_runner_candidate = {
+        "source_revision": revision,
+        "source_archive_sha256": expected_digests["source_archive_sha256"],
+        "profile_binary_sha256": expected_digests["profile_binary_sha256"],
+        "model_tree_sha256": expected_digests["model_tree_sha256"],
+        "optimizer_correctness_report_sha256": expected_digests[
+            "correctness_report_sha256"
+        ],
+        "optimizer_image_id": optimizer_image_id,
+    }
+    if not _exact_json_value(runner_candidate, expected_runner_candidate):
+        raise InputError(
+            "performance runner manifest does not bind the supplied optimizer and frozen inputs"
+        )
+    runner = runner_manifest.get("runner")
+    if type(runner) is not dict:
+        raise InputError("bound performance runner manifest has no typed runner")
+    if not _exact_json_value(runner.get("tools"), RUNNER_REVIEWED_TOOLS):
+        raise InputError("performance runner tool map differs from the reviewed contract")
+    _validate_raw_derived_candidate(derived, candidate)
+
+    ratios = _closed_object(
+        row["ratios"], "performance report.ratios", set(METRIC_FIELDS)
+    )
+    expected_ratios: dict[str, float] = {}
+    for metric in METRIC_FIELDS:
+        expected = candidate["metrics"][metric] / baseline["metrics"][metric]
+        observed = _number(ratios[metric], f"performance report.ratios.{metric}")
+        if observed != expected:
+            raise InputError(
+                f"performance report ratio for {metric} does not equal raw-derived ratio"
+            )
+        expected_ratios[metric] = expected
+    checks = row["checks"]
+    if type(checks) is not list or len(checks) != len(BOUND_SEMANTIC_CHECKS):
+        raise InputError("performance report requires the exact four-check inventory")
+    checks_by_name: dict[str, Mapping[str, Any]] = {}
+    for index, check in enumerate(checks):
+        checked = _closed_object(
+            check,
+            f"performance report.checks[{index}]",
+            {"name", "passed", "observed", "operator", "limit"},
+        )
+        name = _string(checked["name"], f"performance report.checks[{index}].name")
+        if name in checks_by_name:
+            raise InputError("performance report contains duplicate threshold checks")
+        checks_by_name[name] = checked
+    if set(checks_by_name) != {row[0] for row in BOUND_SEMANTIC_CHECKS}:
+        raise InputError("performance report threshold check set differs from the reviewed contract")
+    for name, metric, operator, threshold_field in BOUND_SEMANTIC_CHECKS:
+        check = checks_by_name[name]
+        observed = _number(
+            check["observed"], f"performance report.checks.{name}.observed"
+        )
+        limit = _number(check["limit"], f"performance report.checks.{name}.limit")
+        expected_limit = baseline["thresholds"][threshold_field]
+        if observed != expected_ratios[metric] or limit != expected_limit:
+            raise InputError(
+                f"performance report threshold {name} does not equal raw-derived policy"
+            )
+        if check["operator"] != operator:
+            raise InputError(
+                f"performance report threshold {name} has the wrong comparison operator"
+            )
+        passed = observed <= limit if operator == "<=" else observed >= limit
+        if check["passed"] is not True or not passed:
+            raise InputError(f"performance report threshold {name} did not pass")
+    return {
+        "baseline": baseline,
+        "candidate": candidate,
+        "raw_evidence_sha256": replayed_archive_sha256,
+        "runner_manifest": runner_manifest,
+        "ratios": expected_ratios,
+        "raw_stream_member_byte_limit": replay["raw_stream_member_byte_limit"],
+        "scratch_disk_byte_limit": replay["scratch_disk_byte_limit"],
     }
 
 

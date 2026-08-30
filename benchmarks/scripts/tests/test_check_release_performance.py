@@ -1343,6 +1343,92 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 checker.RUNNER_REVIEWED_TOOLS,
             )
 
+    def test_held_fd_streaming_raw_replay_matches_legacy_without_calling_it(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = ReleaseFixture(root)
+            archive = root / "evidence.tar"
+            payloads = [
+                (str(path), path.read_bytes()) for path in fixture.raw_paths
+            ]
+            expected_sha = checker.write_raw_evidence_archive(
+                archive,
+                payloads,
+                runner_receipt_root=fixture.runner_receipt_root,
+            )
+            legacy = checker.replay_raw_evidence_archive(archive)
+            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+            flags |= getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(archive, flags)
+            try:
+                with mock.patch.object(
+                    checker,
+                    "replay_raw_evidence_archive",
+                    side_effect=AssertionError("held-FD replay must not use legacy full buffer"),
+                ):
+                    replay = checker.replay_bound_raw_evidence_fd(
+                        descriptor,
+                        expected_sha256=expected_sha,
+                        expected_byte_length=archive.stat().st_size,
+                    )
+            finally:
+                os.close(descriptor)
+            self.assertEqual(replay["archive_sha256"], expected_sha)
+            self.assertEqual(replay["runner_manifest"], legacy["runner_manifest"])
+            for field in (
+                "source",
+                "model",
+                "environment",
+                "profile_image_sha256",
+                "workload",
+                "run_summary",
+                "metrics",
+                "raw_runs",
+                "request_identity_sha256",
+            ):
+                self.assertEqual(replay["derived"][field], legacy["derived"][field])
+            self.assertEqual(
+                replay["raw_stream_member_byte_limit"],
+                checker.MAX_BOUND_RAW_STREAM_MEMBER_BYTES,
+            )
+            self.assertEqual(
+                replay["scratch_disk_byte_limit"],
+                checker.MAX_BOUND_RAW_SCRATCH_BYTES,
+            )
+
+    def test_held_fd_streaming_raw_replay_rejects_descriptor_length_before_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            fixture = ReleaseFixture(root)
+            archive = root / "evidence.tar"
+            checker.write_raw_evidence_archive(
+                archive,
+                [(str(path), path.read_bytes()) for path in fixture.raw_paths],
+                runner_receipt_root=fixture.runner_receipt_root,
+            )
+            descriptor = os.open(archive, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+            try:
+                with self.assertRaisesRegex(checker.InputError, "expected bounded regular"):
+                    checker.replay_bound_raw_evidence_fd(
+                        descriptor,
+                        expected_sha256=hashlib.sha256(archive.read_bytes()).hexdigest(),
+                        expected_byte_length=archive.stat().st_size + 1,
+                    )
+            finally:
+                os.close(descriptor)
+
+    def test_bound_performance_policy_rejects_reviewed_runner_script_drift(self) -> None:
+        read = checker._read_bounded_regular
+
+        def drift(path: Path, label: str, maximum: int) -> bytes:
+            if path.name == "run_remote_release_performance.sh":
+                return b"drifted runner script"
+            return read(path, label, maximum)
+
+        with mock.patch.object(checker, "_read_bounded_regular", side_effect=drift):
+            with self.assertRaisesRegex(checker.InputError, "runner scripts drifted"):
+                checker._require_bound_semantic_policy()
+
     def test_v3_receipts_reject_missing_legacy_and_self_rehashed_drift(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

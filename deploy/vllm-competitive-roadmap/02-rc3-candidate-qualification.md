@@ -405,6 +405,26 @@ performance, soak, aggregate Gate E pass, semantic receipt, qualification, deplo
 anchor의 review approval은 명시적으로 `not-established`다. source-level component은 actual GPU
 capture나 actual candidate의 Gate E pass를 기록하지 않는다.
 
+`replay_rc3_gate_e_performance_v1.py`는 performance report/raw, canonical optimizer report,
+profile binary와 native candidate executable만 Gate E held FD에서 읽는다. frozen candidate replay에서
+다시 얻은 source archive/release ELF/model tree와 caller-supplied release·optimizer image ID를 각각
+exact-match해 self-authored report/raw가 anchor를 선택하지 못하게 한다. native candidate executable은
+frozen release ELF와 descriptor pathname이 아니라 SHA-256와 byte length가 같아야 한다.
+
+performance raw archive는 private mode-`0600` scratch copy 한 개로 옮긴 뒤 held FD만 사용한다.
+새 streaming replayer는 archive 전체·모든 receipt·canonical re-encoding을 함께 보관하는 legacy
+path를 호출하지 않는다. 첫 pass에서 canonical USTAR header/padding/record footer와 `SHA256SUMS`를
+stream 검증하고, 두 번째 semantic pass에서는 최대 64 MiB candidate JSON 하나 또는 16 MiB image
+inspect 하나만 차례로 파싱해 five independent run의 R7 metrics와 runner cross-binding을 재유도한다.
+raw scratch archive 상한은 543,686,656 bytes이며 이는 retained raw bytes의 경계일 뿐 JSON object
+expansion을 포함한 process RSS 전체 보장은 아니다.
+
+output은 `bound/frozen/not-run`, `performance_status: passed`,
+`gate-e-performance-semantic-replay-only`만 뜻한다. native/optimizer/Python-free component pass,
+soak, image-review approval, aggregate Gate E pass, semantic receipt, qualification, deployment은
+명시적으로 `not-established`이며 source-level adapter는 actual GPU capture나 actual candidate의
+Gate E pass를 기록하지 않는다.
+
 ## 3. 범위
 
 ### 포함
