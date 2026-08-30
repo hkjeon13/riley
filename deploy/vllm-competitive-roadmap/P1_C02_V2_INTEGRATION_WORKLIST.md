@@ -59,6 +59,20 @@ work. It is not an actual producer boundary: dynamic-loader injection requires
 a later native secure-exec launcher that authenticates the bootstrap leaf before
 Python loads it, and a guardian/lease must close the parent-SIGKILL lock gap.
 
+The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
+`ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
+contract**, not the native implementation.  Their scope is
+`guardian-lease-contract-only`, authority is `not-authoritative`, and
+installation is `not-installed`: no guardian/warden/PID1 controller, durable
+ledger, cgroup, lock, bootstrap, GPU/Docker action, evidence, receipt, or
+qualification is installed or invoked.  A future PID1 controller must retain
+admission while the exact held `{st_dev, st_ino, held_fd_token}` non-delegated
+worker cgroup may be populated; parent-lock availability or guardian/warden
+loss is never a release.  Active durable records rehydrate to `DRAINING`, and
+only a fresh same-object empty observation plus registered terminal worker
+pidfd and controller release returns to `IDLE`.  The future sealed FD 31/32
+bootstrap/core successor is deliberately not a v3 FD 7/8/9/10 retrofit.
+
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before
 and after reading a private external request, rehashes the declared external

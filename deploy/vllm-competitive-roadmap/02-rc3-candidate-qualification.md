@@ -31,6 +31,15 @@ ACL-free held anchor와 pre-existing lock을 재검증해 parent FD 7와 core FD
 qualification authority가 아니다. dynamic-loader injection 및 parent-SIGKILL lock gap은
 Python load 전 bootstrap leaf까지 authenticate하는 후속 native launcher·guardian/lease PR에서
 해소해야 한다.<br>
+**Gate E guardian/lease v1 model:**
+`ci/release/RC3_GATE_E_GUARDIAN_LEASE.md`와 pure
+`rc3_gate_e_guardian_lease_contract_v1.py`는 이 missing boundary의 CPU-only
+`not-installed`/`not-authoritative` specification이다. native guardian·warden·PID1 controller 또는
+durable ledger를 설치하거나 v3 bootstrap을 실행하지 않는다. future controller는 parent lock의
+availability를 release로 해석하지 않고 exact held non-delegated cgroup의 fresh empty observation과
+terminal worker pidfd 후에만 admission을 release하며, active durable ledger는 restart 뒤 항상
+`DRAINING`으로 rehydrate한다. future FD 31/32 successor handoff는 v3 FD 7/8/9/10 protocol의
+extension이나 C02/Gate E/evidence/qualification authority가 아니다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 

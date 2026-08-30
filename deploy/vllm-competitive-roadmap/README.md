@@ -14,6 +14,8 @@ installation preflight다. mutable checkout에서 나온 `checked` output은 lau
 qualification authority가 아니며 host namespace/ACL/verifier source integrity도
 not-established다. 현재 root-installed bundle은 없으므로 probe의 fail-closed 결과는
 정상이며, v3 actual producer는 별도 administrator provisioning 뒤에만 운영할 수 있다.
+그 provisioning은 필요조건일 뿐 충분조건이 아니며, native guardian/warden/PID1 controller와
+durable admission ledger의 별도 review·installation 전에는 producer authority가 생기지 않는다.
 **Gate E v3 no-action core template:** `rc3_gate_e_private_raw_core_v1.py`는 위 future
 root-owned bundle에 들어갈 private child의 source/audit template일 뿐이다. checkout에서
 직접 실행하면 lock·socket·child 생성 전에 fail-closed하며, future bootstrap이 sealed core
@@ -36,6 +38,18 @@ no-action handoff와 lock fail-closed만 검증한다. 현재 root-installed bun
 따라서 future actual producer는 별도 native secure-exec launcher와 guardian/lease contract가
 필요하다. 특히 bootstrap source는 Python load 전에 native guardian이 held leaf/local-FS/digest를
 authenticate해야 하며, 이 template의 `COMPLETE`는 capture·receipt·qualification authority가 아니다.
+**Gate E guardian/lease v1 contract:**
+[`RC3_GATE_E_GUARDIAN_LEASE.md`](../../ci/release/RC3_GATE_E_GUARDIAN_LEASE.md)와
+`rc3_gate_e_guardian_lease_contract_v1.py`는 위 필요조건을 CPU-only 상태기계로만 고정했다.
+scope는 `guardian-lease-contract-only`, authority는 `not-authoritative`, installation은
+`not-installed`이며 native guardian/warden/PID1 controller·durable ledger를 설치하거나 v3
+bootstrap을 실행하지 않는다. future PID1 controller는 parent `flock` 재획득이나 guardian/warden
+소실을 release 신호로 쓰지 않고, `{st_dev, st_ino, held_fd_token}`이 같은 non-delegated worker
+cgroup의 fresh `populated=false`와 terminal worker pidfd 뒤에만 명시적으로 admission을 연다.
+restart에는 durable boot/generation/lease/nonce ledger를 `DRAINING`으로 rehydrate해야 한다.
+이 모델의 future sealed FD 31/32 bootstrap/core audit leaf는 현재 v3 FD 7/8/9/10 template와
+호환되거나 그 argv를 바꿔 설치하는 경로가 아니다. GPU/Docker/capture/evidence/receipt/
+qualification은 계속 없다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

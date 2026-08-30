@@ -64,6 +64,19 @@ loader injection, authenticate the bootstrap leaf before Python loads it, and
 a guardian/lease must close the parent-SIGKILL lock gap.
 No installed bundle exists on `server-4096` yet.
 
+`ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` documents the next safety
+prerequisite: a **not-installed, CPU-only** guardian/lease v1 model.  It makes
+the PID1/system-manager controller the only future admission authority and
+requires a durable authenticated record of boot/generation/lease/nonce and the
+exact held non-delegated worker cgroup.  Guardian or warden loss and a newly
+available parent `flock` never release admission; a restarted controller must
+rehydrate an active record to `DRAINING` and obtain a fresh same-object empty
+cgroup observation plus terminal worker pidfd before explicit release.  The
+model neither installs that native/PID1 machinery nor makes v3 `COMPLETE`,
+GPU/Docker, evidence, receipt, or qualification available.  Its future sealed
+FD 31/32 successor handoff is not compatible with, or a modification of, the
+current v3 FD 7/8/9/10 template.
+
 ## Trusted inputs
 
 Select these values from reviewed evidence before starting the measurement.

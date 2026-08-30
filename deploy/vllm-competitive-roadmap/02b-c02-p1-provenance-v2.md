@@ -19,6 +19,14 @@ rejection만 검증하며, dynamic-loader injection/parent-SIGKILL lifetime gap�
 secure-exec launcher가 Python load 전 bootstrap leaf를 authenticate하고 guardian/lease contract를
 함께 갖추지 않으면 해결되지 않는다. 따라서 이
 `COMPLETE`도 producer/receipt/qualification authority가 아니다.
+**Gate E guardian/lease v1 model:** `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md`와
+`rc3_gate_e_guardian_lease_contract_v1.py`는 위 native/PID1 boundary를 CPU-only로 고정한
+`guardian-lease-contract-only`/`not-authoritative`/`not-installed` contract다. 이는 guardian,
+warden, PID1 admission controller, durable ledger 또는 future bootstrap을 설치·실행하지 않는다.
+future release는 file lock availability가 아니라 exact held non-delegated cgroup의 fresh
+`populated=false`와 registered terminal worker pidfd만 release 조건으로 쓰며, restart의 active
+durable ledger는 `DRAINING`으로 rehydrate한다. future sealed FD 31/32 successor is not a v3
+FD 7/8/9/10 compatibility path; GPU/Docker/raw capture/evidence/receipt/qualification은 계속 없다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 

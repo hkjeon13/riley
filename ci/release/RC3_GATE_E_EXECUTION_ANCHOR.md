@@ -111,6 +111,26 @@ future GPU/raw producer must use that separately reviewed launcher plus a
 guardian or lease design that closes the lifetime gap. It must not treat this
 template's `COMPLETE` as a capture, semantic receipt, or qualification result.
 
+### Guardian/lease v1 model — not an installed v3 extension
+
+`ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` and
+`rc3_gate_e_guardian_lease_contract_v1.py` now fix the **CPU-only,
+non-authoritative** contract that a later native guardian/warden/PID1
+controller must satisfy.  They do not install a guardian, change this v3
+bundle layout, execute a bootstrap, or grant a launch/evidence/receipt/Gate E
+authority.  In particular, the model's future sealed bootstrap/core audit
+leaves and FD 31/32 handoff are a versioned successor contract, not an argv
+change or compatibility claim for this v3 FD 7/8/9/10 template.
+
+The future controller, not `flock` availability, must retain admission closed
+while the exact held non-delegated worker cgroup may be populated.  It needs a
+root-controller-authenticated durable ledger and must rehydrate every active
+lease to `DRAINING`; only a fresh same-object `populated=false` observation,
+the registered terminal worker pidfd, and explicit controller release may
+return to `IDLE`.  The Python model does not create, sign, or read that ledger,
+so this is a later native/PID1 implementation prerequisite rather than a host
+guarantee.
+
 ## v3 private-core no-action template
 
 `ci/release/rc3_gate_e_private_raw_core_v1.py` is an audit/source template for
