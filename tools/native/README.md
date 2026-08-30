@@ -72,3 +72,13 @@ an event/phase/ledger; change admission; or authorize controller release. It
 is not a guardian, launcher, release, Gate E, freeze, rollback, or
 qualification input; its local README defines the fixed typed-claim boundary
 and fixture-only checks.
+
+gate-e-guardian-preflight-witness-matcher/ is an eighth standalone C11
+in-memory library-only precursor. It fieldwise matches caller-normalized
+guardian/warden/PID1 controller identities, a new non-delegated cgroup claim,
+and an explicit empty-population declaration for `NATIVE_PREFLIGHT_OK`. It
+does not receive or inspect a socket, cgroup, pidfd, or FD; create or reserve a
+cgroup; retain an event/phase/ledger; change admission; or establish a lease.
+It is not a guardian, launcher, release, Gate E, freeze, rollback, or
+qualification input; its local README defines the fixed typed-claim boundary
+and fixture-only checks.

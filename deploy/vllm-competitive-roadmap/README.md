@@ -110,6 +110,12 @@ device/inode/token, empty-ancillary claim만 active-session binding과 fieldwise
 일치하는지만 본다. 실제 socket/cgroup/pidfd/FD를 inspect하지 않고 phase·ledger·admission을
 변경하거나 controller release를 허가하지 않으므로, empty witness 성공도 그 자체로는 release가 아니다.
 
+그 다음 C11 preflight-witness matcher는 `NATIVE_PREFLIGHT_OK`의 normalized
+guardian/warden/PID1-controller identity, 새 non-delegated cgroup claim, explicit
+empty-population declaration만 비교한다. cgroup을 create/reserve/inspect하거나
+freshness·emptiness를 증명하지 않고 phase·ledger·admission을 변경하거나 lease를 만들지 않는다.
+따라서 성공은 native acquisition 또는 preflight state transition 권한이 아니다.
+
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

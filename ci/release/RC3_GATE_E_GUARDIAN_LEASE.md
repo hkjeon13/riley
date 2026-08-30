@@ -191,6 +191,15 @@ authorize controller release. A future controller must still independently
 authenticate the observation and enforce the required DRAINING →
 EMPTY_VERIFIED → controller-release ordering.
 
+The separate C11 preflight-witness matcher covers the earlier
+`NATIVE_PREFLIGHT_OK` claim only: it compares caller-normalized guardian,
+warden, and PID1 controller identities; requires a structurally valid declared
+non-delegated cgroup; and accepts only an explicit empty-population declaration.
+It does not acquire, reserve, or inspect a cgroup, pidfd, socket, or FD; prove
+the cgroup is fresh or empty; retain phase/ledger state; change admission; or
+establish a lease. A future native controller must still authenticate and
+atomically persist acquisition before a preflight observation can advance.
+
 The modeled durable ledger is deliberately strict: malformed or incomplete
 active records are rejected; a claimed empty ledger cannot retain a cgroup;
 and an active record always rehydrates closed.  These are CPU-only hostile-path

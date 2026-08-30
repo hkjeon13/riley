@@ -149,6 +149,15 @@ pidfd, or FD; parse a packet; track phase or ledger state; change admission; or
 authorize controller release. Its success is only a normalized claim match,
 not sender/observation authentication, `EMPTY_VERIFIED`, or release authority.
 
+The next sibling C11 preflight-witness matcher deliberately covers only the
+typed `NATIVE_PREFLIGHT_OK` claims: caller-normalized guardian, warden, and
+PID1 controller identities, a new non-delegated cgroup claim, and an explicit
+empty-population declaration. It does not acquire, reserve, or inspect a
+cgroup/pidfd/socket/FD; prove cgroup freshness or emptiness; parse a packet;
+track phase or ledger state; change admission; or establish a lease. Its
+success is only a normalized claim match, not native preflight/acquisition,
+guardian installation, or authority to advance phase.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is
