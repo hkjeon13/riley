@@ -97,7 +97,23 @@ def _gzip_mtime(bundle: Path) -> int:
     return struct.unpack_from("<I", header, 4)[0]
 
 
-def verify_bundle(bundle: Path) -> None:
+def verify_bundle(
+    bundle: Path,
+    *,
+    max_total_bytes: int | None = None,
+) -> None:
+    """Verify one release bundle, optionally under a caller retained-byte cap.
+
+    The default preserves the release format's reviewed 1 GiB uncompressed
+    bound.  A semantic component that keeps the parsed bundle in memory can
+    pass a lower cap before any archive payload is materialized.
+    """
+
+    if (
+        max_total_bytes is not None
+        and (type(max_total_bytes) is not int or max_total_bytes < 1)
+    ):
+        raise ReleaseContractError("release bundle retained-byte cap must be a positive integer")
     try:
         metadata = bundle.lstat()
     except OSError as error:
@@ -138,6 +154,13 @@ def verify_bundle(bundle: Path) -> None:
             total_size += member.size
             if total_size > MAX_TOTAL_SIZE:
                 raise ReleaseContractError("release bundle exceeds the total uncompressed size bound")
+            if (
+                max_total_bytes is not None
+                and total_size > max_total_bytes
+            ):
+                raise ReleaseContractError(
+                    "release bundle exceeds the caller retained-byte cap"
+                )
             if member.isreg():
                 file_contents[member.name] = _read_member(archive, member)
             members.append(member)

@@ -396,8 +396,34 @@ def _validate_safetensors(prefix: bytes, total_size: int) -> None:
         _fail("model.safetensors header", "tensor ranges overlap or contain gaps")
 
 
-def load_raw_evidence_archive(path: Path) -> dict[str, Any]:
-    """Load a canonical v2 tar and hash every archived observation/model byte."""
+_RETAINED_MODEL_PREFIXES = frozenset(
+    {"config.json", "tokenizer.json", "model.safetensors"}
+)
+
+
+def load_raw_evidence_archive(
+    path: Path,
+    *,
+    max_retained_bytes: int | None = None,
+) -> dict[str, Any]:
+    """Load a canonical v2 tar and hash every archived observation/model byte.
+
+    ``max_retained_bytes`` is an optional caller policy for the bytes that
+    remain live in the returned archive structure.  The historical default
+    deliberately remains unbounded relative to that retained subset so the
+    standalone checker preserves its reviewed input contract.  Gate-specific
+    callers can opt into a bounded-RSS profile without weakening the full tar
+    byte/hash validation.
+    """
+
+    if (
+        max_retained_bytes is not None
+        and (
+            type(max_retained_bytes) is not int
+            or max_retained_bytes < 0
+        )
+    ):
+        _fail("raw evidence archive", "retained-byte cap must be a nonnegative integer")
 
     try:
         metadata = path.lstat()
@@ -417,6 +443,7 @@ def load_raw_evidence_archive(path: Path) -> dict[str, Any]:
             sizes: dict[str, int] = {}
             model_prefixes: dict[str, bytes] = {}
             total = 0
+            retained_total = 0
             for member in members:
                 name = member.name
                 if name not in RAW_ARCHIVE_MEMBERS and not name.startswith("model/"):
@@ -432,29 +459,51 @@ def load_raw_evidence_archive(path: Path) -> dict[str, Any]:
                 total += member.size
                 if total > MAX_RAW_ARCHIVE_BYTES:
                     _fail("raw evidence archive", "uncompressed payload exceeds the reviewed bound")
+                model_name = name.removeprefix("model/")
+                if name.startswith("model/"):
+                    retained_size = (
+                        min(member.size, MAX_JSON_BYTES + 8)
+                        if model_name in _RETAINED_MODEL_PREFIXES
+                        else 0
+                    )
+                else:
+                    retained_size = member.size
+                if max_retained_bytes is not None:
+                    retained_total += retained_size
+                    if retained_total > max_retained_bytes:
+                        _fail(
+                            "raw evidence archive",
+                            "retained replay payload exceeds the caller byte cap",
+                        )
                 source = archive.extractfile(member)
                 if source is None:
                     _fail("raw evidence archive", f"cannot read {name}")
-                digest = hashlib.sha256()
-                saved = bytearray()
-                save_limit = member.size if not name.startswith("model/") else min(member.size, MAX_JSON_BYTES + 8)
-                remaining = member.size
-                while remaining:
-                    chunk = source.read(min(1024 * 1024, remaining))
-                    if not chunk:
+                if not name.startswith("model/"):
+                    contents = source.read(member.size)
+                    if len(contents) != member.size:
                         _fail("raw evidence archive", f"truncated member {name}")
-                    digest.update(chunk)
-                    if len(saved) < save_limit:
-                        saved.extend(chunk[: save_limit - len(saved)])
-                    remaining -= len(chunk)
-                if source.read(1):
-                    _fail("raw evidence archive", f"oversized member {name}")
-                digests[name] = digest.hexdigest()
-                sizes[name] = member.size
-                if name.startswith("model/"):
-                    model_prefixes[name.removeprefix("model/")] = bytes(saved)
+                    if source.read(1):
+                        _fail("raw evidence archive", f"oversized member {name}")
+                    digests[name] = hashlib.sha256(contents).hexdigest()
+                    payloads[name] = contents
                 else:
-                    payloads[name] = bytes(saved)
+                    digest = hashlib.sha256()
+                    saved = bytearray()
+                    remaining = member.size
+                    while remaining:
+                        chunk = source.read(min(1024 * 1024, remaining))
+                        if not chunk:
+                            _fail("raw evidence archive", f"truncated member {name}")
+                        digest.update(chunk)
+                        if len(saved) < retained_size:
+                            saved.extend(chunk[: retained_size - len(saved)])
+                        remaining -= len(chunk)
+                    if source.read(1):
+                        _fail("raw evidence archive", f"oversized member {name}")
+                    digests[name] = digest.hexdigest()
+                    if retained_size:
+                        model_prefixes[model_name] = bytes(saved)
+                sizes[name] = member.size
     except EvidenceError:
         raise
     except (OSError, tarfile.TarError) as error:
@@ -497,28 +546,69 @@ def load_raw_evidence_archive(path: Path) -> dict[str, Any]:
     }
 
 
-def _verify_bundle(bundle: Path, binary_sha256: str, revision: str) -> None:
+def verify_bound_release_bundle(
+    bundle: Path,
+    *,
+    release_binary_sha256: str,
+    source_revision: str,
+    max_uncompressed_bytes: int | None = None,
+) -> None:
+    """Verify a release bundle against one immutable binary/source binding.
+
+    This narrow public helper deliberately accepts only a caller-controlled
+    bundle path plus already-bound scalar identities.  It is shared by the
+    path-based E2E evaluation path and the held-FD Gate E adapter, which gives
+    it only a private scratch copy.  ``max_uncompressed_bytes`` is an optional
+    caller retained-memory policy; it does not alter the legacy default.  The
+    helper does not read any model, producer, or source-checkout path.
+    """
+
     try:
-        release_verify.verify_bundle(bundle)
+        release_verify.verify_bundle(
+            bundle,
+            max_total_bytes=max_uncompressed_bytes,
+        )
         with tarfile.open(bundle, "r:gz") as archive:
             binaries = [member for member in archive.getmembers() if member.name.endswith("/bin/riley")]
             manifests = [member for member in archive.getmembers() if member.name.endswith("/manifest/release.json")]
             if len(binaries) != 1 or len(manifests) != 1:
                 _fail("--release-bundle", "must contain one binary and one release manifest")
+            if binaries[0].size > MAX_FIXED_MEMBER_BYTES:
+                _fail("--release-bundle", "embedded binary exceeds the reviewed byte bound")
+            if manifests[0].size > MAX_JSON_BYTES:
+                _fail("--release-bundle", "embedded release manifest exceeds the reviewed byte bound")
             binary_file = archive.extractfile(binaries[0])
             manifest_file = archive.extractfile(manifests[0])
             if binary_file is None or manifest_file is None:
                 _fail("--release-bundle", "cannot read embedded release files")
-            embedded_binary = hashlib.sha256(binary_file.read()).hexdigest()
-            manifest = _parse_json_bytes(manifest_file.read(), "release bundle manifest")
+            digest = hashlib.sha256()
+            remaining = binaries[0].size
+            while remaining:
+                chunk = binary_file.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    _fail("--release-bundle", "embedded binary is truncated")
+                digest.update(chunk)
+                remaining -= len(chunk)
+            if binary_file.read(1):
+                _fail("--release-bundle", "embedded binary exceeds its declared size")
+            embedded_binary = digest.hexdigest()
+            manifest_contents = manifest_file.read(MAX_JSON_BYTES + 1)
+            if len(manifest_contents) != manifests[0].size or len(manifest_contents) > MAX_JSON_BYTES:
+                _fail("--release-bundle", "embedded release manifest has an invalid size")
+            manifest = _parse_json_bytes(manifest_contents, "release bundle manifest")
     except EvidenceError:
         raise
-    except (OSError, tarfile.TarError, release_common.ReleaseContractError) as error:
+    except (
+        OSError,
+        tarfile.TarError,
+        release_common.ReleaseContractError,
+        release_verify.ReleaseContractError,
+    ) as error:
         _fail("--release-bundle", f"cannot inspect release bundle: {error}")
-    if embedded_binary != binary_sha256:
+    if embedded_binary != release_binary_sha256:
         _fail("--release-bundle", "embedded binary differs from --release-binary")
     artifact = manifest.get("artifact")
-    if not isinstance(artifact, dict) or artifact.get("source_revision") != revision:
+    if not isinstance(artifact, dict) or artifact.get("source_revision") != source_revision:
         _fail("--release-bundle", "embedded source revision differs from candidate")
     defaults = manifest.get("defaults")
     if not isinstance(defaults, dict) or {
@@ -537,6 +627,16 @@ def _verify_bundle(bundle: Path, binary_sha256: str, revision: str) -> None:
             "--release-bundle",
             "embedded defaults are not bound to the reviewed Rust resolver source",
         )
+
+
+def _verify_bundle(bundle: Path, binary_sha256: str, revision: str) -> None:
+    """Backward-compatible private spelling for the legacy evaluator."""
+
+    verify_bound_release_bundle(
+        bundle,
+        release_binary_sha256=binary_sha256,
+        source_revision=revision,
+    )
 
 
 def _validate_golden(document: Mapping[str, Any]) -> dict[str, Any]:

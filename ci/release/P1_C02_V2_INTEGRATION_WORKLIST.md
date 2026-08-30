@@ -24,6 +24,17 @@ same reviewed literal is independently used by the active release
 preflight/bundle/manifest contract; it is not imported into the Python-3.10
 held-FD checker, and either contract must fail closed on future source drift.
 
+The landed Gate E component surface now also includes native canonical-E0,
+optimizer canonical-E0, and Python-free replay adapters.  The Python-free
+adapter consumes only its closed raw/report/golden subset plus a native report,
+release bundle, and frozen source/release/model identities; it does not invoke
+the full legacy E2E evaluator because that would reopen un-inventoried producer
+sidecars and model paths. Its component-only legacy calls cap retained raw payload
+at 768 MiB and retained uncompressed bundle payload at 640 MiB (not whole-process
+RSS). Its image/golden arguments are equality anchors, not review approvals. All three outputs remain component-only `bound/frozen/not-run`
+results, never aggregate Gate E, candidate qualification, deployment, or proof
+that actual GPU capture occurred.
+
 The source-free reconstructed runtime-assembly raw host producer is also now
 CPU/static-only mechanism code: it initializes a fresh external `0700` root
 and fixed `raw` child through no-follow directory FDs, rejects source-checkout

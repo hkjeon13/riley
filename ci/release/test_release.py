@@ -14,6 +14,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from typing import Callable
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -28,6 +29,7 @@ from release_common import (  # noqa: E402
     release_manifest,
     validate_binary,
 )
+import verify_release_bundle as bundle_verifier  # noqa: E402
 from verify_release_bundle import verify_bundle  # noqa: E402
 from verify_runtime_dockerfile import verify_dockerfile  # noqa: E402
 
@@ -230,6 +232,15 @@ class ReleaseBundleTests(unittest.TestCase):
         second = self.build("second.tar.gz")
         self.assertEqual(first.read_bytes(), second.read_bytes())
         verify_bundle(first)
+
+    def test_bundle_retained_cap_rejects_before_member_contents_are_read(self) -> None:
+        bundle = self.build()
+        with mock.patch.object(
+            bundle_verifier,
+            "_read_member",
+            side_effect=AssertionError("retained cap must reject before member reads"),
+        ), self.assertRaisesRegex(ReleaseContractError, "retained-byte cap"):
+            verify_bundle(bundle, max_total_bytes=1)
 
     def test_release_manifest_has_exact_defaults_support_and_scope(self) -> None:
         manifest = release_manifest("0.1.0", REVISION, EPOCH)

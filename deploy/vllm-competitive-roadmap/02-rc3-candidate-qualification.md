@@ -379,6 +379,32 @@ review approval은 명시적으로 `not-established`다. 현재 원격 host에�
 `run_release_python.py` compatibility wrapper가 필요하며, source-level component은 actual GPU
 capture나 actual candidate의 Gate E pass를 기록하지 않는다.
 
+`replay_rc3_gate_e_python_free_v1.py`는 Python-free report/raw/golden, canonical native report와
+release bundle을 fixed inventory에서 읽고, frozen candidate의 source archive·release ELF·image
+digest·model descriptors는 original input-root replay에서 다시 얻는다. legacy full `evaluate()`는
+model directory/weights/producer sidecar/source path를 다시 열므로 호출하지 않는다. raw tar와
+bundle만 fixed `/var/tmp` parent의 private `0700` scratch에 held-FD copy하고, legacy raw
+loader와 `validate_bound_raw_archive()`에는 그 두 private pathname만 제공한다. scratch root와
+leaf의 mode/inode/SHA-256/length는 legacy call 전후 재검증한다. component 전용으로 raw loader의
+retained payload는 768 MiB, bundle verifier의 uncompressed retained payload는 640 MiB를 넘지
+않아야 한다. 이는 process RSS 전체가 아닌 replay가 보관하는 payload의 상한이며, large model body는
+stream-hash해 raw tar 전체 admission 한계와 구별한다.
+
+caller는 nonzero lowercase `--expected-release-image-id`와
+`--expected-correctness-golden-sha256`를 제공한다. 전자는 frozen immutable image digest와,
+후자는 Gate E golden descriptor와 각각 exact-match해야 하며 raw receipt가 스스로 image/golden을
+선택하는 것을 막는다. 이것은 target equality binding일 뿐 independent review approval을 증명하지
+않는다. bundle verifier는 embedded `bin/riley`가 frozen release ELF와 같고 release revision이
+frozen source revision과 같은지 확인한다. raw model은 frozen model ID/revision/tree/config/tokenizer와
+exactly one frozen weight SHA/length에 교차 결속된다.
+
+이 component output은 `bound/frozen/not-run`, `python_free_status: passed`,
+`gate-e-python-free-semantic-replay-only`만 뜻한다. full legacy E2E가 요구하는 external model-mount
+provenance, producer-sidecar equality와 source archive content, canonical native/optimizer E0 pass,
+performance, soak, aggregate Gate E pass, semantic receipt, qualification, deployment 및 두 external
+anchor의 review approval은 명시적으로 `not-established`다. source-level component은 actual GPU
+capture나 actual candidate의 Gate E pass를 기록하지 않는다.
+
 ## 3. 범위
 
 ### 포함

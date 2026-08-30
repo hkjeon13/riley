@@ -14,6 +14,7 @@ import tarfile
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "check_python_free_release_e2e.py"
@@ -448,6 +449,24 @@ class PythonFreeReleaseE2EV2Tests(unittest.TestCase):
             self.assertEqual(report["status"], "passed")
             self.assertEqual({row["id"] for row in report["checks"]}, set(checker.CHECK_IDS))
             self.assertEqual(report["raw_evidence_sha256"], sha_bytes(fixture.raw_archive.read_bytes()))
+
+    def test_retained_payload_cap_rejects_before_reading_member_bytes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            fixture = E2EFixture(Path(directory))
+            archive = checker.load_raw_evidence_archive(
+                fixture.raw_archive,
+                max_retained_bytes=checker.MAX_RAW_ARCHIVE_BYTES,
+            )
+            self.assertEqual(archive["raw"]["schema_version"], checker.RAW_SCHEMA)
+            with mock.patch.object(
+                checker.tarfile.TarFile,
+                "extractfile",
+                side_effect=AssertionError("retained cap must reject before member reads"),
+            ), self.assertRaisesRegex(checker.EvidenceError, "retained replay payload"):
+                checker.load_raw_evidence_archive(
+                    fixture.raw_archive,
+                    max_retained_bytes=1,
+                )
 
     def test_frozen_v2_golden_cannot_authorize_v3_release_e2e(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
