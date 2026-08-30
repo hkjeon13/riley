@@ -1055,6 +1055,19 @@ runtime configuration field or a trace counter.
    execution, same-invocation, and capture-independence claims as
    `not-established` until a future authenticated lineage producer exists.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
+   - The current-tree denial half is complete:
+     `rc3_qualification_input_policy_v2.py` is stdlib-only, has no CLI,
+     path-open, output, or replayer imports, and intentionally sets
+     `ADMITTED_INPUTS = {}`. It parses only bounded canonical JSON supplied by
+     its caller and rejects exact historical/raw/structural/semantic schemas
+     before generic failure. A `.v2` suffix, `passed` text, or a caller-supplied
+     authority is never admission.
+   - Do not add an outer finalizer allowlist yet. The remaining half requires a
+     separately reviewed authenticated actual Gate E producer whose same-stack
+     normal return publishes a versioned durable semantic receipt; current
+     soak/rollback diagnostics, frozen identity, reconstructed content
+     material, Gate E component/aggregate replay, and aggregate replay record
+     remain explicit denial inputs rather than qualification evidence.
 8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
 

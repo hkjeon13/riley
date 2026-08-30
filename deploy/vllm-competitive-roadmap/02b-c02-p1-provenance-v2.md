@@ -514,6 +514,24 @@ aggregate replayer는 report의 `passed`/threshold를 해석해 actual Gate E pa
 수용할 수 없다. `freeze.raw`, freeze-input admission, v4 completion pair, structural precheck와
 raw finalizer receipt도 semantic input을 대체할 수 없다.
 
+#### Current qualification-input denial boundary
+
+그 durable receipt가 아직 없는 현재 경계에서는
+`ci/release/rc3_qualification_input_policy_v2.py`가 **승인자가 아니라 pure
+denial policy**로 동작한다. CLI, path-open, output receipt, replayer import를 두지 않고
+caller가 already-held descriptor에서 읽은 canonical JSON bytes만 받는다. `ADMITTED_INPUTS`는
+의도적으로 비어 있으므로 이 버전에는 success path가 없다. historical soak/rollback,
+raw/structural precheck, narrow soak/rollback semantic diagnostic, freeze-input/frozen-candidate
+identity, reconstructed content bridge/A-B materialization, Gate E component/aggregate replay 및
+aggregate replay-record, legacy release-candidate 보고서는 각각 exact schema/authority별
+reason으로 거절한다. 알려지지 않은 schema, `.v2` suffix, `status: passed`, 혹은
+`qualification_status: not-run`도 allowlist를 만들지 않으며 모두 fail-closed한다.
+
+이 denial 자체도 receipt나 qualification input이 아니다. future authenticated actual producer가
+same-stack normal-return와 versioned durable semantic receipt를 함께 제공하는 PR에서만, 그
+exact schema/authority를 별도 리뷰한 allowlist로 추가할 수 있다. 그 전에는 이 policy를
+완화하거나 replayer를 호출해 결과를 up-convert해서는 안 된다.
+
 #### Reconstructed RC2 compatibility boundary
 
 현재 reconstructed `riley-0.1.0-rc2` annotated tag object (`a3f5203…`)와 tag target (`6093006…`)에는
