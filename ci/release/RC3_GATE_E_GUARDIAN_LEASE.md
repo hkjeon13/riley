@@ -103,6 +103,15 @@ This depends on a future PID1/system-manager implementation that actually
 persists and authenticates the ledger.  Until that implementation is reviewed
 and installed, this is a design invariant, not a host guarantee.
 
+The separate C11 START-fence matcher covers only the normalized durable
+boot/generation relation before a new session: an unfenced projection permits
+a valid positive generation, while a fenced projection requires the same boot
+identity and a strictly greater generation. A different boot identity is a
+durable-recovery requirement. It neither parses a session nor reads, signs, or
+writes a ledger; rehydrates state; changes phase/admission; or creates PID1,
+cgroup, descriptor, or release authority. Its success is only a typed claim
+match, not a future durable-ledger implementation or session admission.
+
 ## State machine
 
 ```text

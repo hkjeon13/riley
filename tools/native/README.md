@@ -92,3 +92,13 @@ receive or inspect a socket, cgroup, pidfd, or FD; retain an event/phase/ledger;
 change admission; or authorize controller release. It is not a guardian,
 launcher, release, Gate E, freeze, rollback, or qualification input; its local
 README defines the fixed typed-claim boundary and fixture-only checks.
+
+gate-e-guardian-start-fence-matcher/ is a tenth standalone C11 in-memory
+library-only precursor. It compares a caller-normalized `START` boot identity
+and generation to a durable-fence projection: no prior fence or the same boot
+with a strictly greater generation are the only matching relations. A different
+boot requires durable recovery. It neither parses a session nor reads/writes a
+ledger, changes phase/admission, or creates PID1/cgroup/FD authority. It is not
+a guardian, launcher, release, Gate E, freeze, rollback, or qualification
+input; its local README defines the fixed typed-claim boundary and fixture-only
+checks.

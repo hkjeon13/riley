@@ -122,6 +122,12 @@ replacement PID1 controller가 registered guardian/warden/worker와 distinct한�
 비교한다. 실제 restart/cgroup/pidfd/socket/FD를 증명·inspect하지 않고 phase·ledger·admission을
 변경하거나 release를 허가하지 않으므로, 이 matcher의 성공도 state transition 권한이 아니다.
 
+그 다음 C11 START-fence matcher는 caller-owned durable-fence projection과
+`START` boot identity/generation의 관계만 비교한다. prior fence가 없거나 같은 boot에서
+strictly greater generation인 경우만 일치하며, 다른 boot은 durable recovery가 필요하다.
+session JSON·ledger의 read/write/signature·rehydrate, phase/admission, PID1/cgroup/FD를
+만들거나 변경하지 않으므로, 이 matcher의 성공도 session admission 또는 durable ledger 권한이 아니다.
+
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
