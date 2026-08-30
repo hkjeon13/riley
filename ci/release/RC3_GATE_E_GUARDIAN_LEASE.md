@@ -219,6 +219,38 @@ a worker pidfd, cover any crash cutover, or authorize GPU/Docker/evidence/
 receipt/freeze/semantic/qualification work. Thus all six future implementation
 requirements above remain **not established** by this tool.
 
+## Native root-bundle authenticator v1 — not a guardian
+
+`tools/native/gate-e-root-bundle-authenticator/gate_e_root_bundle_authenticator.c`
+is a second standalone C11 source/audit precursor. Its only public form is
+`--authenticate-root-bundle-v1`; it has no caller-controlled paths, owner IDs,
+manifest names, lock names, GPU/Docker/evidence arguments, or configuration.
+For a root caller it reads only the future audit-leaf directory
+`/opt/riley/rc3-gate-e-v1`, holding `openat2`/no-follow descriptors from `/`
+through the fixed manifest/bootstrap/core leaves. It requires `O_NOATIME`,
+root ownership, exact modes, single regular-file links, ACL absence, approved
+local filesystem type, bootstrap capability absence, exact canonical manifest
+grammar, held-object identity rechecks, and bounded SHA-256/length closure.
+It closes every descriptor afterwards and never installs or creates that
+directory.
+
+This is a read-only object observation only. Its JSON keeps top-level
+`status` at `not-established`; an `object_observation_status` of `checked`
+records only one consistent observation. It does not establish host-initial
+namespace identity, dynamic-loader or pre-Python trust, same-object
+`execveat`, interpreter/runtime closure, a lease/cgroup/pidfd controller,
+execution authority, a Gate E producer, GPU/Docker action, evidence, receipt,
+freeze, rollback, or qualification. Its schema and the future root-bundle
+manifest schema are explicitly denied when presented as canonical documents to
+the qualification-input policy; its actual terminal-newline diagnostic line is
+rejected even earlier as noncanonical input. Neither form is an input channel.
+
+The checkout-built dynamic program itself begins after its own loader, so it
+cannot be the required pre-loader trust root or substitute for the separately
+reviewed static native guardian. It also does not install the future FD 31/32
+bootstrap/core leaves and is not a compatibility path for the old v3 FD
+7/8/9/10 Python template.
+
 ## CPU-only verification
 
 Run from the repository after the source file is present:

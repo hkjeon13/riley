@@ -17,3 +17,11 @@ crate or a root default build target.
 future RC3 Gate E root-boundary review. It is deliberately no-action and has
 no release, runtime, privilege, or qualification authority; its local
 README defines its one allowed invocation and fixture-only test command.
+
+`gate-e-root-bundle-authenticator/` is a separate standalone C11,
+fixed-path, held-`openat2` object-observation precursor for the future guardian
+audit leaves. It is deliberately non-authoritative: it does not install or
+execute a bundle, establish a pre-loader trust root, create a lock/cgroup,
+touch GPU/Docker/evidence, or become a release, Gate E, freeze, rollback, or
+qualification input. Its local README defines its one allowed invocation,
+fixed output boundary, and fixture-only C11 checks.

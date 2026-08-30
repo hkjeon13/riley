@@ -71,6 +71,23 @@ cgroup or lock, launch a child, or perform GPU/Docker/evidence/receipt/freeze/
 qualification work. It is a host-precondition diagnostic only; the six native
 guardian requirements remain not established.
 
+The next source-only native precursor is the excluded C11
+`tools/native/gate-e-root-bundle-authenticator/gate_e_root_bundle_authenticator.c`.
+Its one fixed `--authenticate-root-bundle-v1` form can only make a held-
+`openat2`/no-follow, `O_NOATIME` observation of the future root-owned
+`/opt/riley/rc3-gate-e-v1` audit bundle: the exact future guardian
+manifest/bootstrap/core names, canonical manifest grammar, ownership/mode/link,
+ACL/filesystem/capability policy, bounded SHA-256/length closure, and object
+identity rechecks are all fixed. It has no installation, path/owner/config
+override, `open`/`openat` fallback, lock/cgroup/child/GPU/Docker/evidence write,
+or old-v3 FD 7/8/9/10 compatibility path. Its top-level status is always
+`not-established`; a `checked` object observation is neither pre-loader
+trust, host-initial-namespace proof, same-object execution, guardian lease,
+actual producer authority, nor a C02/Gate E/freeze/rollback/qualification
+input. The terminal-newline diagnostic is noncanonical and is rejected before
+policy schema dispatch; a canonical reserialization of its transient schema or
+the future root-bundle manifest schema receives the explicit policy denial.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

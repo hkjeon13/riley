@@ -55,6 +55,7 @@ class QualificationInputPolicyTests(unittest.TestCase):
             "riley.rc3-frozen-candidate.v1": "frozen-candidate-identity-not-semantic",
             "riley.reconstructed-runtime-a-b-materialization.v1": "reconstructed-materialization-not-qualification",
             "riley.reconstructed-runtime-python-prerequisite.v1": "runtime-python-prerequisite-not-materialization",
+            "riley.rc3-gate-e-root-bundle.v1": "native-root-bundle-manifest-not-qualification",
             "riley.release-candidate-report.v2": "legacy-release-candidate-rejected",
         }
         for schema_version, expected in cases.items():
@@ -70,6 +71,52 @@ class QualificationInputPolicyTests(unittest.TestCase):
                         }
                     ),
                 )
+
+    def test_native_root_bundle_preflight_is_rejected_before_authority_or_status(self) -> None:
+        self.assert_reason(
+            "native-root-bundle-preflight-not-qualification",
+            canonical(
+                {
+                    "actual_gate_e_producer": "not-established",
+                    "authority": "not-authoritative",
+                    "docker_execution": "not-established",
+                    "evidence": "not-established",
+                    "execution_authority": "not-established",
+                    "gpu_execution": "not-run",
+                    "guardian_lease": "not-established",
+                    "host_initial_namespace": "not-established",
+                    "installation": "not-installed",
+                    "interpreter_runtime_closure": "not-established",
+                    "object_observation_status": "checked",
+                    "pre_python_loader_boundary": "not-established",
+                    "qualification_status": "not-run",
+                    "reason_code": None,
+                    "same_object_exec": "not-established",
+                    "schema_version": "riley.rc3-gate-e-native-root-bundle-preflight.v1",
+                    "scope": "root-bundle-object-observation-only",
+                    "status": "not-established",
+                }
+            ),
+        )
+
+    def test_native_root_bundle_json_line_is_noncanonical_before_schema_dispatch(self) -> None:
+        self.assert_reason(
+            "noncanonical-json",
+            b'{"schema_version":"riley.rc3-gate-e-native-root-bundle-preflight.v1",'
+            b'"status":"not-established","object_observation_status":"not-established",'
+            b'"scope":"root-bundle-object-observation-only",'
+            b'"authority":"not-authoritative","installation":"not-installed",'
+            b'"host_initial_namespace":"not-established",'
+            b'"pre_python_loader_boundary":"not-established",'
+            b'"same_object_exec":"not-established",'
+            b'"interpreter_runtime_closure":"not-established",'
+            b'"guardian_lease":"not-established",'
+            b'"execution_authority":"not-established",'
+            b'"actual_gate_e_producer":"not-established",'
+            b'"gpu_execution":"not-run","docker_execution":"not-established",'
+            b'"evidence":"not-established","qualification_status":"not-run",'
+            b'"reason_code":"effective-uid-gid-not-root"}\n',
+        )
 
     def test_exact_narrow_authorities_are_rejected_without_schema_allowlist(self) -> None:
         cases = {

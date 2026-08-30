@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/gate-e-root-bundle-manifest-v1.schema.json",
+  "title": "Riley RC3 Gate E root-bundle manifest v1",
+  "description": "Grammar for future root-owned guardian audit leaves only. It does not install a bundle or authorize launch, receipt, freeze, rollback, Gate E, GPU/Docker work, or qualification. The native authenticator additionally requires the one-line canonical member order and terminal newline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "bootstrap",
+    "core",
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.rc3-gate-e-root-bundle.v1"
+    },
+    "bootstrap": {
+      "$ref": "#/$defs/bootstrap"
+    },
+    "core": {
+      "$ref": "#/$defs/core"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "leaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "byte_length",
+        "filename",
+        "sha256"
+      ],
+      "properties": {
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2097152
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "bootstrap": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/leaf"
+        },
+        {
+          "properties": {
+            "filename": {
+              "const": "rc3_gate_e_guardian_bootstrap_v1.py"
+            }
+          }
+        }
+      ]
+    },
+    "core": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/leaf"
+        },
+        {
+          "properties": {
+            "filename": {
+              "const": "rc3_gate_e_guardian_no_action_core_v1.py"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

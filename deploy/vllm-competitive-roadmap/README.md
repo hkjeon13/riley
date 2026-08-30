@@ -50,6 +50,17 @@ restart에는 durable boot/generation/lease/nonce ledger를 `DRAINING`으로 reh
 이 모델의 future sealed FD 31/32 bootstrap/core audit leaf는 현재 v3 FD 7/8/9/10 template와
 호환되거나 그 argv를 바꿔 설치하는 경로가 아니다. GPU/Docker/capture/evidence/receipt/
 qualification은 계속 없다.
+**Gate E native root-bundle observation precursor:**
+`tools/native/gate-e-root-bundle-authenticator/`는 future guardian manifest/bootstrap/core
+audit leaf만 fixed held-`openat2`/no-follow·`O_NOATIME`으로 읽는 excluded C11 source/audit
+tool이다. root가 아닌 현재 서버에서는 `effective-uid-gid-not-root`로 fail-closed하며,
+repository는 `/opt` 설치나 sudo를 요청하지 않는다. root에서 object observation이
+`checked`여도 top-level status는 `not-established`이고 host-initial namespace, loader/Python
+이전 trust root, same-object exec, guardian lease, actual producer, GPU/Docker/evidence/
+freeze/rollback/qualification을 establish하지 않는다. old v3 FD 7/8/9/10 template와도
+연결되지 않는다. terminal-newline 출력은 qualification input policy의 canonical-byte
+gate에서 먼저 거절되고, 출력/manifest의 canonical 재직렬화도 exact schema reason으로
+거절된다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
