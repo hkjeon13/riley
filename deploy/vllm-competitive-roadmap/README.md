@@ -103,6 +103,13 @@ normalized 된 worker PID/start-tick/pidfd-token/UID/GID, held-cgroup
 device/inode/token, empty-ancillary claim만 active-session binding과 fieldwise
 비교한다. socket/sender/pidfd/cgroup/FD를 실제로 inspect하거나 phase·ledger·admission을
 변경하지 않으며, 두 helper의 성공도 NO_ACTION_COMPLETE를 release signal로 만들지 않는다.
+
+그 다음 C11 drain-witness matcher는 `CGROUP_EMPTY`의 normalized claim만
+비교한다. PID1 controller, 같은 held-cgroup, explicit empty-population,
+정확히 하나의 registered worker terminal-token declaration이 active binding과
+일치하는지만 본다. 실제 socket/cgroup/pidfd/FD를 inspect하지 않고 phase·ledger·admission을
+변경하거나 controller release를 허가하지 않으므로, empty witness 성공도 그 자체로는 release가 아니다.
+
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

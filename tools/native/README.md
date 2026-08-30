@@ -62,3 +62,13 @@ does not receive or inspect a socket, sender, pidfd, cgroup, or FD; retain an
 event/phase/ledger; acquire a path; or execute anything. It is not a guardian,
 launcher, release, Gate E, freeze, rollback, or qualification input; its local
 README defines the fixed typed-claim boundary and fixture-only checks.
+
+gate-e-guardian-drain-witness-matcher/ is a seventh standalone C11 in-memory
+library-only precursor. It fieldwise matches a caller-normalized `CGROUP_EMPTY`
+witness—PID1 controller, held cgroup, explicit empty-population declaration,
+and exactly one worker terminal-token declaration—against active-session
+claims. It does not receive or inspect a socket, cgroup, pidfd, or FD; retain
+an event/phase/ledger; change admission; or authorize controller release. It
+is not a guardian, launcher, release, Gate E, freeze, rollback, or
+qualification input; its local README defines the fixed typed-claim boundary
+and fixture-only checks.

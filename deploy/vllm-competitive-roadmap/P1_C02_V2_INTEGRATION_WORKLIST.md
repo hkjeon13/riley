@@ -141,6 +141,14 @@ ledger state; acquire objects; execute a loader; or create guardian, producer,
 GPU, Docker, evidence, receipt, freeze, rollback, or qualification authority.
 Its success is not sender authentication, admission, or release authority.
 
+The next sibling C11 drain-witness matcher deliberately covers only the typed
+`CGROUP_EMPTY` tail: caller-normalized PID1 controller, same held-cgroup,
+explicit empty-population declaration, and exactly-one registered worker
+terminal-token declaration. It does not receive or inspect a socket, cgroup,
+pidfd, or FD; parse a packet; track phase or ledger state; change admission; or
+authorize controller release. Its success is only a normalized claim match,
+not sender/observation authentication, `EMPTY_VERIFIED`, or release authority.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

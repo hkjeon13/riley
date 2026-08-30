@@ -182,6 +182,15 @@ admission. Even when both source-only helpers return success, a future native
 transport/controller must still authenticate the sender and transport framing;
 NO_ACTION_COMPLETE remains a drain signal, never a release signal.
 
+The separate C11 drain-witness matcher covers the later `CGROUP_EMPTY` claim
+only: it compares caller-normalized PID1 controller, held cgroup, explicit
+empty-population declaration, and the exactly-one registered terminal worker
+token declaration. It does not receive or inspect a socket, cgroup, pidfd, or
+FD, does not retain phase/ledger state, and cannot change admission or
+authorize controller release. A future controller must still independently
+authenticate the observation and enforce the required DRAINING →
+EMPTY_VERIFIED → controller-release ordering.
+
 The modeled durable ledger is deliberately strict: malformed or incomplete
 active records are rejected; a claimed empty ledger cannot retain a cgroup;
 and an active record always rehydrates closed.  These are CPU-only hostile-path
