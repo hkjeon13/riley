@@ -22,6 +22,22 @@ or make a qualification decision. It snapshots the retired no-action stub
 only to exercise the fixed-root/FD mechanism; a future versioned raw-envelope
 producer must introduce a new private core rather than re-enable this body.
 
+## Future immutable execution anchor
+
+The current checkout is user-owned development input, not actual GPU-execution
+authority. `verify_rc3_gate_e_execution_anchor_v1.py
+--anchor-contract-probe` defines the next prerequisite: a fixed root-owned
+and non-group/world-writable external anchor at `/opt/riley/rc3-gate-e-v1`,
+plus a root-owned mode-`0700` lock directory at
+`/var/lib/riley/rc3-gate-e/lock`. It checks a canonical root-owned manifest
+and FD-hashed bootstrap/core bytes but executes neither. The anchor is not
+currently provisioned on `server-4096`, so its probe must fail closed until a
+system administrator installs a reviewed v3 bundle. Its `checked` output is a
+mutable-checkout installation preflight, not launch/receipt/qualification
+authority; the future root-installed bootstrap must repeat host-context and
+ACL checks. See
+`ci/release/RC3_GATE_E_EXECUTION_ANCHOR.md`.
+
 ## Trusted inputs
 
 Select these values from reviewed evidence before starting the measurement.

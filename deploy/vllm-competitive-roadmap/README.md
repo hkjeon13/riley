@@ -6,6 +6,14 @@ sentinel은 모두 fail-closed다. `run_remote_rc3_gate_e_session_v2.py
 --performance-source-contract-probe`는 fixed remote root FD 아래 retired no-action
 stub bytes를 sealed `memfd`로 copy하는 CPU-only/no-action mechanism일 뿐, actual
 performance child, GPU/Docker capture, receipt 또는 qualification authority를 만들지 않는다.
+**Gate E v3 execution-anchor prerequisite:** user-owned checkout은 actual GPU execution
+authority가 아니다. 새 `verify_rc3_gate_e_execution_anchor_v1.py`는 fixed root-owned
+`/opt/riley/rc3-gate-e-v1` bootstrap/core/manifest와 mode-`0700`
+`/var/lib/riley/rc3-gate-e/lock` directory만 no-follow FD로 검증하는 no-action
+installation preflight다. mutable checkout에서 나온 `checked` output은 launch/receipt/
+qualification authority가 아니며 host namespace/ACL/verifier source integrity도
+not-established다. 현재 root-installed bundle은 없으므로 probe의 fail-closed 결과는
+정상이며, v3 actual producer는 별도 administrator provisioning 뒤에만 운영할 수 있다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

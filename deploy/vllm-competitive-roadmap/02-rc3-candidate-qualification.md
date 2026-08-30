@@ -6,6 +6,13 @@ sentinel은 모두 fail-closed고 public Bash에는 privileged body가 남아 �
 Python v2 probe는 fixed root FD를 통해 retired no-action stub bytes만 sealed snapshot하며,
 actual child/GPU/Docker/evidence/receipt/qualification
 권한은 추가하지 않는다.<br>
+**Gate E v3 execution anchor:** mutable checkout은 actual producer authority가 아니다.
+`verify_rc3_gate_e_execution_anchor_v1.py`는 future root-owned external
+bootstrap/core/manifest와 private lock directory만 no-action FD verification으로
+정의한다. 현재 `server-4096`에는 administrator-provisioned bundle이 없으므로
+fail-closed이며, 이 verifier의 mutable-checkout `checked` output은 launch/receipt/
+qualification authority가 아니고 host namespace·ACL·verifier source integrity도
+establish하지 않는다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 

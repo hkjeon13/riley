@@ -20,6 +20,17 @@ but creates no child, lock, GPU/Docker action, evidence, receipt, or
 qualification authority. A future actual producer must introduce a new
 versioned private core rather than reactivate the legacy body.
 
+The mutable checkout also cannot be v3 actual-producer authority. The landed
+`verify_rc3_gate_e_execution_anchor_v1.py` is a no-action, fixed-path contract
+for a root-owned/non-writable external bootstrap/core/manifest and private
+mode-`0700` lock directory. It verifies no-follow held-FD hashes only; it
+executes no bootstrap/core and creates no lock, GPU/Docker action, evidence,
+receipt, or qualification. `server-4096` has no such root-installed bundle
+yet, so the public probe must remain fail-closed until administrator
+provisioning. Its `checked` mutable-checkout output is not execution authority
+and leaves verifier-source integrity, host mount namespace, and ACL write
+policy explicitly not-established.
+
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before
 and after reading a private external request, rehashes the declared external

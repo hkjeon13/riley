@@ -432,6 +432,15 @@ reviewed isolated Python에서 fixed private performance body를 no-follow/nonbl
 v2도 GPU lock/Bash/Docker/evidence/receipt/qualification을 만들지 않으며, retired no-action
 stub bytes를 snapshot할 뿐이다. sealed source FD를 통해 new private raw core를 호출하는
 versioned producer/envelope은 후속 단계다.
+그 후속 producer의 execution authority는 mutable checkout이 아니라 fixed root-owned
+external anchor여야 한다. `verify_rc3_gate_e_execution_anchor_v1.py`는
+`/opt/riley/rc3-gate-e-v1`의 bootstrap/core/canonical manifest와
+`/var/lib/riley/rc3-gate-e/lock` mode-`0700` directory를 no-follow held FD로
+검증하는 no-action prerequisite다. bootstrap/core를 실행하거나 lock/GPU/Docker/evidence/
+receipt/qualification을 만들지 않으며, 현재 root-installed bundle 부재는 fail-closed다.
+그 `checked` output도 mutable checkout source에서 나온 installation preflight일 뿐
+execution authority나 producer/semantic receipt/qualification input이 아니며 host mount
+namespace·ACL·verifier source integrity를 establish하지 않는다.
 artifact, evidence-root, candidate, GPU-selection grammar가 없고 Gate E-root entry, raw
 evidence, marker, receipt, serialized handoff도 만들지 않는다.
 GPU query/selection, Docker, subproducer, aggregate replay, semantic receipt, qualification은
