@@ -28,6 +28,7 @@ import check_rc3_rollback_provenance_v4 as v4_checker
 import finalize_rc3_rollback_candidate_source_v4 as finalizer
 import provenance_v2_common as common
 import replay_rc3_rollback_candidate_source_v1 as candidate_source
+import replay_rc3_rollback_operational_semantics_v1 as operational_semantics
 import write_rc3_rollback_candidate_source_bind_request_v1 as writer
 
 
@@ -79,6 +80,13 @@ def _transaction(call: Callable[[], T]) -> T:
         return call()
     except transaction.RollbackAtomicTransactionError as error:
         _fail(getattr(error, "reason_code", "invalid-atomic-transaction"), str(error))
+
+
+def _operational_semantics(call: Callable[[], T]) -> T:
+    try:
+        return call()
+    except operational_semantics.RollbackOperationalSemanticsError as error:
+        _fail(getattr(error, "reason_code", "invalid-operational-semantics"), str(error))
 
 
 def _receipt_output_names() -> tuple[str, str, str]:
@@ -362,6 +370,91 @@ def _recheck_finalized_closure(
     return v3_report, v4_report
 
 
+def _require_operational_semantics_veto(
+    root_fd: int,
+    switch_fd: int,
+    closure: finalizer._FinalizedRollbackCandidateSourceV4,  # noqa: SLF001
+) -> None:
+    """Require one ephemeral held-FD operational replay before receipt publication.
+
+    This is a failure-only same-stack guard.  Its report is neither persisted
+    nor reflected in the v1 receipt, whose authority remains raw finalizer
+    normal-return only.  A future semantic receipt must establish its own
+    authenticated producer/finalizer authority instead of consuming this
+    ephemeral result or the visible v1 receipt pair.
+    """
+
+    if not isinstance(closure, finalizer._FinalizedRollbackCandidateSourceV4):  # noqa: SLF001
+        _fail(
+            "invalid-finalizer-result",
+            "operational veto requires the typed same-stack finalizer result",
+        )
+    report = _operational_semantics(
+        lambda: operational_semantics._replay_rc3_rollback_operational_semantics_on_held_root_switch_fds(  # noqa: SLF001
+            root_fd,
+            switch_fd,
+        )
+    )
+    expected_fields = {
+        "schema_version",
+        "status",
+        "qualification_status",
+        "authority",
+        "candidate_id",
+        "bindings",
+        "raw_manifest",
+        "rollback_v3_manifest",
+        "atomic_transaction_session",
+        "derived_facts",
+        "checks",
+        "reason_codes",
+    }
+    if not isinstance(report, Mapping) or set(report) != expected_fields:
+        _fail(
+            "invalid-operational-semantics-report",
+            "held-FD operational semantics returned an unsupported report shape",
+        )
+    expected_checks = [
+        {"name": name, "passed": True} for name in operational_semantics._CHECK_NAMES  # noqa: SLF001
+    ]
+    if (
+        report["schema_version"] != operational_semantics.SEMANTICS_VERSION
+        or report["status"] != "passed"
+        or report["qualification_status"] != "not-run"
+        or report["authority"] != operational_semantics.SEMANTICS_AUTHORITY
+        or report["reason_codes"] != []
+        or report["checks"] != expected_checks
+    ):
+        _fail(
+            "invalid-operational-semantics-report",
+            "held-FD operational semantics did not return the fixed passed/not-run diagnostic",
+        )
+    expected_bindings = _finalizer(lambda: finalizer._expected_v3_bindings(closure.written))  # noqa: SLF001
+    raw_manifest = _descriptor(
+        report["raw_manifest"],
+        "operational semantics raw manifest",
+    )
+    rollback_v3_manifest = _descriptor(
+        report["rollback_v3_manifest"],
+        "operational semantics rollback v3 manifest",
+    )
+    transaction_session = _descriptor(
+        report["atomic_transaction_session"],
+        "operational semantics atomic transaction session",
+    )
+    if (
+        report["candidate_id"] != closure.written.static_bindings.candidate_id
+        or report["bindings"] != expected_bindings
+        or raw_manifest != closure.v4_descriptor
+        or rollback_v3_manifest != closure.v3_descriptor
+        or transaction_session != closure.written.atomic_transaction.session_descriptor
+    ):
+        _fail(
+            "operational-semantics-closure-mismatch",
+            "held-FD operational semantics does not bind the retained v3/v4 finalizer closure",
+        )
+
+
 def _receipt_document_from_closure(
     root_fd: int,
     switch_fd: int,
@@ -560,6 +653,7 @@ def _finalize_and_write_rollback_receipt_on_held_root_switch_fds(
             switch_fd,
         )
     )
+    _require_operational_semantics_veto(root_fd, switch_fd, closure)
     document, _descriptors = _receipt_document_from_closure(root_fd, switch_fd, closure)
     raw_document = _common(lambda: common.canonical_json_bytes(document))
     draft_descriptor = _common(

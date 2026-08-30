@@ -57,7 +57,18 @@ class ReplayRollbackOperationalSemanticsTests(
                 atomic,
                 "_rename_exchange",
                 side_effect=writer_fixtures._fake_exchange,
+            ), mock.patch.object(
+                receipt,
+                "_require_operational_semantics_veto",
+                return_value=None,
+                autospec=True,
             ):
+                # These fixtures materialize raw v4 closures, including
+                # malformed ones, so the private replay itself can reject
+                # them below.
+                # The production receipt path now invokes this replay as a
+                # pre-publication veto; that behavior is covered separately
+                # by the receipt writer tests.
                 return composer._prepare_transaction_and_write_fixed_receipt_on_held_root_fd(  # noqa: SLF001
                     root_fd,
                     self.request,

@@ -234,9 +234,15 @@ mechanism과 adversarial test를 닫아야 한다.
   caller-held root EX/switch EX 안에서 v3/v4 finalizer를 직접 호출한 **정상 반환**만
   in-memory typed closure로 유지하고, fixed request·static preparation·candidate/source
   complete inventory·candidate/rollback phase·transaction·v3/v4 descriptor를 다시
-  held-FD replay해 fixed receipt/paired marker를 낸다. status는 `completed/not-run`,
+  held-FD replay해 fixed receipt/paired marker를 낸다. receipt leaf를 쓰기 전에는 같은
+  held root/switch FD에서 private operational replay를 failure-only veto로 한 번 더
+  실행하고 typed v3/v4/transaction closure와 cross-bind하지만, 그 diagnostic은 저장하거나
+  receipt JSON에 반영하지 않는다. status는 `completed/not-run`,
   authority는 `raw-finalizer-normal-return-only`뿐이다. v4나 receipt marker의 post-link
-  fsync ambiguity는 successful return/receipt를 만들지 않고, visible receipt pair는
+  fsync ambiguity 또는 completed v4 뒤 veto failure는 successful return/receipt를 만들지
+  않는다. 후자는 v4 pair만 남기고 receipt pair를 만들지 않을 수 있으며 fixed output collision
+  때문에 그 root를 재개할 수 없다. runner는 root를 조사용으로 보존·retire하고 새 private
+  root에서만 새 시도를 시작해야 한다. visible receipt pair는
   standalone rollback/lifecycle authority 또는 semantic checker input이 될 수 없다.
   authenticated runner의 same-stack normal-return branch만 이 helper의 반환을 소비할 수
   있으며, 이 코드 역시 service/GPU/deployment를 실행하지 않는다.
@@ -248,7 +254,8 @@ mechanism과 adversarial test를 닫아야 한다.
   pair/finalizer receipt/precheck를 semantic input으로 승격하지 않으며 freeze, Gate E,
   deployment 또는 qualification authority가 없다. caller-held FD 자체는 prior finalizer
   normal-return lineage를 증명하지 않으므로 same-stack capability나 receipt를 대체할 수
-  없다. 이후 semantic receipt checker도 위
+  없다. raw finalizer가 이 diagnostic을 receipt publication 직전 ephemeral veto로
+  호출하더라도 결과는 durable semantic receipt나 outer qualification input이 아니다. 이후 semantic receipt checker도 위
   descriptor를 no-follow hash replay로 필수 검증하고, 기존 v1 public schema를
   불명확하게 약화하지 않은 호환 불가 새 version으로 추가해야 한다.
 

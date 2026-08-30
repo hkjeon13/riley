@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import fcntl
+import hashlib
 import inspect
 import json
 import os
@@ -14,9 +15,12 @@ from pathlib import Path
 from typing import Any, Callable, TypeVar
 from unittest import mock
 
+import check_c02_provenance_v2 as c02
 import finalize_rc3_rollback_candidate_source_v4 as finalizer
 import prepare_rc3_rollback_artifacts_v1 as artifact_prepare
 import provenance_v2_common as common
+import replay_rc3_rollback_candidate_source_v1 as candidate_source
+import replay_rc3_rollback_operational_semantics_v1 as operational_semantics
 import test_write_rc3_rollback_candidate_source_bind_request_v1 as writer_fixtures
 import write_rc3_rollback_finalizer_receipt_v1 as receipt
 
@@ -69,6 +73,21 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
             receipt._finalize_and_write_rollback_receipt_on_held_root_switch_fds  # noqa: SLF001
         )
 
+    def _rewrite_candidate_shutdown(self, mutate: Callable[[dict[str, Any]], None]) -> None:
+        artifact_path = self.root / candidate_source.SHUTDOWN_ARTIFACT_PATH
+        document = json.loads(artifact_path.read_text(encoding="utf-8"))
+        mutate(document)
+        raw = common.canonical_json_bytes(document)
+        artifact_path.write_bytes(raw)
+        marker = {
+            "schema_version": c02.SHUTDOWN_MARKER_VERSION,
+            "artifact_filename": "shutdown.json",
+            "artifact_sha256": hashlib.sha256(raw).hexdigest(),
+        }
+        (self.root / candidate_source.SHUTDOWN_MARKER_PATH).write_bytes(
+            common.canonical_json_bytes(marker)
+        )
+
     def test_publishes_one_same_stack_completed_raw_receipt(self) -> None:
         document = self._write()
         self.assertEqual(document["schema_version"], receipt.RECEIPT_VERSION)
@@ -77,6 +96,9 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
         self.assertEqual(
             document["authority"], receipt.RAW_FINALIZER_NORMAL_RETURN_AUTHORITY
         )
+        self.assertEqual(document["reason_codes"], [])
+        self.assertNotIn("operational_semantics", document)
+        self.assertNotIn("semantic_receipt", document)
         self.assertEqual(
             document["finalizer_outputs"]["v4_manifest"]["path"],
             finalizer.ROLLBACK_V4_MANIFEST_NAME,
@@ -98,6 +120,157 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
             (complete.stat().st_dev, complete.stat().st_ino),
         )
         self.assertTrue((self.root / finalizer.ROLLBACK_V4_MANIFEST_NAME).is_file())
+
+    def test_operational_semantics_is_an_ephemeral_prepublication_veto(self) -> None:
+        original = (
+            receipt.operational_semantics._replay_rc3_rollback_operational_semantics_on_held_root_switch_fds  # noqa: SLF001
+        )
+
+        def snapshot_tree() -> tuple[str, ...]:
+            return tuple(
+                sorted(path.relative_to(self.root).as_posix() for path in self.root.rglob("*"))
+            )
+
+        def replay_without_persistence(root_fd: int, switch_fd: int) -> dict[str, Any]:
+            before = snapshot_tree()
+            with mock.patch.object(
+                common,
+                "write_create_only",
+                side_effect=AssertionError("operational veto must not write evidence"),
+            ), mock.patch.object(
+                common,
+                "write_create_only_json",
+                side_effect=AssertionError("operational veto must not write JSON evidence"),
+            ), mock.patch.object(
+                common,
+                "publish_create_only_hardlink",
+                side_effect=AssertionError("operational veto must not publish evidence"),
+            ):
+                report = original(root_fd, switch_fd)
+            self.assertEqual(snapshot_tree(), before)
+            return report
+
+        with mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=replay_without_persistence,
+            autospec=True,
+        ) as replay:
+            document = self._write()
+        self.assertEqual(replay.call_count, 1)
+        self.assertEqual(document["authority"], receipt.RAW_FINALIZER_NORMAL_RETURN_AUTHORITY)
+
+    def test_operational_veto_requires_the_typed_finalizer_closure(self) -> None:
+        with self.assertRaises(receipt.RollbackFinalizerReceiptError) as raised:
+            receipt._require_operational_semantics_veto(-1, -1, object())  # noqa: SLF001
+        self.assert_reason(raised, "invalid-finalizer-result")
+
+    def test_operational_veto_precedes_receipt_closure_replay_and_receipt_leaves(self) -> None:
+        original_veto = receipt._require_operational_semantics_veto  # noqa: SLF001
+        original_document = receipt._receipt_document_from_closure  # noqa: SLF001
+        events: list[str] = []
+
+        def record_veto(root_fd: int, switch_fd: int, closure: Any) -> None:
+            self.assertFalse((self.root / receipt.RECEIPT_NAME).exists())
+            events.append("veto")
+            original_veto(root_fd, switch_fd, closure)
+
+        def record_document(*args: Any, **kwargs: Any) -> Any:
+            self.assertEqual(events[0], "veto")
+            self.assertFalse((self.root / receipt.RECEIPT_NAME).exists())
+            events.append("receipt-document")
+            return original_document(*args, **kwargs)
+
+        with mock.patch.object(
+            receipt,
+            "_require_operational_semantics_veto",
+            side_effect=record_veto,
+        ), mock.patch.object(
+            receipt,
+            "_receipt_document_from_closure",
+            side_effect=record_document,
+        ):
+            document = self._write()
+        self.assertEqual(events, ["veto", "receipt-document", "receipt-document"])
+        self.assertEqual(document["status"], "completed")
+
+    def test_operational_semantics_failure_stops_before_receipt_publication(self) -> None:
+        error = operational_semantics.RollbackOperationalSemanticsError("fixture semantic veto")
+        error.reason_code = "fixture-operational-semantics-failure"  # type: ignore[attr-defined]
+        with mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=error,
+        ):
+            with self.assertRaises(receipt.RollbackFinalizerReceiptError) as raised:
+                self._write()
+        self.assert_reason(raised, "fixture-operational-semantics-failure")
+        self.assertTrue((self.root / finalizer.ROLLBACK_V4_MANIFEST_NAME).is_file())
+        self.assertTrue((self.root / f"{finalizer.ROLLBACK_V4_MANIFEST_NAME}.complete").is_file())
+        for name in (
+            receipt.RECEIPT_NAME,
+            f"{receipt.RECEIPT_NAME}.intent",
+            f"{receipt.RECEIPT_NAME}.complete",
+        ):
+            self.assertFalse((self.root / name).exists(), name)
+
+    def test_operational_semantics_veto_failure_cannot_be_resumed(self) -> None:
+        error = operational_semantics.RollbackOperationalSemanticsError("fixture semantic veto")
+        error.reason_code = "fixture-operational-semantics-failure"  # type: ignore[attr-defined]
+        with mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=error,
+        ):
+            with self.assertRaises(receipt.RollbackFinalizerReceiptError):
+                self._write()
+        with mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=AssertionError("veto must not run on a resumed finalizer"),
+        ):
+            with self.assertRaises(receipt.RollbackFinalizerReceiptError) as raised:
+                self._write()
+        self.assert_reason(raised, "output-name-collision")
+        self.assertFalse((self.root / receipt.RECEIPT_NAME).exists())
+
+    def test_real_non_drained_shutdown_veto_stops_before_receipt_publication(self) -> None:
+        def make_non_drained(document: dict[str, Any]) -> None:
+            document["final_metrics"]["request_states"]["active"] = 1
+
+        self._rewrite_candidate_shutdown(make_non_drained)
+        with self.assertRaises(receipt.RollbackFinalizerReceiptError) as raised:
+            self._write()
+        self.assert_reason(raised, "candidate-shutdown-not-drained")
+        self.assertTrue((self.root / finalizer.ROLLBACK_V4_MANIFEST_NAME).is_file())
+        self.assertTrue((self.root / f"{finalizer.ROLLBACK_V4_MANIFEST_NAME}.complete").is_file())
+        for name in (
+            receipt.RECEIPT_NAME,
+            f"{receipt.RECEIPT_NAME}.intent",
+            f"{receipt.RECEIPT_NAME}.complete",
+        ):
+            self.assertFalse((self.root / name).exists(), name)
+
+    def test_operational_semantics_closure_drift_stops_before_receipt_publication(self) -> None:
+        original = (
+            receipt.operational_semantics._replay_rc3_rollback_operational_semantics_on_held_root_switch_fds  # noqa: SLF001
+        )
+
+        def replay_then_drift(root_fd: int, switch_fd: int) -> dict[str, Any]:
+            report = original(root_fd, switch_fd)
+            report["candidate_id"] = "riley-0.1.0-rc3-drifted"
+            return report
+
+        with mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=replay_then_drift,
+        ):
+            with self.assertRaises(receipt.RollbackFinalizerReceiptError) as raised:
+                self._write()
+        self.assert_reason(raised, "operational-semantics-closure-mismatch")
+        self.assertTrue((self.root / finalizer.ROLLBACK_V4_MANIFEST_NAME).is_file())
+        self.assertFalse((self.root / receipt.RECEIPT_NAME).exists())
 
     def test_receipt_output_collision_stops_before_finalizer(self) -> None:
         (self.root / receipt.RECEIPT_NAME).write_bytes(b"occupied\n")
@@ -188,6 +361,9 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
     def test_successful_terminal_publish_has_no_post_publish_closure_replay(self) -> None:
         original_publish = common.publish_create_only_hardlink
         original_document = receipt._receipt_document_from_closure  # noqa: SLF001
+        original_operational = (
+            receipt.operational_semantics._replay_rc3_rollback_operational_semantics_on_held_root_switch_fds  # noqa: SLF001
+        )
         published = False
 
         def mark_terminal_publish(*args: Any, **kwargs: Any) -> None:
@@ -206,6 +382,11 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
                 raise AssertionError("closure must not be replayed after terminal publication")
             return original_document(*args, **kwargs)
 
+        def reject_post_publish_operational(*args: Any, **kwargs: Any) -> Any:
+            if published:
+                raise AssertionError("operational semantics must not run after terminal publication")
+            return original_operational(*args, **kwargs)
+
         with mock.patch.object(
             common,
             "publish_create_only_hardlink",
@@ -214,6 +395,10 @@ class RollbackFinalizerReceiptV1Tests(unittest.TestCase):
             receipt,
             "_receipt_document_from_closure",
             side_effect=reject_post_publish_replay,
+        ), mock.patch.object(
+            receipt.operational_semantics,
+            "_replay_rc3_rollback_operational_semantics_on_held_root_switch_fds",
+            side_effect=reject_post_publish_operational,
         ):
             document = self._write()
         self.assertEqual(document["status"], "completed")

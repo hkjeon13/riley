@@ -375,6 +375,13 @@ freeze, Gate E, deployment rollback 또는 qualification authority가 아니다.
 FD만으로 prior finalizer normal-return lineage는 증명되지 않으므로, 이 diagnostic은
 same-stack capability나 receipt를 대체할 수 없다.
 
+Landed `write_rc3_rollback_finalizer_receipt_v1.py`는 same root/switch EX stack에서
+v3/v4 typed closure를 만든 직후 이 private replay를 **failure-only pre-publication
+veto**로 호출한다. 결과는 disk나 v1 receipt JSON에 저장하지 않고 typed
+candidate/bindings/v3/v4/transaction closure와만 cross-bind한다. 따라서 v1 receipt의
+authority는 계속 `raw-finalizer-normal-return-only`이며, visible v1 pair나 ephemeral
+diagnostic 어느 것도 semantic receipt/qualification input으로 승격되지 않는다.
+
 `write_rc3_frozen_candidate_v1.py`와
 `replay_rc3_frozen_candidate_v1.py`는 이제 separate fresh `0700` root의 exact one-leaf
 `riley.rc3-frozen-candidate.v1` manifest를 만들고 held-FD로 다시 검증한다. writer는
@@ -538,12 +545,17 @@ hard-linked completion pair를 시도하고, post-link sync ambiguity는 resume�
 EX에서 먼저 finalizer를 직접 호출하고, 반환된 typed v3/v4 closure와 fixed request, static
 preparation, candidate/source complete consumed-path inventory, candidate/rollback phase 및
 atomic transaction을 **같은 FD stack에서** 다시 비교한 뒤 fixed
-`rollback-finalizer-receipt-v1.json`과 paired `.intent`/`.complete`만 create-only로
-publish한다. schema는 `riley.rc3-rollback-finalizer-receipt.v1`,
+`rollback-finalizer-receipt-v1.json`과 paired `.intent`/`.complete`를 create-only로
+publish한다. 그 첫 receipt leaf 전에는 private operational replay가 same held FD에서
+failure-only veto로 실행되어 typed v3/v4/transaction closure와 다시 cross-bind된다.
+그 diagnostic은 disk나 v1 receipt JSON에 남지 않는다. schema는 `riley.rc3-rollback-finalizer-receipt.v1`,
 `completed/not-run`, `raw-finalizer-normal-return-only` authority로 한정된다. receipt output
 충돌은 finalizer 전에 막고, 모든 closure/receipt replay도 receipt leaf/marker 전에 끝낸다.
-terminal hardlink helper가 성공하면 그 뒤 즉시 반환하며, v4 또는 receipt marker의 post-link
-sync ambiguity만 pair가 남은 채 반환값과 후속 receipt를 만들지 않을 수 있다. receipt pair
+terminal hardlink helper가 성공하면 그 뒤 즉시 반환한다. v4 또는 receipt marker의 post-link
+sync ambiguity와, 정상 완료된 v4 뒤 operational veto의 failure 모두 receipt 성공을 만들지
+않는다. veto failure는 completed v4 pair만 남기고 receipt pair를 전혀 만들지 않을 수 있으며,
+fixed output collision 때문에 그 root를 path/FD reopen으로 재개할 수 없다. runner는 해당 root를
+조사용으로 보존·retire하고 새 private root에서만 새 시도를 시작해야 한다. receipt pair
 자체도 filesystem-only success 증명이 아니므로
 path reopen/CLI/resume 또는 future semantic checker가 독립 input으로 수용할 수 없으며, 같은
 authenticated runner normal-return stack만 이 함수의 성공 반환을 소비할 수 있다.
@@ -567,7 +579,8 @@ authenticated runner의 같은 held-FD normal-return sequence 안에서만 raw c
 `compose_rc3_rollback_finalizer_receipt_v1.py`와 runner-only wrapper
 `finalize_rc3_rollback_finalizer_receipt_v1.py`도 landed 되었다. wrapper는 preexisting private root를
 no-follow로 열어 EX를 한 번만 잡고, core는 **artifact preparation → atomic transaction → fixed
-candidate/source v3/v4 finalizer → finalizer receipt**를 한 lexical callback chain으로만 호출한다.
+candidate/source v3/v4 finalizer → ephemeral operational veto → finalizer receipt**를 한 lexical
+callback chain으로만 호출한다.
 fixed request/v3/v4/receipt 및 모든 reserved sibling은 artifact preparation 전에 preflight하며,
 terminal receipt branch는 별도 caller-supplied candidate/config/phase target, fixed evidence
 path/name, descriptor, continuation을 받지 않는다.
@@ -607,8 +620,8 @@ server identity가 제거된 뒤에만 shell은 private
 그 held-FD compositor는 artifact preparation 전에 candidate/config/source와 rollback phase
 전체를 read-only로 두 번 replay하여 malformed·drifting·cross-role-reused evidence가 새
 artifact/atomic surface를 남기지 못하게 한다.
-그 final process는 fixed artifact preparation → atomic transaction → v3/v4 →
-finalizer-receipt chain 외의 binder/writer/checker를 호출하지 않으며 successful receipt 뒤
+그 final process는 fixed artifact preparation → atomic transaction → v3/v4 → ephemeral
+operational veto → finalizer-receipt chain 외의 binder/writer/checker를 호출하지 않으며 successful receipt 뒤
 post-return I/O를 하지 않는다. scratch logs는 evidence root 밖에 두고 failure 때만 보존한다.
 
 이 runner의 landed scope는 **CPU/static contract validation**이다. 실제 GPU capture,

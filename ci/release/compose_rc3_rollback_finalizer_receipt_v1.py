@@ -7,7 +7,8 @@ output names.  Given only an already-exclusive private evidence-root FD and
 the existing six-artifact preparation request, it keeps the normal-return
 chain lexical:
 
-``preparation -> atomic transaction -> fixed v3/v4 finalizer -> receipt``.
+``preparation -> atomic transaction -> fixed v3/v4 finalizer -> ephemeral
+operational veto -> receipt``.
 
 The dynamic candidate/config/source/rollback evidence must already exist under
 their fixed paths.  This compositor neither creates nor interprets that live

@@ -791,7 +791,8 @@ runtime configuration field or a trace counter.
      standard serial scenario and one canonical rollback generation request
      before GPU preflight, uses authenticated `env -i` candidate and RC2
      launches on distinct loopback ports, and reaches only the private
-     preparation→transaction→v3/v4→receipt normal-return finalizer. It has
+     preparation→transaction→v3/v4→ephemeral operational veto→receipt
+     normal-return finalizer. It has
      CPU/static tests only; no GPU capture, freeze, deployment mutation,
      semantic receipt, or qualification result is claimed.
 
@@ -811,6 +812,10 @@ runtime configuration field or a trace counter.
      writes a semantic receipt, freeze, Gate E, deployment, or qualification
      result. Its FDs cannot prove prior finalizer normal-return lineage, so
      this diagnostic can never replace a same-stack capability or receipt.
+     The landed raw finalizer invokes it once as an ephemeral failure-only
+     veto after producing the typed v3/v4 closure and before any v1 receipt
+     leaf is written; it retains no semantic report on disk or in the v1
+     schema, so this does not widen raw-finalizer-normal-return authority.
    - `write_rc3_frozen_candidate_v1.py`,
      `replay_rc3_frozen_candidate_v1.py`, and
      `rc3-frozen-candidate-v1.schema.json` now create/replay one separate
