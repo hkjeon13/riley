@@ -73,6 +73,16 @@ filesystem/interpreter/runtime closure나 host namespace/loader boundary를 auth
 않고 FD 31/32 handoff·Python execution·guardian lease/PID1 ledger·GPU/Docker/evidence/
 receipt/freeze/rollback/qualification을 만들지 않는다. 기존 root-bundle authenticator는
 audit FD를 close하므로 아직 이 primitive와 연결되거나 installed root boundary가 되지 않았다.
+**Gate E execution-closure sidecar precursor:**
+`gate-e-execution-closure-manifest-v1`은 interpreter·dynamic loader·sorted runtime leaf의
+canonical declaration을 위한 별도 schema/pure bytes parser다. exact terminal-newline canonical
+bytes의 SHA-256만 `runtime_closure_sha256`로 정의하며, root-bundle v1을 확장하거나 기존 C
+authenticator·guardian model을 바꾸지 않는다. 이 parser는 path를 열거나 ELF/loader dependency를
+검사·resolve하지 않고 Python을 실행하지 않으므로 actual runtime closure·same-object exec·FD31/32
+handoff·pre-Python trust를 establish하지 않는다. raw manifest line은 qualification policy에서
+noncanonical으로 먼저 거절되고 canonical 재직렬화도 explicit denial을 받는다. interpreter/loader
+held-object authentication과 native secure-exec은 후속 별도 review이며, no-exec sealed leaf FD를
+interpreter/loader execution에 재사용할 수 없다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

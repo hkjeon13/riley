@@ -273,6 +273,26 @@ qualification result. A no-exec Python leaf remains data for a separately
 authenticated interpreter, never an `execveat` substitute. Thus it is only an
 audit implementation precursor, not a launch or authority edge.
 
+## Execution-closure manifest v1 — declaration only
+
+`gate_e_execution_closure_contract_v1.py` and
+`gate-e-execution-closure-manifest-v1.schema.json` define a separate canonical
+sidecar declaration for one future interpreter, one dynamic loader, and a
+sorted runtime-leaf list. Its raw canonical bytes (including one terminal
+newline) have an opaque SHA-256 named `runtime_closure_sha256`. It only parses
+caller-supplied bytes and never opens a path, resolves a dependency, inspects
+ELF, invokes a loader, or executes Python.
+
+It intentionally does not extend the fixed bootstrap/core root-bundle v1
+manifest, change the existing root-bundle authenticator, or alter this
+CPU-only guardian session model. A later static guardian must authenticate
+held objects and bind this sidecar digest to its session before proving the
+same-object interpreter/loader/runtime closure. The declaration itself does
+not establish path presence, ownership, ACL/filesystem policy, object identity,
+ELF or standard-library completeness, loader behavior, FD 31/32 handoff,
+`execveat`, pre-Python trust, a guardian lease, a PID1 controller, or any
+producer/GPU/Docker/evidence/receipt/freeze/qualification authority.
+
 ## CPU-only verification
 
 Run from the repository after the source file is present:

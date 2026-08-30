@@ -104,6 +104,19 @@ rollback, Gate E producer, or qualification. The existing authenticator still
 closes all audited FDs, so this library is not yet connected to it or to an
 installed root boundary.
 
+The next separate source-only contract is
+`gate-e-execution-closure-manifest-v1`: a canonical-byte sidecar declaration
+for one future interpreter, one dynamic loader, and a bytewise-sorted unique
+runtime-leaf list. Its pure parser reads only supplied bytes and defines
+`runtime_closure_sha256` as SHA-256 of the exact newline-terminated canonical
+manifest. It does not extend root-bundle v1, alter the existing C
+authenticator, open any declared path, inspect ELF, resolve dependencies,
+execute Python, establish FD 31/32, or make a loader/runtime closure claim.
+The manifest is explicitly denied as a qualification input. A later static
+native guardian must independently authenticate held interpreter/loader/runtime
+objects and bind this sidecar digest to its session; `MFD_NOEXEC_SEAL` remains
+bootstrap/core data-only and cannot be used for interpreter or loader execution.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

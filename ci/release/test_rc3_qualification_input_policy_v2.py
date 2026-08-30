@@ -56,6 +56,7 @@ class QualificationInputPolicyTests(unittest.TestCase):
             "riley.reconstructed-runtime-a-b-materialization.v1": "reconstructed-materialization-not-qualification",
             "riley.reconstructed-runtime-python-prerequisite.v1": "runtime-python-prerequisite-not-materialization",
             "riley.rc3-gate-e-root-bundle.v1": "native-root-bundle-manifest-not-qualification",
+            "riley.rc3-gate-e-execution-closure-manifest.v1": "execution-closure-manifest-not-qualification",
             "riley.release-candidate-report.v2": "legacy-release-candidate-rejected",
         }
         for schema_version, expected in cases.items():
@@ -116,6 +117,12 @@ class QualificationInputPolicyTests(unittest.TestCase):
             b'"gpu_execution":"not-run","docker_execution":"not-established",'
             b'"evidence":"not-established","qualification_status":"not-run",'
             b'"reason_code":"effective-uid-gid-not-root"}\n',
+        )
+
+    def test_execution_closure_manifest_line_is_noncanonical_before_schema_dispatch(self) -> None:
+        self.assert_reason(
+            "noncanonical-json",
+            b'{"schema_version":"riley.rc3-gate-e-execution-closure-manifest.v1"}\n',
         )
 
     def test_exact_narrow_authorities_are_rejected_without_schema_allowlist(self) -> None:

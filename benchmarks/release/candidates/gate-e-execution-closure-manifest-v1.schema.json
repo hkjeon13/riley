@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/gate-e-execution-closure-manifest-v1.schema.json",
+  "title": "Riley RC3 Gate E execution-closure manifest v1",
+  "description": "Grammar for a future Gate E interpreter, dynamic-loader, and runtime-leaf declaration only. It is a separate sidecar from the root-bundle v1 manifest and does not authenticate files, install or execute anything, establish loader closure, or authorize launch, receipt, Gate E, GPU/Docker work, or qualification. The companion pure contract additionally requires exact canonical JSON member ordering and one terminal newline.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dynamic_loader",
+    "interpreter",
+    "runtime_leaves",
+    "schema_version"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "riley.rc3-gate-e-execution-closure-manifest.v1"
+    },
+    "interpreter": {
+      "$ref": "#/$defs/leaf"
+    },
+    "dynamic_loader": {
+      "$ref": "#/$defs/leaf"
+    },
+    "runtime_leaves": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "items": {
+        "$ref": "#/$defs/leaf"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        {
+          "not": {
+            "const": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        }
+      ]
+    },
+    "audit_path": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 512,
+      "pattern": "^/(?:[A-Za-z0-9_+@%:=,-][A-Za-z0-9._+@%:=,-]*)(?:/[A-Za-z0-9_+@%:=,-][A-Za-z0-9._+@%:=,-]*)*$"
+    },
+    "leaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "audit_path",
+        "byte_length",
+        "sha256"
+      ],
+      "properties": {
+        "audit_path": {
+          "$ref": "#/$defs/audit_path"
+        },
+        "byte_length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 536870912
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}
