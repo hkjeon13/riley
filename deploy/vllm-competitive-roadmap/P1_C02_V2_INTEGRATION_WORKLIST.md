@@ -871,15 +871,18 @@ runtime configuration field or a trace counter.
      passed` remains component-only and leaves native E0, optimizer image-review
      approval, Python-free, performance, soak, aggregate Gate E, semantic
      receipt, qualification, and deployment `not-established`.
-   - Before any `check_rc3_rollback_receipt_v2.py` or outer qualification,
-     still add FD-native semantic components for Python-free, performance, and
-     soak, then a separate aggregate Gate E replayer over the two canonical-E0
-     and three remaining component results. The legacy path-based `check_release_candidate.py`
-     is not that replayer and must not be consumed by a same-stack semantic
-     finalizer. Only after full Gate E is fixed may a distinct same-stack v2
-     semantic receipt be emitted; the outer qualification checker must accept
-     only that exact version and reject historical v1 before generic gate
-     failure.
+   - The FD-native Python-free, performance, and soak components plus the
+     aggregate Gate E replayer are now separate closures. In particular,
+     `check_soak_v2_receipt_v2.py` replays direct completed v4/v5 raw leaves
+     through a held private root FD and reconstructs source audit selections
+     and per-observation-session counters; it never consumes the v1 structural
+     precheck or a saved summary. Its `passed/not-run` diagnostic is still not
+     a producer/lifecycle result or durable semantic receipt. The legacy
+     path-based `check_release_candidate.py` is not an aggregate or
+     same-stack finalizer input. Only after full Gate E is fixed inside an
+     authenticated same-stack closure may a distinct v2 semantic receipt be
+     emitted; the outer qualification checker must accept only that exact
+     version and reject historical v1 before generic gate failure.
    - Replace all existing no-follow fallback flag patterns.
 
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
@@ -888,6 +891,7 @@ runtime configuration field or a trace counter.
    `benchmarks/release/candidates/soak-v2-bind-request-v5.schema.json`, and
    `benchmarks/release/candidates/soak-v2-receipt-v5.schema.json`,
    `benchmarks/release/candidates/soak-v2-semantic-replay-precheck-v1.schema.json`,
+   `benchmarks/release/candidates/soak-v2-semantic-replay-v2.schema.json`,
    `benchmarks/release/candidates/rollback-raw-structural-precheck-v1.schema.json`,
    `benchmarks/release/candidates/rc3-rollback-finalizer-receipt-v1.schema.json`,
    `benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json`,

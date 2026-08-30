@@ -647,6 +647,7 @@ benchmarks/release/candidates/reconstructed-prior-baseline-v2.schema.json
 benchmarks/release/candidates/soak-v2-receipt-v3.schema.json
 benchmarks/release/candidates/soak-v2-bind-request-v3.schema.json
 benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json
+benchmarks/release/candidates/soak-v2-semantic-replay-v2.schema.json
 benchmarks/release/candidates/c02-lifecycle-supervisor-receipt-v1.schema.json
 benchmarks/release/candidates/c02-config-endpoint-observation-v1.schema.json
 benchmarks/release/candidates/rollback-receipt-v2.schema.json
@@ -690,9 +691,13 @@ rollback, qualification을 대체하지 않는다.
 
 현재 landed `check_soak_v2_receipt.py`는 completed raw v4/v5 marker pair를 strict FD
 replay로 읽는 precheck일 뿐이며 `bound`/`not-run`과 `raw-structural-only` authority만
-출력한다. 이는 listed future `check_soak_v2_receipt_v2.py` semantic receipt가 아니고,
-outer RC3 finalizer 또는 C02 qualification checker는 이를 semantic receipt input으로
-수용해서는 안 된다.
+출력한다. 별도 landed `check_soak_v2_receipt_v2.py`는 같은 held private FD에서 원본
+generation-audit/observation leaf를 두 번 다시 읽어 per-session interval order,
+cumulative terminal counters, request/audit identity, typed sampling selection을
+재구성한다. 그러나 그 `passed/not-run` output도 producer/lifecycle success나 actual GPU
+capture, candidate freeze, Gate E, campaign threshold, durable semantic receipt,
+qualification을 뜻하지 않는다. 따라서 어느 public checker output도 outer RC3 finalizer
+또는 C02 qualification checker의 semantic receipt input으로 수용해서는 안 된다.
 
 현재 landed `check_rc3_rollback_structural_precheck.py`도 completed terminal rollback
 raw v4 pair의 strict root→switch held-FD replay만 수행하고 `bound`/`not-run`,

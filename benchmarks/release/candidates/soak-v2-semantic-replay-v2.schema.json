@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "C02 soak v2 semantic replay diagnostic",
+  "description": "A read-only held-FD semantic replay of original completed raw v4/v5 soak leaves. A passed diagnostic is not a producer or lifecycle success, actual GPU capture, candidate freeze, Gate E result, durable semantic receipt, qualification, deployment, rollback, campaign threshold, or cross-session interval-order claim.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scope",
+    "status",
+    "qualification_status",
+    "authority",
+    "semantic_policy_version",
+    "candidate_id",
+    "bindings",
+    "raw_manifest",
+    "raw_manifest_version",
+    "derived_facts",
+    "checks",
+    "not_established",
+    "reason_codes"
+  ],
+  "properties": {
+    "schema_version": {"const": "riley.soak-v2-semantic-replay.v2"},
+    "scope": {"const": "c02-soak-v2-semantic-replay-only"},
+    "status": {"const": "passed"},
+    "qualification_status": {"const": "not-run"},
+    "authority": {"const": "soak-v2-semantic-replay-only"},
+    "semantic_policy_version": {"const": "riley.c02-soak-v2-semantic-policy.v1"},
+    "candidate_id": {"type": "string", "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"},
+    "bindings": {"$ref": "#/$defs/bindings"},
+    "raw_manifest": {"$ref": "#/$defs/descriptor"},
+    "raw_manifest_version": {"enum": ["riley.soak-v2-raw-provenance.v4", "riley.soak-v2-raw-provenance.v5"]},
+    "derived_facts": {"$ref": "#/$defs/derivedFacts"},
+    "checks": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "prefixItems": [
+        {"$ref": "#/$defs/heldFdCompletedRawManifestReplayedCheck"},
+        {"$ref": "#/$defs/dispatchHeaderToManifestDescriptorBindingCheck"},
+        {"$ref": "#/$defs/identityAndScenarioOrderReconstructedFromLeavesCheck"},
+        {"$ref": "#/$defs/requestResponseAuditBindingReconstructedCheck"},
+        {"$ref": "#/$defs/perObservationSessionIntervalOrderReconstructedCheck"},
+        {"$ref": "#/$defs/perObservationSessionCumulativeMetricsMonotonicCheck"},
+        {"$ref": "#/$defs/typedSamplingSelectionsReconstructedCheck"},
+        {"$ref": "#/$defs/semanticReplayDoesNotEstablishLifecycleOrQualificationCheck"}
+      ],
+      "items": false
+    },
+    "not_established": {"$ref": "#/$defs/notEstablished"},
+    "reason_codes": {"type": "array", "maxItems": 0, "items": false}
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "raw_manifest_version": {"const": "riley.soak-v2-raw-provenance.v4"},
+        "derived_facts": {
+          "properties": {
+            "scenarios": {
+              "minItems": 1,
+              "maxItems": 32,
+              "items": {"$ref": "#/$defs/v4Scenario"}
+            }
+          }
+        }
+      }
+    },
+    {
+      "properties": {
+        "raw_manifest_version": {"const": "riley.soak-v2-raw-provenance.v5"},
+        "bindings": {
+          "properties": {
+            "configuration_profile": {"const": "max-performance-exact"}
+          }
+        },
+        "derived_facts": {
+          "properties": {
+            "scenarios": {
+              "minItems": 1,
+              "maxItems": 1,
+              "items": {"$ref": "#/$defs/v5Scenario"}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "byte_length"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 512},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "byte_length": {"type": "integer", "minimum": 1}
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["freeze_sha256", "base_release_candidate_report_sha256", "configuration_profile", "configuration_sha256"],
+      "properties": {
+        "freeze_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "base_release_candidate_report_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "configuration_profile": {"enum": ["stable-default", "max-performance-exact"]},
+        "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["server_pid", "server_start_ticks", "listener_port", "listener_inode", "gpu_index", "gpu_uuid"],
+      "properties": {
+        "server_pid": {"type": "integer", "minimum": 1},
+        "server_start_ticks": {"type": "integer", "minimum": 1},
+        "listener_port": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "listener_inode": {"type": "integer", "minimum": 1},
+        "gpu_index": {"type": "integer", "minimum": 0},
+        "gpu_uuid": {"type": "string", "pattern": "^GPU-[0-9A-Fa-f-]+$"}
+      }
+    },
+    "interval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "sample_count", "first_elapsed_monotonic_millis", "last_elapsed_monotonic_millis", "strictly_increasing"],
+      "properties": {
+        "scope": {"const": "per-observation-session"},
+        "sample_count": {"type": "integer", "minimum": 1, "maximum": 1024},
+        "first_elapsed_monotonic_millis": {"type": "integer", "minimum": 0},
+        "last_elapsed_monotonic_millis": {"type": "integer", "minimum": 0},
+        "strictly_increasing": {"const": true}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cumulative_request_counters_monotonic", "terminal_cumulative_request_counters"],
+      "properties": {
+        "cumulative_request_counters_monotonic": {"const": true},
+        "terminal_cumulative_request_counters": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["completed", "failed", "cancelled", "capacity_rejections"],
+          "properties": {
+            "completed": {"type": "integer", "minimum": 0},
+            "failed": {"type": "integer", "minimum": 0},
+            "cancelled": {"type": "integer", "minimum": 0},
+            "capacity_rejections": {"type": "integer", "minimum": 0}
+          }
+        }
+      }
+    },
+    "selectedBackendCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cpu-normative", "gpu-greedy"],
+      "properties": {
+        "cpu-normative": {"type": "integer", "minimum": 0},
+        "gpu-greedy": {"type": "integer", "minimum": 0}
+      }
+    },
+    "reasonCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gpu-greedy-not-configured", "addressable-vocabulary-mismatch", "nonzero-temperature", "repetition-penalty", "finish-token-mask"],
+      "properties": {
+        "gpu-greedy-not-configured": {"type": "integer", "minimum": 0},
+        "addressable-vocabulary-mismatch": {"type": "integer", "minimum": 0},
+        "nonzero-temperature": {"type": "integer", "minimum": 0},
+        "repetition-penalty": {"type": "integer", "minimum": 0},
+        "finish-token-mask": {"type": "integer", "minimum": 0}
+      }
+    },
+    "typedSampling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["output_token_count", "selection_count", "all_committed", "derived_selected_backend_counts", "derived_ineligibility_reason_counts", "fallback_projection_replayed", "first_iteration_id", "last_iteration_id"],
+      "properties": {
+        "output_token_count": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "selection_count": {"type": "integer", "minimum": 1, "maximum": 65536},
+        "all_committed": {"const": true},
+        "derived_selected_backend_counts": {"$ref": "#/$defs/selectedBackendCounts"},
+        "derived_ineligibility_reason_counts": {"$ref": "#/$defs/reasonCounts"},
+        "fallback_projection_replayed": {"type": "boolean"},
+        "first_iteration_id": {"type": "integer", "minimum": 1},
+        "last_iteration_id": {"type": "integer", "minimum": 1}
+      }
+    },
+    "v4Scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "target", "request_id", "request_ledger", "generation_audit", "observation_session", "interval", "metrics", "typed_sampling"],
+      "properties": {
+        "scenario_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "not": {"const": "exact-backend-fallback"}},
+        "target": {"$ref": "#/$defs/target"},
+        "request_id": {"type": "string", "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}$"},
+        "request_ledger": {"$ref": "#/$defs/descriptor"},
+        "generation_audit": {"$ref": "#/$defs/descriptor"},
+        "observation_session": {"$ref": "#/$defs/descriptor"},
+        "interval": {"$ref": "#/$defs/interval"},
+        "metrics": {"$ref": "#/$defs/metrics"},
+        "typed_sampling": {
+          "allOf": [
+            {"$ref": "#/$defs/typedSampling"},
+            {"properties": {"fallback_projection_replayed": {"const": false}}}
+          ]
+        }
+      }
+    },
+    "v5Scenario": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario_id", "target", "request_id", "request_ledger", "generation_audit", "observation_session", "interval", "metrics", "typed_sampling", "fallback_event"],
+      "properties": {
+        "scenario_id": {"const": "exact-backend-fallback"},
+        "target": {"$ref": "#/$defs/target"},
+        "request_id": {"type": "string", "pattern": "^cmpl-[A-Za-z0-9_-]{1,123}$"},
+        "request_ledger": {"$ref": "#/$defs/descriptor"},
+        "generation_audit": {"$ref": "#/$defs/descriptor"},
+        "observation_session": {"$ref": "#/$defs/descriptor"},
+        "interval": {"$ref": "#/$defs/interval"},
+        "metrics": {"$ref": "#/$defs/metrics"},
+        "typed_sampling": {
+          "allOf": [
+            {"$ref": "#/$defs/typedSampling"},
+            {"properties": {"fallback_projection_replayed": {"const": true}}}
+          ]
+        },
+        "fallback_event": {"$ref": "#/$defs/descriptor"}
+      }
+    },
+    "derivedFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenarios"],
+      "properties": {
+        "scenarios": {"type": "array", "minItems": 1}
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {"name": {"type": "string"}, "passed": {"const": true}}
+    },
+    "heldFdCompletedRawManifestReplayedCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "held-fd-completed-raw-manifest-replayed"}}}]},
+    "dispatchHeaderToManifestDescriptorBindingCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "dispatch-header-to-manifest-descriptor-binding"}}}]},
+    "identityAndScenarioOrderReconstructedFromLeavesCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "identity-and-scenario-order-reconstructed-from-leaves"}}}]},
+    "requestResponseAuditBindingReconstructedCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "request-response-audit-binding-reconstructed"}}}]},
+    "perObservationSessionIntervalOrderReconstructedCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "per-observation-session-interval-order-reconstructed"}}}]},
+    "perObservationSessionCumulativeMetricsMonotonicCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "per-observation-session-cumulative-metrics-monotonic"}}}]},
+    "typedSamplingSelectionsReconstructedCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "typed-sampling-selections-reconstructed"}}}]},
+    "semanticReplayDoesNotEstablishLifecycleOrQualificationCheck": {"allOf": [{"$ref": "#/$defs/check"}, {"properties": {"name": {"const": "semantic-replay-does-not-establish-lifecycle-or-qualification"}}}]},
+    "notEstablished": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["actual_gpu_capture", "campaign_thresholds", "candidate_freeze", "cross_session_interval_order", "deployment", "gate_e", "lifecycle_success", "producer_success", "qualification", "rollback", "same_stack_normal_return", "semantic_receipt"],
+      "properties": {
+        "actual_gpu_capture": {"const": "not-established"},
+        "campaign_thresholds": {"const": "not-established"},
+        "candidate_freeze": {"const": "not-established"},
+        "cross_session_interval_order": {"const": "not-established"},
+        "deployment": {"const": "not-established"},
+        "gate_e": {"const": "not-established"},
+        "lifecycle_success": {"const": "not-established"},
+        "producer_success": {"const": "not-established"},
+        "qualification": {"const": "not-established"},
+        "rollback": {"const": "not-established"},
+        "same_stack_normal_return": {"const": "not-established"},
+        "semantic_receipt": {"const": "not-established"}
+      }
+    }
+  }
+}

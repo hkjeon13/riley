@@ -343,7 +343,20 @@ rollback, freeze, Gate E, threshold, campaign, interval/monotonicity semantic �
 뜻하지 않는다. outer RC3 finalizer는 이 precheck를 semantic receipt input으로
 수용해서는 안 된다.
 
-`check_soak_v2_receipt_v2.py`는 summary counter나 free-form backend event를 믿지 않고 위 leaf에서 identity, interval order, request/audit binding, metrics monotonicity, actual typed sampling selection을 재구성한다.
+`check_soak_v2_receipt_v2.py`와 raw layer의 held-FD semantic-input closure는 위
+원본 manifest/capture/audit/observation leaf를 같은 private root FD에서 두 번
+replay한다. 이 checker는 saved precheck report, summary counter, free-form backend
+event를 입력으로 받지 않고, source generation-audit의 positional output/selection
+관계, request ID와 process/config identity, 각 observation session 내부의 strict
+`elapsed_monotonic_millis` order, 그리고 `completed`/`failed`/`cancelled`/
+`capacity_rejections` 누적 counter의 비감소를 다시 계산한다. v5는 별도 source
+fallback-event가 audit selection의 exact projection이며 모든 selection이 typed
+`gpu-greedy -> cpu-normative`, `nonzero-temperature`, committed transition임도
+재확인한다. 결과 `riley.soak-v2-semantic-replay.v2`의 `passed`는 이 좁은
+held-FD replay만 뜻하고 producer normal return, actual GPU capture, candidate freeze,
+Gate E, semantic receipt, qualification, deployment, rollback, campaign threshold,
+scenario 간/전역 interval order는 계속 `not-established`다. 따라서 outer finalizer는
+이 public diagnostic을 durable semantic receipt input으로 승격해서는 안 된다.
 
 ### Rollback v2
 

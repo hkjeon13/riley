@@ -1618,6 +1618,82 @@ class ReplayedFallbackScenarioCapture:
     audit_directory: str
 
 
+@dataclass(frozen=True)
+class ReplayedObservationSampleSemanticInput:
+    """One descriptor-bound observation sample retained for semantic replay.
+
+    The raw layer deliberately returns the original metrics bytes rather than
+    interpreting their campaign meaning.  A later semantic checker can then
+    derive only per-session interval and cumulative-counter facts without
+    reopening a path or accepting a self-authored summary.
+    """
+
+    sample: common.EvidenceDescriptor
+    sequence: int
+    elapsed_monotonic_millis: int
+    metrics: common.EvidenceDescriptor
+    metrics_bytes: bytes
+
+
+@dataclass(frozen=True)
+class ReplayedObservationSessionSemanticInputs:
+    """One FD-replayed raw observation session and its metric leaves."""
+
+    session: common.EvidenceDescriptor
+    observed_target: ObservedTarget
+    samples: tuple[ReplayedObservationSampleSemanticInput, ...]
+
+
+@dataclass(frozen=True)
+class ReplayedSoakSemanticBindings:
+    """The immutable v4/v5 raw-manifest identity bindings."""
+
+    freeze_sha256: str
+    base_release_candidate_report_sha256: str
+    configuration_profile: str
+    configuration_sha256: str
+
+    def as_json(self) -> dict[str, str]:
+        return {
+            "freeze_sha256": self.freeze_sha256,
+            "base_release_candidate_report_sha256": self.base_release_candidate_report_sha256,
+            "configuration_profile": self.configuration_profile,
+            "configuration_sha256": self.configuration_sha256,
+        }
+
+
+@dataclass(frozen=True)
+class ReplayedSoakSemanticScenarioInputs:
+    """Descriptor-bound raw leaves needed by the later soak semantic layer."""
+
+    scenario_id: str
+    target: ObservedTarget
+    request_id: str
+    request_ledger: common.EvidenceDescriptor
+    generation_audit: common.EvidenceDescriptor
+    generation_audit_bytes: bytes
+    observation: ReplayedObservationSessionSemanticInputs
+    fallback_event: common.EvidenceDescriptor | None
+    fallback_event_bytes: bytes | None
+
+
+@dataclass(frozen=True)
+class ReplayedSoakSemanticInputs:
+    """Closed raw v4/v5 semantic inputs replayed through one held root FD.
+
+    This is still a raw topology/descriptor API: it publishes no pass/fail
+    judgment and makes no inference about a producer's normal return, a GPU
+    capture, candidate freeze, Gate E, or qualification.  It exists so the
+    later semantic checker does not reconstruct a second path traversal.
+    """
+
+    raw_manifest: common.EvidenceDescriptor
+    raw_manifest_version: str
+    candidate_id: str
+    bindings: ReplayedSoakSemanticBindings
+    scenarios: tuple[ReplayedSoakSemanticScenarioInputs, ...]
+
+
 def _capture_target(value: Any, label: str) -> ScenarioCaptureTarget:
     row = _exact(
         value,
@@ -3422,6 +3498,430 @@ def verify_completed_soak_provenance_v5(
         return verify_completed_soak_provenance_v5_fd(root_fd, manifest_path)
     finally:
         os.close(root_fd)
+
+
+def _semantic_bindings(
+    value: Any,
+    *,
+    label: str,
+    allowed_profiles: frozenset[str],
+) -> ReplayedSoakSemanticBindings:
+    bindings = _bindings(value, label, allowed_profiles=allowed_profiles)
+    return ReplayedSoakSemanticBindings(
+        freeze_sha256=bindings["freeze_sha256"],
+        base_release_candidate_report_sha256=bindings[
+            "base_release_candidate_report_sha256"
+        ],
+        configuration_profile=bindings["configuration_profile"],
+        configuration_sha256=bindings["configuration_sha256"],
+    )
+
+
+def _read_completed_semantic_manifest(
+    root_fd: int,
+    manifest_path: str,
+    raw_report: dict[str, Any],
+    *,
+    expected_version: str,
+    allowed_profiles: frozenset[str],
+    label: str,
+) -> tuple[
+    common.EvidenceDescriptor,
+    dict[str, Any],
+    str,
+    ReplayedSoakSemanticBindings,
+]:
+    """Rebind the completed raw report to its exact held manifest bytes."""
+
+    manifest, document = _read_manifest(root_fd, manifest_path, label)
+    report_manifest = _descriptor(
+        raw_report.get("raw_manifest"), f"{label} completed raw report.raw_manifest"
+    )
+    if manifest != report_manifest:
+        _fail(
+            "soak-semantic-input-manifest-drift",
+            f"{label} differs from the completed raw replay manifest",
+        )
+    row = _exact(
+        document,
+        {
+            "schema_version", "capture_status", "qualification_status", "candidate_id",
+            "bindings", "configuration_evidence", "scenario_capture_session",
+            "scenario_contract", "scenarios",
+        },
+        label,
+    )
+    if row["schema_version"] != expected_version:
+        _fail(
+            "soak-semantic-input-version-drift",
+            f"{label} is not the expected {expected_version} raw manifest",
+        )
+    if row["capture_status"] != "captured" or row["qualification_status"] != "not-run":
+        _fail(
+            "invalid-capture-status",
+            f"{label} must remain captured/not-run raw evidence",
+        )
+    candidate_id = _candidate_id(row["candidate_id"], f"{label}.candidate_id")
+    bindings = _semantic_bindings(
+        row["bindings"],
+        label=f"{label}.bindings",
+        allowed_profiles=allowed_profiles,
+    )
+    if (
+        raw_report.get("candidate_id") != candidate_id
+        or raw_report.get("bindings") != bindings.as_json()
+    ):
+        _fail(
+            "soak-semantic-input-report-binding-drift",
+            f"{label} identity differs from the completed raw replay report",
+        )
+    return manifest, row, candidate_id, bindings
+
+
+def _replay_observation_session_semantic_inputs_fd(
+    root_fd: int,
+    descriptor: common.EvidenceDescriptor,
+    *,
+    label: str,
+    used_paths: set[str],
+) -> ReplayedObservationSessionSemanticInputs:
+    """Expose descriptor-bound sample timing and metrics bytes after raw replay.
+
+    ``_load_session`` owns the complete no-follow, identity, and descriptor
+    replay.  This helper only retains the exact sample/metrics leaves already
+    consumed by that traversal for a semantic caller; it never opens a path
+    outside the caller-held root FD.
+    """
+
+    _reserve(descriptor, label=label, used_paths=used_paths)
+    observed_target = _load_session(root_fd, descriptor, label, used_paths)
+    _session_raw, document = _read_json(root_fd, descriptor, label)
+    row = _exact(
+        document,
+        {
+            "schema_version", "capture_status", "qualification_status", "endpoint",
+            "target", "samples",
+        },
+        label,
+    )
+    samples = row["samples"]
+    assert isinstance(samples, list)
+    replayed: list[ReplayedObservationSampleSemanticInput] = []
+    for index, value in enumerate(samples):
+        sample = _descriptor(value, f"{label}.samples[{index}]")
+        _sample_raw, sample_document = _read_json(
+            root_fd,
+            sample,
+            f"{label}.samples[{index}]",
+        )
+        sample_row = _exact(
+            sample_document,
+            {
+                "schema_version", "sequence", "elapsed_monotonic_millis", "endpoint",
+                "process", "gpu",
+            },
+            f"{label}.samples[{index}]",
+        )
+        endpoint = _exact(
+            sample_row["endpoint"],
+            {"http_status", "body", "listener"},
+            f"{label}.samples[{index}].endpoint",
+        )
+        metrics = _descriptor(
+            endpoint["body"],
+            f"{label}.samples[{index}].endpoint.body",
+        )
+        replayed.append(
+            ReplayedObservationSampleSemanticInput(
+                sample=sample,
+                sequence=_nonnegative(
+                    sample_row["sequence"], f"{label}.samples[{index}].sequence"
+                ),
+                elapsed_monotonic_millis=_nonnegative(
+                    sample_row["elapsed_monotonic_millis"],
+                    f"{label}.samples[{index}].elapsed_monotonic_millis",
+                ),
+                metrics=metrics,
+                metrics_bytes=_read_bytes(
+                    root_fd,
+                    metrics,
+                    f"{label}.samples[{index}].metrics",
+                ),
+            )
+        )
+    return ReplayedObservationSessionSemanticInputs(
+        session=descriptor,
+        observed_target=observed_target,
+        samples=tuple(replayed),
+    )
+
+
+def _require_completed_semantic_raw_report_stable(
+    initial: dict[str, Any],
+    final: dict[str, Any],
+    *,
+    label: str,
+) -> None:
+    if common.canonical_json_bytes(initial) != common.canonical_json_bytes(final):
+        _fail(
+            "soak-semantic-input-raw-replay-drift",
+            f"{label} changed between completed raw replays",
+        )
+
+
+def replay_completed_soak_v4_semantic_inputs_fd(
+    root_fd: int,
+    manifest_path: str,
+) -> ReplayedSoakSemanticInputs:
+    """Return v4 raw leaves for a later held-FD semantic replay only.
+
+    The caller must already hold its own shared root lock.  This function
+    performs no interpretation of workload success or qualification and
+    deliberately returns original source audit/metric bytes, not a summary.
+    """
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "v4 soak semantic-input evidence root"
+        )
+    )
+    manifest_name = _soak_terminal_manifest_name(
+        manifest_path, "completed v4 soak semantic-input manifest path"
+    )
+    initial_report = verify_completed_soak_provenance_v4_fd(root_fd, manifest_name)
+    manifest, row, candidate_id, bindings = _read_completed_semantic_manifest(
+        root_fd,
+        manifest_name,
+        initial_report,
+        expected_version=SOAK_V4_MANIFEST_VERSION,
+        allowed_profiles=SOAK_CONFIGURATION_PROFILES,
+        label="v4 soak semantic-input manifest",
+    )
+    used_paths = {manifest.path}
+    capture_descriptor = _descriptor(
+        row["scenario_capture_session"],
+        "v4 soak semantic-input manifest.scenario_capture_session",
+    )
+    capture = replay_raw_scenario_capture_v1_fd(
+        root_fd,
+        capture_descriptor,
+        candidate_id=candidate_id,
+        configuration_profile=bindings.configuration_profile,
+        configuration_sha256=bindings.configuration_sha256,
+        used_paths=used_paths,
+    )
+    scenarios = row["scenarios"]
+    if not isinstance(scenarios, list) or len(scenarios) != len(capture.scenarios):
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "v4 semantic inputs must preserve the serial scenario inventory",
+        )
+    replayed: list[ReplayedSoakSemanticScenarioInputs] = []
+    for index, captured in enumerate(capture.scenarios):
+        label = f"v4 soak semantic-input manifest.scenarios[{index}]"
+        scenario = _exact(
+            scenarios[index],
+            {
+                "scenario_id", "target", "observation_session", "request_ledger",
+                "runtime_event_log", "generation_audit_index",
+            },
+            label,
+        )
+        scenario_id = scenario["scenario_id"]
+        if (
+            type(scenario_id) is not str
+            or scenario_id == FALLBACK_SCENARIO_ID
+            or scenario_id != captured.scenario_id
+        ):
+            _fail("scenario-capture-inventory-mismatch", f"{label} order/ID drifted")
+        declared_target = _target(scenario["target"], f"{label}.target")
+        for key, expected in (
+            ("request_ledger", captured.request_ledger),
+            ("runtime_event_log", captured.runtime_event_log),
+            ("generation_audit_index", captured.generation_audit_index),
+        ):
+            if _descriptor(scenario[key], f"{label}.{key}") != expected:
+                _fail(
+                    "scenario-capture-derived-leaf-mismatch",
+                    f"{label}.{key} was not derived from the serial capture",
+                )
+        observation_descriptor = _descriptor(
+            scenario["observation_session"], f"{label}.observation_session"
+        )
+        observation = _replay_observation_session_semantic_inputs_fd(
+            root_fd,
+            observation_descriptor,
+            label=f"{label}.observation_session",
+            used_paths=used_paths,
+        )
+        if (
+            observation.observed_target.target != declared_target
+            or not _capture_matches_observed(captured.target, observation.observed_target)
+        ):
+            _fail(
+                "scenario-capture-observation-target-mismatch",
+                f"{label} does not share the serial-capture identity",
+            )
+        replayed.append(
+            ReplayedSoakSemanticScenarioInputs(
+                scenario_id=scenario_id,
+                target=observation.observed_target,
+                request_id=captured.request_id,
+                request_ledger=captured.request_ledger,
+                generation_audit=captured.runtime_event_log,
+                generation_audit_bytes=_read_bytes(
+                    root_fd,
+                    captured.runtime_event_log,
+                    f"{label}.generation_audit",
+                ),
+                observation=observation,
+                fallback_event=None,
+                fallback_event_bytes=None,
+            )
+        )
+    final_report = verify_completed_soak_provenance_v4_fd(root_fd, manifest_name)
+    _require_completed_semantic_raw_report_stable(
+        initial_report,
+        final_report,
+        label="v4 soak semantic inputs",
+    )
+    return ReplayedSoakSemanticInputs(
+        raw_manifest=manifest,
+        raw_manifest_version=SOAK_V4_MANIFEST_VERSION,
+        candidate_id=candidate_id,
+        bindings=bindings,
+        scenarios=tuple(replayed),
+    )
+
+
+def replay_completed_soak_v5_semantic_inputs_fd(
+    root_fd: int,
+    manifest_path: str,
+) -> ReplayedSoakSemanticInputs:
+    """Return v5 fallback raw leaves for a later held-FD semantic replay only."""
+
+    _common(
+        lambda: common.require_private_evidence_directory_fd(
+            root_fd, "v5 soak semantic-input evidence root"
+        )
+    )
+    manifest_name = _soak_terminal_manifest_name(
+        manifest_path, "completed v5 soak semantic-input manifest path"
+    )
+    initial_report = verify_completed_soak_provenance_v5_fd(root_fd, manifest_name)
+    manifest, row, candidate_id, bindings = _read_completed_semantic_manifest(
+        root_fd,
+        manifest_name,
+        initial_report,
+        expected_version=SOAK_V5_MANIFEST_VERSION,
+        allowed_profiles=frozenset((MAX_PERFORMANCE_EXACT_PROFILE,)),
+        label="v5 soak semantic-input manifest",
+    )
+    if bindings.configuration_profile != MAX_PERFORMANCE_EXACT_PROFILE:
+        _fail(
+            "fallback-profile-mismatch",
+            "v5 semantic inputs require max-performance-exact",
+        )
+    used_paths = {manifest.path}
+    capture_descriptor = _descriptor(
+        row["scenario_capture_session"],
+        "v5 soak semantic-input manifest.scenario_capture_session",
+    )
+    capture = replay_raw_scenario_capture_v2_fd(
+        root_fd,
+        capture_descriptor,
+        candidate_id=candidate_id,
+        configuration_profile=bindings.configuration_profile,
+        configuration_sha256=bindings.configuration_sha256,
+        used_paths=used_paths,
+    )
+    scenarios = row["scenarios"]
+    if (
+        not isinstance(scenarios, list)
+        or len(scenarios) != 1
+        or len(capture.scenarios) != 1
+    ):
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "v5 semantic inputs require exactly one native fallback scenario",
+        )
+    captured = capture.scenarios[0]
+    label = "v5 soak semantic-input manifest.scenarios[0]"
+    scenario = _exact(
+        scenarios[0],
+        {
+            "scenario_id", "target", "observation_session", "request_ledger",
+            "runtime_event_log", "generation_audit_index", "fallback_event_log",
+        },
+        label,
+    )
+    if scenario["scenario_id"] != FALLBACK_SCENARIO_ID or captured.scenario_id != FALLBACK_SCENARIO_ID:
+        _fail(
+            "scenario-capture-inventory-mismatch",
+            "v5 semantic inputs require exact-backend-fallback",
+        )
+    declared_target = _target(scenario["target"], f"{label}.target")
+    for key, expected in (
+        ("request_ledger", captured.request_ledger),
+        ("runtime_event_log", captured.runtime_event_log),
+        ("generation_audit_index", captured.generation_audit_index),
+        ("fallback_event_log", captured.fallback_event_log),
+    ):
+        if _descriptor(scenario[key], f"{label}.{key}") != expected:
+            _fail(
+                "scenario-capture-derived-leaf-mismatch",
+                f"{label}.{key} was not derived from the native fallback capture",
+            )
+    observation_descriptor = _descriptor(
+        scenario["observation_session"], f"{label}.observation_session"
+    )
+    observation = _replay_observation_session_semantic_inputs_fd(
+        root_fd,
+        observation_descriptor,
+        label=f"{label}.observation_session",
+        used_paths=used_paths,
+    )
+    if (
+        observation.observed_target.target != declared_target
+        or not _capture_matches_observed(captured.target, observation.observed_target)
+    ):
+        _fail(
+            "scenario-capture-observation-target-mismatch",
+            f"{label} does not share the native-fallback capture identity",
+        )
+    final_report = verify_completed_soak_provenance_v5_fd(root_fd, manifest_name)
+    _require_completed_semantic_raw_report_stable(
+        initial_report,
+        final_report,
+        label="v5 soak semantic inputs",
+    )
+    return ReplayedSoakSemanticInputs(
+        raw_manifest=manifest,
+        raw_manifest_version=SOAK_V5_MANIFEST_VERSION,
+        candidate_id=candidate_id,
+        bindings=bindings,
+        scenarios=(
+            ReplayedSoakSemanticScenarioInputs(
+                scenario_id=FALLBACK_SCENARIO_ID,
+                target=observation.observed_target,
+                request_id=captured.request_id,
+                request_ledger=captured.request_ledger,
+                generation_audit=captured.runtime_event_log,
+                generation_audit_bytes=_read_bytes(
+                    root_fd,
+                    captured.runtime_event_log,
+                    f"{label}.generation_audit",
+                ),
+                observation=observation,
+                fallback_event=captured.fallback_event_log,
+                fallback_event_bytes=_read_bytes(
+                    root_fd,
+                    captured.fallback_event_log,
+                    f"{label}.fallback_event",
+                ),
+            ),
+        ),
+    )
 
 
 def verify_rollback_provenance_fd(root_fd: int, manifest_path: str) -> dict[str, Any]:
