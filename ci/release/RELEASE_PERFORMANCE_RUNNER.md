@@ -38,6 +38,17 @@ authority; the future root-installed bootstrap must repeat host-context and
 ACL checks. See
 `ci/release/RC3_GATE_E_EXECUTION_ANCHOR.md`.
 
+`ci/release/rc3_gate_e_private_raw_core_v1.py` now provides only the v3
+private-core **no-action protocol template**. It rejects direct checkout
+execution and accepts only a future bootstrap's sealed FD 8 core, sealed
+canonical FD 9 configuration, and private FD 10 Unix `SOCK_SEQPACKET` channel
+under `/usr/bin/python3.10 -I -S -E -B`. The nonce/config-digest/credential-bound exchange
+returns `COMPLETE` with explicit all-false guarantees and has no GPU lock,
+Docker, evidence, semantic replay, receipt, or qualification capability. Its
+source template and CPU-only memfd/socketpair test are not an installed anchor
+or a path to invoke on `server-4096`; the root-installed bootstrap remains a
+separate prerequisite.
+
 ## Trusted inputs
 
 Select these values from reviewed evidence before starting the measurement.

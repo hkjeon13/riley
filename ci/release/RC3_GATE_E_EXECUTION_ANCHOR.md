@@ -53,3 +53,45 @@ reviewed bundle must carry its own core digest in the root-owned bootstrap,
 retain the parent-only lock, and use the locked FD stack directly; it must not
 reuse the retired Bash runner, the v1 smoke probe, the v2 source probe, or the
 aggregate replay record as authority.
+
+## v3 private-core no-action template
+
+`ci/release/rc3_gate_e_private_raw_core_v1.py` is an audit/source template for
+the private core named by the future anchor. It is deliberately **not** an
+installed bundle and is not a public command: every direct checkout invocation
+fails before it opens a control socket, inspects a lock, or creates a child.
+
+The template accepts only the future bootstrap's fixed isolated handoff:
+
+```text
+/usr/bin/python3.10 -I -S -E -B /proc/self/fd/8 --sealed-no-action-core
+```
+
+The bootstrap must first authenticate the root-owned manifest and its own/core
+held descriptors. It may then copy the verified core bytes into a sealed
+anonymous `memfd` on FD 8, place one canonical sealed configuration `memfd` on
+FD 9, and pass one private `AF_UNIX SOCK_SEQPACKET` endpoint on FD 10. The
+child permits exactly `0,1,2,8,9,10`; in particular it rejects the parent lock
+FD 7 and every other inherited descriptor, then marks its internal FDs
+close-on-exec. It verifies the core digest and length against the configuration,
+checks its isolated pinned Python and immediate parent's
+PID/start-time/credentials/executable, restores an unblocked default
+`SIGTERM`, sets `PDEATHSIG`, and requires `SO_PEERCRED` plus a per-packet
+`SCM_CREDENTIALS` record.
+
+The nonce- and configuration-digest-bound exchange is only
+`INIT -> READY -> RUN_NO_ACTION -> COMPLETE`.
+Linux may autobind an unbound `SO_PASSCRED` endpoint to a short abstract name;
+that non-filesystem kernel form is accepted, while ordinary filesystem or
+arbitrary abstract socket names are rejected. Packets are bounded canonical
+JSON and reject truncation, duplicate/unknown ancillary records, passed FDs,
+or a wrong nonce.
+
+This first core version has no lock acquisition, GPU query, Docker execution,
+filesystem output, raw producer, semantic replay, receipt, or qualification
+capability. Its CPU-only test copies the template into temporary sealed memfds
+and uses a test-only socketpair; it does not create `/opt` or `/var/lib/riley`
+paths and does not touch the shared GPU lock. A later root-installed bootstrap
+must independently enforce host mount-namespace and ACL policy, retain the
+parent-only lock, and treat a normal `COMPLETE` as no more than this protocol
+mechanism result—not producer authority, a receipt, or qualification evidence.

@@ -14,6 +14,14 @@ installation preflight다. mutable checkout에서 나온 `checked` output은 lau
 qualification authority가 아니며 host namespace/ACL/verifier source integrity도
 not-established다. 현재 root-installed bundle은 없으므로 probe의 fail-closed 결과는
 정상이며, v3 actual producer는 별도 administrator provisioning 뒤에만 운영할 수 있다.
+**Gate E v3 no-action core template:** `rc3_gate_e_private_raw_core_v1.py`는 위 future
+root-owned bundle에 들어갈 private child의 source/audit template일 뿐이다. checkout에서
+직접 실행하면 lock·socket·child 생성 전에 fail-closed하며, future bootstrap이 sealed core
+FD 8/config FD 9/private `SOCK_SEQPACKET` FD 10으로 넘길 때만 nonce·config-digest·credential-bound
+`INIT → READY → RUN_NO_ACTION → COMPLETE` protocol을 수행한다. 이 version은 GPU/lock,
+Docker, evidence, raw producer, semantic replay, receipt, qualification capability가 없고,
+CPU-only memfd/socketpair test도 `/opt`·`/var/lib/riley` 또는 shared GPU lock을 만들거나
+열지 않는다.
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.

@@ -13,6 +13,13 @@ bootstrap/core/manifest와 private lock directory만 no-action FD verification�
 fail-closed이며, 이 verifier의 mutable-checkout `checked` output은 launch/receipt/
 qualification authority가 아니고 host namespace·ACL·verifier source integrity도
 establish하지 않는다.<br>
+**Gate E v3 private core template:** `rc3_gate_e_private_raw_core_v1.py`는 future
+root-installed bundle의 audit/source template만 제공한다. checkout direct invocation은
+FD/socket/lock/child action 전에 거부되고, sealed FD 8 core·FD 9 config·private FD 10
+credential-authenticated socket handoff의 nonce/config-digest-bound
+`INIT → READY → RUN_NO_ACTION → COMPLETE`는
+CPU-only no-action protocol일 뿐이다. GPU/Docker/raw capture/evidence/semantic replay/
+receipt/qualification은 모두 여전히 없다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 

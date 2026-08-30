@@ -31,6 +31,18 @@ provisioning. Its `checked` mutable-checkout output is not execution authority
 and leaves verifier-source integrity, host mount namespace, and ACL write
 policy explicitly not-established.
 
+`rc3_gate_e_private_raw_core_v1.py` is now only the source/audit template for
+that future root-installed v3 private child. A checkout path cannot invoke it:
+it fail-closes before any socket/lock/child action. Its sole possible future
+handoff is sealed core FD 8 + canonical sealed config FD 9 + private
+credential-authenticated `SOCK_SEQPACKET` FD 10 under isolated Python. The
+child rejects the parent lock FD and all unexpected inherited FDs, performs a
+nonce/config-digest-bound `INIT -> READY -> RUN_NO_ACTION -> COMPLETE` exchange, and exits
+with all GPU/Docker/evidence/replay/receipt/qualification guarantees false.
+The landed test uses temporary sealed memfds/socketpairs only; it neither
+installs `/opt` nor opens a real or shared GPU lock. A `COMPLETE` is no-action
+mechanism output, not actual producer authority or a semantic input.
+
 The landed RC3 freeze-input structural admission is likewise CPU/static
 mechanism code only. It replays the clean source pre-freeze contract before
 and after reading a private external request, rehashes the declared external
