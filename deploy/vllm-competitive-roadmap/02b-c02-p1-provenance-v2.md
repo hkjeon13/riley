@@ -1,6 +1,6 @@
 # C02-P1 — Provenance v2와 Reconstructed Rollback Baseline
 
-**상태:** In progress — v1 provenance 결함을 확인했고, candidate freeze 전에 v2 contract와 source-owned raw producer를 구현한다. initial C02 lifecycle supervisor/raw receipt, native sampling fallback source leaf/marker, source pair raw capture v2, fresh lifecycle-evidence preparer v5, fixed lifecycle bind-request writer v5, private held-lock terminal binder core와 fixed-name raw compositor v5, authenticated native-fallback raw-v5 runner, reconstructed RC2 전용 rollback raw-provenance v3 verifier/schema와 path-only binder, RC2-compatible raw phase collector, immutable artifact snapshot→separate runtime-copy preparation, isolated atomic-switch producer, held-FD artifact-exchange transaction, fixed candidate/source rollback bind-request writer와 same-stack v3/v4 finalizer 및 same-stack finalizer normal-return receipt v1, same-invocation rollback terminal-provenance v4, reviewed RC2 source/OCI input closures, cross-root baseline content bridge v1, A/B reproducibility build-input closure, static reconstructed-runtime assembly recipe contract, arm별 raw runtime assembly/capture receipt verifier, source-free arm별 raw runtime-assembly host runner/USTAR composer, original freeze-input closure를 full reconstructed-baseline-v2 replay와 함께 bind하는 create-only frozen-candidate input-identity manifest/FD-safe replayer, fresh opaque fourteen-leaf Gate E input snapshot preparer와 four-gate closed input-inventory replayer, no-action authenticated Gate E supervisor handoff probe, native·optimizer canonical-E0, Python-free, performance, soak semantic component adapter와 aggregate Gate E semantic replayer는 구현됐다. CPU/static hostile-path 검증과 Arm A의 source-free raw Docker capture/structural closure는 완료됐지만, 그것은 GPU/service 실행이나 qualification을 뜻하지 않는다. authenticated remote rollback runner, authenticated actual Gate E producer, actual GPU capture·actual candidate freeze·lifecycle-v5 receipt·full Gate E semantic qualification은 아직 수행하지 않았다.
+**상태:** Source closure complete — v1 provenance 결함을 교정하는 v2 contract, source-owned raw producer, reconstructed rollback baseline, four-gate input replay, no-action handoff probe와 native typed-claim boundary는 clean committed source와 CPU/static hostile-path 범위에서 닫혔다. Arm A/B raw Docker assembly closure도 완료됐지만, 이는 GPU/service 실행이나 qualification이 아니다. authenticated actual Gate E producer, actual GPU capture·candidate freeze·lifecycle receipt·full semantic qualification은 아직 수행하지 않았고, 먼저 [C02-P2 native guardian과 root provisioning readiness](02c-c02-p2-native-guardian-readiness.md)의 native/PID1 design·no-GPU acceptance·별도 GPU/Docker authorization을 충족해야 한다.
 **Runtime assembly execution update:** Arm B raw Docker capture, OCI/assembly
 closure, and the A/B content-only materialization are also complete. The two
 arms' release binary, bundle, and captured `/opt/riley` tree match exactly;
@@ -34,10 +34,15 @@ future release는 file lock availability가 아니라 exact held non-delegated c
 `populated=false`와 registered terminal worker pidfd만 release 조건으로 쓰며, restart의 active
 durable ledger는 `DRAINING`으로 rehydrate한다. future sealed FD 31/32 successor is not a v3
 FD 7/8/9/10 compatibility path; GPU/Docker/raw capture/evidence/receipt/qualification은 계속 없다.
+**C02-P2 handoff:** 위 contract와 source-only matcher는 native guardian 설치, same-object
+secure-exec, PID1 durable ledger 또는 actual producer authority를 만들지 않는다. actual candidate
+freeze·GPU/Docker capture·Gate E qualification은 [C02-P2 native guardian과 root provisioning
+readiness](02c-c02-p2-native-guardian-readiness.md)의 독립 review, root no-GPU acceptance,
+별도 GPU/Docker authorization 뒤에만 시작할 수 있다.
 **의미 등급:** `reference` + C02 release-gate corrective prerequisite
 **한 가지 목적:** soak와 rollback의 self-authored summary를 실제 process/socket/GPU/HTTP/audit evidence로 교체하고, historical stable artifact가 없는 RC2를 정직하게 reconstructed-tag baseline으로 한정한다.
 
-[이전: C02-P0](02a-effective-runtime-config-receipt.md) | [목차](README.md) | [다음: C02](02-rc3-candidate-qualification.md)
+[이전: C02-P0](02a-effective-runtime-config-receipt.md) | [목차](README.md) | [다음: C02-P2](02c-c02-p2-native-guardian-readiness.md)
 
 ## 1. 왜 C02-P1이 필요한가
 
@@ -45,7 +50,7 @@ FD 7/8/9/10 compatibility path; GPU/Docker/raw capture/evidence/receipt/qualific
 
 또한 `/v1/config`의 `fallback_policy.runtime_selection`은 cold-prepared policy ID다. 실제 fallback event가 아니다. 지금의 CUDA worker는 attention/GEMM/executor backend를 실행 중에 재시도하지 않으므로, 존재하지 않는 `exact backend fallback`을 evidence로 주장하면 안 된다.
 
-따라서 C02-P1은 아래 네 가지가 clean committed source에서 검증되기 전까지 candidate freeze를 금지한다.
+따라서 C02-P1은 아래 네 가지가 clean committed source에서 검증되기 전까지 candidate freeze를 금지했다. 이 source closure 뒤에도 actual freeze는 C02-P2의 installed native guardian/no-GPU acceptance와 별도 GPU/Docker authorization 전까지 금지된다.
 
 1. v1 soak/rollback receipt를 historical-only로 두고, finalizer가 v1 qualification input을 명시적으로 거절한다.
 2. raw leaf를 strict FD/no-follow replay 가능한 v2 descriptor로 결속한다.
@@ -891,7 +896,7 @@ root를 열기 전 같은 preflight를 수행해야 한다.
    bind-request writer와 same-stack private normal-return v3/v4 finalizer까지 추가한다.
 7. landed raw-structural precheck를 semantic checker로 승격하지 않고, 별도 soak/rollback
    v2 semantic checker를 추가한 뒤 outer RC3 finalizer를 v2-only로 바꾼다.
-8. 이 P1 source가 clean commit으로 고정된 뒤에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
+8. 이 P1 source가 clean commit으로 고정된 뒤, C02-P2의 reviewed native guardian/root provisioning, no-GPU acceptance, 그리고 별도 GPU/Docker operational authorization이 모두 확인된 경우에만 new candidate를 freeze하고 GPU qualification capture를 시작한다.
 
 ## 7. 완료 조건
 
@@ -912,3 +917,4 @@ root를 열기 전 같은 preflight를 수행해야 한다.
 - reconstructed baseline manifest는 previous stable artifact라고 주장하지 않으며, A/B reconstruction equality와 artifact provenance를 검증한다.
 - C02 finalizer가 soak-v2/rollback-v2만 수용하고 resulting final report에서 operational rollback과 historical-stable rollback status를 분리한다.
 - 이 단계는 candidate freeze, Gate E pass, C02 pass, vLLM win을 주장하지 않는다.
+- P1 source-only closure는 native guardian/root installation, actual producer, candidate freeze 또는 GPU qualification authority가 아니며, 해당 선행 조건은 C02-P2에서 별도로 닫는다.

@@ -1,6 +1,6 @@
 # C02 — RC3 Candidate-bound Qualification
 
-**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 initial one-scenario lifecycle supervisor/receipt, create-only frozen-candidate **input-identity** manifest/FD-safe replay, four-gate closed input-inventory replay, 그리고 no-action authenticated Gate E supervisor handoff probe도 CPU/static hostile-path 범위로 구현됐지만, actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision은 미완료다.<br>
+**상태:** In progress — C02-P0 two-profile와 Qwen v2 `riley-0.1.0-rc99` raw smoke, fixed-routing 및 CPU-only fault raw producer의 source/release-ELF 검증은 완료했다. C02-P1 source provenance/native claim-boundary closure도 CPU/static hostile-path 범위에서 완료됐지만, [C02-P2 native guardian과 root provisioning readiness](02c-c02-p2-native-guardian-readiness.md)가 actual Gate E의 새 필수 선행 조건이다. reviewed installed native guardian의 no-GPU acceptance와 별도 GPU/Docker authorization 전에는 actual candidate freeze, Gate E semantic replay, actual GPU raw capture/semantic replay, qualification decision을 시작하지 않는다.<br>
 **Gate E v2 source boundary:** public legacy performance Bash entry와 historical internal
 sentinel은 모두 fail-closed고 public Bash에는 privileged body가 남아 있지 않다. isolated
 Python v2 probe는 fixed root FD를 통해 retired no-action stub bytes만 sealed snapshot하며,
@@ -43,19 +43,21 @@ extension이나 C02/Gate E/evidence/qualification authority가 아니다.<br>
 **의미 등급:** `reference` + 기존 승인 `E0` 검증  
 **한 가지 목적:** 최신 단일 Riley revision과 exact release binary를 대상으로 Gate E, Python-free, correctness, performance regression, soak를 모두 다시 실행해 정식 candidate를 판정한다.
 
-[이전: C02-P1](02b-c02-p1-provenance-v2.md) | [목차](README.md) | [다음: C03](03-scheduler-output-routing-fuzz.md)
+[이전: C02-P2](02c-c02-p2-native-guardian-readiness.md) | [목차](README.md) | [다음: C03](03-scheduler-output-routing-fuzz.md)
 
 ## 1. 배경
 
 `0.1.0-rc2`는 mixed prefill/decode output routing 결함을 수정했지만, 최종 revision과 binary에 결합된 전체 soak를 다시 수행하지 않은 owner-approved prerelease다. 이후 decode fast path도 추가됐으므로 이전 evidence만으로 최신 main의 안정성을 주장할 수 없다.
 
-C01, C02-P0, C02-P1이 merge된 뒤의 C02 pre-freeze mechanism 단계에서는 raw producer와
-provenance verifier를 구현·검토할 수 있다. 그러나 candidate가 freeze된 뒤의 actual
+C01, C02-P0, C02-P1 source closure와 C02-P2의 reviewed native guardian/root-provisioning
+readiness가 충족되기 전까지 C02는 raw producer와 provenance verifier의 source mechanism 단계에
+머문다. 그러나 candidate가 freeze된 뒤의 actual
 qualification execution 동안에는 production 동작을 바꾸지 않는다. gate 실패가 코드 결함을
 발견하면 qualification을 중단하고 별도 corrective PR을 만든 뒤 새 candidate SHA로 처음부터
 재실행한다.
 
-그 production prerequisite가 C02-P0다. source-level endpoint/artifact 구현과 비-device
+그 production prerequisite는 C02-P0의 runtime receipt뿐 아니라 C02-P2의 independently reviewed
+native guardian/root-provisioning boundary까지 포함한다. source-level endpoint/artifact 구현과 비-device
 검증만으로는 충분하지 않다. RTX 4090에서 GPU used-memory `<=256MiB` preflight 뒤
 `riley-0.1.0-rc99`로 실행한 two-profile container smoke는 실제 cold-prepare와 raw
 endpoint/artifact binding을 확인했지만, nonqualifying mechanism evidence일 뿐이다. 새
@@ -205,8 +207,18 @@ v2 observation sampler와 shutdown artifact producer는 원시 관측 surface일
 `riley.soak-v2-receipt.v1` 또는 `riley.rc3-rollback-receipt.v1`을 실제로 생성하는
 producer는 아직 없다. initial v4 raw lifecycle/receipt는 이 historical receipt를
 up-convert하지 않으며, 여전히 semantic receipt 또는 C02 verdict가 아니다. 따라서 C02
-candidate를 freeze하기 전, C01, C02-P0, C02-P1이 각각 clean merge된 source에서 다음
+candidate를 freeze하기 전, C01, C02-P0, C02-P1이 각각 clean merge된 source와 C02-P2의 reviewed installed native guardian/no-GPU acceptance 및 별도 GPU/Docker authorization에서 다음
 mechanism과 adversarial test를 닫아야 한다.
+
+### C02-P2 native guardian/root provisioning readiness (actual Gate E 전 필수)
+
+[`C02-P2 native guardian과 root provisioning readiness`](02c-c02-p2-native-guardian-readiness.md)는
+source-only anchor verifier, C11 matcher, Python guardian/lease model을 actual launch authority로
+승격하지 않도록 막는 별도 prerequisite다. actual producer 전에 pre-loader held-object authentication,
+same-object secure exec, PID1 durable ledger, live non-delegated cgroup/pidfd release,
+cutover fault injection, 그리고 GPU/Docker operation의 별도 authorization을 installed native design에서
+검증해야 한다. 이 prerequisite의 계획·source review 또는 no-GPU acceptance 자체는 candidate freeze,
+Gate E pass, raw capture, receipt, semantic replay, qualification result를 만들지 않는다.
 
 - initial `run_remote_c02_soak_v2.sh`는 authenticated no-follow host lock과 `env -i`,
   새 private external evidence root, host binary/model의 launch 전·후 safe hash/input
