@@ -17,7 +17,7 @@ DOCKERFILE = Path(__file__).with_name("ReliabilitySoak.Dockerfile")
 RUNNER = ROOT / "ci/run_remote_release_soak.sh"
 DRIVER = ROOT / "ci/run_release_soak.sh"
 EXPECTED_REMOTE_RUNNER_SHA256 = (
-    "9b6bdeb24619664c349ceae8fe17ea74f32df9d44ad4f8abf2cf120168236f47"
+    "e23d8398d6af5ea4bd597a5db518e8d8d4c63499c0426889e9d279ae6358448b"
 )
 EXPECTED_RELEASE_DRIVER_SHA256 = (
     "3e9c71a9bd9fb1ae584bece955d8e0270fc3269a6b52675da2d6488cc23e1e88"
@@ -545,9 +545,12 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         "DESIGNATED_HOSTNAME=psyche-MS-7D91",
         "DESIGNATED_GPU_UUID=GPU-9087e425-6aca-b722-b8c9-cc0423b39fb0",
         'lock_path = "/var/tmp/riley-server-4096-gpu-evidence.lock"',
-        "os.O_NOFOLLOW",
-        "os.O_NONBLOCK",
-        'getattr(os, "O_CLOEXEC", 0)',
+        "flags = (os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK\n"
+        "         | os.O_CLOEXEC)",
+        "source_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC",
+        "destination_flags = (\n"
+        "    os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW\n"
+        "    | os.O_CLOEXEC\n)",
         "metadata = os.fstat(descriptor)",
         "metadata.st_nlink != 1",
         "metadata.st_uid != os.getuid()",
@@ -746,6 +749,7 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
         ("fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)", 1),
         ("os.O_NOFOLLOW", 3),
         ("os.O_NONBLOCK", 2),
+        ("os.O_CLOEXEC", 4),
         ("os.O_EXCL", 1),
     ):
         if code.count(marker) != expected_count:
@@ -753,6 +757,11 @@ def verify_remote_soak_runner(path: Path = RUNNER) -> None:
                 f"remote soak lock boundary must contain {expected_count} exact "
                 f"occurrences of: {marker}"
             )
+    if re.search(
+        r'''getattr\s*\(\s*os\s*,\s*["']O_[A-Z0-9_]+["']\s*,\s*0\s*\)''',
+        code,
+    ):
+        _fail("remote soak runner must not silently omit a safety flag")
 
     inventory_start = code.find("expected_runtime_receipts=$(printf '%s\\n'")
     inventory_end = code.find("| sort)", inventory_start)

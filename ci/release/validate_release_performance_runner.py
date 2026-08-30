@@ -114,6 +114,24 @@ def _fail(path: str, message: str) -> NoReturn:
     raise ContractError(f"{path}: {message}")
 
 
+def _required_open_flag(name: str) -> int:
+    """Return a mandatory evidence-read flag or reject an unsafe host."""
+
+    value = getattr(os, name, None)
+    if type(value) is not int or value == 0:
+        _fail("host", f"missing required safe open flag os.{name}")
+    return value
+
+
+def _regular_file_read_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | _required_open_flag("O_CLOEXEC")
+        | _required_open_flag("O_NOFOLLOW")
+        | _required_open_flag("O_NONBLOCK")
+    )
+
+
 def _pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -160,8 +178,7 @@ def _snapshot(
     maximum: int,
     executable: bool = False,
 ) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = _regular_file_read_open_flags()
     descriptor = -1
     try:
         before_path = path.lstat()
@@ -211,8 +228,7 @@ def _sha256(
     maximum: int = 4 * 1024**3,
     executable: bool = False,
 ) -> str:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = _regular_file_read_open_flags()
     descriptor = -1
     try:
         path_metadata = path.lstat()

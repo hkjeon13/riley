@@ -86,7 +86,7 @@ import sys
 
 lock_path = "/var/tmp/riley-server-4096-gpu-evidence.lock"
 flags = (os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK
-         | getattr(os, "O_CLOEXEC", 0))
+         | os.O_CLOEXEC)
 descriptor = os.open(lock_path, flags, 0o600)
 metadata = os.fstat(descriptor)
 if (
@@ -597,10 +597,10 @@ import stat
 import sys
 
 source_path, destination_path = sys.argv[1:]
-source_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+source_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC
 destination_flags = (
     os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW
-    | getattr(os, "O_CLOEXEC", 0)
+    | os.O_CLOEXEC
 )
 source = os.open(source_path, source_flags)
 try:

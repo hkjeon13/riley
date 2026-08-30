@@ -407,12 +407,19 @@ def _normalized_argv(model_tree_sha256: str, dependency_lock_sha256: str) -> lis
     ]
 
 
+def _required_open_flag(name: str) -> int:
+    """Return a mandatory output-safety flag or reject an unsupported host."""
+
+    value = getattr(os, name, None)
+    if type(value) is not int or value == 0:
+        _fail("--output", f"host lacks required safe open flag os.{name}")
+    return value
+
+
 def _write_create_only(path: Path, payload: bytes) -> None:
     if not path.name or path.name in {".", ".."}:
         _fail("--output", "must name a receipt file")
-    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | _required_open_flag("O_NOFOLLOW")
     try:
         descriptor = os.open(path, flags, 0o600)
     except OSError as error:

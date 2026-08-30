@@ -196,20 +196,14 @@ def validate_one_scenario_contract(
 def _new_private_child(root_fd: int, name: str, label: str) -> None:
     if type(name) is not str or SAFE_LEAF_RE.fullmatch(name) is None:
         _fail("invalid-evidence-name", f"{label} must be one safe child name")
+    nofollow, directory, cloexec, _nonblock = _common(common.require_safe_open_flags)
+    flags = os.O_RDONLY | directory | nofollow | cloexec
     try:
         os.mkdir(name, 0o700, dir_fd=root_fd)
     except FileExistsError as error:
         _fail("create-only-collision", f"cannot create new {label}: {error}")
     except OSError as error:
         _fail("unwritable-output", f"cannot create new {label}: {error}")
-    flags = (
-        os.O_RDONLY
-        | getattr(os, "O_DIRECTORY", 0)
-        | getattr(os, "O_NOFOLLOW", 0)
-        | getattr(os, "O_CLOEXEC", 0)
-    )
-    if not all(getattr(os, flag, 0) for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC")):
-        _fail("missing-open-safety-flag", "host lacks required safe directory-open flags")
     try:
         child_fd = os.open(name, flags, dir_fd=root_fd)
     except OSError as error:

@@ -389,9 +389,11 @@ a qualification decision.
 
 An authenticated rollback **raw** runner, a private held-FD raw operational
 semantics core, a create-only frozen-candidate **input-identity** manifest
-with its FD-safe replayer, and a closed four-gate input-inventory replayer are
-landed. No public semantic receipt, RC3 Gate E **semantic** replayer, or
-qualification checker is landed yet. The frozen manifest is not
+with its FD-safe replayer, a closed four-gate input-inventory replayer, and
+the five-component RC3 Gate E aggregate semantic replayer are landed. The
+aggregate is a read-only replay only: no actual Gate E producer, public
+semantic receipt, same-stack producer normal-return closure, or qualification
+checker is landed yet. The frozen manifest is not
 an execution or normal-return receipt: it rereads the original request/raw
 leaves and records only `frozen/not-run` identity binding. The
 existing `riley.rc3-rollback-raw-provenance.v2` verifier is only a raw descriptor
@@ -888,7 +890,12 @@ runtime configuration field or a trace counter.
      authenticated same-stack closure may a distinct v2 semantic receipt be
      emitted; the outer qualification checker must accept only that exact
      version and reject historical v1 before generic gate failure.
-   - Replace all existing no-follow fallback flag patterns.
+   - The remaining no-follow fallback patterns in legacy performance evidence
+     readers/writers, HF golden-oracle outputs, lifecycle child-directory
+     pinning, and remote-soak lock/snapshot opens now use required safety flags
+     and fail closed before an open or child creation if the host lacks one.
+     This is I/O hardening only; it does not promote a raw replay to a
+     producer, semantic receipt, or qualification result.
 
 7. `benchmarks/release/candidates/c02-raw-scenario-capture-v1.schema.json`,
    `benchmarks/release/candidates/soak-v2-bind-request-v4.schema.json`,

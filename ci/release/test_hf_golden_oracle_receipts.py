@@ -272,6 +272,17 @@ class HfGoldenOracleCheckerTests(unittest.TestCase):
         with self.assertRaisesRegex(checker.OracleApprovalError, "already exists"):
             self.fixture.approve(output)
 
+    def test_approval_writer_requires_nofollow_before_creating_output(self) -> None:
+        output = self.root / "approval.json"
+        with mock.patch.object(checker.os, "O_NOFOLLOW", 0):
+            with self.assertRaisesRegex(checker.OracleApprovalError, "os\\.O_NOFOLLOW"):
+                self.fixture.approve(output)
+        self.assertFalse(output.exists())
+        self.assertNotIn(
+            'hasattr(os, "O_NOFOLLOW")',
+            Path(checker.__file__).read_text(encoding="utf-8"),
+        )
+
     def test_exactly_two_receipts_are_required(self) -> None:
         with self.assertRaisesRegex(checker.OracleApprovalError, "exactly twice"):
             checker.approve(
@@ -319,6 +330,18 @@ class HfGoldenOracleWriterUnitTests(unittest.TestCase):
             with self.assertRaisesRegex(writer.OracleReceiptError, "create-only"):
                 writer._write_create_only(output, b"second\n")
             self.assertEqual(output.read_bytes(), b"first\n")
+
+    def test_receipt_writer_requires_nofollow_before_creating_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "receipt.json"
+            with mock.patch.object(writer.os, "O_NOFOLLOW", 0):
+                with self.assertRaisesRegex(writer.OracleReceiptError, "os\\.O_NOFOLLOW"):
+                    writer._write_create_only(output, b"receipt\n")
+            self.assertFalse(output.exists())
+            self.assertNotIn(
+                'hasattr(os, "O_NOFOLLOW")',
+                Path(writer.__file__).read_text(encoding="utf-8"),
+            )
 
 
 if __name__ == "__main__":

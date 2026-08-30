@@ -692,6 +692,22 @@ class ReleasePerformanceRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(contract.ContractError, "regular file"):
                 contract.validate_gpu_csv(fifo)
 
+    def test_gpu_reader_open_flags_fail_closed_without_fallbacks(self) -> None:
+        for flag in ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"):
+            with self.subTest(flag=flag), mock.patch.object(contract.os, flag, 0):
+                with self.assertRaisesRegex(contract.ContractError, f"os\\.{flag}"):
+                    contract._regular_file_read_open_flags()
+
+        source = (ROOT / "ci" / "release" / "validate_release_performance_runner.py").read_text(
+            encoding="utf-8"
+        )
+        for fallback in (
+            'getattr(os, "O_CLOEXEC", 0)',
+            'getattr(os, "O_NOFOLLOW", 0)',
+            'getattr(os, "O_NONBLOCK", 0)',
+        ):
+            self.assertNotIn(fallback, source)
+
     def test_gpu_reader_rejects_same_inode_mutation_during_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "gpu.csv"

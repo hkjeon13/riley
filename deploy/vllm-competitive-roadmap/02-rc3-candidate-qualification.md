@@ -719,10 +719,11 @@ authenticated runner의 same-stack held-FD private core
 `replay_rc3_rollback_operational_semantics_v1.py`다. 이 core는 original raw
 candidate/source/rollback/atomic leaves를 재해석해 operational consistency만
 `passed/not-run`으로 반환하며 evidence를 쓰지 않는다. frozen-candidate input-identity
-manifest/FD-safe replayer와 closed Gate E **input-inventory** replayer는 별도로 landed했지만,
-Gate E **semantic** replayer가 아직 없으므로 이 단계는 semantic receipt, actual candidate
-freeze, Gate E pass 또는 qualification을 만들거나
-주장하지 않는다.
+manifest/FD-safe replayer, closed Gate E **input-inventory** replayer, 그리고 다섯
+component를 묶는 read-only Gate E **aggregate semantic** replayer는 별도로 landed했다.
+그러나 actual Gate E producer가 같은 held-FD stack에서 정상 반환한 closure와 durable
+semantic receipt는 아직 없으므로, 이 단계는 semantic receipt, actual candidate freeze,
+actual Gate E pass 또는 qualification을 만들거나 주장하지 않는다.
 
 재구성 RC2 baseline을 위한 rollback raw v3 binder도 같은 원칙의 local-only path-only
 단계다. request에는 evidence relative path만 넣으며, binder가 private held root FD에서

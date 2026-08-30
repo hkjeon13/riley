@@ -412,6 +412,47 @@ class InputError(ValueError):
     """Malformed or integrity-invalid evidence."""
 
 
+def _required_open_flag(name: str) -> int:
+    """Return one race-hardening flag or reject an unsafe host.
+
+    These evidence readers and writers must never silently degrade to a
+    link-following or potentially blocking open when a POSIX flag is absent.
+    """
+
+    value = getattr(os, name, None)
+    if type(value) is not int or value == 0:
+        raise InputError(f"host lacks required safe open flag os.{name}")
+    return value
+
+
+def _regular_file_read_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | _required_open_flag("O_CLOEXEC")
+        | _required_open_flag("O_NOFOLLOW")
+        | _required_open_flag("O_NONBLOCK")
+    )
+
+
+def _directory_read_open_flags() -> int:
+    return (
+        os.O_RDONLY
+        | _required_open_flag("O_CLOEXEC")
+        | _required_open_flag("O_DIRECTORY")
+        | _required_open_flag("O_NOFOLLOW")
+    )
+
+
+def _create_only_file_open_flags() -> int:
+    return (
+        os.O_RDWR
+        | os.O_CREAT
+        | os.O_EXCL
+        | _required_open_flag("O_CLOEXEC")
+        | _required_open_flag("O_NOFOLLOW")
+    )
+
+
 class ComparabilityError(ValueError):
     """Well-formed evidence from a different release lane."""
 
@@ -528,8 +569,7 @@ def _digest_bytes(raw: bytes) -> str:
 
 
 def _digest_file(path: Path, label: str) -> str:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = _regular_file_read_open_flags()
     descriptor = -1
     try:
         path_metadata = path.lstat()
@@ -616,8 +656,7 @@ def _rename_noreplace(source: Path, target: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags = _directory_read_open_flags()
     descriptor = os.open(path, flags)
     try:
         os.fsync(descriptor)
@@ -639,8 +678,7 @@ def _write_new_file(
 ) -> int:
     """Create, sync, and return a held read/write descriptor for a child."""
 
-    flags = os.O_RDWR | os.O_CREAT | os.O_EXCL
-    flags |= getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags = _create_only_file_open_flags()
     descriptor = os.open(name, flags, mode, dir_fd=directory_descriptor)
     try:
         _write_all(descriptor, raw)
@@ -1895,8 +1933,7 @@ def _strict_json_payload(raw: bytes, label: str) -> Any:
 
 
 def _read_bounded_regular(path: Path, label: str, maximum: int) -> bytes:
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = _regular_file_read_open_flags()
     descriptor = -1
     try:
         descriptor = os.open(path, flags)
@@ -2835,8 +2872,7 @@ def load_runner_receipt_root(path: Path | str) -> dict[str, Any]:
     """Open every required runner receipt once, without following links."""
 
     root = Path(path)
-    root_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    root_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    root_flags = _directory_read_open_flags()
     root_descriptor = -1
     try:
         path_metadata = root.lstat()
@@ -2854,10 +2890,8 @@ def load_runner_receipt_root(path: Path | str) -> dict[str, Any]:
         raise InputError("runner receipt root: must be a real directory")
     try:
         payloads: list[tuple[str, bytes]] = []
-        directory_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        directory_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
-        file_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        file_flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        directory_flags = _directory_read_open_flags()
+        file_flags = _regular_file_read_open_flags()
         for name in RUNNER_RECEIPT_FILES:
             parts = name.split("/")
             parent_descriptor = os.dup(root_descriptor)
@@ -3026,8 +3060,7 @@ def _require_retained_raw_evidence_budget(
 
 def _snapshot_raw_evidence_archive(path: Path) -> tuple[bytes, str]:
     label = "raw performance evidence archive"
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    flags = _regular_file_read_open_flags()
     descriptor = -1
     try:
         descriptor = os.open(path, flags)
@@ -4560,9 +4593,8 @@ def package_release_performance_evidence(
         payloads=canonical_payloads,
     )
 
+    staging_flags = _directory_read_open_flags()
     staging = Path(tempfile.mkdtemp(prefix=f".{output.name}.staging-", dir=parent))
-    staging_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-    staging_flags |= getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     staging_descriptor = os.open(staging, staging_flags)
     staging_metadata = os.fstat(staging_descriptor)
     held_descriptors: dict[str, int] = {}
@@ -4580,8 +4612,7 @@ def package_release_performance_evidence(
             canonical_payloads,
             runner_receipt_root=runner_receipt_root,
         )
-        raw_flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-        raw_flags |= getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        raw_flags = _regular_file_read_open_flags()
         held_descriptors[PACKAGE_RAW_EVIDENCE_NAME] = os.open(
             PACKAGE_RAW_EVIDENCE_NAME,
             raw_flags,

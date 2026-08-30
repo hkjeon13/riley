@@ -1170,6 +1170,43 @@ class ReleasePerformanceTests(unittest.TestCase):
             with self.assertRaisesRegex(checker.InputError, "regular file"):
                 checker._read_raw_run_paths([fifo])
 
+    def test_open_safety_flags_fail_closed_without_fallbacks(self) -> None:
+        for helper, flags in (
+            (
+                checker._regular_file_read_open_flags,
+                ("O_CLOEXEC", "O_NOFOLLOW", "O_NONBLOCK"),
+            ),
+            (
+                checker._directory_read_open_flags,
+                ("O_CLOEXEC", "O_DIRECTORY", "O_NOFOLLOW"),
+            ),
+            (
+                checker._create_only_file_open_flags,
+                ("O_CLOEXEC", "O_NOFOLLOW"),
+            ),
+        ):
+            for flag in flags:
+                with self.subTest(helper=helper.__name__, flag=flag), mock.patch.object(
+                    checker.os, flag, 0
+                ):
+                    with self.assertRaisesRegex(
+                        checker.InputError, f"os\\.{flag}"
+                    ):
+                        helper()
+
+        source = SCRIPT.read_text(encoding="utf-8")
+        for fallback in (
+            'getattr(os, "O_CLOEXEC", 0)',
+            'getattr(os, "O_NOFOLLOW", 0)',
+            'getattr(os, "O_NONBLOCK", 0)',
+            'getattr(os, "O_DIRECTORY", 0)',
+        ):
+            self.assertNotIn(fallback, source)
+        self.assertLess(
+            source.index("staging_flags = _directory_read_open_flags()"),
+            source.index("staging = Path(tempfile.mkdtemp"),
+        )
+
     def test_cli_refuses_to_overwrite_report(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             fixture = ReleaseFixture(Path(directory))
@@ -1357,9 +1394,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 runner_receipt_root=fixture.runner_receipt_root,
             )
             legacy = checker.replay_raw_evidence_archive(archive)
-            flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
-            flags |= getattr(os, "O_NOFOLLOW", 0)
-            descriptor = os.open(archive, flags)
+            descriptor = os.open(archive, checker._regular_file_read_open_flags())
             try:
                 with mock.patch.object(
                     checker,
@@ -1406,7 +1441,7 @@ class ReleasePerformancePackagingTests(unittest.TestCase):
                 [(str(path), path.read_bytes()) for path in fixture.raw_paths],
                 runner_receipt_root=fixture.runner_receipt_root,
             )
-            descriptor = os.open(archive, os.O_RDONLY | getattr(os, "O_CLOEXEC", 0))
+            descriptor = os.open(archive, checker._regular_file_read_open_flags())
             try:
                 with self.assertRaisesRegex(checker.InputError, "expected bounded regular"):
                     checker.replay_bound_raw_evidence_fd(

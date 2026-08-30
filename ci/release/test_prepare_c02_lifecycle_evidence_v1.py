@@ -7,6 +7,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import prepare_c02_lifecycle_evidence_v1 as prepare
 import provenance_v2_common as common
@@ -156,6 +157,27 @@ class PrepareC02LifecycleEvidenceV1Tests(unittest.TestCase):
                 configuration_profile=self.profile,
             )
         self.assert_reason(raised, "create-only-collision")
+
+    def test_missing_directory_open_flags_fail_before_creating_child(self) -> None:
+        root_fd = common.create_private_evidence_directory(self.root, "evidence root")
+        try:
+            for flag in ("O_DIRECTORY", "O_NOFOLLOW", "O_CLOEXEC"):
+                with self.subTest(flag=flag), mock.patch.object(prepare.common.os, flag, 0):
+                    with self.assertRaises(prepare.LifecycleEvidencePreparationError) as raised:
+                        prepare._new_private_child(root_fd, "source-audit", "source audit directory")
+                self.assert_reason(raised, "missing-open-safety-flag")
+                self.assertFalse((self.root / "source-audit").exists())
+
+        finally:
+            os.close(root_fd)
+
+        source = Path(prepare.__file__).read_text(encoding="utf-8")
+        for fallback in (
+            'getattr(os, "O_CLOEXEC", 0)',
+            'getattr(os, "O_NOFOLLOW", 0)',
+            'getattr(os, "O_DIRECTORY", 0)',
+        ):
+            self.assertNotIn(fallback, source)
 
 
 if __name__ == "__main__":

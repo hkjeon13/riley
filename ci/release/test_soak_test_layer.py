@@ -302,6 +302,20 @@ class RemoteReliabilitySoakRunnerTests(unittest.TestCase):
             "privileged": original.replace("--read-only", "--privileged --read-only", 1),
             "missing-shared-lock-nofollow": original.replace("os.O_NOFOLLOW", "0", 1),
             "missing-shared-lock-nonblock": original.replace("os.O_NONBLOCK", "0", 1),
+            "missing-shared-lock-cloexec": original.replace("os.O_CLOEXEC", "0", 1),
+            "shared-lock-cloexec-fallback": original.replace(
+                "os.O_CLOEXEC", 'getattr(os, "O_CLOEXEC", 0)', 1
+            ),
+            "snapshot-source-cloexec-fallback": original.replace(
+                "source_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CLOEXEC",
+                'source_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)',
+                1,
+            ),
+            "snapshot-destination-cloexec-fallback": original.replace(
+                "    | os.O_CLOEXEC\n)",
+                '    | getattr(os, "O_CLOEXEC", 0)\n)',
+                1,
+            ),
             "missing-shared-lock-fstat": original.replace(
                 "metadata = os.fstat(descriptor)", "metadata = os.stat(lock_path)", 1
             ),
