@@ -115,6 +115,9 @@ class RunRemoteReconstructedRuntimeAssemblyCaptureTests(unittest.TestCase):
             "/proc/$$/task/$$/children",
             "initialize_reconstructed_runtime_assembly_evidence_v1.py",
             'run_python "$evidence_initializer" --evidence-dir',
+            'docker_config_dir="$scratch_dir/docker-config"',
+            '/bin/mkdir --mode=0700 -- "$docker_config_dir"',
+            'export DOCKER_CONFIG="$docker_config_dir"',
             "PINNED_RUNTIME=",
             "reviewed pinned runtime base is not present locally",
             "--print-source-sha256",
@@ -191,6 +194,8 @@ class RunRemoteReconstructedRuntimeAssemblyCaptureTests(unittest.TestCase):
 
     def test_build_export_normalization_create_and_composition_order_is_fixed(self) -> None:
         source = RUNNER.read_text(encoding="utf-8")
+        scratch = source.index("scratch_dir=$(/usr/bin/mktemp -d")
+        docker_config = source.index('export DOCKER_CONFIG="$docker_config_dir"')
         initialization = source.index('run_python "$evidence_initializer" --evidence-dir')
         base_preflight = source.index('docker image inspect "$PINNED_RUNTIME"')
         dockerfile_digest = source.index("dockerfile_sha256=$(verify_static_recipe)")
@@ -208,9 +213,11 @@ class RunRemoteReconstructedRuntimeAssemblyCaptureTests(unittest.TestCase):
         capture = source.index('run_python "$composer" capture', runtime_tree)
         post_inputs = source.index("verify_release_inputs post-capture", capture)
         removal = source.index("docker container rm", post_inputs)
+        self.assertLess(scratch, docker_config)
         self.assertEqual(
             [
                 dockerfile_digest,
+                docker_config,
                 initialization,
                 base_preflight,
                 context,
@@ -231,6 +238,7 @@ class RunRemoteReconstructedRuntimeAssemblyCaptureTests(unittest.TestCase):
             sorted(
                 [
                     dockerfile_digest,
+                    docker_config,
                     initialization,
                     base_preflight,
                     context,

@@ -472,6 +472,13 @@ verify_release_inputs pre-build
 
 scratch_dir=$(/usr/bin/mktemp -d /tmp/riley-reconstructed-runtime-assembly.XXXXXX)
 /bin/chmod 0700 "$scratch_dir"
+# The authenticated child deliberately has no usable HOME.  Docker still needs
+# a writable CLI config directory even for local inspect/build/save operations,
+# so give it one ephemeral owner-only directory below this invocation's
+# verified scratch root.  It is never caller supplied or evidence input.
+docker_config_dir="$scratch_dir/docker-config"
+/bin/mkdir --mode=0700 -- "$docker_config_dir"
+export DOCKER_CONFIG="$docker_config_dir"
 run_python "$evidence_initializer" --evidence-dir "$evidence_dir" >"$scratch_dir/evidence-initialization.json"
 raw_dir="$evidence_dir/raw"
 

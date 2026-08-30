@@ -56,7 +56,10 @@ CPU/static-only mechanism code: it initializes a fresh external `0700` root
 and fixed `raw` child through no-follow directory FDs, rejects source-checkout
 mount aliases, requires the reviewed digest-pinned base to already be local,
 and bounds every raw Docker output before canonical OCI/runtime-tree/capture
-composition. It creates but never starts a network-none container and
+composition. Its intentionally unusable HOME is paired with one fresh
+runner-owned 0700 Docker CLI config child below the private scratch root; that
+child is neither caller input nor evidence and is removed by the same cleanup.
+It creates but never starts a network-none container and
 byte-compares pre/post-copy inspect output. This is not a Docker execution
 attestation, capture receipt, freeze, or qualification result; no remote Docker
 or GPU capture has been run for this worklist update.
