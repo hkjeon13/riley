@@ -216,6 +216,114 @@ class RuntimeImageExportNormalizationTests(unittest.TestCase):
         os.chmod(archive, 0o600)
         return Fixture(inspect=self._write_inspect(name, image_id), archive=archive, image_id=image_id)
 
+    def _write_docker28_hybrid(self, name: str = "docker28", *, fault: str | None = None) -> Fixture:
+        """Write the narrow Docker 28 OCI-plus-legacy-config export profile."""
+
+        layer = b"Docker 28 OCI source layer bytes\n"
+        config_document = {
+            "architecture": "amd64",
+            "config": {"Entrypoint": ["/opt/riley/bin/riley"]},
+            "created": "2026-08-30T10:00:00Z",
+            "os": "linux",
+            "rootfs": {"type": "layers", "diff_ids": []},
+        }
+        config = _raw_json(config_document)
+        image_id = _digest(config)
+        layer_descriptor = {
+            "mediaType": "application/vnd.oci.image.layer.v1.tar+gzip",
+            "digest": _digest(layer),
+            "size": len(layer),
+        }
+        manifest = _raw_json(
+            {
+                "schemaVersion": 2,
+                "mediaType": oci_inputs.OCI_MANIFEST_MEDIA_TYPE,
+                "config": {
+                    "mediaType": oci_inputs.OCI_CONFIG_MEDIA_TYPE,
+                    "digest": image_id,
+                    "size": len(config),
+                },
+                "layers": [layer_descriptor],
+            }
+        )
+        index = _raw_json(
+            {
+                "schemaVersion": 2,
+                "mediaType": oci_inputs.OCI_INDEX_MEDIA_TYPE,
+                "manifests": [
+                    {
+                        "mediaType": oci_inputs.OCI_MANIFEST_MEDIA_TYPE,
+                        "digest": _digest(manifest),
+                        "size": len(manifest),
+                        "platform": dict(normalize.PLATFORM),
+                    }
+                ],
+            }
+        )
+        compatibility = {
+            "id": "1" * 64,
+            "created": config_document["created"],
+            "container_config": {},
+            "config": dict(config_document["config"]),
+            "architecture": "amd64",
+            "os": "linux",
+        }
+        sidecar = {
+            "Config": "blobs/sha256/" + image_id[7:],
+            "RepoTags": None,
+            "Layers": ["blobs/sha256/" + layer_descriptor["digest"][7:]],
+            "LayerSources": {layer_descriptor["digest"]: dict(layer_descriptor)},
+        }
+        if fault == "sidecar-config":
+            sidecar["Config"] = "blobs/sha256/" + "f" * 64
+        elif fault == "sidecar-layers":
+            sidecar["Layers"] = []
+        elif fault == "sidecar-layer-sources":
+            sidecar["LayerSources"] = {}
+        elif fault == "broken-parent":
+            compatibility["parent"] = "f" * 64
+        elif fault == "cycle":
+            compatibility["parent"] = compatibility["id"]
+        elif fault == "config":
+            compatibility["config"] = {"Entrypoint": ["/wrong"]}
+        if fault == "binary":
+            compatibility_raw = b"not JSON"
+        elif fault == "non-object":
+            compatibility_raw = b"[]"
+        elif fault == "oversized":
+            compatibility_raw = b"x" * (normalize.MAX_DOCKER_SAVE_COMPATIBILITY_BLOB_BYTES + 1)
+        else:
+            compatibility_raw = _raw_json(compatibility)
+        compatibility_name = _digest(compatibility_raw)[7:]
+        if fault == "blob-digest":
+            compatibility_name = "f" * 64
+
+        archive = self.base / f"{name}.tar"
+        with tarfile.open(archive, mode="w", format=tarfile.USTAR_FORMAT) as output:
+            self._add_directory(output, "blobs")
+            self._add_directory(output, "blobs/sha256")
+            self._add_file(output, "oci-layout", _raw_json({"imageLayoutVersion": "1.0.0"}))
+            self._add_file(output, "index.json", index)
+            self._add_file(output, "blobs/sha256/" + _digest(manifest)[7:], manifest)
+            self._add_file(output, "blobs/sha256/" + image_id[7:], config)
+            self._add_file(output, "blobs/sha256/" + layer_descriptor["digest"][7:], layer)
+            self._add_file(output, "manifest.json", _raw_json([sidecar]))
+            self._add_file(output, "blobs/sha256/" + compatibility_name, compatibility_raw)
+            if fault == "repositories":
+                self._add_file(output, "repositories", b"{}")
+            if fault == "extra-count":
+                extra_raw = _raw_json(
+                    {
+                        "id": "2" * 64,
+                        "created": config_document["created"],
+                        "container_config": {},
+                        "os": "linux",
+                    }
+                )
+                self._add_file(output, "blobs/sha256/" + _digest(extra_raw)[7:], extra_raw)
+        os.chmod(archive, 0o600)
+        return Fixture(inspect=self._write_inspect(name, image_id), archive=archive, image_id=image_id)
+
     def _prepare(self, fixture: Fixture, root: Path, arm: str = "a") -> dict[str, object]:
         return normalize.prepare_reconstructed_runtime_image_export_oci_normalization(
             root,
@@ -295,6 +403,10 @@ class RuntimeImageExportNormalizationTests(unittest.TestCase):
             schema["$defs"]["imageExportArchiveDescriptor"]["allOf"][1]["properties"]["byte_length"]["maximum"],
             normalize.MAX_IMAGE_EXPORT_ARCHIVE_BYTES,
         )
+        self.assertIn(
+            normalize.SOURCE_LAYOUT_OCI_DOCKER_SAVE_COMPATIBILITY_BLOBS,
+            schema["properties"]["source_layout"]["enum"],
+        )
 
     def test_accepts_clean_and_nonempty_opaque_sidecar_oci_exports_without_exporting_sidecars(self) -> None:
         clean = self._write_oci("clean")
@@ -309,6 +421,45 @@ class RuntimeImageExportNormalizationTests(unittest.TestCase):
             names = {member.name.rstrip("/") for member in archive.getmembers()}
         self.assertNotIn("manifest.json", names)
         self.assertNotIn("repositories", names)
+
+    def test_accepts_only_the_bound_docker28_compatibility_blob_profile(self) -> None:
+        fixture = self._write_docker28_hybrid()
+        root = self.base / "docker28-normalization"
+        receipt = self._prepare(fixture, root)
+        self.assertEqual(receipt["source_layout"], normalize.SOURCE_LAYOUT_OCI_DOCKER_SAVE_COMPATIBILITY_BLOBS)
+        self.assertEqual(normalize.verify_reconstructed_runtime_image_export_oci_normalization(root), receipt)
+        with tarfile.open(root / normalize.NORMALIZED_DIRECTORY_NAME / normalize.OCI_ARCHIVE_NAME, mode="r:") as archive:
+            names = {member.name.rstrip("/") for member in archive.getmembers()}
+        self.assertNotIn("manifest.json", names)
+        downstream = oci_inputs.prepare_reconstructed_runtime_oci_inputs(
+            self.base / "docker28-oci-inputs",
+            image_inspect=root / normalize.RAW_DIRECTORY_NAME / normalize.IMAGE_INSPECT_NAME,
+            oci_archive=root / normalize.NORMALIZED_DIRECTORY_NAME / normalize.OCI_ARCHIVE_NAME,
+            reconstruction_id="a",
+        )
+        self.assertEqual(downstream["image_id"], fixture.image_id)
+
+    def test_rejects_unbound_or_malformed_docker28_compatibility_blobs(self) -> None:
+        cases = {
+            "sidecar-config": "docker-save-compatibility-sidecar-mismatch",
+            "sidecar-layers": "docker-save-compatibility-sidecar-mismatch",
+            "sidecar-layer-sources": "docker-save-compatibility-sidecar-mismatch",
+            "blob-digest": "docker-save-compatibility-blob-digest-mismatch",
+            "binary": "invalid-json",
+            "non-object": "invalid-docker-save-compatibility-blob",
+            "oversized": "image-export-member-size",
+            "repositories": "docker-save-compatibility-sidecar-mismatch",
+            "broken-parent": "docker-save-compatibility-chain-mismatch",
+            "cycle": "docker-save-compatibility-chain-mismatch",
+            "config": "docker-save-compatibility-config-mismatch",
+            "extra-count": "docker-save-compatibility-blob-count",
+        }
+        for fault, reason in cases.items():
+            with self.subTest(fault=fault):
+                fixture = self._write_docker28_hybrid(fault, fault=fault)
+                root = self.base / f"docker28-{fault}-normalization"
+                self.assert_reason(reason, lambda: self._prepare(fixture, root))
+                self.assertFalse((root / normalize.NORMALIZATION_NAME).exists())
 
     def test_rejects_missing_referenced_oci_blob_before_an_output_receipt(self) -> None:
         fixture = self._write_oci("missing-oci-blob", omit_layer_blob=True)

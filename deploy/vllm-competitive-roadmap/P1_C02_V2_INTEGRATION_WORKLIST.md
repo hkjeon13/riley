@@ -142,12 +142,20 @@ The separate source-only
 Docker 28 exporter portability boundary without widening OCI-inputs v1 or
 assembly-capture v1. It snapshots an already-produced inspect response and
 runtime image export tar into a new private root, strict-discriminates a one-image
-legacy Docker-save layout from clean OCI layout or OCI layout with bounded,
-opaque root compatibility sidecars,
+legacy Docker-save layout from clean OCI layout, OCI layout with bounded opaque
+root compatibility sidecars, or the separately named Docker-28/Moby hybrid
+profile,
 and uses only the selected config/layer bytes to write a deterministic clean
 OCI USTAR plus derived layout/index/manifest/config snapshots. It requires
 inspect ID = raw config SHA-256, linux/amd64, selected layer descriptor
-hash/size closure, and legacy rootfs diff-id order. PAX/GNU/sparse,
+hash/size closure, and legacy rootfs diff-id order. The hybrid profile is not
+a general unreferenced-blob allowance: it requires the exact one-row root
+`manifest.json` compatibility binding for the selected config, ordered layers,
+and `LayerSources`, no `repositories` sidecar, plus exactly one small
+SHA-addressed strict-JSON legacy config record per selected layer. Those records
+must form one acyclic non-branching parent chain whose full head binds the
+selected linux/amd64 config. Only its selected OCI config/layers are emitted in
+the canonical output. PAX/GNU/sparse,
 links/special files, traversal, duplicate/unknown closure, and an oversized
 zero trailer are rejected before a tar parser receives extension data; replay
 also requires exact USTAR headers, member order, metadata, zero padding, and

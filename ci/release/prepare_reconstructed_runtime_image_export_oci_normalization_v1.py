@@ -59,7 +59,13 @@ NOT_ESTABLISHED = "not-established"
 SOURCE_LAYOUT_LEGACY = "docker-save-v1"
 SOURCE_LAYOUT_OCI = "oci-layout-v1"
 SOURCE_LAYOUT_OCI_SIDECARS = "oci-layout-v1-with-opaque-sidecars"
-SOURCE_LAYOUTS = {SOURCE_LAYOUT_LEGACY, SOURCE_LAYOUT_OCI, SOURCE_LAYOUT_OCI_SIDECARS}
+SOURCE_LAYOUT_OCI_DOCKER_SAVE_COMPATIBILITY_BLOBS = "oci-layout-v1-with-docker-save-compatibility-blobs"
+SOURCE_LAYOUTS = {
+    SOURCE_LAYOUT_LEGACY,
+    SOURCE_LAYOUT_OCI,
+    SOURCE_LAYOUT_OCI_SIDECARS,
+    SOURCE_LAYOUT_OCI_DOCKER_SAVE_COMPATIBILITY_BLOBS,
+}
 
 MAX_RECEIPT_BYTES = common.DEFAULT_MAX_JSON_BYTES
 # The normalizer's OCI output is intentionally bounded to the same maximum
@@ -73,6 +79,11 @@ MAX_NORMALIZED_OCI_ARCHIVE_BYTES = MAX_USTAR_REGULAR_MEMBER_BYTES
 MAX_IMAGE_EXPORT_ARCHIVE_BYTES = MAX_NORMALIZED_OCI_ARCHIVE_BYTES + 64 * 1024 * 1024
 MAX_ARCHIVE_MEMBER_BYTES = MAX_USTAR_REGULAR_MEMBER_BYTES
 MAX_ARCHIVE_MEMBERS = 4096
+# Docker 28 may retain one small legacy config record per selected OCI layer in
+# its otherwise OCI-layout image-save export.  This is a deliberately narrow
+# compatibility profile, not a general admission of unreferenced OCI blobs.
+MAX_DOCKER_SAVE_COMPATIBILITY_BLOBS = 128
+MAX_DOCKER_SAVE_COMPATIBILITY_BLOB_BYTES = MAX_RECEIPT_BYTES
 MAX_CANONICAL_TAR_TRAILER_BYTES = 20 * 512
 TAR_BLOCK_BYTES = 512
 TAR_RECORD_BYTES = 20 * TAR_BLOCK_BYTES
@@ -448,6 +459,175 @@ def _parse_config(config_raw: bytes, expected_image_id: str, label: str) -> dict
     return config
 
 
+def _legacy_config_id(value: Any, label: str) -> str:
+    if type(value) is not str or SHA256_RE.fullmatch(value) is None or value == "0" * 64:
+        _fail("invalid-docker-save-compatibility-blob", f"{label} must be a non-zero lowercase SHA-256 identity")
+    return value
+
+
+def _validate_docker_save_compatibility_sidecar(
+    stream: BinaryIO,
+    member: ArchiveMember,
+    *,
+    config_digest: str,
+    layers: Sequence[SelectedLayer],
+) -> None:
+    """Bind Docker's root compatibility manifest to the selected OCI closure."""
+
+    _raw, document = _read_json_member(stream, member, "Docker-save OCI compatibility manifest")
+    if not isinstance(document, list) or len(document) != 1 or not isinstance(document[0], dict):
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save OCI compatibility manifest must contain one image")
+    row = document[0]
+    if set(row) != {"Config", "RepoTags", "Layers", "LayerSources"}:
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save OCI compatibility manifest has unexpected fields")
+    if row["Config"] != _blob_path(config_digest):
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility Config must bind the selected OCI config")
+    repo_tags = row["RepoTags"]
+    if repo_tags is not None and (not isinstance(repo_tags, list) or any(type(tag) is not str for tag in repo_tags)):
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility RepoTags must be null or a string array")
+    expected_layer_paths = [_blob_path(layer.digest) for layer in layers]
+    if row["Layers"] != expected_layer_paths:
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility Layers must bind selected OCI layers in order")
+    layer_sources = row["LayerSources"]
+    expected_digests = {layer.digest for layer in layers}
+    if not isinstance(layer_sources, dict) or set(layer_sources) != expected_digests:
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility LayerSources must exactly close selected OCI layers")
+    for index, layer in enumerate(layers):
+        descriptor = layer_sources[layer.digest]
+        if not isinstance(descriptor, dict) or set(descriptor) != {"mediaType", "digest", "size"}:
+            _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility LayerSources descriptor has unexpected fields")
+        media_type, digest, byte_length = _parse_oci_descriptor(
+            descriptor,
+            f"Docker-save compatibility LayerSources[{index}]",
+            media_types=runtime_oci.OCI_LAYER_MEDIA_TYPES,
+        )
+        if (media_type, digest, byte_length) != (layer.media_type, layer.digest, layer.member.byte_length):
+            _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility LayerSources differs from selected OCI layers")
+
+
+def _validate_docker_save_compatibility_blobs(
+    stream: BinaryIO,
+    files: Mapping[str, ArchiveMember],
+    extra_blob_paths: set[str],
+    *,
+    config: Mapping[str, Any],
+    config_digest: str,
+    layers: Sequence[SelectedLayer],
+) -> None:
+    """Admit only Docker 28's bounded legacy-config sidecar profile.
+
+    Docker's OCI image-save output can retain a root compatibility manifest and
+    one hash-addressed legacy configuration record for each selected layer.
+    These records are retained in the raw archive descriptor but are never
+    copied into the canonical OCI output.  Their shape is verified here so an
+    arbitrary unreferenced blob cannot enter this special profile.
+    """
+
+    if len(layers) > MAX_DOCKER_SAVE_COMPATIBILITY_BLOBS or len(extra_blob_paths) != len(layers):
+        _fail(
+            "docker-save-compatibility-blob-count",
+            "Docker-save compatibility blobs must contain exactly one bounded record per selected layer",
+        )
+    sidecar = files.get(OCI_MANIFEST_NAME)
+    if sidecar is None:
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility blobs require a root manifest.json sidecar")
+    if "repositories" in files:
+        _fail("docker-save-compatibility-sidecar-mismatch", "Docker-save compatibility blobs do not admit a repositories sidecar")
+    _validate_docker_save_compatibility_sidecar(
+        stream,
+        sidecar,
+        config_digest=config_digest,
+        layers=layers,
+    )
+
+    nodes: dict[str, dict[str, Any]] = {}
+    full_head_ids: list[str] = []
+    for path in sorted(extra_blob_paths):
+        match = OCI_BLOB_PATH_RE.fullmatch(path)
+        assert match is not None
+        member = files[path]
+        raw, actual_digest = _read_member(
+            stream,
+            member,
+            f"Docker-save compatibility blob {path}",
+            maximum_bytes=MAX_DOCKER_SAVE_COMPATIBILITY_BLOB_BYTES,
+            retain=True,
+        )
+        assert raw is not None
+        if actual_digest != match.group(1):
+            _fail("docker-save-compatibility-blob-digest-mismatch", "Docker-save compatibility blob name must equal its SHA-256")
+        document = _common(
+            lambda raw=raw, path=path: common.parse_strict_json(
+                raw,
+                f"Docker-save compatibility blob {path}",
+                maximum_bytes=MAX_DOCKER_SAVE_COMPATIBILITY_BLOB_BYTES,
+                require_object=False,
+            )
+        )
+        if not isinstance(document, dict):
+            _fail("invalid-docker-save-compatibility-blob", "Docker-save compatibility blob must be a JSON object")
+        base_fields = {"id", "created", "container_config", "os"}
+        full_fields = base_fields | {"architecture", "config"}
+        fields = set(document)
+        has_full_head = "architecture" in document or "config" in document
+        allowed = full_fields if has_full_head else base_fields
+        if fields != allowed and fields != allowed | {"parent"}:
+            _fail("invalid-docker-save-compatibility-blob", "Docker-save compatibility blob has unexpected fields")
+        identity = _legacy_config_id(document.get("id"), "Docker-save compatibility blob.id")
+        if identity in nodes:
+            _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility blob identities must be unique")
+        if type(document["created"]) is not str or not document["created"]:
+            _fail("invalid-docker-save-compatibility-blob", "Docker-save compatibility blob.created must be a nonempty string")
+        if document["os"] != PLATFORM["os"] or not isinstance(document["container_config"], dict):
+            _fail("invalid-docker-save-compatibility-blob", "Docker-save compatibility blob must describe linux and an object container_config")
+        if "parent" in document:
+            _legacy_config_id(document["parent"], "Docker-save compatibility blob.parent")
+        if has_full_head:
+            if document["architecture"] != PLATFORM["architecture"] or not isinstance(document["config"], dict):
+                _fail("invalid-docker-save-compatibility-blob", "Docker-save compatibility head must describe linux/amd64 with an object config")
+            full_head_ids.append(identity)
+        nodes[identity] = document
+
+    if len(full_head_ids) != 1:
+        _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility blobs must contain exactly one full head")
+    selected_created = config.get("created")
+    selected_settings = config.get("config")
+    head = nodes[full_head_ids[0]]
+    if type(selected_created) is not str or not isinstance(selected_settings, dict):
+        _fail("docker-save-compatibility-config-mismatch", "selected OCI config lacks Docker-save compatibility binding fields")
+    if head["created"] != selected_created or any(
+        name not in head["config"] or head["config"][name] != value for name, value in selected_settings.items()
+    ):
+        _fail("docker-save-compatibility-config-mismatch", "Docker-save compatibility head does not bind selected OCI configuration")
+
+    roots = [identity for identity, node in nodes.items() if "parent" not in node]
+    if len(roots) != 1:
+        _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility blobs must have one parent-chain root")
+    children: dict[str, str] = {}
+    for identity, node in nodes.items():
+        parent = node.get("parent")
+        if parent is None:
+            continue
+        if parent not in nodes or parent in children:
+            _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility parents must form one non-branching chain")
+        children[parent] = identity
+    leaves = set(nodes) - set(children)
+    if len(leaves) != 1 or full_head_ids[0] not in leaves:
+        _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility full head must be the only chain leaf")
+    visited: set[str] = set()
+    current = full_head_ids[0]
+    while True:
+        if current in visited:
+            _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility parent chain must be acyclic")
+        visited.add(current)
+        parent = nodes[current].get("parent")
+        if parent is None:
+            break
+        current = parent
+    if visited != set(nodes) or current != roots[0]:
+        _fail("docker-save-compatibility-chain-mismatch", "Docker-save compatibility parent chain must be connected")
+
+
 def _parse_legacy_docker_save(
     stream: BinaryIO,
     inventory: ArchiveInventory,
@@ -680,7 +860,8 @@ def _parse_oci_layout(
         if files[path].byte_length != byte_length:
             _fail("oci-descriptor-size-mismatch", "OCI runtime image export layer size differs from its descriptor")
     actual_blob_paths = {name for name in files if OCI_BLOB_PATH_RE.fullmatch(name) is not None}
-    if actual_blob_paths != expected_blob_paths:
+    extra_blob_paths = actual_blob_paths - expected_blob_paths
+    if expected_blob_paths - actual_blob_paths:
         _fail("oci-blob-closure-mismatch", "OCI runtime image export blobs must exactly close the selected image")
     config_path = _blob_path(config_digest)
     if config_path not in files or files[config_path].byte_length != config_size:
@@ -695,7 +876,7 @@ def _parse_oci_layout(
     assert config_raw is not None
     if "sha256:" + config_actual != config_digest:
         _fail("oci-descriptor-digest-mismatch", "OCI runtime image export config digest differs from its descriptor")
-    _parse_config(config_raw, expected_image_id, "OCI runtime image export config blob")
+    config = _parse_config(config_raw, expected_image_id, "OCI runtime image export config blob")
     if config_digest != expected_image_id:
         _fail("runtime-image-id-mismatch", "OCI runtime image export config descriptor differs from raw image inspect Id")
     for index, layer in enumerate(selected_layers):
@@ -708,7 +889,18 @@ def _parse_oci_layout(
         )
         if "sha256:" + actual != layer.digest:
             _fail("oci-descriptor-digest-mismatch", "OCI runtime image export layer digest differs from its descriptor")
-    source_layout = SOURCE_LAYOUT_OCI_SIDECARS if allowed_sidecars & set(files) else SOURCE_LAYOUT_OCI
+    if extra_blob_paths:
+        _validate_docker_save_compatibility_blobs(
+            stream,
+            files,
+            extra_blob_paths,
+            config=config,
+            config_digest=config_digest,
+            layers=selected_layers,
+        )
+        source_layout = SOURCE_LAYOUT_OCI_DOCKER_SAVE_COMPATIBILITY_BLOBS
+    else:
+        source_layout = SOURCE_LAYOUT_OCI_SIDECARS if allowed_sidecars & set(files) else SOURCE_LAYOUT_OCI
     return SelectedImage(
         source_layout=source_layout,
         config_raw=config_raw,

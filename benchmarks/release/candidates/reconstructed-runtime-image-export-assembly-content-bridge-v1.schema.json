@@ -114,7 +114,7 @@
         "receipt": {"$ref": "#/$defs/normalizationReceipt"},
         "reconstruction_id": {"enum": ["a", "b"]},
         "image_id": {"$ref": "#/$defs/ociDigest"},
-        "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars"]},
+        "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars", "oci-layout-v1-with-docker-save-compatibility-blobs"]},
         "image_inspect": {"$ref": "#/$defs/normalizationImageInspect"},
         "image_export_archive": {"$ref": "#/$defs/imageExportArchive"},
         "oci_archive": {"$ref": "#/$defs/normalizationOciArchive"},

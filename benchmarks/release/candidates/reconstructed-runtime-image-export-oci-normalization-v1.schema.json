@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://riley.invalid/benchmarks/release/candidates/reconstructed-runtime-image-export-oci-normalization-v1.schema.json",
   "title": "Reconstructed runtime image-export OCI normalization v1",
-  "description": "A source-only, per-reconstruction closure for one already-captured runtime image-export tar and raw runtime image inspect response. The input can be a legacy Docker-save layout or an OCI image layout, with optional opaque root compatibility sidecars. It validates and retains the selected config/layer content, then writes deterministic canonical OCI image-layout USTAR bytes. It does not establish any Docker export/build execution, same-invocation capture, source/bundle/image provenance, independence, runtime/GPU/service behavior, rollback, freeze, or qualification.",
+  "description": "A source-only, per-reconstruction closure for one already-captured runtime image-export tar and raw runtime image inspect response. The input can be a legacy Docker-save layout, a clean OCI image layout with optional opaque root compatibility sidecars, or the narrowly verified Docker 28 OCI-plus-legacy-config compatibility profile. It validates and retains the selected config/layer content, then writes deterministic canonical OCI image-layout USTAR bytes. It does not establish any Docker export/build execution, same-invocation capture, source/bundle/image provenance, independence, runtime/GPU/service behavior, rollback, freeze, or qualification.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -41,7 +41,7 @@
     "reconstruction_id": {"enum": ["a", "b"]},
     "raw_archive_format": {"const": "runtime-image-export-tar.v1"},
     "normalized_archive_format": {"const": "oci-image-layout-tar.v1"},
-    "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars"]},
+    "source_layout": {"enum": ["docker-save-v1", "oci-layout-v1", "oci-layout-v1-with-opaque-sidecars", "oci-layout-v1-with-docker-save-compatibility-blobs"]},
     "platform": {"$ref": "#/$defs/platform"},
     "image_id": {"$ref": "#/$defs/ociDigest"},
     "content_binding": {"const": "validated"},
