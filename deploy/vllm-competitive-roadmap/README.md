@@ -178,6 +178,12 @@ known limitations
 
 check_soak_v2_receipt.py와 check_rc3_rollback_structural_precheck.py는 각각 completed raw soak v4/v5와 completed rollback terminal provenance v4를 held private-FD replay로 읽는 admission diagnostic이다. 두 output 모두 정확히 bound/not-run, authority raw-structural-only이며 producer/lifecycle/rollback success, semantic receipt, candidate freeze, Gate E 또는 qualification을 주장하지 않는다. rollback precheck CLI/API는 python3 -B 또는 PYTHONDONTWRITEBYTECODE=1 없이 evidence를 읽지 않으며, embedding caller가 import 직전 bytecode-write flag를 바꾼 경우도 거부한다. post-link fsync ambiguity 뒤에도 visible completion pair가 남을 수 있으므로, future semantic checker와 outer C02/RC3 finalizer는 이 두 schema/version을 semantic input으로 수용해서는 안 된다.
 
+### Reconstructed runtime A/B content materialization
+
+`prepare_reconstructed_runtime_a_b_materialization_v1.py`는 shared RC2 source/repro closure와 distinct A/B OCI·assembly-capture closure를 held FD로 모두 다시 replay한 뒤, binary·bundle과 verified `/opt/riley` runtime-tree summary의 A/B content equality만 `bound/not-run` receipt로 기록한다. output root는 fresh `0700`, receipt 하나는 create-only `0600`이며 root path overlap/inode alias, arm swap, output drift와 extra leaf를 거절한다. arm별 reconstruction-ID OCI label 때문에 image ID/config/manifest/archive가 다를 수 있으므로 그것들은 관측값일 뿐 equality 조건이 아니다. 이 결과는 baseline/freeze/rollback/Gate E/qualification input도, Docker/image-export 실행·same-invocation·capture independence·source/bundle→image provenance도 아니다. 그 승격은 future authenticated same-stack lineage producer에 남겨 둔다.
+
+full replay는 upstream PR16 checker의 `tomllib` 때문에 Python 3.11+가 필요하다. 현재 remote host의 3.10에서는 fail-closed하며, repository CPU-only test는 wrapper의 FD/receipt contract만 검증한다. actual captured-evidence replay 전에는 pinned 3.11+ runtime을 별도로 준비해야 한다.
+
 ### RC3 rollback finalizer normal-return receipt
 
 `write_rc3_rollback_finalizer_receipt_v1.py`와 `rc3-rollback-finalizer-receipt-v1.schema.json`은 public path replayer가 아니라 caller-held root EX/switch EX 안의 private continuation이다. fixed v3/v4 finalizer가 **이번 invocation에서** 정상 반환한 typed closure만 받아 static preparation, candidate/source join의 complete consumed-path inventory, candidate/rollback phase, transaction, fixed request와 v3/v4 descriptor를 다시 비교한다. 첫 receipt leaf 전에는 private operational replay를 failure-only veto로 실행해 typed v3/v4/transaction closure와 cross-bind한 뒤 fixed receipt와 paired marker를 create-only로 낸다. veto diagnostic은 disk나 receipt JSON에 남지 않으며, status는 `completed/not-run`, authority는 `raw-finalizer-normal-return-only`뿐이다.

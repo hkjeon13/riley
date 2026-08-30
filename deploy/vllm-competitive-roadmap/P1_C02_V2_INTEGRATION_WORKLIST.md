@@ -186,6 +186,28 @@ source/bundle-to-image provenance, A/B independence, image equality,
 service/GPU execution, rollback, freeze, historical distribution, or
 qualification.
 
+The next narrow consumer is now landed as
+`ci/release/prepare_reconstructed_runtime_a_b_materialization_v1.py` with
+`benchmarks/release/candidates/reconstructed-runtime-a-b-materialization-v1.schema.json`.
+It opens one RC2 source root, one PR16 A/B reproducibility root, distinct A/B
+runtime-OCI roots, and distinct A/B assembly-capture roots once through held
+descriptors; lexical overlap and every root-inode alias are rejected. It
+replays each arm capture against the shared source/repro closure, then records
+only binary `(sha256, byte_length)`, bundle `(sha256, byte_length)`, and the
+already verified `/opt/riley` tree `(sha256, entry_count, byte_length)` A/B
+equality in a fresh receipt-only `bound/not-run` root. It observes each arm's
+OCI image ID and descriptors but intentionally does **not** require them to
+match: the reviewed assembly recipe embeds the arm-specific reconstruction ID
+in image configuration. The result is not a reconstructed-baseline manifest,
+freeze/rollback/qualification input, execution attestation, or proof of
+same-invocation or independently produced runtime captures. A later
+authenticated same-stack lineage contract is still required before any
+source/bundle-to-image or runtime execution boundary can be promoted.
+The delegated PR16/capture replay requires Python 3.11+ (`tomllib`); the
+current remote Python 3.10 host therefore fails a full materialization closed
+until that pinned runtime prerequisite is provisioned. Its local CPU-only
+wrapper tests do not substitute for a full captured-evidence replay.
+
 ## Boundary to preserve
 
 The v2 raw binder returns only `status: "bound"` and
@@ -1028,8 +1050,10 @@ runtime configuration field or a trace counter.
    closures, the narrow held-FD cross-root content bridge, A/B reproducibility
    closure, static source-free runtime assembly recipe, and per-arm raw
    assembly/capture structural receipt; retain their
-   `prepared/not-run`/`bound/not-run` scope until an
-   explicit A/B materializer consumes two independently produced captures.
+   `prepared/not-run`/`bound/not-run` scope until the landed held-FD A/B
+   content materializer replays both captures; that receipt still retains all
+   execution, same-invocation, and capture-independence claims as
+   `not-established` until a future authenticated lineage producer exists.
 7. Land semantic soak/rollback replay and outer qualification v2-only policy.
 8. Freeze only the clean source revision after all mechanism tests pass; then
    capture candidate evidence on the remote GPU host.
