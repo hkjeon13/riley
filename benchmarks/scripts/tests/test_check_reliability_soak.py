@@ -741,6 +741,187 @@ class ReliabilitySoakCheckerTests(unittest.TestCase):
         self.assertRegex(runtime["launcher_receipt_sha256"], r"^[0-9a-f]{64}$")
         self.assertRegex(runtime["release_runtime_closure_sha256"], r"^[0-9a-f]{64}$")
 
+    def test_held_fd_streaming_raw_replay_matches_legacy_without_legacy_calls(self) -> None:
+        """The Gate E path must not reopen or fully buffer the raw archive."""
+
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        raw_evidence = Path(directory.name) / "bound-soak.tar"
+        contract = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            contract,
+        ):
+            expected = checker.evaluate(
+                fixture.manifest_path,
+                fixture.run_directory,
+                **fixture.trusted_arguments(),
+            )
+            self.assertTrue(expected["passed"], expected)
+            checker.package_raw_evidence(
+                fixture.manifest_path,
+                fixture.run_directory,
+                raw_evidence,
+                **fixture.trusted_arguments(),
+            )
+            raw = raw_evidence.read_bytes()
+            raw_sha256 = hashlib.sha256(raw).hexdigest()
+            raw_fd = os.open(raw_evidence, os.O_RDONLY)
+            try:
+                with mock.patch.object(
+                    checker,
+                    "evaluate",
+                    side_effect=AssertionError("legacy evaluate must not be called"),
+                ), mock.patch.object(
+                    checker,
+                    "replay_raw_evidence_archive",
+                    side_effect=AssertionError("legacy raw replay must not be called"),
+                ):
+                    replay = checker.replay_bound_raw_evidence_fd(
+                        raw_fd,
+                        expected_sha256=raw_sha256,
+                        expected_byte_length=len(raw),
+                        correctness_golden_raw=fixture.correctness_golden_path.read_bytes(),
+                        native_correctness_report_raw=(
+                            fixture.native_correctness_report_path.read_bytes()
+                        ),
+                    )
+                self.assertEqual(replay["report"], expected)
+                validated = checker.validate_bound_reliability_soak_evidence(
+                    expected,
+                    raw_fd,
+                    correctness_golden_raw=fixture.correctness_golden_path.read_bytes(),
+                    native_correctness_report_raw=(
+                        fixture.native_correctness_report_path.read_bytes()
+                    ),
+                    source_revision=fixture.source["git_commit"],
+                    source_archive_sha256=fixture.source["source_archive_sha256"],
+                    release_binary_sha256=fixture.source["binary_sha256"],
+                    release_image_id="sha256:" + fixture.source["image_sha256"],
+                    candidate_id="riley-0.1.0-rc1",
+                    correctness_golden_sha256=hashlib.sha256(
+                        fixture.correctness_golden_path.read_bytes()
+                    ).hexdigest(),
+                    native_correctness_report_sha256=hashlib.sha256(
+                        fixture.native_correctness_report_path.read_bytes()
+                    ).hexdigest(),
+                    raw_evidence_sha256=raw_sha256,
+                    raw_evidence_byte_length=len(raw),
+                    model_tree_sha256=fixture.source["model_sha256"],
+                )
+            finally:
+                os.close(raw_fd)
+        self.assertEqual(validated["report"], expected)
+
+    def test_held_fd_streaming_rejects_bound_length_before_archive_parse(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            raw_path = Path(temporary) / "raw.tar"
+            raw_path.write_bytes(b"not-a-canonical-archive")
+            raw_fd = os.open(raw_path, os.O_RDONLY)
+            try:
+                with self.assertRaises(checker.InputError) as raised:
+                    checker.replay_bound_raw_evidence_fd(
+                        raw_fd,
+                        expected_sha256=hashlib.sha256(raw_path.read_bytes()).hexdigest(),
+                        expected_byte_length=raw_path.stat().st_size + 1,
+                        correctness_golden_raw=b"{}",
+                        native_correctness_report_raw=b"{}",
+                    )
+            finally:
+                os.close(raw_fd)
+        self.assertIn("length differs", str(raised.exception))
+
+    def test_held_fd_streaming_rejects_noncanonical_checksum_manifest(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        original = Path(directory.name) / "original.tar"
+        mutated = Path(directory.name) / "mutated.tar"
+        contract = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            contract,
+        ):
+            checker.package_raw_evidence(
+                fixture.manifest_path,
+                fixture.run_directory,
+                original,
+                **fixture.trusted_arguments(),
+            )
+            payloads = read_raw_tar(original)
+            payloads["SHA256SUMS"] = b"0" * 64 + b"  events.jsonl\n"
+            write_raw_tar(mutated, payloads)
+            raw = mutated.read_bytes()
+            raw_fd = os.open(mutated, os.O_RDONLY)
+            try:
+                with self.assertRaises(checker.InputError) as raised:
+                    checker.replay_bound_raw_evidence_fd(
+                        raw_fd,
+                        expected_sha256=hashlib.sha256(raw).hexdigest(),
+                        expected_byte_length=len(raw),
+                        correctness_golden_raw=fixture.correctness_golden_path.read_bytes(),
+                        native_correctness_report_raw=(
+                            fixture.native_correctness_report_path.read_bytes()
+                        ),
+                    )
+            finally:
+                os.close(raw_fd)
+        self.assertIn("SHA256SUMS", str(raised.exception))
+
+    def test_held_fd_streaming_rejects_oversized_event_line_without_buffering_it(self) -> None:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        fixture = SoakFixture(Path(directory.name))
+        original = Path(directory.name) / "original.tar"
+        mutated = Path(directory.name) / "oversized-event.tar"
+        contract = checker._normalized_manifest_sha256(fixture.manifest)
+        with mock.patch.object(
+            checker,
+            "REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256",
+            contract,
+        ):
+            checker.package_raw_evidence(
+                fixture.manifest_path,
+                fixture.run_directory,
+                original,
+                **fixture.trusted_arguments(),
+            )
+            payloads = read_raw_tar(original)
+            payloads["events.jsonl"] = (
+                b"{" + b"a" * checker.MAX_BOUND_EVENT_LINE_BYTES + b"}\n"
+            )
+            launcher = json.loads(payloads["launcher-receipt.json"])
+            launcher["evidence"]["events_jsonl_sha256"] = hashlib.sha256(
+                payloads["events.jsonl"]
+            ).hexdigest()
+            payloads["launcher-receipt.json"] = (
+                json.dumps(launcher, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            payloads["SHA256SUMS"] = b"".join(
+                f"{hashlib.sha256(payloads[name]).hexdigest()}  {name}\n".encode("ascii")
+                for name in checker.RAW_ARCHIVE_PAYLOADS
+            )
+            write_raw_tar(mutated, payloads)
+            raw = mutated.read_bytes()
+            raw_fd = os.open(mutated, os.O_RDONLY)
+            try:
+                with self.assertRaises(checker.InputError) as raised:
+                    checker.replay_bound_raw_evidence_fd(
+                        raw_fd,
+                        expected_sha256=hashlib.sha256(raw).hexdigest(),
+                        expected_byte_length=len(raw),
+                        correctness_golden_raw=fixture.correctness_golden_path.read_bytes(),
+                        native_correctness_report_raw=(
+                            fixture.native_correctness_report_path.read_bytes()
+                        ),
+                    )
+            finally:
+                os.close(raw_fd)
+        self.assertIn("bounded line limit", str(raised.exception))
+
     def test_remote_jq_1_6_integral_request_bytes_are_replayed_exactly(self) -> None:
         request = {
             "model": "fixture/model",

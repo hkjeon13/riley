@@ -425,6 +425,20 @@ soak, image-review approval, aggregate Gate E pass, semantic receipt, qualificat
 명시적으로 `not-established`이며 source-level adapter는 actual GPU capture나 actual candidate의
 Gate E pass를 기록하지 않는다.
 
+`replay_rc3_gate_e_soak_v1.py`는 Gate E held FD에서 soak report/raw와 shared correctness golden,
+canonical native E0 report만 읽고, frozen replay로 다시 얻은 source archive/release ELF/image/model
+identity에 모두 exact-match한다. raw archive는 private mode-`0600` scratch copy의 held FD만으로
+canonical USTAR header/padding/footer와 `SHA256SUMS`를 먼저 확인한다. 최대 512 MiB `events.jsonl`은
+행당 4 MiB 제한으로 streaming하며, 전체 event list를 보관하지 않고 첫 semantic pass와 두 tail-slope
+pass로 scenario ordering, transport, counters, golden parity, final quiescence를 재유도한다. raw
+scratch archive 상한은 613,556,224 bytes이며 JSON object expansion을 포함한 process RSS 전체 보장은
+아니다.
+
+이 component의 `soak_status: passed`는 현재 held raw evidence가 reviewed soak contract와 일치한다는
+뜻뿐이다. raw receipt의 designated host/GPU/test-layer 값은 서로의 consistency를 검증하지만 독립된
+review approval 또는 actual capture authority가 아니다. aggregate Gate E, semantic receipt,
+qualification, deployment 및 actual GPU capture는 명시적으로 `not-established`다.
+
 ## 3. 범위
 
 ### 포함

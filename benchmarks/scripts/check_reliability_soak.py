@@ -18,6 +18,7 @@ import tarfile
 import tempfile
 from contextlib import ExitStack
 from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, NoReturn, Sequence
 
@@ -75,6 +76,16 @@ RAW_MEMBER_MAX_BYTES = {
 MAX_RAW_ARCHIVE_BYTES = sum(RAW_MEMBER_MAX_BYTES.values()) + 64 * 1024
 MAX_CORRECTNESS_GOLDEN_BYTES = 64 * 1024
 MAX_NATIVE_CORRECTNESS_REPORT_BYTES = 16 * 1024 * 1024
+# The bound replay path deliberately never materializes ``events.jsonl``.  A
+# single event is still bounded so a hostile archive cannot turn one JSONL row
+# into an unbounded Python object while it is being parsed.
+MAX_BOUND_EVENT_LINE_BYTES = 4 * 1024 * 1024
+MAX_BOUND_RAW_STREAM_MEMBER_BYTES = MAX_INPUT_BYTES
+MAX_BOUND_RAW_SCRATCH_BYTES = MAX_RAW_ARCHIVE_BYTES
+BOUND_SEMANTIC_POLICY_VERSION = "riley.reliability-soak-bound-semantic.v1"
+# Keeping this explicit makes downstream Gate E adapters fail closed when the
+# held-FD boundary changes without a reviewed policy update.
+BOUND_SEMANTIC_POLICY_SHA256 = "380ca5ae59da9e4945df26ea2d124652b784655799e63e264b65f313d614ba9d"
 CURL_TIMEOUT_EXIT_CODE = 28
 CURL_WRITE_ERROR_EXIT_CODE = 23
 DISCONNECT_RESPONSE_BYTES = 1024
@@ -813,33 +824,50 @@ def _validate_run(value: dict[str, Any], path: str, manifest_sha: str) -> dict[s
     return run
 
 
-def _validate_trusted_correctness(
+def _validate_trusted_correctness_payloads(
     manifest: dict[str, Any],
     run: dict[str, Any],
-    correctness_golden_path: Path | str | None,
-    native_correctness_report_path: Path | str | None,
+    *,
+    correctness_golden_raw: bytes | None,
+    native_correctness_report_raw: bytes | None,
 ) -> dict[str, str]:
-    if correctness_golden_path is None:
+    """Validate caller-held correctness payloads without reopening a path."""
+
+    if correctness_golden_raw is None:
         _fail(
             "--correctness-golden",
             "the independently reviewed E2E correctness golden is required",
         )
-    if native_correctness_report_path is None:
+    if native_correctness_report_raw is None:
         _fail(
             "--native-correctness-report",
             "the passing native E0 correctness report is required",
         )
-
-    correctness_golden, correctness_golden_sha256 = _load_regular_json(
-        Path(correctness_golden_path),
-        "correctness golden",
-        MAX_CORRECTNESS_GOLDEN_BYTES,
+    if type(correctness_golden_raw) is not bytes or not correctness_golden_raw:
+        _fail("correctness golden", "must be non-empty bytes")
+    if len(correctness_golden_raw) > MAX_CORRECTNESS_GOLDEN_BYTES:
+        _fail("correctness golden", "exceeds evidence size bound")
+    if (
+        type(native_correctness_report_raw) is not bytes
+        or not native_correctness_report_raw
+    ):
+        _fail("native correctness report", "must be non-empty bytes")
+    if len(native_correctness_report_raw) > MAX_NATIVE_CORRECTNESS_REPORT_BYTES:
+        _fail("native correctness report", "exceeds evidence size bound")
+    correctness_golden_value = _parse_json_value(
+        correctness_golden_raw, "correctness golden"
     )
-    native_correctness, native_correctness_report_sha256 = _load_regular_json(
-        Path(native_correctness_report_path),
-        "native correctness report",
-        MAX_NATIVE_CORRECTNESS_REPORT_BYTES,
+    native_correctness_value = _parse_json_value(
+        native_correctness_report_raw, "native correctness report"
     )
+    correctness_golden = _object(correctness_golden_value, "correctness golden")
+    native_correctness = _object(
+        native_correctness_value, "native correctness report"
+    )
+    correctness_golden_sha256 = hashlib.sha256(correctness_golden_raw).hexdigest()
+    native_correctness_report_sha256 = hashlib.sha256(
+        native_correctness_report_raw
+    ).hexdigest()
 
     golden = _exact(
         correctness_golden,
@@ -1013,6 +1041,42 @@ def _validate_trusted_correctness(
         "generated_text_sha256": golden["expected_greedy_text_sha256"],
         "native_correctness_report_sha256": native_correctness_report_sha256,
     }
+
+
+def _validate_trusted_correctness(
+    manifest: dict[str, Any],
+    run: dict[str, Any],
+    correctness_golden_path: Path | str | None,
+    native_correctness_report_path: Path | str | None,
+) -> dict[str, str]:
+    """Legacy pathname wrapper retained for the regular checker entrypoint."""
+
+    if correctness_golden_path is None:
+        _fail(
+            "--correctness-golden",
+            "the independently reviewed E2E correctness golden is required",
+        )
+    if native_correctness_report_path is None:
+        _fail(
+            "--native-correctness-report",
+            "the passing native E0 correctness report is required",
+        )
+    correctness_golden_raw, _ = _load_regular_bytes(
+        Path(correctness_golden_path),
+        "correctness golden",
+        MAX_CORRECTNESS_GOLDEN_BYTES,
+    )
+    native_correctness_report_raw, _ = _load_regular_bytes(
+        Path(native_correctness_report_path),
+        "native correctness report",
+        MAX_NATIVE_CORRECTNESS_REPORT_BYTES,
+    )
+    return _validate_trusted_correctness_payloads(
+        manifest,
+        run,
+        correctness_golden_raw=correctness_golden_raw,
+        native_correctness_report_raw=native_correctness_report_raw,
+    )
 
 
 def _required(value: Mapping[str, Any], key: str, path: str) -> Any:
@@ -1466,21 +1530,30 @@ def _validate_container_receipt(
     }
 
 
-def _validate_runtime_receipts(
-    runtime_receipts_directory: Path | str | None,
+def _validate_runtime_receipt_payloads(
+    receipt_payloads: Mapping[str, tuple[bytes, str]],
     run: Mapping[str, Any],
     trusted_correctness: Mapping[str, str],
     *,
     run_json_sha256: str,
     events_jsonl_sha256: str,
 ) -> tuple[dict[str, str], dict[str, int]]:
-    if runtime_receipts_directory is None:
+    if set(receipt_payloads) != set(RUNTIME_RECEIPT_FILENAMES):
         _fail(
-            "--runtime-receipts-directory",
-            "the seven remote launcher runtime receipts are required",
+            "runtime receipts",
+            "the exact seven launcher receipt payloads are required",
         )
-    directory = Path(runtime_receipts_directory)
-    receipt_payloads = _load_runtime_receipt_payloads(directory)
+    for name, payload in receipt_payloads.items():
+        if (
+            not isinstance(payload, tuple)
+            or len(payload) != 2
+            or type(payload[0]) is not bytes
+            or type(payload[1]) is not str
+            or len(payload[0]) <= 0
+            or len(payload[0]) > RAW_MEMBER_MAX_BYTES[name]
+            or hashlib.sha256(payload[0]).hexdigest() != payload[1]
+        ):
+            _fail("runtime receipts", f"invalid held payload for {name}")
     launcher_bytes, launcher_sha256 = receipt_payloads["launcher-receipt.json"]
     launcher_value = _parse_json_value(launcher_bytes, "launcher-receipt.json")
     launcher = _object(launcher_value, "launcher-receipt.json")
@@ -1866,6 +1939,31 @@ def _validate_runtime_receipts(
             "must fall within the validated Docker StartedAt..FinishedAt lifecycle",
         )
     return runtime_provenance, post_timing
+
+
+def _validate_runtime_receipts(
+    runtime_receipts_directory: Path | str | None,
+    run: Mapping[str, Any],
+    trusted_correctness: Mapping[str, str],
+    *,
+    run_json_sha256: str,
+    events_jsonl_sha256: str,
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Legacy pathname wrapper retained for the regular checker entrypoint."""
+
+    if runtime_receipts_directory is None:
+        _fail(
+            "--runtime-receipts-directory",
+            "the seven remote launcher runtime receipts are required",
+        )
+    payloads = _load_runtime_receipt_payloads(Path(runtime_receipts_directory))
+    return _validate_runtime_receipt_payloads(
+        payloads,
+        run,
+        trusted_correctness,
+        run_json_sha256=run_json_sha256,
+        events_jsonl_sha256=events_jsonl_sha256,
+    )
 
 
 def _validate_sample(event: dict[str, Any], path: str) -> None:
@@ -2679,6 +2777,1653 @@ def replay_raw_evidence_archive(
             native_correctness_report=native_correctness_report,
         )
         return {"report": report, **bindings}
+
+
+@dataclass(frozen=True)
+class _BoundRawArchiveMember:
+    """One verified regular USTAR member addressed through a held FD."""
+
+    name: str
+    data_offset: int
+    size: int
+    sha256: str
+
+
+def _bound_semantic_policy_document() -> dict[str, Any]:
+    """Return the small, deliberately pinned held-FD replay policy surface."""
+
+    return {
+        "version": BOUND_SEMANTIC_POLICY_VERSION,
+        "tar_format": "ustar-canonical-v1",
+        "tar_footer": "two-eof-blocks-plus-record-padding",
+        "archive_members": list(sorted(RAW_ARCHIVE_MEMBERS)),
+        "member_byte_limits": {
+            name: RAW_MEMBER_MAX_BYTES[name] for name in sorted(RAW_MEMBER_MAX_BYTES)
+        },
+        "raw_archive_byte_limit": MAX_RAW_ARCHIVE_BYTES,
+        "raw_stream_member_byte_limit": MAX_BOUND_RAW_STREAM_MEMBER_BYTES,
+        "raw_scratch_byte_limit": MAX_BOUND_RAW_SCRATCH_BYTES,
+        "event_line_byte_limit": MAX_BOUND_EVENT_LINE_BYTES,
+        "event_replay_passes": 3,
+    }
+
+
+def bound_semantic_policy_sha256() -> str:
+    """Digest the reviewed held-FD replay boundary for Gate E consumers."""
+
+    return _canonical_sha256(_bound_semantic_policy_document())
+
+
+def _require_bound_semantic_policy() -> None:
+    if bound_semantic_policy_sha256() != BOUND_SEMANTIC_POLICY_SHA256:
+        _fail(
+            "bound reliability soak policy",
+            "changed without updating its reviewed policy digest",
+        )
+
+
+def _bound_raw_identity(metadata: os.stat_result) -> tuple[int, ...]:
+    return tuple(int(getattr(metadata, field)) for field in _stable_stat_fields())
+
+
+def _bound_raw_fd_stat(
+    raw_evidence_fd: int,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+) -> os.stat_result:
+    if type(raw_evidence_fd) is not int or raw_evidence_fd < 0:
+        _fail("bound raw evidence", "must be an open non-negative file descriptor")
+    _string(expected_sha256, "bound raw evidence SHA-256", SHA256_RE)
+    _integer(
+        expected_byte_length,
+        "bound raw evidence byte length",
+        1,
+    )
+    if expected_byte_length > MAX_RAW_ARCHIVE_BYTES:
+        _fail("bound raw evidence byte length", "exceeds canonical archive size bound")
+    try:
+        metadata = os.fstat(raw_evidence_fd)
+    except OSError as error:
+        _fail("bound raw evidence", f"cannot stat held descriptor: {error}")
+    if not stat.S_ISREG(metadata.st_mode):
+        _fail("bound raw evidence", "held descriptor must identify a regular file")
+    if metadata.st_size != expected_byte_length:
+        _fail("bound raw evidence", "held descriptor length differs from its bound")
+    return metadata
+
+
+def _bound_pread_exact(
+    raw_evidence_fd: int,
+    offset: int,
+    size: int,
+    *,
+    label: str,
+) -> bytes:
+    if offset < 0 or size < 0:
+        _fail(label, "invalid bounded FD read range")
+    result = bytearray()
+    try:
+        while len(result) < size:
+            block = os.pread(raw_evidence_fd, size - len(result), offset + len(result))
+            if not block:
+                _fail(label, "truncated held raw evidence")
+            result.extend(block)
+    except OSError as error:
+        _fail(label, f"cannot read held raw evidence: {error}")
+    return bytes(result)
+
+
+def _iter_bound_member_chunks(
+    raw_evidence_fd: int,
+    member: _BoundRawArchiveMember,
+    *,
+    label: str,
+):
+    """Yield exactly one verified archive member without seeking a pathname."""
+
+    offset = member.data_offset
+    remaining = member.size
+    try:
+        while remaining:
+            block = os.pread(
+                raw_evidence_fd,
+                min(1024 * 1024, remaining),
+                offset,
+            )
+            if not block:
+                _fail(label, "truncated held raw archive member")
+            offset += len(block)
+            remaining -= len(block)
+            yield block
+    except OSError as error:
+        _fail(label, f"cannot stream held raw archive member: {error}")
+
+
+def _bound_member_bytes(
+    raw_evidence_fd: int,
+    member: _BoundRawArchiveMember,
+    *,
+    label: str,
+) -> bytes:
+    """Read a bounded non-events member and recheck its archive digest."""
+
+    raw = bytearray()
+    digest = hashlib.sha256()
+    for block in _iter_bound_member_chunks(raw_evidence_fd, member, label=label):
+        raw.extend(block)
+        digest.update(block)
+    if digest.hexdigest() != member.sha256:
+        _fail(label, "held raw archive member changed during replay")
+    return bytes(raw)
+
+
+def _stream_held_fd_sha256(
+    raw_evidence_fd: int,
+    byte_length: int,
+    *,
+    label: str,
+) -> str:
+    digest = hashlib.sha256()
+    offset = 0
+    try:
+        while offset < byte_length:
+            block = os.pread(
+                raw_evidence_fd,
+                min(1024 * 1024, byte_length - offset),
+                offset,
+            )
+            if not block:
+                _fail(label, "held descriptor was truncated while hashing")
+            digest.update(block)
+            offset += len(block)
+    except OSError as error:
+        _fail(label, f"cannot hash held descriptor: {error}")
+    return digest.hexdigest()
+
+
+def _stream_bound_raw_archive(
+    raw_evidence_fd: int,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+) -> tuple[
+    dict[str, _BoundRawArchiveMember],
+    dict[str, tuple[bytes, str]],
+    str,
+    tuple[int, ...],
+]:
+    """Manually verify canonical USTAR and retain only bounded side payloads.
+
+    ``tarfile.open`` is intentionally not used here: the archive is consumed
+    from one caller-owned descriptor and every 512-byte header must equal the
+    deterministic USTAR encoding emitted by ``_write_raw_archive``.
+    """
+
+    label = "bound raw evidence"
+    before = _bound_raw_fd_stat(
+        raw_evidence_fd,
+        expected_sha256=expected_sha256,
+        expected_byte_length=expected_byte_length,
+    )
+    before_identity = _bound_raw_identity(before)
+    archive_sha256 = _stream_held_fd_sha256(
+        raw_evidence_fd, expected_byte_length, label=label
+    )
+    if archive_sha256 != expected_sha256:
+        _fail(label, "held descriptor SHA-256 differs from its bound")
+
+    expected_names = sorted(RAW_ARCHIVE_MEMBERS)
+    members: dict[str, _BoundRawArchiveMember] = {}
+    retained: dict[str, tuple[bytes, str]] = {}
+    offset = 0
+    for expected_name in expected_names:
+        header = _bound_pread_exact(
+            raw_evidence_fd,
+            offset,
+            tarfile.BLOCKSIZE,
+            label=label,
+        )
+        if header == b"\0" * tarfile.BLOCKSIZE:
+            _fail(label, "canonical USTAR archive ended before its full inventory")
+        try:
+            entry = tarfile.TarInfo.frombuf(
+                header, encoding="utf-8", errors="strict"
+            )
+        except (tarfile.TarError, UnicodeError, ValueError) as error:
+            _fail(label, f"invalid USTAR header: {error}")
+        if entry.name != expected_name:
+            _fail(label, f"unexpected canonical USTAR member {entry.name!r}")
+        if entry.size <= 0 or entry.size > RAW_MEMBER_MAX_BYTES[expected_name]:
+            _fail(label, f"invalid bounded member size for {expected_name}")
+        try:
+            canonical_header = _canonical_tar_info(
+                expected_name, entry.size
+            ).tobuf(tarfile.USTAR_FORMAT, encoding="utf-8", errors="strict")
+        except (tarfile.TarError, UnicodeError, ValueError) as error:
+            _fail(label, f"cannot construct canonical USTAR header: {error}")
+        if header != canonical_header:
+            _fail(label, f"non-canonical USTAR metadata for {expected_name}")
+        data_offset = offset + tarfile.BLOCKSIZE
+        padded_size = ((entry.size + tarfile.BLOCKSIZE - 1) // tarfile.BLOCKSIZE) * tarfile.BLOCKSIZE
+        next_offset = data_offset + padded_size
+        if next_offset > expected_byte_length:
+            _fail(label, f"truncated canonical USTAR member {expected_name}")
+        digest = hashlib.sha256()
+        captured = bytearray() if expected_name != "events.jsonl" else None
+        temporary_member = _BoundRawArchiveMember(
+            expected_name, data_offset, entry.size, ""
+        )
+        for block in _iter_bound_member_chunks(
+            raw_evidence_fd,
+            temporary_member,
+            label=f"{label}.{expected_name}",
+        ):
+            digest.update(block)
+            if captured is not None:
+                captured.extend(block)
+        member = _BoundRawArchiveMember(
+            expected_name, data_offset, entry.size, digest.hexdigest()
+        )
+        members[expected_name] = member
+        if captured is not None:
+            retained[expected_name] = (bytes(captured), member.sha256)
+        padding = _bound_pread_exact(
+            raw_evidence_fd,
+            data_offset + entry.size,
+            padded_size - entry.size,
+            label=label,
+        )
+        if padding != b"\0" * len(padding):
+            _fail(label, f"non-zero USTAR padding after {expected_name}")
+        offset = next_offset
+
+    # ``tarfile`` emits two required EOF blocks and then zero pads the archive
+    # to one 10KiB tar record.  The exact footer therefore depends on the
+    # payload sizes; requiring a literal 10KiB suffix would reject archives
+    # produced by this repository's own deterministic writer.
+    footer_size = (
+        2 * tarfile.BLOCKSIZE
+        + (-(offset + 2 * tarfile.BLOCKSIZE)) % tarfile.RECORDSIZE
+    )
+    footer = _bound_pread_exact(
+        raw_evidence_fd,
+        offset,
+        footer_size,
+        label=label,
+    )
+    if footer != b"\0" * len(footer) or offset + len(footer) != expected_byte_length:
+        _fail(label, "canonical USTAR archive requires the exact padded zero footer")
+    expected_checksums = b"".join(
+        f"{members[name].sha256}  {name}\n".encode("ascii")
+        for name in RAW_ARCHIVE_PAYLOADS
+    )
+    checksum_payload = retained.get("SHA256SUMS")
+    if checksum_payload is None or checksum_payload[0] != expected_checksums:
+        _fail(label, "SHA256SUMS does not exactly bind the canonical payloads")
+    try:
+        after = os.fstat(raw_evidence_fd)
+    except OSError as error:
+        _fail(label, f"cannot re-stat held descriptor: {error}")
+    if _bound_raw_identity(after) != before_identity:
+        _fail(label, "held descriptor changed while canonical USTAR was consumed")
+    return members, retained, archive_sha256, before_identity
+
+
+def _iter_bound_jsonl_events(
+    raw_evidence_fd: int,
+    member: _BoundRawArchiveMember,
+):
+    """Decode one bounded JSON object at a time and recheck member bytes."""
+
+    label = member.name
+    pending = bytearray()
+    digest = hashlib.sha256()
+    line_number = 0
+    saw_event = False
+
+    def decode_line(raw_line: bytes) -> dict[str, Any]:
+        nonlocal line_number, saw_event
+        line_number += 1
+        saw_event = True
+        if raw_line.endswith(b"\r"):
+            raw_line = raw_line[:-1]
+        if not raw_line.strip():
+            _fail(f"{label}:{line_number}", "blank JSONL lines are forbidden")
+        try:
+            value = json.loads(
+                raw_line.decode("utf-8"),
+                object_pairs_hook=_pairs,
+                parse_constant=_nonfinite,
+            )
+        except (UnicodeDecodeError, json.JSONDecodeError, InputError) as error:
+            _fail(f"{label}:{line_number}", f"invalid JSON: {error}")
+        if not isinstance(value, dict):
+            _fail(f"{label}:{line_number}", "event must be an object")
+        return value
+
+    for block in _iter_bound_member_chunks(raw_evidence_fd, member, label=label):
+        digest.update(block)
+        pending.extend(block)
+        while True:
+            newline = pending.find(b"\n")
+            if newline < 0:
+                if len(pending) > MAX_BOUND_EVENT_LINE_BYTES:
+                    _fail(label, "JSONL event exceeds the bounded line limit")
+                break
+            if newline > MAX_BOUND_EVENT_LINE_BYTES:
+                _fail(label, "JSONL event exceeds the bounded line limit")
+            raw_line = bytes(pending[:newline])
+            del pending[: newline + 1]
+            yield decode_line(raw_line)
+    if pending:
+        if len(pending) > MAX_BOUND_EVENT_LINE_BYTES:
+            _fail(label, "JSONL event exceeds the bounded line limit")
+        yield decode_line(bytes(pending))
+    if not saw_event:
+        _fail(label, "must contain events")
+    if digest.hexdigest() != member.sha256:
+        _fail(label, "held raw archive member changed during line replay")
+
+
+@dataclass
+class _BoundScenarioState:
+    """Fixed-size summary state for one of the reviewed manifest scenarios."""
+
+    event_count: int = 0
+    kinds: Counter[str] = field(default_factory=Counter)
+    first_kind: str | None = None
+    last_status: Any = None
+    start_count: int = 0
+    end_count: int = 0
+    start_monotonic_ns: int | None = None
+    end_monotonic_ns: int | None = None
+    execution_completion: Any = None
+    sample_count: int = 0
+    request_count: int = 0
+    first_sample_monotonic_ns: int | None = None
+    last_sample_monotonic_ns: int | None = None
+    previous_sample_monotonic_ns: int | None = None
+    previous_sample_pid: int | None = None
+    previous_counters: dict[str, int] | None = None
+    counters_monotonic: bool = True
+    restart_since_previous_sample: bool = False
+    maximum_sample_gap_ms: float = 0.0
+    outcome_counts: Counter[str] = field(default_factory=Counter)
+    golden_success_count: int = 0
+    golden_all_expected: bool = True
+    rollback_success_count: int = 0
+    rollback_all_expected: bool = True
+
+
+class _BoundSoakEventReducer:
+    """Validate and reduce JSONL events without retaining the event stream.
+
+    The normal checker keeps every event in a Python list.  This reducer keeps
+    only a fixed number of scenario summaries, the final global sample, and
+    one representative bad child/restart.  The latter two are enough to
+    reproduce the successful report exactly while keeping hostile failures
+    from making the semantic result grow with ``events.jsonl``.
+    """
+
+    _common = {
+        "schema_version",
+        "sequence",
+        "monotonic_ns",
+        "kind",
+        "scenario_id",
+        "binding_sha256",
+    }
+    _extras = {
+        "run_start": set(),
+        "scenario_start": {"execution_completion"},
+        "sample": {"process", "gpu", "metrics", "sample_dropped"},
+        "request": {
+            "request_id",
+            "request_profile",
+            "client_action",
+            "request_stream",
+            "curl_exit_code",
+            "request_body_sha256",
+            "response_body_sha256",
+            "response_bytes",
+            "outcome",
+            "http_status",
+            "latency_ms",
+            "generated_sha256",
+        },
+        "restart": {
+            "graceful",
+            "exit_code",
+            "elapsed_ms",
+            "before_generated_sha256",
+            "after_generated_sha256",
+        },
+        "scenario_end": {"status"},
+        "failure": {"stage", "message"},
+        "run_end": {"status"},
+    }
+
+    def __init__(
+        self,
+        binding_sha256: str,
+        manifest_scenarios: Sequence[Mapping[str, Any]],
+        manifest_requests: Mapping[str, Any],
+        *,
+        expected_golden: str,
+        golden_profile: str,
+    ) -> None:
+        self.binding_sha256 = binding_sha256
+        self.manifest_scenarios = list(manifest_scenarios)
+        self.manifest_requests = manifest_requests
+        self.scenario_order = [str(scenario["id"]) for scenario in manifest_scenarios]
+        self.scenarios = {
+            str(scenario["id"]): scenario for scenario in manifest_scenarios
+        }
+        self.states = {
+            scenario_id: _BoundScenarioState()
+            for scenario_id in self.scenario_order
+        }
+        self.expected_golden = expected_golden
+        self.golden_profile = golden_profile
+        self.event_count = 0
+        self.active_scenario: str | None = None
+        self.completed_scenarios = 0
+        self.previous_time = -1
+        self.first_kind: str | None = None
+        self.last_kind: str | None = None
+        self.last_status: Any = None
+        self.first_monotonic_ns: int | None = None
+        self.last_monotonic_ns: int | None = None
+        self.boundary_counts: Counter[str] = Counter()
+        self.outcome_counts: Counter[str] = Counter()
+        self.metric_counter_maxima: Counter[str] = Counter()
+        self.final_global_sample_count = 0
+        self.final_global_sample_index: int | None = None
+        self.final_global_sample: dict[str, Any] | None = None
+        self.first_process_sample_pid: int | None = None
+        self.first_python_child: dict[str, Any] | None = None
+        self.dropped_sample_seen = False
+        self.failure_count = 0
+        self.restart_count = 0
+        self.first_restart: dict[str, Any] | None = None
+
+    def consume(self, event: dict[str, Any]) -> None:
+        """Apply the legacy event schema/state machine to one JSON object."""
+
+        index = self.event_count + 1
+        path = f"events[{index}]"
+        kind = event.get("kind")
+        if kind not in self._extras:
+            _fail(f"{path}.kind", "is not a closed v1 event kind")
+        _exact(event, self._common | self._extras[kind], path)
+        if event["schema_version"] != EVENT_VERSION:
+            _fail(f"{path}.schema_version", f"must be {EVENT_VERSION}")
+        if event["sequence"] != index:
+            _fail(f"{path}.sequence", f"must be contiguous value {index}")
+        monotonic_ns = _integer(event["monotonic_ns"], f"{path}.monotonic_ns")
+        if monotonic_ns <= self.previous_time:
+            _fail(f"{path}.monotonic_ns", "must be strictly increasing")
+        self.previous_time = monotonic_ns
+        if event["binding_sha256"] != self.binding_sha256:
+            _fail(f"{path}.binding_sha256", "does not match run binding")
+        scenario_id = event["scenario_id"]
+        if scenario_id is not None:
+            _string(scenario_id, f"{path}.scenario_id")
+            if scenario_id not in self.scenarios:
+                _fail(f"{path}.scenario_id", "is absent from manifest")
+        if kind not in {"run_start", "run_end", "sample", "failure"} and scenario_id is None:
+            _fail(f"{path}.scenario_id", "must identify a scenario")
+        if kind in {"run_start", "run_end"} and scenario_id is not None:
+            _fail(f"{path}.scenario_id", "run boundary events must use null")
+        if kind == "run_start":
+            if (
+                index != 1
+                or self.active_scenario is not None
+                or self.completed_scenarios != 0
+            ):
+                _fail(path, "run_start must be the unique first event")
+        elif kind == "scenario_start":
+            if self.active_scenario is not None:
+                _fail(path, f"overlaps active scenario {self.active_scenario}")
+            if self.completed_scenarios >= len(self.scenario_order):
+                _fail(path, "starts after the manifest scenario inventory completed")
+            expected_scenario = self.scenario_order[self.completed_scenarios]
+            if scenario_id != expected_scenario:
+                _fail(
+                    f"{path}.scenario_id",
+                    f"must follow manifest order; expected {expected_scenario}",
+                )
+            self.active_scenario = scenario_id
+        elif kind == "scenario_end":
+            if self.active_scenario is None or scenario_id != self.active_scenario:
+                _fail(path, "does not close the active manifest scenario")
+            self.active_scenario = None
+            self.completed_scenarios += 1
+        elif scenario_id is not None and scenario_id != self.active_scenario:
+            _fail(path, "must occur inside its non-overlapping scenario interval")
+        elif scenario_id is None and kind == "sample":
+            if (
+                self.active_scenario is not None
+                or self.completed_scenarios != len(self.scenario_order)
+            ):
+                _fail(path, "global sample must follow all manifest scenarios")
+        elif kind == "run_end":
+            if (
+                self.active_scenario is not None
+                or self.completed_scenarios != len(self.scenario_order)
+            ):
+                _fail(path, "run_end requires every manifest scenario to finish in order")
+
+        if kind == "sample":
+            _validate_sample(event, path)
+        elif kind == "request":
+            _string(event["request_id"], f"{path}.request_id")
+            profile = _string(event["request_profile"], f"{path}.request_profile")
+            scenario = self.scenarios[scenario_id]
+            allowed_profiles = {scenario["request_profile"]}
+            if "secondary_request_profile" in scenario:
+                allowed_profiles.add(scenario["secondary_request_profile"])
+            if profile not in allowed_profiles:
+                _fail(f"{path}.request_profile", "does not belong to the manifest scenario")
+            action = _string(event["client_action"], f"{path}.client_action")
+            expected_actions = {"normal"}
+            if scenario["kind"] == "invalid":
+                expected_actions = {"invalid"}
+            elif scenario["kind"] == "overload":
+                expected_actions = {"overload"}
+            elif scenario["kind"] == "cancellation-disconnect":
+                expected_actions = {"cancel", "disconnect"}
+            if action not in expected_actions:
+                _fail(
+                    f"{path}.client_action",
+                    f"does not match scenario kind {scenario['kind']}",
+                )
+            if not isinstance(event["request_stream"], bool):
+                _fail(f"{path}.request_stream", "must be boolean")
+            request_stream = event["request_stream"]
+            if request_stream != (action == "disconnect"):
+                _fail(
+                    f"{path}.request_stream",
+                    "must be true exactly for the disconnect client action",
+                )
+            curl_exit_code = _integer(event["curl_exit_code"], f"{path}.curl_exit_code")
+            if curl_exit_code > 255:
+                _fail(f"{path}.curl_exit_code", "must be <= 255")
+            request_body_sha256 = _string(
+                event["request_body_sha256"],
+                f"{path}.request_body_sha256",
+                SHA256_RE,
+            )
+            expected_request = dict(
+                _object(
+                    self.manifest_requests[profile], f"manifest.requests.{profile}"
+                )
+            )
+            if "prompt_repeat" in expected_request:
+                repeat = _integer(
+                    expected_request.pop("prompt_repeat"),
+                    f"manifest.requests.{profile}.prompt_repeat",
+                    1,
+                )
+                prompt = _string(
+                    expected_request.get("prompt"),
+                    f"manifest.requests.{profile}.prompt",
+                )
+                expected_request["prompt"] = prompt * repeat
+            expected_request["stream"] = request_stream
+            expected_request_sha256 = hashlib.sha256(
+                _jq_1_6_request_json_bytes(expected_request)
+            ).hexdigest()
+            if request_body_sha256 != expected_request_sha256:
+                _fail(
+                    f"{path}.request_body_sha256",
+                    "does not bind the manifest profile and exact stream action bytes",
+                )
+            response_sha256 = _string(
+                event["response_body_sha256"],
+                f"{path}.response_body_sha256",
+                SHA256_RE,
+            )
+            response_bytes = _integer(event["response_bytes"], f"{path}.response_bytes")
+            if response_bytes == 0 and response_sha256 != EMPTY_SHA256:
+                _fail(
+                    f"{path}.response_body_sha256",
+                    "zero response bytes require the empty-body SHA-256",
+                )
+            outcome = _string(event["outcome"], f"{path}.outcome")
+            if outcome not in {
+                "success",
+                "invalid",
+                "overload",
+                "cancelled",
+                "disconnected",
+                "timeout",
+                "failure",
+            }:
+                _fail(f"{path}.outcome", "is not a closed outcome")
+            status = _integer(event["http_status"], f"{path}.http_status")
+            if status > 599:
+                _fail(f"{path}.http_status", "must be <= 599")
+            _number(event["latency_ms"], f"{path}.latency_ms")
+            generated = event["generated_sha256"]
+            if generated is not None:
+                _string(generated, f"{path}.generated_sha256", SHA256_RE)
+            if (outcome == "success") != (generated is not None):
+                _fail(
+                    f"{path}.generated_sha256",
+                    "must be present exactly for success",
+                )
+            if outcome == "success" and not 200 <= status < 300:
+                _fail(f"{path}.http_status", "success requires 2xx")
+            if outcome == "invalid" and not (400 <= status < 500 and status != 429):
+                _fail(f"{path}.http_status", "invalid requires non-429 4xx")
+            if outcome == "overload" and status != 429:
+                _fail(f"{path}.http_status", "overload requires 429")
+            if outcome != "failure":
+                transport_contracts = {
+                    "normal": (
+                        False,
+                        0,
+                        {"success"},
+                        lambda: 200 <= status < 300 and response_bytes > 0,
+                    ),
+                    "invalid": (
+                        False,
+                        0,
+                        {"invalid"},
+                        lambda: 400 <= status < 500
+                        and status != 429
+                        and response_bytes > 0,
+                    ),
+                    "overload": (
+                        False,
+                        0,
+                        {"success", "overload"},
+                        lambda: (200 <= status < 300 or status == 429)
+                        and response_bytes > 0,
+                    ),
+                    "cancel": (
+                        False,
+                        CURL_TIMEOUT_EXIT_CODE,
+                        {"cancelled"},
+                        lambda: status == 0
+                        and response_bytes == 0
+                        and response_sha256 == EMPTY_SHA256,
+                    ),
+                    "disconnect": (
+                        True,
+                        CURL_WRITE_ERROR_EXIT_CODE,
+                        {"disconnected"},
+                        lambda: status == 200
+                        and response_bytes == DISCONNECT_RESPONSE_BYTES,
+                    ),
+                }
+                expected_stream, expected_exit, expected_outcomes, proof_matches = (
+                    transport_contracts[action]
+                )
+                if (
+                    request_stream != expected_stream
+                    or curl_exit_code != expected_exit
+                    or outcome not in expected_outcomes
+                    or not proof_matches()
+                ):
+                    _fail(path, f"does not satisfy the exact {action} transport contract")
+        elif kind == "restart":
+            if not isinstance(event["graceful"], bool):
+                _fail(f"{path}.graceful", "must be boolean")
+            _integer(event["exit_code"], f"{path}.exit_code")
+            _number(event["elapsed_ms"], f"{path}.elapsed_ms")
+            _string(
+                event["before_generated_sha256"],
+                f"{path}.before_generated_sha256",
+                SHA256_RE,
+            )
+            _string(
+                event["after_generated_sha256"],
+                f"{path}.after_generated_sha256",
+                SHA256_RE,
+            )
+        elif kind in {"scenario_end", "run_end"} and event["status"] not in {
+            "success",
+            "failure",
+        }:
+            _fail(f"{path}.status", "must be success or failure")
+        elif kind == "failure":
+            _string(event["stage"], f"{path}.stage")
+            _string(event["message"], f"{path}.message")
+
+        self.event_count = index
+        self.boundary_counts[kind] += 1
+        if self.first_kind is None:
+            self.first_kind = kind
+            self.first_monotonic_ns = monotonic_ns
+        self.last_kind = kind
+        self.last_status = event.get("status")
+        self.last_monotonic_ns = monotonic_ns
+        if scenario_id is not None:
+            state = self.states[scenario_id]
+            state.event_count += 1
+            state.kinds[kind] += 1
+            if state.first_kind is None:
+                state.first_kind = kind
+            state.last_status = event.get("status")
+            if kind == "scenario_start":
+                state.start_count += 1
+                state.start_monotonic_ns = monotonic_ns
+                state.execution_completion = event["execution_completion"]
+            elif kind == "scenario_end":
+                state.end_count += 1
+                state.end_monotonic_ns = monotonic_ns
+            elif kind == "restart":
+                if state.previous_sample_monotonic_ns is not None:
+                    state.restart_since_previous_sample = True
+            elif kind == "request":
+                state.request_count += 1
+                outcome = event["outcome"]
+                state.outcome_counts[outcome] += 1
+                self.outcome_counts[outcome] += 1
+                if event["outcome"] == "success":
+                    generated = event["generated_sha256"]
+                    golden_only = (
+                        self.scenarios[scenario_id]["request_profile"]
+                        == self.golden_profile
+                        and self.scenarios[scenario_id].get(
+                            "secondary_request_profile", self.golden_profile
+                        )
+                        == self.golden_profile
+                    )
+                    if golden_only:
+                        state.golden_success_count += 1
+                        state.golden_all_expected &= generated == self.expected_golden
+                    if self.scenarios[scenario_id]["kind"] == "rollback":
+                        state.rollback_success_count += 1
+                        state.rollback_all_expected &= generated == self.expected_golden
+            elif kind == "sample":
+                self._record_scenario_sample(state, event, monotonic_ns)
+        if kind == "sample":
+            self._record_global_sample(event, scenario_id, monotonic_ns, index)
+        elif kind == "restart":
+            self.restart_count += 1
+            if self.first_restart is None:
+                self.first_restart = event
+        elif kind == "failure":
+            self.failure_count += 1
+
+    def _record_scenario_sample(
+        self,
+        state: _BoundScenarioState,
+        event: dict[str, Any],
+        monotonic_ns: int,
+    ) -> None:
+        state.sample_count += 1
+        if state.first_sample_monotonic_ns is None:
+            state.first_sample_monotonic_ns = monotonic_ns
+        if state.previous_sample_monotonic_ns is not None:
+            if not state.restart_since_previous_sample:
+                gap = (
+                    monotonic_ns - state.previous_sample_monotonic_ns
+                ) / 1_000_000
+                state.maximum_sample_gap_ms = max(state.maximum_sample_gap_ms, gap)
+            counters = event["metrics"]["counters"]
+            if state.previous_sample_pid == event["process"]["pid"]:
+                state.counters_monotonic &= all(
+                    counters[name] >= state.previous_counters[name]
+                    for name in state.previous_counters
+                )
+        state.previous_sample_monotonic_ns = monotonic_ns
+        state.previous_sample_pid = event["process"]["pid"]
+        state.previous_counters = dict(event["metrics"]["counters"])
+        state.restart_since_previous_sample = False
+        state.last_sample_monotonic_ns = monotonic_ns
+        for name, value in event["metrics"]["counters"].items():
+            self.metric_counter_maxima[name] = max(
+                self.metric_counter_maxima[name], value
+            )
+        if self.first_process_sample_pid is None:
+            self.first_process_sample_pid = event["process"]["pid"]
+
+    def _record_global_sample(
+        self,
+        event: dict[str, Any],
+        scenario_id: str | None,
+        _monotonic_ns: int,
+        index: int,
+    ) -> None:
+        if event["sample_dropped"]:
+            self.dropped_sample_seen = True
+        for child in event["process"]["children"]:
+            if self.first_python_child is None and (
+                PYTHON_RE.search(child["comm"])
+                or PYTHON_RE.search(child["executable"])
+            ):
+                self.first_python_child = child
+        if scenario_id is None:
+            self.final_global_sample_count += 1
+            self.final_global_sample_index = index
+            self.final_global_sample = event
+
+    def finish(self) -> None:
+        if self.first_kind != "run_start" or self.last_kind != "run_end":
+            _fail("events", "must be bracketed by run_start and run_end")
+
+
+@dataclass
+class _BoundTailState:
+    """Sufficient statistics for the final plateau fraction of one scenario."""
+
+    start_index: int
+    count: int = 0
+    first_monotonic_ns: int | None = None
+    rss_min: int | None = None
+    rss_max: int | None = None
+    vram_min: int | None = None
+    vram_max: int | None = None
+    rss_sum: float = 0.0
+    vram_sum: float = 0.0
+    x_sum: float = 0.0
+    rss_numerator: float = 0.0
+    rss_denominator: float = 0.0
+    vram_numerator: float = 0.0
+    vram_denominator: float = 0.0
+
+
+def _bound_tail_selection(
+    reducer: _BoundSoakEventReducer,
+    thresholds: Mapping[str, Any],
+) -> dict[str, _BoundTailState]:
+    fraction = float(thresholds["plateau_tail_fraction"])
+    result: dict[str, _BoundTailState] = {}
+    for scenario_id in reducer.scenario_order:
+        count = reducer.states[scenario_id].sample_count
+        tail_count = max(2, math.ceil(count * fraction))
+        result[scenario_id] = _BoundTailState(
+            start_index=count - tail_count + 1
+        )
+    return result
+
+
+def _for_each_bound_tail_sample(
+    raw_evidence_fd: int,
+    events_member: _BoundRawArchiveMember,
+    reducer: _BoundSoakEventReducer,
+    tails: Mapping[str, _BoundTailState],
+    callback: Any,
+) -> None:
+    """Visit selected tail samples in raw order, keeping no event collection."""
+
+    sample_positions: Counter[str] = Counter()
+    for event in _iter_bound_jsonl_events(raw_evidence_fd, events_member):
+        if event.get("kind") != "sample":
+            continue
+        scenario_id = event.get("scenario_id")
+        if scenario_id is None:
+            continue
+        if scenario_id not in tails:
+            _fail("events.jsonl", "sample references an unknown scenario on replay")
+        sample_positions[scenario_id] += 1
+        state = tails[scenario_id]
+        if sample_positions[scenario_id] >= state.start_index:
+            callback(state, event)
+    for scenario_id in reducer.scenario_order:
+        if sample_positions[scenario_id] != reducer.states[scenario_id].sample_count:
+            _fail("events.jsonl", "held JSONL sample inventory changed during replay")
+
+
+def _collect_bound_tail_statistics(
+    raw_evidence_fd: int,
+    events_member: _BoundRawArchiveMember,
+    reducer: _BoundSoakEventReducer,
+    thresholds: Mapping[str, Any],
+) -> dict[str, _BoundTailState]:
+    """Use two sequential passes for exact legacy slope arithmetic.
+
+    The first pass derives means and extrema; the second derives covariance.
+    It matches ``_slope_per_hour``'s left-to-right floating-point arithmetic
+    without holding a tail-sized list in memory.
+    """
+
+    tails = _bound_tail_selection(reducer, thresholds)
+
+    def first_pass(state: _BoundTailState, event: Mapping[str, Any]) -> None:
+        monotonic_ns = event["monotonic_ns"]
+        rss = event["process"]["rss_bytes"]
+        vram = event["gpu"]["vram_bytes"]
+        if state.first_monotonic_ns is None:
+            state.first_monotonic_ns = monotonic_ns
+            state.rss_min = state.rss_max = rss
+            state.vram_min = state.vram_max = vram
+        x = (monotonic_ns - state.first_monotonic_ns) / 1_000_000_000
+        state.count += 1
+        state.x_sum += x
+        state.rss_sum += float(rss)
+        state.vram_sum += float(vram)
+        state.rss_min = min(state.rss_min, rss)
+        state.rss_max = max(state.rss_max, rss)
+        state.vram_min = min(state.vram_min, vram)
+        state.vram_max = max(state.vram_max, vram)
+
+    _for_each_bound_tail_sample(
+        raw_evidence_fd, events_member, reducer, tails, first_pass
+    )
+
+    def second_pass(state: _BoundTailState, event: Mapping[str, Any]) -> None:
+        if state.count < 2 or state.first_monotonic_ns is None:
+            return
+        x = (event["monotonic_ns"] - state.first_monotonic_ns) / 1_000_000_000
+        rss = float(event["process"]["rss_bytes"])
+        vram = float(event["gpu"]["vram_bytes"])
+        mean_x = state.x_sum / state.count
+        mean_rss = state.rss_sum / state.count
+        mean_vram = state.vram_sum / state.count
+        state.rss_denominator += (x - mean_x) ** 2
+        state.rss_numerator += (x - mean_x) * (rss - mean_rss)
+        state.vram_denominator += (x - mean_x) ** 2
+        state.vram_numerator += (x - mean_x) * (vram - mean_vram)
+
+    _for_each_bound_tail_sample(
+        raw_evidence_fd, events_member, reducer, tails, second_pass
+    )
+    return tails
+
+
+def _bound_tail_slope(
+    state: _BoundTailState,
+    *,
+    vram: bool,
+) -> float | None:
+    if state.count < 2:
+        return None
+    denominator = state.vram_denominator if vram else state.rss_denominator
+    numerator = state.vram_numerator if vram else state.rss_numerator
+    if denominator == 0:
+        return math.inf
+    return numerator / denominator * 3600
+
+
+def _bounded_hash_observation(
+    count: int,
+    all_expected: bool,
+    expected: str,
+) -> list[str]:
+    """Preserve valid report parity while bounding invalid diagnostic output."""
+
+    if count and all_expected:
+        return [expected]
+    if not count:
+        return []
+    return ["NONCANONICAL_OR_NONMATCHING_HASH"]
+
+
+def _build_bound_soak_report(
+    reducer: _BoundSoakEventReducer,
+    tails: Mapping[str, _BoundTailState],
+    manifest: Mapping[str, Any],
+    run: Mapping[str, Any],
+    trusted_correctness: Mapping[str, str],
+    runtime_provenance: Mapping[str, str],
+    runtime_timing: Mapping[str, int],
+) -> dict[str, Any]:
+    """Reconstruct the legacy successful semantic report from fixed state."""
+
+    report: dict[str, Any] = {
+        "schema_version": REPORT_VERSION,
+        "status": "error",
+        "passed": False,
+        "bindings": None,
+        "scenario_summaries": [],
+        "observations": {},
+        "checks": [],
+        "errors": [],
+    }
+    if reducer.first_monotonic_ns is None or reducer.last_monotonic_ns is None:
+        _fail("events", "must contain events")
+    event_span_ns = reducer.last_monotonic_ns - reducer.first_monotonic_ns
+    if runtime_timing["elapsed_ns"] < event_span_ns:
+        _fail(
+            "container-inspect-post.json[0].State",
+            "Docker runtime is shorter than the preserved monotonic event span",
+        )
+    checks: list[dict[str, Any]] = []
+    checks.append(
+        _check(
+            "run_boundaries",
+            reducer.boundary_counts["run_start"] == 1
+            and reducer.boundary_counts["run_end"] == 1
+            and reducer.last_status == "success",
+            {
+                "run_start": reducer.boundary_counts["run_start"],
+                "run_end": reducer.boundary_counts["run_end"],
+                "status": reducer.last_status,
+            },
+            "one successful pair",
+        )
+    )
+    thresholds = manifest["thresholds"]
+    expected_golden = manifest["golden"]["generated_sha256"]
+    rollback_hashes: dict[str, list[str]] = {}
+    for scenario in manifest["scenarios"]:
+        scenario_id = scenario["id"]
+        state = reducer.states[scenario_id]
+        tail = tails[scenario_id]
+        complete = (
+            state.kinds["scenario_start"] == 1
+            and state.kinds["scenario_end"] == 1
+            and state.event_count > 0
+            and state.first_kind == "scenario_start"
+            and state.last_status == "success"
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.complete",
+                complete,
+                dict(state.kinds),
+                "one successful start/end",
+            )
+        )
+        mode_matches = (
+            state.start_count == 1
+            and state.execution_completion == scenario["execution_completion"]
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.execution_completion",
+                mode_matches,
+                state.execution_completion if state.start_count else None,
+                scenario["execution_completion"],
+            )
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.service_counters_monotonic",
+                state.counters_monotonic,
+                state.counters_monotonic,
+                True,
+            )
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.samples",
+                state.sample_count >= thresholds["minimum_samples_per_scenario"],
+                state.sample_count,
+                thresholds["minimum_samples_per_scenario"],
+            )
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.requests",
+                bool(state.request_count),
+                state.request_count,
+                ">= 1",
+            )
+        )
+        observed_duration_seconds = (
+            (state.end_monotonic_ns - state.start_monotonic_ns) / 1_000_000_000
+            if state.start_count == 1 and state.end_count == 1
+            else 0.0
+        )
+        required_duration_seconds = scenario["duration_seconds"]
+        checks.append(
+            _check(
+                f"{scenario_id}.duration_seconds",
+                observed_duration_seconds >= required_duration_seconds,
+                observed_duration_seconds,
+                required_duration_seconds,
+            )
+        )
+        sample_span_seconds = (
+            (state.last_sample_monotonic_ns - state.first_sample_monotonic_ns)
+            / 1_000_000_000
+            if state.sample_count >= 2
+            else 0.0
+        )
+        sample_coverage_tolerance_seconds = max(
+            thresholds["maximum_sample_gap_ms"] / 1000,
+            thresholds["sample_interval_ms"] * 2 / 1000,
+        )
+        required_sample_span_seconds = max(
+            0.0,
+            required_duration_seconds - sample_coverage_tolerance_seconds,
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.sample_coverage_seconds",
+                sample_span_seconds >= required_sample_span_seconds,
+                sample_span_seconds,
+                required_sample_span_seconds,
+            )
+        )
+        maximum_gap = state.maximum_sample_gap_ms
+        checks.append(
+            _check(
+                f"{scenario_id}.sample_gap_ms",
+                maximum_gap <= thresholds["maximum_sample_gap_ms"],
+                maximum_gap,
+                thresholds["maximum_sample_gap_ms"],
+            )
+        )
+        if tail.count >= 2:
+            rss_growth = tail.rss_max - tail.rss_min
+            vram_growth = tail.vram_max - tail.vram_min
+            rss_slope = _bound_tail_slope(tail, vram=False)
+            vram_slope = _bound_tail_slope(tail, vram=True)
+        else:
+            rss_growth = vram_growth = 0
+            rss_slope = vram_slope = None
+        checks.extend(
+            [
+                _check(
+                    f"{scenario_id}.rss_plateau_growth",
+                    rss_growth <= thresholds["maximum_rss_plateau_growth_bytes"],
+                    rss_growth,
+                    thresholds["maximum_rss_plateau_growth_bytes"],
+                ),
+                _check(
+                    f"{scenario_id}.rss_slope_per_hour",
+                    rss_slope is not None
+                    and rss_slope
+                    <= thresholds["maximum_rss_slope_bytes_per_hour"],
+                    rss_slope,
+                    thresholds["maximum_rss_slope_bytes_per_hour"],
+                ),
+                _check(
+                    f"{scenario_id}.vram_plateau_growth",
+                    vram_growth <= thresholds["maximum_vram_plateau_growth_bytes"],
+                    vram_growth,
+                    thresholds["maximum_vram_plateau_growth_bytes"],
+                ),
+                _check(
+                    f"{scenario_id}.vram_slope_per_hour",
+                    vram_slope is not None
+                    and vram_slope
+                    <= thresholds["maximum_vram_slope_bytes_per_hour"],
+                    vram_slope,
+                    thresholds["maximum_vram_slope_bytes_per_hour"],
+                ),
+            ]
+        )
+        allowed = {"success"}
+        if scenario["kind"] == "invalid":
+            allowed = {"invalid"}
+        elif scenario["kind"] == "overload":
+            allowed = {"success", "overload"}
+        elif scenario["kind"] == "cancellation-disconnect":
+            allowed = {"success", "cancelled", "disconnected"}
+        unexpected = Counter(
+            {
+                outcome: count
+                for outcome, count in state.outcome_counts.items()
+                if outcome not in allowed
+            }
+        )
+        checks.append(
+            _check(
+                f"{scenario_id}.request_outcomes",
+                not unexpected,
+                dict(unexpected),
+                sorted(allowed),
+            )
+        )
+        golden_only = (
+            scenario["request_profile"] == reducer.golden_profile
+            and scenario.get("secondary_request_profile", reducer.golden_profile)
+            == reducer.golden_profile
+        )
+        if golden_only:
+            successful_hashes = _bounded_hash_observation(
+                state.golden_success_count,
+                state.golden_all_expected,
+                expected_golden,
+            )
+            checks.append(
+                _check(
+                    f"{scenario_id}.golden_parity",
+                    successful_hashes == [expected_golden],
+                    successful_hashes,
+                    [expected_golden],
+                )
+            )
+        if scenario["kind"] == "rollback":
+            rollback_hashes[scenario["execution_completion"]] = _bounded_hash_observation(
+                state.rollback_success_count,
+                state.rollback_all_expected,
+                expected_golden,
+            )
+        report["scenario_summaries"].append(
+            {
+                "scenario_id": scenario_id,
+                "kind": scenario["kind"],
+                "events": state.event_count,
+                "samples": state.sample_count,
+                "requests": state.request_count,
+                "maximum_sample_gap_ms": maximum_gap,
+                "observed_duration_seconds": observed_duration_seconds,
+                "sample_span_seconds": sample_span_seconds,
+                "rss_slope_bytes_per_hour": rss_slope,
+                "vram_slope_bytes_per_hour": vram_slope,
+            }
+        )
+    final_shape = (
+        reducer.final_global_sample_count == 1
+        and reducer.final_global_sample_index == reducer.event_count - 1
+    )
+    checks.append(
+        _check(
+            "final_sample_position",
+            final_shape,
+            reducer.final_global_sample_count,
+            "exactly one penultimate global sample",
+        )
+    )
+    checks.append(
+        _check(
+            "initial_target_pid_binding",
+            reducer.first_process_sample_pid is not None
+            and reducer.first_process_sample_pid == run["target"]["pid"],
+            reducer.first_process_sample_pid,
+            run["target"]["pid"],
+        )
+    )
+    final = reducer.final_global_sample
+    final_values = (
+        None
+        if final is None
+        else {
+            "process_pid": final["process"]["pid"],
+            "process_rss_bytes": final["process"]["rss_bytes"],
+            "process_hwm_bytes": final["process"]["hwm_bytes"],
+            "process_fd_count": final["process"]["fd_count"],
+            "process_thread_count": final["process"]["thread_count"],
+            "process_children": final["process"]["children"],
+            "gpu_vram_bytes": final["gpu"]["vram_bytes"],
+            "active_requests": final["metrics"]["active_requests"],
+            "waiting_requests": final["metrics"]["waiting_requests"],
+            "kv_allocated_blocks": final["metrics"]["kv_allocated_blocks"],
+            **final["metrics"]["allocation"],
+        }
+    )
+    final_quiescent = final_values is not None and all(
+        value == ([] if key == "process_children" else 0)
+        for key, value in final_values.items()
+    )
+    checks.append(
+        _check(
+            "final_quiescence",
+            final_quiescent,
+            final_values,
+            "zero process/GPU/service/allocation state and no children",
+        )
+    )
+    python_children = (
+        [] if reducer.first_python_child is None else [reducer.first_python_child]
+    )
+    checks.append(_check("no_python_children", not python_children, python_children, []))
+    checks.append(
+        _check(
+            "no_dropped_samples",
+            not reducer.dropped_sample_seen,
+            reducer.dropped_sample_seen,
+            False,
+        )
+    )
+    checks.append(
+        _check(
+            "no_failure_events",
+            reducer.failure_count == 0,
+            reducer.failure_count,
+            0,
+        )
+    )
+    checks.extend(
+        [
+            _check(
+                "cancellations_observed",
+                reducer.outcome_counts["cancelled"]
+                >= thresholds["minimum_cancellations"],
+                reducer.outcome_counts["cancelled"],
+                thresholds["minimum_cancellations"],
+            ),
+            _check(
+                "disconnects_observed",
+                reducer.outcome_counts["disconnected"]
+                >= thresholds["minimum_disconnects"],
+                reducer.outcome_counts["disconnected"],
+                thresholds["minimum_disconnects"],
+            ),
+            _check(
+                "overloads_observed",
+                reducer.outcome_counts["overload"] >= thresholds["minimum_overloads"],
+                reducer.outcome_counts["overload"],
+                thresholds["minimum_overloads"],
+            ),
+            _check(
+                "service_cancellations_observed",
+                reducer.metric_counter_maxima["cancellations"]
+                >= thresholds["minimum_cancellations"],
+                reducer.metric_counter_maxima["cancellations"],
+                thresholds["minimum_cancellations"],
+            ),
+            _check(
+                "service_disconnects_observed",
+                reducer.metric_counter_maxima["disconnects"]
+                >= thresholds["minimum_disconnects"],
+                reducer.metric_counter_maxima["disconnects"],
+                thresholds["minimum_disconnects"],
+            ),
+            _check(
+                "service_overloads_observed",
+                reducer.metric_counter_maxima["overloads"]
+                >= thresholds["minimum_overloads"],
+                reducer.metric_counter_maxima["overloads"],
+                thresholds["minimum_overloads"],
+            ),
+        ]
+    )
+    restarts = [] if reducer.first_restart is None else [reducer.first_restart]
+    restart_ok = (
+        reducer.restart_count == 1
+        and reducer.first_restart is not None
+        and reducer.first_restart["graceful"]
+        and reducer.first_restart["exit_code"] == 0
+        and reducer.first_restart["elapsed_ms"]
+        <= thresholds["graceful_shutdown_deadline_ms"]
+        and reducer.first_restart["before_generated_sha256"] == expected_golden
+        and reducer.first_restart["after_generated_sha256"] == expected_golden
+    )
+    checks.append(
+        _check(
+            "graceful_restart_golden_parity",
+            restart_ok,
+            restarts,
+            "one bounded graceful exact-parity restart",
+        )
+    )
+    left = rollback_hashes.get("iteration-batch", [])
+    right = rollback_hashes.get("per-operation", [])
+    rollback_ok = left == [expected_golden] and right == [expected_golden]
+    checks.append(
+        _check(
+            "rollback_golden_parity",
+            rollback_ok,
+            {"iteration-batch": left, "per-operation": right},
+            "one identical non-null hash",
+        )
+    )
+    passed = all(check["passed"] for check in checks)
+    report.update(
+        {
+            "status": "passed" if passed else "failed",
+            "passed": passed,
+            "bindings": {
+                "contract_id": manifest["contract_id"],
+                "reviewed_manifest_template_canonical_sha256": (
+                    REVIEWED_MANIFEST_TEMPLATE_CANONICAL_SHA256
+                ),
+                "manifest_sha256": run["manifest_sha256"],
+                "binding_sha256": run["binding_sha256"],
+                "trusted_correctness": dict(trusted_correctness),
+                "runtime_provenance": dict(runtime_provenance),
+                "source": run["source"],
+            },
+            "observations": {
+                "event_count": reducer.event_count,
+                "outcome_counts": dict(sorted(reducer.outcome_counts.items())),
+                "service_counter_maxima": dict(
+                    sorted(reducer.metric_counter_maxima.items())
+                ),
+                "final": final_values,
+            },
+            "checks": checks,
+        }
+    )
+    return report
+
+
+def _bound_json_document(raw: bytes, label: str, maximum_bytes: int) -> dict[str, Any]:
+    if type(raw) is not bytes or not raw or len(raw) > maximum_bytes:
+        _fail(label, f"must be non-empty bytes within {maximum_bytes} bytes")
+    return _object(_parse_json_value(raw, label), label)
+
+
+def replay_bound_raw_evidence_fd(
+    raw_evidence_fd: int,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+    correctness_golden_raw: bytes,
+    native_correctness_report_raw: bytes,
+) -> dict[str, Any]:
+    """Replay one canonical soak archive from a held private raw FD only.
+
+    This is intentionally independent of ``evaluate`` and
+    ``replay_raw_evidence_archive``.  It never accepts a raw archive pathname,
+    manually validates canonical USTAR/SHA256SUMS, streams JSONL one line at a
+    time, and uses three sequential event passes rather than retaining a raw
+    event collection.
+    """
+
+    _require_bound_semantic_policy()
+    members, retained, archive_sha256, before_identity = _stream_bound_raw_archive(
+        raw_evidence_fd,
+        expected_sha256=expected_sha256,
+        expected_byte_length=expected_byte_length,
+    )
+    manifest_raw, manifest_sha256 = retained["manifest.json"]
+    manifest = _validate_manifest(
+        _bound_json_document(
+            manifest_raw, "manifest.json", RAW_MEMBER_MAX_BYTES["manifest.json"]
+        ),
+        "manifest.json",
+    )
+    run_raw, run_json_sha256 = retained["run.json"]
+    run = _validate_run(
+        _bound_json_document(run_raw, "run.json", RAW_MEMBER_MAX_BYTES["run.json"]),
+        "run.json",
+        manifest_sha256,
+    )
+    if run["target"]["kind"] != manifest["target"]["kind"]:
+        _fail("run.json.target.kind", "does not match manifest target kind")
+    if run["target"]["image_id"] != f"sha256:{run['source']['image_sha256']}":
+        _fail("run.json.target.image_id", "does not match bound image SHA-256")
+    trusted_correctness = _validate_trusted_correctness_payloads(
+        manifest,
+        run,
+        correctness_golden_raw=correctness_golden_raw,
+        native_correctness_report_raw=native_correctness_report_raw,
+    )
+    receipt_payloads = {
+        name: retained[name] for name in RUNTIME_RECEIPT_FILENAMES
+    }
+    runtime_provenance, runtime_timing = _validate_runtime_receipt_payloads(
+        receipt_payloads,
+        run,
+        trusted_correctness,
+        run_json_sha256=run_json_sha256,
+        events_jsonl_sha256=members["events.jsonl"].sha256,
+    )
+    reducer = _BoundSoakEventReducer(
+        run["binding_sha256"],
+        manifest["scenarios"],
+        manifest["requests"],
+        expected_golden=manifest["golden"]["generated_sha256"],
+        golden_profile=manifest["golden"]["request_profile"],
+    )
+    for event in _iter_bound_jsonl_events(raw_evidence_fd, members["events.jsonl"]):
+        reducer.consume(event)
+    reducer.finish()
+    tails = _collect_bound_tail_statistics(
+        raw_evidence_fd,
+        members["events.jsonl"],
+        reducer,
+        manifest["thresholds"],
+    )
+    report = _build_bound_soak_report(
+        reducer,
+        tails,
+        manifest,
+        run,
+        trusted_correctness,
+        runtime_provenance,
+        runtime_timing,
+    )
+    after = _bound_raw_fd_stat(
+        raw_evidence_fd,
+        expected_sha256=expected_sha256,
+        expected_byte_length=expected_byte_length,
+    )
+    if _bound_raw_identity(after) != before_identity:
+        _fail("bound raw evidence", "held descriptor changed during semantic replay")
+    if (
+        _stream_held_fd_sha256(
+            raw_evidence_fd,
+            expected_byte_length,
+            label="bound raw evidence",
+        )
+        != expected_sha256
+    ):
+        _fail("bound raw evidence", "held descriptor SHA-256 changed during replay")
+    return {
+        "report": report,
+        "raw_evidence_sha256": archive_sha256,
+        "raw_evidence_byte_length": expected_byte_length,
+        "correctness_golden_sha256": hashlib.sha256(
+            correctness_golden_raw
+        ).hexdigest(),
+        "native_correctness_report_sha256": hashlib.sha256(
+            native_correctness_report_raw
+        ).hexdigest(),
+        "raw_stream_member_byte_limit": MAX_BOUND_RAW_STREAM_MEMBER_BYTES,
+        "scratch_disk_byte_limit": MAX_BOUND_RAW_SCRATCH_BYTES,
+    }
+
+
+def _bound_required_sha256(value: Any, label: str) -> str:
+    return _string(value, label, SHA256_RE)
+
+
+def validate_bound_reliability_soak_evidence(
+    report: Mapping[str, Any],
+    raw_evidence_fd: int,
+    *,
+    correctness_golden_raw: bytes,
+    native_correctness_report_raw: bytes,
+    source_revision: str,
+    source_archive_sha256: str,
+    release_binary_sha256: str,
+    release_image_id: str,
+    candidate_id: str,
+    correctness_golden_sha256: str,
+    native_correctness_report_sha256: str,
+    raw_evidence_sha256: str,
+    raw_evidence_byte_length: int,
+    model_tree_sha256: str,
+) -> dict[str, Any]:
+    """Validate one fully bound soak component from caller-held evidence.
+
+    The only filesystem input is ``raw_evidence_fd``.  The correctness
+    artifacts are already-bounded bytes read by the caller through held
+    descriptors; their supplied descriptor digests are checked before the
+    semantic report and raw archive are cross-bound.
+    """
+
+    _require_bound_semantic_policy()
+    revision = _string(source_revision, "bound soak source revision", GIT_RE)
+    _string(candidate_id, "bound soak candidate ID")
+    source_archive = _bound_required_sha256(
+        source_archive_sha256, "bound soak source archive SHA-256"
+    )
+    release_binary = _bound_required_sha256(
+        release_binary_sha256, "bound soak release binary SHA-256"
+    )
+    expected_image_id = _string(
+        release_image_id, "bound soak release image ID", IMAGE_ID_RE
+    )
+    expected_golden_sha256 = _bound_required_sha256(
+        correctness_golden_sha256,
+        "bound soak correctness golden SHA-256",
+    )
+    expected_native_sha256 = _bound_required_sha256(
+        native_correctness_report_sha256,
+        "bound soak native correctness report SHA-256",
+    )
+    expected_raw_sha256 = _bound_required_sha256(
+        raw_evidence_sha256, "bound soak raw evidence SHA-256"
+    )
+    expected_model_tree = _bound_required_sha256(
+        model_tree_sha256, "bound soak model-tree SHA-256"
+    )
+    if type(correctness_golden_raw) is not bytes or hashlib.sha256(
+        correctness_golden_raw
+    ).hexdigest() != expected_golden_sha256:
+        _fail("bound soak correctness golden", "bytes differ from held descriptor SHA-256")
+    if type(native_correctness_report_raw) is not bytes or hashlib.sha256(
+        native_correctness_report_raw
+    ).hexdigest() != expected_native_sha256:
+        _fail(
+            "bound soak native correctness report",
+            "bytes differ from held descriptor SHA-256",
+        )
+    replay = replay_bound_raw_evidence_fd(
+        raw_evidence_fd,
+        expected_sha256=expected_raw_sha256,
+        expected_byte_length=raw_evidence_byte_length,
+        correctness_golden_raw=correctness_golden_raw,
+        native_correctness_report_raw=native_correctness_report_raw,
+    )
+    replayed_report = replay["report"]
+    if not isinstance(report, Mapping) or not isinstance(replayed_report, Mapping):
+        _fail("bound soak report", "submitted and replayed reports must be objects")
+    try:
+        submitted_canonical = _canonical_json_bytes(report)
+        replayed_canonical = _canonical_json_bytes(replayed_report)
+    except (TypeError, ValueError) as error:
+        _fail("bound soak report", f"cannot canonicalize report: {error}")
+    if submitted_canonical != replayed_canonical:
+        _fail("bound soak report", "submitted report differs from held-FD raw replay")
+    if (
+        replayed_report.get("schema_version") != REPORT_VERSION
+        or replayed_report.get("status") != "passed"
+        or replayed_report.get("passed") is not True
+        or replayed_report.get("errors") != []
+    ):
+        _fail("bound soak report", "submitted semantic soak report must pass cleanly")
+    bindings = _object(replayed_report.get("bindings"), "bound soak report.bindings")
+    source = _object(bindings.get("source"), "bound soak report.bindings.source")
+    expected_source = {
+        "git_commit": revision,
+        "git_dirty": False,
+        "source_archive_sha256": source_archive,
+        "binary_sha256": release_binary,
+        "image_sha256": expected_image_id.removeprefix("sha256:"),
+        "model_sha256": expected_model_tree,
+        "model_id": source.get("model_id"),
+        "model_revision": source.get("model_revision"),
+    }
+    if source != expected_source:
+        _fail(
+            "bound soak report.bindings.source",
+            "does not bind supplied frozen source, release, image, and model facts",
+        )
+    trusted = _object(
+        bindings.get("trusted_correctness"),
+        "bound soak report.bindings.trusted_correctness",
+    )
+    if (
+        trusted.get("e2e_correctness_golden_sha256") != expected_golden_sha256
+        or trusted.get("native_correctness_report_sha256") != expected_native_sha256
+    ):
+        _fail(
+            "bound soak report.bindings.trusted_correctness",
+            "does not bind caller-held correctness descriptors",
+        )
+    if (
+        replay["raw_evidence_sha256"] != expected_raw_sha256
+        or replay["raw_evidence_byte_length"] != raw_evidence_byte_length
+        or replay["correctness_golden_sha256"] != expected_golden_sha256
+        or replay["native_correctness_report_sha256"] != expected_native_sha256
+    ):
+        _fail("bound soak replay", "replay result differs from supplied evidence anchors")
+    return replay
 
 
 def package_raw_evidence(
