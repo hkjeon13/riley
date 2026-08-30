@@ -71,6 +71,15 @@ closed before the unprivileged worker stage.  The worker stage has exactly
 and no inherited lease or cgroup-control FD.  This document does not provide
 that handoff implementation.
 
+The separate C11 launch-isolation witness matcher compares only caller-normalized
+claims for that fixed profile: argv shape, empty environment, descriptor-set
+masks plus total-count/highest-FD projections, FD 31/32/token declarations,
+seals, and worker privilege/capability declarations. It does not inspect an
+actual argv, environment, FD table, seal, capability set, process, or
+executable object; invoke `prctl` or `execveat`; or create a secure handoff.
+Its success is a typed claim match only, not same-object execution, guardian
+installation, or admission authority.
+
 ## Durable admission and cgroup lease
 
 The safe lifetime condition is not “a file lock is currently held.”  It is:

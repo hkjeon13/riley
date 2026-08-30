@@ -102,3 +102,13 @@ ledger, changes phase/admission, or creates PID1/cgroup/FD authority. It is not
 a guardian, launcher, release, Gate E, freeze, rollback, or qualification
 input; its local README defines the fixed typed-claim boundary and fixture-only
 checks.
+
+gate-e-guardian-launch-isolation-witness-matcher/ is an eleventh standalone
+C11 in-memory library-only precursor. It matches caller-normalized sealed
+bootstrap/core launch-profile claims: the fixed argv profile, empty environment,
+exact bootstrap and worker descriptor-set masks/counts/highest-FD claims, FD
+31/32 tokens, seals, and worker no-new-privileges/capability isolation. It
+does not inspect a live argv/environment/FD table/seal/capability set, invoke
+secure-exec primitives, or create a guardian, launcher, release, Gate E,
+freeze, rollback, or qualification authority; its local README defines the
+fixed typed-claim boundary and fixture-only checks.

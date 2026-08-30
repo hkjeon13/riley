@@ -128,6 +128,12 @@ strictly greater generation인 경우만 일치하며, 다른 boot은 durable re
 session JSON·ledger의 read/write/signature·rehydrate, phase/admission, PID1/cgroup/FD를
 만들거나 변경하지 않으므로, 이 matcher의 성공도 session admission 또는 durable ledger 권한이 아니다.
 
+그 다음 C11 launch-isolation witness matcher는 sealed bootstrap/core의 fixed argv profile,
+empty environment, bootstrap/worker FD-set mask/count/highest-FD, FD 31/32 token/seal 및 worker
+no-new-privileges/capability claim만 비교한다. 실제 argv/environment/FD table/seal/capability를
+inspect하거나 `prctl`/`execveat`를 호출하지 않아, 성공해도 same-object secure execution,
+guardian installation, phase/admission 또는 producer 권한이 아니다.
+
 **작성 기준:** 초기 성능 비교 기준은 `main@1195cf20eef0bd6c3d72ac90437d308265e6f951`이며,
 현재 source-defaults release/pre-freeze contract pin은
 `main.rs@21f445f4870a140346509144c36c7294f2f677f3`이다.
