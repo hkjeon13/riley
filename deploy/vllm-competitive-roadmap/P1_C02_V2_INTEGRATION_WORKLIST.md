@@ -132,6 +132,15 @@ sender/worker/cgroup/FD, track phase or a durable ledger, acquire objects,
 execute a loader, or create guardian, producer, GPU, Docker, evidence, receipt,
 freeze, rollback, or qualification authority.
 
+The sibling C11 control-envelope matcher deliberately does not parse the
+packet again. After a separate packet validator succeeds, it fieldwise
+compares caller-normalized worker identity and held-cgroup claims with an
+active-session binding plus an explicit empty-ancillary declaration. It does
+not receive or inspect a socket, sender, pidfd, cgroup, or FD; track phase or
+ledger state; acquire objects; execute a loader; or create guardian, producer,
+GPU, Docker, evidence, receipt, freeze, rollback, or qualification authority.
+Its success is not sender authentication, admission, or release authority.
+
 The landed `rc3_gate_e_guardian_lease_contract_v1.py` and
 `ci/release/RC3_GATE_E_GUARDIAN_LEASE.md` now define that **CPU-only future
 contract**, not the native implementation.  Their scope is

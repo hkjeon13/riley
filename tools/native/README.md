@@ -53,3 +53,12 @@ authenticate a sender or phase, inspect credentials/cgroups/FDs, retain a
 lease/ledger, acquire a path, or execute anything. It is not a guardian,
 launcher, release, Gate E, freeze, rollback, or qualification input; its local
 README defines the fixed wire grammar and fixture-only checks.
+
+gate-e-guardian-control-envelope-matcher/ is a sixth standalone C11
+in-memory library-only precursor. It fieldwise matches caller-normalized
+worker/cgroup claims and an explicit empty-ancillary declaration against an
+active-session binding after the separate raw packet validator succeeds. It
+does not receive or inspect a socket, sender, pidfd, cgroup, or FD; retain an
+event/phase/ledger; acquire a path; or execute anything. It is not a guardian,
+launcher, release, Gate E, freeze, rollback, or qualification input; its local
+README defines the fixed typed-claim boundary and fixture-only checks.

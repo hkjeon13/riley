@@ -174,6 +174,14 @@ Its successful result means only that the bytes match the supplied binding and
 required kind; it is not sender authentication, admission control, or a native
 guardian installation.
 
+The separate C11 control-envelope matcher then compares caller-normalized
+worker PID/start-tick/pidfd-token/UID/GID and held-cgroup device/inode/token
+claims plus an empty-ancillary declaration. It does not receive or inspect a
+socket, sender, cgroup, pidfd, or FD, and it neither tracks a phase nor changes
+admission. Even when both source-only helpers return success, a future native
+transport/controller must still authenticate the sender and transport framing;
+NO_ACTION_COMPLETE remains a drain signal, never a release signal.
+
 The modeled durable ledger is deliberately strict: malformed or incomplete
 active records are rejected; a claimed empty ledger cannot retain a cgroup;
 and an active record always rehydrates closed.  These are CPU-only hostile-path
