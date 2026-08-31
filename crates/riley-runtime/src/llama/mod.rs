@@ -20,6 +20,8 @@ mod graph;
 mod graph_decode_binding;
 #[allow(dead_code)] // C07-19 deliberately precedes whole-signature/capture ownership.
 mod graph_decode_c06_identity;
+#[allow(dead_code)] // C07-20 deliberately precedes registry/capture ownership.
+mod graph_decode_c06_signature;
 #[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-15 deliberately precedes command-stream transfer ownership.
 mod graph_decode_exact_device_slab;

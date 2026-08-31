@@ -542,6 +542,41 @@ impl GraphSignature {
 
 const GRAPH_SIGNATURE_FINGERPRINT_DOMAIN: &[u8] = b"riley.graph-signature-fingerprint.v1\0";
 
+/// Typed rejection when an independently prepared static identity does not
+/// name the C07 metadata layout that a proposed iteration requires.
+///
+/// This is a cold value-composition error, not a dispatcher fallback reason.
+/// It neither changes the static identity nor attests any of its model, device,
+/// KV, or implementation facts.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct GraphStaticMetadataLayoutMismatch {
+    expected_metadata_layout: GraphMetadataLayoutSignature,
+    static_metadata_layout: GraphMetadataLayoutSignature,
+}
+
+/// Combines two independently prepared graph identities only after their
+/// metadata-layout facts agree exactly.
+///
+/// The supplied static identity is never rebuilt or mutated. In particular,
+/// this helper does not replace its metadata layout with `expected_metadata_layout`:
+/// callers must prepare a matching static value on their own cold path. This
+/// function does not validate or create graph resources, registry entries,
+/// dispatch eligibility, capture safety, or execution work.
+pub(crate) fn compose_graph_signature_checked_metadata(
+    static_signature: GraphStaticSignature,
+    expected_metadata_layout: GraphMetadataLayoutSignature,
+    iteration_signature: GraphIterationSignature,
+) -> Result<GraphSignature, GraphStaticMetadataLayoutMismatch> {
+    let static_metadata_layout = static_signature.layout.metadata_layout;
+    if static_metadata_layout != expected_metadata_layout {
+        return Err(GraphStaticMetadataLayoutMismatch {
+            expected_metadata_layout,
+            static_metadata_layout,
+        });
+    }
+    Ok(GraphSignature::new(static_signature, iteration_signature))
+}
+
 impl GraphModelArchitecture {
     const fn fingerprint_tag(self) -> u8 {
         match self {

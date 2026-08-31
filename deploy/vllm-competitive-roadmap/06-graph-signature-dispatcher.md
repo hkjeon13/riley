@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-4는 closed dispatch outcome의 allocation-free observation contract를 CPU-only로 고정했다.
+**상태:** In progress — C06-5는 C07 consumer가 static metadata identity를 exact 검증한 뒤에만 complete cache key를 조합하게 했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -78,6 +78,18 @@ snapshot은 replay slot, signature fingerprint, request ID를 보관하지 않�
 이 count는 graph launch, replay, completion 또는 performance hit를 뜻하지 않는다. selector, immutable
 registry, executor, CUDA owner, CLI/default에는 연결하지 않으며, C07만 native launch와 completion evidence를
 기록할 수 있다.
+
+### C06-5 — checked static/iteration signature composition (CPU-only)
+
+C06-5는 independently cold-prepared `GraphStaticSignature`의 embedded metadata identity가 consumer가 요구한
+`GraphMetadataLayoutSignature`와 schema와 digest 모두에서 exact equality일 때만 existing static value와
+iteration value로 `GraphSignature`를 만든다. mismatch는 dispatcher fallback reason이 아닌 typed cold
+composition error다. helper는 static value를 rebuild하거나 metadata/KV facts를 교체하지 않는다.
+
+이 helper는 model/device/tensor/geometry/KV/implementation facts를 검증하거나 만들지 않고 caller-supplied
+static identity를 그대로 보존한다. registry lookup, dispatch, metrics, graph owner/handle, CUDA capture/launch,
+allocation 또는 execution work를 하지 않는다. 따라서 complete key도 graph-ready, capture-safe, prepared,
+replayable 또는 performance improvement를 뜻하지 않는다.
 
 ## 2. Execution mode
 

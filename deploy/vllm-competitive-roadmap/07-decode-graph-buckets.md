@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-19는 closed C07 V1 candidate를 C06 partial graph identity에 단방향으로 묶는다.
+**상태:** In progress — C07-20은 C07 partial identity와 independently prepared C06 static identity를 exact metadata match 뒤에만 complete cache key로 조합한다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -276,6 +276,21 @@ sampling backend는 capture safety 또는 GPU greedy execution의 assertion이 �
 metadata-layout-match boolean, buffer/lease/H2D, CUDA stream/capture/instantiate/replay, executor mutation을
 만들거나 허용하지 않는다. 따라서 partial identity는 graph-ready/runnable graph 또는 performance improvement를
 뜻하지 않으며, 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-20 — checked V1 complete C06 signature composition (CPU-only)
+
+C07-20은 C07-19의 opaque Bound partial identity와 independently cold-prepared C06 `GraphStaticSignature`를
+받는다. C06 helper가 static value에 이미 embedded된 full metadata identity를 C07-derived schema/digest와
+exact 비교한 뒤에만 original static value와 C07-19가 보관한 iteration identity로 complete `GraphSignature`를
+만든다. static metadata mismatch는 typed cold composition error이며, C07가 static metadata/KV facts를
+교체하거나 rebuild하는 rebind path는 없다. 이미 Ineligible인 C07 candidate는 static identity를 검사하거나
+complete key를 만들지 않고 original typed reason으로 끝난다.
+
+이 slice는 static signature의 model/device/tensor/geometry/KV/implementation facts를 검증하거나 C07 facts로
+대체하지 않고 input identity에 그대로 남긴다. registry/dispatch/metrics, metadata-layout-match eligibility
+boolean, graph owner/handle, buffer/lease/H2D, CUDA stream/capture/instantiate/replay, executor mutation을
+만들거나 허용하지 않는다. complete key는 graph-ready/capture-safe/prepared/runnable graph 또는 performance
+improvement를 뜻하지 않으며, 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
