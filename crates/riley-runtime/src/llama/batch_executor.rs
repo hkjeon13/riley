@@ -1598,11 +1598,7 @@ fn execute_packed(
         ) => {
             let layout = PackedIterationLayout::for_batch(&packed, dense_rows)?;
             layout.validate_capacity(host.bytes.len())?;
-            layout.validate_capacity(usize::try_from(slab.byte_len()).map_err(|_| {
-                LlamaBatchExecutorError::ArithmeticOverflow {
-                    resource: LlamaBatchExecutorResource::PackedIterationInput,
-                }
-            })?)?;
+            layout.validate_u64_capacity(slab.byte_len())?;
             pack_iteration_input(&packed, dense_rows, layout, &mut host.bytes)?;
             host.pinned
                 .write(0, &host.bytes[..layout.total_bytes])

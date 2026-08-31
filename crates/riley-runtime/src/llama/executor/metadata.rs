@@ -172,6 +172,15 @@ impl PackedIterationLayout {
         }
         Ok(())
     }
+
+    /// Checks a CUDA ABI slab capacity before binding or writing packed metadata.
+    pub(crate) fn validate_u64_capacity(self, capacity: u64) -> LlamaBatchExecutorResult<()> {
+        let capacity =
+            usize::try_from(capacity).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::PackedIterationInput,
+            })?;
+        self.validate_capacity(capacity)
+    }
 }
 
 /// Validates one packed batch against executor-independent host bounds.
@@ -530,5 +539,33 @@ mod tests {
             })
         ));
         assert_eq!(u16_destination, [0x5A; U16_BYTES]);
+    }
+
+    #[test]
+    fn packed_layout_u64_capacity_preserves_conversion_and_layout_errors() {
+        let layout =
+            PackedIterationLayout::checked(1, 1, 0, 0, 0, 0, 0).expect("small packed layout");
+        let exact_capacity = u64::try_from(layout.total_bytes).expect("native capacity fits ABI");
+        layout
+            .validate_u64_capacity(exact_capacity)
+            .expect("exact capacity is accepted");
+        assert!(matches!(
+            layout.validate_u64_capacity(exact_capacity - 1),
+            Err(LlamaBatchExecutorError::InvalidBatch {
+                field: "packed_iteration_input",
+                reason: "dynamic packed input exceeds the cold-prepared slab",
+            })
+        ));
+
+        let maximum_capacity = layout.validate_u64_capacity(u64::MAX);
+        match usize::try_from(u64::MAX) {
+            Ok(_) => maximum_capacity.expect("maximum ABI capacity fits the native width"),
+            Err(_) => assert!(matches!(
+                maximum_capacity,
+                Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                    resource: LlamaBatchExecutorResource::PackedIterationInput,
+                })
+            )),
+        }
     }
 }

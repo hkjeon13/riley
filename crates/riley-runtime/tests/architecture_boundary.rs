@@ -565,6 +565,7 @@ fn executor_metadata_is_a_checked_layout_and_host_packing_boundary() {
         "checked_add(1)",
         "SequenceBlockOffsets",
         "checked_region_slice_mut",
+        "validate_u64_capacity",
         "TokenOutOfRange",
         "PositionOutOfRange",
     ] {

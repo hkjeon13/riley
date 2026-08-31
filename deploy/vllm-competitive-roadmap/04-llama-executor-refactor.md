@@ -19,7 +19,7 @@ C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 seq
 count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
 C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26은 typed packed-region
 validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar conversion을 error facade로
-일관화했다. CUDA owner, KV,
+일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -389,6 +389,15 @@ checked multiplication 순서는 유지한다.
 
 CUDA 호출, buffer allocation, host/device upload, dispatch, owner lifecycle은 변경하지 않는다. 이
 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-28 — packed CUDA-slab capacity validation reuse
+
+`PackedIterationLayout`은 CUDA ABI의 `u64` slab byte capacity를 native capacity로 checked conversion한
+뒤 layout capacity를 검증한다. packed host write 전의 batch owner와 borrowed device span bind 전의
+device view가 같은 pure helper를 사용하며, `PackedIterationInput` overflow mapping을 유지한다.
+
+host write/H2D copy, device span 생성, CUDA invocation, allocation과 owner lifecycle은 각 caller에
+그대로 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

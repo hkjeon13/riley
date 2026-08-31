@@ -578,6 +578,39 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn packed_slab_capacity_validation_is_shared_before_write_or_bind() {
+        let metadata = include_str!("executor/metadata.rs");
+        let helper_begin = metadata
+            .find("pub(crate) fn validate_u64_capacity")
+            .expect("packed slab conversion remains in the layout boundary");
+        let helper_end = metadata[helper_begin..]
+            .find("\n}\n\n/// Validates")
+            .map(|offset| helper_begin + offset)
+            .expect("layout conversion helper remains before host preflight");
+        let helper = &metadata[helper_begin..helper_end];
+        assert!(helper.contains("usize::try_from(capacity)"));
+        assert!(helper.contains("LlamaBatchExecutorResource::PackedIterationInput"));
+        assert!(helper.contains("self.validate_capacity(capacity)"));
+
+        for (boundary, source) in [
+            ("batch owner", include_str!("batch_executor.rs")),
+            ("device views", include_str!("executor/device_views.rs")),
+        ] {
+            assert_eq!(
+                source
+                    .matches("validate_u64_capacity(slab.byte_len())")
+                    .count(),
+                1,
+                "{boundary} must validate the packed CUDA slab through the shared layout helper"
+            );
+            assert!(
+                !source.contains("usize::try_from(slab.byte_len())"),
+                "{boundary} must not retain a local packed CUDA slab conversion"
+            );
+        }
+    }
+
+    #[test]
     fn sequence_block_offset_count_is_shared_before_capacity_or_allocation() {
         assert_eq!(
             super::executor::metadata::sequence_block_offset_count(0)

@@ -93,11 +93,7 @@ pub(crate) fn packed_device_views<'a>(
     layout: PackedIterationLayout,
     site: ExecutionSite,
 ) -> LlamaBatchExecutorResult<BatchDeviceViews<'a>> {
-    layout.validate_capacity(usize::try_from(slab.byte_len()).map_err(|_| {
-        LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::PackedIterationInput,
-        }
-    })?)?;
+    layout.validate_u64_capacity(slab.byte_len())?;
     let batch = PackedBatchV1::new(
         host_batch,
         device_span_region(slab, CudaDType::U32, layout.sequence_block_offsets, site)?,
