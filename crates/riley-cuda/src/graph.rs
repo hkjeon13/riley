@@ -581,6 +581,59 @@ impl CudaGraphLifecycle {
 /// This initial ABI foundation never constructs a capture. It still reserves
 /// the mutable stream borrow in the safe API so the eventual native capture
 /// cannot be introduced as an aliasing-compatible change.
+/// A live capture is also deliberately `!Send + !Sync`: capture invalidation
+/// and recovery remain bound to the stream-owning host thread until a future
+/// native owner can close that lifecycle explicitly.
+///
+/// ```compile_fail
+/// fn cannot_query_stream_while_capturing(stream: &mut riley_cuda::CudaStream) {
+///     let capture = stream
+///         .begin_graph_capture(riley_cuda::CudaGraphCaptureMode::ThreadLocal)
+///         .unwrap();
+///     let _ = stream.query();
+///     drop(capture);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn cannot_synchronize_stream_while_capturing(stream: &mut riley_cuda::CudaStream) {
+///     let capture = stream
+///         .begin_graph_capture(riley_cuda::CudaGraphCaptureMode::ThreadLocal)
+///         .unwrap();
+///     let _ = stream.synchronize();
+///     drop(capture);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn cannot_begin_a_batch_while_capturing(stream: &mut riley_cuda::CudaStream) {
+///     let capture = stream
+///         .begin_graph_capture(riley_cuda::CudaGraphCaptureMode::ThreadLocal)
+///         .unwrap();
+///     let _ = stream.begin_command_batch();
+///     drop(capture);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn cannot_close_stream_while_capturing(stream: &mut riley_cuda::CudaStream) {
+///     let capture = stream
+///         .begin_graph_capture(riley_cuda::CudaGraphCaptureMode::ThreadLocal)
+///         .unwrap();
+///     let _ = stream.close();
+///     drop(capture);
+/// }
+/// ```
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::GraphCapture<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::GraphCapture<'static>>();
+/// ```
 #[derive(Debug)]
 pub struct GraphCapture<'stream> {
     _stream: PhantomData<&'stream mut CudaStream>,

@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-2는 native graph-failure companion record의 canonical Rust decoder를 production FFI 경계에 올렸다.
+**상태:** In progress — C05-3은 `GraphCapture`의 exclusive stream lease와 thread confinement를 compile-fail 계약으로 고정했다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -55,6 +55,17 @@ zero ID와 zero lifecycle flags를 계속 요구한다. valid native NOT_SUPPORT
 command-batch lease 변화, abort/end/instantiate, graph allocation, replay, GPU execution과 성능 주장을
 추가하지 않는다. 실제 owner는 valid handle의 consume-on-error, abort/recovery, context와 resource lease
 정책을 함께 닫는 후속 slice에서만 도입한다.
+
+### C05-3 — type-level exclusive stream lease (CPU-only)
+
+`GraphCapture<'stream>`은 기존 mutable stream borrow와 `!Send + !Sync` marker를 compile-fail
+doctest로 고정한다. live capture 동안 같은 stream에 query, synchronize, command-batch begin,
+close를 호출할 수 없고, `GraphCapture<'static>`을 다른 thread로 보내거나 공유할 수도 없다.
+
+이 slice는 type-only ownership contract다. 성공 capture를 만들지 않으며 native handle, C ABI,
+FFI, stream/context mutation, command-batch/resource lease, abort/end/instantiate/replay를 추가하지
+않는다. 따라서 실제 capture owner는 non-null native handle의 consume-on-error, invalidation abort와
+recovery, resource lifetime을 함께 닫는 다음 native slice에서만 도입한다.
 
 ## 2. 범위
 

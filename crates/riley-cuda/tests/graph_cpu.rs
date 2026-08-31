@@ -123,6 +123,45 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
 }
 
 #[test]
+fn graph_capture_is_a_type_level_exclusive_stream_lease() {
+    let graph_source = include_str!("../src/graph.rs");
+    let capture_source = graph_source
+        .split("/// Borrowed graph-capture owner")
+        .nth(1)
+        .expect("graph contract must retain the GraphCapture owner declaration")
+        .split("impl CudaStream")
+        .next()
+        .expect("GraphCapture owner declaration must precede CudaStream methods");
+
+    for required in [
+        "PhantomData<&'stream mut CudaStream>",
+        "PhantomData<Rc<()>>",
+        "cannot_query_stream_while_capturing",
+        "cannot_synchronize_stream_while_capturing",
+        "cannot_begin_a_batch_while_capturing",
+        "cannot_close_stream_while_capturing",
+        "assert_send::<riley_cuda::GraphCapture<'static>>();",
+        "assert_sync::<riley_cuda::GraphCapture<'static>>();",
+    ] {
+        assert!(
+            capture_source.contains(required),
+            "GraphCapture must retain the exclusive-lease contract: {required}"
+        );
+    }
+    assert_eq!(
+        capture_source.matches("```compile_fail").count(),
+        6,
+        "GraphCapture must keep four stream-alias and two thread-transfer compile-fail examples"
+    );
+    for forbidden in ["RawGraphCapture", "ffi::", "unsafe", "*mut", "self.native"] {
+        assert!(
+            !capture_source.contains(forbidden),
+            "C05-3 must remain a type-only owner contract without a native handle: {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn native_capture_begin_stub_is_wired_and_fails_closed_without_cuda_work() {
     let header = include_str!("../../../kernels/include/riley_cuda.h");
     let native = include_str!("../../../kernels/src/graph.cu");
