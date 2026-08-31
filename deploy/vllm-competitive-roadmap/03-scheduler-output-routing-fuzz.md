@@ -103,7 +103,7 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 - PR마다 최소 10,000 generated traces
 - nightly 또는 scheduled run에서 1,000,000 traces
-- failure 시 seed와 최소 축약 trace 출력
+- failure 시 source seed, full descriptor, grammar candidate-minimized trace 출력
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
@@ -120,12 +120,21 @@ decoder cancel, stale/missing/unplanned feedback의 surface-preserving rejection
 commit에 의한 valid retry 또는 `NotDispatched` abort, consuming close를 조합한다. 각 operation은 public
 scheduler API만 호출하며 planning/update/close 전체에서 terminal-once, token/index ledger, rejected
 feedback 뒤 surface 불변성, final quiescence를 확인한다. 실패 시 seed·bounded config·canonical
-operation list를 출력한다.
+operation list를 출력한다. failure 때는 source seed와 full descriptor를 보존한 채, 같은 V2 failure
+predicate가 재현되는 경우에만 optional rejection/cancel을 제거하고 decoder output capacity와
+final-prefill length를 더 작은 값으로 바꾸는 greedy shrinker도 실행한다. rejection kind, settlement
+(`NotDispatched` abort 또는 reverse commit), prime/mixed prefix와 reverse feedback은 바꾸지 않는다.
+report는 원본과 candidate-minimized V2 descriptor 및 canonical operation list를 함께 남긴다. seed만으로
+shrunken descriptor를 재생성한다는 뜻은 아니다. predicate는 inner replayer가 panic하는지만 보존하므로
+same assertion site, failure signature 또는 root cause를 보존한다고 주장하지 않는다.
 
-이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator, shrink/minimized
-counterexample, 독립 reference model, scheduled 1,000,000 seed rotation, post-validation
-sampling/commit fault injection은 남아 있다. 마지막 항목은 현 public scheduler API에 injection seam이
-없으므로 별도 test-only seam 계약으로 설계한다.
+이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator와 그 전체 grammar의
+shrink/global-minimum counterexample, 독립 reference model, scheduled 1,000,000 seed rotation,
+post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
+multi-edit/delta-debugging reduction, durable JSON parser/round-trip serialization도 별도 범위다. V2
+shrinker는 이 작은 grammar의 greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
+counterexample을 주장하지 않는다. 마지막 항목은 현 public scheduler API에 injection seam이 없으므로
+별도 test-only seam 계약으로 설계한다.
 
 ### Deterministic corpus
 
@@ -156,7 +165,14 @@ GPU test는 property runner 전체를 실행하지 않고 고정된 최소 corpu
 
 ## 7. Shrinking
 
-실패 시 다음 순서로 trace를 축약한다.
+현재 `OperationTraceV2`는 failure가 발생하면 같은 property predicate로 bounded candidate를 다시
+replay해 optional operation 제거와 output/prefill length 축소 순서의 local minimum을 출력한다. seed와
+rejection kind·settlement은 고정하며, descriptor/canonical operation list 전체가 shrunken replay
+입력이다. 이 minimizer 자체는 deterministic synthetic predicate와 모든 bounded candidate의 grammar
+replay로 candidate order·local-minimum 성질을 고정한다. 실제 defect counterexample이나 arbitrary trace를
+이 경로가 이미 global minimum으로 축약했다는 뜻은 아니다.
+
+일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
 2. iteration 수 감소
@@ -165,7 +181,8 @@ GPU test는 property runner 전체를 실행하지 않고 고정된 최소 corpu
 5. output slot permutation 단순화
 6. cancellation/failure 시점 단순화
 
-최종 report는 재현 가능한 seed뿐 아니라 사람이 읽을 수 있는 최소 operation list를 포함한다.
+그 general final report는 source seed와 full replay descriptor, 사람이 읽을 수 있는 globally minimized
+operation list를 함께 포함한다. 이는 현재 V2 local shrinker보다 강한 후속 기준이다.
 
 ## 8. 예상 파일 변경
 

@@ -1494,12 +1494,73 @@ impl OperationTraceV2 {
             .map(OperationTraceV2Op::describe)
             .collect::<Vec<_>>();
         format!(
-            "v2 seed={:#018x}; decoder_max_new_tokens={}; final_prefill_len={}; operations=[{}]",
+            "v2 descriptor={{seed={:#018x}, decoder_max_new_tokens={}, final_prefill_len={}, \
+             cancel_decoder={}, rejected_feedback={:?}, settlement={:?}}}; operations=[{}]",
             self.seed,
             self.decoder_max_new_tokens,
             self.final_prefill_len,
+            self.cancel_decoder,
+            self.rejected_feedback,
+            self.settlement,
             operations.join(" -> "),
         )
+    }
+
+    fn shrink_candidates(self) -> Vec<Self> {
+        let mut candidates = Vec::with_capacity(9);
+        if self.rejected_feedback.is_some() {
+            candidates.push(Self {
+                rejected_feedback: None,
+                ..self
+            });
+        }
+        if self.cancel_decoder {
+            candidates.push(Self {
+                cancel_decoder: false,
+                ..self
+            });
+        }
+        for final_prefill_len in 1..self.final_prefill_len {
+            candidates.push(Self {
+                final_prefill_len,
+                ..self
+            });
+        }
+        for decoder_max_new_tokens in 2..self.decoder_max_new_tokens {
+            candidates.push(Self {
+                decoder_max_new_tokens,
+                ..self
+            });
+        }
+        candidates
+    }
+
+    fn shrink_weight(self) -> usize {
+        usize::from(self.rejected_feedback.is_some())
+            + usize::from(self.cancel_decoder)
+            + (self.final_prefill_len - 1)
+            + (self.decoder_max_new_tokens - 2)
+    }
+}
+
+fn minimize_operation_trace_v2<F>(trace: OperationTraceV2, mut reproduces: F) -> OperationTraceV2
+where
+    F: FnMut(OperationTraceV2) -> bool,
+{
+    assert!(
+        reproduces(trace),
+        "operation-trace minimization requires a reproducing starting trace"
+    );
+    let mut minimized = trace;
+    loop {
+        let Some(candidate) = minimized
+            .shrink_candidates()
+            .into_iter()
+            .find(|candidate| reproduces(*candidate))
+        else {
+            return minimized;
+        };
+        minimized = candidate;
     }
 }
 
@@ -1980,13 +2041,97 @@ fn replay_operation_trace_v2_inner(trace: OperationTraceV2) {
     assert!(state.plan.is_none());
 }
 
+fn operation_trace_v2_fails(trace: OperationTraceV2) -> bool {
+    catch_unwind(AssertUnwindSafe(|| replay_operation_trace_v2_inner(trace))).is_err()
+}
+
 fn replay_operation_trace_v2(trace: OperationTraceV2) {
-    let replay = catch_unwind(AssertUnwindSafe(|| replay_operation_trace_v2_inner(trace)));
-    assert!(
-        replay.is_ok(),
-        "C03-A bounded operation trace failed: {}",
-        trace.describe()
+    if !operation_trace_v2_fails(trace) {
+        return;
+    }
+    let minimized = minimize_operation_trace_v2(trace, operation_trace_v2_fails);
+    panic!(
+        "C03-A bounded operation trace failed:\noriginal: {}\nminimized: {}",
+        trace.describe(),
+        minimized.describe()
     );
+}
+
+fn synthetic_operation_trace_v2_failure(trace: OperationTraceV2) -> bool {
+    trace.decoder_max_new_tokens >= 3
+        && trace.final_prefill_len >= 2
+        && trace.rejected_feedback == Some(OperationTraceRejectedFeedback::Missing)
+}
+
+#[test]
+fn bounded_operation_trace_shrinker_preserves_and_minimizes_a_failure() {
+    let minimized =
+        minimize_operation_trace_v2(ABORT_RETRY_TRACE_V2, synthetic_operation_trace_v2_failure);
+    assert_eq!(minimized.decoder_max_new_tokens, 3);
+    assert_eq!(minimized.final_prefill_len, 2);
+    assert!(!minimized.cancel_decoder);
+    assert_eq!(
+        minimized.rejected_feedback,
+        Some(OperationTraceRejectedFeedback::Missing)
+    );
+    assert_eq!(
+        minimized.settlement,
+        OperationTraceSettlement::AbortNotDispatched
+    );
+    assert_eq!(minimized.seed, ABORT_RETRY_TRACE_V2.seed);
+    assert!(synthetic_operation_trace_v2_failure(minimized));
+    replay_operation_trace_v2_inner(minimized);
+    assert_eq!(
+        minimize_operation_trace_v2(minimized, synthetic_operation_trace_v2_failure),
+        minimized,
+        "bounded shrinker must be idempotent at its local minimum"
+    );
+    assert!(
+        minimized
+            .shrink_candidates()
+            .iter()
+            .all(|candidate| !synthetic_operation_trace_v2_failure(*candidate)),
+        "bounded shrinker must return a local minimum for its deterministic candidate order"
+    );
+}
+
+#[test]
+fn bounded_operation_trace_shrink_candidates_preserve_the_v2_grammar() {
+    let rejected_feedback = [
+        None,
+        Some(OperationTraceRejectedFeedback::Stale),
+        Some(OperationTraceRejectedFeedback::Missing),
+        Some(OperationTraceRejectedFeedback::Unplanned),
+    ];
+    let settlements = [
+        OperationTraceSettlement::CompleteReverse,
+        OperationTraceSettlement::AbortNotDispatched,
+    ];
+    for decoder_max_new_tokens in 2..=4 {
+        for final_prefill_len in 1..=4 {
+            for cancel_decoder in [false, true] {
+                for rejected_feedback in rejected_feedback {
+                    for settlement in settlements {
+                        let trace = OperationTraceV2 {
+                            seed: MIXED_STAGE_SEED,
+                            decoder_max_new_tokens,
+                            final_prefill_len,
+                            cancel_decoder,
+                            rejected_feedback,
+                            settlement,
+                        };
+                        replay_operation_trace_v2_inner(trace);
+                        for candidate in trace.shrink_candidates() {
+                            assert!(candidate.shrink_weight() < trace.shrink_weight());
+                            assert_eq!(candidate.seed, trace.seed);
+                            assert_eq!(candidate.settlement, trace.settlement);
+                            replay_operation_trace_v2_inner(candidate);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[test]
