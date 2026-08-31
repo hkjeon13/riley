@@ -182,9 +182,26 @@ predicate에 전달한다.
 local-minimum 주장은 deterministic replay predicate에 한정한다. 실제 V1 replayer가 panic하면 source와
 minimized canonical descriptor 및 derived operation list를 test panic diagnostic에 함께 출력한다. 이
 predicate는 inner replayer가 panic하는지만 보존하므로 panic site, payload, failure signature 또는 root
-cause를 보존하지 않는다. 이 diagnostic은 파일을 쓰거나 durable CI receipt/checker를 만들지 않는다.
-그 receipt/checker는 다음 별도 PR에서 source/minimized descriptor와 scheduler configuration, Git SHA의
-검증 가능한 artifact contract로 설계한다.
+cause를 보존하지 않는다.
+
+그 diagnostic에는 별도 versioned `riley.scheduler.routing-fuzz-receipt` v1 artifact contract가
+추가됐다. CI가 `RILEY_ROUTING_FUZZ_RECEIPT_DIR`와
+`RILEY_ROUTING_FUZZ_SOURCE_REVISION`을 함께 제공한 실제 V1 failure에만, pre-created absolute
+run directory 아래 safe case ID와 source seed 기반 create-new leaf를 쓴다. 따라서 concurrent failure가 서로
+overwrite하지 않으며 local passing test는 file을 만들지 않는다. write/sync가 실패하면 newly-created partial
+leaf 제거를 시도하고, 제거 실패도 원래 replay failure를 가리지 않는 diagnostic으로 남긴다. receipt는 source/minimized canonical
+descriptor 원문, 각각의 descriptor-derived `SchedulerConfig`, fixed symbolic KV layout
+`(1, 64, 1, 8)`, fixed replay timeline `(0, 1, 2)`, operation spelling, source Git SHA와 explicit
+`not_established` boundary를 bind한다. source/minimized seed·settlement drift 또는 rank 증가도 writer와
+read-only Python checker가 거부한다.
+
+`benchmarks/scripts/check_routing_fuzz_receipt.py`는 duplicate key, float/non-finite value, noncanonical
+outer/nested JSON, unknown/missing/reordered field, symlink/non-regular/oversized file, nonzero SHA, descriptor,
+config, layout, timeline, operation, scope drift를 fail closed한다. checker의 successful output은
+**structurally valid diagnostic**일 뿐 scheduler failure 재실행, panic site/payload/signature/root cause,
+general/global minimum, GPU evidence, C02 qualification 또는 C03-B acceptance를 establish하지 않는다.
+전체 workspace test가 다른 이유로 실패해 receipt가 없으면 CI checker는 이를 별도 failure로 오인하지
+않고, receipt가 있는 경우에만 엄격 검사·failure-only upload한다.
 
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
@@ -247,8 +264,10 @@ permutation을 다시 validate한다. reducer는 cancellation → request remova
 permutation → adjacent inversion swap의 고정 순서로, strict codec round-trip 뒤 deterministic
 panic-only predicate가 재현되는 첫 candidate를 greedy하게 선택한다. 따라서 출력은 이 candidate
 order의 local minimum일 뿐 general shrinker, global minimum, panic site/payload/signature/root-cause
-preservation이 아니다. 현재 failure report는 test panic diagnostic이며 durable receipt file이나 CI
-checker는 다음 별도 slice다.
+preservation이 아니다. failure report는 사람이 읽는 test panic diagnostic을 유지하면서, CI opt-in
+directory가 제공된 경우 source/minimized descriptor·각 replay config·KV layout·timeline·Git SHA를
+create-new diagnostic receipt에도 쓴다. receipt checker는 구조적 binding만 확인하고 failure predicate,
+panic site/payload/signature/root cause 또는 global minimum을 재검증하지 않는다.
 
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
@@ -263,24 +282,23 @@ checker는 다음 별도 slice다.
 operation list를 함께 포함한다. general grammar의 durable format은 V2 codec을 재사용한다고 미리
 가정하지 않고 별도 versioned contract로 설계한다. 이는 현재 V2 local shrinker보다 강한 후속 기준이다.
 
-## 8. 예상 파일 변경
+## 8. 파일 변경
 
 ```text
-crates/riley-scheduler/tests/model_based_routing.rs
-crates/riley-scheduler/tests/support/reference_scheduler.rs
 crates/riley-scheduler/tests/general_mixed_operation_routing.rs
 crates/riley-scheduler/tests/support/general_mixed_operation_trace.rs
-crates/riley-scheduler/tests/corpus/output-routing/*.json
-crates/riley-scheduler/Cargo.toml   # dev-dependency only, 필요 시
+crates/riley-scheduler/tests/support/routing_fuzz_receipt.rs
 benchmarks/scripts/check_routing_fuzz_receipt.py
+benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 .github/workflows/production-cpu.yml
 ```
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 local reducer는 `general_mixed_operation_routing.rs`와 support trace module만 변경하며,
-`check_routing_fuzz_receipt.py`와 CI workflow artifact wiring은 아직 만들지 않는다. 이 둘은 다음
-minimized-trace receipt/checker PR의 명시적 범위다.
+현재 V1 reducer/receipt slice는 기존 test-only `serde_json` dev-dependency만 사용하며 production
+dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지 않는다. 이후 arbitrary
+general grammar, durable cross-version replay contract, failure corpus 자동 등록, delta debugging, fault
+injection seam은 별도 PR 범위다.
 
 ## 9. Observability assertion
 
@@ -311,8 +329,10 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 - 기본 CPU workflow: deterministic seed set + 10,000 traces
 - scheduled workflow: random seed rotation + 1,000,000 traces
 - GPU manual/scheduled: 고정 corpus
-- 현재 V1 failure는 source/minimized descriptor와 operation list를 test panic diagnostic으로만 출력
-- 다음 receipt/checker slice의 CI failure artifact: seed, minimized trace, scheduler config, Git SHA
+- V1 failure: source/minimized descriptor, operation list, 각각의 scheduler config, fixed KV/timeline,
+  source Git SHA를 diagnostic-only receipt로 create-new 기록
+- CI: unit-test step의 failure 때 receipt가 존재하면 strict checker를 실행하고 run/attempt-scoped
+  temp directory를 14일 artifact로 upload; receipt가 없는 unrelated test failure는 그대로 보존
 
 flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 test harness defect로 별도 실패한다.
 
@@ -321,8 +341,8 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 - C03-A: fixed/random CPU seed에서 invariant 위반 0, deterministic corpus와 shrink/replay test 통과
 - RC1 최소 재현 fixture가 수정 전 실패/현재 통과하는 contract test로 보존
 - shrink된 counterexample serialization/replay test 통과
-- V1 selector-local failure diagnostic은 durable receipt/checker 승인 근거가 아니며, 그 artifact
-  contract는 다음 별도 slice에서 검증한다.
+- V1 selector-local receipt/checker의 exact canonical descriptor/config/KV/timeline/SHA binding 및
+  create-new/no-overwrite/hostile-input rejection test 통과; 구조적 checker pass는 diagnostic-only다.
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact

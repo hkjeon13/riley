@@ -51,8 +51,42 @@ jobs:
       - name: Clippy
         run: cargo clippy --locked --workspace --all-targets --no-default-features -- -D warnings
 
+      - name: Prepare C03 routing-fuzz diagnostic directory
+        env:
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+        run: install -d -m 700 "$RILEY_ROUTING_FUZZ_RECEIPT_DIR"
+
       - name: Unit tests
-        run: cargo test --locked --workspace --all-targets --no-default-features
+        id: unit_tests
+        env:
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          RILEY_ROUTING_FUZZ_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
+          cargo test --locked --workspace --all-targets --no-default-features
+
+      - name: Validate C03 routing-fuzz diagnostics
+        if: failure() && steps.unit_tests.outcome == 'failure'
+        env:
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          RILEY_ROUTING_FUZZ_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          shopt -s nullglob
+          receipts=("$RILEY_ROUTING_FUZZ_RECEIPT_DIR"/*.json)
+          for receipt in "${receipts[@]}"; do
+            python3 benchmarks/scripts/check_routing_fuzz_receipt.py \
+              --receipt "$receipt" \
+              --expected-source-revision "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
+          done
+
+      - name: Upload C03 routing-fuzz diagnostics
+        if: failure() && steps.unit_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: c03-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Python-free synthetic model loading
         run: ci/verify_python_free_model_loading.sh

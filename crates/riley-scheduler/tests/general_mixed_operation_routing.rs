@@ -6,8 +6,11 @@
 
 #[path = "support/general_mixed_operation_trace.rs"]
 mod general_mixed_operation_trace;
+#[path = "support/routing_fuzz_receipt.rs"]
+mod routing_fuzz_receipt;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use general_mixed_operation_trace::{
     GeneralMixedOperationOracle, GeneralMixedOperationSettlement, GeneralMixedOperationTrace,
@@ -15,37 +18,29 @@ use general_mixed_operation_trace::{
     minimize_general_mixed_operation_trace, parse_general_mixed_operation_trace_descriptor,
     serialize_general_mixed_operation_trace_descriptor,
 };
-use riley_runtime::paged_kv::KvLayout;
 use riley_scheduler::{
-    ExecutionAbort, IterationPlan, OutputSlot, OverloadPolicy, RequestDescriptor, RequestId,
-    RequestState, Scheduler, SchedulerCloseOutput, SchedulerConfig,
+    ExecutionAbort, IterationPlan, OutputSlot, RequestDescriptor, RequestId, RequestState,
+    Scheduler, SchedulerCloseOutput, SchedulerConfig,
+};
+use routing_fuzz_receipt::{
+    GeneralMixedOperationSchedulerConfig, general_mixed_operation_receipt_document,
+    symbolic_kv_layout, write_general_mixed_operation_receipt,
+    write_general_mixed_operation_receipt_from_environment,
+    write_general_mixed_operation_receipt_from_values,
+    write_general_mixed_operation_receipt_in_directory,
 };
 
 const GENERAL_MIXED_OPERATION_TRACE_COUNT: u64 = 10_000;
+const RECEIPT_TEST_SOURCE_REVISION: &str = "0123456789abcdef0123456789abcdef01234567";
+static NEXT_RECEIPT_TEST_NONCE: AtomicU64 = AtomicU64::new(0);
 
 fn new_scheduler(config: SchedulerConfig) -> Scheduler {
-    let layout = KvLayout::checked(1, 64, 1, 8).expect("valid C03-A symbolic KV layout");
-    Scheduler::new(config, layout).expect("valid C03-A general mixed scheduler configuration")
+    Scheduler::new(config, symbolic_kv_layout())
+        .expect("valid C03-A general mixed scheduler configuration")
 }
 
 fn general_mixed_operation_config(trace: &GeneralMixedOperationTrace) -> SchedulerConfig {
-    let width = trace
-        .decoder_count
-        .checked_add(trace.final_prefill_count)
-        .expect("bounded general mixed request width");
-    SchedulerConfig {
-        max_waiting_requests: width,
-        max_waiting_prompt_tokens: width,
-        max_active_sequences: width,
-        max_sequence_tokens: 3,
-        iteration_token_budget: width,
-        max_prefill_chunk_tokens: 1,
-        aging_threshold_ns: 2,
-        overload_policy: OverloadPolicy::Wait,
-        admission_timeout_ns: None,
-        max_promised_kv_blocks: width,
-        metrics_window_samples: 8,
-    }
+    GeneralMixedOperationSchedulerConfig::for_trace(trace).scheduler_config()
 }
 
 fn decoder_prompt_token(index: usize) -> u32 {
@@ -273,9 +268,16 @@ fn replay_general_mixed_operation(case_id: &str, trace: &GeneralMixedOperationTr
         return;
     }
     let minimized = minimize_general_mixed_operation_trace(trace, general_mixed_operation_fails);
+    let receipt_detail =
+        match write_general_mixed_operation_receipt_from_environment(case_id, trace, &minimized) {
+            Ok(None) => String::new(),
+            Ok(Some(path)) => format!("\ndiagnostic_receipt_path={}", path.display()),
+            Err(error) => format!("\ndiagnostic_receipt_write_error={error}"),
+        };
     panic!(
-        "{}",
-        general_mixed_operation_failure_report(case_id, trace, &minimized)
+        "{}{}",
+        general_mixed_operation_failure_report(case_id, trace, &minimized),
+        receipt_detail,
     );
 }
 
@@ -837,5 +839,325 @@ fn general_mixed_operation_failure_report_delimits_its_panic_only_scope() {
             .expect("minimized report descriptor parses")
             .trace,
         minimized
+    );
+}
+
+fn receipt_minimized_fixture(source: &GeneralMixedOperationTrace) -> GeneralMixedOperationTrace {
+    GeneralMixedOperationTrace {
+        decoder_count: 2,
+        final_prefill_count: 1,
+        prime_slot_order: vec![0, 1],
+        mixed_slot_order: vec![0, 1, 2],
+        cancel_decoder_index: None,
+        ..source.clone()
+    }
+}
+
+fn receipt_test_path(label: &str) -> std::path::PathBuf {
+    let nonce = NEXT_RECEIPT_TEST_NONCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!(
+        "riley-routing-fuzz-receipt-{label}-{}-{nonce}.json",
+        std::process::id()
+    ))
+}
+
+#[test]
+fn general_mixed_operation_receipt_is_canonical_and_binds_both_replays() {
+    let source = reducer_fixture();
+    let minimized = receipt_minimized_fixture(&source);
+    let document = general_mixed_operation_receipt_document(
+        RECEIPT_TEST_SOURCE_REVISION,
+        "receipt-source",
+        &source,
+        &minimized,
+    )
+    .expect("receipt binds a valid V1 source and minimized trace");
+    assert!(document.ends_with('\n'));
+    assert!(!document.contains(": "));
+    assert_eq!(
+        general_mixed_operation_receipt_document(
+            RECEIPT_TEST_SOURCE_REVISION,
+            "receipt-source",
+            &source,
+            &minimized,
+        )
+        .expect("same receipt input is deterministic"),
+        document
+    );
+    let value: serde_json::Value =
+        serde_json::from_str(&document).expect("receipt document is JSON");
+    assert_eq!(value["format"], "riley.scheduler.routing-fuzz-receipt");
+    assert_eq!(value["format_version"], 1);
+    assert_eq!(value["scope"], "diagnostic-only");
+    assert_eq!(
+        value["source_revision"], RECEIPT_TEST_SOURCE_REVISION,
+        "receipt must bind the explicit source revision"
+    );
+    assert_eq!(value["source_case_id"], "receipt-source");
+    assert_eq!(
+        value["source_scheduler_config"]["max_active_sequences"],
+        source.decoder_count + source.final_prefill_count
+    );
+    assert_eq!(
+        value["minimized_scheduler_config"]["max_active_sequences"],
+        minimized.decoder_count + minimized.final_prefill_count
+    );
+    assert_eq!(value["symbolic_kv_layout"]["layer_count"], 1);
+    assert_eq!(value["symbolic_kv_layout"]["physical_block_count"], 64);
+    assert_eq!(value["symbolic_kv_layout"]["block_size_tokens"], 16);
+    assert_eq!(
+        value["replay_timeline_ns"]["decoder_submit_and_prime_ns"],
+        0
+    );
+    assert_eq!(
+        value["replay_timeline_ns"]["final_prefill_submit_and_mixed_ns"],
+        1
+    );
+    assert_eq!(value["replay_timeline_ns"]["close_ns"], 2);
+    assert_eq!(
+        value["not_established"],
+        serde_json::json!([
+            "c02_qualification",
+            "c03_b_gpu_evidence",
+            "general_or_global_minimum",
+            "panic_site_payload_signature_root_cause",
+            "scheduler_reexecution",
+        ])
+    );
+    let source_descriptor = value["source_descriptor_json"]
+        .as_str()
+        .expect("source descriptor is a JSON string");
+    let minimized_descriptor = value["minimized_descriptor_json"]
+        .as_str()
+        .expect("minimized descriptor is a JSON string");
+    assert_eq!(
+        parse_general_mixed_operation_trace_descriptor(source_descriptor)
+            .expect("receipt source descriptor remains strict-canonical")
+            .trace,
+        source
+    );
+    assert_eq!(
+        parse_general_mixed_operation_trace_descriptor(minimized_descriptor)
+            .expect("receipt minimized descriptor remains strict-canonical")
+            .trace,
+        minimized
+    );
+}
+
+#[test]
+fn general_mixed_operation_receipt_writer_is_create_new_and_preserves_primary_binding() {
+    let source = reducer_fixture();
+    let minimized = receipt_minimized_fixture(&source);
+    let path = receipt_test_path("create-new");
+    let _ = std::fs::remove_file(&path);
+    write_general_mixed_operation_receipt(
+        &path,
+        RECEIPT_TEST_SOURCE_REVISION,
+        "receipt-write",
+        &source,
+        &minimized,
+    )
+    .expect("first receipt writer call creates the exact leaf");
+    let expected = general_mixed_operation_receipt_document(
+        RECEIPT_TEST_SOURCE_REVISION,
+        "receipt-write",
+        &source,
+        &minimized,
+    )
+    .expect("receipt document is valid");
+    assert_eq!(
+        std::fs::read_to_string(&path).expect("created receipt is readable"),
+        expected
+    );
+    assert!(
+        write_general_mixed_operation_receipt(
+            &path,
+            RECEIPT_TEST_SOURCE_REVISION,
+            "receipt-write",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "receipt writer must never overwrite an existing diagnostic"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&path).expect("existing receipt remains readable"),
+        expected,
+        "create-new rejection must leave the original receipt intact"
+    );
+    std::fs::remove_file(&path).expect("test receipt cleanup succeeds");
+
+    let invalid_revision_path = receipt_test_path("invalid-revision");
+    let _ = std::fs::remove_file(&invalid_revision_path);
+    assert!(
+        write_general_mixed_operation_receipt(
+            &invalid_revision_path,
+            "not-a-git-revision",
+            "receipt-write",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "writer must reject an unbound source revision before file creation"
+    );
+    assert!(
+        !invalid_revision_path.exists(),
+        "invalid receipt inputs must not leave a file behind"
+    );
+
+    let zero_revision_path = receipt_test_path("zero-revision");
+    let _ = std::fs::remove_file(&zero_revision_path);
+    assert!(
+        write_general_mixed_operation_receipt(
+            &zero_revision_path,
+            "0000000000000000000000000000000000000000",
+            "receipt-write",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "writer must reject the non-resolving all-zero source revision before file creation"
+    );
+    assert!(
+        !zero_revision_path.exists(),
+        "all-zero source revision must not leave a file behind"
+    );
+}
+
+#[test]
+fn general_mixed_operation_receipt_directory_sink_uses_safe_distinct_case_leaves() {
+    let source = reducer_fixture();
+    let minimized = receipt_minimized_fixture(&source);
+    let nonce = NEXT_RECEIPT_TEST_NONCE.fetch_add(1, Ordering::Relaxed);
+    let directory = std::env::temp_dir().join(format!(
+        "riley-routing-fuzz-receipt-directory-{}-{nonce}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&directory);
+    std::fs::create_dir(&directory).expect("test receipt directory is created");
+    let written = write_general_mixed_operation_receipt_in_directory(
+        &directory,
+        RECEIPT_TEST_SOURCE_REVISION,
+        "directory-case",
+        &source,
+        &minimized,
+    )
+    .expect("directory sink accepts a pre-created absolute directory");
+    assert_eq!(
+        written.file_name().and_then(std::ffi::OsStr::to_str),
+        Some("general-mixed-operation-v1-directory-case-75c481a23b9de6f0.json")
+    );
+    assert!(written.starts_with(&directory));
+    assert!(
+        write_general_mixed_operation_receipt_in_directory(
+            &directory,
+            RECEIPT_TEST_SOURCE_REVISION,
+            "../escape",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "directory sink must reject an unsafe source case ID before composing a path"
+    );
+    assert!(
+        write_general_mixed_operation_receipt_in_directory(
+            std::path::Path::new("relative-receipt-directory"),
+            RECEIPT_TEST_SOURCE_REVISION,
+            "directory-case-two",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "directory sink must reject a relative output directory"
+    );
+    assert_eq!(
+        write_general_mixed_operation_receipt_from_values(
+            None,
+            None,
+            "values-disabled",
+            &source,
+            &minimized,
+        )
+        .expect("both optional receipt values disable recording"),
+        None
+    );
+    assert!(
+        write_general_mixed_operation_receipt_from_values(
+            None,
+            Some(std::ffi::OsString::from(RECEIPT_TEST_SOURCE_REVISION)),
+            "values-unpaired",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "a source revision without an output directory must fail explicitly"
+    );
+    assert!(
+        write_general_mixed_operation_receipt_from_values(
+            Some(directory.as_os_str().to_os_string()),
+            None,
+            "values-unpaired",
+            &source,
+            &minimized,
+        )
+        .is_err(),
+        "an output directory without a source revision must fail explicitly"
+    );
+    let values_path = write_general_mixed_operation_receipt_from_values(
+        Some(directory.as_os_str().to_os_string()),
+        Some(std::ffi::OsString::from(RECEIPT_TEST_SOURCE_REVISION)),
+        "values-enabled",
+        &source,
+        &minimized,
+    )
+    .expect("paired receipt values write a diagnostic")
+    .expect("paired receipt values enable recording");
+    assert!(values_path.is_file());
+    std::fs::remove_file(&written).expect("test directory receipt cleanup succeeds");
+    std::fs::remove_file(&values_path).expect("test values receipt cleanup succeeds");
+    std::fs::remove_dir(&directory).expect("test receipt directory cleanup succeeds");
+}
+
+#[test]
+fn general_mixed_operation_receipt_rejects_seed_settlement_and_rank_drift() {
+    let source = reducer_fixture();
+    let minimized = receipt_minimized_fixture(&source);
+    let changed_seed = GeneralMixedOperationTrace {
+        seed: source.seed.wrapping_add(1),
+        ..minimized.clone()
+    };
+    assert!(
+        general_mixed_operation_receipt_document(
+            RECEIPT_TEST_SOURCE_REVISION,
+            "receipt-invalid",
+            &source,
+            &changed_seed,
+        )
+        .is_err(),
+        "receipt must reject source-seed drift"
+    );
+    let changed_settlement = GeneralMixedOperationTrace {
+        settlement: GeneralMixedOperationSettlement::Commit,
+        ..minimized.clone()
+    };
+    assert!(
+        general_mixed_operation_receipt_document(
+            RECEIPT_TEST_SOURCE_REVISION,
+            "receipt-invalid",
+            &source,
+            &changed_settlement,
+        )
+        .is_err(),
+        "receipt must reject settlement drift"
+    );
+    assert!(
+        general_mixed_operation_receipt_document(
+            RECEIPT_TEST_SOURCE_REVISION,
+            "receipt-invalid",
+            &minimized,
+            &source,
+        )
+        .is_err(),
+        "receipt must reject a minimized trace that increases the reducer rank"
     );
 }
