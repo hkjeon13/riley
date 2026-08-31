@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-7은 V1 candidate와 cold layout의 exact bucket 결합을 CPU-only로 고정했다.
+**상태:** In progress — C07-8은 no-padding exact V1 native-field projection을 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -105,8 +105,21 @@ maximum fallback은 없다. 성공값은 C07-4 binding과 layout-derived C07-2 g
 
 이 단계는 V1 raw field/CSR/KV block capacity 검증이나 fixed-slab source materialization, trailing padding sentinel/header/control,
 allocation/address ownership, host-to-device copy, C06 signature/registry/dispatch, CUDA capture/replay, executor mutation을 하지 않는다.
-따라서 bound result도 graph-safe metadata나 runnable graph가 아니며, C07-8 이후 field/capacity contract가 별도로 닫히기 전에는
-exact eager를 유지한다.
+따라서 bound result도 자체로 graph-safe metadata나 runnable graph가 아니며, C07-8의 strict no-tail projection 밖의
+field/capacity/padding case는 계속 exact eager를 유지한다.
+
+### C07-8 — strict exact-shape V1 native-field projection (CPU-only)
+
+C07-8은 C07-6 preflight와 C07-7 layout binding을 한 호출에서 순서대로 적용한 뒤, `A=M`이고 V1 flattened block entry count
+`K`가 cold layout capacity `B`와 정확히 같을 때만 seven native fields를 borrowed view로 반환한다. token IDs, position IDs,
+row sequence slots, block CSR offsets, physical block IDs, valid-token counts, output-token indices의 길이는 각각 `M, M, M, M+1,
+B, B, M`이어야 한다. eligible batch의 `M` mismatch는 기존 C07-4 `LayoutPaddingBucketMismatch` error로 유지한다.
+
+`A<M`의 row padding 또는 `K!=B`의 block tail은 typed ineligible이며 maximum fallback이나 zero/sentinel 대입으로 복구하지 않는다.
+header/control bytes는 V1 native field가 아니므로 이 view에 없고, C07-5 packer 호출이나 fixed slab source creation도 하지 않는다.
+따라서 projection은 copy, allocation/address ownership, host-to-device transfer, C06 signature/registry/dispatch, CUDA capture/replay,
+executor mutation 권한을 만들지 않는다. future tail materialization은 kernel-mask와 ownership semantics를 별도 증명한 이후에만 가능하며,
+그 전까지 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 

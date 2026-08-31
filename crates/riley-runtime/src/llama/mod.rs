@@ -18,6 +18,8 @@ mod generation;
 mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
+#[allow(dead_code)] // C07-8 deliberately precedes opaque metadata-tail materialization.
+mod graph_decode_exact_projection;
 #[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.
 mod graph_decode_layout;
 #[allow(dead_code)] // C07-5 deliberately precedes its future executor adapter.
