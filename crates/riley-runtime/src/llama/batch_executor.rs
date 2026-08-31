@@ -13,8 +13,7 @@ use std::fmt;
 use std::mem;
 
 use riley_cuda::{
-    AttentionReductionProfile, BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE,
-    BF16_ARGMAX_STATUS_SUCCESS, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
+    AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
     CudaDType, CudaDeviceBuffer, CudaError, CudaExecutionStream, CudaStream, EmbeddingParams,
     FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
@@ -43,6 +42,7 @@ use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
+use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
     select_smallest_prepared_dense_rows,
@@ -65,7 +65,6 @@ const F32_BYTES_USIZE: usize = 4;
 const SUPPORTED_HEAD_DIMENSION: usize = 64;
 const PER_OPERATION_BASE_DEVICE_ALLOCATIONS: u64 = 9;
 const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
-const GREEDY_RESULT_BYTES: usize = 2 * U32_BYTES;
 const RAGGED_PAGED_ATTENTION_LEGACY_D64_V1: &str =
     "riley.cuda.ragged-paged-attention.legacy-d64-v1";
 const RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1: &str =
@@ -1369,48 +1368,11 @@ impl PreparedLlamaBatchExecutor {
                 source,
             ));
         }
-        for (output_index, record) in host.chunks_exact(GREEDY_RESULT_BYTES).enumerate() {
-            let token_id = u32::from_ne_bytes(record[..U32_BYTES].try_into().map_err(|_| {
-                LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "greedy_result_record",
-                    reason: "token word has an invalid native layout",
-                }
-            })?);
-            let status = u32::from_ne_bytes(record[U32_BYTES..].try_into().map_err(|_| {
-                LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "greedy_result_record",
-                    reason: "status word has an invalid native layout",
-                }
-            })?);
-            match status {
-                BF16_ARGMAX_STATUS_SUCCESS
-                    if token_id != BF16_ARGMAX_INVALID_TOKEN_ID
-                        && usize::try_from(token_id)
-                            .ok()
-                            .is_some_and(|token| token < vocabulary_size) => {}
-                BF16_ARGMAX_STATUS_NON_FINITE if token_id == BF16_ARGMAX_INVALID_TOKEN_ID => {
-                    return Err(LlamaBatchExecutorError::GreedyLogitsNonFinite { output_index });
-                }
-                _ => {
-                    self.poisoned = true;
-                    return Err(LlamaBatchExecutorError::InvalidGreedyResult {
-                        output_index,
-                        status,
-                        token_id,
-                    });
-                }
+        if let Err(error) = decode_greedy_tokens(host, vocabulary_size, destination) {
+            if matches!(&error, LlamaBatchExecutorError::InvalidGreedyResult { .. }) {
+                self.poisoned = true;
             }
-        }
-        for (output, record) in destination
-            .iter_mut()
-            .zip(host.chunks_exact(GREEDY_RESULT_BYTES))
-        {
-            *output = u32::from_ne_bytes(record[..U32_BYTES].try_into().map_err(|_| {
-                LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "greedy_result_record",
-                    reason: "token word has an invalid native layout",
-                }
-            })?);
+            return Err(error);
         }
         Ok(())
     }

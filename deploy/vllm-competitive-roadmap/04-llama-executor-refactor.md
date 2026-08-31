@@ -5,9 +5,9 @@
 shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을,
 C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source host slab packer를
 각각 분리했고, C04-7은 borrowed CUDA metadata view binding을, C04-8은 anchored GEMM
-shape-variant의 cold inventory preparation을 분리했다. CUDA owner, KV, buffer orchestration,
-pinned-memory write/metadata transport, dispatch, output, public API와 production default는
-유지한다.
+shape-variant의 cold inventory preparation을, C04-9는 greedy output record의 host validation과
+canonical token map을 분리했다. CUDA owner, KV, buffer orchestration, pinned-memory
+write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -176,6 +176,18 @@ reconciliation, runtime selection/dispatch, poison 및 close precedence를 계�
 module은 weight/KV/buffer/stream/metadata transport/output 또는 forward workspace owner를
 복제하지 않는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지
 않는다.
+
+### C04-9 — greedy output record validation extraction
+
+`llama/executor/output.rs`는 device가 생성한 fixed-width `{token_id,status}` greedy record를
+host에서 검증한 뒤 canonical dense output-slot token map으로 쓰는 순수 helper를 소유한다. 모든
+record를 먼저 검증하므로 invalid/non-finite 결과는 caller destination의 partial publication을
+막는다. non-finite logits는 기존의 non-poisoning typed error를 유지하며, invalid native
+record가 executor를 poison하는 판단은 batch owner에 그대로 남긴다.
+
+CUDA download, preallocated host/device result storage, output-ready/mode lifecycle, allocation
+report, dispatch와 public download API는 batch owner가 계속 소유한다. 이 source-only slice는
+GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 
