@@ -20,6 +20,8 @@ mod graph;
 mod graph_decode_binding;
 #[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.
 mod graph_decode_layout;
+#[allow(dead_code)] // C07-5 deliberately precedes its future executor adapter.
+mod graph_decode_packer;
 #[allow(dead_code)] // C07-3 deliberately precedes its future metadata packer.
 mod graph_decode_padding;
 #[path = "executor/graph_metrics.rs"]

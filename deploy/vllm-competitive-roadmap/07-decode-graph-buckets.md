@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-4는 cold metadata layout과 trailing padding의 exact bucket binding을 CPU-only로 고정했다.
+**상태:** In progress — C07-5는 caller-owned fixed metadata slab의 checked CPU packing을 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -68,6 +68,20 @@ caller-provided digest를 받지 않고 bound layout에서 C07-2 geometry digest
 이 binding은 bucket equality와 layout-derived identity만 증명한다. metadata content, address stability, row/request/output/KV
 mapping, sentinel/packing, allocation, C06 signature/registry, capture/replay 권한을 만들지 않는다. cold owner는 이 binding을
 재사용할지와 어느 lifecycle에서 만들지를 별도로 검토해야 하며, 이후 실제 buffer와 kernel contract를 검증해야 한다.
+
+### C07-5 — checked fixed metadata slab writer (CPU-only)
+
+C07-5는 C07-4 binding과 caller-owned fixed-length source slices를 받아 caller-owned byte slab prefix에 canonical little-endian으로
+쓴다. input은 header/control의 exact region byte length, M-sized token/position/row-slot/output fields, M+1-sized block-offset field,
+B-sized physical-block/valid-token fields를 모두 포함해야 하며 trailing placeholder lane도 caller가 명시적으로 제공한다. 모든
+destination/source length와 region addressability를 먼저 검사해 error에는 destination을 바꾸지 않으며, destination은 required slab byte
+이상이면 된다. 성공 시 required prefix만 alignment gap을 포함해 zero-fill한 뒤 C07-1 canonical region에 각 field를 기록하고, extra tail은
+보존한다. header/control은 여전히 opaque bytes다.
+
+이 writer는 current V1 batch ABI adapter, request/output/KV mapping, padding sentinel/validity, allocation ownership, slab base address
+alignment/stability validation, host-to-device copy, C06 registry/signature, CUDA capture/replay를 수행하지 않는다. trailing placeholder
+lane의 실제 byte value와 kernel-mask 의미는 caller가 future production contract에서 증명해야 하며, 단순히 이 writer가 성공했다고
+graph-safe가 되지 않는다.
 
 ## 1. 배경과 가설
 
