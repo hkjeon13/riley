@@ -1,0 +1,399 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/fault-extension-receipt-v2.schema.json",
+  "title": "Riley C02 fault-extension semantic receipt v2",
+  "description": "Closed C02 §8 contract. The input receipt and its raw trace contain no passed/status assertion. The freeze-declared fault_extension path is the separate semantic check report; its raw receipt descriptor must be distinct. A CPU-only checker replays frozen Gate E CUDA evidence, verifies actual compute-sanitizer logs, and parses every injectable engine-fault transition before it can emit a passing report.",
+  "oneOf": [
+    { "$ref": "#/$defs/inputReceipt" },
+    { "$ref": "#/$defs/rawTrace" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "imageId": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "replayInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_archive", "release_binary", "release_bundle"],
+      "properties": {
+        "source_archive": { "$ref": "#/$defs/descriptor" },
+        "release_binary": { "$ref": "#/$defs/descriptor" },
+        "release_bundle": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "cudaFault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report", "raw_evidence"],
+      "properties": {
+        "report": { "$ref": "#/$defs/descriptor" },
+        "raw_evidence": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "extendedFaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_trace"],
+      "properties": {
+        "raw_trace": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "inputReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "bindings",
+        "replay_inputs",
+        "cuda_fault",
+        "extended_faults"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.fault-extension-receipt.v2" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "replay_inputs": { "$ref": "#/$defs/replayInputs" },
+        "cuda_fault": { "$ref": "#/$defs/cudaFault" },
+        "extended_faults": { "$ref": "#/$defs/extendedFaults" }
+      }
+    },
+    "rawTraceBindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256",
+        "source_revision",
+        "source_archive_sha256",
+        "release_binary_sha256",
+        "release_bundle_sha256",
+        "release_image_id",
+        "cuda_build_image_id",
+        "gate_e_cuda_fault_raw_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" },
+        "source_revision": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "source_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "release_binary_sha256": { "$ref": "#/$defs/sha256" },
+        "release_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "release_image_id": { "$ref": "#/$defs/imageId" },
+        "cuda_build_image_id": { "$ref": "#/$defs/imageId" },
+        "gate_e_cuda_fault_raw_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "realGpuSanitizer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_class", "raw_evidence_sha256", "sanitizer_logs"],
+      "properties": {
+        "execution_class": { "const": "real-gpu-sanitizer" },
+        "raw_evidence_sha256": { "$ref": "#/$defs/sha256" },
+        "sanitizer_logs": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "enum": [
+              "compute-sanitizer-memcheck.log",
+              "compute-sanitizer-memory-memcheck.log"
+            ]
+          }
+        }
+      }
+    },
+    "injectableBackend": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_class", "backend_id", "subprocess_isolation"],
+      "properties": {
+        "execution_class": { "const": "injectable-synthetic" },
+        "backend_id": { "const": "riley-fault-injectable-subprocess-v1" },
+        "subprocess_isolation": { "const": true }
+      }
+    },
+    "subprocess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["parent_pid", "child_pid", "exit_code"],
+      "properties": {
+        "parent_pid": { "type": "integer", "minimum": 1 },
+        "child_pid": { "type": "integer", "minimum": 1 },
+        "exit_code": { "const": 0 }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ordinal", "event"],
+      "properties": {
+        "ordinal": { "type": "integer", "minimum": 1 },
+        "event": {
+          "enum": [
+            "case-start",
+            "kv-write-applied",
+            "runtime-error-injected",
+            "scheduler-commit-skipped",
+            "output-suppressed",
+            "kv-write-rolled-back",
+            "terminal-error-emitted",
+            "output-status-corrupted",
+            "output-rejected",
+            "scheduler-commit-attempted",
+            "scheduler-commit-failed",
+            "worker-channel-close-race-injected",
+            "worker-channel-closed"
+          ]
+        }
+      }
+    },
+    "terminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request_state",
+        "output_published",
+        "scheduler_commit",
+        "kv_state",
+        "worker_channel",
+        "terminal_events"
+      ],
+      "properties": {
+        "request_state": { "const": "failed" },
+        "output_published": { "const": false },
+        "scheduler_commit": { "enum": ["not-attempted", "failed"] },
+        "kv_state": { "enum": ["rolled-back", "not-retained"] },
+        "worker_channel": { "enum": ["open", "closed"] },
+        "terminal_events": { "const": 1 }
+      }
+    },
+    "traceCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "execution_class", "injection_point", "subprocess", "events", "terminal"],
+      "properties": {
+        "case_id": {
+          "enum": [
+            "post-kv-write-runtime-error",
+            "output-status-corruption-test-double",
+            "scheduler-commit-failure",
+            "worker-channel-close-race"
+          ]
+        },
+        "execution_class": { "const": "injectable-synthetic" },
+        "injection_point": {
+          "enum": [
+            "post-kv-write-runtime-error",
+            "output-status-corruption-test-double",
+            "scheduler-commit-failure",
+            "worker-channel-close-race"
+          ]
+        },
+        "subprocess": { "$ref": "#/$defs/subprocess" },
+        "events": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 7,
+          "items": { "$ref": "#/$defs/event" }
+        },
+        "terminal": { "$ref": "#/$defs/terminal" }
+      }
+    },
+    "rawTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "candidate_id",
+        "bindings",
+        "real_gpu_sanitizer",
+        "injectable_backend",
+        "cases"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.fault-extension-raw-trace.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/rawTraceBindings" },
+        "real_gpu_sanitizer": { "$ref": "#/$defs/realGpuSanitizer" },
+        "injectable_backend": { "$ref": "#/$defs/injectableBackend" },
+        "cases": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/traceCase" }
+        }
+      }
+    },
+    "evidenceClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["execution_class", "source", "sha256", "passed"],
+      "properties": {
+        "execution_class": { "enum": ["real-gpu-sanitizer", "injectable-synthetic"] },
+        "source": { "enum": ["gate-e-cuda-fault-raw", "expanded-fault-raw-trace"] },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "passed": { "const": true }
+      }
+    },
+    "faultCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "execution_class", "semantic_check", "passed"],
+      "properties": {
+        "case_id": {
+          "enum": [
+            "create-rollback-ambiguous",
+            "explicit-close-ambiguous",
+            "deferred-submission-error",
+            "completion-restore-ambiguous",
+            "post-kv-write-runtime-error",
+            "output-status-corruption-test-double",
+            "scheduler-commit-failure",
+            "worker-channel-close-race"
+          ]
+        },
+        "execution_class": { "enum": ["real-gpu-sanitizer", "injectable-synthetic"] },
+        "semantic_check": {
+          "enum": [
+            "create_rollback_ambiguity",
+            "explicit_close_ambiguity",
+            "confirmed_completion_deferred_error",
+            "unconfirmed_completion_retained",
+            "post-kv-write-runtime-error",
+            "output-status-corruption-test-double",
+            "scheduler-commit-failure",
+            "worker-channel-close-race"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {
+          "enum": [
+            "freeze-binding",
+            "gate-e-replay",
+            "stable-default-arm-binding",
+            "gate-e-cuda-fault-binding",
+            "cuda-fault-attestation-replay",
+            "real-gpu-sanitizer-binding",
+            "extended-fault-trace-binding",
+            "extended-fault-trace-replay",
+            "expanded-fault-case-coverage"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "passed",
+        "candidate_id",
+        "freeze_sha256",
+        "base_release_candidate_report",
+        "receipt",
+        "bindings",
+        "replay_inputs",
+        "cuda_fault_report",
+        "cuda_fault_raw",
+        "extended_faults_raw_trace",
+        "evidence_classes",
+        "fault_cases",
+        "checks",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.fault-extension-check.v2" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report": { "$ref": "#/$defs/descriptor" },
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "replay_inputs": { "$ref": "#/$defs/replayInputs" },
+        "cuda_fault_report": { "$ref": "#/$defs/descriptor" },
+        "cuda_fault_raw": { "$ref": "#/$defs/descriptor" },
+        "extended_faults_raw_trace": { "$ref": "#/$defs/descriptor" },
+        "evidence_classes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": { "$ref": "#/$defs/evidenceClass" }
+        },
+        "fault_cases": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/faultCase" }
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 9,
+          "maxItems": 9,
+          "items": { "$ref": "#/$defs/check" }
+        },
+        "reason_codes": { "const": [] }
+      }
+    }
+  }
+}

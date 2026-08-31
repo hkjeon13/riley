@@ -1,0 +1,450 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/release/candidates/rc3-routing-receipt-v1.schema.json",
+  "title": "Riley C02 fixed release-binary routing receipt v1",
+  "description": "Closed evidence contract for C02's finite routing release corpus. The Python verifier additionally enforces source-corpus bytes, frozen Gate E bindings, descriptor no-follow safety, and slot/request/token semantics.",
+  "oneOf": [
+    { "$ref": "#/$defs/corpus" },
+    { "$ref": "#/$defs/receipt" },
+    { "$ref": "#/$defs/traceManifest" },
+    { "$ref": "#/$defs/traceEvidence" },
+    { "$ref": "#/$defs/checkReport" }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{64}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "gitRevision": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^[0-9a-f]{40}$" },
+        { "not": { "const": "0000000000000000000000000000000000000000" } }
+      ]
+    },
+    "imageId": {
+      "type": "string",
+      "allOf": [
+        { "pattern": "^sha256:[0-9a-f]{64}$" },
+        { "not": { "const": "sha256:0000000000000000000000000000000000000000000000000000000000000000" } }
+      ]
+    },
+    "candidateId": {
+      "type": "string",
+      "pattern": "^riley-(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)-rc[1-9][0-9]*$"
+    },
+    "relativeEvidencePath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*//)(?!.*(?:^|/)\\.\\.?/)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "descriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/relativeEvidencePath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "freeze_sha256",
+        "base_release_candidate_report_sha256",
+        "configuration_profile",
+        "configuration_sha256"
+      ],
+      "properties": {
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report_sha256": { "$ref": "#/$defs/sha256" },
+        "configuration_profile": { "const": "stable-default" },
+        "configuration_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "modelIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model_id",
+        "model_revision",
+        "config_sha256",
+        "weights_sha256",
+        "tokenizer_revision",
+        "tokenizer_files_sha256"
+      ],
+      "properties": {
+        "model_id": { "type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^\\S(?:[^\\r\\n]*\\S)?$" },
+        "model_revision": { "$ref": "#/$defs/gitRevision" },
+        "config_sha256": { "$ref": "#/$defs/sha256" },
+        "weights_sha256": { "$ref": "#/$defs/sha256" },
+        "tokenizer_revision": { "$ref": "#/$defs/gitRevision" },
+        "tokenizer_files_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "traceExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_revision",
+        "source_archive_sha256",
+        "release_binary_sha256",
+        "release_bundle_sha256",
+        "release_image_id",
+        "test_image_id",
+        "test_executable_sha256"
+      ],
+      "properties": {
+        "source_revision": { "$ref": "#/$defs/gitRevision" },
+        "source_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "release_binary_sha256": { "$ref": "#/$defs/sha256" },
+        "release_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "release_image_id": { "$ref": "#/$defs/imageId" },
+        "test_image_id": { "$ref": "#/$defs/imageId" },
+        "test_executable_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "receiptExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_revision",
+        "source_archive_sha256",
+        "release_binary_sha256",
+        "release_bundle_sha256",
+        "release_image_id",
+        "test_image_id",
+        "test_executable"
+      ],
+      "properties": {
+        "source_revision": { "$ref": "#/$defs/gitRevision" },
+        "source_archive_sha256": { "$ref": "#/$defs/sha256" },
+        "release_binary_sha256": { "$ref": "#/$defs/sha256" },
+        "release_bundle_sha256": { "$ref": "#/$defs/sha256" },
+        "release_image_id": { "$ref": "#/$defs/imageId" },
+        "test_image_id": { "$ref": "#/$defs/imageId" },
+        "test_executable": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "corpusDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "const": "benchmarks/release/candidates/rc3-routing-corpus-v1.json" },
+        "sha256": { "const": "6ec9f610a7ffc2a2e75d39c6b8894d94901a2dab25cf16c5f2e405df1290c585" }
+      }
+    },
+    "requestId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,63}$"
+    },
+    "caseId": {
+      "type": "string",
+      "enum": [
+        "routing-c1-basic",
+        "routing-c5-permuted-mixed",
+        "routing-c8-cancel-precommit",
+        "routing-malformed-pre-dispatch",
+        "routing-commit-failure-contained"
+      ]
+    },
+    "slotRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "request_id", "work_kind"],
+      "properties": {
+        "slot": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "work_kind": { "enum": ["prefill", "decode"] }
+      }
+    },
+    "downloadedToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "token_id"],
+      "properties": {
+        "slot": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "token_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "publishedToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "slot", "request_id", "token_id"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "slot": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "token_id": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "precommitCancellation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "slot"],
+      "properties": {
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "slot": { "type": "integer", "minimum": 0, "maximum": 255 }
+      }
+    },
+    "iteration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phase", "slot_routes", "downloaded_tokens", "published_tokens", "precommit_cancellation"],
+      "properties": {
+        "phase": { "enum": ["prefill", "decode", "mixed"] },
+        "slot_routes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/slotRoute" }
+        },
+        "downloaded_tokens": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/downloadedToken" }
+        },
+        "published_tokens": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/publishedToken" }
+        },
+        "precommit_cancellation": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/precommitCancellation" }
+          ]
+        }
+      }
+    },
+    "failure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "reason"],
+      "properties": {
+        "stage": { "enum": ["pre-dispatch", "post-execute-pre-publication"] },
+        "reason": { "enum": ["malformed-plan-rejected", "commit-reservation-failed"] }
+      }
+    },
+    "terminalEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sequence", "request_id", "reason"],
+      "properties": {
+        "sequence": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "request_id": { "$ref": "#/$defs/requestId" },
+        "reason": { "enum": ["length", "stop", "cancelled", "rejected", "executor-failure"] }
+      }
+    },
+    "kvFinal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total_blocks", "free_blocks", "reserved_blocks", "active_blocks", "promised_blocks"],
+      "properties": {
+        "total_blocks": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "free_blocks": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "reserved_blocks": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "active_blocks": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+        "promised_blocks": { "type": "integer", "minimum": 0, "maximum": 4294967295 }
+      }
+    },
+    "shutdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pending_requests", "completion_outbox", "terminal_outbox", "live_allocations"],
+      "properties": {
+        "pending_requests": { "const": 0 },
+        "completion_outbox": { "const": 0 },
+        "terminal_outbox": { "const": 0 },
+        "live_allocations": { "const": 0 }
+      }
+    },
+    "traceBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["concurrency", "dispatch_count", "failure", "iterations", "terminal_events", "kv_final", "shutdown"],
+      "properties": {
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 256 },
+        "dispatch_count": { "type": "integer", "minimum": 0, "maximum": 256 },
+        "failure": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/failure" }
+          ]
+        },
+        "iterations": { "type": "array", "maxItems": 256, "items": { "$ref": "#/$defs/iteration" } },
+        "terminal_events": { "type": "array", "minItems": 1, "maxItems": 1024, "items": { "$ref": "#/$defs/terminalEvent" } },
+        "kv_final": { "$ref": "#/$defs/kvFinal" },
+        "shutdown": { "$ref": "#/$defs/shutdown" }
+      }
+    },
+    "coverage": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 11,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "c1",
+          "c5",
+          "c8",
+          "dense-permutation",
+          "mixed-prefill-decode",
+          "cancellation",
+          "precommit-cancellation",
+          "malformed-plan-pre-dispatch-rejection",
+          "commit-failure-containment",
+          "kv-ownership",
+          "shutdown-quiescence"
+        ]
+      }
+    },
+    "corpusCase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "coverage", "trace"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "trace": { "$ref": "#/$defs/traceBody" }
+      }
+    },
+    "corpus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "corpus_id", "cases"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-routing-corpus.v1" },
+        "corpus_id": { "const": "rc3-routing-fixed-release-v1" },
+        "cases": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/corpusCase" } }
+      }
+    },
+    "receipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "status", "passed", "candidate_id", "bindings", "model", "execution", "corpus", "trace_manifest"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-routing-receipt.v1" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "execution": { "$ref": "#/$defs/receiptExecution" },
+        "corpus": { "$ref": "#/$defs/corpusDescriptor" },
+        "trace_manifest": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "manifestTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "trace"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "trace": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "traceManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "candidate_id", "bindings", "model", "execution", "corpus", "traces"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-routing-trace-manifest.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "execution": { "$ref": "#/$defs/traceExecution" },
+        "corpus": { "$ref": "#/$defs/corpusDescriptor" },
+        "traces": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/manifestTrace" } }
+      }
+    },
+    "traceEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "candidate_id", "bindings", "model", "execution", "corpus", "case_id", "trace"],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-routing-trace.v1" },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "execution": { "$ref": "#/$defs/traceExecution" },
+        "corpus": { "$ref": "#/$defs/corpusDescriptor" },
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "trace": { "$ref": "#/$defs/traceBody" }
+      }
+    },
+    "check": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "passed"],
+      "properties": {
+        "name": {
+          "enum": [
+            "gate-e-replay",
+            "frozen-stable-release-binding",
+            "fixed-corpus-integrity",
+            "release-executable-binding",
+            "slot-request-token-routing",
+            "cancellation-and-failure-containment",
+            "terminal-kv-shutdown-quiescence"
+          ]
+        },
+        "passed": { "const": true }
+      }
+    },
+    "reportTrace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "coverage", "trace"],
+      "properties": {
+        "case_id": { "$ref": "#/$defs/caseId" },
+        "coverage": { "$ref": "#/$defs/coverage" },
+        "trace": { "$ref": "#/$defs/descriptor" }
+      }
+    },
+    "checkReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "status",
+        "passed",
+        "candidate_id",
+        "freeze_sha256",
+        "base_release_candidate_report",
+        "bindings",
+        "corpus",
+        "receipt",
+        "trace_manifest",
+        "model",
+        "execution",
+        "traces",
+        "checks",
+        "reason_codes"
+      ],
+      "properties": {
+        "schema_version": { "const": "riley.rc3-routing-check.v1" },
+        "status": { "const": "passed" },
+        "passed": { "const": true },
+        "candidate_id": { "$ref": "#/$defs/candidateId" },
+        "freeze_sha256": { "$ref": "#/$defs/sha256" },
+        "base_release_candidate_report": { "$ref": "#/$defs/descriptor" },
+        "bindings": { "$ref": "#/$defs/bindings" },
+        "corpus": { "$ref": "#/$defs/corpusDescriptor" },
+        "receipt": { "$ref": "#/$defs/descriptor" },
+        "trace_manifest": { "$ref": "#/$defs/descriptor" },
+        "model": { "$ref": "#/$defs/modelIdentity" },
+        "execution": { "$ref": "#/$defs/receiptExecution" },
+        "traces": { "type": "array", "minItems": 5, "maxItems": 5, "items": { "$ref": "#/$defs/reportTrace" } },
+        "checks": { "type": "array", "minItems": 7, "maxItems": 7, "items": { "$ref": "#/$defs/check" } },
+        "reason_codes": { "type": "array", "maxItems": 0 }
+      }
+    }
+  }
+}

@@ -1,0 +1,249 @@
+{
+  "schema_version": "riley.rc3-routing-corpus.v1",
+  "corpus_id": "rc3-routing-fixed-release-v1",
+  "cases": [
+    {
+      "case_id": "routing-c1-basic",
+      "coverage": ["c1", "shutdown-quiescence"],
+      "trace": {
+        "concurrency": 1,
+        "dispatch_count": 2,
+        "failure": null,
+        "iterations": [
+          {
+            "phase": "prefill",
+            "slot_routes": [
+              {"slot": 0, "request_id": "c1-a", "work_kind": "prefill"}
+            ],
+            "downloaded_tokens": [
+              {"slot": 0, "token_id": 101}
+            ],
+            "published_tokens": [
+              {"sequence": 0, "slot": 0, "request_id": "c1-a", "token_id": 101}
+            ],
+            "precommit_cancellation": null
+          },
+          {
+            "phase": "decode",
+            "slot_routes": [
+              {"slot": 0, "request_id": "c1-a", "work_kind": "decode"}
+            ],
+            "downloaded_tokens": [
+              {"slot": 0, "token_id": 102}
+            ],
+            "published_tokens": [
+              {"sequence": 1, "slot": 0, "request_id": "c1-a", "token_id": 102}
+            ],
+            "precommit_cancellation": null
+          }
+        ],
+        "terminal_events": [
+          {"sequence": 2, "request_id": "c1-a", "reason": "length"}
+        ],
+        "kv_final": {
+          "total_blocks": 16,
+          "free_blocks": 16,
+          "reserved_blocks": 0,
+          "active_blocks": 0,
+          "promised_blocks": 0
+        },
+        "shutdown": {
+          "pending_requests": 0,
+          "completion_outbox": 0,
+          "terminal_outbox": 0,
+          "live_allocations": 0
+        }
+      }
+    },
+    {
+      "case_id": "routing-c5-permuted-mixed",
+      "coverage": ["c5", "dense-permutation", "mixed-prefill-decode"],
+      "trace": {
+        "concurrency": 5,
+        "dispatch_count": 1,
+        "failure": null,
+        "iterations": [
+          {
+            "phase": "mixed",
+            "slot_routes": [
+              {"slot": 0, "request_id": "c5-e", "work_kind": "prefill"},
+              {"slot": 1, "request_id": "c5-b", "work_kind": "decode"},
+              {"slot": 2, "request_id": "c5-d", "work_kind": "prefill"},
+              {"slot": 3, "request_id": "c5-a", "work_kind": "decode"},
+              {"slot": 4, "request_id": "c5-c", "work_kind": "prefill"}
+            ],
+            "downloaded_tokens": [
+              {"slot": 0, "token_id": 505},
+              {"slot": 1, "token_id": 502},
+              {"slot": 2, "token_id": 504},
+              {"slot": 3, "token_id": 501},
+              {"slot": 4, "token_id": 503}
+            ],
+            "published_tokens": [
+              {"sequence": 0, "slot": 0, "request_id": "c5-e", "token_id": 505},
+              {"sequence": 1, "slot": 1, "request_id": "c5-b", "token_id": 502},
+              {"sequence": 2, "slot": 2, "request_id": "c5-d", "token_id": 504},
+              {"sequence": 3, "slot": 3, "request_id": "c5-a", "token_id": 501},
+              {"sequence": 4, "slot": 4, "request_id": "c5-c", "token_id": 503}
+            ],
+            "precommit_cancellation": null
+          }
+        ],
+        "terminal_events": [
+          {"sequence": 5, "request_id": "c5-e", "reason": "length"},
+          {"sequence": 6, "request_id": "c5-b", "reason": "length"},
+          {"sequence": 7, "request_id": "c5-d", "reason": "length"},
+          {"sequence": 8, "request_id": "c5-a", "reason": "length"},
+          {"sequence": 9, "request_id": "c5-c", "reason": "length"}
+        ],
+        "kv_final": {
+          "total_blocks": 32,
+          "free_blocks": 32,
+          "reserved_blocks": 0,
+          "active_blocks": 0,
+          "promised_blocks": 0
+        },
+        "shutdown": {
+          "pending_requests": 0,
+          "completion_outbox": 0,
+          "terminal_outbox": 0,
+          "live_allocations": 0
+        }
+      }
+    },
+    {
+      "case_id": "routing-c8-cancel-precommit",
+      "coverage": ["c8", "cancellation", "precommit-cancellation"],
+      "trace": {
+        "concurrency": 8,
+        "dispatch_count": 1,
+        "failure": null,
+        "iterations": [
+          {
+            "phase": "mixed",
+            "slot_routes": [
+              {"slot": 0, "request_id": "c8-h", "work_kind": "prefill"},
+              {"slot": 1, "request_id": "c8-b", "work_kind": "decode"},
+              {"slot": 2, "request_id": "c8-f", "work_kind": "prefill"},
+              {"slot": 3, "request_id": "c8-a", "work_kind": "decode"},
+              {"slot": 4, "request_id": "c8-g", "work_kind": "prefill"},
+              {"slot": 5, "request_id": "c8-d", "work_kind": "decode"},
+              {"slot": 6, "request_id": "c8-c", "work_kind": "prefill"},
+              {"slot": 7, "request_id": "c8-e", "work_kind": "decode"}
+            ],
+            "downloaded_tokens": [
+              {"slot": 0, "token_id": 808},
+              {"slot": 1, "token_id": 802},
+              {"slot": 2, "token_id": 806},
+              {"slot": 3, "token_id": 801},
+              {"slot": 4, "token_id": 807},
+              {"slot": 5, "token_id": 804},
+              {"slot": 6, "token_id": 803},
+              {"slot": 7, "token_id": 805}
+            ],
+            "published_tokens": [
+              {"sequence": 0, "slot": 0, "request_id": "c8-h", "token_id": 808},
+              {"sequence": 1, "slot": 2, "request_id": "c8-f", "token_id": 806},
+              {"sequence": 2, "slot": 3, "request_id": "c8-a", "token_id": 801},
+              {"sequence": 3, "slot": 4, "request_id": "c8-g", "token_id": 807},
+              {"sequence": 4, "slot": 5, "request_id": "c8-d", "token_id": 804},
+              {"sequence": 5, "slot": 6, "request_id": "c8-c", "token_id": 803},
+              {"sequence": 6, "slot": 7, "request_id": "c8-e", "token_id": 805}
+            ],
+            "precommit_cancellation": {"request_id": "c8-b", "slot": 1}
+          }
+        ],
+        "terminal_events": [
+          {"sequence": 7, "request_id": "c8-b", "reason": "cancelled"},
+          {"sequence": 8, "request_id": "c8-h", "reason": "length"},
+          {"sequence": 9, "request_id": "c8-f", "reason": "length"},
+          {"sequence": 10, "request_id": "c8-a", "reason": "length"},
+          {"sequence": 11, "request_id": "c8-g", "reason": "length"},
+          {"sequence": 12, "request_id": "c8-d", "reason": "length"},
+          {"sequence": 13, "request_id": "c8-c", "reason": "length"},
+          {"sequence": 14, "request_id": "c8-e", "reason": "length"}
+        ],
+        "kv_final": {
+          "total_blocks": 64,
+          "free_blocks": 64,
+          "reserved_blocks": 0,
+          "active_blocks": 0,
+          "promised_blocks": 0
+        },
+        "shutdown": {
+          "pending_requests": 0,
+          "completion_outbox": 0,
+          "terminal_outbox": 0,
+          "live_allocations": 0
+        }
+      }
+    },
+    {
+      "case_id": "routing-malformed-pre-dispatch",
+      "coverage": ["malformed-plan-pre-dispatch-rejection"],
+      "trace": {
+        "concurrency": 1,
+        "dispatch_count": 0,
+        "failure": {"stage": "pre-dispatch", "reason": "malformed-plan-rejected"},
+        "iterations": [],
+        "terminal_events": [
+          {"sequence": 0, "request_id": "malformed-a", "reason": "rejected"}
+        ],
+        "kv_final": {
+          "total_blocks": 8,
+          "free_blocks": 8,
+          "reserved_blocks": 0,
+          "active_blocks": 0,
+          "promised_blocks": 0
+        },
+        "shutdown": {
+          "pending_requests": 0,
+          "completion_outbox": 0,
+          "terminal_outbox": 0,
+          "live_allocations": 0
+        }
+      }
+    },
+    {
+      "case_id": "routing-commit-failure-contained",
+      "coverage": ["commit-failure-containment", "kv-ownership"],
+      "trace": {
+        "concurrency": 2,
+        "dispatch_count": 1,
+        "failure": {"stage": "post-execute-pre-publication", "reason": "commit-reservation-failed"},
+        "iterations": [
+          {
+            "phase": "mixed",
+            "slot_routes": [
+              {"slot": 0, "request_id": "commit-b", "work_kind": "decode"},
+              {"slot": 1, "request_id": "commit-a", "work_kind": "prefill"}
+            ],
+            "downloaded_tokens": [
+              {"slot": 0, "token_id": 902},
+              {"slot": 1, "token_id": 901}
+            ],
+            "published_tokens": [],
+            "precommit_cancellation": null
+          }
+        ],
+        "terminal_events": [
+          {"sequence": 0, "request_id": "commit-b", "reason": "executor-failure"},
+          {"sequence": 1, "request_id": "commit-a", "reason": "executor-failure"}
+        ],
+        "kv_final": {
+          "total_blocks": 16,
+          "free_blocks": 16,
+          "reserved_blocks": 0,
+          "active_blocks": 0,
+          "promised_blocks": 0
+        },
+        "shutdown": {
+          "pending_requests": 0,
+          "completion_outbox": 0,
+          "terminal_outbox": 0,
+          "live_allocations": 0
+        }
+      }
+    }
+  ]
+}

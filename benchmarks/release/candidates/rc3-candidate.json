@@ -1,0 +1,105 @@
+{
+  "$schema": "rc3-candidate-template.schema.json",
+  "schema_version": "riley.rc3-qualification-candidate.v1",
+  "template_only": true,
+  "status": "template",
+  "candidate_id": null,
+  "created_at_utc": null,
+  "source": {
+    "git_revision": null,
+    "archive_sha256": null,
+    "cargo_lock_sha256": null,
+    "extension_registry_sha256": null,
+    "correctness_golden_sha256": null
+  },
+  "release": {
+    "binary_sha256": null,
+    "bundle_sha256": null,
+    "image_id": null,
+    "cuda_c_abi_version": null
+  },
+  "images": {
+    "reproducible": null,
+    "cuda": null,
+    "optimization": null
+  },
+  "toolchain": {
+    "rustc": null,
+    "nvcc": null,
+    "driver": null,
+    "cuda_runtime": null,
+    "cuda_toolkit": null,
+    "cublas": null
+  },
+  "models": {
+    "smollm2": {
+      "model_id": null,
+      "model_revision": null,
+      "config_sha256": null,
+      "weights_sha256": null,
+      "tokenizer_revision": null,
+      "tokenizer_files_sha256": null
+    },
+    "qwen": {
+      "model_id": null,
+      "model_revision": null,
+      "config_sha256": null,
+      "weights_sha256": null,
+      "tokenizer_revision": null,
+      "tokenizer_files_sha256": null
+    }
+  },
+  "arms": {
+    "stable_default": {
+      "argv": null,
+      "environment": null,
+      "configuration_sha256": null
+    },
+    "max_performance_exact": {
+      "argv": null,
+      "environment": null,
+      "configuration_sha256": null
+    }
+  },
+  "rollback": {
+    "binary_sha256": null,
+    "bundle_sha256": null,
+    "image_id": null
+  },
+  "outputs": {
+    "final_release_candidate_manifest": {
+      "path": null
+    },
+    "final_release_candidate": {
+      "path": null
+    },
+    "receipts": {
+      "startup_configuration": {
+        "path": null
+      },
+      "qwen_multistep": {
+        "path": null
+      },
+      "routing": {
+        "path": null
+      },
+      "fault_extension": {
+        "path": null
+      },
+      "soak_v2": {
+        "path": null
+      },
+      "rollback": {
+        "path": null
+      }
+    }
+  },
+  "required_gates": [
+    "startup_configuration",
+    "qwen_multistep",
+    "routing",
+    "fault_extension",
+    "soak_v2",
+    "rollback"
+  ]
+}
