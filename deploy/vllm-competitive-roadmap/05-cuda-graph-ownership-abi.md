@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-0은 기존 generic error ABI를 바꾸지 않는 graph contract foundation을 추가했다.
+**상태:** In progress — C05-2는 native graph-failure companion record의 canonical Rust decoder를 production FFI 경계에 올렸다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -41,6 +41,20 @@ lease 변경, graph allocation을 수행하지 않는다. 대신 thread-local mo
 native `NOT_SUPPORTED`을 반환한다. 따라서 CUDA-enabled Rust build도 Rust-only placeholder가 아닌 native
 ABI 결과를 받지만, 성공 capture handle은 만들지 않는다. C11 source ABI test와 CPU-only source contract는
 새 symbol/wiring과 이 fail-closed 제한을 고정하며 GPU 실행·성능 개선은 주장하지 않는다.
+
+### C05-2 — canonical graph-failure companion decoder (CPU/ABI-only)
+
+C05-2는 graph module에 하나의 private Rust C-layout mirror와 canonical decoder를 둔다. decoder는
+v1 required prefix보다 큰 forward-compatible record를 허용하지만, reserved field, 네 ABI boolean,
+stage와 zero/nonzero capture·exec ID를 모두 엄격히 해석한다. unknown stage는 success로 바꾸지 않고
+unknown value로 보존하며 malformed companion은 Internal/Validation error로 fail-closed한다.
+
+C05-1 capture-begin stub은 generic decoder보다 더 좁게 exact v1 record size, CaptureBegin stage,
+zero ID와 zero lifecycle flags를 계속 요구한다. valid native NOT_SUPPORTED result는 원래 CudaError
+경로를 그대로 유지한다. 이 slice는 native capture 시작, non-null capture handle, stream/context 또는
+command-batch lease 변화, abort/end/instantiate, graph allocation, replay, GPU execution과 성능 주장을
+추가하지 않는다. 실제 owner는 valid handle의 consume-on-error, abort/recovery, context와 resource lease
+정책을 함께 닫는 후속 slice에서만 도입한다.
 
 ## 2. 범위
 

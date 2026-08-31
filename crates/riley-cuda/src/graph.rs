@@ -5,6 +5,8 @@
 //! a later successful capture slice cannot silently widen this contract.
 
 use std::marker::PhantomData;
+#[cfg(any(feature = "cuda", test))]
+use std::mem::{align_of, offset_of, size_of};
 use std::num::NonZeroU64;
 use std::rc::Rc;
 
@@ -104,6 +106,81 @@ pub enum CudaGraphStage {
     Unknown(u32),
 }
 
+/// Private Rust mirror of the fixed C ABI graph-failure companion record.
+///
+/// This contains no native handle and is never public API. The CUDA FFI
+/// boundary supplies it immediately after a graph operation so the decoder
+/// below can reject malformed companion metadata before a future graph owner
+/// reasons about lifecycle evidence.
+#[cfg(any(feature = "cuda", test))]
+#[repr(C)]
+pub(crate) struct RawGraphErrorInfo {
+    struct_size: u32,
+    graph_stage: u32,
+    capture_id: u64,
+    exec_id: u64,
+    submission_started: u8,
+    completion_known: u8,
+    resource_release_known: u8,
+    poisoned: u8,
+    reserved0: u32,
+    reserved: [u64; 3],
+}
+
+#[cfg(any(feature = "cuda", test))]
+impl RawGraphErrorInfo {
+    /// Required stable prefix size of the v1 companion record.
+    pub(crate) const ABI_SIZE: u32 = 56;
+
+    /// Creates an exact v1 zero-initialized companion output buffer.
+    #[must_use]
+    pub(crate) const fn new() -> Self {
+        Self {
+            struct_size: Self::ABI_SIZE,
+            graph_stage: 0,
+            capture_id: 0,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known: 0,
+            poisoned: 0,
+            reserved0: 0,
+            reserved: [0; 3],
+        }
+    }
+
+    /// Returns the native-reported companion record size.
+    #[must_use]
+    pub(crate) const fn struct_size(&self) -> u32 {
+        self.struct_size
+    }
+}
+
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(size_of::<RawGraphErrorInfo>() == RawGraphErrorInfo::ABI_SIZE as usize);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(align_of::<RawGraphErrorInfo>() == 8);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, struct_size) == 0);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, graph_stage) == 4);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, capture_id) == 8);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, exec_id) == 16);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, submission_started) == 24);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, completion_known) == 25);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, resource_release_known) == 26);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, poisoned) == 27);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved0) == 28);
+#[cfg(any(feature = "cuda", test))]
+const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved) == 32);
+
 /// Public, decoded companion metadata for a graph operation outcome.
 ///
 /// This information augments, rather than replaces, the stable generic
@@ -164,6 +241,106 @@ impl CudaGraphFailureInfo {
     #[must_use]
     pub const fn poisoned(&self) -> bool {
         self.flags & Self::POISONED != 0
+    }
+
+    /// Whether this is the exact empty C05-1 capture-begin stub receipt.
+    ///
+    /// The generic decoder accepts a forward-compatible larger companion
+    /// record. C05-1 deliberately remains stricter: its native stub must
+    /// report the exact v1 record with capture-begin stage and no ownership or
+    /// completion evidence.
+    #[cfg(any(feature = "cuda", test))]
+    #[must_use]
+    pub(crate) fn is_empty_capture_begin_attempt(&self) -> bool {
+        matches!(self.stage, Some(CudaGraphStage::CaptureBegin))
+            && self.capture_id.is_none()
+            && self.exec_id.is_none()
+            && self.flags == 0
+    }
+}
+
+/// Decodes one graph-failure companion record from the native ABI.
+///
+/// The required v1 prefix is accepted from a future larger record, but every
+/// reserved field and ABI boolean is checked exactly. Unknown graph stages are
+/// retained as unknown rather than treated as successful lifecycle evidence.
+#[cfg(any(feature = "cuda", test))]
+pub(crate) fn decode_graph_failure_info(
+    raw: &RawGraphErrorInfo,
+) -> CudaResult<CudaGraphFailureInfo> {
+    if raw.struct_size < RawGraphErrorInfo::ABI_SIZE {
+        return Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Validation,
+            0,
+            "CudaGraphFailureInfo::decode",
+            "native graph error metadata is smaller than the required prefix",
+        ));
+    }
+    if raw.reserved0 != 0 || raw.reserved != [0; 3] {
+        return Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Validation,
+            0,
+            "CudaGraphFailureInfo::decode",
+            "native graph error metadata has a non-zero reserved field",
+        ));
+    }
+
+    let mut flags = 0;
+    if decode_graph_abi_bool("submission_started", raw.submission_started)? {
+        flags |= CudaGraphFailureInfo::SUBMISSION_STARTED;
+    }
+    if decode_graph_abi_bool("completion_known", raw.completion_known)? {
+        flags |= CudaGraphFailureInfo::COMPLETION_KNOWN;
+    }
+    if decode_graph_abi_bool("resource_release_known", raw.resource_release_known)? {
+        flags |= CudaGraphFailureInfo::RESOURCE_RELEASE_KNOWN;
+    }
+    if decode_graph_abi_bool("poisoned", raw.poisoned)? {
+        flags |= CudaGraphFailureInfo::POISONED;
+    }
+
+    Ok(CudaGraphFailureInfo {
+        stage: decode_graph_stage(raw.graph_stage),
+        capture_id: NonZeroU64::new(raw.capture_id),
+        exec_id: NonZeroU64::new(raw.exec_id),
+        flags,
+    })
+}
+
+#[cfg(any(feature = "cuda", test))]
+const fn decode_graph_stage(value: u32) -> Option<CudaGraphStage> {
+    match value {
+        0 => None,
+        1 => Some(CudaGraphStage::CaptureBegin),
+        2 => Some(CudaGraphStage::CaptureEnqueue),
+        3 => Some(CudaGraphStage::CaptureEnd),
+        4 => Some(CudaGraphStage::CaptureAbort),
+        5 => Some(CudaGraphStage::Instantiate),
+        6 => Some(CudaGraphStage::Update),
+        7 => Some(CudaGraphStage::Launch),
+        8 => Some(CudaGraphStage::Completion),
+        9 => Some(CudaGraphStage::Close),
+        unknown => Some(CudaGraphStage::Unknown(unknown)),
+    }
+}
+
+#[cfg(any(feature = "cuda", test))]
+fn decode_graph_abi_bool(name: &'static str, value: u8) -> CudaResult<bool> {
+    match value {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Validation,
+            0,
+            "CudaGraphFailureInfo::decode",
+            format!("native graph error metadata has invalid {name} boolean"),
+        )),
     }
 }
 
@@ -449,111 +626,22 @@ impl CudaStream {
 
 #[cfg(test)]
 mod tests {
-    use std::mem::{align_of, offset_of, size_of};
-
     use super::*;
 
-    #[repr(C)]
-    struct RawGraphErrorInfo {
-        struct_size: u32,
-        graph_stage: u32,
-        capture_id: u64,
-        exec_id: u64,
-        submission_started: u8,
-        completion_known: u8,
-        resource_release_known: u8,
-        poisoned: u8,
-        reserved0: u32,
-        reserved: [u64; 3],
-    }
+    #[test]
+    fn raw_graph_error_info_constructor_is_an_exact_zeroed_v1_record() {
+        let raw = RawGraphErrorInfo::new();
 
-    const _: () = assert!(size_of::<RawGraphErrorInfo>() == 56);
-    const _: () = assert!(align_of::<RawGraphErrorInfo>() == 8);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, struct_size) == 0);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, graph_stage) == 4);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, capture_id) == 8);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, exec_id) == 16);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, submission_started) == 24);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, completion_known) == 25);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, resource_release_known) == 26);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, poisoned) == 27);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved0) == 28);
-    const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved) == 32);
-    const RAW_GRAPH_ERROR_INFO_SIZE: u32 = 56;
-
-    fn decode_graph_failure_info(raw: &RawGraphErrorInfo) -> CudaResult<CudaGraphFailureInfo> {
-        if raw.struct_size < RAW_GRAPH_ERROR_INFO_SIZE {
-            return Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Validation,
-                0,
-                "CudaGraphFailureInfo::decode",
-                "native graph error metadata is smaller than the required prefix",
-            ));
-        }
-        if raw.reserved0 != 0 || raw.reserved != [0; 3] {
-            return Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Validation,
-                0,
-                "CudaGraphFailureInfo::decode",
-                "native graph error metadata has a non-zero reserved field",
-            ));
-        }
-
-        let mut flags = 0;
-        if decode_abi_bool("submission_started", raw.submission_started)? {
-            flags |= CudaGraphFailureInfo::SUBMISSION_STARTED;
-        }
-        if decode_abi_bool("completion_known", raw.completion_known)? {
-            flags |= CudaGraphFailureInfo::COMPLETION_KNOWN;
-        }
-        if decode_abi_bool("resource_release_known", raw.resource_release_known)? {
-            flags |= CudaGraphFailureInfo::RESOURCE_RELEASE_KNOWN;
-        }
-        if decode_abi_bool("poisoned", raw.poisoned)? {
-            flags |= CudaGraphFailureInfo::POISONED;
-        }
-
-        Ok(CudaGraphFailureInfo {
-            stage: decode_graph_stage(raw.graph_stage),
-            capture_id: NonZeroU64::new(raw.capture_id),
-            exec_id: NonZeroU64::new(raw.exec_id),
-            flags,
-        })
-    }
-
-    const fn decode_graph_stage(value: u32) -> Option<CudaGraphStage> {
-        match value {
-            0 => None,
-            1 => Some(CudaGraphStage::CaptureBegin),
-            2 => Some(CudaGraphStage::CaptureEnqueue),
-            3 => Some(CudaGraphStage::CaptureEnd),
-            4 => Some(CudaGraphStage::CaptureAbort),
-            5 => Some(CudaGraphStage::Instantiate),
-            6 => Some(CudaGraphStage::Update),
-            7 => Some(CudaGraphStage::Launch),
-            8 => Some(CudaGraphStage::Completion),
-            9 => Some(CudaGraphStage::Close),
-            unknown => Some(CudaGraphStage::Unknown(unknown)),
-        }
-    }
-
-    fn decode_abi_bool(name: &'static str, value: u8) -> CudaResult<bool> {
-        match value {
-            0 => Ok(false),
-            1 => Ok(true),
-            _ => Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Validation,
-                0,
-                "CudaGraphFailureInfo::decode",
-                format!("native graph error metadata has invalid {name} boolean"),
-            )),
-        }
+        assert_eq!(raw.struct_size(), RawGraphErrorInfo::ABI_SIZE);
+        let decoded = decode_graph_failure_info(&raw)
+            .expect("an exact zeroed v1 graph companion record must decode");
+        assert_eq!(decoded.stage(), None);
+        assert_eq!(decoded.capture_id(), None);
+        assert_eq!(decoded.exec_id(), None);
+        assert!(!decoded.submission_started());
+        assert!(!decoded.completion_known());
+        assert!(!decoded.resource_release_known());
+        assert!(!decoded.poisoned());
     }
 
     #[test]
@@ -622,7 +710,7 @@ mod tests {
     #[test]
     fn graph_error_record_preserves_unknown_stage_and_conservative_flags() {
         let info = decode_graph_failure_info(&RawGraphErrorInfo {
-            struct_size: RAW_GRAPH_ERROR_INFO_SIZE + 8,
+            struct_size: RawGraphErrorInfo::ABI_SIZE + 8,
             graph_stage: 77,
             capture_id: 41,
             exec_id: 0,
@@ -642,12 +730,46 @@ mod tests {
         assert!(!info.completion_known());
         assert!(!info.resource_release_known());
         assert!(info.poisoned());
+        assert!(!info.is_empty_capture_begin_attempt());
+    }
+
+    #[test]
+    fn graph_error_record_recognizes_only_the_exact_empty_capture_begin_evidence() {
+        let empty = decode_graph_failure_info(&RawGraphErrorInfo {
+            struct_size: RawGraphErrorInfo::ABI_SIZE,
+            graph_stage: 1,
+            capture_id: 0,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known: 0,
+            poisoned: 0,
+            reserved0: 0,
+            reserved: [0; 3],
+        })
+        .unwrap();
+        assert!(empty.is_empty_capture_begin_attempt());
+
+        let with_capture_id = decode_graph_failure_info(&RawGraphErrorInfo {
+            struct_size: RawGraphErrorInfo::ABI_SIZE,
+            graph_stage: 1,
+            capture_id: 1,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known: 0,
+            poisoned: 0,
+            reserved0: 0,
+            reserved: [0; 3],
+        })
+        .unwrap();
+        assert!(!with_capture_id.is_empty_capture_begin_attempt());
     }
 
     #[test]
     fn graph_error_record_rejects_malformed_abi_booleans_and_reserved_data() {
         let malformed_flag = decode_graph_failure_info(&RawGraphErrorInfo {
-            struct_size: RAW_GRAPH_ERROR_INFO_SIZE,
+            struct_size: RawGraphErrorInfo::ABI_SIZE,
             graph_stage: 0,
             capture_id: 0,
             exec_id: 0,
@@ -662,7 +784,7 @@ mod tests {
         assert_eq!(malformed_flag.kind(), CudaErrorKind::Internal);
 
         let reserved = decode_graph_failure_info(&RawGraphErrorInfo {
-            struct_size: RAW_GRAPH_ERROR_INFO_SIZE,
+            struct_size: RawGraphErrorInfo::ABI_SIZE,
             graph_stage: 0,
             capture_id: 0,
             exec_id: 0,
@@ -675,5 +797,21 @@ mod tests {
         })
         .unwrap_err();
         assert_eq!(reserved.kind(), CudaErrorKind::Internal);
+
+        let short_prefix = decode_graph_failure_info(&RawGraphErrorInfo {
+            struct_size: RawGraphErrorInfo::ABI_SIZE - 1,
+            graph_stage: 0,
+            capture_id: 0,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known: 0,
+            poisoned: 0,
+            reserved0: 0,
+            reserved: [0; 3],
+        })
+        .unwrap_err();
+        assert_eq!(short_prefix.kind(), CudaErrorKind::Internal);
+        assert_eq!(short_prefix.stage(), CudaErrorStage::Validation);
     }
 }

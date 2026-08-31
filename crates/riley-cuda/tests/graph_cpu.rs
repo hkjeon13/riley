@@ -10,6 +10,7 @@ use riley_cuda::{
 fn graph_contract_is_additive_and_declares_the_capture_begin_symbol() {
     let header = include_str!("../../../kernels/include/riley_cuda.h");
     let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
 
     for declaration in [
         "typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;",
@@ -29,10 +30,41 @@ fn graph_contract_is_additive_and_declares_the_capture_begin_symbol() {
     }
     assert!(header.contains("rather than a tail extension of RileyCudaErrorInfo"));
     assert!(header.contains("riley_cuda_graph_capture_begin("));
-    assert!(ffi.contains("struct RawGraphErrorInfo"));
+    assert!(graph.contains("pub(crate) struct RawGraphErrorInfo"));
+    assert!(graph.contains("pub(crate) fn decode_graph_failure_info"));
+    assert_eq!(graph.matches("struct RawGraphErrorInfo").count(), 1);
+    assert_eq!(graph.matches("fn decode_graph_failure_info").count(), 1);
+    assert!(!ffi.contains("struct RawGraphErrorInfo"));
     assert!(ffi.contains("struct RawGraphCapture"));
     assert!(ffi.contains("riley_cuda_graph_capture_begin"));
     assert!(ffi.contains("graph_capture_begin_metadata_is_valid"));
+}
+
+#[test]
+fn capture_begin_decodes_the_canonical_failure_companion_before_native_status() {
+    let ffi = include_str!("../src/ffi.rs");
+    let begin = ffi
+        .split("pub(super) fn begin_graph_capture")
+        .nth(1)
+        .expect("FFI must retain the graph-capture begin boundary")
+        .split("pub(super) fn wait_event")
+        .next()
+        .expect("graph-capture begin boundary must end before wait_event");
+    let decode_position = begin
+        .find("decode_graph_failure_info(&graph_error)?;")
+        .expect("capture begin must decode its companion graph evidence");
+    let status_position = begin
+        .find("status_result(status, OPERATION, &error)?;")
+        .expect("capture begin must preserve the native status boundary");
+
+    assert!(
+        decode_position < status_position,
+        "capture begin must validate graph evidence before returning native status"
+    );
+    assert!(begin.contains("RawGraphErrorInfo::new()"));
+    assert!(begin.contains("graph_capture_begin_metadata_is_valid(&graph_error, &graph_failure)"));
+    assert!(ffi.contains("raw.struct_size() == RawGraphErrorInfo::ABI_SIZE"));
+    assert!(ffi.contains("decoded.is_empty_capture_begin_attempt()"));
 }
 
 #[test]

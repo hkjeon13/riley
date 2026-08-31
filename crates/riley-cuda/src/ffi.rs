@@ -4,6 +4,7 @@ use std::mem::{offset_of, size_of};
 use std::ptr::{self, NonNull};
 
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
+use crate::graph::{CudaGraphFailureInfo, RawGraphErrorInfo, decode_graph_failure_info};
 
 const STATUS_SUCCESS: i32 = 0;
 const STATUS_INVALID_ARGUMENT: i32 = 1;
@@ -46,8 +47,6 @@ const NVIDIA_PERSISTENCE_DISABLED: u32 = 0;
 #[cfg(feature = "nvml")]
 const NVIDIA_PERSISTENCE_ENABLED: u32 = 1;
 const ERROR_INFO_SIZE: u32 = 272;
-const GRAPH_ERROR_INFO_SIZE: u32 = 56;
-const GRAPH_STAGE_CAPTURE_BEGIN: u32 = 1;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
 #[cfg(feature = "nvml")]
 const NVIDIA_DEVICE_SNAPSHOT_SIZE: u32 = 320;
@@ -132,37 +131,6 @@ impl ErrorInfo {
             domain: 0,
             stage: 0,
             message: [0; ERROR_MESSAGE_CAPACITY],
-        }
-    }
-}
-
-#[repr(C)]
-struct RawGraphErrorInfo {
-    struct_size: u32,
-    graph_stage: u32,
-    capture_id: u64,
-    exec_id: u64,
-    submission_started: u8,
-    completion_known: u8,
-    resource_release_known: u8,
-    poisoned: u8,
-    reserved0: u32,
-    reserved: [u64; 3],
-}
-
-impl RawGraphErrorInfo {
-    fn new() -> Self {
-        Self {
-            struct_size: GRAPH_ERROR_INFO_SIZE,
-            graph_stage: 0,
-            capture_id: 0,
-            exec_id: 0,
-            submission_started: 0,
-            completion_known: 0,
-            resource_release_known: 0,
-            poisoned: 0,
-            reserved0: 0,
-            reserved: [0; 3],
         }
     }
 }
@@ -2194,7 +2162,8 @@ impl StreamHandle {
                 "native graph-capture stub returned an unexpected owning capture handle",
             ));
         }
-        if !graph_capture_begin_metadata_is_valid(&graph_error) {
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_begin_metadata_is_valid(&graph_error, &graph_failure) {
             return Err(CudaError::new(
                 CudaErrorKind::Internal,
                 CudaErrorDomain::Internal,
@@ -5058,17 +5027,11 @@ fn missing_output(operation: &'static str, message: &'static str) -> CudaError {
     )
 }
 
-fn graph_capture_begin_metadata_is_valid(error: &RawGraphErrorInfo) -> bool {
-    error.struct_size == GRAPH_ERROR_INFO_SIZE
-        && error.graph_stage == GRAPH_STAGE_CAPTURE_BEGIN
-        && error.capture_id == 0
-        && error.exec_id == 0
-        && error.submission_started == 0
-        && error.completion_known == 0
-        && error.resource_release_known == 0
-        && error.poisoned == 0
-        && error.reserved0 == 0
-        && error.reserved == [0; 3]
+fn graph_capture_begin_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE && decoded.is_empty_capture_begin_attempt()
 }
 
 #[cfg(feature = "nvml")]
@@ -5113,17 +5076,6 @@ fn c_array_to_string<const N: usize>(bytes: &[c_char; N]) -> String {
 
 const _: () = assert!(size_of::<ErrorInfo>() == 272);
 const _: () = assert!(offset_of!(ErrorInfo, message) == 16);
-const _: () = assert!(size_of::<RawGraphErrorInfo>() == 56);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, struct_size) == 0);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, graph_stage) == 4);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, capture_id) == 8);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, exec_id) == 16);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, submission_started) == 24);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, completion_known) == 25);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, resource_release_known) == 26);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, poisoned) == 27);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved0) == 28);
-const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved) == 32);
 const _: () = assert!(size_of::<RawDeviceProperties>() == 320);
 const _: () = assert!(offset_of!(RawDeviceProperties, name) == 64);
 #[cfg(feature = "nvml")]
