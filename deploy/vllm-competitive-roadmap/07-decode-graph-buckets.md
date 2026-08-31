@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-17은 exact command batch를 ownership으로 보관한 H2D receipt의 completion 뒤에만 device-fresh lease를 만든다.
+**상태:** In progress — C07-18은 exact C07 cold metadata geometry를 C06 metadata-layout identity에 단방향으로 묶는다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -247,6 +247,19 @@ allocation, async token, host read/write, D2H, CUDA graph capture/replay를 만�
 one C07-16 delegation, one finish, finish-before-lease, no-direct-copy boundary를 검증하고 CUDA feature는 toolkit이 존재하는 host에서만 library
 compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를
 유지한다.
+
+### C07-18 — canonical C07-to-C06 metadata-layout identity (CPU-only)
+
+C07-18은 one exact C07 cold metadata layout의 schema version과 canonical geometry digest만으로 C06의
+`GraphMetadataLayoutSignature`를 만든다. digest는 caller가 제공하지 않고 C07 layout에서 바로 계산하므로 layout/digest mismatch를 만들 수
+없다. 같은 layout은 같은 C06 identity를 만들며 bucket, block-entry capacity, header, control/status를 포함한 어떤 cold geometry 변화도 다른
+identity가 된다.
+
+이 bridge는 whole `GraphLayoutSignature`/`GraphSignature`, C06 registry/dispatch, device/pinned buffer, device-fresh lease consumption,
+CUDA stream/capture, graph instantiate/replay, executor mutation을 만들거나 허용하지 않는다. C05 native graph capture는 아직 fail-closed이며,
+여기서 identity가 같다는 사실은 capture-safe/runnable graph 또는 performance improvement를 뜻하지 않는다. CPU tests는 every exact C07 bucket의
+schema/digest equality, every cold-geometry change의 distinct C06 identity, deterministic copyability와 source boundary를 검증한다. 그 전까지
+모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 

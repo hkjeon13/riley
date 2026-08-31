@@ -42,6 +42,8 @@ mod graph_decode_exact_slab_writer;
 mod graph_decode_exact_sources;
 #[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.
 mod graph_decode_layout;
+#[allow(dead_code)] // C07-18 deliberately precedes whole-signature/capture ownership.
+mod graph_decode_layout_signature;
 #[allow(dead_code)] // C07-5 deliberately precedes its future executor adapter.
 mod graph_decode_packer;
 #[allow(dead_code)] // C07-3 deliberately precedes its future metadata packer.
