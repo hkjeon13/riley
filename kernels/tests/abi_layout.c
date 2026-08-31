@@ -16,6 +16,64 @@ _Static_assert(RILEY_CUDA_DTYPE_F32 == 1 &&
                "dtype discriminants changed");
 _Static_assert(sizeof(RileyCudaErrorInfo) == 272,
                "error-info ABI size changed");
+_Static_assert(offsetof(RileyCudaErrorInfo, struct_size) == 0,
+               "error-info struct-size offset changed");
+_Static_assert(offsetof(RileyCudaErrorInfo, native_code) == 4,
+               "error-info native-code offset changed");
+_Static_assert(offsetof(RileyCudaErrorInfo, domain) == 8,
+               "error-info domain offset changed");
+_Static_assert(offsetof(RileyCudaErrorInfo, stage) == 12,
+               "error-info stage offset changed");
+_Static_assert(offsetof(RileyCudaErrorInfo, message) == 16,
+               "error-info message offset changed");
+_Static_assert(sizeof(RileyCudaGraphCaptureMode) == 4,
+               "graph-capture-mode ABI width changed");
+_Static_assert(RILEY_CUDA_GRAPH_CAPTURE_MODE_INVALID == 0 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL == 1,
+               "graph-capture-mode ABI discriminants changed");
+_Static_assert(sizeof(RileyCudaGraphCaptureCapability) == 4,
+               "graph-capture-capability ABI width changed");
+_Static_assert(RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN == 0 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNSUPPORTED == 1 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED == 2,
+               "graph-capture-capability ABI discriminants changed");
+_Static_assert(sizeof(RileyCudaGraphStage) == 4,
+               "graph-stage ABI width changed");
+_Static_assert(RILEY_CUDA_GRAPH_STAGE_NONE == 0 &&
+                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN == 1 &&
+                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE == 2 &&
+                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_END == 3 &&
+                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_ABORT == 4 &&
+                   RILEY_CUDA_GRAPH_STAGE_INSTANTIATE == 5 &&
+                   RILEY_CUDA_GRAPH_STAGE_UPDATE == 6 &&
+                   RILEY_CUDA_GRAPH_STAGE_LAUNCH == 7 &&
+                   RILEY_CUDA_GRAPH_STAGE_COMPLETION == 8 &&
+                   RILEY_CUDA_GRAPH_STAGE_CLOSE == 9,
+               "graph-stage ABI discriminants changed");
+_Static_assert(sizeof(RileyCudaGraphErrorInfo) == 56,
+               "graph-error-info ABI size changed");
+_Static_assert(_Alignof(RileyCudaGraphErrorInfo) == 8,
+               "graph-error-info ABI alignment changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, struct_size) == 0,
+               "graph-error-info struct-size offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, graph_stage) == 4,
+               "graph-error-info stage offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, capture_id) == 8,
+               "graph-error-info capture-id offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, exec_id) == 16,
+               "graph-error-info exec-id offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, submission_started) == 24,
+               "graph-error-info submission flag offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, completion_known) == 25,
+               "graph-error-info completion flag offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, resource_release_known) == 26,
+               "graph-error-info release flag offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, poisoned) == 27,
+               "graph-error-info poisoned flag offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, reserved0) == 28,
+               "graph-error-info reserved0 offset changed");
+_Static_assert(offsetof(RileyCudaGraphErrorInfo, reserved) == 32,
+               "graph-error-info reserved tail offset changed");
 _Static_assert(sizeof(RileyCudaNvidiaDeviceSnapshot) == 320,
                "NVIDIA device snapshot ABI size changed");
 _Static_assert(offsetof(RileyCudaNvidiaDeviceSnapshot, name) == 64,

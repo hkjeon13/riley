@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** Planned  
+**상태:** In progress — C05-0은 기존 generic error ABI를 바꾸지 않는 graph contract foundation을 추가했다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -11,6 +11,23 @@
 Riley는 non-default stream, event, command batch와 resource ledger를 이미 갖고 있지만 CUDA Graph lifecycle은 production ABI에 없다. Graph를 Llama executor 안에서 바로 구현하면 native handle, static address, stream capture, failure recovery가 model code와 섞인다.
 
 이 PR은 실제 Llama decode graph를 만들지 않는다. model-independent graph ownership과 오류 계약만 닫는다.
+
+### C05-0 — graph contract foundation (CPU/ABI-only)
+
+`RileyCudaErrorInfo`의 272-byte v1 layout, 기존 status/domain/generic stage는 불변으로 유지한다.
+대신 header는 opaque graph/capture/exec handle, thread-local capture mode, `unknown | unsupported |
+supported` closed capture-capability vocabulary, 상세 graph stage와 56-byte
+`RileyCudaGraphErrorInfo` companion record를 additive하게 선언한다. `unknown`은 zero-initialized
+default이며 반드시 거부한다. 이 record는 capture/exec ID, submission/completion/resource-release
+certainty, poison 상태를 보존하며 기존 error buffer의 tail extension이 아니다. C11/C++/Rust layout test는
+size, alignment, all critical offset과 enum numeric contract를 고정한다.
+
+Rust의 `graph` module은 native CUDA call 없이 lifecycle transition을 fail-closed로 검증한다. feature-off
+`CudaStream::begin_graph_capture`는 fake graph나 eager fallback 없이 actionable unavailable error를
+반환하며, CUDA-enabled build도 native symbol이 연결되기 전에는 not-supported로 실패한다. 실제 native
+capture/instantiate/replay/close symbol, resource lease, operation-specific capture capability query와 GPU
+lifecycle/fault/performance test는 후속 vertical slice로 남긴다. 따라서 이 slice는 GPU parity나 launch
+overhead 개선을 주장하지 않는다.
 
 ## 2. 범위
 

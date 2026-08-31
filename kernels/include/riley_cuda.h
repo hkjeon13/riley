@@ -151,6 +151,73 @@ typedef struct RileyCudaGemmPlan RileyCudaGemmPlan;
 typedef struct RileyCudaFixed37GemmPlan RileyCudaFixed37GemmPlan;
 typedef struct RileyCudaHfPrefillAttentionPlan
     RileyCudaHfPrefillAttentionPlan;
+typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;
+typedef struct RileyCudaGraph RileyCudaGraph;
+typedef struct RileyCudaGraphExec RileyCudaGraphExec;
+
+// CUDA's raw capture-mode numeric values are deliberately not part of the
+// Riley ABI. The first graph ABI slice admits only thread-local capture; more
+// permissive modes require their own ownership and thread-safety review.
+typedef uint32_t RileyCudaGraphCaptureMode;
+
+#define RILEY_CUDA_GRAPH_CAPTURE_MODE_INVALID \
+  ((RileyCudaGraphCaptureMode)0)
+#define RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL \
+  ((RileyCudaGraphCaptureMode)1)
+
+// Per-operation graph-capture admission result. A zero-initialized or absent
+// query is unknown and must be denied; this enum does not claim that a whole
+// stream, context, or library is graph-capture capable.
+typedef uint32_t RileyCudaGraphCaptureCapability;
+
+#define RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN \
+  ((RileyCudaGraphCaptureCapability)0)
+#define RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNSUPPORTED \
+  ((RileyCudaGraphCaptureCapability)1)
+#define RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED \
+  ((RileyCudaGraphCaptureCapability)2)
+
+// Detailed graph lifecycle phase recorded separately from the established
+// RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
+// a successful or reusable graph state by a caller.
+typedef uint32_t RileyCudaGraphStage;
+
+#define RILEY_CUDA_GRAPH_STAGE_NONE ((RileyCudaGraphStage)0)
+#define RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN ((RileyCudaGraphStage)1)
+#define RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE ((RileyCudaGraphStage)2)
+#define RILEY_CUDA_GRAPH_STAGE_CAPTURE_END ((RileyCudaGraphStage)3)
+#define RILEY_CUDA_GRAPH_STAGE_CAPTURE_ABORT ((RileyCudaGraphStage)4)
+#define RILEY_CUDA_GRAPH_STAGE_INSTANTIATE ((RileyCudaGraphStage)5)
+#define RILEY_CUDA_GRAPH_STAGE_UPDATE ((RileyCudaGraphStage)6)
+#define RILEY_CUDA_GRAPH_STAGE_LAUNCH ((RileyCudaGraphStage)7)
+#define RILEY_CUDA_GRAPH_STAGE_COMPLETION ((RileyCudaGraphStage)8)
+#define RILEY_CUDA_GRAPH_STAGE_CLOSE ((RileyCudaGraphStage)9)
+
+// Caller-owned companion metadata for future graph entry points. This is a
+// separate fixed-size record rather than a tail extension of RileyCudaErrorInfo
+// so existing v1 error buffers remain valid. A non-null output must set
+// struct_size to at least sizeof(RileyCudaGraphErrorInfo) and zero every
+// reserved field. Native graph calls will initialize this record on both
+// success and failure while preserving a larger caller-provided struct_size.
+//
+// submission_started becomes one only after CUDA launch submission is
+// attempted. completion_known becomes one only after a completion boundary is
+// observed unambiguously. resource_release_known becomes one only after every
+// transient lease cleanup outcome is known. poisoned means the relevant graph,
+// graph exec, or stream must not be reused. Zero IDs mean no capture or exec
+// was assigned to the operation.
+typedef struct RileyCudaGraphErrorInfo {
+  uint32_t struct_size;
+  RileyCudaGraphStage graph_stage;
+  uint64_t capture_id;
+  uint64_t exec_id;
+  uint8_t submission_started;
+  uint8_t completion_known;
+  uint8_t resource_release_known;
+  uint8_t poisoned;
+  uint32_t reserved0;
+  uint64_t reserved[3];
+} RileyCudaGraphErrorInfo;
 
 // Raw C callers must externally synchronize opaque-handle lifetime: no call
 // may begin with a handle while another thread can close that same handle.

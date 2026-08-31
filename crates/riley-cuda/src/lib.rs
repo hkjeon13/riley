@@ -13,6 +13,7 @@ mod error;
 #[allow(unsafe_code)]
 mod ffi;
 mod gemm;
+mod graph;
 #[cfg(any(feature = "cuda", test))]
 mod hf_eager_allowlist;
 mod memory;
@@ -53,6 +54,10 @@ pub use gemm::{
     CudaFixed37GemmMetadata, CudaGemmAlgorithmMetadata, CudaGemmConfig, CudaGemmReductionPolicy,
     CudaPreparedFixed37Gemm, CudaPreparedGemm, FIXED37_CHUNK_ELEMENTS, FIXED37_MAX_CHUNK_COUNT,
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
+};
+pub use graph::{
+    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo, CudaGraphLifecycle,
+    CudaGraphLifecycleState, CudaGraphStage, GraphCapture,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,
