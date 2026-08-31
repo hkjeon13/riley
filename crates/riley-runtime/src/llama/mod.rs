@@ -16,6 +16,8 @@ mod gemm_policy;
 mod generation;
 #[path = "executor/graph.rs"]
 mod graph;
+#[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.
+mod graph_decode_layout;
 #[path = "executor/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "executor/graph_registry.rs"]

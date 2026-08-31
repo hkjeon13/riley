@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-0은 pure-decode graph bucket catalog만 CPU-only로 고정했다.
+**상태:** In progress — C07-1은 exact bucket의 fixed-offset metadata geometry를 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -16,6 +16,23 @@
 C06 eligibility/registry/signature, executor shape policy, metadata packing, CLI/default, CUDA capture와
 performance 판정에는 연결하지 않는다. future owner는 base batch validation 뒤 checked row conversion으로만
 catalog를 사용할 수 있다.
+
+### C07-1 — fixed pure-decode metadata layout descriptor (CPU-only)
+
+C07-1은 exact bucket `M∈{1,2,4,8,16,32}`와 cold `block_entry_capacity B`에서 schema v1의
+상대 offset, byte size, alignment, 최종 정렬된 총 byte 수만 계산한다. `M`은 catalog의 정확한 원소여야 하며
+`B >= M`이어야 한다. `3` 같은 active-row count를 이 descriptor에서 `4`로 올림 처리하지 않는다.
+
+canonical field order는 `header`, token IDs, position IDs, row sequence slots, sequence block offsets,
+physical block IDs, valid-token counts, output-token indices, control/status다. `header`와 control/status는
+0 byte를 허용하지 않는 opaque region이며 v1에서 모두 4-byte alignment를 요구한다. schema의 capacity,
+offset, byte size, alignment, total은 host word size와 무관한 `u64`이고, 각 산술과 정렬은 overflow 시
+닫힌 typed error로 실패한다. 이 schema version은 기존 `LLAMA_BATCH_METADATA_V1_VERSION`과 별개다.
+
+이 단계는 relative geometry 계약일 뿐 실제 slab allocation·주소 안정성·byte packing·padding sentinel·동적
+batch validation·현재 V1 packed metadata ABI의 adapter·C06 registry lookup·CUDA capture/replay를 수행하지
+않는다. 현재 V1의 CSR/KV ownership은 동적이므로, future executor owner가 production-valid padding과
+ownership을 별도로 증명하기 전에는 이 layout을 runtime graph input으로 사용할 수 없다.
 
 ## 1. 배경과 가설
 
