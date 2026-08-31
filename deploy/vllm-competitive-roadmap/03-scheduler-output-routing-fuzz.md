@@ -1,8 +1,8 @@
 # C03 — Scheduler Output Routing Property Fuzz
 
-**상태:** In progress — C03-A CPU-only reference harness는 C02-P1 source closure 뒤 병렬로
-진행할 수 있다. C03-B GPU fixed corpus와 C03의 formal completion은 C02 actual qualification
-뒤에만 수행한다.
+**상태:** In progress — C03-A CPU-only reference harness와 C03-B의 fixed corpus/CPU topology
+contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다. C03-B의 actual CUDA fixed-corpus
+execution과 C03의 formal completion은 C02 actual qualification 뒤에만 수행한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** scheduler plan부터 sampling/commit/terminal event까지 request-token 대응 관계를 model-based property test로 고정한다.
 
@@ -318,6 +318,31 @@ CPU model이 생성한 대표 trace 중 다음만 실제 CUDA path로 replay한�
 
 GPU test는 property runner 전체를 실행하지 않고 고정된 최소 corpus만 검증한다.
 
+첫 source slice는 `gpu-fixed-v1` canonical JSON 세 건을
+`crates/riley-scheduler/tests/corpus/output-routing/gpu-fixed-v1/`에 고정한다. pure parser는
+case ID별 body drift, unknown/reordered/noncanonical JSON, label alias를 거부하고 scheduler/CUDA를
+열지 않는다. `c5-kv15-to17-mixed-greedy`는 decoder 두 개의 prompt 15 / `max_new=3`과 final
+prefill 세 개를 사용해 prime `[15]` → mixed decode `[16]` → final decode `[16,1]` KV table을
+고정한다. `c8-mixed-deferred-cancel`은 decoder 세 개와 final prefill 다섯 개의 dense 8-slot
+mixed plan에서 device download 뒤 deferred cancel을 고정한다. 별도
+`c8-mixed-greedy-commit-assembly-failure`는 같은 8-slot device-greedy download 후 public
+`into_result` sample-count mismatch가 반환한 `DeviceQuiescedMutationUnknown`만으로 abort하는
+fixture다. 이는 private reservation-commit failure injection을 주장하지 않는다.
+
+`gpu_fixed_corpus_contract` CPU test는 같은 descriptor를 public scheduler와 synthetic result로
+replay해 plan kind/slot/request/target length/block-table valid-token layout, deferred cancel,
+terminal-once, abort quiescence를 확인한다. CUDA target `c03_gpu_fixed_corpus`는 source archive에
+포함되지만 `#[ignore]` 상태다. future C02-qualified candidate와 별도 GPU execution approval 뒤에만
+다음처럼 수동 실행한다.
+
+```bash
+cargo test --locked -p riley-scheduler --features cuda \
+  --test c03_gpu_fixed_corpus -- --ignored --test-threads=1
+```
+
+이 source/CPU contract 통과는 GPU execution, candidate binding, C02 pass, C03-B acceptance 또는
+vLLM 성능 우위를 뜻하지 않는다.
+
 ## 7. Shrinking
 
 현재 `OperationTraceV2`는 failure가 발생하면 같은 property predicate로 bounded candidate를 다시
@@ -415,6 +440,9 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 - 기본 CPU workflow: deterministic seed set + 10,000 traces
 - scheduled workflow: random seed rotation + 1,000,000 traces
 - GPU manual/scheduled: 고정 corpus
+- C03-B source contract: `gpu_fixed_corpus_contract`는 기본 CPU workflow에서 실행하며, ignored
+  `c03_gpu_fixed_corpus`는 C02 actual qualification과 explicit GPU operation approval 뒤에만
+  candidate-bound environment에서 실행
 - V1 failure: source/minimized descriptor, operation list, 각각의 scheduler config, fixed KV/timeline,
   source Git SHA를 diagnostic-only receipt로 create-new 기록
 - bounded raw-program failure: source canonical descriptor와 operation list를 test panic diagnostic으로
@@ -439,6 +467,7 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   10,000 seeded replay, deferred cancel complete/abort-retry/terminal-once/final quiescence test 통과
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
+- C03-B source: strict `gpu-fixed-v1` corpus parse와 CPU topology/KV/deferred-cancel/abort contract 통과
 - C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact
 
 ## 13. 롤백

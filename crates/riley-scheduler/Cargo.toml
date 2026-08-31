@@ -29,3 +29,8 @@ workspace = true
 name = "llama_iteration_gpu"
 path = "tests/llama_iteration_gpu.rs"
 required-features = ["cuda"]
+
+[[test]]
+name = "c03_gpu_fixed_corpus"
+path = "tests/c03_gpu_fixed_corpus.rs"
+required-features = ["cuda"]
