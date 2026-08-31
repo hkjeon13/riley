@@ -24,6 +24,9 @@ mod graph_decode_exact_device_slab;
 #[allow(dead_code)] // C07-10 deliberately precedes fixed slab writing.
 mod graph_decode_exact_field_sources;
 #[cfg(feature = "cuda")]
+#[allow(dead_code)] // C07-17 deliberately precedes graph/capture ownership.
+mod graph_decode_exact_h2d_completion;
+#[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-16 deliberately precedes completion ownership.
 mod graph_decode_exact_h2d_submission;
 #[allow(dead_code)] // C07-12 deliberately precedes device/pinned transfer ownership.

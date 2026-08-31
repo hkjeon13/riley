@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-16은 same-layout pinned/device binding의 exact slab H2D enqueue를 caller-owned command batch로 좁힌다.
+**상태:** In progress — C07-17은 exact command batch를 ownership으로 보관한 H2D receipt의 completion 뒤에만 device-fresh lease를 만든다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -226,6 +226,27 @@ adapter는 stream 또는 command batch를 만들거나 finish하지 않는다. c
 executor integration을 만들지 않는다. CPU-only source contract가 one-copy/full-length/lifetime/no-completion boundary를 검증하고 CUDA feature는
 toolkit이 존재하는 host에서만 library compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에
 남기며 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-17 — completed exact V1 H2D device-fresh lease (CUDA feature; no GPU execution test)
+
+C07-17은 caller-created active command batch를 by-value로 소비하고, 짧은 scoped command proxy를 통해 C07-16의 exact enqueue primitive를
+정확히 한 번 호출한다. 성공 result는 stream-lifetime binding과 **그 exact batch 자체**를 보관한 private receipt다. 따라서 다른 stream 또는
+다른 batch를 completion에 대입할 safe path가 없다. C07-17 finish는 receipt만 소비하고 receipt-owned batch `finish()`를 정확히 한 번
+성공시킨 뒤에만 layout·geometry digest·same-owner device buffer를 가진 device-fresh lease를 만든다. completion error는 native `CudaResult`
+identity 그대로 반환하며 fresh lease를 만들지 않는다. 성공 lease는 device owner borrow만 보관하므로 completed source pinned storage는 lease
+반환 후 re-stage 또는 close할 수 있다.
+
+enqueue transaction은 attempt-consuming이다. enqueue 실패에는 원래 native copy error가 그대로 반환되고 consumed batch는 existing best-effort
+drop contract로 끝난다. 따라서 active batch recovery handle 또는 secondary finish diagnostic을 약속하지 않으며 fresh lease도 반환하지 않는다.
+completion failure에는 owned `finish()`의 native error가 그대로 반환되고 batch drop이 native finish를 재시도하지 않으며, ambiguous native
+resource retention은 existing fail-closed CUDA contract에 맡긴다.
+
+lease는 completed exact H2D만 증명하며 graph readiness/execution, kernel visibility beyond existing CUDA completion contract, C06
+signature/registry/dispatch, executor integration을 의미하지 않는다. C07-17은 stream/batch creation, C07-16 이외의 new copy submission,
+allocation, async token, host read/write, D2H, CUDA graph capture/replay를 만들지 않는다. CPU-only source contracts가 receipt-owned batch,
+one C07-16 delegation, one finish, finish-before-lease, no-direct-copy boundary를 검증하고 CUDA feature는 toolkit이 존재하는 host에서만 library
+compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를
+유지한다.
 
 ## 1. 배경과 가설
 
