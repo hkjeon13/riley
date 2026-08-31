@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-9는 exact V1 native fields와 opaque region length를 CPU-only로 결박했다.
+**상태:** In progress — C07-10은 exact V1 nine-field borrow를 C07-5 canonical source order로 결합했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -132,6 +132,18 @@ opaque byte value, schema interpretation, sentinel, kernel-mask meaning은 검�
 borrowed grouping일 뿐 C07-5 field-source creation/packer invocation, fixed slab write, padding-tail materialization, allocation/address
 ownership, host-to-device copy, C06 signature/registry/dispatch, CUDA capture/replay, executor mutation을 수행하거나 graph-safe 권한을
 부여하지 않는다. 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-10 — exact nine-field source composition (CPU-only)
+
+C07-10은 successful C07-9 grouping을 shortest reborrow lifetime으로 C07-5의 canonical nine-field source order에만 재구성한다.
+same value는 originating C07 binding도 함께 보관하므로, future caller가 exact fields와 unrelated cold layout binding을 무심코 섞지
+않는다. order는 header, token IDs, position IDs, row sequence slots, block CSR offsets, physical block IDs, valid-token counts,
+output-token indices, control/status다.
+
+C07-8이 seven native capacity와 no-tail shape를, C07-9가 two opaque region byte length를 이미 닫았으므로 이 bridge는 Result/error,
+length 재검사 또는 error translation을 만들지 않는다. C07-5 field-source construction 외에는 packer invocation, fixed slab write/zero-fill,
+opaque byte semantics, padding-tail materialization, allocation/address ownership, host-to-device copy, C06 signature/registry/dispatch,
+CUDA capture/replay, executor mutation을 수행하거나 graph-safe 권한을 부여하지 않는다. 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 

@@ -18,6 +18,8 @@ mod generation;
 mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
+#[allow(dead_code)] // C07-10 deliberately precedes fixed slab writing.
+mod graph_decode_exact_field_sources;
 #[allow(dead_code)] // C07-8 deliberately precedes opaque metadata-tail materialization.
 mod graph_decode_exact_projection;
 #[allow(dead_code)] // C07-9 deliberately precedes fixed source construction and slab writing.
