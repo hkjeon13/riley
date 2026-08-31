@@ -45,8 +45,12 @@ fn graph_decode_layout_stays_value_only_and_separate_from_current_batch_executio
     for required in [
         "PURE_DECODE_GRAPH_BUCKETS",
         "PureDecodeGraphMetadataField",
+        "PureDecodeGraphMetadataGeometryDigest",
+        "PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_FIELD_COUNT",
+        "Sha256",
         "checked_mul",
         "checked_add",
+        "to_le_bytes",
         "BlockEntryCapacityTooSmall",
     ] {
         assert!(

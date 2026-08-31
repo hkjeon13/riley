@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-1은 exact bucket의 fixed-offset metadata geometry를 CPU-only로 고정했다.
+**상태:** In progress — C07-2는 fixed metadata geometry의 canonical cold digest를 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -33,6 +33,21 @@ offset, byte size, alignment, total은 host word size와 무관한 `u64`이고, 
 batch validation·현재 V1 packed metadata ABI의 adapter·C06 registry lookup·CUDA capture/replay를 수행하지
 않는다. 현재 V1의 CSR/KV ownership은 동적이므로, future executor owner가 production-valid padding과
 ownership을 별도로 증명하기 전에는 이 layout을 runtime graph input으로 사용할 수 없다.
+
+### C07-2 — canonical fixed-layout digest (CPU-only)
+
+C07-2는 C07-1 layout에서 domain-separated SHA-256 value digest를 만든다. raw Rust struct bytes를 hash하지 않고
+little-endian으로 schema version, canonical field count, exact `M`, cold `B`, required base alignment, canonical field
+순서의 field tag·offset·byte size·alignment, final total byte를 streaming 순서로 hash한다. 따라서 어느 cold
+geometry input이 달라도 identity가 달라진다.
+
+`header` 또는 control/status의 의미가 geometry를 바꾸지 않고 달라져도 schema version을 올려야 한다. 같은
+geometry digest를 과거 의미와 재사용하는 것은 허용하지 않는다.
+
+digest에는 allocation address, pointer, payload byte, active-row count, actual block count, padding sentinel, dynamic
+batch value가 들어가지 않는다. 이 type은 C07-local value identity일 뿐 C06 `GraphMetadataLayoutSignature` 변환,
+registry key, graph prepared/capture/replay 권한이나 current V1 packed metadata ABI adapter를 만들지 않는다. future
+cold owner는 production ownership·padding·exact equality를 별도로 검증한 뒤에만 이를 더 큰 graph identity에 넣을 수 있다.
 
 ## 1. 배경과 가설
 

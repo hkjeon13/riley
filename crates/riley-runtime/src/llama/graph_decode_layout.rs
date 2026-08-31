@@ -7,12 +7,17 @@
 use std::error;
 use std::fmt;
 
+use sha2::{Digest, Sha256};
+
 use super::graph::PURE_DECODE_GRAPH_BUCKETS;
 
 const U16_BYTES: u64 = 2;
 const U32_BYTES: u64 = 4;
 const BASE_ALIGNMENT: u64 = U32_BYTES;
 const FIELD_COUNT: usize = 9;
+const PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_FIELD_COUNT: u32 = 9;
+const PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_DOMAIN: &[u8] =
+    b"riley.pure-decode-graph-metadata-layout.v1\0";
 
 /// Version of the C07 fixed pure-decode metadata layout geometry.
 pub(crate) const PURE_DECODE_GRAPH_METADATA_LAYOUT_SCHEMA_VERSION: u32 = 1;
@@ -89,6 +94,20 @@ impl PureDecodeGraphMetadataField {
             Self::ControlStatus => "control-status",
         }
     }
+
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::Header => 1,
+            Self::TokenIds => 2,
+            Self::PositionIds => 3,
+            Self::RowSequenceSlots => 4,
+            Self::SequenceBlockOffsets => 5,
+            Self::PhysicalBlockIds => 6,
+            Self::ValidTokens => 7,
+            Self::OutputTokenIndices => 8,
+            Self::ControlStatus => 9,
+        }
+    }
 }
 
 type PureDecodeGraphMetadataFieldSpec = (PureDecodeGraphMetadataField, u64, u64);
@@ -151,6 +170,21 @@ impl PureDecodeGraphMetadataRegion {
     #[must_use]
     pub(crate) const fn alignment(self) -> u64 {
         self.alignment
+    }
+}
+
+/// Fixed-width, domain-separated identity of one metadata layout geometry.
+///
+/// It is calculated only from declared cold geometry in canonical wire order.
+/// It is not an allocation address, current batch value, or replay authority.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub(crate) struct PureDecodeGraphMetadataGeometryDigest([u8; 32]);
+
+impl PureDecodeGraphMetadataGeometryDigest {
+    /// Returns the canonical SHA-256 digest bytes.
+    #[must_use]
+    pub(crate) const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
 }
 
@@ -289,6 +323,30 @@ impl PureDecodeGraphMetadataLayout {
     #[must_use]
     pub(crate) const fn total_bytes(self) -> u64 {
         self.total_bytes
+    }
+
+    /// Calculates the canonical fixed-layout digest for future cold identity use.
+    ///
+    /// Every integer uses explicit little-endian encoding; raw Rust struct bytes,
+    /// addresses, current payload, and dynamic iteration facts never enter it.
+    #[must_use]
+    pub(crate) fn geometry_digest(self) -> PureDecodeGraphMetadataGeometryDigest {
+        let mut hasher = Sha256::new();
+        hasher.update(PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_DOMAIN);
+        hasher.update(Self::schema_version().to_le_bytes());
+        hasher.update(PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_FIELD_COUNT.to_le_bytes());
+        hasher.update(self.bucket_rows.to_le_bytes());
+        hasher.update(self.block_entry_capacity.to_le_bytes());
+        hasher.update(Self::required_base_alignment().to_le_bytes());
+        for field in PureDecodeGraphMetadataField::ALL {
+            let region = self.region(field);
+            hasher.update([field.fingerprint_tag()]);
+            hasher.update(region.offset().to_le_bytes());
+            hasher.update(region.byte_len().to_le_bytes());
+            hasher.update(region.alignment().to_le_bytes());
+        }
+        hasher.update(self.total_bytes.to_le_bytes());
+        PureDecodeGraphMetadataGeometryDigest(hasher.finalize().into())
     }
 }
 
@@ -477,6 +535,7 @@ fn align_up(
 #[cfg(test)]
 mod tests {
     use super::{
+        PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_FIELD_COUNT,
         PURE_DECODE_GRAPH_METADATA_LAYOUT_SCHEMA_VERSION, PureDecodeGraphMetadataField,
         PureDecodeGraphMetadataLayout, PureDecodeGraphMetadataLayoutError,
         PureDecodeGraphMetadataLayoutSpec,
@@ -625,5 +684,54 @@ mod tests {
                 field: PureDecodeGraphMetadataField::TokenIds,
             })
         );
+    }
+
+    #[test]
+    fn geometry_digest_is_canonical_and_changes_with_every_cold_geometry_input() {
+        let baseline = PureDecodeGraphMetadataLayout::try_new(spec(8, 16, 5, 5))
+            .expect("representable baseline layout");
+        let repeat =
+            PureDecodeGraphMetadataLayout::try_new(spec(8, 16, 5, 5)).expect("same cold layout");
+        let baseline_digest = baseline.geometry_digest();
+        let copied_digest = baseline_digest;
+        assert_eq!(
+            baseline_digest,
+            repeat.geometry_digest(),
+            "same geometry must have one canonical identity"
+        );
+        assert_eq!(
+            copied_digest, baseline_digest,
+            "geometry digest must remain a copyable value"
+        );
+        assert_eq!(
+            *baseline_digest.as_bytes(),
+            [
+                0x65, 0x63, 0x6c, 0x69, 0x2d, 0x19, 0x10, 0xd7, 0xf0, 0xd3, 0x67, 0x64, 0xc9, 0xcd,
+                0x32, 0x37, 0x66, 0x43, 0x08, 0x10, 0x49, 0x47, 0x5f, 0xc8, 0x6b, 0xd6, 0xf0, 0xfd,
+                0xe2, 0xfe, 0x6d, 0x66,
+            ],
+            "reviewed canonical wire digest must remain stable"
+        );
+        assert_eq!(
+            PureDecodeGraphMetadataField::ALL.len(),
+            usize::try_from(PURE_DECODE_GRAPH_METADATA_GEOMETRY_DIGEST_FIELD_COUNT)
+                .expect("fixed field count must fit host index")
+        );
+        for changed in [
+            PureDecodeGraphMetadataLayout::try_new(spec(8, 17, 5, 5))
+                .expect("changed block capacity"),
+            PureDecodeGraphMetadataLayout::try_new(spec(8, 16, 6, 5))
+                .expect("changed header capacity"),
+            PureDecodeGraphMetadataLayout::try_new(spec(8, 16, 5, 6))
+                .expect("changed control capacity"),
+            PureDecodeGraphMetadataLayout::try_new(spec(16, 16, 5, 5))
+                .expect("changed exact bucket"),
+        ] {
+            assert_ne!(
+                baseline_digest,
+                changed.geometry_digest(),
+                "every cold geometry input must contribute to the digest"
+            );
+        }
     }
 }
