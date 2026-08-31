@@ -12,7 +12,7 @@ gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 
 host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
 facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은 greedy output
 record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-table byte builder를
-rope helper로 분리했다. CUDA owner, KV,
+rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -36,7 +36,7 @@ crates/riley-runtime/src/llama/executor/
   shape.rs              # active-row bucket and shape variant
   gemm_plan.rs           # anchored plan inventory
   metadata.rs            # synchronous/packed transport
-  dispatch.rs            # exact backend selection
+  dispatch.rs            # exact backend and borrowed output primitive selection
   output.rs              # logits/token status and canonical output map
   rope.rs                # cold host-side RoPE table bytes
   metrics.rs             # allocation-free counters/snapshots
@@ -282,6 +282,17 @@ batch owner는 RoPE profile 선택, device allocation, upload, CUDA table launch
 allocation-report ownership을 계속 보유한다. forward/decode의 유사 builder는 다른 error/resource
 contract이므로 이번 slice에서 공유하거나 변경하지 않는다. 이 source-only slice는 GPU parity나
 performance non-regression을 주장하지 않는다.
+
+### C04-18 — borrowed output primitive dispatch extraction
+
+`llama/executor/dispatch.rs`는 fixed graph가 logits를 만든 뒤, pre-bound output index/logit/result
+buffers를 row-gather와 optional deterministic greedy argmax CUDA primitive에 bind한다. non-empty
+output의 index-buffer 확인, gathered-logit 확인, row gather, 그 뒤에만 greedy result 확인/argmax를
+수행하는 기존 error order와 `Forward`/typed CUDA error mapping을 보존한다.
+
+batch owner는 metadata transport, shape/plan 선택, fixed graph 실행, output-ready state, poison,
+allocation 및 close ownership을 계속 보유한다. 이 source-only slice는 GPU parity나 performance
+non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

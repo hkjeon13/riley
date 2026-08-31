@@ -5,6 +5,7 @@ const EXECUTOR_ERROR: &str = include_str!("../src/llama/executor/error.rs");
 const EXECUTOR_SHAPE: &str = include_str!("../src/llama/executor/shape.rs");
 const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
 const EXECUTOR_DEVICE_VIEWS: &str = include_str!("../src/llama/executor/device_views.rs");
+const EXECUTOR_DISPATCH: &str = include_str!("../src/llama/executor/dispatch.rs");
 const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
@@ -184,6 +185,67 @@ fn executor_device_views_only_bind_borrowed_cuda_metadata() {
         assert!(
             !EXECUTOR_DEVICE_VIEWS.contains(forbidden),
             "executor device views crossed its borrowed-binding boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_dispatch_only_binds_borrowed_output_primitives() {
+    for required in [
+        "struct OutputPrimitiveDispatch",
+        "dispatch_output_primitives",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut::new(",
+        "RowGatherParams",
+        "row_gather",
+        "Bf16ArgmaxParams",
+        "deterministic_bf16_argmax",
+        "span(",
+        "output_logits_bytes",
+        "greedy_result_bytes",
+        "cuda_error as dispatch_cuda",
+    ] {
+        assert!(
+            EXECUTOR_DISPATCH.contains(required),
+            "executor dispatch omitted required borrowed-output token {required:?}"
+        );
+    }
+    for forbidden in [
+        "batch_executor",
+        "ForwardBuffers",
+        "LlamaExecutionPlan",
+        "BatchOutputMode",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaForward",
+        "BatchHostInput",
+        "BatchDeviceInput",
+        "BatchMetadataTransport",
+        "LlamaPackedBatchMetadata",
+        "PackedBatchV1",
+        "CudaContext",
+        "CudaStream",
+        "CudaPinnedHostBuffer",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "GemmPlans",
+        "RopeTableParams",
+        "indexed_rope",
+        "ragged_paged_attention",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+        "upload_from_slice",
+        "copy_from_pinned",
+        "close(",
+        "poison",
+        "Vec",
+        "Box",
+        "String",
+        "format!",
+    ] {
+        assert!(
+            !EXECUTOR_DISPATCH.contains(forbidden),
+            "executor dispatch crossed its borrowed-output boundary with {forbidden:?}"
         );
     }
 }

@@ -472,6 +472,7 @@ mod source_contract_tests {
         }
         for required in [
             "execute_fixed_graph(",
+            "dispatch_output_primitives(",
             "PackedBatchHostV1::new(",
             "per_operation_device_views(",
             "packed_device_views(",
@@ -482,6 +483,16 @@ mod source_contract_tests {
                 "batch hot execute source omits required tensor-batch contract {required:?}"
             );
         }
+        let fixed_graph_offset = hot
+            .find("execute_fixed_graph(")
+            .expect("fixed graph dispatch remains explicit");
+        let output_dispatch_offset = hot
+            .find("dispatch_output_primitives(")
+            .expect("output primitive dispatch remains explicit");
+        assert!(
+            fixed_graph_offset < output_dispatch_offset,
+            "output primitives must run after the fixed graph produces logits"
+        );
     }
 
     #[test]

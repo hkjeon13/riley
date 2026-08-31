@@ -13,14 +13,13 @@ use std::fmt;
 use std::mem;
 
 use riley_cuda::{
-    AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStream, EmbeddingParams,
+    AttentionReductionProfile, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType,
+    CudaDeviceBuffer, CudaExecutionStream, CudaStream, EmbeddingParams,
     FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams, SiluParams,
-    deterministic_bf16_argmax, embedding, fixed37_ragged_paged_attention, gated_multiply,
-    grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
-    ragged_paged_kv_cache_write, residual_add, rope_table, row_gather, silu,
+    ResidualRmsNormParams, RmsNormParams, RopeTableParams, SiluParams, embedding,
+    fixed37_ragged_paged_attention, gated_multiply, grouped_ragged_paged_attention, indexed_rope,
+    ragged_paged_attention, ragged_paged_kv_cache_write, residual_add, rope_table, silu,
 };
 use riley_model::LoadedModel;
 
@@ -33,6 +32,7 @@ use super::executor::buffers::{
     close_device_input, close_host_input,
 };
 use super::executor::device_views::{packed_device_views, per_operation_device_views};
+use super::executor::dispatch::{OutputPrimitiveDispatch, dispatch_output_primitives};
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
@@ -42,9 +42,7 @@ use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
-use super::executor::output::{
-    GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes, output_logits_bytes,
-};
+use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes};
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
 use super::executor::rope::{build_absolute_cpu_rope_tables, build_absolute_rope_angles};
 use super::executor::shape::{
@@ -1676,91 +1674,21 @@ fn execute_packed(
         )?;
 
         if packed.output_count() != 0 {
-            let output_indices =
-                output_indices.ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                    field: "output_token_indices",
-                    reason: "non-empty output has no cold-prepared device index buffer",
-                })?;
-            let output =
-                gathered_logits
-                    .as_mut()
-                    .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "gathered_logits",
-                        reason: "non-empty output has no cold-prepared device buffer",
-                    })?;
-            let site = ExecutionSite::global(LlamaOp::OutputGather);
-            let mut params = RowGatherParams {
-                input: span(
-                    &buffers.logits,
-                    CudaDType::BF16,
-                    plan.workspace_spec().logits_bytes(),
-                    site,
-                )?,
-                row_indices: output_indices,
-                row_indices_host: packed.output_token_indices(),
-                output: CudaBufferSpanMut::new(
-                    output,
-                    CudaDType::BF16,
-                    0,
-                    output_logits_bytes(
-                        packed.output_count(),
-                        plan.dimensions().vocabulary_size(),
-                    )?,
-                )
-                .map_err(|source| batch_cuda(site, source))?,
-                input_row_count: usize_u64(dense_rows, LlamaBatchExecutorResource::GatheredLogits)?,
-                column_count: usize_u64(
-                    plan.dimensions().vocabulary_size(),
-                    LlamaBatchExecutorResource::GatheredLogits,
-                )?,
-            };
-            row_gather(&mut params, stream).map_err(|source| batch_cuda(site, source))?;
-            if output_mode == BatchOutputMode::GreedyTokens {
-                let logits = gathered_logits.as_ref().ok_or(
-                    LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "gathered_logits",
-                        reason: "greedy selection requires gathered logits",
-                    },
-                )?;
-                let results = greedy_results.as_mut().ok_or(
-                    LlamaBatchExecutorError::InvalidConfiguration {
-                        field: "greedy_results",
-                        reason: "non-empty output has no cold-prepared greedy result buffer",
-                    },
-                )?;
-                let mut argmax = Bf16ArgmaxParams {
-                    logits: CudaBufferSpan::new(
-                        logits,
-                        CudaDType::BF16,
-                        0,
-                        output_logits_bytes(
-                            packed.output_count(),
-                            plan.dimensions().vocabulary_size(),
-                        )?,
-                    )
-                    .map_err(|source| batch_cuda(site, source))?,
-                    results: CudaBufferSpanMut::new(
-                        results,
-                        CudaDType::U32,
-                        0,
-                        usize_u64(
-                            greedy_result_bytes(packed.output_count())?,
-                            LlamaBatchExecutorResource::GreedyResults,
-                        )?,
-                    )
-                    .map_err(|source| batch_cuda(site, source))?,
-                    row_count: usize_u64(
-                        packed.output_count(),
-                        LlamaBatchExecutorResource::GreedyResults,
-                    )?,
-                    vocabulary_size: usize_u64(
-                        plan.dimensions().vocabulary_size(),
-                        LlamaBatchExecutorResource::GreedyResults,
-                    )?,
-                };
-                deterministic_bf16_argmax(&mut argmax, stream)
-                    .map_err(|source| batch_cuda(site, source))?;
-            }
+            dispatch_output_primitives(
+                OutputPrimitiveDispatch {
+                    logits: &buffers.logits,
+                    logits_byte_len: plan.workspace_spec().logits_bytes(),
+                    vocabulary_size: plan.dimensions().vocabulary_size(),
+                    dense_rows,
+                    output_indices,
+                    output_indices_host: packed.output_token_indices(),
+                    output_count: packed.output_count(),
+                    gathered_logits,
+                    greedy_results,
+                    produce_greedy_tokens: output_mode == BatchOutputMode::GreedyTokens,
+                },
+                stream,
+            )?;
         }
         Ok(())
     };
