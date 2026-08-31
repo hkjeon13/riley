@@ -14,6 +14,8 @@ mod forward;
 mod gemm_policy;
 #[cfg(feature = "cuda")]
 mod generation;
+#[path = "executor/graph.rs"]
+mod graph;
 mod plan;
 #[cfg(any(feature = "cuda", test))]
 mod reduction_profile;
@@ -36,6 +38,12 @@ pub use batch_executor::{
 pub use error::{
     ExecutionSite, LlamaBufferRole, LlamaDimension, LlamaOp, LlamaPlanError, LlamaPlanResult,
     LlamaScalar,
+};
+pub use graph::{
+    ExecutionGraphPolicy, ExecutionMode, GraphCaptureSafety, GraphDispatchDecision,
+    GraphDispatchEligibility, GraphDispatchError, GraphDispatchRequest, GraphFallbackReason,
+    GraphInventoryState, GraphOperatorCapability, GraphSamplingBackend, GraphWorkloadStage,
+    select_execution_graph,
 };
 pub use plan::{
     HIDDEN_WORKSPACE_BUFFER_COUNT, INTERMEDIATE_WORKSPACE_BUFFER_COUNT,

@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** Planned  
+**상태:** In progress — C06-0은 CUDA/model executor와 분리된 closed dispatch policy를 CPU-only로 고정했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -11,6 +11,18 @@
 CUDA Graph를 global on/off flag로 다루면 dynamic shape, mixed prefill/decode, sampling backend, metadata layout 차이 때문에 잘못된 graph를 재사용하기 쉽다. 반대로 모든 조합을 capture하면 VRAM과 cold-start가 폭증한다.
 
 C06은 graph를 선택하는 identity와 policy를 먼저 고정한다. 실제 Llama decode graph bucket의 성능 구현은 C07 범위다.
+
+### C06-0 — pure closed dispatch policy (CPU-only)
+
+`ExecutionGraphPolicy`, `ExecutionMode`, capture-safety/eligibility facts, exact inventory state와
+fallback reason을 allocation-free value type으로 분리한다. 이 slice는 raw graph handle, CUDA call,
+model executor mutation, signature construction, dynamic capture, CLI wiring을 하지 않는다. `disabled`는
+입력 사실을 검사하지 않고 항상 `ExactEager`를 선택한다. `auto`는 matching prepared entry만 graph로
+선택하고 모든 miss를 closed eager reason으로 남기며, `require`는 같은 miss를 eager fallback으로 숨기지
+않고 typed error로 거부한다. C05 native capability record를 runtime policy 값으로 변환하는 adapter,
+signature/inventory owner, metrics/CLI와 실제 graph replay는 후속 slice다.
+GPU greedy sampling은 initial full-graph path의 admission 조건이며, piecewise graph에서는 dynamic
+sampling/output boundary를 exact eager로 남긴다.
 
 ## 2. Execution mode
 
