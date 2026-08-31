@@ -15,13 +15,12 @@ use std::mem;
 use riley_cuda::{
     AttentionReductionProfile, BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE,
     BF16_ARGMAX_STATUS_SUCCESS, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaError, CudaErrorKind, CudaExecutionStream,
-    CudaPinnedHostBuffer, CudaStream, EmbeddingParams, FIXED37_RAGGED_MAX_LOGICAL_TOKENS,
-    GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1, PackedBatchV1,
-    RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
-    ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams, SiluParams,
-    deterministic_bf16_argmax, embedding, fixed37_ragged_paged_attention, gated_multiply,
-    grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
+    CudaDType, CudaDeviceBuffer, CudaError, CudaErrorKind, CudaExecutionStream, CudaStream,
+    EmbeddingParams, FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams,
+    PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
+    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams,
+    SiluParams, deterministic_bf16_argmax, embedding, fixed37_ragged_paged_attention,
+    gated_multiply, grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
     ragged_paged_kv_cache_write, residual_add, rope_table, row_gather, silu,
 };
 use riley_model::LoadedModel;
@@ -29,6 +28,11 @@ use riley_model::LoadedModel;
 use super::batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LlamaBatchMetadataConfig, LlamaBatchRow,
     LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
+};
+use super::executor::buffers::{
+    BatchDeviceInput, BatchHostInput, PerOperationDeviceMetadata, U16_BYTES, U32_BYTES,
+    allocate_packed_device_input, allocate_packed_host_input, allocate_synchronous_device_input,
+    allocate_synchronous_host_input, close_device_input, close_host_input,
 };
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
@@ -53,8 +57,6 @@ const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const BF16_BYTES_USIZE: usize = 2;
 const F32_BYTES_USIZE: usize = 4;
-const U32_BYTES: usize = 4;
-const U16_BYTES: usize = 2;
 const SUPPORTED_HEAD_DIMENSION: usize = 64;
 const PER_OPERATION_BASE_DEVICE_ALLOCATIONS: u64 = 9;
 const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
@@ -558,40 +560,6 @@ impl PreparedLlamaBatchAllocationReport {
     pub const fn pinned_host_allocation_count(self) -> u64 {
         self.total_pinned_host_allocation_count
     }
-}
-
-struct PerOperationDeviceMetadata {
-    sequence_block_offsets: CudaDeviceBuffer,
-    physical_block_ids: CudaDeviceBuffer,
-    valid_tokens: CudaDeviceBuffer,
-    row_sequence_slots: CudaDeviceBuffer,
-    row_positions: CudaDeviceBuffer,
-    output_token_indices: Option<CudaDeviceBuffer>,
-}
-
-enum BatchDeviceInput {
-    PerOperation(PerOperationDeviceMetadata),
-    IterationBatch { slab: CudaDeviceBuffer },
-}
-
-struct PerOperationHostWorkspace {
-    padded_tokens: Box<[u32]>,
-    sequence_block_offsets: Box<[u8]>,
-    physical_block_ids: Box<[u8]>,
-    valid_tokens: Box<[u8]>,
-    row_sequence_slots: Box<[u8]>,
-    row_positions: Box<[u8]>,
-    output_token_indices: Box<[u8]>,
-}
-
-struct IterationBatchHostWorkspace {
-    bytes: Box<[u8]>,
-    pinned: CudaPinnedHostBuffer,
-}
-
-enum BatchHostInput {
-    PerOperation(PerOperationHostWorkspace),
-    IterationBatch(IterationBatchHostWorkspace),
 }
 
 struct BatchHostWorkspace {
@@ -1688,7 +1656,11 @@ impl PreparedLlamaBatchExecutor {
             LlamaBatchExecutorResource::RopeSin,
             absolute_rope_sin.close(),
         );
-        close_device_input(device_input, &mut first);
+        if let Some(error) = close_device_input(device_input) {
+            if first.is_none() {
+                first = Some(error);
+            }
+        }
         if let Some(buffer) = gathered_logits {
             record_close(
                 &mut first,
@@ -1703,7 +1675,11 @@ impl PreparedLlamaBatchExecutor {
                 buffer.close(),
             );
         }
-        close_host_input(host.input, &mut first);
+        if let Some(error) = close_host_input(host.input) {
+            if first.is_none() {
+                first = Some(error);
+            }
+        }
         let mut shape_error = None;
         for shape in shape_variants {
             if let Err(error) = shape.close() {
@@ -3114,80 +3090,12 @@ fn allocate_device_input(
     transport: BatchMetadataTransport,
 ) -> LlamaBatchExecutorResult<BatchDeviceInput> {
     match transport {
-        BatchMetadataTransport::Synchronous => {
-            allocate_per_operation_device_metadata(context, bounds)
-                .map(BatchDeviceInput::PerOperation)
-        }
+        BatchMetadataTransport::Synchronous => allocate_synchronous_device_input(context, bounds),
         BatchMetadataTransport::PackedAsync => {
             let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
-            let slab = allocate_device(
-                context,
-                usize_u64(capacity, LlamaBatchExecutorResource::PackedIterationInput)?,
-                ExecutionSite::global(LlamaOp::BatchMetadataUpload),
-            )?;
-            Ok(BatchDeviceInput::IterationBatch { slab })
+            allocate_packed_device_input(context, capacity)
         }
     }
-}
-
-fn allocate_per_operation_device_metadata(
-    context: &CudaContext,
-    bounds: LlamaBatchMetadataConfig,
-) -> LlamaBatchExecutorResult<PerOperationDeviceMetadata> {
-    let offsets =
-        bounds
-            .max_rows()
-            .checked_add(1)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-            })?;
-    let allocate = |elements: usize,
-                    element_bytes: usize,
-                    resource: LlamaBatchExecutorResource|
-     -> LlamaBatchExecutorResult<CudaDeviceBuffer> {
-        let bytes = checked_host_byte_len(elements, element_bytes, resource)?;
-        allocate_device(
-            context,
-            usize_u64(bytes, resource)?,
-            ExecutionSite::global(LlamaOp::BatchMetadataUpload),
-        )
-    };
-    Ok(PerOperationDeviceMetadata {
-        sequence_block_offsets: allocate(
-            offsets,
-            U32_BYTES,
-            LlamaBatchExecutorResource::SequenceBlockOffsets,
-        )?,
-        physical_block_ids: allocate(
-            bounds.max_block_entries(),
-            U32_BYTES,
-            LlamaBatchExecutorResource::PhysicalBlockIds,
-        )?,
-        valid_tokens: allocate(
-            bounds.max_block_entries(),
-            U16_BYTES,
-            LlamaBatchExecutorResource::ValidTokens,
-        )?,
-        row_sequence_slots: allocate(
-            bounds.max_input_tokens(),
-            U32_BYTES,
-            LlamaBatchExecutorResource::RowSequenceSlots,
-        )?,
-        row_positions: allocate(
-            bounds.max_input_tokens(),
-            U32_BYTES,
-            LlamaBatchExecutorResource::RowPositions,
-        )?,
-        output_token_indices: if bounds.max_output_slots() == 0 {
-            None
-        } else {
-            Some(allocate(
-                bounds.max_output_slots(),
-                U32_BYTES,
-                LlamaBatchExecutorResource::OutputTokenIndices,
-            )?)
-        },
-    })
 }
 
 fn allocate_host_workspace(
@@ -3196,57 +3104,16 @@ fn allocate_host_workspace(
     transport: BatchMetadataTransport,
 ) -> LlamaBatchExecutorResult<BatchHostWorkspace> {
     let input = match transport {
-        BatchMetadataTransport::Synchronous => {
-            let offsets = bounds.max_rows().checked_add(1).ok_or(
-                LlamaBatchExecutorError::ArithmeticOverflow {
-                    resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-                },
-            )?;
-            BatchHostInput::PerOperation(PerOperationHostWorkspace {
-                padded_tokens: allocate_zeroed_u32(bounds.max_input_tokens())?,
-                sequence_block_offsets: allocate_zeroed_bytes(offsets, U32_BYTES)?,
-                physical_block_ids: allocate_zeroed_bytes(bounds.max_block_entries(), U32_BYTES)?,
-                valid_tokens: allocate_zeroed_bytes(bounds.max_block_entries(), U16_BYTES)?,
-                row_sequence_slots: allocate_zeroed_bytes(bounds.max_input_tokens(), U32_BYTES)?,
-                row_positions: allocate_zeroed_bytes(bounds.max_input_tokens(), U32_BYTES)?,
-                output_token_indices: allocate_zeroed_bytes(bounds.max_output_slots(), U32_BYTES)?,
-            })
-        }
+        BatchMetadataTransport::Synchronous => allocate_synchronous_host_input(bounds)?,
         BatchMetadataTransport::PackedAsync => {
             let capacity = PackedIterationLayout::capacity(bounds)?.total_bytes;
-            let bytes = allocate_zeroed_bytes(capacity, 1)?;
-            let pinned = context
-                .allocate_pinned_host_buffer(usize_u64(
-                    capacity,
-                    LlamaBatchExecutorResource::PinnedIterationInput,
-                )?)
-                .map_err(|source| {
-                    batch_cuda(ExecutionSite::global(LlamaOp::BatchMetadataUpload), source)
-                })?;
-            BatchHostInput::IterationBatch(IterationBatchHostWorkspace { bytes, pinned })
+            allocate_packed_host_input(context, capacity)?
         }
     };
     Ok(BatchHostWorkspace {
         input,
         greedy_results: allocate_zeroed_bytes(bounds.max_output_slots(), GREEDY_RESULT_BYTES)?,
     })
-}
-
-fn allocate_zeroed_u32(elements: usize) -> LlamaBatchExecutorResult<Box<[u32]>> {
-    let requested_bytes = checked_host_byte_len(
-        elements,
-        U32_BYTES,
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let mut values = Vec::new();
-    values
-        .try_reserve_exact(elements)
-        .map_err(|_| LlamaBatchExecutorError::HostAllocation {
-            resource: LlamaBatchExecutorResource::HostWorkspace,
-            requested_bytes: requested_bytes as u64,
-        })?;
-    values.resize(elements, 0);
-    Ok(values.into_boxed_slice())
 }
 
 fn allocate_zeroed_bytes(
@@ -3669,67 +3536,6 @@ fn poison_for_batch_error(
             forward.poisoned = true;
         }
         _ => {}
-    }
-}
-
-fn close_device_input(input: BatchDeviceInput, first: &mut Option<LlamaBatchExecutorError>) {
-    match input {
-        BatchDeviceInput::PerOperation(metadata) => {
-            let PerOperationDeviceMetadata {
-                sequence_block_offsets,
-                physical_block_ids,
-                valid_tokens,
-                row_sequence_slots,
-                row_positions,
-                output_token_indices,
-            } = metadata;
-            for (resource, result) in [
-                (
-                    LlamaBatchExecutorResource::SequenceBlockOffsets,
-                    sequence_block_offsets.close(),
-                ),
-                (
-                    LlamaBatchExecutorResource::PhysicalBlockIds,
-                    physical_block_ids.close(),
-                ),
-                (
-                    LlamaBatchExecutorResource::ValidTokens,
-                    valid_tokens.close(),
-                ),
-                (
-                    LlamaBatchExecutorResource::RowSequenceSlots,
-                    row_sequence_slots.close(),
-                ),
-                (
-                    LlamaBatchExecutorResource::RowPositions,
-                    row_positions.close(),
-                ),
-            ] {
-                record_close(first, resource, result);
-            }
-            if let Some(buffer) = output_token_indices {
-                record_close(
-                    first,
-                    LlamaBatchExecutorResource::OutputTokenIndices,
-                    buffer.close(),
-                );
-            }
-        }
-        BatchDeviceInput::IterationBatch { slab } => record_close(
-            first,
-            LlamaBatchExecutorResource::PackedIterationInput,
-            slab.close(),
-        ),
-    }
-}
-
-fn close_host_input(input: BatchHostInput, first: &mut Option<LlamaBatchExecutorError>) {
-    if let BatchHostInput::IterationBatch(host) = input {
-        record_close(
-            first,
-            LlamaBatchExecutorResource::PinnedIterationInput,
-            host.pinned.close(),
-        );
     }
 }
 

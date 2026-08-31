@@ -3,6 +3,7 @@
 const EXECUTOR_METRICS: &str = include_str!("../src/llama/executor/metrics.rs");
 const EXECUTOR_ERROR: &str = include_str!("../src/llama/executor/error.rs");
 const EXECUTOR_SHAPE: &str = include_str!("../src/llama/executor/shape.rs");
+const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
 
 #[test]
 fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
@@ -79,6 +80,34 @@ fn executor_shape_does_not_own_runtime_resources_or_scheduling_policy() {
         assert!(
             !EXECUTOR_SHAPE.contains(forbidden),
             "executor shape crossed its value-only boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_buffers_do_not_own_model_or_execution_policy() {
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "LoadedModel",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "LlamaExecutionPlan",
+        "PreparedLlamaForward",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaBatchShape",
+        "GemmPlans",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "LlamaPackedBatchMetadata",
+        "BatchMetadataTransport",
+        "greedy_results",
+        "GREEDY_RESULT_BYTES",
+    ] {
+        assert!(
+            !EXECUTOR_BUFFERS.contains(forbidden),
+            "executor buffers crossed its raw-input boundary with {forbidden:?}"
         );
     }
 }

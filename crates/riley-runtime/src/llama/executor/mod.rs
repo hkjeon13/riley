@@ -4,6 +4,7 @@
 //! must not take ownership of CUDA buffers, weights, KV storage, streams, or
 //! scheduling policy unless their dedicated ownership boundary says so.
 
+pub(crate) mod buffers;
 pub(crate) mod error;
 pub(crate) mod metrics;
 pub(crate) mod shape;

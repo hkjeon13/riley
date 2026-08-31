@@ -2,8 +2,9 @@
 
 **상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
 분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
-shape policy·bucket·history를 value-only module로 이동한다. CUDA owner, KV, buffer, dispatch,
-output, public API와 production default는 유지한다.
+shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을
+각각 분리한다. CUDA owner, KV, buffer orchestration, dispatch, output, public API와 production
+default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -118,6 +119,15 @@ prepared owner type을 받지 않고 dense-row predicate만 받아 unsupported s
 maximum rollback bucket을 항상 유지한다. 따라서 shape module은 error/metrics vocabulary만
 참조하고 CUDA context·buffer·stream, model/forward/GEMM/KV/plan owner, scheduler/server를 알지
 않는다.
+
+### C04-4 — raw batch-input buffer extraction
+
+Per-operation metadata buffer, packed metadata slab, their host workspace와 cold allocation/cleanup
+helper는 `llama/executor/buffers.rs`에 둔다. transport policy match와 allocation-report aggregation은
+batch owner에 남기므로 새 module은 `BatchMetadataTransport`, model/forward/GEMM/KV/RoPE/output,
+stream/dispatch를 참조하지 않는다. owner close는 기존 순서대로 모든 resource close를 시도하고,
+input helper에서 받은 첫 cleanup error만 기존 전체 close result에 병합한다. public API와
+allocation count/byte contract는 바꾸지 않는다.
 
 ## 6. Allocation 검증
 
