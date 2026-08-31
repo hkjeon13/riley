@@ -26,6 +26,8 @@ mod graph_decode_packer;
 mod graph_decode_padding;
 #[allow(dead_code)] // C07-6 deliberately precedes its future executor adapter.
 mod graph_decode_preflight;
+#[allow(dead_code)] // C07-7 deliberately precedes its future V1 field/capacity adapter.
+mod graph_decode_preflight_binding;
 #[path = "executor/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "executor/graph_registry.rs"]

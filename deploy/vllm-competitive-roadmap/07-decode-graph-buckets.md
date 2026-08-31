@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-6는 base-validated V1 metadata의 pure-decode 후보 경계를 CPU-only로 고정했다.
+**상태:** In progress — C07-7은 V1 candidate와 cold layout의 exact bucket 결합을 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -95,6 +95,18 @@ row count는 checked `u32` conversion 뒤 C07-3 padding planner에만 전달하�
 padding sentinel/header/control 생성, allocation/address ownership, host-to-device copy, C06 registry/signature/dispatch, graph
 capture/replay, executor mutation, CLI/default 변경을 수행하지 않는다. 따라서 candidate는 향후 graph-safe metadata 또는 runnable
 graph를 뜻하지 않고, 계속 exact eager 상태에서 다음 ownership·field-mapping contract를 검토하기 위한 read-only fact다.
+
+### C07-7 — V1 candidate/cold-layout exact binding (CPU-only)
+
+C07-7은 C07-6의 closed V1 candidate result와 caller-supplied C07-1 cold layout을 값으로만 결합한다.
+이미 ineligible인 결과는 layout을 검사하거나 binding을 만들지 않고 같은 typed reason으로 반환한다. eligible result만 C07-4의
+exact bucket binder에 전달하므로 `M` 불일치는 기존 `LayoutPaddingBucketMismatch` typed error로 남고, bucket 재선택이나
+maximum fallback은 없다. 성공값은 C07-4 binding과 layout-derived C07-2 geometry digest를 보관한다.
+
+이 단계는 V1 raw field/CSR/KV block capacity 검증이나 fixed-slab source materialization, trailing padding sentinel/header/control,
+allocation/address ownership, host-to-device copy, C06 signature/registry/dispatch, CUDA capture/replay, executor mutation을 하지 않는다.
+따라서 bound result도 graph-safe metadata나 runnable graph가 아니며, C07-8 이후 field/capacity contract가 별도로 닫히기 전에는
+exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
