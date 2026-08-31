@@ -11,8 +11,8 @@ use riley_runtime::paged_kv::{KvBlockPoolStats, KvLayout};
 use riley_scheduler::{
     ExecutionAbort, IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot,
     OverloadPolicy, RequestCompletion, RequestDescriptor, RequestFinishReason, RequestId,
-    RequestSnapshot, Scheduler, SchedulerConfig, SchedulerError, SchedulerMetricsSnapshot,
-    TokenEvent,
+    RequestSnapshot, RequestState, Scheduler, SchedulerConfig, SchedulerError,
+    SchedulerMetricsSnapshot, TokenEvent,
 };
 
 const TRACE_COUNT: u64 = 10_000;
@@ -850,4 +850,283 @@ fn ten_thousand_seeded_fault_microtraces_preserve_routing_and_quiescence() {
             FaultAction::InvalidFeedback => run_invalid_feedback(seed),
         }
     }
+}
+
+const MIXED_STAGE_SEED: u64 = 0x51f1_edc3_70a5_9b61;
+
+struct MixedStageFixture {
+    scheduler: Scheduler,
+    decoder: RequestId,
+    final_prefill: RequestId,
+    plan: IterationPlan,
+    expected: Vec<ExpectedOutput>,
+    label_by_request: HashMap<RequestId, u32>,
+    histories: BTreeMap<u32, Vec<u32>>,
+    terminal_labels: BTreeSet<u32>,
+}
+
+struct MixedStageState {
+    scheduler: Scheduler,
+    decoder: RequestId,
+    label_by_request: HashMap<RequestId, u32>,
+    histories: BTreeMap<u32, Vec<u32>>,
+    terminal_labels: BTreeSet<u32>,
+}
+
+fn prime_mixed_stage_decoder() -> MixedStageState {
+    let config = SchedulerConfig {
+        iteration_token_budget: 2,
+        max_prefill_chunk_tokens: 1,
+        aging_threshold_ns: 100,
+        ..fault_config(2, None)
+    };
+    let mut scheduler = new_scheduler(config);
+    let decoder = scheduler
+        .submit(RequestDescriptor::new(vec![1_001], 2), 0)
+        .expect("prime mixed-stage decoder");
+    let label_by_request = HashMap::from([(decoder.request_id(), 1_u32)]);
+    let mut histories = BTreeMap::from([(1_u32, Vec::new()), (2_u32, Vec::new())]);
+    let mut terminal_labels = BTreeSet::new();
+
+    let planning = scheduler
+        .plan_iteration(0)
+        .expect("prime mixed-stage prefill");
+    let (prime_plan, prime_completions) = planning.into_parts();
+    assert!(prime_completions.is_empty());
+    let prime_plan = prime_plan.expect("decoder prime plan");
+    assert_eq!(prime_plan.prefill_items().len(), 1);
+    assert!(prime_plan.decode_items().is_empty());
+    assert_eq!(
+        prime_plan.prefill_items()[0].request_id(),
+        decoder.request_id()
+    );
+    assert_eq!(prime_plan.output_slots(), &[OutputSlot::new(0)]);
+    let prime_expected = expected_outputs(&prime_plan, &label_by_request, &histories);
+    let prime_result = IterationResult::new(
+        prime_plan.iteration_id(),
+        vec![IterationOutput::new(
+            prime_expected[0].slot,
+            prime_expected[0].token_id,
+            false,
+        )],
+        0,
+        0,
+    )
+    .expect("prime result has one unique slot");
+    let prime_updates = scheduler
+        .complete_iteration(&prime_result, 0)
+        .expect("commit mixed-stage decoder prime");
+    assert!(prime_updates.settlement_failures().is_empty());
+    assert_token_events(
+        &prime_expected,
+        prime_updates.token_events(),
+        MIXED_STAGE_SEED,
+        0,
+    );
+    for output in &prime_expected {
+        histories
+            .get_mut(&output.label)
+            .expect("prime label history")
+            .push(output.token_id);
+    }
+    assert_completions(
+        prime_updates.completions(),
+        &label_by_request,
+        &histories,
+        &mut terminal_labels,
+        MIXED_STAGE_SEED,
+        0,
+    );
+    assert_eq!(
+        scheduler.request_state(decoder.request_id()),
+        Some(RequestState::Decoding)
+    );
+    MixedStageState {
+        scheduler,
+        decoder: decoder.request_id(),
+        label_by_request,
+        histories,
+        terminal_labels,
+    }
+}
+
+fn mixed_stage_fixture() -> MixedStageFixture {
+    let MixedStageState {
+        mut scheduler,
+        decoder,
+        mut label_by_request,
+        histories,
+        terminal_labels,
+    } = prime_mixed_stage_decoder();
+    let decoder_token = histories[&1][0];
+    let final_prefill = scheduler
+        .submit(RequestDescriptor::new(vec![2_001], 1), 1)
+        .expect("submit final-prefill peer");
+    assert!(
+        label_by_request
+            .insert(final_prefill.request_id(), 2)
+            .is_none()
+    );
+    let planning = scheduler
+        .plan_iteration(1)
+        .expect("plan RC1 mixed-stage corpus");
+    let (plan, completions) = planning.into_parts();
+    assert!(completions.is_empty());
+    let plan = plan.expect("mixed-stage plan");
+    assert_eq!(plan.prefill_items().len(), 1);
+    assert_eq!(plan.decode_items().len(), 1);
+    assert_eq!(plan.decode_items()[0].request_id(), decoder);
+    assert_eq!(plan.decode_items()[0].input_tokens(), &[decoder_token]);
+    assert_eq!(
+        plan.decode_items()[0].output_slot(),
+        Some(OutputSlot::new(0))
+    );
+    assert_eq!(
+        plan.prefill_items()[0].request_id(),
+        final_prefill.request_id()
+    );
+    assert_eq!(plan.prefill_items()[0].input_tokens(), &[2_001]);
+    assert_eq!(
+        plan.prefill_items()[0].output_slot(),
+        Some(OutputSlot::new(1))
+    );
+    assert_eq!(
+        plan.output_slots(),
+        &[OutputSlot::new(0), OutputSlot::new(1)]
+    );
+    assert_eq!(plan.total_tokens(), 2);
+    let expected = expected_outputs(&plan, &label_by_request, &histories);
+    assert_eq!(expected.len(), 2);
+    MixedStageFixture {
+        scheduler,
+        decoder,
+        final_prefill: final_prefill.request_id(),
+        plan,
+        expected,
+        label_by_request,
+        histories,
+        terminal_labels,
+    }
+}
+
+fn explicit_reverse_mixed_stage_result(fixture: &MixedStageFixture) -> IterationResult {
+    let decoder = fixture
+        .expected
+        .iter()
+        .copied()
+        .find(|output| output.request_id == fixture.decoder)
+        .expect("mixed-stage decoder output");
+    let final_prefill = fixture
+        .expected
+        .iter()
+        .copied()
+        .find(|output| output.request_id == fixture.final_prefill)
+        .expect("mixed-stage final-prefill output");
+    assert_eq!(decoder.slot, OutputSlot::new(0));
+    assert_eq!(final_prefill.slot, OutputSlot::new(1));
+    IterationResult::new(
+        fixture.plan.iteration_id(),
+        vec![
+            IterationOutput::new(final_prefill.slot, final_prefill.token_id, false),
+            IterationOutput::new(decoder.slot, decoder.token_id, false),
+        ],
+        0,
+        0,
+    )
+    .expect("mixed-stage reverse result has unique slots")
+}
+
+fn append_published_tokens(histories: &mut BTreeMap<u32, Vec<u32>>, outputs: &[ExpectedOutput]) {
+    for output in outputs {
+        histories
+            .get_mut(&output.label)
+            .expect("mixed-stage output label history")
+            .push(output.token_id);
+    }
+}
+
+#[test]
+fn rc1_mixed_stage_corpus_routes_explicit_reverse_output_order() {
+    let mut fixture = mixed_stage_fixture();
+    let result = explicit_reverse_mixed_stage_result(&fixture);
+    let updates = fixture
+        .scheduler
+        .complete_iteration(&result, 1)
+        .expect("commit RC1 mixed-stage reverse result");
+    assert!(updates.settlement_failures().is_empty());
+    assert_token_events(
+        &fixture.expected,
+        updates.token_events(),
+        MIXED_STAGE_SEED,
+        1,
+    );
+    append_published_tokens(&mut fixture.histories, &fixture.expected);
+    assert_completions(
+        updates.completions(),
+        &fixture.label_by_request,
+        &fixture.histories,
+        &mut fixture.terminal_labels,
+        MIXED_STAGE_SEED,
+        1,
+    );
+    let completions = completion_records(updates.completions());
+    assert_eq!(completions.len(), 2);
+    assert_eq!(
+        completions.get(&fixture.decoder),
+        Some(&(
+            RequestFinishReason::Length,
+            vec![token_for(1, 0), token_for(1, 1)]
+        ))
+    );
+    assert_eq!(
+        completions.get(&fixture.final_prefill),
+        Some(&(RequestFinishReason::Length, vec![token_for(2, 0)]))
+    );
+    assert_eq!(fixture.terminal_labels.len(), 2);
+    assert_clean_close(fixture.scheduler, 2, MIXED_STAGE_SEED);
+}
+
+#[test]
+fn rc1_mixed_stage_corpus_suppresses_cancelled_decoder_output() {
+    let mut fixture = mixed_stage_fixture();
+    let cancellation = fixture
+        .scheduler
+        .cancel(fixture.decoder, 1)
+        .expect("defer RC1 mixed-stage decoder cancellation");
+    assert!(cancellation.deferred_until_iteration_settles());
+    assert!(cancellation.completion().is_none());
+    let result = explicit_reverse_mixed_stage_result(&fixture);
+    let updates = fixture
+        .scheduler
+        .complete_iteration(&result, 1)
+        .expect("commit cancelled RC1 mixed-stage result");
+    assert!(updates.settlement_failures().is_empty());
+    let published = fixture
+        .expected
+        .iter()
+        .copied()
+        .filter(|output| output.request_id == fixture.final_prefill)
+        .collect::<Vec<_>>();
+    assert_token_events(&published, updates.token_events(), MIXED_STAGE_SEED, 1);
+    append_published_tokens(&mut fixture.histories, &published);
+    assert_completions(
+        updates.completions(),
+        &fixture.label_by_request,
+        &fixture.histories,
+        &mut fixture.terminal_labels,
+        MIXED_STAGE_SEED,
+        1,
+    );
+    let completions = completion_records(updates.completions());
+    assert_eq!(completions.len(), 2);
+    assert_eq!(
+        completions.get(&fixture.decoder),
+        Some(&(RequestFinishReason::Cancelled, vec![token_for(1, 0)]))
+    );
+    assert_eq!(
+        completions.get(&fixture.final_prefill),
+        Some(&(RequestFinishReason::Length, vec![token_for(2, 0)]))
+    );
+    assert_eq!(fixture.terminal_labels.len(), 2);
+    assert_clean_close(fixture.scheduler, 2, MIXED_STAGE_SEED);
 }

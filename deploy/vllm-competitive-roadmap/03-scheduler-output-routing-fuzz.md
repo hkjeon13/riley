@@ -118,6 +118,12 @@ output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확�
 
 과거 defect와 발견된 모든 fuzz counterexample을 JSON 또는 Rust fixture로 영구 등록한다.
 
+현재 C03-A corpus는 RC1 mixed-stage 최소 재현으로 decoder A의 `slot 0`과 final-prefill
+B의 `slot 1`에 대해 physical feedback vector를 명시적으로 `[slot 1, slot 0]`으로 역순 제출한다.
+정상 commit과 deferred decoder cancellation 모두에서 host-side synthetic scheduler feedback의
+request/token/generation-index mapping과 terminal history를 검증한다. 이는 GPU mixed execution이나
+stream cancellation을 실행하거나 주장하지 않는다.
+
 ### C03-B — GPU integration slice
 
 CPU model이 생성한 대표 trace 중 다음만 실제 CUDA path로 replay한다.
