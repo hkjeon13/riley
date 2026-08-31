@@ -387,6 +387,7 @@ fn executor_output_only_decodes_and_sizes_canonical_host_results() {
         "greedy_result_bytes",
         "greedy_result_capacity_bytes",
         "LlamaBatchExecutorResource::GreedyResults",
+        "usize_u64(",
         "ArithmeticOverflow",
     ] {
         assert!(
@@ -441,7 +442,8 @@ fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
         "absolute_rope_position_count",
         "RopeTableBytes",
         "table_byte_len",
-        "u64::try_from(head_dimension / 2)",
+        "usize_u64(",
+        "head_dimension / 2",
         "checked_mul(F32_BYTES)",
         "table_byte_len / row_bytes",
         "theta.powf",

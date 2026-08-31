@@ -626,6 +626,8 @@ mod source_contract_tests {
             ("batch buffers", include_str!("executor/buffers.rs"), 3),
             ("device views", include_str!("executor/device_views.rs"), 3),
             ("output dispatch", include_str!("executor/dispatch.rs"), 5),
+            ("output sizing", include_str!("executor/output.rs"), 3),
+            ("RoPE scalar", include_str!("executor/rope.rs"), 1),
         ] {
             assert!(
                 !source.contains("fn usize_u64("),

@@ -18,7 +18,8 @@ completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte alloc
 C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 sequence-block-offset
 count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
 C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26은 typed packed-region
-validation을 metadata helper로 공유했다. CUDA owner, KV,
+validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar conversion을 error facade로
+일관화했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -379,6 +380,15 @@ check, layout length mismatch, destination range validation을 shared helper로 
 
 metadata packing order, destination ownership, CUDA upload/dispatch와 allocation lifecycle은 변경하지
 않는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-27 — typed CUDA-scalar conversion reuse
+
+`llama/executor/error.rs`의 typed `usize`-to-`u64` conversion은 output capacity와 RoPE table-row
+scalar에도 같은 resource-preserving overflow mapping을 제공한다. 각 output/RoPE helper의 conversion과
+checked multiplication 순서는 유지한다.
+
+CUDA 호출, buffer allocation, host/device upload, dispatch, owner lifecycle은 변경하지 않는다. 이
+source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

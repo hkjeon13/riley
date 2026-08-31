@@ -8,7 +8,9 @@ use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
 };
 
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::error::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, usize_u64,
+};
 
 const BF16_BYTES: u64 = 2;
 const U32_BYTES: usize = std::mem::size_of::<u32>();
@@ -38,10 +40,7 @@ pub(in crate::llama) fn greedy_result_bytes(
 pub(in crate::llama) fn greedy_result_capacity_bytes(
     output_count: usize,
 ) -> LlamaBatchExecutorResult<u64> {
-    let output_count =
-        u64::try_from(output_count).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::GreedyResults,
-        })?;
+    let output_count = usize_u64(output_count, LlamaBatchExecutorResource::GreedyResults)?;
     output_count.checked_mul(GREEDY_RESULT_BYTES as u64).ok_or(
         LlamaBatchExecutorError::ArithmeticOverflow {
             resource: LlamaBatchExecutorResource::GreedyResults,
@@ -57,15 +56,8 @@ pub(in crate::llama) fn output_logits_bytes(
     output_count: usize,
     vocabulary_size: usize,
 ) -> LlamaBatchExecutorResult<u64> {
-    let output_count =
-        u64::try_from(output_count).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::GatheredLogits,
-        })?;
-    let vocabulary_size = u64::try_from(vocabulary_size).map_err(|_| {
-        LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::GatheredLogits,
-        }
-    })?;
+    let output_count = usize_u64(output_count, LlamaBatchExecutorResource::GatheredLogits)?;
+    let vocabulary_size = usize_u64(vocabulary_size, LlamaBatchExecutorResource::GatheredLogits)?;
     output_count
         .checked_mul(vocabulary_size)
         .and_then(|elements| elements.checked_mul(BF16_BYTES))

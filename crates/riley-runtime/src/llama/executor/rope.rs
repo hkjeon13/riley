@@ -4,7 +4,9 @@
 //! upload, kernel launch, and lifetime management. This component only
 //! materializes native-endian host bytes for the selected cold path.
 
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::error::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, usize_u64,
+};
 use super::host::allocate_zeroed_host_bytes;
 
 const F32_BYTES_USIZE: usize = std::mem::size_of::<f32>();
@@ -20,10 +22,7 @@ pub(in crate::llama) fn absolute_rope_position_count(
     table_byte_len: u64,
     head_dimension: usize,
 ) -> LlamaBatchExecutorResult<u64> {
-    let row_bytes = u64::try_from(head_dimension / 2)
-        .map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::RopeCos,
-        })?
+    let row_bytes = usize_u64(head_dimension / 2, LlamaBatchExecutorResource::RopeCos)?
         .checked_mul(F32_BYTES)
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
             resource: LlamaBatchExecutorResource::RopeCos,
