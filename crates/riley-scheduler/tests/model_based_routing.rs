@@ -19,6 +19,7 @@ use riley_scheduler::{
 const TRACE_COUNT: u64 = 10_000;
 const FAULT_TRACE_COUNT: u64 = 10_000;
 const MIXED_STAGE_TRACE_COUNT: u64 = 10_000;
+const OPERATION_TRACE_V2_COUNT: u64 = 10_000;
 const MAX_ITERATIONS_PER_TRACE: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -871,7 +872,16 @@ impl MixedStageAction {
     const fn name(self) -> &'static str {
         match self {
             Self::Commit => "commit",
-            Self::DeferredCancelDecoder => "deferred-cancel-decoder then commit",
+            Self::DeferredCancelDecoder => "deferred-cancel-decoder",
+        }
+    }
+
+    const fn operation(self) -> &'static str {
+        match self {
+            Self::Commit => "explicit feedback [slot 1, slot 0]/commit",
+            Self::DeferredCancelDecoder => {
+                "deferred decoder cancel, explicit feedback [slot 1, slot 0]/commit"
+            }
         }
     }
 }
@@ -904,12 +914,12 @@ impl MixedStageTraceV1 {
             "v1 seed={:#018x}; decoder_max_new_tokens={}; final_prefill_len={}; \
              action={}; operations=[submit decoder, plan/commit decoder prime slot 0, \
              submit final-prefill, plan decode decoder slot 0 + final-prefill slot 1, \
-             synthetic feedback [slot 1, slot 0], {}, close]",
+             {}, close]",
             self.seed,
             self.decoder_max_new_tokens,
             self.final_prefill_len,
             self.action.name(),
-            self.action.name(),
+            self.action.operation(),
         )
     }
 }
@@ -1330,5 +1340,666 @@ fn ten_thousand_seeded_mixed_stage_traces_preserve_routing_and_quiescence() {
     for trace_index in 0..MIXED_STAGE_TRACE_COUNT {
         let seed = MIXED_STAGE_SEED_FACTOR.wrapping_mul(trace_index.wrapping_add(1));
         replay_mixed_stage_trace(MixedStageTraceV1::from_seed(seed));
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OperationTraceFeedbackOrder {
+    Canonical,
+    ExplicitReverse,
+}
+
+impl OperationTraceFeedbackOrder {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Canonical => "canonical slot order",
+            Self::ExplicitReverse => "explicit reverse slot order",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OperationTraceRejectedFeedback {
+    Stale,
+    Missing,
+    Unplanned,
+}
+
+impl OperationTraceRejectedFeedback {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Stale => "stale iteration",
+            Self::Missing => "missing slot",
+            Self::Unplanned => "unplanned slot",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OperationTraceSettlement {
+    CompleteReverse,
+    AbortNotDispatched,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OperationTraceV2Op {
+    Submit {
+        label: u32,
+        prompt_len: usize,
+        max_new_tokens: usize,
+    },
+    Plan,
+    Complete(OperationTraceFeedbackOrder),
+    Cancel {
+        label: u32,
+    },
+    RejectFeedback(OperationTraceRejectedFeedback),
+    AbortNotDispatched,
+    Close,
+}
+
+impl OperationTraceV2Op {
+    fn describe(self) -> String {
+        match self {
+            Self::Submit {
+                label,
+                prompt_len,
+                max_new_tokens,
+            } => {
+                format!("submit(label={label}, prompt_len={prompt_len}, max_new={max_new_tokens})")
+            }
+            Self::Plan => "plan".to_owned(),
+            Self::Complete(order) => format!("complete({})", order.name()),
+            Self::Cancel { label } => format!("cancel(label={label})"),
+            Self::RejectFeedback(kind) => format!("reject-feedback({})", kind.name()),
+            Self::AbortNotDispatched => "abort(not-dispatched)".to_owned(),
+            Self::Close => "close".to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OperationTraceV2 {
+    seed: u64,
+    decoder_max_new_tokens: usize,
+    final_prefill_len: usize,
+    cancel_decoder: bool,
+    rejected_feedback: Option<OperationTraceRejectedFeedback>,
+    settlement: OperationTraceSettlement,
+}
+
+impl OperationTraceV2 {
+    fn from_seed(seed: u64) -> Self {
+        let mut random = Lcg(seed ^ 0xb4f3_7ea9_62d1_0c5b);
+        let rejected_feedback = match random.bounded_usize(4) {
+            0 => None,
+            1 => Some(OperationTraceRejectedFeedback::Stale),
+            2 => Some(OperationTraceRejectedFeedback::Missing),
+            _ => Some(OperationTraceRejectedFeedback::Unplanned),
+        };
+        Self {
+            seed,
+            decoder_max_new_tokens: 2 + random.bounded_usize(3),
+            final_prefill_len: 1 + random.bounded_usize(4),
+            cancel_decoder: random.next() & 1 == 1,
+            rejected_feedback,
+            settlement: if random.next() & 1 == 0 {
+                OperationTraceSettlement::CompleteReverse
+            } else {
+                OperationTraceSettlement::AbortNotDispatched
+            },
+        }
+    }
+
+    fn operations(self) -> Vec<OperationTraceV2Op> {
+        let mut operations = vec![
+            OperationTraceV2Op::Submit {
+                label: 1,
+                prompt_len: 1,
+                max_new_tokens: self.decoder_max_new_tokens,
+            },
+            OperationTraceV2Op::Plan,
+            OperationTraceV2Op::Complete(OperationTraceFeedbackOrder::Canonical),
+            OperationTraceV2Op::Submit {
+                label: 2,
+                prompt_len: self.final_prefill_len,
+                max_new_tokens: 1,
+            },
+            OperationTraceV2Op::Plan,
+        ];
+        if self.cancel_decoder {
+            operations.push(OperationTraceV2Op::Cancel { label: 1 });
+        }
+        if let Some(rejected_feedback) = self.rejected_feedback {
+            operations.push(OperationTraceV2Op::RejectFeedback(rejected_feedback));
+        }
+        operations.push(match self.settlement {
+            OperationTraceSettlement::CompleteReverse => {
+                OperationTraceV2Op::Complete(OperationTraceFeedbackOrder::ExplicitReverse)
+            }
+            OperationTraceSettlement::AbortNotDispatched => OperationTraceV2Op::AbortNotDispatched,
+        });
+        operations.push(OperationTraceV2Op::Close);
+        assert!(
+            operations.len() <= 9,
+            "bounded operation trace exceeded its declared operation cap"
+        );
+        operations
+    }
+
+    fn describe(self) -> String {
+        let operations = self
+            .operations()
+            .into_iter()
+            .map(OperationTraceV2Op::describe)
+            .collect::<Vec<_>>();
+        format!(
+            "v2 seed={:#018x}; decoder_max_new_tokens={}; final_prefill_len={}; operations=[{}]",
+            self.seed,
+            self.decoder_max_new_tokens,
+            self.final_prefill_len,
+            operations.join(" -> "),
+        )
+    }
+}
+
+const RC1_REVERSE_COMPLETE_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
+    seed: MIXED_STAGE_SEED,
+    decoder_max_new_tokens: 2,
+    final_prefill_len: 1,
+    cancel_decoder: false,
+    rejected_feedback: None,
+    settlement: OperationTraceSettlement::CompleteReverse,
+};
+
+const RC1_REVERSE_CANCEL_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
+    cancel_decoder: true,
+    ..RC1_REVERSE_COMPLETE_TRACE_V2
+};
+
+const INVALID_RETRY_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
+    seed: MIXED_STAGE_SEED ^ 3,
+    decoder_max_new_tokens: 3,
+    final_prefill_len: 2,
+    cancel_decoder: false,
+    rejected_feedback: Some(OperationTraceRejectedFeedback::Unplanned),
+    settlement: OperationTraceSettlement::CompleteReverse,
+};
+
+const ABORT_RETRY_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
+    seed: MIXED_STAGE_SEED ^ 4,
+    decoder_max_new_tokens: 4,
+    final_prefill_len: 4,
+    cancel_decoder: true,
+    rejected_feedback: Some(OperationTraceRejectedFeedback::Missing),
+    settlement: OperationTraceSettlement::AbortNotDispatched,
+};
+
+const OPERATION_TRACE_CORPUS_V2: [OperationTraceV2; 4] = [
+    RC1_REVERSE_COMPLETE_TRACE_V2,
+    RC1_REVERSE_CANCEL_TRACE_V2,
+    INVALID_RETRY_TRACE_V2,
+    ABORT_RETRY_TRACE_V2,
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OperationTraceV2Phase {
+    New,
+    DecoderSubmitted,
+    PrimePlanned,
+    PrimeSettled,
+    FinalPrefillSubmitted,
+    MixedPlanned,
+    Settled,
+    Closed,
+}
+
+struct OperationTraceV2State {
+    scheduler: Option<Scheduler>,
+    request_ids: BTreeMap<u32, RequestId>,
+    label_by_request: HashMap<RequestId, u32>,
+    histories: BTreeMap<u32, Vec<u32>>,
+    terminal_labels: BTreeSet<u32>,
+    cancelled_labels: BTreeSet<u32>,
+    plan: Option<IterationPlan>,
+    phase: OperationTraceV2Phase,
+    now_ns: u64,
+}
+
+impl OperationTraceV2State {
+    fn new() -> Self {
+        Self {
+            scheduler: None,
+            request_ids: BTreeMap::new(),
+            label_by_request: HashMap::new(),
+            histories: BTreeMap::new(),
+            terminal_labels: BTreeSet::new(),
+            cancelled_labels: BTreeSet::new(),
+            plan: None,
+            phase: OperationTraceV2Phase::New,
+            now_ns: 0,
+        }
+    }
+
+    fn scheduler_mut(&mut self) -> &mut Scheduler {
+        self.scheduler
+            .as_mut()
+            .expect("operation trace scheduler is initialized")
+    }
+
+    fn scheduler_ref(&self) -> &Scheduler {
+        self.scheduler
+            .as_ref()
+            .expect("operation trace scheduler is initialized")
+    }
+
+    fn request_id(&self, label: u32) -> RequestId {
+        *self
+            .request_ids
+            .get(&label)
+            .expect("operation trace label was submitted")
+    }
+}
+
+fn operation_trace_v2_config(trace: OperationTraceV2) -> SchedulerConfig {
+    mixed_stage_config(MixedStageTraceV1 {
+        seed: trace.seed,
+        decoder_max_new_tokens: trace.decoder_max_new_tokens,
+        final_prefill_len: trace.final_prefill_len,
+        action: MixedStageAction::Commit,
+    })
+}
+
+fn operation_trace_v2_step(now_ns: u64) -> usize {
+    usize::try_from(now_ns).expect("bounded operation-trace clock fits usize")
+}
+
+fn assert_operation_trace_v2_prime_plan(state: &OperationTraceV2State, plan: &IterationPlan) {
+    assert_eq!(plan.prefill_items().len(), 1);
+    assert!(plan.decode_items().is_empty());
+    assert_eq!(plan.prefill_items()[0].request_id(), state.request_id(1));
+    assert_eq!(plan.prefill_items()[0].input_tokens(), &[1_001]);
+    assert_eq!(plan.output_slots(), &[OutputSlot::new(0)]);
+}
+
+fn assert_operation_trace_v2_mixed_plan(
+    trace: OperationTraceV2,
+    state: &OperationTraceV2State,
+    plan: &IterationPlan,
+) {
+    assert_eq!(plan.prefill_items().len(), 1);
+    assert_eq!(plan.decode_items().len(), 1);
+    assert_eq!(plan.decode_items()[0].request_id(), state.request_id(1));
+    assert_eq!(plan.decode_items()[0].input_tokens(), &[token_for(1, 0)]);
+    assert_eq!(
+        plan.decode_items()[0].output_slot(),
+        Some(OutputSlot::new(0))
+    );
+    assert_eq!(plan.prefill_items()[0].request_id(), state.request_id(2));
+    assert_eq!(
+        plan.prefill_items()[0].input_tokens(),
+        mixed_stage_final_prefill_prompt(trace.final_prefill_len)
+    );
+    assert_eq!(
+        plan.prefill_items()[0].output_slot(),
+        Some(OutputSlot::new(1))
+    );
+    assert_eq!(
+        plan.output_slots(),
+        &[OutputSlot::new(0), OutputSlot::new(1)]
+    );
+    assert_eq!(plan.total_tokens(), trace.final_prefill_len + 1);
+}
+
+fn operation_trace_v2_outputs(
+    expected: &[ExpectedOutput],
+    order: OperationTraceFeedbackOrder,
+) -> Vec<IterationOutput> {
+    let mut outputs = expected.to_vec();
+    outputs.sort_by_key(|output| output.slot);
+    if order == OperationTraceFeedbackOrder::ExplicitReverse {
+        outputs.reverse();
+    }
+    outputs
+        .into_iter()
+        .map(|output| IterationOutput::new(output.slot, output.token_id, false))
+        .collect()
+}
+
+fn replay_operation_trace_v2_submit(
+    trace: OperationTraceV2,
+    state: &mut OperationTraceV2State,
+    label: u32,
+    prompt_len: usize,
+    max_new_tokens: usize,
+) {
+    let prompt = match label {
+        1 => {
+            assert_eq!(state.phase, OperationTraceV2Phase::New);
+            assert_eq!(prompt_len, 1);
+            assert_eq!(max_new_tokens, trace.decoder_max_new_tokens);
+            state.scheduler = Some(new_scheduler(operation_trace_v2_config(trace)));
+            vec![1_001]
+        }
+        2 => {
+            assert_eq!(state.phase, OperationTraceV2Phase::PrimeSettled);
+            assert_eq!(prompt_len, trace.final_prefill_len);
+            assert_eq!(max_new_tokens, 1);
+            mixed_stage_final_prefill_prompt(prompt_len)
+        }
+        _ => panic!("operation trace only admits its two bounded logical labels"),
+    };
+    let now_ns = state.now_ns;
+    let submission = state
+        .scheduler_mut()
+        .submit(RequestDescriptor::new(prompt, max_new_tokens), now_ns)
+        .expect("bounded operation-trace submission");
+    assert!(
+        state
+            .request_ids
+            .insert(label, submission.request_id())
+            .is_none(),
+        "operation trace submitted the same logical label twice"
+    );
+    assert!(
+        state
+            .label_by_request
+            .insert(submission.request_id(), label)
+            .is_none(),
+        "operation trace received a duplicate request ID"
+    );
+    assert!(
+        state.histories.insert(label, Vec::new()).is_none(),
+        "operation trace reset a logical request history"
+    );
+    state.phase = match label {
+        1 => OperationTraceV2Phase::DecoderSubmitted,
+        2 => OperationTraceV2Phase::FinalPrefillSubmitted,
+        _ => unreachable!(),
+    };
+}
+
+fn replay_operation_trace_v2_plan(trace: OperationTraceV2, state: &mut OperationTraceV2State) {
+    let previous_phase = state.phase;
+    assert!(matches!(
+        previous_phase,
+        OperationTraceV2Phase::DecoderSubmitted | OperationTraceV2Phase::FinalPrefillSubmitted
+    ));
+    let now_ns = state.now_ns;
+    let planning = state
+        .scheduler_mut()
+        .plan_iteration(now_ns)
+        .expect("bounded operation-trace plan");
+    let (plan, completions) = planning.into_parts();
+    assert!(completions.is_empty());
+    let plan = plan.expect("bounded operation-trace plan has work");
+    state.phase = match previous_phase {
+        OperationTraceV2Phase::DecoderSubmitted => {
+            assert_operation_trace_v2_prime_plan(state, &plan);
+            OperationTraceV2Phase::PrimePlanned
+        }
+        OperationTraceV2Phase::FinalPrefillSubmitted => {
+            assert_operation_trace_v2_mixed_plan(trace, state, &plan);
+            OperationTraceV2Phase::MixedPlanned
+        }
+        _ => unreachable!(),
+    };
+    assert!(state.plan.replace(plan).is_none());
+}
+
+fn replay_operation_trace_v2_complete(
+    trace: OperationTraceV2,
+    state: &mut OperationTraceV2State,
+    order: OperationTraceFeedbackOrder,
+) {
+    let previous_phase = state.phase;
+    assert!(matches!(
+        previous_phase,
+        OperationTraceV2Phase::PrimePlanned | OperationTraceV2Phase::MixedPlanned
+    ));
+    let plan = state
+        .plan
+        .take()
+        .expect("operation trace has an in-flight plan");
+    let expected = expected_outputs(&plan, &state.label_by_request, &state.histories);
+    let result = IterationResult::new(
+        plan.iteration_id(),
+        operation_trace_v2_outputs(&expected, order),
+        0,
+        0,
+    )
+    .expect("operation trace result has unique slots");
+    let now_ns = state.now_ns;
+    let updates = state
+        .scheduler_mut()
+        .complete_iteration(&result, now_ns)
+        .expect("bounded operation-trace commit");
+    assert!(updates.settlement_failures().is_empty());
+    let published = expected
+        .iter()
+        .copied()
+        .filter(|output| !state.cancelled_labels.contains(&output.label))
+        .collect::<Vec<_>>();
+    assert_token_events(
+        &published,
+        updates.token_events(),
+        trace.seed,
+        operation_trace_v2_step(now_ns),
+    );
+    append_published_tokens(&mut state.histories, &published);
+    assert_completions(
+        updates.completions(),
+        &state.label_by_request,
+        &state.histories,
+        &mut state.terminal_labels,
+        trace.seed,
+        operation_trace_v2_step(now_ns),
+    );
+    state.now_ns = state
+        .now_ns
+        .checked_add(1)
+        .expect("bounded operation-trace clock");
+    state.phase = match previous_phase {
+        OperationTraceV2Phase::PrimePlanned => OperationTraceV2Phase::PrimeSettled,
+        OperationTraceV2Phase::MixedPlanned => OperationTraceV2Phase::Settled,
+        _ => unreachable!(),
+    };
+}
+
+fn replay_operation_trace_v2_cancel(state: &mut OperationTraceV2State, label: u32) {
+    assert_eq!(state.phase, OperationTraceV2Phase::MixedPlanned);
+    let request_id = state.request_id(label);
+    let now_ns = state.now_ns;
+    let cancellation = state
+        .scheduler_mut()
+        .cancel(request_id, now_ns)
+        .expect("defer operation-trace cancellation");
+    assert!(cancellation.deferred_until_iteration_settles());
+    assert!(cancellation.completion().is_none());
+    assert!(
+        state.cancelled_labels.insert(label),
+        "operation trace cancelled the same label twice"
+    );
+}
+
+fn operation_trace_v2_rejected_result(
+    plan: &IterationPlan,
+    expected: &[ExpectedOutput],
+    rejected: OperationTraceRejectedFeedback,
+) -> IterationResult {
+    let mut outputs = operation_trace_v2_outputs(expected, OperationTraceFeedbackOrder::Canonical);
+    match rejected {
+        OperationTraceRejectedFeedback::Stale => {
+            let stale_id = IterationId::new(
+                plan.iteration_id()
+                    .get()
+                    .checked_add(1)
+                    .expect("bounded stale operation-trace ID"),
+            )
+            .expect("nonzero stale operation-trace ID");
+            IterationResult::new(stale_id, outputs, 0, 0)
+        }
+        OperationTraceRejectedFeedback::Missing => {
+            outputs.pop();
+            IterationResult::new(plan.iteration_id(), outputs, 0, 0)
+        }
+        OperationTraceRejectedFeedback::Unplanned => {
+            outputs[0] = IterationOutput::new(OutputSlot::new(99), expected[0].token_id, false);
+            IterationResult::new(plan.iteration_id(), outputs, 0, 0)
+        }
+    }
+    .expect("operation-trace rejected result remains structurally constructible")
+}
+
+fn replay_operation_trace_v2_reject(
+    state: &mut OperationTraceV2State,
+    rejected: OperationTraceRejectedFeedback,
+) {
+    assert_eq!(state.phase, OperationTraceV2Phase::MixedPlanned);
+    let plan = state
+        .plan
+        .as_ref()
+        .expect("operation trace has a mixed plan");
+    let expected = expected_outputs(plan, &state.label_by_request, &state.histories);
+    let result = operation_trace_v2_rejected_result(plan, &expected, rejected);
+    let request_ids = state.request_ids.values().copied().collect();
+    let surface = capture_surface(state.scheduler_ref(), request_ids);
+    let now_ns = state.now_ns;
+    let completion = state.scheduler_mut().complete_iteration(&result, now_ns);
+    let expected_error = match rejected {
+        OperationTraceRejectedFeedback::Stale => {
+            matches!(completion, Err(SchedulerError::UnexpectedIteration { .. }))
+        }
+        OperationTraceRejectedFeedback::Missing | OperationTraceRejectedFeedback::Unplanned => {
+            matches!(
+                completion,
+                Err(SchedulerError::InvalidIterationResult { .. })
+            )
+        }
+    };
+    assert!(
+        expected_error,
+        "operation trace rejected feedback unexpectedly settled"
+    );
+    assert_surface_unchanged(state.scheduler_ref(), &surface);
+}
+
+fn replay_operation_trace_v2_abort(trace: OperationTraceV2, state: &mut OperationTraceV2State) {
+    assert_eq!(state.phase, OperationTraceV2Phase::MixedPlanned);
+    let plan = state.plan.take().expect("operation trace has a mixed plan");
+    let now_ns = state.now_ns;
+    let updates = state
+        .scheduler_mut()
+        .abort_iteration(plan.iteration_id(), ExecutionAbort::NotDispatched, now_ns)
+        .expect("operation-trace not-dispatched abort");
+    assert!(updates.token_events().is_empty());
+    assert!(updates.settlement_failures().is_empty());
+    assert_completions(
+        updates.completions(),
+        &state.label_by_request,
+        &state.histories,
+        &mut state.terminal_labels,
+        trace.seed,
+        operation_trace_v2_step(now_ns),
+    );
+    state.now_ns = state
+        .now_ns
+        .checked_add(1)
+        .expect("bounded operation-trace clock");
+    state.phase = OperationTraceV2Phase::Settled;
+}
+
+fn replay_operation_trace_v2_close(trace: OperationTraceV2, state: &mut OperationTraceV2State) {
+    assert_eq!(state.phase, OperationTraceV2Phase::Settled);
+    assert!(state.plan.is_none());
+    let scheduler = state
+        .scheduler
+        .take()
+        .expect("operation trace has a scheduler to close");
+    let closed = scheduler
+        .close(state.now_ns, None)
+        .unwrap_or_else(|failure| {
+            panic!(
+                "{}: operation-trace close failed: {}",
+                trace.describe(),
+                failure.error()
+            )
+        });
+    assert!(closed.settlement_failures().is_empty());
+    assert_completions(
+        closed.completions(),
+        &state.label_by_request,
+        &state.histories,
+        &mut state.terminal_labels,
+        trace.seed,
+        operation_trace_v2_step(state.now_ns),
+    );
+    assert_eq!(
+        state.terminal_labels.len(),
+        state.request_ids.len(),
+        "{}: operation trace did not terminally settle every logical request exactly once",
+        trace.describe()
+    );
+    assert_closed_quiescent(&closed);
+    state.phase = OperationTraceV2Phase::Closed;
+}
+
+fn replay_operation_trace_v2_inner(trace: OperationTraceV2) {
+    let mut state = OperationTraceV2State::new();
+    for operation in trace.operations() {
+        match operation {
+            OperationTraceV2Op::Submit {
+                label,
+                prompt_len,
+                max_new_tokens,
+            } => replay_operation_trace_v2_submit(
+                trace,
+                &mut state,
+                label,
+                prompt_len,
+                max_new_tokens,
+            ),
+            OperationTraceV2Op::Plan => replay_operation_trace_v2_plan(trace, &mut state),
+            OperationTraceV2Op::Complete(order) => {
+                replay_operation_trace_v2_complete(trace, &mut state, order);
+            }
+            OperationTraceV2Op::Cancel { label } => {
+                replay_operation_trace_v2_cancel(&mut state, label);
+            }
+            OperationTraceV2Op::RejectFeedback(rejected) => {
+                replay_operation_trace_v2_reject(&mut state, rejected);
+            }
+            OperationTraceV2Op::AbortNotDispatched => {
+                replay_operation_trace_v2_abort(trace, &mut state);
+            }
+            OperationTraceV2Op::Close => replay_operation_trace_v2_close(trace, &mut state),
+        }
+    }
+    assert_eq!(state.phase, OperationTraceV2Phase::Closed);
+    assert!(state.scheduler.is_none());
+    assert!(state.plan.is_none());
+}
+
+fn replay_operation_trace_v2(trace: OperationTraceV2) {
+    let replay = catch_unwind(AssertUnwindSafe(|| replay_operation_trace_v2_inner(trace)));
+    assert!(
+        replay.is_ok(),
+        "C03-A bounded operation trace failed: {}",
+        trace.describe()
+    );
+}
+
+#[test]
+fn replay_operation_trace_corpus_v2() {
+    for trace in OPERATION_TRACE_CORPUS_V2 {
+        replay_operation_trace_v2(trace);
+    }
+}
+
+#[test]
+fn ten_thousand_seeded_operation_traces_preserve_routing_and_quiescence() {
+    for trace_index in 0..OPERATION_TRACE_V2_COUNT {
+        let seed = 0xa24b_aed4_963e_e407_u64.wrapping_mul(trace_index.wrapping_add(1));
+        replay_operation_trace_v2(OperationTraceV2::from_seed(seed));
     }
 }

@@ -106,16 +106,23 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 - failure 시 seed와 최소 축약 trace 출력
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
-`FaultAction` microtrace, 그리고 10,000 bounded mixed-stage trace다. `FaultAction` microtrace는
-deferred cancel 뒤 commit/`NotDispatched` abort, `DeviceQuiescedMutationUnknown` abort, waiting
-timeout, stale/missing/unplanned feedback이 output-slot ledger·terminal-once·KV/queue quiescence를
-깨지 않는지 확인한다. bounded mixed-stage trace는 `MixedStageTraceV1 { seed,
-decoder_max_new_tokens, final_prefill_len, action }`를 seed에서 생성하고, `decoder prime → decoder
-decode slot 0 + final-prefill slot 1 → optional deferred decoder cancel → explicit [slot 1, slot 0]
-feedback/commit → close`를 public scheduler API로 재생한다. 실패 시 seed·bounded config·canonical
-operation list를 출력하며, close에 걸친 terminal-once와 quiescence도 확인한다.
+`FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
+V2 trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
+`DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
+output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. bounded mixed-stage
+trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
+생성하고, `decoder prime → decoder decode slot 0 + final-prefill slot 1 → optional deferred decoder
+cancel → explicit [slot 1, slot 0] feedback/commit → close`를 public scheduler API로 재생한다.
 
-이는 여전히 C03-A의 부분 범위다. 일반 mixed-operation generator, shrink/minimized
+V2는 같은 RC1 mixed prefix를 concrete `Submit`, `Plan`, `Complete`, `Cancel`, `RejectFeedback`,
+`AbortNotDispatched`, `Close` operation list로 canonicalize한다. seed가 선택한 최대 9개 operation은
+decoder cancel, stale/missing/unplanned feedback의 surface-preserving rejection, reverse feedback
+commit에 의한 valid retry 또는 `NotDispatched` abort, consuming close를 조합한다. 각 operation은 public
+scheduler API만 호출하며 planning/update/close 전체에서 terminal-once, token/index ledger, rejected
+feedback 뒤 surface 불변성, final quiescence를 확인한다. 실패 시 seed·bounded config·canonical
+operation list를 출력한다.
+
+이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator, shrink/minimized
 counterexample, 독립 reference model, scheduled 1,000,000 seed rotation, post-validation
 sampling/commit fault injection은 남아 있다. 마지막 항목은 현 public scheduler API에 injection seam이
 없으므로 별도 test-only seam 계약으로 설계한다.
@@ -130,6 +137,11 @@ decoder A의 `slot 0`과 final-prefill B의 `slot 1`에 대해 physical feedback
 decoder를 `close`가 정확히 한 번 취소해야 하는 output capacity 3/4 케이스를 재생한다. 모두 host-side
 synthetic scheduler feedback의 request/token/generation-index mapping·terminal history·quiescence를
 검증하며, GPU mixed execution이나 stream cancellation을 실행하거나 주장하지 않는다.
+
+`OperationTraceV2` corpus는 같은 RC1 normal/cancel prefix를 보존하고, unplanned feedback rejection
+뒤 valid reverse retry와 missing feedback rejection 뒤 deferred cancel + `NotDispatched` abort도
+등록한다. `IterationResult::new` 단계에서 막히는 duplicate slot이나 immutable public plan으로 만들 수
+없는 stale block-table version은 scheduler boundary property라고 주장하지 않는다.
 
 ### C03-B — GPU integration slice
 
