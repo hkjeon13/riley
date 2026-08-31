@@ -496,6 +496,20 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn absolute_rope_position_shape_is_shared_as_value_only_arithmetic() {
+        let source = include_str!("batch_executor.rs");
+        assert!(
+            !source.contains("fn model_max_position("),
+            "RoPE position shape must not retain a CUDA-buffer helper in the batch owner"
+        );
+        assert_eq!(
+            source.matches("absolute_rope_position_count(").count(),
+            3,
+            "public query, metadata preflight, and fixed graph must share one RoPE shape helper"
+        );
+    }
+
+    #[test]
     fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
         let forward = include_str!("forward.rs");
         let variant_begin = forward

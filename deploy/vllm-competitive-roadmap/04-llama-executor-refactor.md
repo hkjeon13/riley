@@ -12,7 +12,8 @@ gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 
 host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
 facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은 greedy output
 record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-table byte builder를
-rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로 분리했다. CUDA owner, KV,
+rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로, C04-19는 absolute
+RoPE position-count scalar arithmetic을 rope helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -38,7 +39,7 @@ crates/riley-runtime/src/llama/executor/
   metadata.rs            # synchronous/packed transport
   dispatch.rs            # exact backend and borrowed output primitive selection
   output.rs              # logits/token status and canonical output map
-  rope.rs                # cold host-side RoPE table bytes
+  rope.rs                # cold host-side RoPE table bytes and scalar shape
   metrics.rs             # allocation-free counters/snapshots
   poison.rs              # post-dispatch failure state
 ```
@@ -292,6 +293,17 @@ output의 index-buffer 확인, gathered-logit 확인, row gather, 그 뒤에만 
 
 batch owner는 metadata transport, shape/plan 선택, fixed graph 실행, output-ready state, poison,
 allocation 및 close ownership을 계속 보유한다. 이 source-only slice는 GPU parity나 performance
+non-regression을 주장하지 않는다.
+
+### C04-19 — absolute RoPE position-count scalar extraction
+
+`llama/executor/rope.rs`는 cold-prepared table byte length와 head dimension에서 absolute RoPE
+position count를 계산한다. 기존 half-width의 `u64` conversion, F32 row-byte checked multiply,
+그리고 table byte length의 floor division을 그대로 유지해 `RopeCos` overflow category와 table
+shape semantics를 보존한다.
+
+batch owner는 CUDA RoPE buffer의 ownership과 `.byte_len()` 조회, table allocation/upload/kernel
+launch, profile 선택 및 lifecycle을 계속 보유한다. 이 source-only slice는 GPU parity나 performance
 non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증

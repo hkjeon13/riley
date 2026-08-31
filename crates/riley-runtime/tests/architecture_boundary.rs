@@ -366,11 +366,16 @@ fn executor_output_only_decodes_and_sizes_canonical_host_results() {
 }
 
 #[test]
-fn executor_rope_only_materializes_cold_host_table_bytes() {
+fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
     for required in [
         "build_absolute_rope_angles",
         "build_absolute_cpu_rope_tables",
+        "absolute_rope_position_count",
         "RopeTableBytes",
+        "table_byte_len",
+        "u64::try_from(head_dimension / 2)",
+        "checked_mul(F32_BYTES)",
+        "table_byte_len / row_bytes",
         "theta.powf",
         "angle.sin_cos",
         "to_ne_bytes",

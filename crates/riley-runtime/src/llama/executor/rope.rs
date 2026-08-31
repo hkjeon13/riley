@@ -7,8 +7,28 @@
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
 
 const F32_BYTES_USIZE: usize = std::mem::size_of::<f32>();
+const F32_BYTES: u64 = 4;
 
 pub(in crate::llama) type RopeTableBytes = (Box<[u8]>, Box<[u8]>);
+
+/// Derives the absolute `RoPE` position capacity from its preallocated table bytes.
+///
+/// The enclosing owner reads the device buffer length. This value-only helper
+/// preserves the established row-width overflow and floor-division semantics.
+pub(in crate::llama) fn absolute_rope_position_count(
+    table_byte_len: u64,
+    head_dimension: usize,
+) -> LlamaBatchExecutorResult<u64> {
+    let row_bytes = u64::try_from(head_dimension / 2)
+        .map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::RopeCos,
+        })?
+        .checked_mul(F32_BYTES)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::RopeCos,
+        })?;
+    Ok(table_byte_len / row_bytes)
+}
 
 #[allow(clippy::cast_precision_loss)]
 pub(in crate::llama) fn build_absolute_rope_angles(
@@ -159,5 +179,25 @@ mod tests {
                 }
             ));
         }
+    }
+
+    #[test]
+    fn absolute_rope_position_count_preserves_floor_and_overflow_semantics() {
+        assert_eq!(
+            absolute_rope_position_count(32, 4).expect("exact table rows"),
+            4
+        );
+        assert_eq!(
+            absolute_rope_position_count(31, 4).expect("trailing bytes are truncated"),
+            3
+        );
+
+        #[cfg(target_pointer_width = "64")]
+        assert!(matches!(
+            absolute_rope_position_count(0, usize::MAX),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RopeCos,
+            })
+        ));
     }
 }

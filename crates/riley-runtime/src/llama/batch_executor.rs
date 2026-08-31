@@ -44,7 +44,9 @@ use super::executor::metadata::{
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes};
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
-use super::executor::rope::{build_absolute_cpu_rope_tables, build_absolute_rope_angles};
+use super::executor::rope::{
+    absolute_rope_position_count, build_absolute_cpu_rope_tables, build_absolute_rope_angles,
+};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
     select_prepared_dense_rows,
@@ -1004,8 +1006,8 @@ impl PreparedLlamaBatchExecutor {
     /// Returns when the owned table byte shape is inconsistent or cannot be
     /// represented as a host `usize`.
     pub fn maximum_position_count(&self) -> LlamaBatchExecutorResult<usize> {
-        let positions = model_max_position(
-            &self.absolute_rope_cos,
+        let positions = absolute_rope_position_count(
+            self.absolute_rope_cos.byte_len(),
             self.forward.plan.dimensions().head_dimension(),
         )?;
         usize::try_from(positions).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
@@ -1127,8 +1129,8 @@ impl PreparedLlamaBatchExecutor {
         validate_for_execution(
             packed,
             forward.plan.dimensions().vocabulary_size(),
-            model_max_position(
-                absolute_rope_cos,
+            absolute_rope_position_count(
+                absolute_rope_cos.byte_len(),
                 forward.plan.dimensions().head_dimension(),
             )?,
             config.metadata(),
@@ -1886,7 +1888,8 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
         dimensions.head_dimension(),
         LlamaBatchExecutorResource::HostWorkspace,
     )?;
-    let max_positions = model_max_position(rope_cos, dimensions.head_dimension())?;
+    let max_positions =
+        absolute_rope_position_count(rope_cos.byte_len(), dimensions.head_dimension())?;
     let hidden_elements = plan.workspace_spec().hidden_buffer_bytes() / BF16_BYTES;
     let intermediate_elements = plan.workspace_spec().intermediate_buffer_bytes() / BF16_BYTES;
 
@@ -2643,18 +2646,6 @@ fn build_batch_allocation_report(
         total_pinned_host_bytes,
         total_pinned_host_allocation_count,
     })
-}
-
-fn model_max_position(
-    rope_cos: &CudaDeviceBuffer,
-    head_dimension: usize,
-) -> LlamaBatchExecutorResult<u64> {
-    let row_bytes = usize_u64(head_dimension / 2, LlamaBatchExecutorResource::RopeCos)?
-        .checked_mul(F32_BYTES)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-            resource: LlamaBatchExecutorResource::RopeCos,
-        })?;
-    Ok(rope_cos.byte_len() / row_bytes)
 }
 
 fn allocate_device(
