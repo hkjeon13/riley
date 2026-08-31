@@ -10,6 +10,8 @@ unapproved review input을 canonical bytes로만 fail-closed parse한다. v2 bun
 raw-sidecar binding, static-or-dynamic 전략 선택, FD 31/32 successor ABI와 required
 artifact digest set를 빠짐없이 요구하지만 file/ELF/host를 읽지 않으며, accepted result도
 approval·installation·GPU/Docker·qualification authority가 아니다.
+`check_gate_e_native_guardian_review_v1.py`는 `-I -S -E -B`와 explicit flag 아래 stdin
+한 stream만 검사하며 path-based input이나 success receipt를 만들지 않는다.
 **Gate E v2 source boundary:** public legacy performance Bash entry와 historical internal
 sentinel은 모두 fail-closed다. `run_remote_rc3_gate_e_session_v2.py
 --performance-source-contract-probe`는 fixed remote root FD 아래 retired no-action

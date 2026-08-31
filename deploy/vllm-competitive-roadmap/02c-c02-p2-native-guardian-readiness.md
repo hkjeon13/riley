@@ -63,6 +63,9 @@ worker `0/1/2` FD ABI 및 필수 review-artifact digest set를 모두 명시해�
 뿐 approval/evidence/installation/operation 권한이 아니다. 따라서 현재 checkout에는
 실제 review record나 digest를 commit하지 않으며, administrator/reviewer의 외부 결정은
 여전히 별도 record와 installed-object inspection으로만 확정한다.
+`check_gate_e_native_guardian_review_v1.py --review-input-contract-check`는 이 parser의
+stdin-only CPU wrapper다. `-I -S -E -B`를 요구하고 path/install/approve/exec/GPU/Docker
+option이나 success receipt를 제공하지 않는다.
 
 - guardian/warden/PID1 state machine, syscall/FD ABI, trust boundary, crash-recovery threat model
 - reproducible static-native build, source/binary digest pin, signing/approval ownership, rollback/revocation 정책
