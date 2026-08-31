@@ -22,6 +22,8 @@ mod graph_decode_binding;
 mod graph_decode_exact_field_sources;
 #[allow(dead_code)] // C07-8 deliberately precedes opaque metadata-tail materialization.
 mod graph_decode_exact_projection;
+#[allow(dead_code)] // C07-11 deliberately precedes address ownership and transfer.
+mod graph_decode_exact_slab_writer;
 #[allow(dead_code)] // C07-9 deliberately precedes fixed source construction and slab writing.
 mod graph_decode_exact_sources;
 #[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.

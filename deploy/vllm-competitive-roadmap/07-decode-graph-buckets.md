@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-10은 exact V1 nine-field borrow를 C07-5 canonical source order로 결합했다.
+**상태:** In progress — C07-11은 exact V1 metadata를 caller-owned fixed slab에 CPU-only로 기록했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -144,6 +144,20 @@ C07-8이 seven native capacity와 no-tail shape를, C07-9가 two opaque region b
 length 재검사 또는 error translation을 만들지 않는다. C07-5 field-source construction 외에는 packer invocation, fixed slab write/zero-fill,
 opaque byte semantics, padding-tail materialization, allocation/address ownership, host-to-device copy, C06 signature/registry/dispatch,
 CUDA capture/replay, executor mutation을 수행하거나 graph-safe 권한을 부여하지 않는다. 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-11 — exact V1 caller-owned slab write (CPU-only)
+
+C07-11은 C07-8 projection, C07-9 opaque-region binding, C07-10 nine-field composition을 순서대로 적용한 뒤 C07-5 canonical
+little-endian writer에 caller-owned destination을 한 번 전달한다. exact success는 Written이고, C07-8 ineligible은 opaque bytes나
+destination을 검사하기 전에 unchanged typed reason으로 반환한다. eligible layout mismatch, opaque header/control mismatch, C07-5
+destination/source error는 각각 original typed error family로 보존한다. header는 control/status보다 먼저 검사되며 C07-9 opaque error는
+뒤의 C07-5 destination error보다 우선한다.
+
+all ineligible/error path는 C07-5 write 전 또는 C07-5의 pre-write validation에서 끝나므로 destination을 변경하지 않는다. success에서는
+C07-5가 required slab prefix와 alignment gap만 기록하고 caller tail을 보존한다. 이 wrapper는 slab allocation, base-address alignment or
+stability, persistent ownership, opaque-byte semantics, padding-tail materialization, host-to-device copy, C06 signature/registry/dispatch,
+CUDA capture/replay, executor mutation을 수행하거나 graph-safe/runnable authority를 부여하지 않는다. 그 전까지 모든 path는 exact eager를
+유지한다.
 
 ## 1. 배경과 가설
 
