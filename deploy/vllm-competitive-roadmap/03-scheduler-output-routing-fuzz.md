@@ -107,7 +107,7 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
-V2 trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
+V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
 `DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
 output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. bounded mixed-stage
 trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
@@ -149,8 +149,29 @@ format/kind/version, invalid seed/bounds는 decode 단계에서 거부한다. `s
 재생한다. 이 codec은 current bounded V2 grammar 전용 test artifact이며 arbitrary/general trace나
 portable historical runtime configuration을 serialize한다고 주장하지 않는다.
 
-이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator와 그 전체 grammar의
-shrink/global-minimum counterexample, general multi-request independent reference model, scheduled 1,000,000 seed rotation,
+V1은 V2와 별도 `format="riley.scheduler.general-mixed-operation"`,
+`trace_kind="general-mixed-operation-v1"` canonical descriptor를 사용한다. schema는 decoder A
+`1..=3`개(모두 prompt 1, max-new 2)의 prime wave와 final-prefill B `1..=3`개(모두 prompt 1,
+max-new 1)의 mixed wave를 고정한다. `prime_slot_order`와 `mixed_slot_order`는 각 wave의 정확한
+slot permutation이고, `cancel_decoder_index`는 명시적 JSON `null` 또는 A index이며,
+`settlement`는 commit 또는 `NotDispatched` abort다. source seed는 provenance일 뿐 selector를
+다시 생성하는 recipe가 아니다. 이 별도 V1 descriptor 전체가 replay 입력이다.
+
+`GeneralMixedOperationOracle`은 `Scheduler`나 `IterationPlan`을 import하지 않는다. decoder
+A의 prime slot `i`와 mixed slot `i`, final-prefill B의 mixed slot `D + j`, symbolic token/index,
+optional deferred cancellation, terminal ledger와 close를 descriptor와 opaque public request ID만으로
+계산한다. public adapter는 plan의 request binding, prefill/decode kind, input, canonical slot,
+total-token projection을 별도 assert하고 iteration ID만 oracle feedback builder에 넘긴다. 따라서
+production plan item을 순회해 feedback mapping을 재구성하지 않는다. V1은 optional one-decoder
+cancel, permuted valid commit 또는 pre-dispatch abort, close의 terminal-once/zero-gauge를
+검증한다.
+
+이는 parameterized fixed two-wave grammar다. partial prefill, queue/aging, invalid feedback/retry,
+`DeviceQuiescedMutationUnknown`, arbitrary raw operation sequence 또는 general shrinker를 구현·주장하지
+않는다. 그 영역은 기존 `FaultAction`/V2 또는 후속 general grammar PR의 범위다.
+
+이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
+shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
 multi-edit/delta-debugging reduction도 별도 범위다. V2
 shrinker는 이 작은 grammar의 greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
@@ -174,6 +195,13 @@ document로 같은 RC1 normal/cancel prefix를 보존하고, unplanned feedback 
 retry와 missing feedback rejection 뒤 deferred cancel + `NotDispatched` abort도 등록한다. fixture는
 typed strict decode, canonical byte round-trip, V2 pure oracle와 host-side synthetic feedback replay를
 모두 통과해야 한다.
+
+`GeneralMixedOperationTraceV1` corpus는
+`crates/riley-scheduler/tests/corpus/output-routing/general-mixed-operation-v1/*.json`에
+2x2 reverse commit, 3x1 permuted cancel commit, 3x3 permuted abort를 canonical descriptor로
+등록한다. fixture와 seeded trace는 strict decode, exact canonical round-trip, descriptor-only pure
+oracle, public plan projection assertion, host-side replay 및 close quiescence를 모두 통과해야 한다.
+이는 V2 codec 확장이나 arbitrary/general trace format의 주장도 아니다.
 이는 GPU fixture나 C02/C03-B evidence가 아니다. `IterationResult::new` 단계에서 막히는 duplicate
 slot이나 immutable public plan으로 만들 수 없는 stale block-table version은 scheduler boundary property라고
 주장하지 않는다.
@@ -198,6 +226,11 @@ shrunken replay 입력이다. 이 minimizer 자체는 deterministic synthetic pr
 replay로 candidate order·local-minimum 성질을 고정한다. 실제 defect counterexample이나 arbitrary trace를
 이 경로가 이미 global minimum으로 축약했다는 뜻은 아니다.
 
+`general-mixed-operation-v1`은 아직 fixed two-wave grammar라 request removal/operation deletion
+때 selector normalization이 필요하다. 따라서 이 PR에는 reducer를 넣지 않고 failure에 exact
+canonical descriptor와 derived operation list만 남긴다. 이를 general shrinker 또는 local minimum
+counterexample이라고 주장하지 않는다.
+
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
@@ -216,6 +249,8 @@ operation list를 함께 포함한다. general grammar의 durable format은 V2 c
 ```text
 crates/riley-scheduler/tests/model_based_routing.rs
 crates/riley-scheduler/tests/support/reference_scheduler.rs
+crates/riley-scheduler/tests/general_mixed_operation_routing.rs
+crates/riley-scheduler/tests/support/general_mixed_operation_trace.rs
 crates/riley-scheduler/tests/corpus/output-routing/*.json
 crates/riley-scheduler/Cargo.toml   # dev-dependency only, 필요 시
 benchmarks/scripts/check_routing_fuzz_receipt.py
