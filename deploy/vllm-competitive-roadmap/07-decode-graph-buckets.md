@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-8은 no-padding exact V1 native-field projection을 CPU-only로 고정했다.
+**상태:** In progress — C07-9는 exact V1 native fields와 opaque region length를 CPU-only로 결박했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -120,6 +120,18 @@ header/control bytes는 V1 native field가 아니므로 이 view에 없고, C07-
 따라서 projection은 copy, allocation/address ownership, host-to-device transfer, C06 signature/registry/dispatch, CUDA capture/replay,
 executor mutation 권한을 만들지 않는다. future tail materialization은 kernel-mask와 ownership semantics를 별도 증명한 이후에만 가능하며,
 그 전까지 exact eager를 유지한다.
+
+### C07-9 — exact opaque-region length binding (CPU-only)
+
+C07-9는 C07-8의 already-projected seven native fields와 caller-owned header/control-status byte slices를 두 독립 borrow lifetime으로
+결합한다. header와 control/status는 각각 bound C07-1 layout의 corresponding opaque region byte capacity와 exact equality여야 하며,
+header mismatch를 control/status보다 먼저 typed error로 닫는다. C07-8이 이미 A=M, K=B 및 seven native field capacity를 닫았으므로,
+이 단계는 remaining two opaque input shapes만 확인한다.
+
+opaque byte value, schema interpretation, sentinel, kernel-mask meaning은 검증하지 않는다. 성공값은 native slices와 opaque byte slices의
+borrowed grouping일 뿐 C07-5 field-source creation/packer invocation, fixed slab write, padding-tail materialization, allocation/address
+ownership, host-to-device copy, C06 signature/registry/dispatch, CUDA capture/replay, executor mutation을 수행하거나 graph-safe 권한을
+부여하지 않는다. 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
