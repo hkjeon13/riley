@@ -13,7 +13,8 @@ host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 
 facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은 greedy output
 record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-table byte builder를
 rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로, C04-19는 absolute
-RoPE position-count scalar arithmetic을 rope helper로 분리했다. CUDA owner, KV,
+RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iteration command-batch
+completion guard를 dispatch helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -37,7 +38,7 @@ crates/riley-runtime/src/llama/executor/
   shape.rs              # active-row bucket and shape variant
   gemm_plan.rs           # anchored plan inventory
   metadata.rs            # synchronous/packed transport
-  dispatch.rs            # exact backend and borrowed output primitive selection
+  dispatch.rs            # exact backend, output primitives, and command completion guard
   output.rs              # logits/token status and canonical output map
   rope.rs                # cold host-side RoPE table bytes and scalar shape
   metrics.rs             # allocation-free counters/snapshots
@@ -305,6 +306,17 @@ shape semantics를 보존한다.
 batch owner는 CUDA RoPE buffer의 ownership과 `.byte_len()` 조회, table allocation/upload/kernel
 launch, profile 선택 및 lifecycle을 계속 보유한다. 이 source-only slice는 GPU parity나 performance
 non-regression을 주장하지 않는다.
+
+### C04-20 — borrowed iteration command-batch completion guard
+
+`llama/executor/dispatch.rs`는 iteration-batch mode의 shared command-batch lifecycle을 보유하지
+않는 borrowed guard로 수행한다. native begin 성공 뒤에만 mutation-unknown disposition을 기록하고,
+non-replaceable command proxy로 body를 한 번 실행한 뒤 body 성공/실패와 무관하게 finish를 호출한다.
+finish error가 body error보다 우선하는 기존 completion contract를 그대로 유지한다.
+
+batch owner는 synchronous/packed metadata preflight, packed H2D와 view rebind, fixed graph body,
+output state 및 실제 poison decision을 계속 보유한다. 이 source-only slice는 GPU parity나
+performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

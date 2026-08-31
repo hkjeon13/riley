@@ -7,24 +7,6 @@
 use super::super::forward::{poison_for_cuda_error, poison_for_forward_error};
 use super::error::LlamaBatchExecutorError;
 
-/// Tracks whether a command submission could have mutated iteration state.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub(in crate::llama) enum BatchDispatchDisposition {
-    /// Validation or setup failed before a command batch began.
-    #[default]
-    PreDispatch,
-    /// A command batch was opened, so partial device-side mutation is possible.
-    CommandSubmissionStarted,
-}
-
-impl BatchDispatchDisposition {
-    /// Returns whether the enclosing iteration may have been partially mutated.
-    #[must_use]
-    pub(in crate::llama) const fn mutation_may_have_occurred(self) -> bool {
-        matches!(self, Self::CommandSubmissionStarted)
-    }
-}
-
 /// Applies established typed error poison rules to borrowed executor flags.
 ///
 /// The `forward_gemms_poisoned` callback reads state owned by the caller only
@@ -62,15 +44,6 @@ mod tests {
 
     use super::*;
     use crate::llama::forward::LlamaForwardError;
-
-    #[test]
-    fn dispatch_disposition_distinguishes_preflight_from_unknown_mutation() {
-        let mut disposition = BatchDispatchDisposition::PreDispatch;
-        assert!(!disposition.mutation_may_have_occurred());
-
-        disposition = BatchDispatchDisposition::CommandSubmissionStarted;
-        assert!(disposition.mutation_may_have_occurred());
-    }
 
     #[test]
     fn forward_error_folds_owner_gemm_state_only_when_forward_is_not_poisoned() {

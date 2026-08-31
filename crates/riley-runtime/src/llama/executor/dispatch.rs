@@ -1,13 +1,14 @@
-//! Borrowed CUDA output primitives for the Llama batch executor.
+//! Borrowed CUDA dispatch bindings for the Llama batch executor.
 //!
 //! The enclosing owner keeps metadata transport, fixed-graph execution,
 //! output-ready state, failure routing, allocation, and close ordering. This
-//! component binds already prepared output buffers after the fixed graph has
-//! produced logits.
+//! component runs borrowed command-batch completion guards and binds already
+//! prepared output buffers after the fixed graph has produced logits.
 
 use riley_cuda::{
-    Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaDType, CudaDeviceBuffer,
-    CudaExecutionStream, RowGatherParams, deterministic_bf16_argmax, row_gather,
+    Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaCommandStream, CudaDType,
+    CudaDeviceBuffer, CudaExecutionStream, CudaStream, RowGatherParams, deterministic_bf16_argmax,
+    row_gather,
 };
 
 use super::super::forward::span;
@@ -17,6 +18,55 @@ use super::error::{
     cuda_error as dispatch_cuda,
 };
 use super::output::{greedy_result_bytes, output_logits_bytes};
+
+/// Tracks whether a command submission could have mutated iteration state.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(in crate::llama) enum BatchDispatchDisposition {
+    /// Validation or setup failed before a command batch began.
+    #[default]
+    PreDispatch,
+    /// A command batch was opened, so partial device-side mutation is possible.
+    CommandSubmissionStarted,
+}
+
+impl BatchDispatchDisposition {
+    /// Returns whether the enclosing iteration may have been partially mutated.
+    #[must_use]
+    pub(in crate::llama) const fn mutation_may_have_occurred(self) -> bool {
+        matches!(self, Self::CommandSubmissionStarted)
+    }
+}
+
+/// Runs one borrowed command-batch body and always observes completion.
+///
+/// The caller retains metadata preflight, the command body, and failure-state
+/// decisions. Once the native batch begins, this guard records the established
+/// mutation-unknown disposition before exposing its non-replaceable proxy.
+pub(in crate::llama) fn execute_iteration_command_batch<'stream, F>(
+    stream: &'stream mut CudaStream,
+    dispatch_disposition: &mut BatchDispatchDisposition,
+    body: F,
+) -> LlamaBatchExecutorResult<()>
+where
+    F: for<'batch> FnOnce(&mut CudaCommandStream<'batch, 'stream>) -> LlamaBatchExecutorResult<()>,
+{
+    let completion_site = ExecutionSite::global(LlamaOp::IterationCompletion);
+    let mut command_batch = stream
+        .begin_command_batch()
+        .map_err(|source| dispatch_cuda(completion_site, source))?;
+    *dispatch_disposition = BatchDispatchDisposition::CommandSubmissionStarted;
+    let body_result = {
+        let mut commands = command_batch.commands();
+        body(&mut commands)
+    };
+    let completion_result = command_batch
+        .finish()
+        .map_err(|source| dispatch_cuda(completion_site, source));
+    match completion_result {
+        Err(error) => Err(error),
+        Ok(()) => body_result,
+    }
+}
 
 /// Borrowed state for one non-empty output gather and optional greedy argmax.
 pub(in crate::llama) struct OutputPrimitiveDispatch<'a> {
@@ -125,4 +175,18 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
 
 fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
     u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BatchDispatchDisposition;
+
+    #[test]
+    fn dispatch_disposition_distinguishes_preflight_from_unknown_mutation() {
+        let mut disposition = BatchDispatchDisposition::PreDispatch;
+        assert!(!disposition.mutation_may_have_occurred());
+
+        disposition = BatchDispatchDisposition::CommandSubmissionStarted;
+        assert!(disposition.mutation_may_have_occurred());
+    }
 }

@@ -582,8 +582,10 @@ mod source_contract_tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn iteration_completion_guards_synchronous_and_packed_async_bodies() {
         let source = include_str!("batch_executor.rs");
+        let dispatch = include_str!("executor/dispatch.rs");
         let begin = source
             .find("// HOT_BATCH_EXECUTE_BEGIN")
             .expect("batch hot execute begin marker");
@@ -615,21 +617,15 @@ mod source_contract_tests {
             .expect("packed async iteration arm remains explicit");
         let synchronous = &execution[synchronous_arm..packed_arm];
         assert!(synchronous.contains("per_operation_device_views("));
-        assert!(synchronous.contains("let mut command_batch = stream"));
-        assert!(synchronous.contains("&mut commands,"));
-        assert!(synchronous.contains("let completion_result = command_batch"));
+        assert!(synchronous.contains("execute_iteration_command_batch("));
+        assert!(synchronous.contains("execute_iteration_body("));
+        assert!(!synchronous.contains("begin_command_batch()"));
         assert!(!synchronous.contains("copy_from_pinned_in_command_batch"));
 
         let packed = &execution[packed_arm..];
-        let command_begin = packed
-            .find("let mut command_batch = stream")
-            .expect("packed iteration completion begins explicitly");
-        let body_result = packed
-            .find("let body_result = {")
-            .expect("packed body result is retained through completion");
-        let command_proxy = packed
-            .find("let mut commands = command_batch.commands();")
-            .expect("packed body uses the non-replaceable command proxy");
+        let command_guard = packed
+            .find("execute_iteration_command_batch(")
+            .expect("packed iteration uses the shared command-batch guard");
         let copy = packed
             .find("copy_from_pinned_in_command_batch(")
             .expect("packed input uses one command-batch H2D");
@@ -639,24 +635,67 @@ mod source_contract_tests {
         let body_call = packed
             .find("Ok(views) => execute_iteration_body(")
             .expect("packed graph dispatches through the command proxy");
-        let command_finish = packed
-            .find("let completion_result = command_batch")
-            .expect("packed iteration completion finishes explicitly");
-
-        assert!(command_begin < body_result);
-        assert!(body_result < command_proxy);
-        assert!(command_proxy < copy);
+        assert!(command_guard < copy);
         assert!(copy < bind_views);
         assert!(bind_views < body_call);
+        assert_eq!(
+            hot.matches("execute_iteration_command_batch(").count(),
+            2,
+            "both iteration-completion arms must share the command-batch guard"
+        );
+        assert!(!hot.contains(".begin_command_batch()"));
+        assert!(!hot.contains("command_batch.commands()"));
+        assert!(!hot.contains("let completion_result = command_batch"));
+
+        let guard_start = dispatch
+            .find("fn execute_iteration_command_batch")
+            .expect("shared command-batch guard remains explicit");
+        let guard = &dispatch[guard_start..];
+        let command_begin = guard
+            .find(".begin_command_batch()")
+            .expect("shared guard begins the native command batch");
+        let disposition = guard
+            .find("CommandSubmissionStarted")
+            .expect("shared guard records mutation-unknown disposition after begin");
+        let body_result = guard
+            .find("let body_result = {")
+            .expect("shared guard retains body errors through completion");
+        let command_proxy = guard
+            .find("let mut commands = command_batch.commands();")
+            .expect("shared guard uses the non-replaceable command proxy");
+        let guard_body_call = guard
+            .find("body(&mut commands)")
+            .expect("shared guard invokes the borrowed body through the proxy");
+        let command_finish = guard
+            .find("let completion_result = command_batch")
+            .expect("shared guard finishes every opened command batch");
+        let completion_match = guard
+            .find("match completion_result")
+            .expect("shared guard makes completion error precedence explicit");
+        let finish_error = guard
+            .find("Err(error) => Err(error)")
+            .expect("completion error remains higher priority than body error");
+        let body_success = guard
+            .find("Ok(()) => body_result")
+            .expect("successful completion returns the retained body result");
+
+        assert!(command_begin < disposition);
+        assert!(disposition < body_result);
+        assert!(body_result < command_proxy);
+        assert!(command_proxy < guard_body_call);
+        assert!(guard_body_call < command_finish);
         assert!(body_result < command_finish);
+        assert!(command_finish < completion_match);
+        assert!(completion_match < finish_error);
+        assert!(finish_error < body_success);
         assert!(
-            packed[body_result..command_finish].contains("command_batch.commands()"),
+            guard[body_result..command_finish].contains("command_batch.commands()"),
             "body errors must be retained without skipping command-batch finish"
         );
         assert!(
-            !hot.contains("command_batch.stream_mut()"),
+            !guard.contains("command_batch.stream_mut()"),
             "the guarded CudaStream must not be exposed for replacement"
         );
-        assert!(hot.contains("LlamaOp::IterationCompletion"));
+        assert!(guard.contains("LlamaOp::IterationCompletion"));
     }
 }

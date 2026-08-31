@@ -32,7 +32,10 @@ use super::executor::buffers::{
     close_device_input, close_host_input,
 };
 use super::executor::device_views::{packed_device_views, per_operation_device_views};
-use super::executor::dispatch::{OutputPrimitiveDispatch, dispatch_output_primitives};
+use super::executor::dispatch::{
+    BatchDispatchDisposition, OutputPrimitiveDispatch, dispatch_output_primitives,
+    execute_iteration_command_batch,
+};
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
@@ -43,7 +46,7 @@ use super::executor::metadata::{
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes};
-use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
+use super::executor::poison::poison_for_batch_error;
 use super::executor::rope::{
     absolute_rope_position_count, build_absolute_cpu_rope_tables, build_absolute_rope_angles,
 };
@@ -1722,27 +1725,14 @@ fn execute_packed(
                 });
             };
             let views = per_operation_device_views(host_batch, device, &packed, metadata_site)?;
-            let completion_site = ExecutionSite::global(LlamaOp::IterationCompletion);
-            let mut command_batch = stream
-                .begin_command_batch()
-                .map_err(|source| batch_cuda(completion_site, source))?;
-            *dispatch_disposition = BatchDispatchDisposition::CommandSubmissionStarted;
-            let body_result = {
-                let mut commands = command_batch.commands();
+            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
                 execute_iteration_body(
                     views.batch,
                     views.token_ids,
                     views.output_token_indices,
-                    &mut commands,
+                    commands,
                 )
-            };
-            let completion_result = command_batch
-                .finish()
-                .map_err(|source| batch_cuda(completion_site, source));
-            match completion_result {
-                Err(error) => Err(error),
-                Ok(()) => body_result,
-            }
+            })
         }
         (
             ExecutionCompletionImplementation::IterationBatch,
@@ -1772,13 +1762,7 @@ fn execute_packed(
                     });
                 }
             }
-            let completion_site = ExecutionSite::global(LlamaOp::IterationCompletion);
-            let mut command_batch = stream
-                .begin_command_batch()
-                .map_err(|source| batch_cuda(completion_site, source))?;
-            *dispatch_disposition = BatchDispatchDisposition::CommandSubmissionStarted;
-            let body_result = {
-                let mut commands = command_batch.commands();
+            execute_iteration_command_batch(stream, dispatch_disposition, |commands| {
                 match (&mut *device, &host.input) {
                     (
                         BatchDeviceInput::IterationBatch { slab },
@@ -1790,7 +1774,7 @@ fn execute_packed(
                                 &host.pinned,
                                 0,
                                 copy_byte_len,
-                                &mut commands,
+                                commands,
                             )
                             .map_err(|source| batch_cuda(metadata_site, source));
                         match copy_result {
@@ -1808,7 +1792,7 @@ fn execute_packed(
                                         views.batch,
                                         views.token_ids,
                                         views.output_token_indices,
-                                        &mut commands,
+                                        commands,
                                     ),
                                 }
                             }
@@ -1819,14 +1803,7 @@ fn execute_packed(
                         reason: "packed async execution has no packed host/device slab",
                     }),
                 }
-            };
-            let completion_result = command_batch
-                .finish()
-                .map_err(|source| batch_cuda(completion_site, source));
-            match completion_result {
-                Err(error) => Err(error),
-                Ok(()) => body_result,
-            }
+            })
         }
         (ExecutionCompletionImplementation::PerOperation, BatchMetadataTransport::PackedAsync) => {
             Err(LlamaBatchExecutorError::InvalidConfiguration {

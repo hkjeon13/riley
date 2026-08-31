@@ -190,8 +190,21 @@ fn executor_device_views_only_bind_borrowed_cuda_metadata() {
 }
 
 #[test]
-fn executor_dispatch_only_binds_borrowed_output_primitives() {
+fn executor_dispatch_only_binds_borrowed_primitives_and_completion() {
     for required in [
+        "enum BatchDispatchDisposition",
+        "mutation_may_have_occurred",
+        "execute_iteration_command_batch",
+        "CudaCommandStream",
+        "CudaStream",
+        "begin_command_batch()",
+        "CommandSubmissionStarted",
+        "command_batch.commands()",
+        "body(&mut commands)",
+        "match completion_result",
+        "Err(error) => Err(error)",
+        "Ok(()) => body_result",
+        "LlamaOp::IterationCompletion",
         "struct OutputPrimitiveDispatch",
         "dispatch_output_primitives",
         "CudaExecutionStream",
@@ -208,7 +221,7 @@ fn executor_dispatch_only_binds_borrowed_output_primitives() {
     ] {
         assert!(
             EXECUTOR_DISPATCH.contains(required),
-            "executor dispatch omitted required borrowed-output token {required:?}"
+            "executor dispatch omitted required borrowed-dispatch token {required:?}"
         );
     }
     for forbidden in [
@@ -224,7 +237,6 @@ fn executor_dispatch_only_binds_borrowed_output_primitives() {
         "LlamaPackedBatchMetadata",
         "PackedBatchV1",
         "CudaContext",
-        "CudaStream",
         "CudaPinnedHostBuffer",
         "CudaUploadedWeights",
         "KvLayout",
@@ -238,6 +250,8 @@ fn executor_dispatch_only_binds_borrowed_output_primitives() {
         "copy_from_pinned",
         "close(",
         "poison",
+        "poison_for_batch_error",
+        "forward_poisoned",
         "Vec",
         "Box",
         "String",
@@ -433,9 +447,6 @@ fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
 #[test]
 fn executor_poison_only_routes_borrowed_failure_state() {
     for required in [
-        "enum BatchDispatchDisposition",
-        "CommandSubmissionStarted",
-        "mutation_may_have_occurred",
         "poison_for_batch_error",
         "forward_gemms_poisoned",
         "LlamaBatchExecutorError::Cuda",
