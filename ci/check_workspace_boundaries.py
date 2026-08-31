@@ -185,6 +185,18 @@ EXPECTED_DEV_DEPENDENCIES = {
         "features": [],
         "path": "crates/riley-model",
     },
+    ("riley-scheduler", "serde"): {
+        "req": "=1.0.228",
+        "default_features": True,
+        "features": ["derive"],
+        "path": None,
+    },
+    ("riley-scheduler", "serde_json"): {
+        "req": "=1.0.145",
+        "default_features": True,
+        "features": [],
+        "path": None,
+    },
     ("riley-runtime", "riley-cuda"): {
         "req": "*",
         "default_features": True,

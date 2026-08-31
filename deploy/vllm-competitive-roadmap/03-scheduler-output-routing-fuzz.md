@@ -119,19 +119,29 @@ V2는 같은 RC1 mixed prefix를 concrete `Submit`, `Plan`, `Complete`, `Cancel`
 decoder cancel, stale/missing/unplanned feedback의 surface-preserving rejection, reverse feedback
 commit에 의한 valid retry 또는 `NotDispatched` abort, consuming close를 조합한다. 각 operation은 public
 scheduler API만 호출하며 planning/update/close 전체에서 terminal-once, token/index ledger, rejected
-feedback 뒤 surface 불변성, final quiescence를 확인한다. 실패 시 seed·bounded config·canonical
-operation list를 출력한다. failure 때는 source seed와 full descriptor를 보존한 채, 같은 V2 failure
+feedback 뒤 surface 불변성, final quiescence를 확인한다. 실패 시 source seed를 포함한 canonical
+descriptor JSON과 derived canonical operation list를 출력한다. failure 때는 source seed와 full descriptor를 보존한 채, 같은 V2 failure
 predicate가 재현되는 경우에만 optional rejection/cancel을 제거하고 decoder output capacity와
 final-prefill length를 더 작은 값으로 바꾸는 greedy shrinker도 실행한다. rejection kind, settlement
 (`NotDispatched` abort 또는 reverse commit), prime/mixed prefix와 reverse feedback은 바꾸지 않는다.
-report는 원본과 candidate-minimized V2 descriptor 및 canonical operation list를 함께 남긴다. seed만으로
+report는 원본과 candidate-minimized V2 descriptor JSON 및 canonical operation list를 함께 남긴다. seed만으로
 shrunken descriptor를 재생성한다는 뜻은 아니다. predicate는 inner replayer가 panic하는지만 보존하므로
 same assertion site, failure signature 또는 root cause를 보존한다고 주장하지 않는다.
+
+V2에는 test-only typed `OperationTraceV2DescriptorV1` codec도 있다. `format`,
+`format_version`, `trace_kind`, `case_id`, fixed-width lowercase `source_seed`와 bounded
+selector를 canonical JSON document로 고정하고, committed fixture를 exact byte round-trip 한 뒤
+public scheduler API로 재생한다. `rejected_feedback`는 반드시 명시적인 JSON `null` 또는 known
+kind여야 하며, unknown/missing/duplicate field, noncanonical formatting/order, unsupported
+format/kind/version, invalid seed/bounds는 decode 단계에서 거부한다. `source_seed`는 provenance일
+뿐 shrunken selector의 재생성 recipe가 아니므로, 축약된 failure는 그 전체 canonical document로
+재생한다. 이 codec은 current bounded V2 grammar 전용 test artifact이며 arbitrary/general trace나
+portable historical runtime configuration을 serialize한다고 주장하지 않는다.
 
 이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, 독립 reference model, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
-multi-edit/delta-debugging reduction, durable JSON parser/round-trip serialization도 별도 범위다. V2
+multi-edit/delta-debugging reduction도 별도 범위다. V2
 shrinker는 이 작은 grammar의 greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
 counterexample을 주장하지 않는다. 마지막 항목은 현 public scheduler API에 injection seam이 없으므로
 별도 test-only seam 계약으로 설계한다.
@@ -147,10 +157,14 @@ decoder를 `close`가 정확히 한 번 취소해야 하는 output capacity 3/4 
 synthetic scheduler feedback의 request/token/generation-index mapping·terminal history·quiescence를
 검증하며, GPU mixed execution이나 stream cancellation을 실행하거나 주장하지 않는다.
 
-`OperationTraceV2` corpus는 같은 RC1 normal/cancel prefix를 보존하고, unplanned feedback rejection
-뒤 valid reverse retry와 missing feedback rejection 뒤 deferred cancel + `NotDispatched` abort도
-등록한다. `IterationResult::new` 단계에서 막히는 duplicate slot이나 immutable public plan으로 만들 수
-없는 stale block-table version은 scheduler boundary property라고 주장하지 않는다.
+`OperationTraceV2` corpus는
+`crates/riley-scheduler/tests/corpus/output-routing/operation-trace-v2/*.json`의 committed canonical
+document로 같은 RC1 normal/cancel prefix를 보존하고, unplanned feedback rejection 뒤 valid reverse
+retry와 missing feedback rejection 뒤 deferred cancel + `NotDispatched` abort도 등록한다. fixture는
+typed strict decode, canonical byte round-trip, host-side synthetic feedback replay를 모두 통과해야 한다.
+이는 GPU fixture나 C02/C03-B evidence가 아니다. `IterationResult::new` 단계에서 막히는 duplicate
+slot이나 immutable public plan으로 만들 수 없는 stale block-table version은 scheduler boundary property라고
+주장하지 않는다.
 
 ### C03-B — GPU integration slice
 
@@ -167,8 +181,8 @@ GPU test는 property runner 전체를 실행하지 않고 고정된 최소 corpu
 
 현재 `OperationTraceV2`는 failure가 발생하면 같은 property predicate로 bounded candidate를 다시
 replay해 optional operation 제거와 output/prefill length 축소 순서의 local minimum을 출력한다. seed와
-rejection kind·settlement은 고정하며, descriptor/canonical operation list 전체가 shrunken replay
-입력이다. 이 minimizer 자체는 deterministic synthetic predicate와 모든 bounded candidate의 grammar
+rejection kind·settlement은 고정하며, exact canonical descriptor JSON과 derived operation list 전체가
+shrunken replay 입력이다. 이 minimizer 자체는 deterministic synthetic predicate와 모든 bounded candidate의 grammar
 replay로 candidate order·local-minimum 성질을 고정한다. 실제 defect counterexample이나 arbitrary trace를
 이 경로가 이미 global minimum으로 축약했다는 뜻은 아니다.
 
@@ -182,7 +196,8 @@ replay로 candidate order·local-minimum 성질을 고정한다. 실제 defect c
 6. cancellation/failure 시점 단순화
 
 그 general final report는 source seed와 full replay descriptor, 사람이 읽을 수 있는 globally minimized
-operation list를 함께 포함한다. 이는 현재 V2 local shrinker보다 강한 후속 기준이다.
+operation list를 함께 포함한다. general grammar의 durable format은 V2 codec을 재사용한다고 미리
+가정하지 않고 별도 versioned contract로 설계한다. 이는 현재 V2 local shrinker보다 강한 후속 기준이다.
 
 ## 8. 예상 파일 변경
 

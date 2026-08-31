@@ -19,6 +19,8 @@ riley-runtime = { path = "../riley-runtime" }
 
 [dev-dependencies]
 riley-model = { path = "../riley-model" }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
 
 [lints]
 workspace = true

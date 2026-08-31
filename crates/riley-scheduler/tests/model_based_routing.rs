@@ -15,6 +15,7 @@ use riley_scheduler::{
     RequestSnapshot, RequestState, Scheduler, SchedulerCloseOutput, SchedulerConfig,
     SchedulerError, SchedulerMetricsSnapshot, TokenEvent,
 };
+use serde::{Deserialize, Serialize};
 
 const TRACE_COUNT: u64 = 10_000;
 const FAULT_TRACE_COUNT: u64 = 10_000;
@@ -1358,7 +1359,8 @@ impl OperationTraceFeedbackOrder {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum OperationTraceRejectedFeedback {
     Stale,
     Missing,
@@ -1375,7 +1377,8 @@ impl OperationTraceRejectedFeedback {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 enum OperationTraceSettlement {
     CompleteReverse,
     AbortNotDispatched,
@@ -1416,6 +1419,25 @@ impl OperationTraceV2Op {
             Self::Close => "close".to_owned(),
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+struct RequiredNullable<T>(Option<T>);
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct OperationTraceV2DescriptorV1 {
+    format: String,
+    format_version: u8,
+    trace_kind: String,
+    case_id: String,
+    source_seed: String,
+    decoder_max_new_tokens: u8,
+    final_prefill_len: u8,
+    cancel_decoder: bool,
+    rejected_feedback: RequiredNullable<OperationTraceRejectedFeedback>,
+    settlement: OperationTraceSettlement,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1487,12 +1509,32 @@ impl OperationTraceV2 {
         operations
     }
 
-    fn describe(self) -> String {
-        let operations = self
-            .operations()
+    fn descriptor(self, case_id: &str) -> OperationTraceV2DescriptorV1 {
+        OperationTraceV2DescriptorV1 {
+            format: OPERATION_TRACE_V2_DESCRIPTOR_FORMAT.to_owned(),
+            format_version: OPERATION_TRACE_V2_DESCRIPTOR_FORMAT_VERSION,
+            trace_kind: OPERATION_TRACE_V2_DESCRIPTOR_TRACE_KIND.to_owned(),
+            case_id: case_id.to_owned(),
+            source_seed: format!("0x{:016x}", self.seed),
+            decoder_max_new_tokens: u8::try_from(self.decoder_max_new_tokens)
+                .expect("bounded operation-trace decoder capacity fits u8"),
+            final_prefill_len: u8::try_from(self.final_prefill_len)
+                .expect("bounded operation-trace final prefill length fits u8"),
+            cancel_decoder: self.cancel_decoder,
+            rejected_feedback: RequiredNullable(self.rejected_feedback),
+            settlement: self.settlement,
+        }
+    }
+
+    fn describe_operations(self) -> String {
+        self.operations()
             .into_iter()
             .map(OperationTraceV2Op::describe)
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+            .join(" -> ")
+    }
+
+    fn describe(self) -> String {
         format!(
             "v2 descriptor={{seed={:#018x}, decoder_max_new_tokens={}, final_prefill_len={}, \
              cancel_decoder={}, rejected_feedback={:?}, settlement={:?}}}; operations=[{}]",
@@ -1502,7 +1544,7 @@ impl OperationTraceV2 {
             self.cancel_decoder,
             self.rejected_feedback,
             self.settlement,
-            operations.join(" -> "),
+            self.describe_operations(),
         )
     }
 
@@ -1543,6 +1585,152 @@ impl OperationTraceV2 {
     }
 }
 
+const OPERATION_TRACE_V2_DESCRIPTOR_FORMAT: &str = "riley.scheduler.operation-trace";
+const OPERATION_TRACE_V2_DESCRIPTOR_FORMAT_VERSION: u8 = 1;
+const OPERATION_TRACE_V2_DESCRIPTOR_TRACE_KIND: &str = "operation-trace-v2";
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct NamedOperationTraceV2 {
+    case_id: String,
+    trace: OperationTraceV2,
+}
+
+impl OperationTraceV2DescriptorV1 {
+    fn validate(&self) -> Result<(), String> {
+        if self.format != OPERATION_TRACE_V2_DESCRIPTOR_FORMAT {
+            return Err("operation-trace descriptor format is unsupported".to_owned());
+        }
+        if self.format_version != OPERATION_TRACE_V2_DESCRIPTOR_FORMAT_VERSION {
+            return Err("operation-trace descriptor format_version is unsupported".to_owned());
+        }
+        if self.trace_kind != OPERATION_TRACE_V2_DESCRIPTOR_TRACE_KIND {
+            return Err("operation-trace descriptor trace_kind is unsupported".to_owned());
+        }
+        validate_operation_trace_v2_case_id(&self.case_id)?;
+        parse_operation_trace_v2_source_seed(&self.source_seed)?;
+        if !(2..=4).contains(&self.decoder_max_new_tokens) {
+            return Err(
+                "operation-trace descriptor decoder_max_new_tokens must be in 2..=4".to_owned(),
+            );
+        }
+        if !(1..=4).contains(&self.final_prefill_len) {
+            return Err("operation-trace descriptor final_prefill_len must be in 1..=4".to_owned());
+        }
+        Ok(())
+    }
+
+    fn into_named_trace(self) -> Result<NamedOperationTraceV2, String> {
+        self.validate()?;
+        let seed = parse_operation_trace_v2_source_seed(&self.source_seed)?;
+        Ok(NamedOperationTraceV2 {
+            case_id: self.case_id,
+            trace: OperationTraceV2 {
+                seed,
+                decoder_max_new_tokens: usize::from(self.decoder_max_new_tokens),
+                final_prefill_len: usize::from(self.final_prefill_len),
+                cancel_decoder: self.cancel_decoder,
+                rejected_feedback: self.rejected_feedback.0,
+                settlement: self.settlement,
+            },
+        })
+    }
+}
+
+fn validate_operation_trace_v2_case_id(case_id: &str) -> Result<(), String> {
+    let bytes = case_id.as_bytes();
+    if !(1..=96).contains(&bytes.len())
+        || bytes.first() == Some(&b'-')
+        || bytes.last() == Some(&b'-')
+        || !bytes
+            .iter()
+            .copied()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(
+            "operation-trace descriptor case_id must be a bounded lowercase identifier".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+fn parse_operation_trace_v2_source_seed(source_seed: &str) -> Result<u64, String> {
+    let Some(hex) = source_seed.strip_prefix("0x") else {
+        return Err("operation-trace descriptor source_seed must start with 0x".to_owned());
+    };
+    if hex.len() != 16
+        || !hex
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(
+            "operation-trace descriptor source_seed must be 16 lowercase hexadecimal digits"
+                .to_owned(),
+        );
+    }
+    u64::from_str_radix(hex, 16)
+        .map_err(|_| "operation-trace descriptor source_seed does not fit u64".to_owned())
+}
+
+fn operation_trace_v2_descriptor_document(descriptor: &OperationTraceV2DescriptorV1) -> String {
+    let mut document =
+        serde_json::to_string(descriptor).expect("bounded operation-trace descriptor serializes");
+    document.push('\n');
+    document
+}
+
+fn serialize_operation_trace_v2_descriptor(case_id: &str, trace: OperationTraceV2) -> String {
+    let descriptor = trace.descriptor(case_id);
+    descriptor
+        .validate()
+        .expect("bounded operation-trace descriptor is valid");
+    operation_trace_v2_descriptor_document(&descriptor)
+}
+
+fn parse_operation_trace_v2_descriptor(document: &str) -> Result<NamedOperationTraceV2, String> {
+    let descriptor = serde_json::from_str::<OperationTraceV2DescriptorV1>(document)
+        .map_err(|error| format!("operation-trace descriptor JSON is invalid: {error}"))?;
+    let canonical = operation_trace_v2_descriptor_document(&descriptor);
+    if document != canonical {
+        return Err("operation-trace descriptor JSON is not canonical".to_owned());
+    }
+    descriptor.into_named_trace()
+}
+
+const OPERATION_TRACE_V2_CORPUS_DOCUMENTS_V1: [(&str, &str); 4] = [
+    (
+        "operation-trace-v2/rc1-reverse-complete.json",
+        include_str!("corpus/output-routing/operation-trace-v2/rc1-reverse-complete.json"),
+    ),
+    (
+        "operation-trace-v2/rc1-reverse-cancel.json",
+        include_str!("corpus/output-routing/operation-trace-v2/rc1-reverse-cancel.json"),
+    ),
+    (
+        "operation-trace-v2/unplanned-retry-complete.json",
+        include_str!("corpus/output-routing/operation-trace-v2/unplanned-retry-complete.json"),
+    ),
+    (
+        "operation-trace-v2/missing-retry-abort.json",
+        include_str!("corpus/output-routing/operation-trace-v2/missing-retry-abort.json"),
+    ),
+];
+
+fn operation_trace_v2_corpus() -> Vec<NamedOperationTraceV2> {
+    let mut case_ids = BTreeSet::new();
+    let mut corpus = Vec::with_capacity(OPERATION_TRACE_V2_CORPUS_DOCUMENTS_V1.len());
+    for (path, document) in OPERATION_TRACE_V2_CORPUS_DOCUMENTS_V1 {
+        let named = parse_operation_trace_v2_descriptor(document)
+            .unwrap_or_else(|error| panic!("{path}: operation-trace corpus is invalid: {error}"));
+        assert!(
+            case_ids.insert(named.case_id.clone()),
+            "{path}: operation-trace corpus repeats case_id {:?}",
+            named.case_id
+        );
+        corpus.push(named);
+    }
+    corpus
+}
+
 fn minimize_operation_trace_v2<F>(trace: OperationTraceV2, mut reproduces: F) -> OperationTraceV2
 where
     F: FnMut(OperationTraceV2) -> bool,
@@ -1563,45 +1751,6 @@ where
         minimized = candidate;
     }
 }
-
-const RC1_REVERSE_COMPLETE_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
-    seed: MIXED_STAGE_SEED,
-    decoder_max_new_tokens: 2,
-    final_prefill_len: 1,
-    cancel_decoder: false,
-    rejected_feedback: None,
-    settlement: OperationTraceSettlement::CompleteReverse,
-};
-
-const RC1_REVERSE_CANCEL_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
-    cancel_decoder: true,
-    ..RC1_REVERSE_COMPLETE_TRACE_V2
-};
-
-const INVALID_RETRY_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
-    seed: MIXED_STAGE_SEED ^ 3,
-    decoder_max_new_tokens: 3,
-    final_prefill_len: 2,
-    cancel_decoder: false,
-    rejected_feedback: Some(OperationTraceRejectedFeedback::Unplanned),
-    settlement: OperationTraceSettlement::CompleteReverse,
-};
-
-const ABORT_RETRY_TRACE_V2: OperationTraceV2 = OperationTraceV2 {
-    seed: MIXED_STAGE_SEED ^ 4,
-    decoder_max_new_tokens: 4,
-    final_prefill_len: 4,
-    cancel_decoder: true,
-    rejected_feedback: Some(OperationTraceRejectedFeedback::Missing),
-    settlement: OperationTraceSettlement::AbortNotDispatched,
-};
-
-const OPERATION_TRACE_CORPUS_V2: [OperationTraceV2; 4] = [
-    RC1_REVERSE_COMPLETE_TRACE_V2,
-    RC1_REVERSE_CANCEL_TRACE_V2,
-    INVALID_RETRY_TRACE_V2,
-    ABORT_RETRY_TRACE_V2,
-];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OperationTraceV2Phase {
@@ -2050,10 +2199,21 @@ fn replay_operation_trace_v2(trace: OperationTraceV2) {
         return;
     }
     let minimized = minimize_operation_trace_v2(trace, operation_trace_v2_fails);
+    let original_descriptor = serialize_operation_trace_v2_descriptor("failing-original", trace);
+    let minimized_descriptor =
+        serialize_operation_trace_v2_descriptor("failing-minimized", minimized);
     panic!(
-        "C03-A bounded operation trace failed:\noriginal: {}\nminimized: {}",
-        trace.describe(),
-        minimized.describe()
+        concat!(
+            "C03-A bounded operation trace failed:\n",
+            "original_descriptor_json:\n{}",
+            "original_operations=[{}]\n",
+            "minimized_descriptor_json:\n{}",
+            "minimized_operations=[{}]"
+        ),
+        original_descriptor,
+        trace.describe_operations(),
+        minimized_descriptor,
+        minimized.describe_operations(),
     );
 }
 
@@ -2065,8 +2225,12 @@ fn synthetic_operation_trace_v2_failure(trace: OperationTraceV2) -> bool {
 
 #[test]
 fn bounded_operation_trace_shrinker_preserves_and_minimizes_a_failure() {
-    let minimized =
-        minimize_operation_trace_v2(ABORT_RETRY_TRACE_V2, synthetic_operation_trace_v2_failure);
+    let source = operation_trace_v2_corpus()
+        .into_iter()
+        .find(|named| named.case_id == "missing-retry-abort")
+        .expect("operation-trace corpus contains the synthetic shrinker source")
+        .trace;
+    let minimized = minimize_operation_trace_v2(source, synthetic_operation_trace_v2_failure);
     assert_eq!(minimized.decoder_max_new_tokens, 3);
     assert_eq!(minimized.final_prefill_len, 2);
     assert!(!minimized.cancel_decoder);
@@ -2078,9 +2242,14 @@ fn bounded_operation_trace_shrinker_preserves_and_minimizes_a_failure() {
         minimized.settlement,
         OperationTraceSettlement::AbortNotDispatched
     );
-    assert_eq!(minimized.seed, ABORT_RETRY_TRACE_V2.seed);
+    assert_eq!(minimized.seed, source.seed);
     assert!(synthetic_operation_trace_v2_failure(minimized));
-    replay_operation_trace_v2_inner(minimized);
+    let serialized = serialize_operation_trace_v2_descriptor("synthetic-minimized", minimized);
+    let replayable = parse_operation_trace_v2_descriptor(&serialized)
+        .expect("minimized operation trace serializes and parses");
+    assert_eq!(replayable.case_id, "synthetic-minimized");
+    assert_eq!(replayable.trace, minimized);
+    replay_operation_trace_v2_inner(replayable.trace);
     assert_eq!(
         minimize_operation_trace_v2(minimized, synthetic_operation_trace_v2_failure),
         minimized,
@@ -2135,16 +2304,174 @@ fn bounded_operation_trace_shrink_candidates_preserve_the_v2_grammar() {
 }
 
 #[test]
-fn replay_operation_trace_corpus_v2() {
-    for trace in OPERATION_TRACE_CORPUS_V2 {
-        replay_operation_trace_v2(trace);
+fn operation_trace_v2_corpus_is_canonical_round_trips_and_replays() {
+    for (path, document) in OPERATION_TRACE_V2_CORPUS_DOCUMENTS_V1 {
+        let named = parse_operation_trace_v2_descriptor(document)
+            .unwrap_or_else(|error| panic!("{path}: operation-trace corpus is invalid: {error}"));
+        assert_eq!(
+            serialize_operation_trace_v2_descriptor(&named.case_id, named.trace),
+            document,
+            "{path}: operation-trace corpus must retain canonical bytes"
+        );
+        replay_operation_trace_v2(named.trace);
     }
 }
 
 #[test]
-fn ten_thousand_seeded_operation_traces_preserve_routing_and_quiescence() {
+fn operation_trace_v2_codec_round_trips_the_bounded_grammar() {
+    let rejected_feedback = [
+        None,
+        Some(OperationTraceRejectedFeedback::Stale),
+        Some(OperationTraceRejectedFeedback::Missing),
+        Some(OperationTraceRejectedFeedback::Unplanned),
+    ];
+    let settlements = [
+        OperationTraceSettlement::CompleteReverse,
+        OperationTraceSettlement::AbortNotDispatched,
+    ];
+    for seed in [0, u64::MAX] {
+        for decoder_max_new_tokens in 2..=4 {
+            for final_prefill_len in 1..=4 {
+                for cancel_decoder in [false, true] {
+                    for (rejected_index, rejected_feedback) in
+                        rejected_feedback.into_iter().enumerate()
+                    {
+                        for (settlement_index, settlement) in settlements.into_iter().enumerate() {
+                            let trace = OperationTraceV2 {
+                                seed,
+                                decoder_max_new_tokens,
+                                final_prefill_len,
+                                cancel_decoder,
+                                rejected_feedback,
+                                settlement,
+                            };
+                            let case_id = format!(
+                                "grammar-{seed:016x}-{decoder_max_new_tokens}-{final_prefill_len}-{cancel_decoder}-{rejected_index}-{settlement_index}"
+                            );
+                            let serialized =
+                                serialize_operation_trace_v2_descriptor(&case_id, trace);
+                            let parsed = parse_operation_trace_v2_descriptor(&serialized)
+                                .expect("bounded operation-trace descriptor parses");
+                            assert_eq!(parsed.case_id, case_id);
+                            assert_eq!(parsed.trace, trace);
+                            replay_operation_trace_v2_inner(parsed.trace);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn operation_trace_v2_codec_rejects_noncanonical_or_invalid_documents() {
+    let trace = OperationTraceV2 {
+        seed: 0x0123_4567_89ab_cdef,
+        decoder_max_new_tokens: 2,
+        final_prefill_len: 1,
+        cancel_decoder: false,
+        rejected_feedback: None,
+        settlement: OperationTraceSettlement::CompleteReverse,
+    };
+    let valid = serialize_operation_trace_v2_descriptor("strict-codec", trace);
+    let append_field = |field: &str| {
+        let object = valid
+            .strip_suffix("}\n")
+            .expect("canonical operation-trace descriptor closes its JSON object");
+        format!("{object},{field}}}\n")
+    };
+    let missing_rejected_feedback = valid.replacen("\"rejected_feedback\":null,", "", 1);
+    let reordered_fields = valid.replacen(
+        "{\"format\":\"riley.scheduler.operation-trace\",\"format_version\":1",
+        "{\"format_version\":1,\"format\":\"riley.scheduler.operation-trace\"",
+        1,
+    );
+    let invalid_documents = [
+        ("unknown field", append_field("\"unexpected\":true")),
+        (
+            "duplicate field",
+            append_field("\"source_seed\":\"0x0123456789abcdef\""),
+        ),
+        ("missing explicit null", missing_rejected_feedback),
+        ("noncanonical field order", reordered_fields),
+        ("noncanonical whitespace", format!(" {valid}")),
+        (
+            "numeric source seed",
+            valid.replacen(
+                "\"source_seed\":\"0x0123456789abcdef\"",
+                "\"source_seed\":1",
+                1,
+            ),
+        ),
+        (
+            "uppercase source seed",
+            valid.replacen(
+                "\"source_seed\":\"0x0123456789abcdef\"",
+                "\"source_seed\":\"0x0123456789ABCDEF\"",
+                1,
+            ),
+        ),
+        (
+            "unsupported format",
+            valid.replacen(
+                "\"format\":\"riley.scheduler.operation-trace\"",
+                "\"format\":\"other\"",
+                1,
+            ),
+        ),
+        (
+            "unsupported format version",
+            valid.replacen("\"format_version\":1", "\"format_version\":2", 1),
+        ),
+        (
+            "unsupported trace kind",
+            valid.replacen(
+                "\"trace_kind\":\"operation-trace-v2\"",
+                "\"trace_kind\":\"other\"",
+                1,
+            ),
+        ),
+        (
+            "invalid settlement",
+            valid.replacen(
+                "\"settlement\":\"complete_reverse\"",
+                "\"settlement\":\"other\"",
+                1,
+            ),
+        ),
+        (
+            "decoder capacity below grammar bound",
+            valid.replacen(
+                "\"decoder_max_new_tokens\":2",
+                "\"decoder_max_new_tokens\":1",
+                1,
+            ),
+        ),
+        (
+            "prefill length above grammar bound",
+            valid.replacen("\"final_prefill_len\":1", "\"final_prefill_len\":5", 1),
+        ),
+        ("trailing JSON", format!("{valid}null")),
+    ];
+    for (name, document) in invalid_documents {
+        assert!(
+            parse_operation_trace_v2_descriptor(&document).is_err(),
+            "{name}: invalid operation-trace descriptor unexpectedly parsed"
+        );
+    }
+}
+
+#[test]
+fn ten_thousand_seeded_operation_traces_round_trip_and_preserve_routing_and_quiescence() {
     for trace_index in 0..OPERATION_TRACE_V2_COUNT {
         let seed = 0xa24b_aed4_963e_e407_u64.wrapping_mul(trace_index.wrapping_add(1));
-        replay_operation_trace_v2(OperationTraceV2::from_seed(seed));
+        let trace = OperationTraceV2::from_seed(seed);
+        let case_id = format!("generated-{seed:016x}");
+        let serialized = serialize_operation_trace_v2_descriptor(&case_id, trace);
+        let parsed = parse_operation_trace_v2_descriptor(&serialized)
+            .expect("seeded operation-trace descriptor parses");
+        assert_eq!(parsed.case_id, case_id);
+        assert_eq!(parsed.trace, trace);
+        replay_operation_trace_v2(parsed.trace);
     }
 }
