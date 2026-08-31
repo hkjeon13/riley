@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-14는 successful exact V1 host-slab lease를 cold pinned-host staging lease로 좁힌다.
+**상태:** In progress — C07-15는 same-layout pinned/device slab을 two-lifetime binding으로 좁힌다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -199,6 +199,19 @@ stream/command, host-to-device copy, copy completion, CUDA graph capture/replay,
 graph-safe/runnable authority를 만들지 않는다. CPU-only source contract가 allocation/write count와 feature gating을 확인하고 CUDA feature는
 compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를
 유지한다.
+
+### C07-15 — cold exact V1 device-slab geometry binding (CUDA feature; no GPU execution test)
+
+C07-15는 `layout.total_bytes()`와 정확히 같은 길이의 opaque device allocation을 cold prepare에서 한 번 만들고 layout·geometry digest와 함께
+owner에 보관한다. C07-14의 successful pinned lease만 받을 수 있는 binding API는 digest가 아니라 complete layout equality를 먼저 확인한다.
+mismatch는 device/pinned geometry digest를 가진 typed error이며 allocation·copy·native command를 만들지 않는다. matching result는 same cold
+layout의 `&CudaDeviceBuffer`와 `&CudaPinnedHostBuffer`를 independent lifetime으로 함께 보관할 뿐 raw pointer나 byte view를 노출하지 않는다.
+device owner의 mutable borrow와 pinned lease의 retained borrow가 binding이 살아 있는 동안 rebind, owner move, explicit close를 막는다.
+
+이 binding은 device allocation ownership과 geometry equality만 증명한다. H2D submission, stream/command batch, copy completion, device content
+freshness, CUDA graph capture/replay, C06 signature/registry/dispatch, executor integration 또는 graph-safe/runnable authority는 만들지 않는다.
+CPU-only source contract가 exact cold allocation과 no-copy boundary를 검증하고 CUDA feature는 toolkit이 존재하는 host에서만 compile-only로 확인한다.
+actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
