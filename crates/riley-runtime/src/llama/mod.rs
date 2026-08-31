@@ -18,6 +18,8 @@ mod generation;
 mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
+#[allow(dead_code)] // C07-19 deliberately precedes whole-signature/capture ownership.
+mod graph_decode_c06_identity;
 #[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-15 deliberately precedes command-stream transfer ownership.
 mod graph_decode_exact_device_slab;

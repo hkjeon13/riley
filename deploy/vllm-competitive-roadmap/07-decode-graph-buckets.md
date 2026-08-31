@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-18은 exact C07 cold metadata geometry를 C06 metadata-layout identity에 단방향으로 묶는다.
+**상태:** In progress — C07-19는 closed C07 V1 candidate를 C06 partial graph identity에 단방향으로 묶는다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -260,6 +260,22 @@ CUDA stream/capture, graph instantiate/replay, executor mutation을 만들거나
 여기서 identity가 같다는 사실은 capture-safe/runnable graph 또는 performance improvement를 뜻하지 않는다. CPU tests는 every exact C07 bucket의
 schema/digest equality, every cold-geometry change의 distinct C06 identity, deterministic copyability와 source boundary를 검증한다. 그 전까지
 모든 path는 exact eager를 유지한다.
+
+### C07-19 — V1 candidate-to-C06 partial identity (CPU-only)
+
+C07-19는 C07-7의 closed V1 layout-binding result만 받아 Bound candidate에 두 C06 identity component를
+만든다. metadata identity는 C07-18을 통해 bound cold layout의 schema와 geometry digest에서만 유도하고,
+iteration identity는 PureDecode stage, 그 layout의 exact bucket, caller가 관측한 sampling backend로 만든다.
+Ineligible reason은 그대로 보존하며 C06 identity를 만들지 않는다. 동일 bucket의 서로 다른 active-row
+padding은 original C07 binding에 남지만 C06 iteration bucket identity는 공유한다. 같은 bucket이라도 cold
+block-entry capacity, header, control/status geometry가 다르면 metadata identity는 달라진다.
+
+sampling backend는 capture safety 또는 GPU greedy execution의 assertion이 아니다. Unsupported 값도 identity에는
+담을 수 있으며, 이후 C06 dispatcher가 기존 closed policy로 eager fallback 또는 require rejection을 결정한다.
+이 slice는 whole GraphLayoutSignature, GraphStaticSignature, GraphSignature, registry/dispatch/metrics wiring,
+metadata-layout-match boolean, buffer/lease/H2D, CUDA stream/capture/instantiate/replay, executor mutation을
+만들거나 허용하지 않는다. 따라서 partial identity는 graph-ready/runnable graph 또는 performance improvement를
+뜻하지 않으며, 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
