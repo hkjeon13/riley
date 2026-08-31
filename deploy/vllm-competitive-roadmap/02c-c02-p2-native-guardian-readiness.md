@@ -34,6 +34,15 @@ C02-P1은 raw provenance, immutable input closure, source-only C11 matchers와 C
 
 `gate-e-root-bundle-authenticator`는 fixed future guardian bundle을 검사한 뒤 곧바로 닫던 기존 CLI 정책을 보존하면서, 같은 held root/ancestor/manifest/bootstrap/core `CLOEXEC` descriptor와 metadata/digest를 caller-owned handle로 돌려주는 `gate_e_root_bundle_held_v1` ABI를 추가했다. `recheck`와 single-owner `close`도 포함한다. 이어 `gate-e-root-bundle-sealed-leaves`는 이 handle을 빌려 bootstrap/core를 before/between/after recheck와 exact digest/length 검증 뒤 no-exec sealed data pair로 복사한다. 두 source API 모두 checkout-built dynamic binary이며 `execveat`, FD 31/32 placement, interpreter/runtime closure, PID1/cgroup/ledger, launch 또는 GPU/Docker authority를 만들지 않는다.
 
+별도 execution-closure sidecar는 parser만으로는 declaration에 머물렀다. 이제
+gate-e-execution-closure-held-fds는 caller가 이미 보유한 loader/interpreter/runtime
+FD를 canonical role order, linked regular CLOEXEC duplicate, exact length/SHA-256,
+pre/post identity, numeric/device-inode alias denial과 묶어 retained result로 만든다.
+caller는 bind/recheck/close 중 input/output FD-table ownership도 serialize해야 한다.
+이 결과도 sidecar 또는 FD의 root/ACL/filesystem provenance를 인증하지 않고, ELF
+closure, same-object execveat, FD 31/32, launch, PID1/cgroup/ledger, GPU/Docker
+authority를 만들지 않는다.
+
 ## 3. 설계·리뷰 산출물
 
 native implementation 또는 root installation 전에 다음 산출물을 source review와 administrator review에서 각각 독립적으로 확인한다.

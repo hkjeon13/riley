@@ -112,3 +112,15 @@ does not inspect a live argv/environment/FD table/seal/capability set, invoke
 secure-exec primitives, or create a guardian, launcher, release, Gate E,
 freeze, rollback, or qualification authority; its local README defines the
 fixed typed-claim boundary and fixture-only checks.
+
+gate-e-execution-closure-held-fds/ is a twelfth standalone C11 library-only
+precursor. It joins one raw canonical execution-closure declaration to
+role-ordered, already-borrowed loader/interpreter/runtime FDs through private
+CLOEXEC duplicates, linked-regular digest/length checks, full object-identity
+rechecks, and numeric/device-inode alias denial. The caller serializes
+input/output FD-table ownership for each bind/recheck/close call. It neither
+opens nor authenticates a path or sidecar, checks ELF or loader behavior,
+creates an FD handoff, executes, or performs a guardian/lease/GPU/Docker/
+evidence action. It is not a complete runtime closure, secure-exec, launcher,
+release, Gate E, freeze, rollback, or qualification input; its local README
+defines the typed binding boundary and fixture-only checks.

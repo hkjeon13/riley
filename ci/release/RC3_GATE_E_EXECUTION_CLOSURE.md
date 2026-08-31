@@ -24,6 +24,17 @@ It has no CLI, filesystem, descriptor, ELF, loader, execution, or privilege
 operation, and does not make the Python parser, schema, root-bundle
 authenticator, or guardian lease model an execution authority.
 
+The companion C11 library in tools/native/gate-e-execution-closure-held-fds
+now composes that parser with an already-borrowed, role-ordered set of dynamic
+loader, interpreter, and runtime FDs. It privately duplicates each descriptor,
+requires a linked regular CLOEXEC read-only object of the exact declared
+length, hashes it with pre/post full-identity checks, rejects numeric and
+device/inode aliases, and retains only its duplicate plus the copied
+declaration and raw sidecar SHA. The caller serializes input/output FD-table
+ownership for each call. It never opens or authenticates the sidecar path or
+any declared path; its retained result is a point-in-time binding precursor,
+not an authenticated or complete execution closure.
+
 ## Exact bytes and closure identity
 
 The only accepted raw bytes are:
@@ -82,21 +93,26 @@ raw newline-inclusive closure SHA-256. It performs no allocation. On a failed
 parse, a valid initialized output is cleared to prevent stale declaration
 reuse.
 
-This is still parser parity, not object acquisition. In particular it does
-not read a sidecar from a path or FD, verify a sidecar owner/ACL/filesystem
-policy, hash a listed object, discover a dependency, parse ELF, establish an
-interpreter/loader closure, or arrange FD 31/32. A future guardian must bind
-the returned raw digest and independently authenticated held objects to the
-session under a later review.
+The parser itself remains parser parity, not object acquisition. The held-FD
+binder separately verifies only caller-borrowed objects against the parsed
+declaration and retains no raw sidecar bytes. Neither component reads a
+sidecar from a path or FD, verifies sidecar owner/ACL/filesystem policy,
+discovers a dependency, parses ELF, establishes an interpreter/loader closure,
+or arranges FD 31/32. A future guardian must bind the raw digest and
+independently authenticated held objects to the session under a later review.
 
 ## Boundaries that remain unestablished
 
-The manifest does **not** prove any declared path exists; that the file type,
-owner, ACL, filesystem, namespace, device/inode, digest, length, ELF type,
-`PT_INTERP`, `DT_NEEDED`, RPATH/RUNPATH, loader search, Python standard-library
-tree, or runtime dependency list is complete; or that a path is safe to open
-or execute. It has no held-object token because tokens arise only after a
-future native guardian opens and authenticates objects. It cannot establish
+The manifest alone does **not** prove any declared path exists; that the file
+type, owner, ACL, filesystem, namespace, device/inode, digest, length, ELF
+type, `PT_INTERP`, `DT_NEEDED`, RPATH/RUNPATH, loader search, Python
+standard-library tree, or runtime dependency list is complete; or that a path
+is safe to open or execute. The held-FD binder adds only a point-in-time
+linked-regular-FD length/digest/identity match for inputs supplied by its
+caller; zero-link objects fail closed, but multiple links remain allowed. Its
+caller must serialize FD-table ownership during each bind/recheck/close call.
+It does not authenticate provenance, the sidecar, or any later mutation, and
+does not make the multi-object result atomic. It cannot establish
 same-object `execveat`, secure dynamic-loader behavior, interpreter/runtime
 closure, a pre-Python trust root, or a launch authority.
 
