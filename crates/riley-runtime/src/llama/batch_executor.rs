@@ -31,6 +31,7 @@ use super::batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LlamaBatchError, LlamaBatchMetadataConfig, LlamaBatchRow,
     LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
 };
+pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile,
     PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig, execute_gemm,
@@ -822,51 +823,6 @@ impl PreparedLlamaBatchExecutorConfig {
     }
 }
 
-/// Shape facts from the most recent successfully completed iteration.
-#[allow(clippy::struct_field_names)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LlamaBatchShapeObservation {
-    active_rows: usize,
-    selected_dense_rows: usize,
-    padding_rows: usize,
-}
-
-impl LlamaBatchShapeObservation {
-    #[must_use]
-    pub const fn active_rows(self) -> usize {
-        self.active_rows
-    }
-
-    #[must_use]
-    pub const fn selected_dense_rows(self) -> usize {
-        self.selected_dense_rows
-    }
-
-    #[must_use]
-    pub const fn padding_rows(self) -> usize {
-        self.padding_rows
-    }
-}
-
-/// Allocation-free cumulative hit counter for one cold-prepared shape.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct LlamaBatchShapeBucketHit {
-    dense_rows: usize,
-    hit_count: u64,
-}
-
-impl LlamaBatchShapeBucketHit {
-    #[must_use]
-    pub const fn dense_rows(self) -> usize {
-        self.dense_rows
-    }
-
-    #[must_use]
-    pub const fn hit_count(self) -> u64 {
-        self.hit_count
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct LlamaBatchShapeHistory {
     entries: [LlamaBatchShapeBucketHit; MAX_LLAMA_BATCH_SHAPE_BUCKETS],
@@ -878,7 +834,7 @@ impl LlamaBatchShapeHistory {
     fn new(config: PreparedLlamaBatchExecutorConfig) -> LlamaBatchExecutorResult<Self> {
         let mut entries = [LlamaBatchShapeBucketHit::default(); MAX_LLAMA_BATCH_SHAPE_BUCKETS];
         let len = if config.shape_policy == LlamaBatchShapePolicy::FixedMaximum {
-            entries[0].dense_rows = config.metadata.max_input_tokens();
+            entries[0] = LlamaBatchShapeBucketHit::new(config.metadata.max_input_tokens());
             1
         } else {
             validate_shape_buckets(
@@ -887,7 +843,7 @@ impl LlamaBatchShapeHistory {
             )?;
             let buckets = config.shape_buckets.as_slice();
             for (entry, &dense_rows) in entries.iter_mut().zip(buckets) {
-                entry.dense_rows = dense_rows;
+                *entry = LlamaBatchShapeBucketHit::new(dense_rows);
             }
             buckets.len()
         };
@@ -905,7 +861,7 @@ impl LlamaBatchShapeHistory {
     fn bucket_index(&self, dense_rows: usize) -> LlamaBatchExecutorResult<usize> {
         self.entries()
             .iter()
-            .position(|entry| entry.dense_rows == dense_rows)
+            .position(|entry| entry.dense_rows() == dense_rows)
             .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "shape_history",
                 reason: "selected dense-row bucket is not tracked",
@@ -914,14 +870,13 @@ impl LlamaBatchShapeHistory {
 
     fn record_success(&mut self, bucket_index: usize, active_rows: usize, dense_rows: usize) {
         debug_assert!(active_rows <= dense_rows);
-        debug_assert_eq!(self.entries[bucket_index].dense_rows, dense_rows);
-        self.entries[bucket_index].hit_count =
-            self.entries[bucket_index].hit_count.saturating_add(1);
-        self.last_success = Some(LlamaBatchShapeObservation {
+        debug_assert_eq!(self.entries[bucket_index].dense_rows(), dense_rows);
+        self.entries[bucket_index].record_hit();
+        self.last_success = Some(LlamaBatchShapeObservation::new(
             active_rows,
-            selected_dense_rows: dense_rows,
-            padding_rows: dense_rows - active_rows,
-        });
+            dense_rows,
+            dense_rows - active_rows,
+        ));
     }
 
     fn retain_prepared_variants(
@@ -932,10 +887,10 @@ impl LlamaBatchShapeHistory {
         let mut retained = [LlamaBatchShapeBucketHit::default(); MAX_LLAMA_BATCH_SHAPE_BUCKETS];
         let mut retained_len = 0;
         for entry in self.entries() {
-            if entry.dense_rows == maximum_rows
+            if entry.dense_rows() == maximum_rows
                 || variants
                     .iter()
-                    .any(|variant| variant.dense_rows == entry.dense_rows)
+                    .any(|variant| variant.dense_rows == entry.dense_rows())
             {
                 retained[retained_len] = *entry;
                 retained_len += 1;
@@ -4771,21 +4726,14 @@ mod tests {
         record_shape_success(&mut history, config, 128);
         record_shape_success(&mut history, config, 1);
 
-        assert_eq!(
-            history.last_success,
-            Some(LlamaBatchShapeObservation {
-                active_rows: 1,
-                selected_dense_rows: 512,
-                padding_rows: 511,
-            })
-        );
-        assert_eq!(
-            history.entries(),
-            &[LlamaBatchShapeBucketHit {
-                dense_rows: 512,
-                hit_count: 2,
-            }]
-        );
+        let observation = history.last_success.expect("successful shape observation");
+        assert_eq!(observation.active_rows(), 1);
+        assert_eq!(observation.selected_dense_rows(), 512);
+        assert_eq!(observation.padding_rows(), 511);
+        let hits = history.entries();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].dense_rows(), 512);
+        assert_eq!(hits[0].hit_count(), 2);
     }
 
     #[test]
@@ -4801,14 +4749,10 @@ mod tests {
             record_shape_success(&mut history, config, active_rows);
         }
 
-        assert_eq!(
-            history.last_success,
-            Some(LlamaBatchShapeObservation {
-                active_rows: 511,
-                selected_dense_rows: 512,
-                padding_rows: 1,
-            })
-        );
+        let observation = history.last_success.expect("successful shape observation");
+        assert_eq!(observation.active_rows(), 511);
+        assert_eq!(observation.selected_dense_rows(), 512);
+        assert_eq!(observation.padding_rows(), 1);
         let hits = history.entries();
         assert_eq!(hits.len(), 10);
         assert_eq!(hits[0].dense_rows(), 1);

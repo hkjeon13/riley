@@ -1,6 +1,7 @@
 # C04 — Llama Batch Executor 동작 보존 분리
 
-**상태:** Planned  
+**상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
+분리한다. CUDA owner, KV, buffer, dispatch, output, public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -86,6 +87,16 @@ post-dispatch mutation이 불명확한 오류는 executor 전체 또는 명시�
 9. 원래 파일은 제거하거나 얇은 compatibility module로 끝낸다.
 
 각 단계는 컴파일 가능한 commit으로 유지하되 최종 merge는 하나의 behavior-preserving PR이다.
+
+### C04-1 — shape metrics value-type extraction
+
+첫 source slice는 `LlamaBatchShapeObservation`과 `LlamaBatchShapeBucketHit`의 derive, field
+order, getter 및 `riley_runtime::llama::*` public reexport를 보존한 채
+`llama/executor/metrics.rs`로 이동한다. batch owner의 history는 같은 nominal type을 계속 쓰되,
+CUDA buffer/weight/KV/stream/dispatch/close/poison/output code는 이동하거나 변경하지 않는다.
+CPU source boundary test는 이 value-only module이 scheduler/server와 runtime resource owner를
+import하지 않음을 고정한다. 이는 GPU parity나 performance non-regression을 대신하지 않으며,
+그 검증은 C02-qualified candidate가 준비된 뒤 후속 C04 slice에서 수행한다.
 
 ## 6. Allocation 검증
 

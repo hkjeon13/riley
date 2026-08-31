@@ -7,6 +7,8 @@ mod batch_executor;
 mod decode;
 mod error;
 #[cfg(any(feature = "cuda", test))]
+mod executor;
+#[cfg(any(feature = "cuda", test))]
 mod forward;
 #[cfg(any(feature = "cuda", test))]
 mod gemm_policy;
@@ -84,6 +86,20 @@ mod source_contract_tests {
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
     use super::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
     use riley_cuda::{AttentionPreference, AttentionReductionProfile};
+
+    #[test]
+    fn batch_executor_facade_reexports_the_executor_metric_value_types() {
+        let observation: super::batch_executor::LlamaBatchShapeObservation =
+            super::executor::metrics::LlamaBatchShapeObservation::new(3, 4, 1);
+        assert_eq!(observation.active_rows(), 3);
+        assert_eq!(observation.selected_dense_rows(), 4);
+        assert_eq!(observation.padding_rows(), 1);
+
+        let hit: super::batch_executor::LlamaBatchShapeBucketHit =
+            super::executor::metrics::LlamaBatchShapeBucketHit::new(4);
+        assert_eq!(hit.dense_rows(), 4);
+        assert_eq!(hit.hit_count(), 0);
+    }
 
     #[test]
     fn llama_reduction_profile_has_stable_ids_and_cuda_mapping() {
