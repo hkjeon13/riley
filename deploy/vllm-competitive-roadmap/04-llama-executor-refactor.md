@@ -1,8 +1,9 @@
 # C04 — Llama Batch Executor 동작 보존 분리
 
 **상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
-분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동한다. CUDA owner,
-KV, buffer, dispatch, output, public API와 production default는 유지한다.
+분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
+shape policy·bucket·history를 value-only module로 이동한다. CUDA owner, KV, buffer, dispatch,
+output, public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -107,6 +108,16 @@ import하지 않음을 고정한다. 이는 GPU parity나 performance non-regres
 vocabulary는 batch metadata, forward failure, CUDA site, paged-KV error를 기술할 수 있지만
 prepared owner·buffer·weight·KV·stream을 소유하지 않는다. C04-3의 `shape.rs`는 이 facade만
 참조하여 이전 batch-owner module로 역의존하지 않는다.
+
+### C04-3 — shape policy and history extraction
+
+`LlamaBatchShapePolicy`, fixed-capacity bucket validation, prepared-bucket selection과 hit/history
+accounting은 `llama/executor/shape.rs`에 둔다. 기존 `batch_executor` facade가 policy와 maximum
+bucket constant를 같은 nominal type으로 `pub use`하여 public path를 보존한다. shape history는
+prepared owner type을 받지 않고 dense-row predicate만 받아 unsupported smaller plan을 제거하되
+maximum rollback bucket을 항상 유지한다. 따라서 shape module은 error/metrics vocabulary만
+참조하고 CUDA context·buffer·stream, model/forward/GEMM/KV/plan owner, scheduler/server를 알지
+않는다.
 
 ## 6. Allocation 검증
 

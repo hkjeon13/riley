@@ -34,6 +34,11 @@ pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
+use super::executor::shape::{
+    LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
+    select_smallest_prepared_dense_rows, validate_shape_buckets,
+};
+pub use super::executor::shape::{LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS};
 use super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile,
     PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig, execute_gemm,
@@ -55,16 +60,12 @@ const PER_OPERATION_BASE_DEVICE_ALLOCATIONS: u64 = 9;
 const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
 const GREEDY_RESULT_BYTES: usize = 2 * U32_BYTES;
 const PACKED_ITERATION_ALIGNMENT: usize = U32_BYTES;
-const ACTIVE_ROW_BUCKETS: [usize; 9] = [1, 2, 4, 8, 16, 32, 64, 128, 256];
 const RAGGED_PAGED_ATTENTION_LEGACY_D64_V1: &str =
     "riley.cuda.ragged-paged-attention.legacy-d64-v1";
 const RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1: &str =
     "riley.cuda.ragged-paged-attention.grouped-heads-d64-v1";
 const RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1: &str =
     "riley.cuda.ragged-paged-attention.fixed37-two-pass-d64-s8192-v1";
-/// Maximum number of cold-prepared dense-row shapes, including the configured
-/// maximum catch-all shape.
-pub const MAX_LLAMA_BATCH_SHAPE_BUCKETS: usize = ACTIVE_ROW_BUCKETS.len() + 1;
 
 /// Exact implementation selected for the attention residual/post-norm pair.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -129,13 +130,6 @@ const fn batch_metadata_transport_id(transport: BatchMetadataTransport) -> &'sta
     }
 }
 
-const fn batch_shape_policy_id(policy: LlamaBatchShapePolicy) -> &'static str {
-    match policy {
-        LlamaBatchShapePolicy::FixedMaximum => "fixed-max",
-        LlamaBatchShapePolicy::ActiveRowBuckets => "power-of-two",
-    }
-}
-
 const fn residual_norm_implementation_id(
     implementation: ResidualNormImplementation,
 ) -> &'static str {
@@ -186,148 +180,6 @@ impl BatchDispatchDisposition {
     const fn mutation_may_have_occurred(self) -> bool {
         matches!(self, Self::CommandSubmissionStarted)
     }
-}
-
-/// Dense-row shape selection for one continuous-batch execution.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum LlamaBatchShapePolicy {
-    /// Preserve the established rollback graph with `M = max_input_tokens`.
-    #[default]
-    FixedMaximum,
-    /// Select the smallest prepared `1..=256` power-of-two bucket, then the
-    /// configured maximum as the final catch-all shape.
-    ActiveRowBuckets,
-}
-
-impl LlamaBatchShapePolicy {
-    /// Selects an exact dense row count for `active_rows` within `maximum_rows`.
-    ///
-    /// # Errors
-    ///
-    /// Returns when the active row count is zero or exceeds the prepared
-    /// maximum. Selection is host-only and is safe before device dispatch.
-    pub fn select_dense_rows(
-        self,
-        active_rows: usize,
-        maximum_rows: usize,
-    ) -> LlamaBatchExecutorResult<usize> {
-        if active_rows == 0 {
-            return Err(LlamaBatchExecutorError::InvalidBatch {
-                field: "active_rows",
-                reason: "must be greater than zero",
-            });
-        }
-        if active_rows > maximum_rows {
-            return Err(LlamaBatchExecutorError::InvalidBatch {
-                field: "active_rows",
-                reason: "exceeds the prepared dense-row maximum",
-            });
-        }
-        if self == Self::FixedMaximum {
-            return Ok(maximum_rows);
-        }
-        Ok(ACTIVE_ROW_BUCKETS
-            .into_iter()
-            .find(|&rows| rows >= active_rows && rows < maximum_rows)
-            .unwrap_or(maximum_rows))
-    }
-}
-
-/// Fixed-capacity cold representation of active-row execution shapes.
-///
-/// Keeping the values inline makes shape selection and hit accounting
-/// allocation-free on the iteration hot path.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct LlamaBatchShapeBuckets {
-    values: [usize; MAX_LLAMA_BATCH_SHAPE_BUCKETS],
-    len: usize,
-}
-
-impl LlamaBatchShapeBuckets {
-    const fn automatic(maximum_rows: usize) -> Self {
-        let mut values = [0; MAX_LLAMA_BATCH_SHAPE_BUCKETS];
-        let mut source_index = 0;
-        let mut len = 0;
-        while source_index < ACTIVE_ROW_BUCKETS.len() {
-            let rows = ACTIVE_ROW_BUCKETS[source_index];
-            if rows >= maximum_rows {
-                break;
-            }
-            values[len] = rows;
-            len += 1;
-            source_index += 1;
-        }
-        values[len] = maximum_rows;
-        len += 1;
-        Self { values, len }
-    }
-
-    fn custom(buckets: &[usize], maximum_rows: usize) -> LlamaBatchExecutorResult<Self> {
-        validate_shape_buckets(buckets, maximum_rows)?;
-        let mut values = [0; MAX_LLAMA_BATCH_SHAPE_BUCKETS];
-        values[..buckets.len()].copy_from_slice(buckets);
-        Ok(Self {
-            values,
-            len: buckets.len(),
-        })
-    }
-
-    const fn as_slice(&self) -> &[usize] {
-        self.values.split_at(self.len).0
-    }
-
-    fn select(self, active_rows: usize) -> LlamaBatchExecutorResult<usize> {
-        if active_rows == 0 {
-            return Err(LlamaBatchExecutorError::InvalidBatch {
-                field: "active_rows",
-                reason: "must be greater than zero",
-            });
-        }
-        self.as_slice()
-            .iter()
-            .copied()
-            .find(|&rows| rows >= active_rows)
-            .ok_or(LlamaBatchExecutorError::InvalidBatch {
-                field: "active_rows",
-                reason: "exceeds the prepared dense-row maximum",
-            })
-    }
-}
-
-fn validate_shape_buckets(buckets: &[usize], maximum_rows: usize) -> LlamaBatchExecutorResult<()> {
-    if buckets.is_empty() {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "shape_buckets",
-            reason: "must contain at least one bucket",
-        });
-    }
-    if buckets.len() > MAX_LLAMA_BATCH_SHAPE_BUCKETS {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "shape_buckets",
-            reason: "contains too many buckets",
-        });
-    }
-    if buckets[0] != 1 {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "shape_buckets",
-            reason: "the first bucket must be exactly one",
-        });
-    }
-    for pair in buckets.windows(2) {
-        if pair[0] >= pair[1] {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "shape_buckets",
-                reason: "buckets must be strictly increasing",
-            });
-        }
-    }
-    if buckets.last().copied() != Some(maximum_rows) {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "shape_buckets",
-            reason: "the final bucket must equal max_input_tokens",
-        });
-    }
-    Ok(())
 }
 
 /// Cold bounds and shape policy for one reusable continuous-batch owner.
@@ -603,83 +455,14 @@ impl PreparedLlamaBatchExecutorConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct LlamaBatchShapeHistory {
-    entries: [LlamaBatchShapeBucketHit; MAX_LLAMA_BATCH_SHAPE_BUCKETS],
-    len: usize,
-    last_success: Option<LlamaBatchShapeObservation>,
-}
-
-impl LlamaBatchShapeHistory {
-    fn new(config: PreparedLlamaBatchExecutorConfig) -> LlamaBatchExecutorResult<Self> {
-        let mut entries = [LlamaBatchShapeBucketHit::default(); MAX_LLAMA_BATCH_SHAPE_BUCKETS];
-        let len = if config.shape_policy == LlamaBatchShapePolicy::FixedMaximum {
-            entries[0] = LlamaBatchShapeBucketHit::new(config.metadata.max_input_tokens());
-            1
-        } else {
-            validate_shape_buckets(
-                config.shape_buckets.as_slice(),
-                config.metadata.max_input_tokens(),
-            )?;
-            let buckets = config.shape_buckets.as_slice();
-            for (entry, &dense_rows) in entries.iter_mut().zip(buckets) {
-                *entry = LlamaBatchShapeBucketHit::new(dense_rows);
-            }
-            buckets.len()
-        };
-        Ok(Self {
-            entries,
-            len,
-            last_success: None,
-        })
-    }
-
-    const fn entries(&self) -> &[LlamaBatchShapeBucketHit] {
-        self.entries.split_at(self.len).0
-    }
-
-    fn bucket_index(&self, dense_rows: usize) -> LlamaBatchExecutorResult<usize> {
-        self.entries()
-            .iter()
-            .position(|entry| entry.dense_rows() == dense_rows)
-            .ok_or(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "shape_history",
-                reason: "selected dense-row bucket is not tracked",
-            })
-    }
-
-    fn record_success(&mut self, bucket_index: usize, active_rows: usize, dense_rows: usize) {
-        debug_assert!(active_rows <= dense_rows);
-        debug_assert_eq!(self.entries[bucket_index].dense_rows(), dense_rows);
-        self.entries[bucket_index].record_hit();
-        self.last_success = Some(LlamaBatchShapeObservation::new(
-            active_rows,
-            dense_rows,
-            dense_rows - active_rows,
-        ));
-    }
-
-    fn retain_prepared_variants(
-        &mut self,
-        variants: &[PreparedLlamaBatchShape],
-        maximum_rows: usize,
-    ) {
-        let mut retained = [LlamaBatchShapeBucketHit::default(); MAX_LLAMA_BATCH_SHAPE_BUCKETS];
-        let mut retained_len = 0;
-        for entry in self.entries() {
-            if entry.dense_rows() == maximum_rows
-                || variants
-                    .iter()
-                    .any(|variant| variant.dense_rows == entry.dense_rows())
-            {
-                retained[retained_len] = *entry;
-                retained_len += 1;
-            }
-        }
-        debug_assert!(retained_len != 0);
-        self.entries = retained;
-        self.len = retained_len;
-    }
+fn shape_history_for_config(
+    config: PreparedLlamaBatchExecutorConfig,
+) -> LlamaBatchExecutorResult<LlamaBatchShapeHistory> {
+    LlamaBatchShapeHistory::new(
+        config.shape_policy,
+        config.shape_buckets.as_slice(),
+        config.metadata.max_input_tokens(),
+    )
 }
 
 /// Exact owned allocation totals after cold batch preparation.
@@ -1086,7 +869,7 @@ impl PreparedLlamaBatchExecutor {
     ) -> LlamaBatchExecutorResult<Self> {
         let config = normalize_prepared_config(config);
         config.validate_metadata_transport()?;
-        let mut shape_history = LlamaBatchShapeHistory::new(config)?;
+        let mut shape_history = shape_history_for_config(config)?;
         let spec = model.spec();
         let attention = spec
             .blocks()
@@ -1125,7 +908,11 @@ impl PreparedLlamaBatchExecutor {
                 return Err(error);
             }
         };
-        shape_history.retain_prepared_variants(&shape_variants, forward.plan.sequence_length());
+        shape_history.retain_prepared_variants(forward.plan.sequence_length(), |dense_rows| {
+            shape_variants
+                .iter()
+                .any(|shape| shape.dense_rows == dense_rows)
+        });
         let required_gemm_workspace_bytes = shape_variants.iter().fold(
             forward.gemms.maximum_workspace_bytes(),
             |required, shape| required.max(shape.gemms.maximum_workspace_bytes()),
@@ -1412,7 +1199,7 @@ impl PreparedLlamaBatchExecutor {
     /// observation.
     #[must_use]
     pub const fn last_shape_observation(&self) -> Option<LlamaBatchShapeObservation> {
-        self.shape_history.last_success
+        self.shape_history.last_success()
     }
 
     /// Returns cumulative hit counters in ascending cold-prepared bucket order.
@@ -1944,7 +1731,7 @@ fn prepare_shape_variants(
     }
     let maximum_rows = forward.plan.sequence_length();
     validate_shape_buckets(config.shape_buckets.as_slice(), maximum_rows)?;
-    let variant_count = config.shape_buckets.len - 1;
+    let variant_count = config.shape_buckets.as_slice().len() - 1;
     let mut variants: Vec<PreparedLlamaBatchShape> = Vec::new();
     variants.try_reserve_exact(variant_count).map_err(|_| {
         LlamaBatchExecutorError::HostAllocation {
@@ -1987,17 +1774,6 @@ fn is_anchored_gemm_not_supported(error: &LlamaForwardError) -> bool {
             if source.kind() == CudaErrorKind::NotSupported
                 && source.operation() == "prepare anchored CUDA GEMM plan"
     )
-}
-
-fn select_smallest_prepared_dense_rows(
-    active_rows: usize,
-    maximum_rows: usize,
-    prepared_rows: impl Iterator<Item = usize>,
-) -> usize {
-    prepared_rows
-        .filter(|&dense_rows| dense_rows >= active_rows)
-        .min()
-        .unwrap_or(maximum_rows)
 }
 
 fn select_prepared_dense_rows(
@@ -4500,13 +4276,15 @@ mod tests {
             LlamaBatchMetadataConfig::new(8, 512, 8, 8, 8).expect("valid metadata bounds");
         let config =
             PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default());
-        let mut history = LlamaBatchShapeHistory::new(config).expect("valid fixed history");
-        assert_eq!(history.last_success, None);
+        let mut history = shape_history_for_config(config).expect("valid fixed history");
+        assert_eq!(history.last_success(), None);
 
         record_shape_success(&mut history, config, 128);
         record_shape_success(&mut history, config, 1);
 
-        let observation = history.last_success.expect("successful shape observation");
+        let observation = history
+            .last_success()
+            .expect("successful shape observation");
         assert_eq!(observation.active_rows(), 1);
         assert_eq!(observation.selected_dense_rows(), 512);
         assert_eq!(observation.padding_rows(), 511);
@@ -4523,13 +4301,15 @@ mod tests {
         let config =
             PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default())
                 .with_active_row_buckets();
-        let mut history = LlamaBatchShapeHistory::new(config).expect("valid active history");
+        let mut history = shape_history_for_config(config).expect("valid active history");
 
         for active_rows in [128, 1, 8, 256, 1, 511] {
             record_shape_success(&mut history, config, active_rows);
         }
 
-        let observation = history.last_success.expect("successful shape observation");
+        let observation = history
+            .last_success()
+            .expect("successful shape observation");
         assert_eq!(observation.active_rows(), 511);
         assert_eq!(observation.selected_dense_rows(), 512);
         assert_eq!(observation.padding_rows(), 1);

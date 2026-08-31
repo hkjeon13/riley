@@ -128,6 +128,22 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn batch_executor_facade_reexports_the_executor_shape_policy() {
+        let policy: super::batch_executor::LlamaBatchShapePolicy =
+            super::executor::shape::LlamaBatchShapePolicy::ActiveRowBuckets;
+        assert_eq!(
+            policy
+                .select_dense_rows(3, 512)
+                .expect("select active bucket"),
+            4
+        );
+        assert_eq!(
+            super::batch_executor::MAX_LLAMA_BATCH_SHAPE_BUCKETS,
+            super::executor::shape::MAX_LLAMA_BATCH_SHAPE_BUCKETS
+        );
+    }
+
+    #[test]
     fn llama_reduction_profile_has_stable_ids_and_cuda_mapping() {
         let canonical = LlamaReductionProfile::default();
         assert_eq!(canonical, LlamaReductionProfile::CanonicalV1);
