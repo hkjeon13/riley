@@ -10,9 +10,10 @@ use std::error;
 use std::fmt;
 
 use super::batch::LlamaPackedBatchMetadata;
+use super::graph_decode_exact_projection::PureDecodeGraphV1ExactProjectionIneligibility;
 use super::graph_decode_exact_slab_writer::{
-    PureDecodeGraphV1ExactSlabWrite, PureDecodeGraphV1ExactSlabWriteResult,
-    write_pure_decode_graph_v1_exact_metadata_le,
+    PureDecodeGraphV1ExactSlabWrite, PureDecodeGraphV1ExactSlabWriteError,
+    PureDecodeGraphV1ExactSlabWriteResult, write_pure_decode_graph_v1_exact_metadata_le,
 };
 use super::graph_decode_layout::{
     PureDecodeGraphMetadataGeometryDigest, PureDecodeGraphMetadataLayout,
@@ -105,6 +106,56 @@ impl error::Error for PureDecodeGraphV1ExactHostSlabPrepareError {}
 /// Result of cold preparation for one exact V1 C07 host slab.
 pub(crate) type PureDecodeGraphV1ExactHostSlabPrepareResult<T> =
     Result<T, PureDecodeGraphV1ExactHostSlabPrepareError>;
+
+/// Read-only proof of one just-written exact V1 host-slab payload.
+///
+/// The lease carries the payload with the same cold layout and geometry digest
+/// that own it. Its borrow prevents another write, owner move, or owner drop
+/// until the lease ends. It proves only a successful host write; it does not
+/// establish opaque-byte semantics, pinned storage, transfer completion,
+/// device contents, graph readiness, or execution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+pub(crate) struct PureDecodeGraphV1ExactHostSlabLease<'slab> {
+    layout: &'slab PureDecodeGraphMetadataLayout,
+    geometry_digest: &'slab PureDecodeGraphMetadataGeometryDigest,
+    bytes: &'slab [u8],
+}
+
+impl<'slab> PureDecodeGraphV1ExactHostSlabLease<'slab> {
+    /// Returns the exact cold layout that owns these borrowed bytes.
+    #[must_use]
+    pub(crate) const fn layout(self) -> PureDecodeGraphMetadataLayout {
+        *self.layout
+    }
+
+    /// Returns the geometry identity stored with the originating cold owner.
+    #[must_use]
+    pub(crate) const fn geometry_digest(self) -> PureDecodeGraphMetadataGeometryDigest {
+        *self.geometry_digest
+    }
+
+    /// Returns the exact aligned payload written by the originating owner.
+    #[must_use]
+    pub(crate) const fn bytes(self) -> &'slab [u8] {
+        self.bytes
+    }
+}
+
+/// Closed result of an exact V1 write that may yield a read-only host lease.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[must_use]
+#[allow(clippy::large_enum_variant)] // The closed no-allocation write result retains its lease.
+pub(crate) enum PureDecodeGraphV1ExactHostSlabWrite<'slab> {
+    /// C07-11 wrote the exact payload and it is now borrowed read-only.
+    Written(PureDecodeGraphV1ExactHostSlabLease<'slab>),
+    /// C07-11 rejected the V1 batch before changing this host payload.
+    Ineligible(PureDecodeGraphV1ExactProjectionIneligibility),
+}
+
+/// Result of an exact V1 write that may yield a read-only host lease.
+pub(crate) type PureDecodeGraphV1ExactHostSlabWriteResult<'slab> =
+    Result<PureDecodeGraphV1ExactHostSlabWrite<'slab>, PureDecodeGraphV1ExactSlabWriteError>;
 
 /// One cold-owned, fixed-address host payload for an exact V1 C07 layout.
 ///
@@ -224,11 +275,44 @@ impl PureDecodeGraphV1ExactHostSlab {
             &mut self.backing[self.payload_offset..self.payload_offset + self.payload_len],
         )
     }
+
+    /// Writes exact V1 metadata and borrows the successful payload read-only.
+    ///
+    /// This calls the existing C07-12 write boundary exactly once. A successful
+    /// write becomes a lease of this same owner's layout, digest, and exact
+    /// payload. Every C07-11 ineligible or error result keeps its original
+    /// identity and precedence without creating a lease.
+    pub(crate) fn write_exact_v1_leased<'slab>(
+        &'slab mut self,
+        metadata: &LlamaPackedBatchMetadata<'_>,
+        header: &[u8],
+        control_status: &[u8],
+    ) -> PureDecodeGraphV1ExactHostSlabWriteResult<'slab> {
+        match self.write_exact_v1(metadata, header, control_status)? {
+            PureDecodeGraphV1ExactSlabWrite::Written => Ok(
+                PureDecodeGraphV1ExactHostSlabWrite::Written(self.successful_write_lease()),
+            ),
+            PureDecodeGraphV1ExactSlabWrite::Ineligible(reason) => {
+                Ok(PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason))
+            }
+        }
+    }
+
+    fn successful_write_lease(&self) -> PureDecodeGraphV1ExactHostSlabLease<'_> {
+        PureDecodeGraphV1ExactHostSlabLease {
+            layout: &self.layout,
+            geometry_digest: &self.geometry_digest,
+            bytes: self.bytes(),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{PureDecodeGraphV1ExactHostSlab, PureDecodeGraphV1ExactHostSlabPrepareError};
+    use super::{
+        PureDecodeGraphV1ExactHostSlab, PureDecodeGraphV1ExactHostSlabLease,
+        PureDecodeGraphV1ExactHostSlabPrepareError, PureDecodeGraphV1ExactHostSlabWrite,
+    };
     use crate::llama::batch::{
         LlamaBatchBlockTable, LlamaBatchMetadataConfig, LlamaBatchRow, LlamaBatchRowKind,
         LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
@@ -527,6 +611,146 @@ mod tests {
     }
 
     #[test]
+    fn leased_write_binds_the_just_written_payload_to_its_layout_and_digest() {
+        let config = LlamaBatchMetadataConfig::new(2, 2, 2, 2, 4)
+            .expect("exact fixture must fit metadata bounds");
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(config)
+            .expect("exact fixture must prepare metadata");
+        let metadata = pack_two_exact_decodes(&mut prepared);
+        let layout = exact_layout();
+        let mut slab = PureDecodeGraphV1ExactHostSlab::prepare(layout)
+            .expect("exact fixture host slab must prepare");
+        let payload_address = slab.bytes().as_ptr() as usize;
+        let lease = match slab
+            .write_exact_v1_leased(
+                &metadata,
+                &[0xa0, 0xa1, 0xa2],
+                &[0xc0, 0xc1, 0xc2, 0xc3, 0xc4],
+            )
+            .expect("exact fixture leased write must succeed")
+        {
+            PureDecodeGraphV1ExactHostSlabWrite::Written(lease) => lease,
+            PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason) => {
+                panic!("exact fixture unexpectedly ineligible: {reason:?}");
+            }
+        };
+
+        assert_eq!(lease.layout(), layout);
+        assert_eq!(lease.geometry_digest(), layout.geometry_digest());
+        assert_eq!(lease.bytes().as_ptr() as usize, payload_address);
+        assert_eq!(
+            field_bytes(lease.bytes(), layout, PureDecodeGraphMetadataField::Header),
+            &[0xa0, 0xa1, 0xa2]
+        );
+        assert_eq!(
+            field_bytes(
+                lease.bytes(),
+                layout,
+                PureDecodeGraphMetadataField::ControlStatus,
+            ),
+            &[0xc0, 0xc1, 0xc2, 0xc3, 0xc4]
+        );
+        let moved_lease = move_lease(lease);
+        assert_eq!(moved_lease.bytes().as_ptr() as usize, payload_address);
+    }
+
+    #[test]
+    fn ending_a_lease_allows_a_later_exact_write_at_the_same_payload_address() {
+        let config = LlamaBatchMetadataConfig::new(2, 2, 2, 2, 4)
+            .expect("exact fixture must fit metadata bounds");
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(config)
+            .expect("exact fixture must prepare metadata");
+        let metadata = pack_two_exact_decodes(&mut prepared);
+        let mut slab = PureDecodeGraphV1ExactHostSlab::prepare(exact_layout())
+            .expect("exact fixture host slab must prepare");
+        let first_address = {
+            let lease = match slab
+                .write_exact_v1_leased(&metadata, &[1, 2, 3], &[4, 5, 6, 7, 8])
+                .expect("first leased write must succeed")
+            {
+                PureDecodeGraphV1ExactHostSlabWrite::Written(lease) => lease,
+                PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason) => {
+                    panic!("exact fixture unexpectedly ineligible: {reason:?}");
+                }
+            };
+            lease.bytes().as_ptr() as usize
+        };
+        let second_lease = match slab
+            .write_exact_v1_leased(&metadata, &[8, 7, 6], &[5, 4, 3, 2, 1])
+            .expect("second leased write must succeed")
+        {
+            PureDecodeGraphV1ExactHostSlabWrite::Written(lease) => lease,
+            PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason) => {
+                panic!("exact fixture unexpectedly ineligible: {reason:?}");
+            }
+        };
+
+        assert_eq!(second_lease.bytes().as_ptr() as usize, first_address);
+        assert_eq!(
+            field_bytes(
+                second_lease.bytes(),
+                exact_layout(),
+                PureDecodeGraphMetadataField::Header,
+            ),
+            &[8, 7, 6]
+        );
+    }
+
+    #[test]
+    fn leased_write_preserves_ineligible_and_opaque_error_identity_without_mutation() {
+        let prefill_config = LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1)
+            .expect("prefill fixture must fit metadata bounds");
+        let mut prefill_prepared = PreparedLlamaBatchMetadata::prepare(prefill_config)
+            .expect("prefill fixture must prepare metadata");
+        let prefill = pack_one_prefill(&mut prefill_prepared);
+        let mut prefill_slab = PureDecodeGraphV1ExactHostSlab::prepare(exact_layout())
+            .expect("exact fixture host slab must prepare");
+        let prefill_address = prefill_slab.bytes().as_ptr() as usize;
+        let prefill_before = prefill_slab.bytes().to_vec();
+
+        assert_eq!(
+            prefill_slab.write_exact_v1_leased(&prefill, &[0; 2], &[0; 4]),
+            Ok(PureDecodeGraphV1ExactHostSlabWrite::Ineligible(
+                PureDecodeGraphV1ExactProjectionIneligibility::Preflight(
+                    PureDecodeGraphV1Ineligibility::PrefillWorkPresent {
+                        prefill_rows: 1,
+                        prefill_tokens: 1,
+                    }
+                )
+            ))
+        );
+        assert_eq!(prefill_slab.bytes().as_ptr() as usize, prefill_address);
+        assert_eq!(prefill_slab.bytes(), prefill_before);
+
+        let exact_config = LlamaBatchMetadataConfig::new(2, 2, 2, 2, 4)
+            .expect("exact fixture must fit metadata bounds");
+        let mut exact_prepared = PreparedLlamaBatchMetadata::prepare(exact_config)
+            .expect("exact fixture must prepare metadata");
+        let exact = pack_two_exact_decodes(&mut exact_prepared);
+        let mut exact_slab = PureDecodeGraphV1ExactHostSlab::prepare(exact_layout())
+            .expect("exact fixture host slab must prepare");
+        assert_eq!(
+            exact_slab.write_exact_v1(&exact, &[1, 2, 3], &[4, 5, 6, 7, 8]),
+            Ok(PureDecodeGraphV1ExactSlabWrite::Written)
+        );
+        let exact_address = exact_slab.bytes().as_ptr() as usize;
+        let exact_before = exact_slab.bytes().to_vec();
+
+        assert_eq!(
+            exact_slab.write_exact_v1_leased(&exact, &[0; 2], &[0; 4]),
+            Err(PureDecodeGraphV1ExactSlabWriteError::OpaqueSource(
+                PureDecodeGraphV1ExactOpaqueSourceError::FieldLengthMismatch {
+                    field: PureDecodeGraphV1ExactOpaqueField::Header,
+                    expected: 3,
+                    actual: 2,
+                }
+            ))
+        );
+        assert_eq!(exact_slab.bytes().as_ptr() as usize, exact_address);
+        assert_eq!(exact_slab.bytes(), exact_before);
+    }
+
+    #[test]
     fn prepare_error_is_a_closed_error_type() {
         let error =
             PureDecodeGraphV1ExactHostSlabPrepareError::HostAllocation { requested_bytes: 9 };
@@ -538,5 +762,11 @@ mod tests {
 
     fn move_owner(owner: PureDecodeGraphV1ExactHostSlab) -> PureDecodeGraphV1ExactHostSlab {
         owner
+    }
+
+    fn move_lease(
+        lease: PureDecodeGraphV1ExactHostSlabLease<'_>,
+    ) -> PureDecodeGraphV1ExactHostSlabLease<'_> {
+        lease
     }
 }

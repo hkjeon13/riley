@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-12는 exact V1 metadata를 cold-owned, aligned fixed host slab에 CPU-only로 재사용 기록한다.
+**상태:** In progress — C07-13은 successful exact V1 host-slab payload를 same-owner read-only lease로 묶는다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -172,6 +172,18 @@ identity와 failure precedence를 그대로 보존하고 hot path에서 allocati
 signature/registry/dispatch, padding-tail materialization, opaque-byte semantics, CUDA capture/replay, executor integration은 만들지 않는다.
 따라서 aligned stable host address는 준비하지만 graph-safe metadata 또는 runnable graph authority는 아직 부여하지 않으며, 그 전까지
 모든 path는 exact eager를 유지한다.
+
+### C07-13 — successful exact V1 host-slab lease (CPU-only)
+
+C07-13은 C07-12의 successful exact write만 same-owner read-only lease로 바꾼다. lease는 방금 기록한 exact payload slice와 그 owner의
+cold layout·geometry digest를 한 value로 보관하므로, future caller가 bytes를 다른 cold geometry와 섞지 않는다. lease가 살아 있는 동안
+`&mut` owner borrow가 유지되어 Rust가 re-write, owner move, drop을 막고, lease가 끝난 뒤에만 같은 stable payload를 다시 기록할 수 있다.
+leased write는 C07-12에 정확히 한 번 위임한다. 따라서 Written만 lease가 되고, Ineligible 및 모든 typed error의 identity·precedence와
+no-mutation behavior는 그대로 보존되며 hot path allocation도 없다.
+
+lease는 successful host write의 freshness/ownership fact일 뿐 opaque-byte semantics, pinned host storage, H2D completion, device contents,
+C06 signature/registry/dispatch, CUDA capture/replay 또는 graph-safe/runnable authority를 만들지 않는다. 현재 V1 row/block tail·kernel mask
+semantics가 닫히기 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 

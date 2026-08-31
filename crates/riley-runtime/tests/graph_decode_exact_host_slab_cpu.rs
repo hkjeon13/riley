@@ -34,7 +34,9 @@ const FORBIDDEN_PRODUCTION_TOKENS: &[&str] = &[
 
 const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "PureDecodeGraphV1ExactHostSlab",
+    "PureDecodeGraphV1ExactHostSlabLease",
     "PureDecodeGraphV1ExactHostSlabPrepareError",
+    "PureDecodeGraphV1ExactHostSlabWrite",
     "PureDecodeGraphMetadataLayout",
     "PureDecodeGraphMetadataGeometryDigest",
     "LlamaPackedBatchMetadata",
@@ -47,6 +49,7 @@ const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "geometry_digest",
     "bytes(&self) -> &[u8]",
     "write_exact_v1",
+    "write_exact_v1_leased",
     "write_pure_decode_graph_v1_exact_metadata_le",
 ];
 
@@ -103,6 +106,18 @@ fn graph_decode_exact_host_slab_stays_cold_owned_and_cpu_only() {
             "C07 exact host slab exact-write path must not allocate through {allocation_token:?}"
         );
     }
+    let (_, leased_write_tail) = production_source
+        .split_once("pub(crate) fn write_exact_v1_leased")
+        .expect("C07 exact host slab must expose its leased exact write method");
+    assert_eq!(
+        leased_write_tail.matches("self.write_exact_v1(").count(),
+        1,
+        "C07 exact host slab leased write must delegate exactly once to C07-12"
+    );
+    assert!(
+        !leased_write_tail.contains("write_pure_decode_graph_v1_exact_metadata_le"),
+        "C07 exact host slab leased write must not bypass C07-12"
+    );
     assert!(LLAMA_MODULE_SOURCE.contains("mod graph_decode_exact_host_slab;"));
     assert!(!LLAMA_MODULE_SOURCE.contains("pub use graph_decode_exact_host_slab"));
 }
