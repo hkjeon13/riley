@@ -8,7 +8,8 @@ C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source 
 shape-variant의 cold inventory preparation을, C04-9는 greedy output record의 host validation과
 canonical token map을, C04-10은 typed error poison routing과 command-submission disposition을
 분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로, C04-12는
-gathered logits의 checked BF16 span byte length를 output helper로 분리했다. CUDA owner, KV,
+gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 packed batch의
+host preflight validation을 metadata helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -224,6 +225,18 @@ overflow error mapping을 계산한다. batch owner는 기존의 row-gather/argm
 output lifecycle은 바꾸지 않는다.
 
 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-13 — packed batch host-preflight extraction
+
+`llama/executor/metadata.rs`는 packed schema, cold metadata capacity, token vocabulary와 row
+position을 pure host preflight로 검증한다. owner는 model maximum position과 profile-derived
+position cap만 scalar로 주입하며, validation 순서와 typed error category를 그대로 유지한다.
+Fixed37의 `8192` logical-token cap도 metadata validation 안에서 model position bound보다 먼저
+평가한다.
+
+metadata packing/allocation/H2D transport, prepared CUDA owner, shape selection, dispatch, poison,
+output lifecycle와 public API는 batch owner가 계속 소유한다. 이 source-only slice는 GPU parity나
+performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

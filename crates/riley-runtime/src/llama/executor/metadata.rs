@@ -3,7 +3,9 @@
 //! This module calculates host-side byte regions and cold capacity without
 //! owning device buffers or deciding how a prepared batch is dispatched.
 
-use super::super::batch::{LlamaBatchMetadataConfig, LlamaPackedBatchMetadata};
+use super::super::batch::{
+    LLAMA_BATCH_METADATA_V1_VERSION, LlamaBatchMetadataConfig, LlamaPackedBatchMetadata,
+};
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
 
 const U16_BYTES: usize = 2;
@@ -161,6 +163,72 @@ impl PackedIterationLayout {
         }
         Ok(())
     }
+}
+
+/// Validates one packed batch against executor-independent host bounds.
+///
+/// The owner supplies its immutable model and profile-position-limit scalars so
+/// this helper remains independent of prepared CUDA resources and dispatch.
+#[allow(clippy::large_types_passed_by_value)]
+pub(in crate::llama) fn validate_for_execution(
+    packed: LlamaPackedBatchMetadata<'_>,
+    vocabulary_size: usize,
+    maximum_position_count: u64,
+    bounds: LlamaBatchMetadataConfig,
+    profile_position_limit: Option<u64>,
+) -> LlamaBatchExecutorResult<()> {
+    if packed.schema_version() != LLAMA_BATCH_METADATA_V1_VERSION {
+        return Err(LlamaBatchExecutorError::InvalidBatch {
+            field: "schema_version",
+            reason: "packed metadata version differs from the executor contract",
+        });
+    }
+    if packed.total_input_tokens() > bounds.max_input_tokens()
+        || packed.row_count() > bounds.max_rows()
+        || packed.physical_block_ids().len() > bounds.max_block_entries()
+        || packed.output_count() > bounds.max_output_slots()
+    {
+        return Err(LlamaBatchExecutorError::InvalidBatch {
+            field: "capacity",
+            reason: "packed metadata exceeds the executor's cold bounds",
+        });
+    }
+    for (position, &token_id) in packed.input_token_ids().iter().enumerate() {
+        if usize::try_from(token_id)
+            .ok()
+            .is_none_or(|token| token >= vocabulary_size)
+        {
+            return Err(LlamaBatchExecutorError::TokenOutOfRange {
+                position,
+                token_id,
+                vocabulary_size,
+            });
+        }
+    }
+    for (&row, &position) in packed
+        .row_sequence_slots()
+        .iter()
+        .zip(packed.position_ids())
+    {
+        match profile_position_limit {
+            Some(profile_maximum) if u64::from(position) >= profile_maximum => {
+                return Err(LlamaBatchExecutorError::PositionOutOfRange {
+                    row: usize::try_from(row).unwrap_or(usize::MAX),
+                    position,
+                    maximum: usize::try_from(profile_maximum).unwrap_or(usize::MAX),
+                });
+            }
+            _ => {}
+        }
+        if u64::from(position) >= maximum_position_count {
+            return Err(LlamaBatchExecutorError::PositionOutOfRange {
+                row: usize::try_from(row).unwrap_or(usize::MAX),
+                position,
+                maximum: usize::try_from(maximum_position_count).unwrap_or(usize::MAX),
+            });
+        }
+    }
+    Ok(())
 }
 
 fn align_up(

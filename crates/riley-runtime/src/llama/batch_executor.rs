@@ -25,8 +25,7 @@ use riley_cuda::{
 use riley_model::LoadedModel;
 
 use super::batch::{
-    LLAMA_BATCH_METADATA_V1_VERSION, LlamaBatchMetadataConfig, LlamaBatchRow,
-    LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
+    LlamaBatchMetadataConfig, LlamaBatchRow, LlamaPackedBatchMetadata, PreparedLlamaBatchMetadata,
 };
 use super::executor::buffers::{
     BatchDeviceInput, BatchHostInput, U16_BYTES, U32_BYTES, allocate_packed_device_input,
@@ -39,7 +38,7 @@ pub use super::executor::error::{
 };
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::metadata::{
-    PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
+    PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, output_logits_bytes};
@@ -1131,7 +1130,10 @@ impl PreparedLlamaBatchExecutor {
                 absolute_rope_cos,
                 forward.plan.dimensions().head_dimension(),
             )?,
-            *config,
+            config.metadata(),
+            (config.ragged_attention_reduction_profile()
+                == AttentionReductionProfile::FixedContiguous37BalancedV1)
+                .then_some(FIXED37_RAGGED_MAX_LOGICAL_TOKENS),
         )?;
 
         let mut dispatch_disposition = BatchDispatchDisposition::PreDispatch;
@@ -2497,67 +2499,6 @@ fn execute_fixed_graph<S: CudaExecutionStream + ?Sized>(
 }
 // HOT_BATCH_EXECUTE_END
 
-#[allow(clippy::large_types_passed_by_value)]
-fn validate_for_execution(
-    packed: LlamaPackedBatchMetadata<'_>,
-    vocabulary_size: usize,
-    maximum_position_count: u64,
-    config: PreparedLlamaBatchExecutorConfig,
-) -> LlamaBatchExecutorResult<()> {
-    if packed.schema_version() != LLAMA_BATCH_METADATA_V1_VERSION {
-        return Err(LlamaBatchExecutorError::InvalidBatch {
-            field: "schema_version",
-            reason: "packed metadata version differs from the executor contract",
-        });
-    }
-    if packed.total_input_tokens() > config.metadata.max_input_tokens()
-        || packed.row_count() > config.metadata.max_rows()
-        || packed.physical_block_ids().len() > config.metadata.max_block_entries()
-        || packed.output_count() > config.metadata.max_output_slots()
-    {
-        return Err(LlamaBatchExecutorError::InvalidBatch {
-            field: "capacity",
-            reason: "packed metadata exceeds the executor's cold bounds",
-        });
-    }
-    for (position, &token_id) in packed.input_token_ids().iter().enumerate() {
-        if usize::try_from(token_id)
-            .ok()
-            .is_none_or(|token| token >= vocabulary_size)
-        {
-            return Err(LlamaBatchExecutorError::TokenOutOfRange {
-                position,
-                token_id,
-                vocabulary_size,
-            });
-        }
-    }
-    for (&row, &position) in packed
-        .row_sequence_slots()
-        .iter()
-        .zip(packed.position_ids())
-    {
-        if config.ragged_attention_reduction_profile
-            == AttentionReductionProfile::FixedContiguous37BalancedV1
-            && u64::from(position) >= FIXED37_RAGGED_MAX_LOGICAL_TOKENS
-        {
-            return Err(LlamaBatchExecutorError::PositionOutOfRange {
-                row: usize::try_from(row).unwrap_or(usize::MAX),
-                position,
-                maximum: usize::try_from(FIXED37_RAGGED_MAX_LOGICAL_TOKENS).unwrap_or(usize::MAX),
-            });
-        }
-        if u64::from(position) >= maximum_position_count {
-            return Err(LlamaBatchExecutorError::PositionOutOfRange {
-                row: usize::try_from(row).unwrap_or(usize::MAX),
-                position,
-                maximum: usize::try_from(maximum_position_count).unwrap_or(usize::MAX),
-            });
-        }
-    }
-    Ok(())
-}
-
 fn allocate_device_input(
     context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
@@ -3682,9 +3623,27 @@ mod tests {
         let fixed37 =
             PreparedLlamaBatchExecutorConfig::new(metadata, PreparedLlamaForwardConfig::default())
                 .with_fixed37_ragged_attention();
-
+        let fixed37_position_limit = (fixed37.ragged_attention_reduction_profile()
+            == AttentionReductionProfile::FixedContiguous37BalancedV1)
+            .then_some(FIXED37_RAGGED_MAX_LOGICAL_TOKENS);
         assert!(matches!(
-            validate_for_execution(packed, 2, 16_384, fixed37),
+            validate_for_execution(
+                packed,
+                2,
+                16_384,
+                fixed37.metadata(),
+                fixed37_position_limit,
+            ),
+            Err(LlamaBatchExecutorError::PositionOutOfRange {
+                position: 8_192,
+                maximum: 8_192,
+                ..
+            })
+        ));
+
+        let packed = prepared.pack(&rows).expect("repack for bound precedence");
+        assert!(matches!(
+            validate_for_execution(packed, 2, 4_096, fixed37.metadata(), fixed37_position_limit,),
             Err(LlamaBatchExecutorError::PositionOutOfRange {
                 position: 8_192,
                 maximum: 8_192,
@@ -3693,7 +3652,17 @@ mod tests {
         ));
 
         let packed = prepared.pack(&rows).expect("repack after preflight error");
-        validate_for_execution(packed, 2, 16_384, fixed37.with_canonical_ragged_attention())
-            .expect("canonical ragged attention retains its existing model bound");
+        let canonical = fixed37.with_canonical_ragged_attention();
+        let canonical_position_limit = (canonical.ragged_attention_reduction_profile()
+            == AttentionReductionProfile::FixedContiguous37BalancedV1)
+            .then_some(FIXED37_RAGGED_MAX_LOGICAL_TOKENS);
+        validate_for_execution(
+            packed,
+            2,
+            16_384,
+            canonical.metadata(),
+            canonical_position_limit,
+        )
+        .expect("canonical ragged attention retains its existing model bound");
     }
 }

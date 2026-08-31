@@ -353,10 +353,23 @@ fn executor_poison_only_routes_borrowed_failure_state() {
 
 #[test]
 fn executor_metadata_is_a_checked_layout_and_host_packing_boundary() {
+    for required in [
+        "validate_for_execution",
+        "LLAMA_BATCH_METADATA_V1_VERSION",
+        "TokenOutOfRange",
+        "PositionOutOfRange",
+    ] {
+        assert!(
+            EXECUTOR_METADATA.contains(required),
+            "executor metadata omitted required host-preflight token {required:?}"
+        );
+    }
     for forbidden in [
         "riley_scheduler",
         "riley_server",
         "super::buffers",
+        "AttentionReductionProfile",
+        "FIXED37_RAGGED_MAX_LOGICAL_TOKENS",
         "CudaContext",
         "CudaError",
         "CudaDType",
