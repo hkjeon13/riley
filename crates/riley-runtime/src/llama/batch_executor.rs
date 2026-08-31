@@ -42,7 +42,7 @@ use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
-use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens};
+use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, output_logits_bytes};
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
@@ -2862,17 +2862,6 @@ fn model_max_position(
             resource: LlamaBatchExecutorResource::RopeCos,
         })?;
     Ok(rope_cos.byte_len() / row_bytes)
-}
-
-fn output_logits_bytes(outputs: usize, vocabulary: usize) -> LlamaBatchExecutorResult<u64> {
-    checked_product_u64(
-        &[
-            usize_u64(outputs, LlamaBatchExecutorResource::GatheredLogits)?,
-            usize_u64(vocabulary, LlamaBatchExecutorResource::GatheredLogits)?,
-            BF16_BYTES,
-        ],
-        LlamaBatchExecutorResource::GatheredLogits,
-    )
 }
 
 fn allocate_device(

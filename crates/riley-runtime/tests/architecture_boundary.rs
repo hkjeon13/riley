@@ -241,6 +241,9 @@ fn executor_output_only_decodes_canonical_host_results() {
         "GreedyLogitsNonFinite",
         "InvalidGreedyResult",
         "chunks_exact",
+        "output_logits_bytes",
+        "LlamaBatchExecutorResource::GatheredLogits",
+        "ArithmeticOverflow",
     ] {
         assert!(
             EXECUTOR_OUTPUT.contains(required),

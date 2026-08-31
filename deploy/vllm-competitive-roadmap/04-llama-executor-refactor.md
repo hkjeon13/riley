@@ -7,8 +7,9 @@ C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source 
 각각 분리했고, C04-7은 borrowed CUDA metadata view binding을, C04-8은 anchored GEMM
 shape-variant의 cold inventory preparation을, C04-9는 greedy output record의 host validation과
 canonical token map을, C04-10은 typed error poison routing과 command-submission disposition을
-분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로 분리했다. CUDA
-owner, KV, buffer orchestration, pinned-memory
+분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로, C04-12는
+gathered logits의 checked BF16 span byte length를 output helper로 분리했다. CUDA owner, KV,
+buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
@@ -214,6 +215,15 @@ empty/over-capacity error category와 public `select_dense_rows` contract는 그
 prepared variant의 CUDA plan/GEMM handle, mutable dispatch lookup, shape-history update와 output/KV/
 buffer lifecycle은 batch owner가 계속 소유한다. 이 source-only slice는 GPU parity나 performance
 non-regression을 주장하지 않는다.
+
+### C04-12 — gathered logits byte-length extraction
+
+`llama/executor/output.rs`는 dense `[O,V]` BF16 gathered-logits span의 checked `u64` byte length와
+overflow error mapping을 계산한다. batch owner는 기존의 row-gather/argmax CUDA primitive binding에
+그 scalar byte length만 사용하므로 output buffer allocation, download API, public `usize` query와
+output lifecycle은 바꾸지 않는다.
+
+이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

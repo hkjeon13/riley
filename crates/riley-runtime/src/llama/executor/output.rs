@@ -8,12 +8,38 @@ use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
 };
 
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResult};
+use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
 
+const BF16_BYTES: u64 = 2;
 const U32_BYTES: usize = std::mem::size_of::<u32>();
 
 /// Native `{token_id,status}` result bytes produced per greedy output row.
 pub(in crate::llama) const GREEDY_RESULT_BYTES: usize = 2 * U32_BYTES;
+
+/// Exact BF16 byte length for one dense `[output_count, vocabulary_size]` map.
+///
+/// The batch owner uses this checked scalar result when binding an existing
+/// gathered-logits buffer to CUDA output primitives.
+pub(in crate::llama) fn output_logits_bytes(
+    output_count: usize,
+    vocabulary_size: usize,
+) -> LlamaBatchExecutorResult<u64> {
+    let output_count =
+        u64::try_from(output_count).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GatheredLogits,
+        })?;
+    let vocabulary_size = u64::try_from(vocabulary_size).map_err(|_| {
+        LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GatheredLogits,
+        }
+    })?;
+    output_count
+        .checked_mul(vocabulary_size)
+        .and_then(|elements| elements.checked_mul(BF16_BYTES))
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GatheredLogits,
+        })
+}
 
 /// Validates fixed-width greedy records before filling dense output slots.
 ///
@@ -130,5 +156,16 @@ mod tests {
             LlamaBatchExecutorError::GreedyLogitsNonFinite { output_index: 0 }
         ));
         assert_eq!(destination, [41]);
+    }
+
+    #[test]
+    fn output_logits_bytes_is_exact_and_fails_closed_on_overflow() {
+        assert_eq!(output_logits_bytes(3, 5).expect("representable logits"), 30);
+        assert!(matches!(
+            output_logits_bytes(usize::MAX, usize::MAX),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::GatheredLogits,
+            })
+        ));
     }
 }
