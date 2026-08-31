@@ -103,11 +103,13 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 - PR마다 최소 10,000 generated traces
 - nightly 또는 scheduled run에서 1,000,000 traces
-- failure 시 source seed, full descriptor, grammar candidate-minimized trace 출력
+- failure 시 source seed와 full descriptor를 출력한다. candidate-minimized trace는 reducer가 명시적으로
+  구현된 grammar slice에만 추가한다.
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
-V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
+V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace, 10,000
+bounded raw `bounded-mixed-program-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
 `DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
 output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. bounded mixed-stage
 trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
@@ -203,12 +205,40 @@ general/global minimum, GPU evidence, C02 qualification 또는 C03-B acceptance�
 전체 workspace test가 다른 이유로 실패해 receipt가 없으면 CI checker는 이를 별도 failure로 오인하지
 않고, receipt가 있는 경우에만 엄격 검사·failure-only upload한다.
 
+`bounded-mixed-program-v1`은 V1/V2와 별도 canonical descriptor다. 최대 네 logical label(각 label은
+한 번만 submit)과 최대 세 live request에서 prompt 1, `max_new_tokens=1..=2`를 고정하고, raw
+`submit`, settled-boundary `cancel`, `plan_commit(feedback_slot_order)`, final `close`만 허용한다.
+최대 12 operations, 네 plan commit, 한 settled cancel이며, 최소 두 commit과 하나 이상의
+decode+prefill mixed plan을 강제한다. label domain은 `1..=4`이므로 다섯 번째 logical request는
+grammar 밖이다. fixed active/budget=3, prefill-chunk=1 configuration이 매 plan에서 모든 live request를
+선택하게 하며 queue, timeout, aging override, partial prefill은 범위 밖으로 고정한다. descriptor의
+feedback slot order는 해당 plan의 dense slot 전체 순열이다.
+
+seeded sampler는 exhaustive enumerator가 아니다. `seed & 3`으로 singleton-first, two-prefill-first,
+three-prefill-first prefix를 고정 분기한 뒤, 두 번째 plan에서 필요한 decode+prefill mixed shape를
+만든다. 따라서 10,000 seed set은 첫 plan의 width 1/2/3을 모두 재생하지만, bounded grammar 안의 모든
+raw operation vector를 열거한다는 뜻은 아니다.
+
+이 slice의 pure `BoundedMixedProgramOracle`은 `Scheduler`나 `IterationPlan`을 import하지 않는다.
+logical label의 submission order·history·terminal ledger만으로 decode/prefill projection과 semantic
+slot/token feedback을 만들고, public adapter는 request ID, work kind, input, dense slot, total token을
+별도로 assert한 뒤 iteration ID만 전달한다. 따라서 feedback mapping을 production plan에서 다시
+추론하지 않는다. settled cancel은 즉시 `Cancelled` completion 하나를 받아야 하며, plan commit과 close는
+token/index mapping, length/cancel terminal-once, final zero gauge를 oracle ledger와 비교한다. corpus는
+3-slot reverse mixed feedback, first-plan two/three-prefill 뒤 mixed replay, unplanned prefill cancel 뒤
+replacement submit, generated-history decoder cancel, two live decoder close를 canonical JSON으로 보존한다. failure
+report에는 source canonical descriptor와 operation list만 남긴다; V1 receipt/checker나 general reducer를
+재사용하지 않는다.
+
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
-multi-edit/delta-debugging reduction도 별도 범위다. V1/V2 shrinker는 각각 작은 grammar의 deterministic
-greedy local minimum일 뿐 일반 trace shrinker나 globally minimal counterexample을 주장하지 않는다.
-마지막 항목은 현 public scheduler API에 injection seam이 없으므로 별도 test-only seam 계약으로 설계한다.
+multi-edit/delta-debugging reduction도 별도 범위다. `bounded-mixed-program-v1`도 Plan/Complete
+분리, in-flight deferred cancel, abort/retry, stale/missing/unplanned feedback, `DeviceQuiescedMutationUnknown`,
+queue/aging/timeout, partial prefill 또는 injection seam을 구현·주장하지 않는다. V1/V2 shrinker는 각각
+작은 grammar의 deterministic greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
+counterexample을 주장하지 않는다. 마지막 항목은 현 public scheduler API에 injection seam이 없으므로
+별도 test-only seam 계약으로 설계한다.
 
 ### Deterministic corpus
 
@@ -269,6 +299,12 @@ directory가 제공된 경우 source/minimized descriptor·각 replay config·KV
 create-new diagnostic receipt에도 쓴다. receipt checker는 구조적 binding만 확인하고 failure predicate,
 panic site/payload/signature/root cause 또는 global minimum을 재검증하지 않는다.
 
+`bounded-mixed-program-v1`은 이 PR에서 reducer를 추가하지 않는다. source descriptor는 이미 raw
+operation vector 전체를 replay input으로 보존하지만, operation 삭제·request/iteration 길이 축소·slot
+permutation 단순화·cancel timing 단순화를 함께 보장하는 general minimizer는 후속 별도 contract다.
+따라서 현재 failure report는 source만 출력하며 local/global minimum, failure signature 또는 root cause
+preservation을 주장하지 않는다.
+
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
@@ -288,6 +324,9 @@ operation list를 함께 포함한다. general grammar의 durable format은 V2 c
 crates/riley-scheduler/tests/general_mixed_operation_routing.rs
 crates/riley-scheduler/tests/support/general_mixed_operation_trace.rs
 crates/riley-scheduler/tests/support/routing_fuzz_receipt.rs
+crates/riley-scheduler/tests/bounded_mixed_program_routing.rs
+crates/riley-scheduler/tests/support/bounded_mixed_program_trace.rs
+crates/riley-scheduler/tests/corpus/output-routing/bounded-mixed-program-v1/*.json
 benchmarks/scripts/check_routing_fuzz_receipt.py
 benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 .github/workflows/production-cpu.yml
@@ -295,10 +334,10 @@ benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 reducer/receipt slice는 기존 test-only `serde_json` dev-dependency만 사용하며 production
-dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지 않는다. 이후 arbitrary
-general grammar, durable cross-version replay contract, failure corpus 자동 등록, delta debugging, fault
-injection seam은 별도 PR 범위다.
+현재 V1 reducer/receipt와 bounded raw-program slice는 기존 test-only `serde_json` dev-dependency만
+사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
+않는다. 이후 arbitrary general grammar, durable cross-version replay contract, failure corpus 자동 등록,
+delta debugging, fault injection seam은 별도 PR 범위다.
 
 ## 9. Observability assertion
 
@@ -331,6 +370,8 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 - GPU manual/scheduled: 고정 corpus
 - V1 failure: source/minimized descriptor, operation list, 각각의 scheduler config, fixed KV/timeline,
   source Git SHA를 diagnostic-only receipt로 create-new 기록
+- bounded raw-program failure: source canonical descriptor와 operation list를 test panic diagnostic으로
+  남기며, V1 전용 receipt/checker를 재사용하지 않음
 - CI: unit-test step의 failure 때 receipt가 존재하면 strict checker를 실행하고 run/attempt-scoped
   temp directory를 14일 artifact로 upload; receipt가 없는 unrelated test failure는 그대로 보존
 
@@ -343,6 +384,8 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 - shrink된 counterexample serialization/replay test 통과
 - V1 selector-local receipt/checker의 exact canonical descriptor/config/KV/timeline/SHA binding 및
   create-new/no-overwrite/hostile-input rejection test 통과; 구조적 checker pass는 diagnostic-only다.
+- bounded raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
+  10,000 seeded replay, settled cancel/terminal-once/final quiescence test 통과
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact
@@ -356,6 +399,7 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 C03-A의 formal CPU completion은 scheduler event 순서와 output slot permutation을 deterministic
 seeded CPU trace로 생성해 reference model과 production state가 일치하고, mixed-operation
 generator·shrink·counterexample corpus/replay·failure seed와 최소 trace까지 갖출 때다. 현재
-valid/fault microtrace slice는 이를 향한 partial coverage이며 아직 C03-A 완료 선언 근거가 아니다.
+valid/fault microtrace, two-wave, bounded raw-program slice는 이를 향한 partial coverage이며 아직
+C03-A 완료 선언 근거가 아니다.
 C03의 formal completion은 C03-B가 C02 actual qualification 뒤 GPU corpus에서도 exact mapping을
 확인할 때만 선언한다.
