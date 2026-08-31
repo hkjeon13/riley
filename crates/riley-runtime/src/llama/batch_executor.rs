@@ -42,7 +42,9 @@ use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
-use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, output_logits_bytes};
+use super::executor::output::{
+    GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes, output_logits_bytes,
+};
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
@@ -1242,11 +1244,7 @@ impl PreparedLlamaBatchExecutor {
                 reason: "prospective output count exceeds the cold-prepared bound",
             });
         }
-        output_count.checked_mul(GREEDY_RESULT_BYTES).ok_or(
-            LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::GreedyResults,
-            },
-        )
+        greedy_result_bytes(output_count)
     }
 
     /// Downloads only gathered sampled rows `[O,V]`, in dense output-slot order.
@@ -1746,12 +1744,7 @@ fn execute_packed(
                         CudaDType::U32,
                         0,
                         usize_u64(
-                            packed
-                                .output_count()
-                                .checked_mul(GREEDY_RESULT_BYTES)
-                                .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                                    resource: LlamaBatchExecutorResource::GreedyResults,
-                                })?,
+                            greedy_result_bytes(packed.output_count())?,
                             LlamaBatchExecutorResource::GreedyResults,
                         )?,
                     )

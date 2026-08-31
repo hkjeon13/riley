@@ -1,4 +1,4 @@
-//! Pure host-side decoding for fixed-width Llama greedy output records.
+//! Pure host-side decoding and checked sizing for Llama output records.
 //!
 //! The batch owner retains all device downloads, workspace storage, output
 //! readiness, and poison decisions. This component validates the complete
@@ -15,6 +15,20 @@ const U32_BYTES: usize = std::mem::size_of::<u32>();
 
 /// Native `{token_id,status}` result bytes produced per greedy output row.
 pub(in crate::llama) const GREEDY_RESULT_BYTES: usize = 2 * U32_BYTES;
+
+/// Exact byte length for `output_count` fixed-width greedy result records.
+///
+/// The batch owner retains cold-buffer capacity checks, allocation, device
+/// binding, download, output lifecycle, and poison decisions.
+pub(in crate::llama) fn greedy_result_bytes(
+    output_count: usize,
+) -> LlamaBatchExecutorResult<usize> {
+    output_count.checked_mul(GREEDY_RESULT_BYTES).ok_or(
+        LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GreedyResults,
+        },
+    )
+}
 
 /// Exact BF16 byte length for one dense `[output_count, vocabulary_size]` map.
 ///
@@ -165,6 +179,17 @@ mod tests {
             output_logits_bytes(usize::MAX, usize::MAX),
             Err(LlamaBatchExecutorError::ArithmeticOverflow {
                 resource: LlamaBatchExecutorResource::GatheredLogits,
+            })
+        ));
+    }
+
+    #[test]
+    fn greedy_result_bytes_is_exact_and_fails_closed_on_overflow() {
+        assert_eq!(greedy_result_bytes(3).expect("representable results"), 24);
+        assert!(matches!(
+            greedy_result_bytes(usize::MAX),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::GreedyResults,
             })
         ));
     }

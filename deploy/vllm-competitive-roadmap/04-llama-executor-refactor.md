@@ -10,7 +10,8 @@ canonical token map을, C04-10은 typed error poison routing과 command-submissi
 분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로, C04-12는
 gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 packed batch의
 host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
-facade로, C04-15는 typed CUDA error construction을 error facade로 분리했다. CUDA owner, KV,
+facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은 greedy output
+record의 checked byte length를 output helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -258,6 +259,15 @@ name으로 import하여 모든 `map_err` call site와 poison/dispatch ordering�
 
 CUDA primitive invocation, buffer/stream/KV ownership과 poison decision은 각 existing owner에
 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-16 — greedy output record byte-length extraction
+
+`llama/executor/output.rs`는 fixed-width `{token_id,status}` greedy record의 checked byte
+length와 `GreedyResults` overflow error mapping을 소유한다. batch owner는 cold prepared bound
+검사, device buffer allocation, argmax output span binding, host download, output-ready lifecycle과
+invalid native result의 poison 판단을 그대로 보유한다.
+
+이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

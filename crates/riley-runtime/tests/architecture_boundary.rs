@@ -243,7 +243,7 @@ fn executor_gemm_plan_only_prepares_anchored_shape_variants() {
 }
 
 #[test]
-fn executor_output_only_decodes_canonical_host_results() {
+fn executor_output_only_decodes_and_sizes_canonical_host_results() {
     for required in [
         "decode_greedy_tokens",
         "GREEDY_RESULT_BYTES",
@@ -254,6 +254,8 @@ fn executor_output_only_decodes_canonical_host_results() {
         "chunks_exact",
         "output_logits_bytes",
         "LlamaBatchExecutorResource::GatheredLogits",
+        "greedy_result_bytes",
+        "LlamaBatchExecutorResource::GreedyResults",
         "ArithmeticOverflow",
     ] {
         assert!(
