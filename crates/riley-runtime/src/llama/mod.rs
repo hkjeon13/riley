@@ -565,6 +565,17 @@ mod source_contract_tests {
             .find("// HOT_BATCH_EXECUTE_END")
             .expect("batch hot execute end marker");
         let hot = &source[begin..end];
+        let pack_input = hot
+            .find("pack_iteration_input(")
+            .expect("packed host bytes are assembled before their pinned write");
+        let pinned_write = hot
+            .find("host.pinned")
+            .expect("packed host bytes are written to pinned storage explicitly");
+        let packed_copy = hot
+            .find("copy_from_pinned_in_command_batch(")
+            .expect("packed input uses one command-batch H2D");
+        assert!(pack_input < pinned_write);
+        assert!(pinned_write < packed_copy);
 
         let execution_match = hot
             .find("match (config.execution_completion, config.metadata_transport)")

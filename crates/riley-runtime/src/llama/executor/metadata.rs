@@ -191,3 +191,144 @@ fn push_region(
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })?;
     Ok(ByteRegion { offset, byte_len })
 }
+
+/// Writes the seven packed-batch source arrays into one preallocated slab.
+///
+/// The caller retains ownership of the slab and decides whether its bytes are
+/// copied synchronously or through a pinned host transfer.
+pub(crate) fn pack_iteration_input(
+    packed: &LlamaPackedBatchMetadata<'_>,
+    dense_rows: usize,
+    layout: PackedIterationLayout,
+    destination: &mut [u8],
+) -> LlamaBatchExecutorResult<()> {
+    layout.validate_capacity(destination.len())?;
+    if packed.total_input_tokens() > dense_rows {
+        return Err(LlamaBatchExecutorError::InvalidBatch {
+            field: "dense_rows",
+            reason: "active input rows exceed the selected packed token region",
+        });
+    }
+    destination[..layout.total_bytes].fill(0);
+    let active_token_bytes = checked_byte_len(
+        packed.total_input_tokens(),
+        U32_BYTES,
+        LlamaBatchExecutorResource::PackedIterationInput,
+    )?;
+    encode_u32_region(
+        packed.input_token_ids(),
+        destination,
+        ByteRegion {
+            offset: layout.token_ids.offset,
+            byte_len: active_token_bytes,
+        },
+        LlamaBatchExecutorResource::PackedIterationInput,
+    )?;
+    encode_u32_region(
+        packed.block_row_offsets(),
+        destination,
+        layout.sequence_block_offsets,
+        LlamaBatchExecutorResource::SequenceBlockOffsets,
+    )?;
+    encode_u32_region(
+        packed.physical_block_ids(),
+        destination,
+        layout.physical_block_ids,
+        LlamaBatchExecutorResource::PhysicalBlockIds,
+    )?;
+    encode_u16_region(
+        packed.valid_tokens(),
+        destination,
+        layout.valid_tokens,
+        LlamaBatchExecutorResource::ValidTokens,
+    )?;
+    encode_u32_region(
+        packed.row_sequence_slots(),
+        destination,
+        layout.row_sequence_slots,
+        LlamaBatchExecutorResource::RowSequenceSlots,
+    )?;
+    encode_u32_region(
+        packed.position_ids(),
+        destination,
+        layout.row_positions,
+        LlamaBatchExecutorResource::RowPositions,
+    )?;
+    encode_u32_region(
+        packed.output_token_indices(),
+        destination,
+        layout.output_token_indices,
+        LlamaBatchExecutorResource::OutputTokenIndices,
+    )?;
+    Ok(())
+}
+
+/// Encodes native-endian `u32` values into an already-sized byte prefix.
+pub(crate) fn encode_u32(source: &[u32], destination: &mut [u8]) {
+    for (value, bytes) in source.iter().zip(destination.chunks_exact_mut(U32_BYTES)) {
+        bytes.copy_from_slice(&value.to_ne_bytes());
+    }
+}
+
+fn encode_u32_region(
+    source: &[u32],
+    destination: &mut [u8],
+    region: ByteRegion,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<()> {
+    let expected = checked_byte_len(source.len(), U32_BYTES, resource)?;
+    if region.byte_len != expected {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "packed_iteration_layout",
+            reason: "U32 region length does not match its host source",
+        });
+    }
+    let bytes = region_slice_mut(destination, region, resource)?;
+    encode_u32(source, bytes);
+    Ok(())
+}
+
+fn encode_u16_region(
+    source: &[u16],
+    destination: &mut [u8],
+    region: ByteRegion,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<()> {
+    let expected = checked_byte_len(source.len(), U16_BYTES, resource)?;
+    if region.byte_len != expected {
+        return Err(LlamaBatchExecutorError::InvalidConfiguration {
+            field: "packed_iteration_layout",
+            reason: "U16 region length does not match its host source",
+        });
+    }
+    let bytes = region_slice_mut(destination, region, resource)?;
+    encode_u16(source, bytes);
+    Ok(())
+}
+
+/// Encodes native-endian `u16` values into an already-sized byte prefix.
+pub(crate) fn encode_u16(source: &[u16], destination: &mut [u8]) {
+    for (value, bytes) in source.iter().zip(destination.chunks_exact_mut(U16_BYTES)) {
+        bytes.copy_from_slice(&value.to_ne_bytes());
+    }
+}
+
+fn region_slice_mut(
+    bytes: &mut [u8],
+    region: ByteRegion,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<&mut [u8]> {
+    bytes
+        .get_mut(region.offset..region.end()?)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}
+
+fn checked_byte_len(
+    elements: usize,
+    element_bytes: usize,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<usize> {
+    elements
+        .checked_mul(element_bytes)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}

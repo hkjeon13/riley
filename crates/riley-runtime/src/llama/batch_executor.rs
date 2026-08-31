@@ -37,7 +37,9 @@ use super::executor::buffers::{
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
-use super::executor::metadata::{ByteRegion, PackedIterationLayout};
+use super::executor::metadata::{
+    ByteRegion, PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
+};
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
@@ -2144,119 +2146,6 @@ fn packed_device_views<'a>(
     })
 }
 
-fn pack_iteration_input(
-    packed: &LlamaPackedBatchMetadata<'_>,
-    dense_rows: usize,
-    layout: PackedIterationLayout,
-    destination: &mut [u8],
-) -> LlamaBatchExecutorResult<()> {
-    layout.validate_capacity(destination.len())?;
-    if packed.total_input_tokens() > dense_rows {
-        return Err(LlamaBatchExecutorError::InvalidBatch {
-            field: "dense_rows",
-            reason: "active input rows exceed the selected packed token region",
-        });
-    }
-    destination[..layout.total_bytes].fill(0);
-    let active_token_bytes = checked_host_byte_len(
-        packed.total_input_tokens(),
-        U32_BYTES,
-        LlamaBatchExecutorResource::PackedIterationInput,
-    )?;
-    encode_u32_region(
-        packed.input_token_ids(),
-        destination,
-        ByteRegion {
-            offset: layout.token_ids.offset,
-            byte_len: active_token_bytes,
-        },
-        LlamaBatchExecutorResource::PackedIterationInput,
-    )?;
-    encode_u32_region(
-        packed.block_row_offsets(),
-        destination,
-        layout.sequence_block_offsets,
-        LlamaBatchExecutorResource::SequenceBlockOffsets,
-    )?;
-    encode_u32_region(
-        packed.physical_block_ids(),
-        destination,
-        layout.physical_block_ids,
-        LlamaBatchExecutorResource::PhysicalBlockIds,
-    )?;
-    encode_u16_region(
-        packed.valid_tokens(),
-        destination,
-        layout.valid_tokens,
-        LlamaBatchExecutorResource::ValidTokens,
-    )?;
-    encode_u32_region(
-        packed.row_sequence_slots(),
-        destination,
-        layout.row_sequence_slots,
-        LlamaBatchExecutorResource::RowSequenceSlots,
-    )?;
-    encode_u32_region(
-        packed.position_ids(),
-        destination,
-        layout.row_positions,
-        LlamaBatchExecutorResource::RowPositions,
-    )?;
-    encode_u32_region(
-        packed.output_token_indices(),
-        destination,
-        layout.output_token_indices,
-        LlamaBatchExecutorResource::OutputTokenIndices,
-    )?;
-    Ok(())
-}
-
-fn encode_u32_region(
-    source: &[u32],
-    destination: &mut [u8],
-    region: ByteRegion,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<()> {
-    let expected = checked_host_byte_len(source.len(), U32_BYTES, resource)?;
-    if region.byte_len != expected {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "packed_iteration_layout",
-            reason: "U32 region length does not match its host source",
-        });
-    }
-    let bytes = region_slice_mut(destination, region, resource)?;
-    encode_u32(source, bytes);
-    Ok(())
-}
-
-fn encode_u16_region(
-    source: &[u16],
-    destination: &mut [u8],
-    region: ByteRegion,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<()> {
-    let expected = checked_host_byte_len(source.len(), U16_BYTES, resource)?;
-    if region.byte_len != expected {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "packed_iteration_layout",
-            reason: "U16 region length does not match its host source",
-        });
-    }
-    let bytes = region_slice_mut(destination, region, resource)?;
-    encode_u16(source, bytes);
-    Ok(())
-}
-
-fn region_slice_mut(
-    bytes: &mut [u8],
-    region: ByteRegion,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<&mut [u8]> {
-    bytes
-        .get_mut(region.offset..region.end()?)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
-}
-
 #[allow(
     clippy::too_many_arguments,
     clippy::too_many_lines,
@@ -3320,18 +3209,6 @@ fn device_span_region(
     .map_err(|source| batch_cuda(site, source))
 }
 
-fn encode_u32(source: &[u32], destination: &mut [u8]) {
-    for (value, bytes) in source.iter().zip(destination.chunks_exact_mut(U32_BYTES)) {
-        bytes.copy_from_slice(&value.to_ne_bytes());
-    }
-}
-
-fn encode_u16(source: &[u16], destination: &mut [u8]) {
-    for (value, bytes) in source.iter().zip(destination.chunks_exact_mut(U16_BYTES)) {
-        bytes.copy_from_slice(&value.to_ne_bytes());
-    }
-}
-
 fn batch_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
     LlamaBatchExecutorError::Cuda { site, source }
 }
@@ -3729,6 +3606,50 @@ mod tests {
                 .all(|&byte| byte == 0)
         );
         assert!(bytes[layout.total_bytes..].iter().all(|&byte| byte == 0xA5));
+    }
+
+    #[test]
+    fn packed_iteration_input_preflight_preserves_destination_bytes() {
+        let tokens = [7_u32];
+        let physical_block_ids = [0_u32];
+        let valid_tokens = [1_u16];
+        let rows = [LlamaBatchRow::new(
+            41,
+            LlamaBatchRowKind::Prefill,
+            &tokens,
+            1,
+            LlamaBatchBlockTable::new(
+                BLOCK_TABLE_V1_VERSION,
+                &physical_block_ids,
+                &valid_tokens,
+                1,
+            ),
+            None,
+        )];
+        let bounds = LlamaBatchMetadataConfig::new(1, 1, 1, 0, 1).expect("valid metadata bounds");
+        let mut prepared = PreparedLlamaBatchMetadata::prepare(bounds).expect("prepare metadata");
+        let packed = prepared.pack(&rows).expect("pack one row");
+        let layout = PackedIterationLayout::for_batch(&packed, 1).expect("dynamic layout");
+        let mut bytes = [0xA5_u8; 64];
+
+        assert!(matches!(
+            pack_iteration_input(&packed, 1, layout, &mut bytes[..layout.total_bytes - 1],),
+            Err(LlamaBatchExecutorError::InvalidBatch {
+                field: "packed_iteration_input",
+                reason: "dynamic packed input exceeds the cold-prepared slab",
+            })
+        ));
+        assert!(bytes.iter().all(|&byte| byte == 0xA5));
+
+        let too_small = PackedIterationLayout::for_batch(&packed, 0).expect("representable layout");
+        assert!(matches!(
+            pack_iteration_input(&packed, 0, too_small, &mut bytes[..too_small.total_bytes],),
+            Err(LlamaBatchExecutorError::InvalidBatch {
+                field: "dense_rows",
+                reason: "active input rows exceed the selected packed token region",
+            })
+        ));
+        assert!(bytes.iter().all(|&byte| byte == 0xA5));
     }
 
     #[test]

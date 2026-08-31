@@ -114,12 +114,14 @@ fn executor_buffers_do_not_own_model_or_execution_policy() {
 }
 
 #[test]
-fn executor_metadata_is_a_checked_layout_only_boundary() {
+fn executor_metadata_is_a_checked_layout_and_host_packing_boundary() {
     for forbidden in [
         "riley_scheduler",
         "riley_server",
         "super::buffers",
         "CudaContext",
+        "CudaError",
+        "CudaDType",
         "CudaDeviceBuffer",
         "CudaPinnedHostBuffer",
         "CudaStream",
@@ -135,6 +137,13 @@ fn executor_metadata_is_a_checked_layout_only_boundary() {
         "GemmPlans",
         "BatchMetadataTransport",
         "ExecutionCompletionImplementation",
+        "BatchDeviceInput",
+        "BatchHostInput",
+        "PerOperationDeviceMetadata",
+        "IterationBatchHostWorkspace",
+        "PackedBatchV1",
+        "upload_from_slice",
+        "copy_from_pinned_in_command_batch",
         "Vec",
         "Box",
         "String",
@@ -142,7 +151,7 @@ fn executor_metadata_is_a_checked_layout_only_boundary() {
     ] {
         assert!(
             !EXECUTOR_METADATA.contains(forbidden),
-            "executor metadata crossed its checked-layout boundary with {forbidden:?}"
+            "executor metadata crossed its checked-layout/host-packing boundary with {forbidden:?}"
         );
     }
 }

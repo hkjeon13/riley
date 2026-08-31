@@ -3,9 +3,9 @@
 **상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
 분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
 shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을,
-C04-5는 packed metadata의 checked layout descriptor를 각각 분리했다. CUDA owner, KV,
-buffer orchestration, actual metadata packing/transport, dispatch, output, public API와 production
-default는 유지한다.
+C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source host slab packer를
+각각 분리했다. CUDA owner, KV, buffer orchestration, pinned-memory write/metadata transport,
+dispatch, output, public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -139,6 +139,16 @@ write, H2D copy, device view binding, command-batch lifecycle이나 `BatchMetada
 소유하지 않는다. batch owner는 기존 pack/transport/dispatch 순서와 public nominal type을 그대로
 유지한다. 따라서 이번 source-only slice는 packed layout의 alignment·capacity semantics를
 변경하지 않으며 GPU parity와 performance non-regression을 주장하지 않는다.
+
+### C04-6 — pure packed-metadata host-packing extraction
+
+seven source array를 preallocated byte slab에 native-endian으로 encode하는
+`pack_iteration_input`과 region/bounds helper는 `llama/executor/metadata.rs`에 둔다. capacity와
+active-row preflight는 zero-fill 이전에 실행하고, 기존 seven-source 순서와 zero-padding을
+그대로 유지한다. synchronous path가 공유하는 U16/U32 byte encoder도 같은 pure helper를 쓴다.
+이 module은 allocation, pinned-memory write, H2D copy, device span/view, stream,
+`BatchMetadataTransport` policy와 command-batch lifecycle을 소유하지 않는다. 따라서 이 역시
+GPU parity나 performance non-regression을 주장하지 않는 source-only slice다.
 
 ## 6. Allocation 검증
 
