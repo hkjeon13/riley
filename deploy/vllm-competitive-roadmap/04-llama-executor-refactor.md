@@ -16,7 +16,8 @@ rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper�
 RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iteration command-batch
 completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte allocator를 host helper로
 C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 sequence-block-offset
-count를 metadata helper로 분리했다. CUDA owner, KV,
+count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
+CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -349,6 +350,15 @@ metadata allocation, packed-layout capacity가 같은 scalar helper를 사용한
 
 각 caller의 allocation/report/layout 순서와 byte sizing, CUDA resource ownership은 변경하지 않는다.
 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-24 — typed `usize`-to-`u64` conversion extraction
+
+`llama/executor/error.rs`는 CUDA ABI가 받는 native scalar의 checked `usize`-to-`u64` conversion과
+resource-preserving `ArithmeticOverflow` mapping을 보유한다. batch owner, raw metadata buffer,
+borrowed metadata views, output dispatch가 기존 call-site 순서와 resource를 유지해 이를 공유한다.
+
+CUDA span/primitive invocation, allocation, dispatch/poison ordering과 owner lifecycle은 각 caller에
+그대로 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

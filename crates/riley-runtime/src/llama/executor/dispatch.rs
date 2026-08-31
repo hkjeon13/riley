@@ -15,7 +15,7 @@ use super::super::forward::span;
 use super::super::{ExecutionSite, LlamaOp};
 use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
-    cuda_error as dispatch_cuda,
+    cuda_error as dispatch_cuda, usize_u64,
 };
 use super::output::{greedy_result_bytes, output_logits_bytes};
 
@@ -171,10 +171,6 @@ pub(in crate::llama) fn dispatch_output_primitives<S: CudaExecutionStream + ?Siz
             .map_err(|source| dispatch_cuda(site, source))?;
     }
     Ok(())
-}
-
-fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
-    u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
 
 #[cfg(test)]

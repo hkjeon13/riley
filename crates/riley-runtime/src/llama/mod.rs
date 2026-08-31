@@ -591,6 +591,26 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn executor_usize_u64_conversions_share_one_typed_error_facade() {
+        for (boundary, source, expected_calls) in [
+            ("batch owner", include_str!("batch_executor.rs"), 17),
+            ("batch buffers", include_str!("executor/buffers.rs"), 3),
+            ("device views", include_str!("executor/device_views.rs"), 3),
+            ("output dispatch", include_str!("executor/dispatch.rs"), 5),
+        ] {
+            assert!(
+                !source.contains("fn usize_u64("),
+                "{boundary} must not retain a local typed usize-to-u64 conversion"
+            );
+            assert_eq!(
+                source.matches("usize_u64(").count(),
+                expected_calls,
+                "{boundary} must use the shared typed usize-to-u64 conversion at every existing boundary"
+            );
+        }
+    }
+
+    #[test]
     fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
         let forward = include_str!("forward.rs");
         let variant_begin = forward

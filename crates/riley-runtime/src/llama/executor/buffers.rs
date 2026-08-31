@@ -10,7 +10,7 @@ use super::super::batch::LlamaBatchMetadataConfig;
 use super::super::error::{ExecutionSite, LlamaOp};
 use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
-    checked_byte_len, cuda_error as allocation_cuda, record_close,
+    checked_byte_len, cuda_error as allocation_cuda, record_close, usize_u64,
 };
 use super::host::allocate_zeroed_host_bytes;
 use super::metadata::sequence_block_offset_count;
@@ -177,10 +177,6 @@ pub(crate) fn close_host_input(input: BatchHostInput) -> Option<LlamaBatchExecut
         );
     }
     first
-}
-
-fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
-    u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
 
 fn allocate_per_operation_device_metadata(

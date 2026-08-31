@@ -46,6 +46,8 @@ fn executor_error_vocabulary_does_not_own_runtime_resources_or_scheduling_policy
         "checked_byte_len",
         "checked_mul(element_bytes)",
         "LlamaBatchExecutorError::ArithmeticOverflow",
+        "usize_u64",
+        "u64::try_from(value)",
         "record_close",
         "LlamaBatchExecutorError::Cleanup",
     ] {

@@ -235,6 +235,15 @@ pub(crate) fn checked_byte_len(
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
 
+/// Converts one executor-native scalar to the CUDA ABI without losing its resource category.
+#[inline]
+pub(crate) fn usize_u64(
+    value: usize,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<u64> {
+    u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}
+
 /// Records the first CUDA cleanup failure while later closes still run.
 pub(crate) fn record_close(
     first: &mut Option<LlamaBatchExecutorError>,
@@ -271,7 +280,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn checked_byte_len_is_exact_and_retains_its_overflow_resource() {
+    fn checked_scalar_helpers_are_exact_and_retain_their_resource_mapping() {
         assert_eq!(
             checked_byte_len(3, 4, LlamaBatchExecutorResource::GreedyResults)
                 .expect("representable byte length"),
@@ -283,5 +292,10 @@ mod tests {
                 resource: LlamaBatchExecutorResource::RopeCos,
             })
         ));
+        assert_eq!(
+            usize_u64(17, LlamaBatchExecutorResource::GatheredLogits)
+                .expect("representable CUDA ABI scalar"),
+            17
+        );
     }
 }

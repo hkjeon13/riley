@@ -39,7 +39,7 @@ use super::executor::dispatch::{
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
-use super::executor::error::{checked_byte_len, cuda_error as batch_cuda, record_close};
+use super::executor::error::{checked_byte_len, cuda_error as batch_cuda, record_close, usize_u64};
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::host::allocate_zeroed_host_bytes;
 use super::executor::metadata::{
@@ -2662,10 +2662,6 @@ fn upload_prefix(
     destination
         .upload_from_slice(0, &source[..byte_len], staging, stream)
         .map_err(|source| batch_cuda(site, source))
-}
-
-fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
-    u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
 
 fn checked_product_u64(

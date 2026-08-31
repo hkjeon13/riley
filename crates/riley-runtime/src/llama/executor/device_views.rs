@@ -10,7 +10,7 @@ use super::super::error::ExecutionSite;
 use super::buffers::{PerOperationDeviceMetadata, U16_BYTES, U32_BYTES};
 use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
-    cuda_error as batch_cuda,
+    cuda_error as batch_cuda, usize_u64,
 };
 use super::metadata::{ByteRegion, PackedIterationLayout};
 
@@ -163,8 +163,4 @@ fn device_span_region(
         )?,
     )
     .map_err(|source| batch_cuda(site, source))
-}
-
-fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
-    u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
