@@ -15,12 +15,12 @@ use std::mem;
 use riley_cuda::{
     AttentionReductionProfile, BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE,
     BF16_ARGMAX_STATUS_SUCCESS, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaError, CudaErrorKind, CudaExecutionStream, CudaStream,
-    EmbeddingParams, FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams,
-    PackedBatchHostV1, PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams,
-    ResidualAddParams, ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams,
-    SiluParams, deterministic_bf16_argmax, embedding, fixed37_ragged_paged_attention,
-    gated_multiply, grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
+    CudaDType, CudaDeviceBuffer, CudaError, CudaExecutionStream, CudaStream, EmbeddingParams,
+    FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
+    PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
+    ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams, SiluParams,
+    deterministic_bf16_argmax, embedding, fixed37_ragged_paged_attention, gated_multiply,
+    grouped_ragged_paged_attention, indexed_rope, ragged_paged_attention,
     ragged_paged_kv_cache_write, residual_add, rope_table, row_gather, silu,
 };
 use riley_model::LoadedModel;
@@ -38,13 +38,14 @@ use super::executor::device_views::{packed_device_views, per_operation_device_vi
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
+use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
-    select_smallest_prepared_dense_rows, validate_shape_buckets,
+    select_smallest_prepared_dense_rows,
 };
 pub use super::executor::shape::{LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS};
 use super::forward::{
@@ -570,20 +571,6 @@ struct BatchHostWorkspace {
     greedy_results: Box<[u8]>,
 }
 
-/// One exact dense-row plan and GEMM set sharing the enclosing owner's
-/// uploaded weights, maximum-size graph buffers, and paged KV allocations.
-struct PreparedLlamaBatchShape {
-    dense_rows: usize,
-    plan: LlamaExecutionPlan,
-    gemms: GemmPlans,
-}
-
-impl PreparedLlamaBatchShape {
-    fn close(self) -> LlamaBatchExecutorResult<()> {
-        self.gemms.close().map_err(LlamaBatchExecutorError::Forward)
-    }
-}
-
 /// Shape-bucketed, shared-KV Llama continuous-batch executor.
 ///
 /// The scheduler retains ownership of logical reservations. A successful call
@@ -686,7 +673,13 @@ impl PreparedLlamaBatchExecutor {
             bounds.max_input_tokens(),
             config.forward,
         )?;
-        let shape_variants = match prepare_shape_variants(model, context, &forward, config) {
+        let shape_variants = match prepare_shape_variants(
+            model,
+            context,
+            &forward,
+            config.shape_policy,
+            config.shape_buckets.as_slice(),
+        ) {
             Ok(variants) => variants,
             Err(error) => {
                 let _ = forward.close();
@@ -1511,62 +1504,6 @@ impl PreparedLlamaBatchExecutor {
             (None, None, result) => result,
         }
     }
-}
-
-fn prepare_shape_variants(
-    model: &LoadedModel,
-    context: &CudaContext,
-    forward: &PreparedLlamaForward,
-    config: PreparedLlamaBatchExecutorConfig,
-) -> LlamaBatchExecutorResult<Box<[PreparedLlamaBatchShape]>> {
-    if config.shape_policy == LlamaBatchShapePolicy::FixedMaximum {
-        return Ok(Vec::new().into_boxed_slice());
-    }
-    let maximum_rows = forward.plan.sequence_length();
-    validate_shape_buckets(config.shape_buckets.as_slice(), maximum_rows)?;
-    let variant_count = config.shape_buckets.as_slice().len() - 1;
-    let mut variants: Vec<PreparedLlamaBatchShape> = Vec::new();
-    variants.try_reserve_exact(variant_count).map_err(|_| {
-        LlamaBatchExecutorError::HostAllocation {
-            resource: LlamaBatchExecutorResource::HostWorkspace,
-            requested_bytes: u64::try_from(variant_count)
-                .unwrap_or(u64::MAX)
-                .saturating_mul(mem::size_of::<PreparedLlamaBatchShape>() as u64),
-        }
-    })?;
-    for &dense_rows in &config.shape_buckets.as_slice()[..variant_count] {
-        let (plan, gemms) = match forward.prepare_batch_shape_variant(model, context, dense_rows) {
-            Ok(prepared) => prepared,
-            Err(error) if is_anchored_gemm_not_supported(&error) => {
-                // The maximum shape remains the exact owner. Never substitute
-                // an M-specific heuristic when its anchored reduction topology
-                // cannot execute; dispatch will use the next available bucket
-                // or the fixed maximum plan instead.
-                continue;
-            }
-            Err(error) => {
-                for variant in variants {
-                    let _ = variant.close();
-                }
-                return Err(LlamaBatchExecutorError::Forward(error));
-            }
-        };
-        variants.push(PreparedLlamaBatchShape {
-            dense_rows,
-            plan,
-            gemms,
-        });
-    }
-    Ok(variants.into_boxed_slice())
-}
-
-fn is_anchored_gemm_not_supported(error: &LlamaForwardError) -> bool {
-    matches!(
-        error,
-        LlamaForwardError::Cuda { source, .. }
-            if source.kind() == CudaErrorKind::NotSupported
-                && source.operation() == "prepare anchored CUDA GEMM plan"
-    )
 }
 
 fn select_prepared_dense_rows(

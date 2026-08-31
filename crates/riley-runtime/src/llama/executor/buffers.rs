@@ -1,7 +1,7 @@
 //! Cold-owned batch-input buffers and allocation helpers.
 //!
 //! This module owns only metadata-input device and host storage. The enclosing
-//! batch executor retains the model, KV, RoPE, output, forward, and dispatch
+//! batch executor retains the model, KV, `RoPE`, output, forward, and dispatch
 //! owners that use these buffers.
 
 use riley_cuda::{CudaContext, CudaDeviceBuffer, CudaError, CudaPinnedHostBuffer};

@@ -4,9 +4,10 @@
 분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
 shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을,
 C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source host slab packer를
-각각 분리했고, C04-7은 borrowed CUDA metadata view binding을 분리했다. CUDA owner, KV,
-buffer orchestration, pinned-memory write/metadata transport, dispatch, output, public API와
-production default는 유지한다.
+각각 분리했고, C04-7은 borrowed CUDA metadata view binding을, C04-8은 anchored GEMM
+shape-variant의 cold inventory preparation을 분리했다. CUDA owner, KV, buffer orchestration,
+pinned-memory write/metadata transport, dispatch, output, public API와 production default는
+유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -160,6 +161,21 @@ upload/copy, stream/command batch, transport policy, forward/KV/model ownership�
 batch owner는 host descriptor 생성, H2D enqueue, preflight/dispatch ordering과 completion/poison
 semantics를 그대로 보유한다. 이 source-only slice도 GPU parity나 performance non-regression을
 주장하지 않는다.
+
+### C04-8 — anchored GEMM shape-variant inventory extraction
+
+`llama/executor/gemm_plan.rs`는 shared maximum forward owner 아래의 optional exact dense-row
+plan과 anchored GEMM handle inventory를 cold prepare한다. FixedMaximum은 bucket validation이나
+host reservation 전에 빈 inventory를 유지하고, active-row mode는 configured maximum 아래의
+buckets만 exact anchor로 준비한다. anchored CUDA GEMM plan이 정확히 NotSupported일 때만
+해당 smaller variant를 생략해 다음 prepared bucket 또는 maximum owner로 fallback하며, 다른
+failure는 이미 만든 variant를 close한 뒤 원 error를 보존한다.
+
+batch owner는 variant field, history, workspace maximum fold와 한 번의 shared-workspace
+reconciliation, runtime selection/dispatch, poison 및 close precedence를 계속 소유한다. 새
+module은 weight/KV/buffer/stream/metadata transport/output 또는 forward workspace owner를
+복제하지 않는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지
+않는다.
 
 ## 6. Allocation 검증
 

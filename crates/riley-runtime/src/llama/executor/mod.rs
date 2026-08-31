@@ -7,6 +7,7 @@
 pub(crate) mod buffers;
 pub(crate) mod device_views;
 pub(crate) mod error;
+pub(crate) mod gemm_plan;
 pub(crate) mod metadata;
 pub(crate) mod metrics;
 pub(crate) mod shape;

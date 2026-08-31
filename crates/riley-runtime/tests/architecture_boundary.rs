@@ -5,6 +5,7 @@ const EXECUTOR_ERROR: &str = include_str!("../src/llama/executor/error.rs");
 const EXECUTOR_SHAPE: &str = include_str!("../src/llama/executor/shape.rs");
 const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
 const EXECUTOR_DEVICE_VIEWS: &str = include_str!("../src/llama/executor/device_views.rs");
+const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
 
 #[test]
@@ -164,6 +165,61 @@ fn executor_device_views_only_bind_borrowed_cuda_metadata() {
         assert!(
             !EXECUTOR_DEVICE_VIEWS.contains(forbidden),
             "executor device views crossed its borrowed-binding boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_gemm_plan_only_prepares_anchored_shape_variants() {
+    for required in [
+        "struct PreparedLlamaBatchShape",
+        "prepare_shape_variants",
+        "validate_shape_buckets",
+        "prepare_batch_shape_variant",
+        "try_reserve_exact",
+        "is_anchored_gemm_not_supported",
+        "CudaErrorKind::NotSupported",
+        "variant.close()",
+        "prepare anchored CUDA GEMM plan",
+    ] {
+        assert!(
+            EXECUTOR_GEMM_PLAN.contains(required),
+            "executor GEMM plan omitted required cold-preparation token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "batch_executor",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaBatchExecutorConfig",
+        "LlamaBatchShapeHistory",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaBufferSpan",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "ForwardBuffers",
+        "BatchDeviceInput",
+        "BatchHostInput",
+        "PreparedLlamaBatchMetadata",
+        "LlamaPackedBatchMetadata",
+        "PackedBatchV1",
+        "BatchMetadataTransport",
+        "ExecutionCompletionImplementation",
+        "LlamaOp",
+        "execute_gemm",
+        "execute_fixed_graph",
+        "upload_from_slice",
+        "copy_from_pinned",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+    ] {
+        assert!(
+            !EXECUTOR_GEMM_PLAN.contains(forbidden),
+            "executor GEMM plan crossed its cold-variant boundary with {forbidden:?}"
         );
     }
 }
