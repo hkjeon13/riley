@@ -1,10 +1,21 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** Planned  
+**상태:** In progress — C07-0은 pure-decode graph bucket catalog만 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
 [이전: C06](06-graph-signature-dispatcher.md) | [목차](README.md) | [다음: C08](08-executable-pattern-registry.md)
+
+### C07-0 — fixed pure-decode bucket catalog (CPU-only)
+
+초기 catalog는 active row `1,2,4,8,16,32`만 허용하고, `3→4`, `5→8`, `9→16`, `17→32`처럼
+가장 작은 상계 bucket으로만 padding한다. zero 또는 `32` 초과 row는 maximum executor shape로
+대체하지 않고 bucket 없음으로 남겨 exact eager를 유지한다.
+
+이 slice는 catalog selection이 graph prepared/capture-safe/launch-complete를 뜻하지 않음을 명시한다.
+C06 eligibility/registry/signature, executor shape policy, metadata packing, CLI/default, CUDA capture와
+performance 판정에는 연결하지 않는다. future owner는 base batch validation 뒤 checked row conversion으로만
+catalog를 사용할 수 있다.
 
 ## 1. 배경과 가설
 

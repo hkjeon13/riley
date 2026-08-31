@@ -54,6 +54,32 @@ pub enum GraphSamplingBackend {
     Unsupported,
 }
 
+/// Fixed active-row capacities prepared by the initial pure-decode graph path.
+///
+/// This catalog is a C07 cold-planning contract only. Selecting a bucket does
+/// not prove that a graph is prepared, capture-safe, launched, or complete.
+#[allow(dead_code)] // C07-0 deliberately precedes its future executor owner.
+pub(crate) const PURE_DECODE_GRAPH_BUCKETS: [u32; 6] = [1, 2, 4, 8, 16, 32];
+
+/// Selects the smallest C07 pure-decode graph bucket that can pad active rows.
+///
+/// Zero and values above the fixed initial catalog have no graph bucket. They
+/// remain exact-eager candidates until a later reviewed owner adds a separate
+/// contract; this function never applies a maximum-shape fallback.
+#[must_use]
+#[allow(dead_code)] // C07-0 deliberately precedes its future executor owner.
+pub(crate) const fn select_pure_decode_graph_bucket(active_rows: u32) -> Option<u32> {
+    match active_rows {
+        1 => Some(PURE_DECODE_GRAPH_BUCKETS[0]),
+        2 => Some(PURE_DECODE_GRAPH_BUCKETS[1]),
+        3..=4 => Some(PURE_DECODE_GRAPH_BUCKETS[2]),
+        5..=8 => Some(PURE_DECODE_GRAPH_BUCKETS[3]),
+        9..=16 => Some(PURE_DECODE_GRAPH_BUCKETS[4]),
+        17..=32 => Some(PURE_DECODE_GRAPH_BUCKETS[5]),
+        _ => None,
+    }
+}
+
 /// Schema version embedded in every graph-cache identity.
 ///
 /// Increment this value whenever equality-relevant signature meaning changes.
@@ -1054,7 +1080,7 @@ mod tests {
         ExecutionGraphPolicy, ExecutionMode, GraphCaptureSafety, GraphDispatchDecision,
         GraphDispatchEligibility, GraphDispatchError, GraphDispatchRequest, GraphFallbackReason,
         GraphInventoryState, GraphOperatorCapability, GraphSamplingBackend, GraphWorkloadStage,
-        select_execution_graph,
+        PURE_DECODE_GRAPH_BUCKETS, select_execution_graph, select_pure_decode_graph_bucket,
     };
 
     const fn capture_safety() -> GraphCaptureSafety {
@@ -1191,5 +1217,27 @@ mod tests {
                 reason: GraphFallbackReason::UnsupportedSampling,
             })
         );
+    }
+
+    #[test]
+    fn pure_decode_graph_bucket_catalog_is_fixed_minimal_and_bounded() {
+        assert_eq!(PURE_DECODE_GRAPH_BUCKETS, [1, 2, 4, 8, 16, 32]);
+        for active_rows in 1..=32 {
+            let bucket = select_pure_decode_graph_bucket(active_rows)
+                .expect("active rows within the C07 catalog must select a bucket");
+            assert!(PURE_DECODE_GRAPH_BUCKETS.contains(&bucket));
+            assert!(bucket >= active_rows);
+            for candidate in PURE_DECODE_GRAPH_BUCKETS {
+                if candidate < bucket {
+                    assert!(
+                        candidate < active_rows,
+                        "selected bucket {bucket} must be the smallest allowed capacity"
+                    );
+                }
+            }
+        }
+        assert_eq!(select_pure_decode_graph_bucket(0), None);
+        assert_eq!(select_pure_decode_graph_bucket(33), None);
+        assert_eq!(select_pure_decode_graph_bucket(u32::MAX), None);
     }
 }
