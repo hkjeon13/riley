@@ -79,15 +79,18 @@ Routing producer는 `riley c02-routing-capture --format canonical-json` feature-
 five-case scheduler fixture와 GPU 없는 read-only/network-none container runner다. development
 release ELF의 `case_id`+`trace` projection이 reviewed corpus와 일치함은 확인했지만, raw runner는
 frozen candidate manifest와 replayed Gate E report를 필수로 요구한다. 따라서 현재 source-level
-producer 검증은 candidate-bound routing evidence 또는 C03 시작 조건을 충족하지 않는다.
+producer 검증은 candidate-bound routing evidence 또는 C03-B GPU integration/final acceptance
+조건을 충족하지 않는다. C03-A CPU-only routing harness는 C02-P1 source closure 뒤 병렬로
+진행할 수 있으나, C02 pass·candidate freeze·Gate E·GPU/Docker/evidence/qualification authority를
+주장하지 않으며 실제 C02 candidate에 포함해 다시 검증해야 한다.
 
 Fault raw producer는 `riley c02-fault-capture --format canonical-json`의 feature-gated 네 case
 fixture를 read-only, network-none, GPU-free container에서 실행하고 parent capture, child marker
 log, test ELF를 create-only external evidence root에 보존한다. 현재 development capture의 raw
 receipt는 `riley.c02-fault-raw-capture.v1` 및 `qualification_status: not-run`이다. 따라서 이는
 injectable-synthetic producer mechanism 확인일 뿐, frozen candidate binding, Gate E semantic replay,
-`riley.fault-extension-receipt.v3` semantic input/report, C02 verdict 또는 C03 시작 조건이
-아니다. future v3 replay는 test ELF도 frozen source archive/revision, frozen reproducible
+`riley.fault-extension-receipt.v3` semantic input/report, C02 verdict 또는 C03-B GPU
+integration/final acceptance 조건이 아니다. future v3 replay는 test ELF도 frozen source archive/revision, frozen reproducible
 build/execution image, exact feature build command에 결박한다. v2 fault-extension receipt/schema는
 historical only다.
 

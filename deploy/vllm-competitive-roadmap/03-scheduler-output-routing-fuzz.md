@@ -1,10 +1,27 @@
 # C03 — Scheduler Output Routing Property Fuzz
 
-**상태:** Planned  
+**상태:** In progress — C03-A CPU-only reference harness는 C02-P1 source closure 뒤 병렬로
+진행할 수 있다. C03-B GPU fixed corpus와 C03의 formal completion은 C02 actual qualification
+뒤에만 수행한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** scheduler plan부터 sampling/commit/terminal event까지 request-token 대응 관계를 model-based property test로 고정한다.
 
 [이전: C02](02-rc3-candidate-qualification.md) | [목차](README.md) | [다음: C04](04-llama-executor-refactor.md)
+
+## 0. 병렬 착수 경계
+
+**C03-A**는 clean committed source와 C02-P1 source closure만을 전제로 하는 CPU-only
+reference model, deterministic corpus, seeded property harness다. scheduler의 public host API와
+synthetic `IterationResult`만 사용하며 CUDA, server, Docker, root service, Gate E, candidate
+freeze, evidence 또는 qualification을 실행하거나 주장하지 않는다. 따라서 C02-P2의
+administrator provisioning과 병렬로 구현할 수 있지만, 그 결과는 candidate-bound routing
+evidence나 C02 pass가 아니며 이후 actual C02 candidate에 포함해 재검증한다.
+
+**C03-B**의 GPU corpus/fixture source는 same-candidate integration replay를 주장하려면 C02
+candidate freeze 전에 그 candidate source archive에 포함되어야 한다. GPU fixed-corpus execution,
+integration replay, formal C03 acceptance는 C02 actual qualification 뒤에만 수행한다. C02 뒤에
+그 source가 바뀌면 same-candidate 주장을 거부하고 새 C02 candidate와 requalification부터
+다시 시작한다. C03-A의 green CPU test는 C03-B, C02, M4/M5 또는 vLLM win을 대체하지 않는다.
 
 ## 1. 배경
 
@@ -82,7 +99,7 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 ## 6. 테스트 계층
 
-### CPU fast property
+### C03-A — CPU fast property
 
 - PR마다 최소 10,000 generated traces
 - nightly 또는 scheduled run에서 1,000,000 traces
@@ -92,7 +109,7 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 과거 defect와 발견된 모든 fuzz counterexample을 JSON 또는 Rust fixture로 영구 등록한다.
 
-### GPU integration slice
+### C03-B — GPU integration slice
 
 CPU model이 생성한 대표 trace 중 다음만 실제 CUDA path로 replay한다.
 
@@ -164,12 +181,12 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 
 ## 12. 승인 기준
 
-- 고정 seed와 random seed에서 invariant 위반 0
+- C03-A: fixed/random CPU seed에서 invariant 위반 0, deterministic corpus와 shrink/replay test 통과
 - RC1 최소 재현 fixture가 수정 전 실패/현재 통과하는 contract test로 보존
 - shrink된 counterexample serialization/replay test 통과
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
-- GPU corpus에서 output token/request mapping exact
+- C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact
 
 ## 13. 롤백
 
@@ -177,4 +194,7 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 
 ## 14. 완료 정의
 
-scheduler event 순서와 output slot permutation을 임의로 생성해도 reference model과 production state가 항상 일치하고, 실패 시 최소 재현 trace가 자동 생성될 때 완료다.
+C03-A는 scheduler event 순서와 output slot permutation을 deterministic seeded CPU trace로
+생성해 reference model과 production state가 일치하고, failure seed/trace가 남을 때 완료다.
+C03의 formal completion은 C03-B가 C02 actual qualification 뒤 GPU corpus에서도 exact mapping을
+확인할 때만 선언한다.
