@@ -40,10 +40,15 @@ pub use error::{
     LlamaScalar,
 };
 pub use graph::{
-    ExecutionGraphPolicy, ExecutionMode, GraphCaptureSafety, GraphDispatchDecision,
+    ExecutionGraphPolicy, ExecutionMode, GRAPH_SIGNATURE_SCHEMA_VERSION, GraphCaptureSafety,
+    GraphComputeType, GraphDataType, GraphDeviceSignature, GraphDispatchDecision,
     GraphDispatchEligibility, GraphDispatchError, GraphDispatchRequest, GraphFallbackReason,
-    GraphInventoryState, GraphOperatorCapability, GraphSamplingBackend, GraphWorkloadStage,
-    select_execution_graph,
+    GraphGemmPlanSetId, GraphGeometrySignature, GraphImplementationId,
+    GraphImplementationSignature, GraphInventoryState, GraphIterationSignature,
+    GraphLayoutSignature, GraphMetadataLayoutSignature, GraphModelArchitecture,
+    GraphModelSignature, GraphOperatorCapability, GraphReductionPolicyId, GraphRevisionFingerprint,
+    GraphSamplingBackend, GraphSignature, GraphSignatureFingerprint, GraphStaticSignature,
+    GraphTensorSignature, GraphWorkloadStage, select_execution_graph,
 };
 pub use plan::{
     HIDDEN_WORKSPACE_BUFFER_COUNT, INTERMEDIATE_WORKSPACE_BUFFER_COUNT,

@@ -1,12 +1,15 @@
 //! Closed and allocation-free execution-graph dispatch policy.
 //!
-//! This C06-0 module owns neither a CUDA Graph nor a model executor. It turns
-//! already-observed scalar eligibility and inventory facts into one of three
-//! modes, or a fail-closed `require` rejection. Signature construction,
-//! native graph lookup, and runtime wiring remain separate follow-up slices.
+//! This C06-0/C06-1 module owns neither a CUDA Graph nor a model executor.
+//! It turns already-observed scalar eligibility and inventory facts into one
+//! of three modes, or a fail-closed `require` rejection, and defines an
+//! immutable value-only cache identity. Native graph lookup and runtime
+//! wiring remain separate follow-up slices.
 
 use std::error;
 use std::fmt;
+
+use sha2::{Digest, Sha256};
 
 /// Operator-specific graph-capture admission result supplied to the dispatcher.
 ///
@@ -25,7 +28,7 @@ pub enum GraphOperatorCapability {
 }
 
 /// Workload stage considered by the C06 execution-graph policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub enum GraphWorkloadStage {
     /// A prefill-only iteration.
@@ -39,7 +42,7 @@ pub enum GraphWorkloadStage {
 }
 
 /// Sampling/output backend considered for full-graph admission.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 #[non_exhaustive]
 pub enum GraphSamplingBackend {
     /// The fixed GPU greedy backend required by the initial full-graph path.
@@ -49,6 +52,593 @@ pub enum GraphSamplingBackend {
     /// It can remain an eager boundary around a piecewise graph, but cannot be
     /// part of a full graph replay.
     Unsupported,
+}
+
+/// Schema version embedded in every graph-cache identity.
+///
+/// Increment this value whenever equality-relevant signature meaning changes.
+/// Cold graph inventory never reuses entries from a different schema version.
+pub const GRAPH_SIGNATURE_SCHEMA_VERSION: u16 = 1;
+
+/// Closed model topology family accepted by the initial graph cache.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum GraphModelArchitecture {
+    /// The canonical dense Llama decoder topology, including dense Qwen2 IR.
+    LlamaDecoder,
+}
+
+/// Closed tensor storage dtype carried by a graph signature.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum GraphDataType {
+    /// IEEE 16-bit floating point storage.
+    Float16,
+    /// Brain floating-point 16-bit storage.
+    BFloat16,
+    /// IEEE 32-bit floating point storage.
+    Float32,
+}
+
+/// Closed compute/reduction type carried by a graph signature.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[non_exhaustive]
+pub enum GraphComputeType {
+    /// IEEE 32-bit floating point accumulation.
+    Float32,
+    /// TensorFloat-32 Tensor Core compute.
+    TensorFloat32,
+}
+
+/// Fixed-size canonical model revision fingerprint.
+///
+/// The fingerprint is prepared on a cold path from a canonical model/config
+/// representation. It deliberately contains no model pointer, path, or
+/// process-unique address.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphRevisionFingerprint([u8; 32]);
+
+impl GraphRevisionFingerprint {
+    const DOMAIN_SEPARATOR: &[u8] = b"riley.graph-revision-fingerprint.v1\0";
+
+    /// Wraps a reviewed fixed-width fingerprint without allocation.
+    #[must_use]
+    pub const fn from_bytes(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    /// Hashes canonical cold-path bytes with the fixed graph-revision domain.
+    #[must_use]
+    pub fn from_canonical_bytes(canonical_bytes: &[u8]) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(Self::DOMAIN_SEPARATOR);
+        hasher.update(canonical_bytes);
+        Self(hasher.finalize().into())
+    }
+
+    /// Returns the fixed-width digest for logging-free identity composition.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// Immutable model and uploaded-weight layout identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphModelSignature {
+    architecture: GraphModelArchitecture,
+    architecture_revision: u32,
+    model_revision: GraphRevisionFingerprint,
+    weight_layout_revision: u32,
+}
+
+impl GraphModelSignature {
+    /// Creates the static identity for one canonical model topology and layout.
+    #[must_use]
+    pub const fn new(
+        architecture: GraphModelArchitecture,
+        architecture_revision: u32,
+        model_revision: GraphRevisionFingerprint,
+        weight_layout_revision: u32,
+    ) -> Self {
+        Self {
+            architecture,
+            architecture_revision,
+            model_revision,
+            weight_layout_revision,
+        }
+    }
+}
+
+/// CUDA/native provenance that changes graph replay compatibility.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphDeviceSignature {
+    compute_capability_major: u32,
+    compute_capability_minor: u32,
+    cuda_runtime_version: u32,
+    cublaslt_version: u32,
+    native_abi_version: u32,
+}
+
+impl GraphDeviceSignature {
+    /// Creates a stable device/runtime identity from cold runtime metadata.
+    #[must_use]
+    pub const fn new(
+        compute_capability_major: u32,
+        compute_capability_minor: u32,
+        cuda_runtime_version: u32,
+        cublaslt_version: u32,
+        native_abi_version: u32,
+    ) -> Self {
+        Self {
+            compute_capability_major,
+            compute_capability_minor,
+            cuda_runtime_version,
+            cublaslt_version,
+            native_abi_version,
+        }
+    }
+}
+
+/// Exact activation, weight, and accumulator types for a graph chain.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphTensorSignature {
+    activation_dtype: GraphDataType,
+    weight_dtype: GraphDataType,
+    compute_type: GraphComputeType,
+}
+
+impl GraphTensorSignature {
+    /// Creates a closed tensor and compute-type identity.
+    #[must_use]
+    pub const fn new(
+        activation_dtype: GraphDataType,
+        weight_dtype: GraphDataType,
+        compute_type: GraphComputeType,
+    ) -> Self {
+        Self {
+            activation_dtype,
+            weight_dtype,
+            compute_type,
+        }
+    }
+}
+
+/// Model geometry that fixes graph-buffer and kernel launch shapes.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphGeometrySignature {
+    layer_count: u32,
+    hidden_size: u32,
+    intermediate_size: u32,
+    vocabulary_size: u32,
+    query_heads: u32,
+    key_value_heads: u32,
+    head_dimension: u32,
+}
+
+impl GraphGeometrySignature {
+    /// Creates the exact model dimensions used by graph preparation.
+    #[must_use]
+    pub const fn new(
+        layer_count: u32,
+        hidden_size: u32,
+        intermediate_size: u32,
+        vocabulary_size: u32,
+        query_heads: u32,
+        key_value_heads: u32,
+        head_dimension: u32,
+    ) -> Self {
+        Self {
+            layer_count,
+            hidden_size,
+            intermediate_size,
+            vocabulary_size,
+            query_heads,
+            key_value_heads,
+            head_dimension,
+        }
+    }
+}
+
+/// Canonical packed-metadata layout identity.
+///
+/// The digest is prepared on a cold path from schema version, field offsets,
+/// field sizes, and alignments. It does not contain an allocation address.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphMetadataLayoutSignature {
+    schema_version: u32,
+    digest: [u8; 32],
+}
+
+impl GraphMetadataLayoutSignature {
+    /// Creates the exact metadata schema and canonical-layout digest identity.
+    #[must_use]
+    pub const fn new(schema_version: u32, digest: [u8; 32]) -> Self {
+        Self {
+            schema_version,
+            digest,
+        }
+    }
+
+    /// Returns the packed-metadata schema version.
+    #[must_use]
+    pub const fn schema_version(self) -> u32 {
+        self.schema_version
+    }
+
+    /// Returns the canonical fixed-width layout digest.
+    #[must_use]
+    pub const fn digest(&self) -> &[u8; 32] {
+        &self.digest
+    }
+}
+
+/// Fixed KV and packed-metadata layout identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphLayoutSignature {
+    maximum_sequence_tokens: u32,
+    kv_page_size: u32,
+    kv_layout_version: u32,
+    metadata_layout: GraphMetadataLayoutSignature,
+}
+
+impl GraphLayoutSignature {
+    /// Creates the cold layout identity for graph-owned fixed addresses.
+    #[must_use]
+    pub const fn new(
+        maximum_sequence_tokens: u32,
+        kv_page_size: u32,
+        kv_layout_version: u32,
+        metadata_layout: GraphMetadataLayoutSignature,
+    ) -> Self {
+        Self {
+            maximum_sequence_tokens,
+            kv_page_size,
+            kv_layout_version,
+            metadata_layout,
+        }
+    }
+}
+
+/// Fixed numeric identifier for one cold-selected graph implementation.
+///
+/// A later cold adapter owns the mapping from executable implementation to
+/// this value; strings and runtime addresses never enter this identity.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphImplementationId(u32);
+
+impl GraphImplementationId {
+    /// Creates one fixed implementation identifier.
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+/// Fixed numeric identity for the complete selected GEMM-plan set.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphGemmPlanSetId(u32);
+
+impl GraphGemmPlanSetId {
+    /// Creates one cold-selected GEMM-plan-set identifier.
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+/// Fixed numeric identity for the selected reduction policy.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphReductionPolicyId(u32);
+
+impl GraphReductionPolicyId {
+    /// Creates one cold-selected reduction-policy identifier.
+    #[must_use]
+    pub const fn new(value: u32) -> Self {
+        Self(value)
+    }
+}
+
+/// Closed implementation-plan identities used by an instantiated graph.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphImplementationSignature {
+    attention: GraphImplementationId,
+    projections: GraphImplementationId,
+    mlp: GraphImplementationId,
+    output: GraphImplementationId,
+    gemm_plan_set: GraphGemmPlanSetId,
+    reduction_policy: GraphReductionPolicyId,
+}
+
+impl GraphImplementationSignature {
+    /// Creates the exact implementation and reduction-plan identity.
+    #[must_use]
+    pub const fn new(
+        attention: GraphImplementationId,
+        projections: GraphImplementationId,
+        mlp: GraphImplementationId,
+        output: GraphImplementationId,
+        gemm_plan_set: GraphGemmPlanSetId,
+        reduction_policy: GraphReductionPolicyId,
+    ) -> Self {
+        Self {
+            attention,
+            projections,
+            mlp,
+            output,
+            gemm_plan_set,
+            reduction_policy,
+        }
+    }
+}
+
+/// Every cold-prepared fact shared by all iteration signatures for one model.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphStaticSignature {
+    model: GraphModelSignature,
+    device: GraphDeviceSignature,
+    tensors: GraphTensorSignature,
+    geometry: GraphGeometrySignature,
+    layout: GraphLayoutSignature,
+    implementations: GraphImplementationSignature,
+}
+
+impl GraphStaticSignature {
+    /// Combines only fixed-width, cold-prepared graph identity facts.
+    #[must_use]
+    pub const fn new(
+        model: GraphModelSignature,
+        device: GraphDeviceSignature,
+        tensors: GraphTensorSignature,
+        geometry: GraphGeometrySignature,
+        layout: GraphLayoutSignature,
+        implementations: GraphImplementationSignature,
+    ) -> Self {
+        Self {
+            model,
+            device,
+            tensors,
+            geometry,
+            layout,
+            implementations,
+        }
+    }
+}
+
+/// Iteration-specific identity that changes a graph cache lookup.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphIterationSignature {
+    stage: GraphWorkloadStage,
+    active_row_bucket: u32,
+    sampling_backend: GraphSamplingBackend,
+}
+
+impl GraphIterationSignature {
+    /// Creates the allocation-free identity for one planned iteration shape.
+    #[must_use]
+    pub const fn new(
+        stage: GraphWorkloadStage,
+        active_row_bucket: u32,
+        sampling_backend: GraphSamplingBackend,
+    ) -> Self {
+        Self {
+            stage,
+            active_row_bucket,
+            sampling_backend,
+        }
+    }
+}
+
+/// Stable SHA-256 digest of one explicit graph signature encoding.
+///
+/// This is a trace and cache-prefilter value only. A graph owner must still
+/// require full `GraphSignature` equality before it reuses an entry.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphSignatureFingerprint([u8; 32]);
+
+impl GraphSignatureFingerprint {
+    /// Returns the fixed-width digest bytes without allocation.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+/// Complete, immutable key for one exact prepared graph cache entry.
+///
+/// Pointer stability is intentionally not represented here: the future graph
+/// owner validates its own instantiated-buffer addresses separately.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct GraphSignature {
+    schema_version: u16,
+    static_signature: GraphStaticSignature,
+    iteration: GraphIterationSignature,
+}
+
+impl GraphSignature {
+    /// Creates a versioned graph-cache key without allocation or I/O.
+    #[must_use]
+    pub const fn new(
+        static_signature: GraphStaticSignature,
+        iteration: GraphIterationSignature,
+    ) -> Self {
+        Self {
+            schema_version: GRAPH_SIGNATURE_SCHEMA_VERSION,
+            static_signature,
+            iteration,
+        }
+    }
+
+    /// Returns the equality-relevant schema version embedded in this key.
+    #[must_use]
+    pub const fn schema_version(self) -> u16 {
+        self.schema_version
+    }
+
+    /// Returns the cold identity portion of this graph-cache key.
+    #[must_use]
+    pub const fn static_signature(self) -> GraphStaticSignature {
+        self.static_signature
+    }
+
+    /// Returns the iteration identity portion of this graph-cache key.
+    #[must_use]
+    pub const fn iteration(self) -> GraphIterationSignature {
+        self.iteration
+    }
+
+    /// Calculates the fixed, domain-separated cache prefilter and trace digest.
+    ///
+    /// This encodes each field in a declared order and never hashes raw struct
+    /// bytes. Full `GraphSignature` equality remains required before graph reuse.
+    #[must_use]
+    pub fn fingerprint(self) -> GraphSignatureFingerprint {
+        let mut hasher = Sha256::new();
+        hasher.update(GRAPH_SIGNATURE_FINGERPRINT_DOMAIN);
+        hasher.update(self.schema_version.to_le_bytes());
+        self.static_signature.update_fingerprint(&mut hasher);
+        self.iteration.update_fingerprint(&mut hasher);
+        GraphSignatureFingerprint(hasher.finalize().into())
+    }
+}
+
+const GRAPH_SIGNATURE_FINGERPRINT_DOMAIN: &[u8] = b"riley.graph-signature-fingerprint.v1\0";
+
+impl GraphModelArchitecture {
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::LlamaDecoder => 1,
+        }
+    }
+}
+
+impl GraphDataType {
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::Float16 => 1,
+            Self::BFloat16 => 2,
+            Self::Float32 => 3,
+        }
+    }
+}
+
+impl GraphComputeType {
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::Float32 => 1,
+            Self::TensorFloat32 => 2,
+        }
+    }
+}
+
+impl GraphWorkloadStage {
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::Prefill => 1,
+            Self::PureDecode => 2,
+            Self::Mixed => 3,
+            Self::Unsupported => 4,
+        }
+    }
+}
+
+impl GraphSamplingBackend {
+    const fn fingerprint_tag(self) -> u8 {
+        match self {
+            Self::GpuGreedy => 1,
+            Self::Unsupported => 2,
+        }
+    }
+}
+
+impl GraphStaticSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'S']);
+        self.model.update_fingerprint(hasher);
+        self.device.update_fingerprint(hasher);
+        self.tensors.update_fingerprint(hasher);
+        self.geometry.update_fingerprint(hasher);
+        self.layout.update_fingerprint(hasher);
+        self.implementations.update_fingerprint(hasher);
+    }
+}
+
+impl GraphModelSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'M', self.architecture.fingerprint_tag()]);
+        hasher.update(self.architecture_revision.to_le_bytes());
+        hasher.update(self.model_revision.as_bytes());
+        hasher.update(self.weight_layout_revision.to_le_bytes());
+    }
+}
+
+impl GraphDeviceSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'D']);
+        hasher.update(self.compute_capability_major.to_le_bytes());
+        hasher.update(self.compute_capability_minor.to_le_bytes());
+        hasher.update(self.cuda_runtime_version.to_le_bytes());
+        hasher.update(self.cublaslt_version.to_le_bytes());
+        hasher.update(self.native_abi_version.to_le_bytes());
+    }
+}
+
+impl GraphTensorSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([
+            b'T',
+            self.activation_dtype.fingerprint_tag(),
+            self.weight_dtype.fingerprint_tag(),
+            self.compute_type.fingerprint_tag(),
+        ]);
+    }
+}
+
+impl GraphGeometrySignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'G']);
+        hasher.update(self.layer_count.to_le_bytes());
+        hasher.update(self.hidden_size.to_le_bytes());
+        hasher.update(self.intermediate_size.to_le_bytes());
+        hasher.update(self.vocabulary_size.to_le_bytes());
+        hasher.update(self.query_heads.to_le_bytes());
+        hasher.update(self.key_value_heads.to_le_bytes());
+        hasher.update(self.head_dimension.to_le_bytes());
+    }
+}
+
+impl GraphLayoutSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'L']);
+        hasher.update(self.maximum_sequence_tokens.to_le_bytes());
+        hasher.update(self.kv_page_size.to_le_bytes());
+        hasher.update(self.kv_layout_version.to_le_bytes());
+        hasher.update(self.metadata_layout.schema_version.to_le_bytes());
+        hasher.update(self.metadata_layout.digest);
+    }
+}
+
+impl GraphImplementationSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([b'I']);
+        hasher.update(self.attention.0.to_le_bytes());
+        hasher.update(self.projections.0.to_le_bytes());
+        hasher.update(self.mlp.0.to_le_bytes());
+        hasher.update(self.output.0.to_le_bytes());
+        hasher.update(self.gemm_plan_set.0.to_le_bytes());
+        hasher.update(self.reduction_policy.0.to_le_bytes());
+    }
+}
+
+impl GraphIterationSignature {
+    fn update_fingerprint(self, hasher: &mut Sha256) {
+        hasher.update([
+            b'R',
+            self.stage.fingerprint_tag(),
+            self.sampling_backend.fingerprint_tag(),
+        ]);
+        hasher.update(self.active_row_bucket.to_le_bytes());
+    }
 }
 
 /// Operator and backend facts that must both admit graph dispatch.

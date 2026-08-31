@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-0은 CUDA/model executor와 분리된 closed dispatch policy를 CPU-only로 고정했다.
+**상태:** In progress — C06-1은 C06-0 policy 위에 versioned immutable graph signature와 fixed fingerprint를 CPU-only로 고정했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -16,13 +16,24 @@ C06은 graph를 선택하는 identity와 policy를 먼저 고정한다. 실제 L
 
 `ExecutionGraphPolicy`, `ExecutionMode`, capture-safety/eligibility facts, exact inventory state와
 fallback reason을 allocation-free value type으로 분리한다. 이 slice는 raw graph handle, CUDA call,
-model executor mutation, signature construction, dynamic capture, CLI wiring을 하지 않는다. `disabled`는
+model executor mutation, runtime signature adapter construction, dynamic capture, CLI wiring을 하지 않는다. `disabled`는
 입력 사실을 검사하지 않고 항상 `ExactEager`를 선택한다. `auto`는 matching prepared entry만 graph로
 선택하고 모든 miss를 closed eager reason으로 남기며, `require`는 같은 miss를 eager fallback으로 숨기지
 않고 typed error로 거부한다. C05 native capability record를 runtime policy 값으로 변환하는 adapter,
 signature/inventory owner, metrics/CLI와 실제 graph replay는 후속 slice다.
 GPU greedy sampling은 initial full-graph path의 admission 조건이며, piecewise graph에서는 dynamic
 sampling/output boundary를 exact eager로 남긴다.
+
+### C06-1 — versioned immutable graph signature (CPU-only)
+
+`GraphSignature`는 schema version, model/weight layout, device/native runtime, dtype/compute,
+geometry/KV/metadata schema+layout digest, fixed numeric implementation/GEMM-plan-set/reduction IDs,
+iteration stage/bucket/sampling의 fixed-width
+value만 포함한다. process-unique pointer, owner ID, raw graph handle, string key, heap container는
+포함하지 않는다. equality가 graph 재사용의 최종 조건이고, explicit little-endian field order와 domain
+separator로 계산한 SHA-256 fingerprint는 trace/cache prefilter로만 사용한다. C06-1은 CUDA/model
+adapter, registry lookup, graph owner, dispatcher request wiring을 하지 않으므로 disabled policy의
+무검사 exact-eager 계약은 그대로다.
 
 ## 2. Execution mode
 
