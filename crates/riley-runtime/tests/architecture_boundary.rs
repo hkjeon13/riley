@@ -63,6 +63,11 @@ fn executor_error_vocabulary_does_not_own_runtime_resources_or_scheduling_policy
 
 #[test]
 fn executor_shape_does_not_own_runtime_resources_or_scheduling_policy() {
+    let required = "select_prepared_dense_rows";
+    assert!(
+        EXECUTOR_SHAPE.contains(required),
+        "executor shape omitted required scalar-selection token {required:?}"
+    );
     for forbidden in [
         "riley_scheduler",
         "riley_server",

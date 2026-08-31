@@ -46,7 +46,7 @@ use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens};
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
-    select_smallest_prepared_dense_rows,
+    select_prepared_dense_rows,
 };
 pub use super::executor::shape::{LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS};
 use super::forward::{
@@ -950,12 +950,12 @@ impl PreparedLlamaBatchExecutor {
     ///
     /// Returns when the active row count is empty or exceeds the cold bound.
     pub fn select_dense_rows(&self, active_rows: usize) -> LlamaBatchExecutorResult<usize> {
-        select_prepared_dense_rows(
-            self.config,
-            self.forward.plan.sequence_length(),
-            &self.shape_variants,
+        self.config.select_dense_rows(active_rows)?;
+        Ok(select_prepared_dense_rows(
             active_rows,
-        )
+            self.forward.plan.sequence_length(),
+            self.shape_variants.iter().map(|shape| shape.dense_rows),
+        ))
     }
 
     /// Returns shape facts from the most recent successful iteration.
@@ -1117,12 +1117,12 @@ impl PreparedLlamaBatchExecutor {
         } = self;
         let packed = metadata.pack(rows)?;
         let active_rows = packed.total_input_tokens();
+        config.select_dense_rows(active_rows)?;
         let selected_dense_rows = select_prepared_dense_rows(
-            *config,
-            forward.plan.sequence_length(),
-            shape_variants,
             active_rows,
-        )?;
+            forward.plan.sequence_length(),
+            shape_variants.iter().map(|shape| shape.dense_rows),
+        );
         let shape_bucket_index = shape_history.bucket_index(selected_dense_rows)?;
         validate_for_execution(
             packed,
@@ -1457,20 +1457,6 @@ impl PreparedLlamaBatchExecutor {
             (None, None, result) => result,
         }
     }
-}
-
-fn select_prepared_dense_rows(
-    config: PreparedLlamaBatchExecutorConfig,
-    maximum_rows: usize,
-    variants: &[PreparedLlamaBatchShape],
-    active_rows: usize,
-) -> LlamaBatchExecutorResult<usize> {
-    config.select_dense_rows(active_rows)?;
-    Ok(select_smallest_prepared_dense_rows(
-        active_rows,
-        maximum_rows,
-        variants.iter().map(|shape| shape.dense_rows),
-    ))
 }
 
 pub(super) const fn normalize_prepared_config(
@@ -3465,27 +3451,6 @@ mod tests {
                 .select_dense_rows(1)
                 .expect("fixed rollback"),
             512
-        );
-    }
-
-    #[test]
-    fn unavailable_anchored_shape_uses_the_next_prepared_bucket_or_exact_maximum() {
-        let prepared = [2, 8, 64];
-        assert_eq!(
-            select_smallest_prepared_dense_rows(1, 256, prepared.into_iter()),
-            2
-        );
-        assert_eq!(
-            select_smallest_prepared_dense_rows(3, 256, prepared.into_iter()),
-            8
-        );
-        assert_eq!(
-            select_smallest_prepared_dense_rows(9, 256, prepared.into_iter()),
-            64
-        );
-        assert_eq!(
-            select_smallest_prepared_dense_rows(65, 256, prepared.into_iter()),
-            256
         );
     }
 

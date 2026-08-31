@@ -167,7 +167,11 @@ pub(crate) fn validate_shape_buckets(
 
 /// Chooses the smallest successfully prepared bucket, falling back to the
 /// exact maximum plan when an optional smaller bucket was unavailable.
-pub(crate) fn select_smallest_prepared_dense_rows(
+///
+/// The caller validates its policy/configuration first, then provides only
+/// scalar rows from successfully prepared optional variants. This keeps
+/// runtime selection independent of the batch owner and CUDA plan handles.
+pub(crate) fn select_prepared_dense_rows(
     active_rows: usize,
     maximum_rows: usize,
     prepared_rows: impl Iterator<Item = usize>,
@@ -264,7 +268,7 @@ impl LlamaBatchShapeHistory {
 
 #[cfg(test)]
 mod tests {
-    use super::{LlamaBatchShapeHistory, LlamaBatchShapePolicy};
+    use super::{LlamaBatchShapeHistory, LlamaBatchShapePolicy, select_prepared_dense_rows};
 
     #[test]
     fn history_retains_supported_buckets_and_the_maximum_fallback() {
@@ -282,5 +286,17 @@ mod tests {
         assert_eq!(hits[0].hit_count(), 1);
         assert_eq!(hits[1].dense_rows(), 8);
         assert_eq!(hits[1].hit_count(), 0);
+    }
+
+    #[test]
+    fn unavailable_anchored_shape_uses_the_next_prepared_bucket_or_exact_maximum() {
+        let prepared = [2, 8, 64];
+        assert_eq!(select_prepared_dense_rows(1, 256, prepared.into_iter()), 2);
+        assert_eq!(select_prepared_dense_rows(3, 256, prepared.into_iter()), 8);
+        assert_eq!(select_prepared_dense_rows(9, 256, prepared.into_iter()), 64);
+        assert_eq!(
+            select_prepared_dense_rows(65, 256, prepared.into_iter()),
+            256
+        );
     }
 }
