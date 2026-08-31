@@ -14,7 +14,8 @@ facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은
 record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-table byte builder를
 rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로, C04-19는 absolute
 RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iteration command-batch
-completion guard를 dispatch helper로 분리했다. CUDA owner, KV,
+completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte allocator를 host helper로
+분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -37,6 +38,7 @@ crates/riley-runtime/src/llama/executor/
   buffers.rs            # cold-reserved tensor/device/host buffers
   shape.rs              # active-row bucket and shape variant
   gemm_plan.rs           # anchored plan inventory
+  host.rs                # checked zeroed host bytes
   metadata.rs            # synchronous/packed transport
   dispatch.rs            # exact backend, output primitives, and command completion guard
   output.rs              # logits/token status and canonical output map
@@ -317,6 +319,16 @@ finish error가 body error보다 우선하는 기존 completion contract를 그�
 batch owner는 synchronous/packed metadata preflight, packed H2D와 view rebind, fixed graph body,
 output state 및 실제 poison decision을 계속 보유한다. 이 source-only slice는 GPU parity나
 performance non-regression을 주장하지 않는다.
+
+### C04-21 — checked zeroed host-byte allocator extraction
+
+`llama/executor/host.rs`는 cold host workspace가 쓰는 checked element-byte multiplication, exact
+reserve, zero fill 및 boxed-byte conversion을 한 곳에 둔다. overflow와 reserve failure는 기존처럼
+각각 `HostWorkspace` arithmetic/host-allocation error로 매핑한다.
+
+batch owner, metadata buffer helper, RoPE builder는 각자의 semantic preflight와 resource ownership을
+계속 보유하고 shared allocator에는 element count와 byte width만 전달한다. 이 source-only slice는 GPU
+parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

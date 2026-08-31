@@ -510,6 +510,25 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn cold_zeroed_host_bytes_share_one_checked_allocator() {
+        for (boundary, source, expected_calls) in [
+            ("batch owner", include_str!("batch_executor.rs"), 1),
+            ("batch buffers", include_str!("executor/buffers.rs"), 7),
+            ("RoPE builders", include_str!("executor/rope.rs"), 3),
+        ] {
+            assert!(
+                !source.contains("fn allocate_zeroed_bytes("),
+                "{boundary} must not retain a local zeroed-byte allocator"
+            );
+            assert_eq!(
+                source.matches("allocate_zeroed_host_bytes(").count(),
+                expected_calls,
+                "{boundary} must use the shared zeroed-byte allocator at every existing boundary"
+            );
+        }
+    }
+
+    #[test]
     fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
         let forward = include_str!("forward.rs");
         let variant_begin = forward

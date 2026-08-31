@@ -41,6 +41,7 @@ pub use super::executor::error::{
 };
 use super::executor::error::{cuda_error as batch_cuda, record_close};
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
+use super::executor::host::allocate_zeroed_host_bytes;
 use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
 };
@@ -2429,28 +2430,8 @@ fn allocate_host_workspace(
     };
     Ok(BatchHostWorkspace {
         input,
-        greedy_results: allocate_zeroed_bytes(bounds.max_output_slots(), GREEDY_RESULT_BYTES)?,
+        greedy_results: allocate_zeroed_host_bytes(bounds.max_output_slots(), GREEDY_RESULT_BYTES)?,
     })
-}
-
-fn allocate_zeroed_bytes(
-    elements: usize,
-    element_bytes: usize,
-) -> LlamaBatchExecutorResult<Box<[u8]>> {
-    let requested = checked_host_byte_len(
-        elements,
-        element_bytes,
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(requested)
-        .map_err(|_| LlamaBatchExecutorError::HostAllocation {
-            resource: LlamaBatchExecutorResource::HostWorkspace,
-            requested_bytes: requested as u64,
-        })?;
-    bytes.resize(requested, 0);
-    Ok(bytes.into_boxed_slice())
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]

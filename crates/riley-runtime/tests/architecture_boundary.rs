@@ -7,6 +7,7 @@ const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
 const EXECUTOR_DEVICE_VIEWS: &str = include_str!("../src/llama/executor/device_views.rs");
 const EXECUTOR_DISPATCH: &str = include_str!("../src/llama/executor/dispatch.rs");
 const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
+const EXECUTOR_HOST: &str = include_str!("../src/llama/executor/host.rs");
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
 const EXECUTOR_POISON: &str = include_str!("../src/llama/executor/poison.rs");
@@ -131,6 +132,53 @@ fn executor_buffers_do_not_own_model_or_execution_policy() {
         assert!(
             !EXECUTOR_BUFFERS.contains(forbidden),
             "executor buffers crossed its raw-input boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_host_only_allocates_checked_zeroed_bytes() {
+    for required in [
+        "allocate_zeroed_host_bytes",
+        "checked_mul(element_bytes)",
+        "try_reserve_exact",
+        "bytes.resize(requested, 0)",
+        "LlamaBatchExecutorError::ArithmeticOverflow",
+        "LlamaBatchExecutorError::HostAllocation",
+        "LlamaBatchExecutorResource::HostWorkspace",
+    ] {
+        assert!(
+            EXECUTOR_HOST.contains(required),
+            "executor host omitted required zeroed-byte token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "riley_cuda",
+        "batch_executor",
+        "super::buffers",
+        "CudaContext",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "LlamaExecutionPlan",
+        "PreparedLlamaForward",
+        "PreparedLlamaBatchExecutor",
+        "BatchMetadataTransport",
+        "LlamaPackedBatchMetadata",
+        "ExecutionSite",
+        "LlamaOp",
+        "upload_from_slice",
+        "close(",
+    ] {
+        assert!(
+            !EXECUTOR_HOST.contains(forbidden),
+            "executor host crossed its zeroed-byte boundary with {forbidden:?}"
         );
     }
 }
@@ -393,11 +441,8 @@ fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
         "theta.powf",
         "angle.sin_cos",
         "to_ne_bytes",
-        "try_reserve_exact",
         "LlamaBatchExecutorError::ArithmeticOverflow",
-        "LlamaBatchExecutorError::HostAllocation",
         "LlamaBatchExecutorResource::RopeCos",
-        "LlamaBatchExecutorResource::HostWorkspace",
     ] {
         assert!(
             EXECUTOR_ROPE.contains(required),

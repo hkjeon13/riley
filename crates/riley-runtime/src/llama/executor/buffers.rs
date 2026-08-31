@@ -12,6 +12,7 @@ use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
     cuda_error as allocation_cuda, record_close,
 };
+use super::host::allocate_zeroed_host_bytes;
 
 pub(crate) const U32_BYTES: usize = 4;
 pub(crate) const U16_BYTES: usize = 2;
@@ -81,12 +82,12 @@ pub(crate) fn allocate_synchronous_host_input(
             })?;
     Ok(BatchHostInput::PerOperation(PerOperationHostWorkspace {
         padded_tokens: allocate_zeroed_u32(bounds.max_input_tokens())?,
-        sequence_block_offsets: allocate_zeroed_bytes(offsets, U32_BYTES)?,
-        physical_block_ids: allocate_zeroed_bytes(bounds.max_block_entries(), U32_BYTES)?,
-        valid_tokens: allocate_zeroed_bytes(bounds.max_block_entries(), U16_BYTES)?,
-        row_sequence_slots: allocate_zeroed_bytes(bounds.max_input_tokens(), U32_BYTES)?,
-        row_positions: allocate_zeroed_bytes(bounds.max_input_tokens(), U32_BYTES)?,
-        output_token_indices: allocate_zeroed_bytes(bounds.max_output_slots(), U32_BYTES)?,
+        sequence_block_offsets: allocate_zeroed_host_bytes(offsets, U32_BYTES)?,
+        physical_block_ids: allocate_zeroed_host_bytes(bounds.max_block_entries(), U32_BYTES)?,
+        valid_tokens: allocate_zeroed_host_bytes(bounds.max_block_entries(), U16_BYTES)?,
+        row_sequence_slots: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
+        row_positions: allocate_zeroed_host_bytes(bounds.max_input_tokens(), U32_BYTES)?,
+        output_token_indices: allocate_zeroed_host_bytes(bounds.max_output_slots(), U32_BYTES)?,
     }))
 }
 
@@ -94,7 +95,7 @@ pub(crate) fn allocate_packed_host_input(
     context: &CudaContext,
     capacity: usize,
 ) -> LlamaBatchExecutorResult<BatchHostInput> {
-    let bytes = allocate_zeroed_bytes(capacity, 1)?;
+    let bytes = allocate_zeroed_host_bytes(capacity, 1)?;
     let pinned = context
         .allocate_pinned_host_buffer(usize_u64(
             capacity,
@@ -106,26 +107,6 @@ pub(crate) fn allocate_packed_host_input(
     Ok(BatchHostInput::IterationBatch(
         IterationBatchHostWorkspace { bytes, pinned },
     ))
-}
-
-fn allocate_zeroed_bytes(
-    elements: usize,
-    element_bytes: usize,
-) -> LlamaBatchExecutorResult<Box<[u8]>> {
-    let requested = checked_host_byte_len(
-        elements,
-        element_bytes,
-        LlamaBatchExecutorResource::HostWorkspace,
-    )?;
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(requested)
-        .map_err(|_| LlamaBatchExecutorError::HostAllocation {
-            resource: LlamaBatchExecutorResource::HostWorkspace,
-            requested_bytes: requested as u64,
-        })?;
-    bytes.resize(requested, 0);
-    Ok(bytes.into_boxed_slice())
 }
 
 fn allocate_device(

@@ -5,6 +5,7 @@
 //! materializes native-endian host bytes for the selected cold path.
 
 use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::host::allocate_zeroed_host_bytes;
 
 const F32_BYTES_USIZE: usize = std::mem::size_of::<f32>();
 const F32_BYTES: u64 = 4;
@@ -43,7 +44,7 @@ pub(in crate::llama) fn build_absolute_rope_angles(
             .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
                 resource: LlamaBatchExecutorResource::RopeCos,
             })?;
-    let mut angles = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
+    let mut angles = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
         for pair in 0..half {
             let exponent = (2 * pair) as f32 / head_dimension as f32;
@@ -76,8 +77,8 @@ pub(in crate::llama) fn build_absolute_cpu_rope_tables(
             .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
                 resource: LlamaBatchExecutorResource::RopeCos,
             })?;
-    let mut cos = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
-    let mut sin = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
+    let mut cos = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
+    let mut sin = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
         for pair in 0..half {
             let exponent = (2 * pair) as f32 / head_dimension as f32;
@@ -96,27 +97,6 @@ pub(in crate::llama) fn build_absolute_cpu_rope_tables(
         }
     }
     Ok((cos, sin))
-}
-
-fn allocate_zeroed_bytes(
-    elements: usize,
-    element_bytes: usize,
-) -> LlamaBatchExecutorResult<Box<[u8]>> {
-    let requested =
-        elements
-            .checked_mul(element_bytes)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::HostWorkspace,
-            })?;
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(requested)
-        .map_err(|_| LlamaBatchExecutorError::HostAllocation {
-            resource: LlamaBatchExecutorResource::HostWorkspace,
-            requested_bytes: requested as u64,
-        })?;
-    bytes.resize(requested, 0);
-    Ok(bytes.into_boxed_slice())
 }
 
 #[cfg(test)]
