@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-3은 bounded registry의 exact lookup을 기존 closed dispatcher에 CPU-only로 연결했다.
+**상태:** In progress — C06-4는 closed dispatch outcome의 allocation-free observation contract를 CPU-only로 고정했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -67,6 +67,17 @@ eligibility bool이 동일 signature에서 계산됐다는 request-construction 
 이 adapter는 CUDA/native handle, capture/launch, model/executor mutation, poison/evict write,
 completion/KV retry, CLI/metrics를 하지 않는다. 따라서 C07 owner만 logical slot을 native graph
 resource와 실제 lifetime contract에 연결할 수 있다.
+
+### C06-4 — dispatch observation contract (CPU-only)
+
+GraphDispatchMetrics는 registry adapter가 반환한 full/piecewise selection, exact-eager selection,
+그리고 require rejection을 fixed-size saturating counter로 분리한다. 모든 closed fallback reason은
+독립적으로 집계되며, require rejection은 reason에는 포함되지만 eager selection으로 위장되지 않는다.
+snapshot은 replay slot, signature fingerprint, request ID를 보관하지 않는다.
+
+이 count는 graph launch, replay, completion 또는 performance hit를 뜻하지 않는다. selector, immutable
+registry, executor, CUDA owner, CLI/default에는 연결하지 않으며, C07만 native launch와 completion evidence를
+기록할 수 있다.
 
 ## 2. Execution mode
 
@@ -150,20 +161,22 @@ model instance별 graph inventory는 설정 상한을 가진다.
 metric과 trace에 closed reason을 남긴다.
 
 ```text
-graph-hit
+policy-disabled
 not-prepared
 unsupported-stage
 unsupported-shape
 unsupported-sampling
 layout-mismatch
+signature-mismatch
 backend-not-capture-safe
 graph-poisoned
-launch-failed-recovered
 capacity-disabled
 operator-capability-unknown
 ```
 
-request ID를 metric label로 사용하지 않는다.
+full/piecewise selection은 fallback reason이 아닌 별도 dispatch outcome counter다. `graph-hit`과
+`launch-failed-recovered`는 native launch/completion lifecycle을 전제하므로 C06-4 vocabulary에 넣지 않으며,
+C07 owner가 별도 lifecycle metric으로 정의한다. request ID를 metric label로 사용하지 않는다.
 
 ## 8. Failure policy
 

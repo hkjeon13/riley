@@ -16,6 +16,8 @@ mod gemm_policy;
 mod generation;
 #[path = "executor/graph.rs"]
 mod graph;
+#[path = "executor/graph_metrics.rs"]
+mod graph_metrics;
 #[path = "executor/graph_registry.rs"]
 mod graph_registry;
 #[path = "executor/graph_registry_dispatch.rs"]
@@ -54,6 +56,7 @@ pub use graph::{
     GraphSamplingBackend, GraphSignature, GraphSignatureFingerprint, GraphStaticSignature,
     GraphTensorSignature, GraphWorkloadStage, select_execution_graph,
 };
+pub use graph_metrics::{GraphDispatchMetrics, GraphDispatchMetricsSnapshot};
 pub use graph_registry::{
     GraphEntryFootprint, GraphRegistry, GraphRegistryAvailability, GraphRegistryBuildError,
     GraphRegistryEntry, GraphRegistryEntryState, GraphRegistryLimits, GraphRegistryLookup,

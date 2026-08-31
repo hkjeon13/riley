@@ -850,6 +850,12 @@ pub enum GraphFallbackReason {
     OperatorCapabilityUnknown,
 }
 
+/// Number of closed fallback-reason counters exposed by graph dispatch metrics.
+///
+/// Keep this value and the fixed index mapping below synchronized whenever the
+/// closed fallback vocabulary changes.
+pub(crate) const GRAPH_FALLBACK_REASON_METRIC_COUNT: u8 = 11;
+
 impl GraphFallbackReason {
     /// Stable allocation-free identifier for metrics and traces.
     #[must_use]
@@ -866,6 +872,24 @@ impl GraphFallbackReason {
             Self::GraphPoisoned => "graph-poisoned",
             Self::CapacityDisabled => "capacity-disabled",
             Self::OperatorCapabilityUnknown => "operator-capability-unknown",
+        }
+    }
+
+    /// Returns this reason's fixed counter position for in-process metrics.
+    #[must_use]
+    pub(crate) const fn metric_index(self) -> u8 {
+        match self {
+            Self::PolicyDisabled => 0,
+            Self::NotPrepared => 1,
+            Self::UnsupportedStage => 2,
+            Self::UnsupportedShape => 3,
+            Self::UnsupportedSampling => 4,
+            Self::LayoutMismatch => 5,
+            Self::SignatureMismatch => 6,
+            Self::BackendNotCaptureSafe => 7,
+            Self::GraphPoisoned => 8,
+            Self::CapacityDisabled => 9,
+            Self::OperatorCapabilityUnknown => 10,
         }
     }
 }
