@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-2는 fixed metadata geometry의 canonical cold digest를 CPU-only로 고정했다.
+**상태:** In progress — C07-3은 active rows의 trailing graph-padding topology를 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -48,6 +48,16 @@ digest에는 allocation address, pointer, payload byte, active-row count, actual
 batch value가 들어가지 않는다. 이 type은 C07-local value identity일 뿐 C06 `GraphMetadataLayoutSignature` 변환,
 registry key, graph prepared/capture/replay 권한이나 current V1 packed metadata ABI adapter를 만들지 않는다. future
 cold owner는 production ownership·padding·exact equality를 별도로 검증한 뒤에만 이를 더 큰 graph identity에 넣을 수 있다.
+
+### C07-3 — trailing pure-decode padding plan (CPU-only)
+
+C07-3은 base pure-decode validation 뒤의 active-row count `A`만 받아 C07-0 selector의 exact bucket `M`과
+`P = M - A`를 계산한다. supported `A=1..32`에서 active lane은 prefix `[0,A)`, trailing placeholder lane은
+`[A,M)`이며, `0` 또는 `32` 초과는 `None`으로 남아 maximum bucket으로 대체하지 않는다.
+
+이 plan은 metadata lane topology일 뿐 request/output/KV block 또는 caller row mapping이 아니다. sentinel/zero-fill,
+row transformation, block-table padding, actual metadata packing과 kernel mask는 future owner가 별도로 증명해야 한다.
+`A`와 `P`는 dynamic iteration fact이므로 C07-1 cold layout identity나 C07-2 geometry digest에 넣지 않는다.
 
 ## 1. 배경과 가설
 

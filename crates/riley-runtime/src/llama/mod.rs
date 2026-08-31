@@ -18,6 +18,8 @@ mod generation;
 mod graph;
 #[allow(dead_code)] // C07-1 deliberately precedes its future executor owner.
 mod graph_decode_layout;
+#[allow(dead_code)] // C07-3 deliberately precedes its future metadata packer.
+mod graph_decode_padding;
 #[path = "executor/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "executor/graph_registry.rs"]
