@@ -4,8 +4,9 @@
 분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
 shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을,
 C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source host slab packer를
-각각 분리했다. CUDA owner, KV, buffer orchestration, pinned-memory write/metadata transport,
-dispatch, output, public API와 production default는 유지한다.
+각각 분리했고, C04-7은 borrowed CUDA metadata view binding을 분리했다. CUDA owner, KV,
+buffer orchestration, pinned-memory write/metadata transport, dispatch, output, public API와
+production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -149,6 +150,16 @@ active-row preflight는 zero-fill 이전에 실행하고, 기존 seven-source �
 이 module은 allocation, pinned-memory write, H2D copy, device span/view, stream,
 `BatchMetadataTransport` policy와 command-batch lifecycle을 소유하지 않는다. 따라서 이 역시
 GPU parity나 performance non-regression을 주장하지 않는 source-only slice다.
+
+### C04-7 — borrowed CUDA metadata-view extraction
+
+separate cold buffer와 packed slab을 `PackedBatchV1` 및 optional token/output span으로 bind하는
+descriptor는 `llama/executor/device_views.rs`에 둔다. 이 component는 preallocated
+`CudaDeviceBuffer`를 빌려 range/dtype/error mapping만 수행하며 allocation, pinned-memory,
+upload/copy, stream/command batch, transport policy, forward/KV/model ownership을 갖지 않는다.
+batch owner는 host descriptor 생성, H2D enqueue, preflight/dispatch ordering과 completion/poison
+semantics를 그대로 보유한다. 이 source-only slice도 GPU parity나 performance non-regression을
+주장하지 않는다.
 
 ## 6. Allocation 검증
 

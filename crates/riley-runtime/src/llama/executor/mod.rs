@@ -5,6 +5,7 @@
 //! scheduling policy unless their dedicated ownership boundary says so.
 
 pub(crate) mod buffers;
+pub(crate) mod device_views;
 pub(crate) mod error;
 pub(crate) mod metadata;
 pub(crate) mod metrics;

@@ -473,7 +473,8 @@ mod source_contract_tests {
         for required in [
             "execute_fixed_graph(",
             "PackedBatchHostV1::new(",
-            "PackedBatchV1::new(",
+            "per_operation_device_views(",
+            "packed_device_views(",
             "output_token_indices",
         ] {
             assert!(
