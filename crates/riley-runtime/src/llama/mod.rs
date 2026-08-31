@@ -77,6 +77,8 @@ pub(crate) use plan::{PhysicalWeightId, PhysicalWeightMetadata};
 
 #[cfg(test)]
 mod source_contract_tests {
+    use std::error::Error as _;
+
     use super::batch::LlamaBatchMetadataConfig;
     use super::batch_executor::{
         ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
@@ -99,6 +101,30 @@ mod source_contract_tests {
             super::executor::metrics::LlamaBatchShapeBucketHit::new(4);
         assert_eq!(hit.dense_rows(), 4);
         assert_eq!(hit.hit_count(), 0);
+    }
+
+    #[test]
+    fn batch_executor_facade_reexports_the_executor_error_vocabulary() {
+        let resource: super::batch_executor::LlamaBatchExecutorResource =
+            super::executor::error::LlamaBatchExecutorResource::HostWorkspace;
+        assert_eq!(resource.to_string(), "batch_host_workspace");
+
+        let batch_error = super::batch::LlamaBatchError::InvalidBatch {
+            field: "rows",
+            reason: "test-only invalid batch",
+        };
+        let executor_error: super::batch_executor::LlamaBatchExecutorError = batch_error.into();
+        assert_eq!(
+            executor_error.to_string(),
+            "invalid Llama batch rows: test-only invalid batch"
+        );
+        assert!(executor_error.source().is_some());
+
+        let result: super::batch_executor::LlamaBatchExecutorResult<()> = Err(executor_error);
+        assert!(matches!(
+            result,
+            Err(super::batch_executor::LlamaBatchExecutorError::Metadata(_))
+        ));
     }
 
     #[test]

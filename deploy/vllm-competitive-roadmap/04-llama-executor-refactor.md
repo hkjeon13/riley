@@ -1,7 +1,8 @@
 # C04 — Llama Batch Executor 동작 보존 분리
 
 **상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
-분리한다. CUDA owner, KV, buffer, dispatch, output, public API와 production default는 유지한다.
+분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동한다. CUDA owner,
+KV, buffer, dispatch, output, public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
 
@@ -97,6 +98,15 @@ CUDA buffer/weight/KV/stream/dispatch/close/poison/output code는 이동하거�
 CPU source boundary test는 이 value-only module이 scheduler/server와 runtime resource owner를
 import하지 않음을 고정한다. 이는 GPU parity나 performance non-regression을 대신하지 않으며,
 그 검증은 C02-qualified candidate가 준비된 뒤 후속 C04 slice에서 수행한다.
+
+### C04-2 — error/resource facade extraction
+
+`LlamaBatchExecutorResource`, `LlamaBatchExecutorError`, result alias와 `Display`/`Error`/`From`
+계약은 `llama/executor/error.rs`에 둔다. 기존 `batch_executor` facade가 같은 nominal type을
+`pub use`하여 `riley_runtime::llama::*` public path와 error text/category를 보존한다. 이 error
+vocabulary는 batch metadata, forward failure, CUDA site, paged-KV error를 기술할 수 있지만
+prepared owner·buffer·weight·KV·stream을 소유하지 않는다. C04-3의 `shape.rs`는 이 facade만
+참조하여 이전 batch-owner module로 역의존하지 않는다.
 
 ## 6. Allocation 검증
 
