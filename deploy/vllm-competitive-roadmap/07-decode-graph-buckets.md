@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-3은 active rows의 trailing graph-padding topology를 CPU-only로 고정했다.
+**상태:** In progress — C07-4는 cold metadata layout과 trailing padding의 exact bucket binding을 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -58,6 +58,16 @@ C07-3은 base pure-decode validation 뒤의 active-row count `A`만 받아 C07-0
 이 plan은 metadata lane topology일 뿐 request/output/KV block 또는 caller row mapping이 아니다. sentinel/zero-fill,
 row transformation, block-table padding, actual metadata packing과 kernel mask는 future owner가 별도로 증명해야 한다.
 `A`와 `P`는 dynamic iteration fact이므로 C07-1 cold layout identity나 C07-2 geometry digest에 넣지 않는다.
+
+### C07-4 — exact layout/padding binding (CPU-only)
+
+C07-4는 검증된 cold metadata layout과 C07-3 padding plan을 결합할 때 두 exact bucket `M`이 같아야 한다는
+계약을 typed error로 닫는다. mismatch는 다른 bucket 재선택이나 maximum fallback으로 복구하지 않는다. binding은
+caller-provided digest를 받지 않고 bound layout에서 C07-2 geometry digest를 직접 계산·보관한다.
+
+이 binding은 bucket equality와 layout-derived identity만 증명한다. metadata content, address stability, row/request/output/KV
+mapping, sentinel/packing, allocation, C06 signature/registry, capture/replay 권한을 만들지 않는다. cold owner는 이 binding을
+재사용할지와 어느 lifecycle에서 만들지를 별도로 검토해야 하며, 이후 실제 buffer와 kernel contract를 검증해야 한다.
 
 ## 1. 배경과 가설
 
