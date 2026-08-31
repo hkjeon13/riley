@@ -2,8 +2,9 @@
 
 **상태:** In progress — C04-1은 executor shape 관측/히트 value type을 별도 metrics module로
 분리했고, C04-2는 error/resource/result vocabulary를 executor facade로 이동했으며, C04-3은
-shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을
-각각 분리한다. CUDA owner, KV, buffer orchestration, dispatch, output, public API와 production
+shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold allocation/cleanup을,
+C04-5는 packed metadata의 checked layout descriptor를 각각 분리했다. CUDA owner, KV,
+buffer orchestration, actual metadata packing/transport, dispatch, output, public API와 production
 default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
@@ -128,6 +129,16 @@ batch owner에 남기므로 새 module은 `BatchMetadataTransport`, model/forwar
 stream/dispatch를 참조하지 않는다. owner close는 기존 순서대로 모든 resource close를 시도하고,
 input helper에서 받은 첫 cleanup error만 기존 전체 close result에 병합한다. public API와
 allocation count/byte contract는 바꾸지 않는다.
+
+### C04-5 — checked packed-metadata layout extraction
+
+`ByteRegion`, `PackedIterationLayout`과 alignment/region 계산은
+`llama/executor/metadata.rs`에 둔다. 이 module은 packed input slab의 offset, byte length,
+cold capacity와 overflow/invalid-capacity error만 계산하며 device allocation, pinned-memory
+write, H2D copy, device view binding, command-batch lifecycle이나 `BatchMetadataTransport` policy를
+소유하지 않는다. batch owner는 기존 pack/transport/dispatch 순서와 public nominal type을 그대로
+유지한다. 따라서 이번 source-only slice는 packed layout의 alignment·capacity semantics를
+변경하지 않으며 GPU parity와 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

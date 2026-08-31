@@ -6,5 +6,6 @@
 
 pub(crate) mod buffers;
 pub(crate) mod error;
+pub(crate) mod metadata;
 pub(crate) mod metrics;
 pub(crate) mod shape;
