@@ -223,6 +223,18 @@ pub(crate) fn cuda_error(site: ExecutionSite, source: CudaError) -> LlamaBatchEx
     LlamaBatchExecutorError::Cuda { site, source }
 }
 
+/// Computes one typed executor byte length without losing its resource category.
+#[inline]
+pub(crate) fn checked_byte_len(
+    elements: usize,
+    element_bytes: usize,
+    resource: LlamaBatchExecutorResource,
+) -> LlamaBatchExecutorResult<usize> {
+    elements
+        .checked_mul(element_bytes)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}
+
 /// Records the first CUDA cleanup failure while later closes still run.
 pub(crate) fn record_close(
     first: &mut Option<LlamaBatchExecutorError>,
@@ -251,5 +263,25 @@ impl From<LlamaForwardError> for LlamaBatchExecutorError {
 impl From<PagedKvError> for LlamaBatchExecutorError {
     fn from(source: PagedKvError) -> Self {
         Self::PagedKv(source)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_byte_len_is_exact_and_retains_its_overflow_resource() {
+        assert_eq!(
+            checked_byte_len(3, 4, LlamaBatchExecutorResource::GreedyResults)
+                .expect("representable byte length"),
+            12
+        );
+        assert!(matches!(
+            checked_byte_len(usize::MAX, 2, LlamaBatchExecutorResource::RopeCos),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RopeCos,
+            })
+        ));
     }
 }

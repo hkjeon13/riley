@@ -43,6 +43,9 @@ fn executor_error_vocabulary_does_not_own_runtime_resources_or_scheduling_policy
     for required in [
         "cuda_error",
         "LlamaBatchExecutorError::Cuda",
+        "checked_byte_len",
+        "checked_mul(element_bytes)",
+        "LlamaBatchExecutorError::ArithmeticOverflow",
         "record_close",
         "LlamaBatchExecutorError::Cleanup",
     ] {

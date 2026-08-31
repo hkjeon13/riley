@@ -10,7 +10,7 @@ use super::super::batch::LlamaBatchMetadataConfig;
 use super::super::error::{ExecutionSite, LlamaOp};
 use super::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
-    cuda_error as allocation_cuda, record_close,
+    checked_byte_len, cuda_error as allocation_cuda, record_close,
 };
 use super::host::allocate_zeroed_host_bytes;
 
@@ -184,16 +184,6 @@ pub(crate) fn close_host_input(input: BatchHostInput) -> Option<LlamaBatchExecut
     first
 }
 
-fn checked_host_byte_len(
-    elements: usize,
-    element_bytes: usize,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<usize> {
-    elements
-        .checked_mul(element_bytes)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
-}
-
 fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
     u64::try_from(value).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
@@ -213,7 +203,7 @@ fn allocate_per_operation_device_metadata(
                     element_bytes: usize,
                     resource: LlamaBatchExecutorResource|
      -> LlamaBatchExecutorResult<CudaDeviceBuffer> {
-        let bytes = checked_host_byte_len(elements, element_bytes, resource)?;
+        let bytes = checked_byte_len(elements, element_bytes, resource)?;
         allocate_device(
             context,
             usize_u64(bytes, resource)?,
@@ -259,7 +249,7 @@ fn allocate_per_operation_device_metadata(
 }
 
 fn allocate_zeroed_u32(elements: usize) -> LlamaBatchExecutorResult<Box<[u32]>> {
-    let requested_bytes = checked_host_byte_len(
+    let requested_bytes = checked_byte_len(
         elements,
         U32_BYTES,
         LlamaBatchExecutorResource::HostWorkspace,

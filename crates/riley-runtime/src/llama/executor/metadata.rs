@@ -6,7 +6,9 @@
 use super::super::batch::{
     LLAMA_BATCH_METADATA_V1_VERSION, LlamaBatchMetadataConfig, LlamaPackedBatchMetadata,
 };
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::error::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, checked_byte_len,
+};
 
 const U16_BYTES: usize = 2;
 const U32_BYTES: usize = 4;
@@ -251,9 +253,7 @@ fn push_region(
     resource: LlamaBatchExecutorResource,
 ) -> LlamaBatchExecutorResult<ByteRegion> {
     let offset = align_up(*cursor, alignment, resource)?;
-    let byte_len = elements
-        .checked_mul(element_bytes)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })?;
+    let byte_len = checked_byte_len(elements, element_bytes, resource)?;
     *cursor = offset
         .checked_add(byte_len)
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })?;
@@ -388,15 +388,5 @@ fn region_slice_mut(
 ) -> LlamaBatchExecutorResult<&mut [u8]> {
     bytes
         .get_mut(region.offset..region.end()?)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
-}
-
-fn checked_byte_len(
-    elements: usize,
-    element_bytes: usize,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<usize> {
-    elements
-        .checked_mul(element_bytes)
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }

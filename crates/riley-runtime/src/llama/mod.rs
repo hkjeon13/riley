@@ -529,6 +529,26 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn executor_byte_lengths_share_one_typed_overflow_facade() {
+        for (boundary, source, expected_calls) in [
+            ("batch owner", include_str!("batch_executor.rs"), 7),
+            ("batch buffers", include_str!("executor/buffers.rs"), 2),
+            ("packed metadata", include_str!("executor/metadata.rs"), 4),
+        ] {
+            assert!(
+                !source.contains("fn checked_host_byte_len(")
+                    && !source.contains("fn checked_byte_len("),
+                "{boundary} must not retain a local typed byte-length helper"
+            );
+            assert_eq!(
+                source.matches("checked_byte_len(").count(),
+                expected_calls,
+                "{boundary} must use the shared typed byte-length helper at every existing boundary"
+            );
+        }
+    }
+
+    #[test]
     fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
         let forward = include_str!("forward.rs");
         let variant_begin = forward

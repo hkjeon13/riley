@@ -39,7 +39,7 @@ use super::executor::dispatch::{
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
-use super::executor::error::{cuda_error as batch_cuda, record_close};
+use super::executor::error::{checked_byte_len, cuda_error as batch_cuda, record_close};
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::host::allocate_zeroed_host_bytes;
 use super::executor::metadata::{
@@ -2453,32 +2453,32 @@ fn build_batch_allocation_report(
                 resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
             })?;
     let packed_metadata_device_bytes = [
-        checked_host_byte_len(
+        checked_byte_len(
             offset_count,
             U32_BYTES,
             LlamaBatchExecutorResource::SequenceBlockOffsets,
         )?,
-        checked_host_byte_len(
+        checked_byte_len(
             bounds.max_block_entries(),
             U32_BYTES,
             LlamaBatchExecutorResource::PhysicalBlockIds,
         )?,
-        checked_host_byte_len(
+        checked_byte_len(
             bounds.max_block_entries(),
             U16_BYTES,
             LlamaBatchExecutorResource::ValidTokens,
         )?,
-        checked_host_byte_len(
+        checked_byte_len(
             bounds.max_input_tokens(),
             U32_BYTES,
             LlamaBatchExecutorResource::RowSequenceSlots,
         )?,
-        checked_host_byte_len(
+        checked_byte_len(
             bounds.max_input_tokens(),
             U32_BYTES,
             LlamaBatchExecutorResource::RowPositions,
         )?,
-        checked_host_byte_len(
+        checked_byte_len(
             bounds.max_output_slots(),
             U32_BYTES,
             LlamaBatchExecutorResource::OutputTokenIndices,
@@ -2624,7 +2624,7 @@ fn upload_batch_tokens(
     if token_ids.len() == forward.plan.sequence_length() {
         return forward.upload_tokens(token_ids, stream).map_err(Into::into);
     }
-    let byte_len = checked_host_byte_len(
+    let byte_len = checked_byte_len(
         token_ids.len(),
         U32_BYTES,
         LlamaBatchExecutorResource::HostWorkspace,
@@ -2667,16 +2667,6 @@ fn upload_prefix(
     destination
         .upload_from_slice(0, &source[..byte_len], staging, stream)
         .map_err(|source| batch_cuda(site, source))
-}
-
-fn checked_host_byte_len(
-    elements: usize,
-    element_bytes: usize,
-    resource: LlamaBatchExecutorResource,
-) -> LlamaBatchExecutorResult<usize> {
-    elements
-        .checked_mul(element_bytes)
-        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
 }
 
 fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {
