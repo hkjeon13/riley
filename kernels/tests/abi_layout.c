@@ -530,6 +530,10 @@ _Static_assert(offsetof(RileyCudaFixed37GemmPlanInfo, reserved) == 72,
 static RileyCudaStatus (*const nvidia_environment_probe_symbol)(
     RileyCudaNvidiaEnvironmentSnapshot*, RileyCudaErrorInfo*) =
     riley_cuda_nvidia_environment_probe;
+static RileyCudaStatus (*const graph_capture_begin_symbol)(
+    RileyCudaStream*, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin;
 static RileyCudaStatus (*const command_batch_copy_h2d_symbol)(
     RileyCudaDeviceBuffer*, uint64_t, RileyCudaPinnedHostBuffer*, uint64_t,
     uint64_t, RileyCudaStream*, RileyCudaErrorInfo*) =
@@ -738,6 +742,7 @@ static RileyCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 // warning configurations.
 const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
+    (const void*)&graph_capture_begin_symbol,
     (const void*)&command_batch_copy_h2d_symbol,
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&hugging_face_smollm2_rms_norm_symbol,

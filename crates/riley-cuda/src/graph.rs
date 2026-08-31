@@ -1,8 +1,8 @@
 //! CUDA Graph ABI vocabulary and fail-closed lifecycle policy.
 //!
-//! This module deliberately contains no native CUDA Graph call yet. It fixes
-//! the ownership vocabulary and validates lifecycle transitions on the CPU so
-//! the later native capture slice cannot silently widen the contract.
+//! C05-1 wires one native capture-begin ABI stub while still fixing ownership
+//! vocabulary and lifecycle transitions on the CPU. The stub fails closed, so
+//! a later successful capture slice cannot silently widen this contract.
 
 use std::marker::PhantomData;
 use std::num::NonZeroU64;
@@ -414,32 +414,34 @@ impl CudaStream {
     /// Starts CUDA Graph capture on this stream when the linked native ABI
     /// provides it.
     ///
-    /// The C05 foundation intentionally has no native graph symbol yet. With
-    /// CUDA disabled this returns an actionable unavailable error; with CUDA
-    /// enabled it returns not-supported without mutating stream ownership or
-    /// falling back to eager execution.
+    /// With CUDA disabled this returns an actionable unavailable error. With
+    /// CUDA enabled it calls the linked native ABI, which currently returns
+    /// not-supported without mutating stream ownership or falling back to
+    /// eager execution.
     ///
     /// # Errors
     ///
-    /// Always returns an error until the additive native graph ABI is linked.
+    /// Always returns an error until a later native slice can return a safely
+    /// owned capture handle.
     pub fn begin_graph_capture(
         &mut self,
         mode: CudaGraphCaptureMode,
     ) -> CudaResult<GraphCapture<'_>> {
-        let _ = (self, mode);
         #[cfg(feature = "cuda")]
         {
+            self.native.begin_graph_capture(mode as u32)?;
             Err(CudaError::new(
-                CudaErrorKind::NotSupported,
-                CudaErrorDomain::Rust,
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
                 CudaErrorStage::Prepare,
                 0,
                 "CudaStream::begin_graph_capture",
-                "the linked Riley CUDA ABI has no CUDA Graph capture entry point yet",
+                "native graph capture returned success without an owned capture handle",
             ))
         }
         #[cfg(not(feature = "cuda"))]
         {
+            let _ = (self, mode);
             Err(CudaError::unavailable("CudaStream::begin_graph_capture"))
         }
     }

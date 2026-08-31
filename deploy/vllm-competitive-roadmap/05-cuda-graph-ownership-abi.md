@@ -22,12 +22,25 @@ default이며 반드시 거부한다. 이 record는 capture/exec ID, submission/
 certainty, poison 상태를 보존하며 기존 error buffer의 tail extension이 아니다. C11/C++/Rust layout test는
 size, alignment, all critical offset과 enum numeric contract를 고정한다.
 
-Rust의 `graph` module은 native CUDA call 없이 lifecycle transition을 fail-closed로 검증한다. feature-off
+Rust의 `graph` module은 lifecycle transition을 CPU에서도 fail-closed로 검증한다. feature-off
 `CudaStream::begin_graph_capture`는 fake graph나 eager fallback 없이 actionable unavailable error를
-반환하며, CUDA-enabled build도 native symbol이 연결되기 전에는 not-supported로 실패한다. 실제 native
+반환한다. 실제 native
 capture/instantiate/replay/close symbol, resource lease, operation-specific capture capability query와 GPU
 lifecycle/fault/performance test는 후속 vertical slice로 남긴다. 따라서 이 slice는 GPU parity나 launch
 overhead 개선을 주장하지 않는다.
+
+### C05-1 — native capture-begin fail-closed vertical slice (CPU/ABI-only)
+
+`riley_cuda_graph_capture_begin` 하나를 static native archive와 Rust FFI에 연결한다. 유효한
+`out_capture`은 항상 먼저 null로 만들고, optional `RileyCudaGraphErrorInfo`는 forward-compatible
+`struct_size`를 보존한 채 `CAPTURE_BEGIN`과 zero ID/flag로 초기화한다. malformed companion record는
+generic validation error로 거부하고 기록을 쓰지 않는다.
+
+이 slice는 `cudaStreamBeginCapture`, current-context 전환, stream dereference, command-batch/resource
+lease 변경, graph allocation을 수행하지 않는다. 대신 thread-local mode와 non-null stream을 검증한 뒤
+native `NOT_SUPPORTED`을 반환한다. 따라서 CUDA-enabled Rust build도 Rust-only placeholder가 아닌 native
+ABI 결과를 받지만, 성공 capture handle은 만들지 않는다. C11 source ABI test와 CPU-only source contract는
+새 symbol/wiring과 이 fail-closed 제한을 고정하며 GPU 실행·성능 개선은 주장하지 않는다.
 
 ## 2. 범위
 

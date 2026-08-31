@@ -7,7 +7,7 @@ use riley_cuda::{
 };
 
 #[test]
-fn graph_contract_is_additive_and_does_not_claim_native_capture_symbols() {
+fn graph_contract_is_additive_and_declares_the_capture_begin_symbol() {
     let header = include_str!("../../../kernels/include/riley_cuda.h");
     let ffi = include_str!("../src/ffi.rs");
 
@@ -28,8 +28,11 @@ fn graph_contract_is_additive_and_does_not_claim_native_capture_symbols() {
         );
     }
     assert!(header.contains("rather than a tail extension of RileyCudaErrorInfo"));
-    assert!(!header.contains("riley_cuda_graph_capture_begin("));
-    assert!(!ffi.contains("riley_cuda_graph_capture_begin"));
+    assert!(header.contains("riley_cuda_graph_capture_begin("));
+    assert!(ffi.contains("struct RawGraphErrorInfo"));
+    assert!(ffi.contains("struct RawGraphCapture"));
+    assert!(ffi.contains("riley_cuda_graph_capture_begin"));
+    assert!(ffi.contains("graph_capture_begin_metadata_is_valid"));
 }
 
 #[test]
@@ -77,11 +80,45 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
 
     let graph_source = include_str!("../src/graph.rs");
     assert!(graph_source.contains("CudaError::unavailable(\"CudaStream::begin_graph_capture\")"));
-    assert!(graph_source.contains("no CUDA Graph capture entry point yet"));
+    assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
+    assert!(graph_source.contains("without an owned capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
         assert!(
             !graph_source.contains(forbidden),
             "graph contract must remain model/runtime independent: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn native_capture_begin_stub_is_wired_and_fails_closed_without_cuda_work() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let cmake = include_str!("../../../kernels/CMakeLists.txt");
+    let build_script = include_str!("../build.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+
+    assert!(header.contains("out_capture is required and is null on every return"));
+    assert!(native.contains("*out_capture = nullptr;"));
+    assert!(
+        native.contains("clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN)")
+    );
+    assert!(native.contains("RILEY_CUDA_STATUS_NOT_SUPPORTED"));
+    assert!(native.contains("native CUDA Graph capture is not linked into this build"));
+    assert!(native.contains("graph_error_reserved_is_zero"));
+    assert!(cmake.contains("src/graph.cu"));
+    assert!(build_script.contains("kernels_dir.join(\"src/graph.cu\")"));
+    assert!(abi_layout.contains("graph_capture_begin_symbol"));
+
+    for forbidden in [
+        "cudaStreamBeginCapture",
+        "CurrentContext",
+        "command_batch",
+        "stream->",
+    ] {
+        assert!(
+            !native.contains(forbidden),
+            "C05-1 native stub must not begin CUDA work or mutate stream ownership: {forbidden}"
         );
     }
 }

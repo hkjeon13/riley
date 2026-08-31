@@ -27,6 +27,7 @@ add_library(riley_cuda_native STATIC
     src/fixed37_attention.cu
     src/fixed37_primitives.cu
     src/gemm.cu
+    src/graph.cu
     src/host_runtime.cu
     src/memory.cu
     src/primitives.cu

@@ -1121,6 +1121,16 @@ RileyCudaStatus riley_cuda_stream_command_batch_begin(
 RileyCudaStatus riley_cuda_stream_command_batch_end(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// C05-1 ABI probe only: this validates the capture-begin contract and returns
+// NOT_SUPPORTED without beginning CUDA capture, changing stream ownership, or
+// allocating a graph. out_capture is required and is null on every return;
+// out_graph_error is optional companion metadata for the attempted begin.
+RileyCudaStatus riley_cuda_graph_capture_begin(
+    RileyCudaStream* stream,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_stream_query(
     RileyCudaStream* stream,
     uint8_t* out_complete,

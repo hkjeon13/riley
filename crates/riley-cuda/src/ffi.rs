@@ -46,6 +46,8 @@ const NVIDIA_PERSISTENCE_DISABLED: u32 = 0;
 #[cfg(feature = "nvml")]
 const NVIDIA_PERSISTENCE_ENABLED: u32 = 1;
 const ERROR_INFO_SIZE: u32 = 272;
+const GRAPH_ERROR_INFO_SIZE: u32 = 56;
+const GRAPH_STAGE_CAPTURE_BEGIN: u32 = 1;
 const DEVICE_PROPERTIES_SIZE: u32 = 320;
 #[cfg(feature = "nvml")]
 const NVIDIA_DEVICE_SNAPSHOT_SIZE: u32 = 320;
@@ -130,6 +132,37 @@ impl ErrorInfo {
             domain: 0,
             stage: 0,
             message: [0; ERROR_MESSAGE_CAPACITY],
+        }
+    }
+}
+
+#[repr(C)]
+struct RawGraphErrorInfo {
+    struct_size: u32,
+    graph_stage: u32,
+    capture_id: u64,
+    exec_id: u64,
+    submission_started: u8,
+    completion_known: u8,
+    resource_release_known: u8,
+    poisoned: u8,
+    reserved0: u32,
+    reserved: [u64; 3],
+}
+
+impl RawGraphErrorInfo {
+    fn new() -> Self {
+        Self {
+            struct_size: GRAPH_ERROR_INFO_SIZE,
+            graph_stage: 0,
+            capture_id: 0,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known: 0,
+            poisoned: 0,
+            reserved0: 0,
+            reserved: [0; 3],
         }
     }
 }
@@ -348,6 +381,12 @@ struct RawContext {
 
 #[repr(C)]
 struct RawStream {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawGraphCapture {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
 }
@@ -1287,6 +1326,13 @@ unsafe extern "C" {
     fn riley_cuda_stream_synchronize(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_begin(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_end(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_capture_begin(
+        stream: *mut RawStream,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_stream_wait_event(
         stream: *mut RawStream,
         event: *mut RawEvent,
@@ -2119,6 +2165,54 @@ impl StreamHandle {
         // call owns completion and any fail-closed post-error lifecycle state.
         let status = unsafe { riley_cuda_stream_command_batch_end(self.as_ptr(), &mut error) };
         status_result(status, "end CUDA stream command batch", &error)
+    }
+
+    pub(super) fn begin_graph_capture(&mut self, mode: u32) -> CudaResult<()> {
+        const OPERATION: &str = "begin CUDA Graph capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: self uniquely owns the stream; every output points to a
+        // correctly sized local record. C05-1 requires the native stub to
+        // leave capture null and avoid mutating stream ownership.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin(
+                self.as_ptr(),
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        if !capture.is_null() {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                OPERATION,
+                "native graph-capture stub returned an unexpected owning capture handle",
+            ));
+        }
+        if !graph_capture_begin_metadata_is_valid(&graph_error) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Prepare,
+                0,
+                OPERATION,
+                "native graph-capture stub returned malformed graph companion metadata",
+            ));
+        }
+        status_result(status, OPERATION, &error)?;
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph-capture stub returned success without an owning capture handle",
+        ))
     }
 
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
@@ -4964,6 +5058,19 @@ fn missing_output(operation: &'static str, message: &'static str) -> CudaError {
     )
 }
 
+fn graph_capture_begin_metadata_is_valid(error: &RawGraphErrorInfo) -> bool {
+    error.struct_size == GRAPH_ERROR_INFO_SIZE
+        && error.graph_stage == GRAPH_STAGE_CAPTURE_BEGIN
+        && error.capture_id == 0
+        && error.exec_id == 0
+        && error.submission_started == 0
+        && error.completion_known == 0
+        && error.resource_release_known == 0
+        && error.poisoned == 0
+        && error.reserved0 == 0
+        && error.reserved == [0; 3]
+}
+
 #[cfg(feature = "nvml")]
 fn invalid_nvidia_snapshot(message: impl Into<String>) -> CudaError {
     CudaError::new(
@@ -5006,6 +5113,17 @@ fn c_array_to_string<const N: usize>(bytes: &[c_char; N]) -> String {
 
 const _: () = assert!(size_of::<ErrorInfo>() == 272);
 const _: () = assert!(offset_of!(ErrorInfo, message) == 16);
+const _: () = assert!(size_of::<RawGraphErrorInfo>() == 56);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, struct_size) == 0);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, graph_stage) == 4);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, capture_id) == 8);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, exec_id) == 16);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, submission_started) == 24);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, completion_known) == 25);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, resource_release_known) == 26);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, poisoned) == 27);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved0) == 28);
+const _: () = assert!(offset_of!(RawGraphErrorInfo, reserved) == 32);
 const _: () = assert!(size_of::<RawDeviceProperties>() == 320);
 const _: () = assert!(offset_of!(RawDeviceProperties, name) == 64);
 #[cfg(feature = "nvml")]
