@@ -439,6 +439,7 @@ fn executor_rope_only_materializes_cold_host_table_bytes_and_scalar_shape() {
     for required in [
         "build_absolute_rope_angles",
         "build_absolute_cpu_rope_tables",
+        "absolute_rope_table_shape",
         "absolute_rope_position_count",
         "RopeTableBytes",
         "table_byte_len",

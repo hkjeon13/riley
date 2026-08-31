@@ -19,7 +19,8 @@ C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 seq
 count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
 C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26은 typed packed-region
 validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar conversion을 error facade로
-일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했다. CUDA owner, KV,
+일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했으며, C04-29는
+absolute RoPE cold table shape preflight를 rope helper로 공유했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -398,6 +399,16 @@ device view가 같은 pure helper를 사용하며, `PackedIterationInput` overfl
 
 host write/H2D copy, device span 생성, CUDA invocation, allocation과 owner lifecycle은 각 caller에
 그대로 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-29 — absolute RoPE cold table-shape preflight reuse
+
+`llama/executor/rope.rs`는 absolute RoPE table의 half-width와 checked element count를 두 cold
+builder가 공유하도록 계산한다. allocation 전의 `RopeCos` overflow mapping, odd head dimension의
+floor semantics, zero-element table은 유지한다.
+
+F32 byte sizing, angles의 단일 allocation과 CPU cosine/sine의 순차 allocation, native-byte write loop,
+CUDA upload/launch와 owner lifecycle은 각 caller에 그대로 남는다. 이 source-only slice는 GPU parity나
+performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

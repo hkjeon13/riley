@@ -30,12 +30,11 @@ pub(in crate::llama) fn absolute_rope_position_count(
     Ok(table_byte_len / row_bytes)
 }
 
-#[allow(clippy::cast_precision_loss)]
-pub(in crate::llama) fn build_absolute_rope_angles(
+/// Returns the absolute `RoPE` half-width and checked cold table element count.
+fn absolute_rope_table_shape(
     position_count: usize,
     head_dimension: usize,
-    theta: f32,
-) -> LlamaBatchExecutorResult<Box<[u8]>> {
+) -> LlamaBatchExecutorResult<(usize, usize)> {
     let half = head_dimension / 2;
     let elements =
         position_count
@@ -43,6 +42,16 @@ pub(in crate::llama) fn build_absolute_rope_angles(
             .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
                 resource: LlamaBatchExecutorResource::RopeCos,
             })?;
+    Ok((half, elements))
+}
+
+#[allow(clippy::cast_precision_loss)]
+pub(in crate::llama) fn build_absolute_rope_angles(
+    position_count: usize,
+    head_dimension: usize,
+    theta: f32,
+) -> LlamaBatchExecutorResult<Box<[u8]>> {
+    let (half, elements) = absolute_rope_table_shape(position_count, head_dimension)?;
     let mut angles = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
         for pair in 0..half {
@@ -69,13 +78,7 @@ pub(in crate::llama) fn build_absolute_cpu_rope_tables(
     head_dimension: usize,
     theta: f32,
 ) -> LlamaBatchExecutorResult<RopeTableBytes> {
-    let half = head_dimension / 2;
-    let elements =
-        position_count
-            .checked_mul(half)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::RopeCos,
-            })?;
+    let (half, elements) = absolute_rope_table_shape(position_count, head_dimension)?;
     let mut cos = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     let mut sin = allocate_zeroed_host_bytes(elements, F32_BYTES_USIZE)?;
     for position in 0..position_count {
@@ -158,6 +161,44 @@ mod tests {
                 }
             ));
         }
+    }
+
+    #[test]
+    fn absolute_rope_table_shape_preserves_floor_and_overflow_semantics() {
+        assert_eq!(
+            absolute_rope_table_shape(3, 5).expect("odd head dimension keeps floor half-width"),
+            (2, 6)
+        );
+        assert_eq!(
+            absolute_rope_table_shape(3, 1).expect("sub-pair head dimension has zero elements"),
+            (0, 0)
+        );
+        assert!(matches!(
+            absolute_rope_table_shape(usize::MAX, 4),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RopeCos,
+            })
+        ));
+    }
+
+    #[test]
+    fn absolute_rope_builders_preserve_empty_floor_shape() {
+        for head_dimension in [0, 1] {
+            assert!(
+                build_absolute_rope_angles(3, head_dimension, 4.0)
+                    .expect("sub-pair head dimension keeps an empty angle table")
+                    .is_empty()
+            );
+            let (cos, sin) = build_absolute_cpu_rope_tables(3, head_dimension, 4.0)
+                .expect("sub-pair head dimension keeps empty CPU tables");
+            assert!(cos.is_empty());
+            assert!(sin.is_empty());
+        }
+        assert!(
+            build_absolute_rope_angles(0, usize::MAX, 4.0)
+                .expect("zero positions do not precompute a row width")
+                .is_empty()
+        );
     }
 
     #[test]

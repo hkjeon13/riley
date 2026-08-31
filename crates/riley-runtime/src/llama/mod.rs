@@ -510,6 +510,19 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn absolute_rope_builders_share_cold_table_shape_preflight() {
+        let source = include_str!("executor/rope.rs");
+        assert!(source.contains("fn absolute_rope_table_shape("));
+        assert_eq!(
+            source
+                .matches("absolute_rope_table_shape(position_count, head_dimension)")
+                .count(),
+            2,
+            "both cold absolute RoPE builders must share one shape preflight"
+        );
+    }
+
+    #[test]
     fn cold_zeroed_host_bytes_share_one_checked_allocator() {
         for (boundary, source, expected_calls) in [
             ("batch owner", include_str!("batch_executor.rs"), 1),
