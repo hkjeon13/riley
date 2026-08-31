@@ -109,7 +109,8 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
 V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace, 10,000
-bounded raw `bounded-mixed-program-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
+bounded raw `bounded-mixed-program-v1` trace, 10,000 bounded raw in-flight
+`inflight-mixed-program-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
 `DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
 output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. bounded mixed-stage
 trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
@@ -230,6 +231,36 @@ replacement submit, generated-history decoder cancel, two live decoder close를 
 report에는 source canonical descriptor와 operation list만 남긴다; V1 receipt/checker나 general reducer를
 재사용하지 않는다.
 
+`inflight-mixed-program-v1`은 위 settled-boundary grammar와도 별도 canonical descriptor다. 최대 네
+logical label(각 label은 한 번만 submit), 세 live request, 16 operations, 네 `plan`, 한 deferred
+`cancel`, 한 `abort_not_dispatched`를 상한으로 둔다. prompt 1과 `max_new_tokens=1..=2` 아래 raw
+`submit`, `plan`, in-flight `cancel`, `complete(feedback_slot_order)`, `abort_not_dispatched`, final
+`close`를 명시한다. `plan`은 idle에서만 열리고 `complete` 또는 abort가 정확히 한 pending plan을
+settle한다. abort 다음 operation은 반드시 fresh `plan`이며 normal `close`는 pending plan 없이 final에만
+허용한다. 최소 두 plan과 하나 이상의 decode+prefill mixed plan을 강제하고, fixed active/budget=3,
+prefill-chunk=1가 매 plan의 모든 live request를 선택하게 한다.
+
+seeded sampler는 first-plan width 1/2/3과 세 settlement branch(deferred-cancel complete,
+cancel 없는 `NotDispatched` abort/retry, deferred-cancel abort/retry)를 고정 분기한다. sampler는
+exhaustive enumerator가 아니며 arbitrary raw operation vector를 모두 생성한다고 주장하지 않는다.
+`complete` feedback에는 deferred-cancel label의 dense slot도 반드시 포함하지만, 그 slot은 token event를
+만들지 않고 prior history의 `Cancelled` completion 하나로 settle해야 한다. `NotDispatched` abort는
+deferred label만 terminal로 만들고 나머지 request의 history/state를 rollback하여 fresh iteration ID의
+retry plan으로 다시 검증한다. cancel 없는 abort/retry branch는 final prefill을 `max_new_tokens=2`로
+남겨 retry 뒤 live decoder를 normal `close`가 history 보존 `Cancelled` completion으로 settle하는지도 확인한다.
+
+pure `InflightMixedProgramOracle`은 `Scheduler`나 `IterationPlan`을 import하지 않는다. label의
+submission order·history·live/deferred 상태·pending semantic slot·terminal ledger만 보유하며, adapter는
+public plan의 request ID, work kind, input, dense slot, total token 및 single-inflight contract를 별도로
+assert한 뒤 iteration ID만 oracle feedback builder에 전달한다. corpus는 deferred prefill cancel의 reverse
+complete, generated-history decoder cancel의 abort/retry, cancel 없는 three-slot abort/retry를 canonical
+JSON으로 보존한다. 각 case는 token/index, deferred cancellation priority, terminal-once, final zero gauge를
+검증한다. 이 slice도 source descriptor만 failure diagnostic에 남기며 reducer/receipt를 추가하지 않는다.
+
+이는 `DeviceQuiescedMutationUnknown`, pending close disposition, stale/missing/unplanned feedback,
+settled-boundary cancellation, partial prefill, queue/aging/timeout, multiple deferred cancel/abort,
+fault injection, general reducer/receipt 또는 GPU evidence를 구현·주장하지 않는다.
+
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
@@ -268,6 +299,14 @@ oracle, public plan projection assertion, host-side replay 및 close quiescence�
 slot이나 immutable public plan으로 만들 수 없는 stale block-table version은 scheduler boundary property라고
 주장하지 않는다.
 
+`InflightMixedProgramTraceV1` corpus는
+`crates/riley-scheduler/tests/corpus/output-routing/inflight-mixed-program-v1/*.json`에 deferred
+prefill cancel의 reverse complete, deferred decoder cancel의 `NotDispatched` abort/retry, cancel 없는
+three-slot abort/retry와 retry 뒤 live decoder close를 committed canonical descriptor로 등록한다. fixture와 seeded trace는 strict
+decode/exact canonical round-trip, descriptor-only pure oracle, public plan projection, one outstanding
+plan rejection, host-side replay와 close quiescence를 모두 통과해야 한다. 이는 fixed V2 selector grammar의
+확장이나 device-executed abort/GPU evidence가 아니다.
+
 ### C03-B — GPU integration slice
 
 CPU model이 생성한 대표 trace 중 다음만 실제 CUDA path로 replay한다.
@@ -305,6 +344,11 @@ permutation 단순화·cancel timing 단순화를 함께 보장하는 general mi
 따라서 현재 failure report는 source만 출력하며 local/global minimum, failure signature 또는 root cause
 preservation을 주장하지 않는다.
 
+`inflight-mixed-program-v1`도 pending-plan lifecycle을 raw descriptor로 보존할 뿐 reducer를 추가하지
+않는다. plan/complete 쌍 삭제, abort/retry 쌍 축소, deferred-cancel target rebase와 permutation 단순화를
+함께 보장하는 minimizer는 별도 contract다. 따라서 source-only diagnostic은 local/global minimum, failure
+signature 또는 root-cause preservation을 주장하지 않는다.
+
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
@@ -327,6 +371,9 @@ crates/riley-scheduler/tests/support/routing_fuzz_receipt.rs
 crates/riley-scheduler/tests/bounded_mixed_program_routing.rs
 crates/riley-scheduler/tests/support/bounded_mixed_program_trace.rs
 crates/riley-scheduler/tests/corpus/output-routing/bounded-mixed-program-v1/*.json
+crates/riley-scheduler/tests/inflight_mixed_program_routing.rs
+crates/riley-scheduler/tests/support/inflight_mixed_program_trace.rs
+crates/riley-scheduler/tests/corpus/output-routing/inflight-mixed-program-v1/*.json
 benchmarks/scripts/check_routing_fuzz_receipt.py
 benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 .github/workflows/production-cpu.yml
@@ -334,7 +381,7 @@ benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 reducer/receipt와 bounded raw-program slice는 기존 test-only `serde_json` dev-dependency만
+현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice는 기존 test-only `serde_json` dev-dependency만
 사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
 않는다. 이후 arbitrary general grammar, durable cross-version replay contract, failure corpus 자동 등록,
 delta debugging, fault injection seam은 별도 PR 범위다.
@@ -372,6 +419,8 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
   source Git SHA를 diagnostic-only receipt로 create-new 기록
 - bounded raw-program failure: source canonical descriptor와 operation list를 test panic diagnostic으로
   남기며, V1 전용 receipt/checker를 재사용하지 않음
+- in-flight raw-program failure: source canonical descriptor와 operation list를 test panic diagnostic으로
+  남기며 reducer/receipt/checker를 재사용하지 않음
 - CI: unit-test step의 failure 때 receipt가 존재하면 strict checker를 실행하고 run/attempt-scoped
   temp directory를 14일 artifact로 upload; receipt가 없는 unrelated test failure는 그대로 보존
 
@@ -386,6 +435,8 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   create-new/no-overwrite/hostile-input rejection test 통과; 구조적 checker pass는 diagnostic-only다.
 - bounded raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
   10,000 seeded replay, settled cancel/terminal-once/final quiescence test 통과
+- in-flight raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
+  10,000 seeded replay, deferred cancel complete/abort-retry/terminal-once/final quiescence test 통과
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact
