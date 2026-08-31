@@ -332,10 +332,12 @@ It closes its private source duplicate before publishing the result and never
 reopens a path. It requires the Linux 6.3+ no-exec memfd ABI; no weaker seal or
 temporary-file fallback exists.
 
-This is not yet integrated with the root-bundle authenticator. The retained
-object API can provide a future caller with an already authenticated source
-descriptor, but neither library invokes the other or creates an FD 31/32
-arrangement. The snapshot does not authenticate the source
+`tools/native/gate-e-root-bundle-sealed-leaves/` now composes the retained
+root-bundle ABI with this primitive as a source-only, borrowed-handle bridge:
+it rechecks the held bundle before/between/after bootstrap/core data snapshots,
+and clears only its output pair on failure. It neither acquires nor closes the
+held bundle and creates no FD 31/32 arrangement. The snapshot does not
+authenticate the source
 path/manifest/object token/owner/ACL/filesystem,
 interpreter or runtime closure, host namespace, loader boundary, or same-object
 execution. It creates no FD 31/32 arrangement, no child, lease, cgroup, PID1
