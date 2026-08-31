@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-15는 same-layout pinned/device slab을 two-lifetime binding으로 좁힌다.
+**상태:** In progress — C07-16은 same-layout pinned/device binding의 exact slab H2D enqueue를 caller-owned command batch로 좁힌다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -212,6 +212,20 @@ device owner의 mutable borrow와 pinned lease의 retained borrow가 binding이 
 freshness, CUDA graph capture/replay, C06 signature/registry/dispatch, executor integration 또는 graph-safe/runnable authority는 만들지 않는다.
 CPU-only source contract가 exact cold allocation과 no-copy boundary를 검증하고 CUDA feature는 toolkit이 존재하는 host에서만 compile-only로 확인한다.
 actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-16 — exact V1 H2D command-batch enqueue (CUDA feature; no GPU execution test)
+
+C07-16은 C07-15의 successful pinned/device two-lifetime binding을 caller-owned active command-batch proxy로 `&'stream` borrow한다.
+adapter는 exact device offset `0`, pinned offset `0`, `binding.layout().total_bytes()` 길이의 H2D를 단 한 번 enqueue하고 native
+`CudaResult<()>`를 번역 없이 반환한다. 이 stream-lifetime borrow는 batch가 끝날 때까지 pinned/device owner rebind, re-stage, move,
+explicit close를 Rust level에서 막는다. `Ok(())`는 enqueue 성공만 뜻하며 device contents, copy completion, freshness, graph-ready 또는
+execution authority를 뜻하지 않는다.
+
+adapter는 stream 또는 command batch를 만들거나 finish하지 않는다. completion과 late error는 caller가 existing command-batch finish boundary에서
+명시적으로 관찰해야 하며, C07-16은 async token, allocation, host read/write, D2H, CUDA graph capture/replay, C06 signature/registry/dispatch,
+executor integration을 만들지 않는다. CPU-only source contract가 one-copy/full-length/lifetime/no-completion boundary를 검증하고 CUDA feature는
+toolkit이 존재하는 host에서만 library compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에
+남기며 그 전까지 모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
