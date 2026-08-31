@@ -73,6 +73,7 @@ REJECTED_SCHEMA_REASONS: Mapping[str, str] = MappingProxyType(
         "riley.rc3-gate-e-native-root-bundle-preflight.v1": "native-root-bundle-preflight-not-qualification",
         "riley.rc3-gate-e-root-bundle.v1": "native-root-bundle-manifest-not-qualification",
         "riley.rc3-gate-e-execution-closure-manifest.v1": "execution-closure-manifest-not-qualification",
+        "riley.rc3-gate-e-native-guardian-review.v1": "native-guardian-review-input-not-qualification",
         "riley.rc3-freeze-input-admission.v1": "freeze-input-admission-not-frozen-candidate",
         "riley.rc3-frozen-candidate.v1": "frozen-candidate-identity-not-semantic",
         "riley.rc3-frozen-candidate-replay.v1": "frozen-candidate-identity-not-semantic",

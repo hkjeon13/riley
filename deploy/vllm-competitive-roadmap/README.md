@@ -5,6 +5,11 @@
 RC3_GATE_E_NATIVE_GUARDIAN_REVIEW.md는 현 root-bundle v1과
 execution-closure sidecar 사이의 authentication gap 및 dynamic-loader strategy를
 implementation 전 review blocker로 분리한다.
+`gate_e_native_guardian_review_contract_v1.py`와 v1 JSON schema는 그 전의
+unapproved review input을 canonical bytes로만 fail-closed parse한다. v2 bundle/
+raw-sidecar binding, static-or-dynamic 전략 선택, FD 31/32 successor ABI와 required
+artifact digest set를 빠짐없이 요구하지만 file/ELF/host를 읽지 않으며, accepted result도
+approval·installation·GPU/Docker·qualification authority가 아니다.
 **Gate E v2 source boundary:** public legacy performance Bash entry와 historical internal
 sentinel은 모두 fail-closed다. `run_remote_rc3_gate_e_session_v2.py
 --performance-source-contract-probe`는 fixed remote root FD 아래 retired no-action

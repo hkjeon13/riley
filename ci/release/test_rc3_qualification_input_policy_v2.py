@@ -57,6 +57,7 @@ class QualificationInputPolicyTests(unittest.TestCase):
             "riley.reconstructed-runtime-python-prerequisite.v1": "runtime-python-prerequisite-not-materialization",
             "riley.rc3-gate-e-root-bundle.v1": "native-root-bundle-manifest-not-qualification",
             "riley.rc3-gate-e-execution-closure-manifest.v1": "execution-closure-manifest-not-qualification",
+            "riley.rc3-gate-e-native-guardian-review.v1": "native-guardian-review-input-not-qualification",
             "riley.release-candidate-report.v2": "legacy-release-candidate-rejected",
         }
         for schema_version, expected in cases.items():

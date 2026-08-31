@@ -53,6 +53,17 @@ PT_INTERP/loader resolution 전략이 아직 선택되지 않았다는 점을 im
 blocker로 고정한다. 이 review boundary는 guardian 구현이나 설치 지침이 아니며,
 execveat·FD 31/32·GPU/Docker authority를 만들지 않는다.
 
+`gate_e_native_guardian_review_contract_v1.py`와
+`gate-e-native-guardian-review-v1.schema.json`는 그 review 전에 작성할 수 있는
+**unapproved design input**의 raw canonical bytes만 검사한다. 이 input은 v2 bundle
+revision, manifest가 반복한 raw execution-closure sidecar의 length/SHA-256, static 또는
+same-object dynamic-loader 중 정확히 하나의 strategy, 그리고 bootstrap `0/1/2/31/32`와
+worker `0/1/2` FD ABI 및 필수 review-artifact digest set를 모두 명시해야 한다. parser는
+어떤 path·ELF·bundle·artifact도 열지 않고, accepted SHA-256도 input bytes의 identity일
+뿐 approval/evidence/installation/operation 권한이 아니다. 따라서 현재 checkout에는
+실제 review record나 digest를 commit하지 않으며, administrator/reviewer의 외부 결정은
+여전히 별도 record와 installed-object inspection으로만 확정한다.
+
 - guardian/warden/PID1 state machine, syscall/FD ABI, trust boundary, crash-recovery threat model
 - reproducible static-native build, source/binary digest pin, signing/approval ownership, rollback/revocation 정책
 - root service/PID1 integration, UID/GID·namespace·capability·signal·environment contract
