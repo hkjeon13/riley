@@ -3,14 +3,15 @@
 //! This module binds already allocated metadata buffers to the CUDA batch
 //! descriptor. It neither allocates, uploads, copies, nor owns streams.
 
-use riley_cuda::{
-    CudaBufferSpan, CudaDType, CudaDeviceBuffer, CudaError, PackedBatchHostV1, PackedBatchV1,
-};
+use riley_cuda::{CudaBufferSpan, CudaDType, CudaDeviceBuffer, PackedBatchHostV1, PackedBatchV1};
 
 use super::super::batch::LlamaPackedBatchMetadata;
 use super::super::error::ExecutionSite;
 use super::buffers::{PerOperationDeviceMetadata, U16_BYTES, U32_BYTES};
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::error::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
+    cuda_error as batch_cuda,
+};
 use super::metadata::{ByteRegion, PackedIterationLayout};
 
 /// Borrowed batch descriptor and optional input/output spans for one dispatch.
@@ -162,10 +163,6 @@ fn device_span_region(
         )?,
     )
     .map_err(|source| batch_cuda(site, source))
-}
-
-fn batch_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
-    LlamaBatchExecutorError::Cuda { site, source }
 }
 
 fn usize_u64(value: usize, resource: LlamaBatchExecutorResource) -> LlamaBatchExecutorResult<u64> {

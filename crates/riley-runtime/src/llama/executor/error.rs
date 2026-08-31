@@ -218,6 +218,11 @@ impl error::Error for LlamaBatchExecutorError {
     }
 }
 
+/// Wraps one CUDA failure with its stable executor operation site.
+pub(crate) fn cuda_error(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
+    LlamaBatchExecutorError::Cuda { site, source }
+}
+
 /// Records the first CUDA cleanup failure while later closes still run.
 pub(crate) fn record_close(
     first: &mut Option<LlamaBatchExecutorError>,

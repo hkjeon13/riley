@@ -10,7 +10,7 @@ canonical token map을, C04-10은 typed error poison routing과 command-submissi
 분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로, C04-12는
 gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 packed batch의
 host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
-facade로 분리했다. CUDA owner, KV,
+facade로, C04-15는 typed CUDA error construction을 error facade로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -248,6 +248,16 @@ performance non-regression을 주장하지 않는다.
 
 forward/KV/output/stream의 owner lifecycle과 close 순서 결정은 각 owner에 남는다. 이
 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-15 — typed CUDA error construction extraction
+
+`llama/executor/error.rs`는 `ExecutionSite`와 `CudaError`를 stable typed
+`LlamaBatchExecutorError::Cuda`로 묶는 `cuda_error` helper를 소유한다. batch owner,
+metadata buffer allocation, borrowed metadata-view binding은 이 helper를 기존 local mapper
+name으로 import하여 모든 `map_err` call site와 poison/dispatch ordering을 그대로 유지한다.
+
+CUDA primitive invocation, buffer/stream/KV ownership과 poison decision은 각 existing owner에
+남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

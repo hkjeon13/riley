@@ -14,7 +14,7 @@ use std::mem;
 
 use riley_cuda::{
     AttentionReductionProfile, Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext,
-    CudaDType, CudaDeviceBuffer, CudaError, CudaExecutionStream, CudaStream, EmbeddingParams,
+    CudaDType, CudaDeviceBuffer, CudaExecutionStream, CudaStream, EmbeddingParams,
     FIXED37_RAGGED_MAX_LOGICAL_TOKENS, GatedMultiplyParams, IndexedRopeParams, PackedBatchHostV1,
     PackedBatchV1, RaggedPagedAttentionParams, RaggedPagedKvCacheWriteParams, ResidualAddParams,
     ResidualRmsNormParams, RmsNormParams, RopeTableParams, RowGatherParams, SiluParams,
@@ -33,10 +33,10 @@ use super::executor::buffers::{
     close_device_input, close_host_input,
 };
 use super::executor::device_views::{packed_device_views, per_operation_device_views};
-use super::executor::error::record_close;
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
+use super::executor::error::{cuda_error as batch_cuda, record_close};
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::metadata::{
     PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
@@ -2867,10 +2867,6 @@ fn upload_prefix(
     destination
         .upload_from_slice(0, &source[..byte_len], staging, stream)
         .map_err(|source| batch_cuda(site, source))
-}
-
-fn batch_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
-    LlamaBatchExecutorError::Cuda { site, source }
 }
 
 fn checked_host_byte_len(

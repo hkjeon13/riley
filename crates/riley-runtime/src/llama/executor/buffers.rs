@@ -4,12 +4,13 @@
 //! batch executor retains the model, KV, `RoPE`, output, forward, and dispatch
 //! owners that use these buffers.
 
-use riley_cuda::{CudaContext, CudaDeviceBuffer, CudaError, CudaPinnedHostBuffer};
+use riley_cuda::{CudaContext, CudaDeviceBuffer, CudaPinnedHostBuffer};
 
 use super::super::batch::LlamaBatchMetadataConfig;
 use super::super::error::{ExecutionSite, LlamaOp};
 use super::error::{
-    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, record_close,
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
+    cuda_error as allocation_cuda, record_close,
 };
 
 pub(crate) const U32_BYTES: usize = 4;
@@ -291,8 +292,4 @@ fn allocate_zeroed_u32(elements: usize) -> LlamaBatchExecutorResult<Box<[u32]>> 
         })?;
     values.resize(elements, 0);
     Ok(values.into_boxed_slice())
-}
-
-fn allocation_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
-    LlamaBatchExecutorError::Cuda { site, source }
 }
