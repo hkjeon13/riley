@@ -128,6 +128,17 @@ report는 원본과 candidate-minimized V2 descriptor JSON 및 canonical operati
 shrunken descriptor를 재생성한다는 뜻은 아니다. predicate는 inner replayer가 panic하는지만 보존하므로
 same assertion site, failure signature 또는 root cause를 보존한다고 주장하지 않는다.
 
+V2는 별도 test-only pure `V2RoutingOracle`도 사용한다. 이 oracle은 scheduler나
+`IterationPlan`을 보유·순회하지 않고, bounded grammar가 정한 decoder A=`slot 0`,
+final-prefill B=`slot 1`, symbolic token/index, deferred cancellation, terminal ledger와 close
+결과만으로 feedback과 기대 public update를 만든다. adapter는 public plan의 request binding·stage·input·slot
+구조를 oracle 기대와 별도로 비교하고 iteration ID만 oracle feedback에 전달한다. 따라서 production
+plan에서 feedback의 request mapping을 다시 유도하지 않으며, reverse feedback의 token/completion은
+opaque public request ID에 bind한 oracle ledger와 비교한다. stale/missing/unplanned rejection 뒤에는
+oracle phase가 advance하지 않고 기존 public surface non-mutation check도 유지한다. 이는 fixed
+two-request V2 grammar의 independent routing/lifecycle oracle일 뿐 admission/aging/KV allocation을
+재구현하거나 general multi-request reference scheduler가 완성됐다는 뜻은 아니다.
+
 V2에는 test-only typed `OperationTraceV2DescriptorV1` codec도 있다. `format`,
 `format_version`, `trace_kind`, `case_id`, fixed-width lowercase `source_seed`와 bounded
 selector를 canonical JSON document로 고정하고, committed fixture를 exact byte round-trip 한 뒤
@@ -139,7 +150,7 @@ format/kind/version, invalid seed/bounds는 decode 단계에서 거부한다. `s
 portable historical runtime configuration을 serialize한다고 주장하지 않는다.
 
 이는 여전히 C03-A의 부분 범위다. unbounded/general mixed-operation generator와 그 전체 grammar의
-shrink/global-minimum counterexample, 독립 reference model, scheduled 1,000,000 seed rotation,
+shrink/global-minimum counterexample, general multi-request independent reference model, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
 multi-edit/delta-debugging reduction도 별도 범위다. V2
 shrinker는 이 작은 grammar의 greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
@@ -161,7 +172,8 @@ synthetic scheduler feedback의 request/token/generation-index mapping·terminal
 `crates/riley-scheduler/tests/corpus/output-routing/operation-trace-v2/*.json`의 committed canonical
 document로 같은 RC1 normal/cancel prefix를 보존하고, unplanned feedback rejection 뒤 valid reverse
 retry와 missing feedback rejection 뒤 deferred cancel + `NotDispatched` abort도 등록한다. fixture는
-typed strict decode, canonical byte round-trip, host-side synthetic feedback replay를 모두 통과해야 한다.
+typed strict decode, canonical byte round-trip, V2 pure oracle와 host-side synthetic feedback replay를
+모두 통과해야 한다.
 이는 GPU fixture나 C02/C03-B evidence가 아니다. `IterationResult::new` 단계에서 막히는 duplicate
 slot이나 immutable public plan으로 만들 수 없는 stale block-table version은 scheduler boundary property라고
 주장하지 않는다.

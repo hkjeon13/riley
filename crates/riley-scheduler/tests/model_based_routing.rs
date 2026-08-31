@@ -5,9 +5,13 @@
 //! permuted output order, and compares the public commit events with an
 //! independent `OutputSlot -> (request, generation step)` ledger.
 
+#[path = "support/reference_scheduler.rs"]
+mod reference_scheduler;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
+use reference_scheduler::V2RoutingOracle;
 use riley_runtime::paged_kv::{KvBlockPoolStats, KvLayout};
 use riley_scheduler::{
     ExecutionAbort, IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot,
@@ -1767,10 +1771,7 @@ enum OperationTraceV2Phase {
 struct OperationTraceV2State {
     scheduler: Option<Scheduler>,
     request_ids: BTreeMap<u32, RequestId>,
-    label_by_request: HashMap<RequestId, u32>,
-    histories: BTreeMap<u32, Vec<u32>>,
-    terminal_labels: BTreeSet<u32>,
-    cancelled_labels: BTreeSet<u32>,
+    oracle: Option<V2RoutingOracle>,
     plan: Option<IterationPlan>,
     phase: OperationTraceV2Phase,
     now_ns: u64,
@@ -1781,10 +1782,7 @@ impl OperationTraceV2State {
         Self {
             scheduler: None,
             request_ids: BTreeMap::new(),
-            label_by_request: HashMap::new(),
-            histories: BTreeMap::new(),
-            terminal_labels: BTreeSet::new(),
-            cancelled_labels: BTreeSet::new(),
+            oracle: None,
             plan: None,
             phase: OperationTraceV2Phase::New,
             now_ns: 0,
@@ -1803,6 +1801,18 @@ impl OperationTraceV2State {
             .expect("operation trace scheduler is initialized")
     }
 
+    fn oracle_mut(&mut self) -> &mut V2RoutingOracle {
+        self.oracle
+            .as_mut()
+            .expect("operation trace oracle is initialized")
+    }
+
+    fn oracle_ref(&self) -> &V2RoutingOracle {
+        self.oracle
+            .as_ref()
+            .expect("operation trace oracle is initialized")
+    }
+
     fn request_id(&self, label: u32) -> RequestId {
         *self
             .request_ids
@@ -1818,10 +1828,6 @@ fn operation_trace_v2_config(trace: OperationTraceV2) -> SchedulerConfig {
         final_prefill_len: trace.final_prefill_len,
         action: MixedStageAction::Commit,
     })
-}
-
-fn operation_trace_v2_step(now_ns: u64) -> usize {
-    usize::try_from(now_ns).expect("bounded operation-trace clock fits usize")
 }
 
 fn assert_operation_trace_v2_prime_plan(state: &OperationTraceV2State, plan: &IterationPlan) {
@@ -1861,21 +1867,6 @@ fn assert_operation_trace_v2_mixed_plan(
     assert_eq!(plan.total_tokens(), trace.final_prefill_len + 1);
 }
 
-fn operation_trace_v2_outputs(
-    expected: &[ExpectedOutput],
-    order: OperationTraceFeedbackOrder,
-) -> Vec<IterationOutput> {
-    let mut outputs = expected.to_vec();
-    outputs.sort_by_key(|output| output.slot);
-    if order == OperationTraceFeedbackOrder::ExplicitReverse {
-        outputs.reverse();
-    }
-    outputs
-        .into_iter()
-        .map(|output| IterationOutput::new(output.slot, output.token_id, false))
-        .collect()
-}
-
 fn replay_operation_trace_v2_submit(
     trace: OperationTraceV2,
     state: &mut OperationTraceV2State,
@@ -1889,6 +1880,11 @@ fn replay_operation_trace_v2_submit(
             assert_eq!(prompt_len, 1);
             assert_eq!(max_new_tokens, trace.decoder_max_new_tokens);
             state.scheduler = Some(new_scheduler(operation_trace_v2_config(trace)));
+            state.oracle = Some(V2RoutingOracle::new(
+                trace.seed,
+                trace.decoder_max_new_tokens,
+                trace.final_prefill_len,
+            ));
             vec![1_001]
         }
         2 => {
@@ -1911,17 +1907,13 @@ fn replay_operation_trace_v2_submit(
             .is_none(),
         "operation trace submitted the same logical label twice"
     );
-    assert!(
-        state
-            .label_by_request
-            .insert(submission.request_id(), label)
-            .is_none(),
-        "operation trace received a duplicate request ID"
-    );
-    assert!(
-        state.histories.insert(label, Vec::new()).is_none(),
-        "operation trace reset a logical request history"
-    );
+    match label {
+        1 => state.oracle_mut().bind_decoder(submission.request_id()),
+        2 => state
+            .oracle_mut()
+            .bind_final_prefill(submission.request_id()),
+        _ => unreachable!(),
+    }
     state.phase = match label {
         1 => OperationTraceV2Phase::DecoderSubmitted,
         2 => OperationTraceV2Phase::FinalPrefillSubmitted,
@@ -1946,10 +1938,12 @@ fn replay_operation_trace_v2_plan(trace: OperationTraceV2, state: &mut Operation
     state.phase = match previous_phase {
         OperationTraceV2Phase::DecoderSubmitted => {
             assert_operation_trace_v2_prime_plan(state, &plan);
+            state.oracle_mut().observe_prime_plan();
             OperationTraceV2Phase::PrimePlanned
         }
         OperationTraceV2Phase::FinalPrefillSubmitted => {
             assert_operation_trace_v2_mixed_plan(trace, state, &plan);
+            state.oracle_mut().observe_mixed_plan();
             OperationTraceV2Phase::MixedPlanned
         }
         _ => unreachable!(),
@@ -1958,7 +1952,6 @@ fn replay_operation_trace_v2_plan(trace: OperationTraceV2, state: &mut Operation
 }
 
 fn replay_operation_trace_v2_complete(
-    trace: OperationTraceV2,
     state: &mut OperationTraceV2State,
     order: OperationTraceFeedbackOrder,
 ) {
@@ -1971,40 +1964,31 @@ fn replay_operation_trace_v2_complete(
         .plan
         .take()
         .expect("operation trace has an in-flight plan");
-    let expected = expected_outputs(&plan, &state.label_by_request, &state.histories);
-    let result = IterationResult::new(
-        plan.iteration_id(),
-        operation_trace_v2_outputs(&expected, order),
-        0,
-        0,
-    )
-    .expect("operation trace result has unique slots");
+    let result = match previous_phase {
+        OperationTraceV2Phase::PrimePlanned => {
+            assert_eq!(order, OperationTraceFeedbackOrder::Canonical);
+            state.oracle_ref().prime_feedback(plan.iteration_id())
+        }
+        OperationTraceV2Phase::MixedPlanned => {
+            assert_eq!(order, OperationTraceFeedbackOrder::ExplicitReverse);
+            state
+                .oracle_ref()
+                .mixed_reverse_feedback(plan.iteration_id())
+        }
+        _ => unreachable!(),
+    };
     let now_ns = state.now_ns;
     let updates = state
         .scheduler_mut()
         .complete_iteration(&result, now_ns)
         .expect("bounded operation-trace commit");
-    assert!(updates.settlement_failures().is_empty());
-    let published = expected
-        .iter()
-        .copied()
-        .filter(|output| !state.cancelled_labels.contains(&output.label))
-        .collect::<Vec<_>>();
-    assert_token_events(
-        &published,
-        updates.token_events(),
-        trace.seed,
-        operation_trace_v2_step(now_ns),
-    );
-    append_published_tokens(&mut state.histories, &published);
-    assert_completions(
-        updates.completions(),
-        &state.label_by_request,
-        &state.histories,
-        &mut state.terminal_labels,
-        trace.seed,
-        operation_trace_v2_step(now_ns),
-    );
+    match previous_phase {
+        OperationTraceV2Phase::PrimePlanned => state.oracle_mut().record_prime_commit(&updates),
+        OperationTraceV2Phase::MixedPlanned => {
+            state.oracle_mut().record_mixed_commit(&updates, now_ns);
+        }
+        _ => unreachable!(),
+    }
     state.now_ns = state
         .now_ns
         .checked_add(1)
@@ -2026,39 +2010,19 @@ fn replay_operation_trace_v2_cancel(state: &mut OperationTraceV2State, label: u3
         .expect("defer operation-trace cancellation");
     assert!(cancellation.deferred_until_iteration_settles());
     assert!(cancellation.completion().is_none());
-    assert!(
-        state.cancelled_labels.insert(label),
-        "operation trace cancelled the same label twice"
-    );
+    state.oracle_mut().defer_decoder_cancel();
 }
 
 fn operation_trace_v2_rejected_result(
     plan: &IterationPlan,
-    expected: &[ExpectedOutput],
+    oracle: &V2RoutingOracle,
     rejected: OperationTraceRejectedFeedback,
 ) -> IterationResult {
-    let mut outputs = operation_trace_v2_outputs(expected, OperationTraceFeedbackOrder::Canonical);
     match rejected {
-        OperationTraceRejectedFeedback::Stale => {
-            let stale_id = IterationId::new(
-                plan.iteration_id()
-                    .get()
-                    .checked_add(1)
-                    .expect("bounded stale operation-trace ID"),
-            )
-            .expect("nonzero stale operation-trace ID");
-            IterationResult::new(stale_id, outputs, 0, 0)
-        }
-        OperationTraceRejectedFeedback::Missing => {
-            outputs.pop();
-            IterationResult::new(plan.iteration_id(), outputs, 0, 0)
-        }
-        OperationTraceRejectedFeedback::Unplanned => {
-            outputs[0] = IterationOutput::new(OutputSlot::new(99), expected[0].token_id, false);
-            IterationResult::new(plan.iteration_id(), outputs, 0, 0)
-        }
+        OperationTraceRejectedFeedback::Stale => oracle.stale_feedback(plan.iteration_id()),
+        OperationTraceRejectedFeedback::Missing => oracle.missing_feedback(plan.iteration_id()),
+        OperationTraceRejectedFeedback::Unplanned => oracle.unplanned_feedback(plan.iteration_id()),
     }
-    .expect("operation-trace rejected result remains structurally constructible")
 }
 
 fn replay_operation_trace_v2_reject(
@@ -2070,8 +2034,7 @@ fn replay_operation_trace_v2_reject(
         .plan
         .as_ref()
         .expect("operation trace has a mixed plan");
-    let expected = expected_outputs(plan, &state.label_by_request, &state.histories);
-    let result = operation_trace_v2_rejected_result(plan, &expected, rejected);
+    let result = operation_trace_v2_rejected_result(plan, state.oracle_ref(), rejected);
     let request_ids = state.request_ids.values().copied().collect();
     let surface = capture_surface(state.scheduler_ref(), request_ids);
     let now_ns = state.now_ns;
@@ -2094,7 +2057,7 @@ fn replay_operation_trace_v2_reject(
     assert_surface_unchanged(state.scheduler_ref(), &surface);
 }
 
-fn replay_operation_trace_v2_abort(trace: OperationTraceV2, state: &mut OperationTraceV2State) {
+fn replay_operation_trace_v2_abort(state: &mut OperationTraceV2State) {
     assert_eq!(state.phase, OperationTraceV2Phase::MixedPlanned);
     let plan = state.plan.take().expect("operation trace has a mixed plan");
     let now_ns = state.now_ns;
@@ -2102,16 +2065,9 @@ fn replay_operation_trace_v2_abort(trace: OperationTraceV2, state: &mut Operatio
         .scheduler_mut()
         .abort_iteration(plan.iteration_id(), ExecutionAbort::NotDispatched, now_ns)
         .expect("operation-trace not-dispatched abort");
-    assert!(updates.token_events().is_empty());
-    assert!(updates.settlement_failures().is_empty());
-    assert_completions(
-        updates.completions(),
-        &state.label_by_request,
-        &state.histories,
-        &mut state.terminal_labels,
-        trace.seed,
-        operation_trace_v2_step(now_ns),
-    );
+    state
+        .oracle_mut()
+        .record_not_dispatched_abort(&updates, now_ns);
     state.now_ns = state
         .now_ns
         .checked_add(1)
@@ -2135,21 +2091,8 @@ fn replay_operation_trace_v2_close(trace: OperationTraceV2, state: &mut Operatio
                 failure.error()
             )
         });
-    assert!(closed.settlement_failures().is_empty());
-    assert_completions(
-        closed.completions(),
-        &state.label_by_request,
-        &state.histories,
-        &mut state.terminal_labels,
-        trace.seed,
-        operation_trace_v2_step(state.now_ns),
-    );
-    assert_eq!(
-        state.terminal_labels.len(),
-        state.request_ids.len(),
-        "{}: operation trace did not terminally settle every logical request exactly once",
-        trace.describe()
-    );
+    let now_ns = state.now_ns;
+    state.oracle_mut().record_close(&closed, now_ns);
     assert_closed_quiescent(&closed);
     state.phase = OperationTraceV2Phase::Closed;
 }
@@ -2171,7 +2114,7 @@ fn replay_operation_trace_v2_inner(trace: OperationTraceV2) {
             ),
             OperationTraceV2Op::Plan => replay_operation_trace_v2_plan(trace, &mut state),
             OperationTraceV2Op::Complete(order) => {
-                replay_operation_trace_v2_complete(trace, &mut state, order);
+                replay_operation_trace_v2_complete(&mut state, order);
             }
             OperationTraceV2Op::Cancel { label } => {
                 replay_operation_trace_v2_cancel(&mut state, label);
@@ -2179,15 +2122,14 @@ fn replay_operation_trace_v2_inner(trace: OperationTraceV2) {
             OperationTraceV2Op::RejectFeedback(rejected) => {
                 replay_operation_trace_v2_reject(&mut state, rejected);
             }
-            OperationTraceV2Op::AbortNotDispatched => {
-                replay_operation_trace_v2_abort(trace, &mut state);
-            }
+            OperationTraceV2Op::AbortNotDispatched => replay_operation_trace_v2_abort(&mut state),
             OperationTraceV2Op::Close => replay_operation_trace_v2_close(trace, &mut state),
         }
     }
     assert_eq!(state.phase, OperationTraceV2Phase::Closed);
     assert!(state.scheduler.is_none());
     assert!(state.plan.is_none());
+    state.oracle_ref().assert_closed();
 }
 
 fn operation_trace_v2_fails(trace: OperationTraceV2) -> bool {
