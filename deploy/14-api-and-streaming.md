@@ -84,6 +84,27 @@ active shutdown과 engine drain을 재검증했다.
 | `GET` | `/v1/models/{id}` | exact configured model metadata |
 | `POST` | `/v1/completions` | streaming SSE 또는 aggregate completion |
 
+### C02-P0 보완 계약 — 구현 대기
+
+C02 candidate qualification에는 CLI 요청값이 아니라 cold prepare 뒤 실제 선택된
+runtime 구성을 재현 가능한 증적으로 남겨야 한다. 따라서 C02-P0가 완료되면 아래
+endpoint를 추가한다. 이 행은 현재 구현 상태를 주장하지 않으며, C02-P0가 merge되고
+원격 GPU gate를 통과할 때까지 `/v1/config` 요청은 기존 서버에서 지원되지 않는다.
+
+| Method | Endpoint | C02-P0 계약 |
+|---|---|---|
+| `GET` | `/v1/config` | cold prepare 성공 후 생성한 canonical effective-runtime-config bytes를 그대로 반환 |
+| non-`GET` | `/v1/config` | `405` |
+
+증적을 만들지 않은 일반 서버는 fabricated default를 반환하지 않고 sanitized `503
+config_unavailable`을 반환한다. C02-P0 mode에서는 candidate ID, configuration profile,
+absolute startup-artifact path를 all-or-none launch input으로 받고, configuration SHA는
+server가 실제 frozen argv/environment에서 직접 계산한다. endpoint와 create-only startup
+artifact에는 self-referential freeze/Gate-E hash를 넣지 않으며, 이 값들의 결합은 raw
+capture 뒤 C02 semantic checker가 담당한다. 세부 순서와 schema는
+[`C02-P0 runtime configuration receipt`](../benchmarks/release/candidates/c02-p0-runtime-config-receipt.md)를
+따른다.
+
 ## Layering
 
 ```text
@@ -109,6 +130,7 @@ prepared Runtime/CUDA executor
 | request/admission timeout or cancellation before response | 408 |
 | connection/backend overload | 429 |
 | model unavailable/server shutdown | 503 |
+| C02-P0 config evidence unavailable | sanitized `503 config_unavailable` |
 | internal CUDA/model/encoding failure | sanitized 500 |
 
 내부 pointer, filesystem path, tokenizer input, CUDA stack detail은 외부 응답에 노출하지

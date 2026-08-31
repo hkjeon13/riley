@@ -1,0 +1,1434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://riley.invalid/benchmarks/competitive/contract-v1.schema.json",
+  "title": "Riley vLLM competitive benchmark contract v1",
+  "description": "Closed manifests for the C01 competitive benchmark. This schema intentionally describes only plans and receipts; it does not assert that either lane is runnable or production-ready.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/contract"
+    },
+    {
+      "$ref": "#/$defs/matrix"
+    },
+    {
+      "$ref": "#/$defs/lane"
+    }
+  ],
+  "$defs": {
+    "schemaPath": {
+      "type": "string",
+      "pattern": "^(?:\\.\\./)?contract-v1\\.schema\\.json$"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:[^\\r\\n]*\\S)?$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "gitRevision": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "canonicalContractReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "schema_version",
+        "contract_id"
+      ],
+      "properties": {
+        "path": {
+          "const": "benchmarks/competitive/contract-v1.json"
+        },
+        "sha256": {
+          "const": "6ef30fb591a3421b8ffaef41e6ed6907d7308d90c72ee03955f9c083240cc931"
+        },
+        "schema_version": {
+          "const": "riley.competitive.contract.v1"
+        },
+        "contract_id": {
+          "const": "riley-vllm-competitive-v1"
+        }
+      }
+    },
+    "canonicalAssetReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256",
+        "schema_version",
+        "asset_id"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/manifestPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "schema_version": {
+          "enum": [
+            "riley.competitive.matrix.v1",
+            "riley.competitive.lane.v1"
+          ]
+        },
+        "asset_id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "artifactReceipts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "executable_sha256",
+        "source_or_wheel_sha256",
+        "dependency_lock_sha256",
+        "runtime_options_sha256",
+        "model_identity_sha256",
+        "tokenizer_identity_sha256"
+      ],
+      "properties": {
+        "executable_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "source_or_wheel_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "dependency_lock_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "runtime_options_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "model_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tokenizer_identity_sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*\\\\)(?!(?:.*/)?\\.{1,2}(?:/|$))[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    },
+    "manifestPath": {
+      "type": "string",
+      "pattern": "^benchmarks/competitive/(?:matrices|lanes)/[a-z0-9][a-z0-9-]*[a-z0-9]\\.json$"
+    },
+    "environmentKey": {
+      "enum": [
+        "gpu_uuid",
+        "gpu_model",
+        "compute_capability",
+        "gpu_count",
+        "driver_version",
+        "cuda_runtime_version",
+        "cuda_toolkit_version",
+        "container_image_digest",
+        "git_commit",
+        "source_archive_sha256",
+        "lane_command_sha256",
+        "engine_version",
+        "engine_revision",
+        "engine_options_sha256",
+        "model_id",
+        "model_revision",
+        "model_weights_sha256",
+        "tokenizer_revision",
+        "tokenizer_files_sha256",
+        "dtype",
+        "clock_policy",
+        "power_limit_watts"
+      ]
+    },
+    "requiredFor": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "diagnostic",
+          "m4",
+          "m5",
+          "s1"
+        ]
+      }
+    },
+    "samplingId": {
+      "enum": [
+        "greedy",
+        "seeded-top-p-v1"
+      ]
+    },
+    "modelSlot": {
+      "type": "string",
+      "pattern": "^dense-(?:0-5b|1-3b|7-8b)$"
+    },
+    "modelSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_status",
+        "architecture",
+        "dtype",
+        "model_slots",
+        "prohibited_features",
+        "campaign_manifest_requirements"
+      ],
+      "properties": {
+        "identity_status": {
+          "const": "campaign-pinned-required"
+        },
+        "architecture": {
+          "const": "dense-decoder"
+        },
+        "dtype": {
+          "const": "bf16"
+        },
+        "model_slots": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/modelSlotRequirement"
+          }
+        },
+        "prohibited_features": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "moe",
+              "multimodal",
+              "multi-gpu",
+              "multi-lora",
+              "quantization",
+              "speculative-decoding"
+            ]
+          }
+        },
+        "campaign_manifest_requirements": {
+          "type": "array",
+          "minItems": 5,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "model_id",
+              "model_revision",
+              "model_weights_sha256",
+              "tokenizer_revision",
+              "tokenizer_files_sha256",
+              "model_config_sha256",
+              "architecture_signature_sha256"
+            ]
+          }
+        }
+      }
+    },
+    "modelSlotRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "slot_id",
+        "parameter_count_billions_min",
+        "parameter_count_billions_max",
+        "family_compatibility"
+      ],
+      "properties": {
+        "slot_id": {
+          "$ref": "#/$defs/modelSlot"
+        },
+        "parameter_count_billions_min": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "parameter_count_billions_max": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "family_compatibility": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "llama",
+              "qwen"
+            ]
+          }
+        }
+      }
+    },
+    "diagnosticModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity_status",
+        "model_id",
+        "model_revision",
+        "weights_sha256",
+        "dtype",
+        "prompt_token_ids_source"
+      ],
+      "properties": {
+        "identity_status": {
+          "const": "known-diagnostic"
+        },
+        "model_id": {
+          "const": "HuggingFaceTB/SmolLM2-135M"
+        },
+        "model_revision": {
+          "const": "93efa2f097d58c2a74874c7e644dbc9b0cee75a2"
+        },
+        "weights_sha256": {
+          "const": "80521b40281d6ce74e35c9282c22539e75aa0ac8578892b2a59955ef78d55da1"
+        },
+        "dtype": {
+          "const": "bf16"
+        },
+        "prompt_token_ids_source": {
+          "$ref": "#/$defs/hashedArtifact"
+        }
+      }
+    },
+    "hashedArtifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "hardwareRequirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gpu_count",
+        "gpu_architecture",
+        "gpu_model",
+        "dtype",
+        "execution_host_requirement"
+      ],
+      "properties": {
+        "gpu_count": {
+          "const": 1
+        },
+        "gpu_architecture": {
+          "const": "sm89"
+        },
+        "gpu_model": {
+          "const": "NVIDIA GeForce RTX 4090"
+        },
+        "dtype": {
+          "const": "bf16"
+        },
+        "execution_host_requirement": {
+          "const": "remote-gpu-host-required"
+        }
+      }
+    },
+    "preflight": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fresh_process_per_independent_run",
+        "clean_git_required",
+        "thermal_stabilization_required",
+        "exclusive_gpu_required",
+        "warmup_excluded_from_measurements"
+      ],
+      "properties": {
+        "fresh_process_per_independent_run": {
+          "const": true
+        },
+        "clean_git_required": {
+          "const": true
+        },
+        "thermal_stabilization_required": {
+          "const": true
+        },
+        "exclusive_gpu_required": {
+          "const": true
+        },
+        "warmup_excluded_from_measurements": {
+          "const": true
+        }
+      }
+    },
+    "sloProfileId": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/id"
+        }
+      ]
+    },
+    "commonCell": {
+      "type": "object",
+      "required": [
+        "cell_id",
+        "required_for",
+        "measurement_mode",
+        "warm_state",
+        "sampling",
+        "eos_policy",
+        "cache_policy",
+        "arrival_mode",
+        "arrival_schedule_id",
+        "client_behavior",
+        "cancellation_rate_percent",
+        "slo_profile_id",
+        "primary"
+      ],
+      "properties": {
+        "cell_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 180,
+          "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+        },
+        "required_for": {
+          "$ref": "#/$defs/requiredFor"
+        },
+        "measurement_mode": {
+          "enum": [
+            "engine-only",
+            "http-streaming"
+          ]
+        },
+        "warm_state": {
+          "enum": [
+            "cold",
+            "warm"
+          ]
+        },
+        "sampling": {
+          "$ref": "#/$defs/samplingId"
+        },
+        "eos_policy": {
+          "enum": [
+            "ignore-eos",
+            "stop-on-eos"
+          ]
+        },
+        "cache_policy": {
+          "enum": [
+            "cache-off",
+            "controlled-prefix-hit-50",
+            "controlled-prefix-hit-90"
+          ]
+        },
+        "arrival_mode": {
+          "enum": [
+            "closed-loop",
+            "open-loop"
+          ]
+        },
+        "arrival_schedule_id": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+        },
+        "client_behavior": {
+          "enum": [
+            "normal",
+            "disconnect-after-first-chunk",
+            "backpressure"
+          ]
+        },
+        "cancellation_rate_percent": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "slo_profile_id": {
+          "$ref": "#/$defs/sloProfileId"
+        },
+        "primary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "explicitCell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonCell"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "concurrency",
+            "prompt_tokens",
+            "requested_output_tokens"
+          ],
+          "properties": {
+            "cell_id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 180,
+              "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+            },
+            "required_for": {
+              "$ref": "#/$defs/requiredFor"
+            },
+            "measurement_mode": {
+              "enum": [
+                "engine-only",
+                "http-streaming"
+              ]
+            },
+            "warm_state": {
+              "enum": [
+                "cold",
+                "warm"
+              ]
+            },
+            "sampling": {
+              "$ref": "#/$defs/samplingId"
+            },
+            "eos_policy": {
+              "enum": [
+                "ignore-eos",
+                "stop-on-eos"
+              ]
+            },
+            "cache_policy": {
+              "enum": [
+                "cache-off",
+                "controlled-prefix-hit-50",
+                "controlled-prefix-hit-90"
+              ]
+            },
+            "arrival_mode": {
+              "enum": [
+                "closed-loop",
+                "open-loop"
+              ]
+            },
+            "arrival_schedule_id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128,
+              "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+            },
+            "client_behavior": {
+              "enum": [
+                "normal",
+                "disconnect-after-first-chunk",
+                "backpressure"
+              ]
+            },
+            "cancellation_rate_percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "slo_profile_id": {
+              "$ref": "#/$defs/sloProfileId"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "concurrency": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "prompt_tokens": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "requested_output_tokens": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
+    },
+    "templateAxes": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "model_slot": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/modelSlot"
+          }
+        },
+        "concurrency": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "prompt_tokens": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "requested_output_tokens": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "arrival_rate_class": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "low",
+              "target",
+              "saturation",
+              "overload"
+            ]
+          }
+        },
+        "traffic_profile_id": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 128,
+            "pattern": "^[a-z0-9][a-z0-9_-]*[a-z0-9]$"
+          }
+        },
+        "cancellation_rate_percent": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          }
+        }
+      }
+    },
+    "templateCell": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/commonCell"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "template",
+            "axes"
+          ],
+          "properties": {
+            "cell_id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 180,
+              "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+            },
+            "required_for": {
+              "$ref": "#/$defs/requiredFor"
+            },
+            "measurement_mode": {
+              "enum": [
+                "engine-only",
+                "http-streaming"
+              ]
+            },
+            "warm_state": {
+              "enum": [
+                "cold",
+                "warm"
+              ]
+            },
+            "sampling": {
+              "$ref": "#/$defs/samplingId"
+            },
+            "eos_policy": {
+              "enum": [
+                "ignore-eos",
+                "stop-on-eos"
+              ]
+            },
+            "cache_policy": {
+              "enum": [
+                "cache-off",
+                "controlled-prefix-hit-50",
+                "controlled-prefix-hit-90"
+              ]
+            },
+            "arrival_mode": {
+              "enum": [
+                "closed-loop",
+                "open-loop"
+              ]
+            },
+            "arrival_schedule_id": {
+              "type": "string",
+              "minLength": 3,
+              "maxLength": 128,
+              "pattern": "^[a-z0-9][a-z0-9{}_-]*[a-z0-9}]$"
+            },
+            "client_behavior": {
+              "enum": [
+                "normal",
+                "disconnect-after-first-chunk",
+                "backpressure"
+              ]
+            },
+            "cancellation_rate_percent": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "slo_profile_id": {
+              "$ref": "#/$defs/sloProfileId"
+            },
+            "primary": {
+              "type": "boolean"
+            },
+            "template": {
+              "const": true
+            },
+            "axes": {
+              "$ref": "#/$defs/templateAxes"
+            }
+          }
+        }
+      ]
+    },
+    "promotionRule": {
+      "type": "object",
+      "required": [
+        "ttft_p95_ratio_max",
+        "tpot_p95_ratio_max",
+        "slo_goodput_ratio_min",
+        "peak_vram_ratio_max",
+        "failure_count_max",
+        "token_mismatch_count_max"
+      ],
+      "properties": {
+        "ttft_p95_ratio_max": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "tpot_p95_ratio_max": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "slo_goodput_ratio_min": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "peak_vram_ratio_max": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "failure_count_max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "token_mismatch_count_max": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schema_version",
+        "contract_id",
+        "status",
+        "purpose",
+        "required_independent_runs",
+        "orders",
+        "required_environment_keys",
+        "identity_requirements",
+        "measurement_requirements",
+        "m4",
+        "m5",
+        "matrix_manifests",
+        "lane_manifests",
+        "campaign_admission",
+        "result_states"
+      ],
+      "properties": {
+        "$schema": {
+          "$ref": "#/$defs/schemaPath"
+        },
+        "schema_version": {
+          "const": "riley.competitive.contract.v1"
+        },
+        "contract_id": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": [
+            "planned",
+            "active",
+            "retired"
+          ]
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "required_independent_runs": {
+          "type": "integer",
+          "minimum": 5
+        },
+        "orders": {
+          "const": [
+            "AB",
+            "BA"
+          ]
+        },
+        "required_environment_keys": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/environmentKey"
+          }
+        },
+        "identity_requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "candidate_lane_id",
+            "baseline_lane_id",
+            "same_campaign_fields",
+            "token_equivalence_policy"
+          ],
+          "properties": {
+            "candidate_lane_id": {
+              "const": "riley"
+            },
+            "baseline_lane_id": {
+              "const": "vllm-current"
+            },
+            "same_campaign_fields": {
+              "type": "array",
+              "minItems": 7,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "model_id",
+                  "model_revision",
+                  "model_weights_sha256",
+                  "tokenizer_revision",
+                  "tokenizer_files_sha256",
+                  "prompt_token_ids_sha256",
+                  "sampling",
+                  "seed",
+                  "requested_output_tokens",
+                  "eos_policy",
+                  "cache_policy",
+                  "arrival_schedule_id",
+                  "gpu_uuid",
+                  "driver_version",
+                  "cuda_runtime_version"
+                ]
+              }
+            },
+            "token_equivalence_policy": {
+              "enum": [
+                "exact-generated-token-hash-when-comparable",
+                "predeclared-semantic-gate-otherwise"
+              ]
+            }
+          }
+        },
+        "measurement_requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "percentile_method",
+            "statistics",
+            "warmup_excluded",
+            "engine_and_http_separate",
+            "failure_samples_excluded_from_success_percentiles"
+          ],
+          "properties": {
+            "percentile_method": {
+              "const": "nearest-rank"
+            },
+            "statistics": {
+              "type": "array",
+              "minItems": 3,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "p50",
+                  "p95",
+                  "p99",
+                  "median-of-independent-runs",
+                  "geometric-mean-ratio"
+                ]
+              }
+            },
+            "warmup_excluded": {
+              "const": true
+            },
+            "engine_and_http_separate": {
+              "const": true
+            },
+            "failure_samples_excluded_from_success_percentiles": {
+              "const": true
+            }
+          }
+        },
+        "m4": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/promotionRule"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ttft_p95_ratio_max",
+                "tpot_p95_ratio_max",
+                "slo_goodput_ratio_min",
+                "peak_vram_ratio_max",
+                "failure_count_max",
+                "token_mismatch_count_max",
+                "required_cell_selector"
+              ],
+              "properties": {
+                "ttft_p95_ratio_max": {
+                  "const": 1.03
+                },
+                "tpot_p95_ratio_max": {
+                  "const": 1.03
+                },
+                "slo_goodput_ratio_min": {
+                  "const": 0.97
+                },
+                "peak_vram_ratio_max": {
+                  "const": 1.05
+                },
+                "failure_count_max": {
+                  "const": 0
+                },
+                "token_mismatch_count_max": {
+                  "const": 0
+                },
+                "required_cell_selector": {
+                  "const": "all-expanded-cells-required-for-m4"
+                }
+              }
+            }
+          ]
+        },
+        "m5": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/promotionRule"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "ttft_p95_ratio_max",
+                "tpot_p95_ratio_max",
+                "slo_goodput_ratio_min",
+                "peak_vram_ratio_max",
+                "failure_count_max",
+                "token_mismatch_count_max",
+                "required_cell_selector",
+                "aggregate"
+              ],
+              "properties": {
+                "ttft_p95_ratio_max": {
+                  "const": 0.9
+                },
+                "tpot_p95_ratio_max": {
+                  "const": 0.9
+                },
+                "slo_goodput_ratio_min": {
+                  "const": 1.1
+                },
+                "peak_vram_ratio_max": {
+                  "const": 1.05
+                },
+                "failure_count_max": {
+                  "const": 0
+                },
+                "token_mismatch_count_max": {
+                  "const": 0
+                },
+                "required_cell_selector": {
+                  "const": "all-expanded-cells-required-for-m5"
+                },
+                "aggregate": {
+                  "const": "geometric-mean-ratio-across-required-cells"
+                }
+              }
+            }
+          ]
+        },
+        "matrix_manifests": {
+          "type": "array",
+          "minItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/manifestPath"
+          }
+        },
+        "lane_manifests": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/manifestPath"
+          }
+        },
+        "campaign_admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "current_competitor_pin_required",
+            "model_identity_pin_required",
+            "request_manifest_schema_version",
+            "execution_plan_schema_version",
+            "raw_record_schema_version",
+            "unknown_fields_rejected"
+          ],
+          "properties": {
+            "current_competitor_pin_required": {
+              "const": true
+            },
+            "model_identity_pin_required": {
+              "const": true
+            },
+            "request_manifest_schema_version": {
+              "const": "riley.competitive.requests.v1"
+            },
+            "execution_plan_schema_version": {
+              "const": "riley.competitive.execution-plan.v1"
+            },
+            "raw_record_schema_version": {
+              "const": "riley.competitive.raw.v1"
+            },
+            "unknown_fields_rejected": {
+              "const": true
+            }
+          }
+        },
+        "result_states": {
+          "const": [
+            "passed",
+            "partial-win",
+            "failed",
+            "incomparable"
+          ]
+        }
+      }
+    },
+    "matrix": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schema_version",
+        "matrix_id",
+        "tier",
+        "measurement_mode",
+        "hardware_requirement",
+        "model",
+        "preflight",
+        "cells"
+      ],
+      "properties": {
+        "$schema": {
+          "$ref": "#/$defs/schemaPath"
+        },
+        "schema_version": {
+          "const": "riley.competitive.matrix.v1"
+        },
+        "matrix_id": {
+          "$ref": "#/$defs/id"
+        },
+        "tier": {
+          "enum": [
+            "D",
+            "C",
+            "S",
+            "P"
+          ]
+        },
+        "measurement_mode": {
+          "enum": [
+            "engine-only",
+            "http-streaming",
+            "mixed-separated"
+          ]
+        },
+        "hardware_requirement": {
+          "$ref": "#/$defs/hardwareRequirement"
+        },
+        "model": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/diagnosticModel"
+            },
+            {
+              "$ref": "#/$defs/modelSelector"
+            }
+          ]
+        },
+        "preflight": {
+          "$ref": "#/$defs/preflight"
+        },
+        "parent_contract": {
+          "$ref": "#/$defs/canonicalContractReceipt"
+        },
+        "parent_asset": {
+          "$ref": "#/$defs/canonicalAssetReceipt"
+        },
+        "cells": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/explicitCell"
+              },
+              {
+                "$ref": "#/$defs/templateCell"
+              }
+            ]
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "tier": {
+                "const": "D"
+              }
+            },
+            "required": [
+              "tier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "model": {
+                "$ref": "#/$defs/diagnosticModel"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "tier": {
+                "enum": [
+                  "C",
+                  "S",
+                  "P"
+                ]
+              }
+            },
+            "required": [
+              "tier"
+            ]
+          },
+          "then": {
+            "properties": {
+              "model": {
+                "$ref": "#/$defs/modelSelector"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "lane": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "$schema",
+        "schema_version",
+        "lane_id",
+        "role",
+        "availability",
+        "engine",
+        "command",
+        "artifact_requirements"
+      ],
+      "properties": {
+        "$schema": {
+          "$ref": "#/$defs/schemaPath"
+        },
+        "schema_version": {
+          "const": "riley.competitive.lane.v1"
+        },
+        "lane_id": {
+          "$ref": "#/$defs/id"
+        },
+        "role": {
+          "enum": [
+            "candidate",
+            "baseline"
+          ]
+        },
+        "availability": {
+          "enum": [
+            "contract-only",
+            "campaign-pin-required",
+            "available"
+          ]
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "backend",
+            "pin_status",
+            "version",
+            "revision",
+            "dependency_lock_sha256"
+          ],
+          "properties": {
+            "name": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "backend": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "pin_status": {
+              "enum": [
+                "contract-only",
+                "campaign-pinned-required",
+                "pinned"
+              ]
+            },
+            "version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "dependency_lock_sha256": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/sha256"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        },
+        "command": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "argv",
+            "required_placeholders",
+            "output_format"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "contract-template",
+                "campaign-pin-required",
+                "available"
+              ]
+            },
+            "argv": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/nonEmptyString"
+              }
+            },
+            "required_placeholders": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "riley_executable",
+                  "vllm_executable",
+                  "model_id",
+                  "model_revision",
+                  "dtype",
+                  "host",
+                  "port",
+                  "result_dir",
+                  "campaign_id",
+                  "cell_id",
+                  "request_manifest"
+                ]
+              }
+            },
+            "output_format": {
+              "const": "riley.competitive.raw.v1"
+            }
+          }
+        },
+        "artifact_requirements": {
+          "type": "array",
+          "minItems": 4,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "executable_sha256",
+              "source_or_wheel_sha256",
+              "dependency_lock_sha256",
+              "runtime_options_sha256",
+              "model_identity",
+              "tokenizer_identity"
+            ]
+          }
+        },
+        "artifact_receipts": {
+          "$ref": "#/$defs/artifactReceipts"
+        },
+        "parent_contract": {
+          "$ref": "#/$defs/canonicalContractReceipt"
+        },
+        "parent_asset": {
+          "$ref": "#/$defs/canonicalAssetReceipt"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "contract-only"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "engine": {
+                "properties": {
+                  "pin_status": {
+                    "const": "contract-only"
+                  },
+                  "version": {
+                    "type": "null"
+                  },
+                  "revision": {
+                    "type": "null"
+                  },
+                  "dependency_lock_sha256": {
+                    "type": "null"
+                  }
+                }
+              },
+              "command": {
+                "properties": {
+                  "status": {
+                    "const": "contract-template"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "availability": {
+                "const": "campaign-pin-required"
+              }
+            },
+            "required": [
+              "availability"
+            ]
+          },
+          "then": {
+            "properties": {
+              "engine": {
+                "properties": {
+                  "pin_status": {
+                    "const": "campaign-pinned-required"
+                  },
+                  "version": {
+                    "type": "null"
+                  },
+                  "revision": {
+                    "type": "null"
+                  },
+                  "dependency_lock_sha256": {
+                    "type": "null"
+                  }
+                }
+              },
+              "command": {
+                "properties": {
+                  "status": {
+                    "const": "campaign-pin-required"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
