@@ -1,6 +1,10 @@
 # Riley vLLM 경쟁력 로드맵
 
 **상태:** In progress — C01과 C02-P0, C02-P1 provenance/source-only native claim-boundary closure는 clean remote branch에 커밋됐다. C02-P1의 raw provenance, reconstruction, input replay와 CPU/static hostile-path 검증은 source closure일 뿐 actual execution authority가 아니다. 이제 [C02-P2 native guardian과 root provisioning readiness](02c-c02-p2-native-guardian-readiness.md)에서 immutable native trust root·PID1/cgroup/ledger·no-GPU acceptance·별도 GPU/Docker authorization을 닫는다. actual Gate E producer normal return, durable semantic receipt, actual GPU capture·candidate freeze·lifecycle receipt·qualification은 아직 수행하지 않았다.
+
+RC3_GATE_E_NATIVE_GUARDIAN_REVIEW.md는 현 root-bundle v1과
+execution-closure sidecar 사이의 authentication gap 및 dynamic-loader strategy를
+implementation 전 review blocker로 분리한다.
 **Gate E v2 source boundary:** public legacy performance Bash entry와 historical internal
 sentinel은 모두 fail-closed다. `run_remote_rc3_gate_e_session_v2.py
 --performance-source-contract-probe`는 fixed remote root FD 아래 retired no-action

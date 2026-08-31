@@ -47,6 +47,12 @@ authority를 만들지 않는다.
 
 native implementation 또는 root installation 전에 다음 산출물을 source review와 administrator review에서 각각 독립적으로 확인한다.
 
+ci/release/RC3_GATE_E_NATIVE_GUARDIAN_REVIEW.md는 현재 v1 root bundle이
+execution-closure sidecar를 authenticate하지 못한다는 점과 dynamic ELF의
+PT_INTERP/loader resolution 전략이 아직 선택되지 않았다는 점을 implementation
+blocker로 고정한다. 이 review boundary는 guardian 구현이나 설치 지침이 아니며,
+execveat·FD 31/32·GPU/Docker authority를 만들지 않는다.
+
 - guardian/warden/PID1 state machine, syscall/FD ABI, trust boundary, crash-recovery threat model
 - reproducible static-native build, source/binary digest pin, signing/approval ownership, rollback/revocation 정책
 - root service/PID1 integration, UID/GID·namespace·capability·signal·environment contract
