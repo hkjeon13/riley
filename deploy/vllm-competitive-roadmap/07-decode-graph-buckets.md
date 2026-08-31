@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-11은 exact V1 metadata를 caller-owned fixed slab에 CPU-only로 기록했다.
+**상태:** In progress — C07-12는 exact V1 metadata를 cold-owned, aligned fixed host slab에 CPU-only로 재사용 기록한다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -158,6 +158,20 @@ C07-5가 required slab prefix와 alignment gap만 기록하고 caller tail을 �
 stability, persistent ownership, opaque-byte semantics, padding-tail materialization, host-to-device copy, C06 signature/registry/dispatch,
 CUDA capture/replay, executor mutation을 수행하거나 graph-safe/runnable authority를 부여하지 않는다. 그 전까지 모든 path는 exact eager를
 유지한다.
+
+### C07-12 — cold exact V1 aligned host-slab owner (CPU-only)
+
+C07-12는 C07-11의 caller-owned destination을 하나의 cold-owned fixed host allocation으로 좁힌다. layout의 exact `total_bytes`에
+`required_base_alignment - 1` byte alignment window를 더해 한 번만 fallible allocation하고, `Box<[u8]>` 자체의 1-byte alignment에
+의존하지 않고 safe `align_offset`으로 interior payload base를 선택·검증한다. public payload view는 exact `total_bytes` 길이이고 layout의
+base alignment를 만족하며, backing/offset은 private이므로 owner를 move하거나 repeated write해도 owner lifetime 동안 payload allocation
+address는 바뀌지 않는다. cold prepare 후 write는 stored layout과 exact source를 C07-11에 한 번만 전달해 기존 Written/Ineligible/error
+identity와 failure precedence를 그대로 보존하고 hot path에서 allocation을 하지 않는다.
+
+이 owner는 CPU pageable host storage만 가진다. pinned allocation, raw pointer export, mutable byte view, H2D/device slab, C06
+signature/registry/dispatch, padding-tail materialization, opaque-byte semantics, CUDA capture/replay, executor integration은 만들지 않는다.
+따라서 aligned stable host address는 준비하지만 graph-safe metadata 또는 runnable graph authority는 아직 부여하지 않으며, 그 전까지
+모든 path는 exact eager를 유지한다.
 
 ## 1. 배경과 가설
 
