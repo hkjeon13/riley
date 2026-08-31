@@ -385,6 +385,7 @@ fn executor_output_only_decodes_and_sizes_canonical_host_results() {
         "output_logits_bytes",
         "LlamaBatchExecutorResource::GatheredLogits",
         "greedy_result_bytes",
+        "greedy_result_capacity_bytes",
         "LlamaBatchExecutorResource::GreedyResults",
         "ArithmeticOverflow",
     ] {

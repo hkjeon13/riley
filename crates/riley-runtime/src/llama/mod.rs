@@ -593,7 +593,7 @@ mod source_contract_tests {
     #[test]
     fn executor_usize_u64_conversions_share_one_typed_error_facade() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 17),
+            ("batch owner", include_str!("batch_executor.rs"), 14),
             ("batch buffers", include_str!("executor/buffers.rs"), 3),
             ("device views", include_str!("executor/device_views.rs"), 3),
             ("output dispatch", include_str!("executor/dispatch.rs"), 5),
@@ -608,6 +608,27 @@ mod source_contract_tests {
                 "{boundary} must use the shared typed usize-to-u64 conversion at every existing boundary"
             );
         }
+    }
+
+    #[test]
+    fn cold_output_capacity_reuses_canonical_output_sizing() {
+        let source = include_str!("batch_executor.rs");
+        let capacity_begin = source
+            .find("let gathered_logits_capacity_bytes")
+            .expect("cold gathered-logits capacity remains explicit");
+        let capacity_end = source[capacity_begin..]
+            .find("let host = allocate_host_workspace(")
+            .map(|offset| capacity_begin + offset)
+            .expect("cold host workspace follows output capacity preparation");
+        let capacities = &source[capacity_begin..capacity_end];
+        assert_eq!(capacities.matches("output_logits_bytes(").count(), 1);
+        assert_eq!(
+            capacities.matches("greedy_result_capacity_bytes(").count(),
+            1
+        );
+        assert!(!capacities.contains("checked_product_u64("));
+        assert!(!capacities.contains("LlamaBatchExecutorResource::GatheredLogits"));
+        assert!(!capacities.contains("LlamaBatchExecutorResource::GreedyResults"));
     }
 
     #[test]

@@ -47,7 +47,10 @@ use super::executor::metadata::{
     sequence_block_offset_count, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
-use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes};
+use super::executor::output::{
+    GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes, greedy_result_capacity_bytes,
+    output_logits_bytes,
+};
 use super::executor::poison::poison_for_batch_error;
 use super::executor::rope::{
     absolute_rope_position_count, build_absolute_cpu_rope_tables, build_absolute_rope_angles,
@@ -788,20 +791,8 @@ impl PreparedLlamaBatchExecutor {
         }
 
         let device_input = allocate_device_input(context, bounds, config.metadata_transport)?;
-        let gathered_logits_capacity_bytes = checked_product_u64(
-            &[
-                usize_u64(
-                    bounds.max_output_slots(),
-                    LlamaBatchExecutorResource::GatheredLogits,
-                )?,
-                usize_u64(
-                    dimensions.vocabulary_size(),
-                    LlamaBatchExecutorResource::GatheredLogits,
-                )?,
-                BF16_BYTES,
-            ],
-            LlamaBatchExecutorResource::GatheredLogits,
-        )?;
+        let gathered_logits_capacity_bytes =
+            output_logits_bytes(bounds.max_output_slots(), dimensions.vocabulary_size())?;
         let gathered_logits = if bounds.max_output_slots() == 0 {
             None
         } else {
@@ -811,16 +802,7 @@ impl PreparedLlamaBatchExecutor {
                 ExecutionSite::global(LlamaOp::OutputGather),
             )?)
         };
-        let greedy_result_capacity_bytes = checked_product_u64(
-            &[
-                usize_u64(
-                    bounds.max_output_slots(),
-                    LlamaBatchExecutorResource::GreedyResults,
-                )?,
-                GREEDY_RESULT_BYTES as u64,
-            ],
-            LlamaBatchExecutorResource::GreedyResults,
-        )?;
+        let greedy_result_capacity_bytes = greedy_result_capacity_bytes(bounds.max_output_slots())?;
         let greedy_results = if bounds.max_output_slots() == 0 {
             None
         } else {

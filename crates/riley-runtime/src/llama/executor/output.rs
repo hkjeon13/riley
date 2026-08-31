@@ -30,6 +30,25 @@ pub(in crate::llama) fn greedy_result_bytes(
     )
 }
 
+/// Exact CUDA ABI byte length for `output_count` greedy result records.
+///
+/// This keeps the native-width conversion before multiplication for cold
+/// device-buffer capacity preparation while the owner retains allocation and
+/// output lifecycle decisions.
+pub(in crate::llama) fn greedy_result_capacity_bytes(
+    output_count: usize,
+) -> LlamaBatchExecutorResult<u64> {
+    let output_count =
+        u64::try_from(output_count).map_err(|_| LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GreedyResults,
+        })?;
+    output_count.checked_mul(GREEDY_RESULT_BYTES as u64).ok_or(
+        LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::GreedyResults,
+        },
+    )
+}
+
 /// Exact BF16 byte length for one dense `[output_count, vocabulary_size]` map.
 ///
 /// The batch owner uses this checked scalar result when binding an existing
@@ -192,5 +211,29 @@ mod tests {
                 resource: LlamaBatchExecutorResource::GreedyResults,
             })
         ));
+    }
+
+    #[test]
+    fn greedy_result_capacity_bytes_preserves_cuda_abi_overflow_mapping() {
+        assert_eq!(
+            greedy_result_capacity_bytes(3).expect("representable capacity"),
+            24
+        );
+        let maximum_capacity = greedy_result_capacity_bytes(usize::MAX);
+        match u64::try_from(usize::MAX)
+            .ok()
+            .and_then(|output_count| output_count.checked_mul(GREEDY_RESULT_BYTES as u64))
+        {
+            Some(expected) => assert_eq!(
+                maximum_capacity.expect("maximum native count fits the CUDA ABI"),
+                expected
+            ),
+            None => assert!(matches!(
+                maximum_capacity,
+                Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                    resource: LlamaBatchExecutorResource::GreedyResults,
+                })
+            )),
+        }
     }
 }

@@ -17,7 +17,7 @@ RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iter
 completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte allocator를 host helper로
 C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 sequence-block-offset
 count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
-CUDA owner, KV,
+C04-25는 cold output capacity sizing을 output helper로 연결했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -359,6 +359,16 @@ borrowed metadata views, output dispatch가 기존 call-site 순서와 resource�
 
 CUDA span/primitive invocation, allocation, dispatch/poison ordering과 owner lifecycle은 각 caller에
 그대로 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-25 — cold output-capacity sizing reuse
+
+`llama/executor/output.rs`는 dense gathered-logits와 greedy result의 canonical checked capacity
+calculation을 보유한다. greedy CUDA ABI capacity helper는 native-width conversion을 multiplication보다
+먼저 수행해 기존 `GreedyResults` overflow precedence를 유지한다.
+
+batch owner는 cold output-buffer allocation, allocation report, dispatch, download/poison lifecycle을
+계속 소유하며 shared sizing helper만 호출한다. 이 source-only slice는 GPU parity나 performance
+non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 
