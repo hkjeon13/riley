@@ -24,6 +24,8 @@ mod graph_decode_layout;
 mod graph_decode_packer;
 #[allow(dead_code)] // C07-3 deliberately precedes its future metadata packer.
 mod graph_decode_padding;
+#[allow(dead_code)] // C07-6 deliberately precedes its future executor adapter.
+mod graph_decode_preflight;
 #[path = "executor/graph_metrics.rs"]
 mod graph_metrics;
 #[path = "executor/graph_registry.rs"]

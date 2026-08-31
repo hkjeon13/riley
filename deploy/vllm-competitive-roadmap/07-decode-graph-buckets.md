@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-5는 caller-owned fixed metadata slab의 checked CPU packing을 고정했다.
+**상태:** In progress — C07-6는 base-validated V1 metadata의 pure-decode 후보 경계를 CPU-only로 고정했다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -82,6 +82,19 @@ destination/source length와 region addressability를 먼저 검사해 error에�
 alignment/stability validation, host-to-device copy, C06 registry/signature, CUDA capture/replay를 수행하지 않는다. trailing placeholder
 lane의 실제 byte value와 kernel-mask 의미는 caller가 future production contract에서 증명해야 하며, 단순히 이 writer가 성공했다고
 graph-safe가 되지 않는다.
+
+### C07-6 — V1 pure-decode eligibility preflight (CPU-only)
+
+C07-6는 이미 base validation을 통과한 `LlamaPackedBatchMetadata`를 read-only로 보고 C07 candidate인지 닫힌 결과로 분류한다.
+candidate는 prefill row/token이 없고, decode row count가 전체 row count와 같으며, decode token count와 total input token count가
+모두 row count와 같고, output count도 row count와 같아야 한다. 즉 각 row는 exactly one decode input과 one output을 가진다.
+row count는 checked `u32` conversion 뒤 C07-3 padding planner에만 전달하며 `A=1..32`의 exact/padded bucket만 candidate가 된다.
+`A=0`, `A>32`, host-width conversion failure, prefill 또는 mixed shape는 typed ineligible로 남고 maximum bucket으로 대체하지 않는다.
+
+성공값은 C07-3 `PureDecodeGraphPaddingPlan`뿐이다. 이 preflight는 fixed layout/binding/packer 호출, field materialization,
+padding sentinel/header/control 생성, allocation/address ownership, host-to-device copy, C06 registry/signature/dispatch, graph
+capture/replay, executor mutation, CLI/default 변경을 수행하지 않는다. 따라서 candidate는 향후 graph-safe metadata 또는 runnable
+graph를 뜻하지 않고, 계속 exact eager 상태에서 다음 ownership·field-mapping contract를 검토하기 위한 read-only fact다.
 
 ## 1. 배경과 가설
 
