@@ -427,6 +427,18 @@ impl GraphIterationSignature {
             sampling_backend,
         }
     }
+
+    /// Returns the workload stage encoded into this exact cache key.
+    #[must_use]
+    pub const fn stage(self) -> GraphWorkloadStage {
+        self.stage
+    }
+
+    /// Returns the sampling/output backend encoded into this exact cache key.
+    #[must_use]
+    pub const fn sampling_backend(self) -> GraphSamplingBackend {
+        self.sampling_backend
+    }
 }
 
 /// Stable SHA-256 digest of one explicit graph signature encoding.
@@ -694,6 +706,27 @@ impl GraphDispatchEligibility {
             capture_safety,
         }
     }
+
+    /// Returns the workload stage used for graph-policy admission.
+    #[must_use]
+    pub const fn stage(self) -> GraphWorkloadStage {
+        self.stage
+    }
+
+    /// Returns the sampling backend used for graph-policy admission.
+    #[must_use]
+    pub const fn sampling_backend(self) -> GraphSamplingBackend {
+        self.capture_safety.sampling_backend
+    }
+
+    /// Returns this eligibility bundle with only inventory availability changed.
+    #[must_use]
+    pub const fn with_inventory_enabled(self, inventory_enabled: bool) -> Self {
+        Self {
+            inventory_enabled,
+            ..self
+        }
+    }
 }
 
 /// Policy selected at startup or by an explicit benchmark/qualification caller.
@@ -745,6 +778,36 @@ impl GraphDispatchRequest {
             inventory,
         }
     }
+
+    /// Returns the scalar eligibility facts for this dispatch request.
+    #[must_use]
+    pub const fn eligibility(self) -> GraphDispatchEligibility {
+        self.eligibility
+    }
+
+    /// Returns the configured execution-graph policy for this request.
+    #[must_use]
+    pub const fn policy(self) -> ExecutionGraphPolicy {
+        self.policy
+    }
+
+    /// Returns this request with only its exact inventory fact replaced.
+    ///
+    /// A registry adapter uses this to preflight policy before it performs a
+    /// lookup, preserving the `disabled` policy's lookup-free eager path.
+    #[must_use]
+    pub const fn with_inventory(self, inventory: GraphInventoryState) -> Self {
+        Self { inventory, ..self }
+    }
+
+    /// Returns this request with only its scalar eligibility facts replaced.
+    #[must_use]
+    pub const fn with_eligibility(self, eligibility: GraphDispatchEligibility) -> Self {
+        Self {
+            eligibility,
+            ..self
+        }
+    }
 }
 
 /// Mode selected for one iteration after graph policy evaluation.
@@ -775,6 +838,8 @@ pub enum GraphFallbackReason {
     UnsupportedSampling,
     /// The runtime metadata layout differs from the prepared graph layout.
     LayoutMismatch,
+    /// Signature facts disagree with independently observed request facts.
+    SignatureMismatch,
     /// A selected backend or operator is not capture-safe.
     BackendNotCaptureSafe,
     /// The exact graph entry is poisoned and must never be replayed.
@@ -796,6 +861,7 @@ impl GraphFallbackReason {
             Self::UnsupportedShape => "unsupported-shape",
             Self::UnsupportedSampling => "unsupported-sampling",
             Self::LayoutMismatch => "layout-mismatch",
+            Self::SignatureMismatch => "signature-mismatch",
             Self::BackendNotCaptureSafe => "backend-not-capture-safe",
             Self::GraphPoisoned => "graph-poisoned",
             Self::CapacityDisabled => "capacity-disabled",

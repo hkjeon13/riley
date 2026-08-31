@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-2는 C06-1 signature 위에 bounded immutable graph-registry snapshot을 CPU-only로 고정했다.
+**상태:** In progress — C06-3은 bounded registry의 exact lookup을 기존 closed dispatcher에 CPU-only로 연결했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -47,8 +47,26 @@ configuration은 ambiguous enabled snapshot으로 만들지 않고 typed error�
 
 registry가 보관하는 replay slot은 native graph handle이나 address가 아닌 logical ID뿐이다. C07의
 owner가 slot을 실제 graph resource와 destruction/pointer-stability contract에 연결한다. 이 slice는
-registry mutation, CUDA/model adapter, dispatcher request wiring, capture/launch, CLI를 하지 않으므로
-`disabled` policy의 lookup-free exact-eager 계약도 그대로다.
+registry mutation, CUDA/model adapter, capture/launch, CLI를 하지 않는다.
+
+### C06-3 — registry dispatch adapter (CPU-only)
+
+`select_registered_execution_graph`는 concrete immutable registry lookup을 existing closed policy에
+연결하고, graph가 선택된 경우에만 non-owning logical replay slot을 함께 반환한다. `disabled`는
+signature inspection과 registry lookup 이전에 `PolicyDisabled` eager로 끝난다. `auto`/`require`는
+signature의 stage와 sampling backend가 independently observed eligibility와 일치하는지 먼저
+검증하며, 불일치는 `signature-mismatch` eager/fail-closed outcome으로 끝난다.
+
+일치한 request는 먼저 `NotPrepared`로 existing selector를 preflight한다. unsupported
+stage/shape/layout/sampling/capability 같은 closed miss는 registry를 보지 않고 그대로 반환하며, 정확히
+admitted `NotPrepared`만 stage에서 full/piecewise mode를 정해 한 번 lookup한다. registry의
+`CapacityDisabled`는 eligibility의 inventory-enabled fact를 false로 변환해 기존 capacity precedence를
+보존한다. bucket과 metadata-layout의 concrete value는 existing
+eligibility bool이 동일 signature에서 계산됐다는 request-construction contract로 유지한다.
+
+이 adapter는 CUDA/native handle, capture/launch, model/executor mutation, poison/evict write,
+completion/KV retry, CLI/metrics를 하지 않는다. 따라서 C07 owner만 logical slot을 native graph
+resource와 실제 lifetime contract에 연결할 수 있다.
 
 ## 2. Execution mode
 

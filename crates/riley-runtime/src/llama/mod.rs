@@ -18,6 +18,8 @@ mod generation;
 mod graph;
 #[path = "executor/graph_registry.rs"]
 mod graph_registry;
+#[path = "executor/graph_registry_dispatch.rs"]
+mod graph_registry_dispatch;
 mod plan;
 #[cfg(any(feature = "cuda", test))]
 mod reduction_profile;
@@ -56,6 +58,9 @@ pub use graph_registry::{
     GraphEntryFootprint, GraphRegistry, GraphRegistryAvailability, GraphRegistryBuildError,
     GraphRegistryEntry, GraphRegistryEntryState, GraphRegistryLimits, GraphRegistryLookup,
     GraphRegistryUsage, GraphReplayMode, GraphReplaySlot,
+};
+pub use graph_registry_dispatch::{
+    GraphRegistryDispatchDecision, select_registered_execution_graph,
 };
 pub use plan::{
     HIDDEN_WORKSPACE_BUFFER_COUNT, INTERMEDIATE_WORKSPACE_BUFFER_COUNT,
