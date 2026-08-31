@@ -1,6 +1,6 @@
 # C06 — Graph Signature와 Execution Dispatcher
 
-**상태:** In progress — C06-1은 C06-0 policy 위에 versioned immutable graph signature와 fixed fingerprint를 CPU-only로 고정했다.
+**상태:** In progress — C06-2는 C06-1 signature 위에 bounded immutable graph-registry snapshot을 CPU-only로 고정했다.
 **의미 등급:** `E0` systems dispatch  
 **한 가지 목적:** workload와 runtime capability에 따라 `full graph | piecewise graph | exact eager`를 선택하고 실패 시 exact fallback하는 bounded dispatcher를 구현한다.
 
@@ -34,6 +34,21 @@ value만 포함한다. process-unique pointer, owner ID, raw graph handle, strin
 separator로 계산한 SHA-256 fingerprint는 trace/cache prefilter로만 사용한다. C06-1은 CUDA/model
 adapter, registry lookup, graph owner, dispatcher request wiring을 하지 않으므로 disabled policy의
 무검사 exact-eager 계약은 그대로다.
+
+### C06-2 — bounded immutable graph-registry snapshot (CPU-only)
+
+`GraphRegistry<const MAX_ENTRIES>`는 full `GraphSignature`와 replay mode를 함께 exact key로
+쓰는 fixed-array snapshot이다. cold builder는 graph count, full/piecewise quota, retained
+host/device byte quota, byte-accounting overflow, duplicate key와 duplicate logical replay slot을
+typed error로 거부하며 entry를 조용히 잘라내지 않는다. prepared와 poisoned entry 모두 quota와
+retained bytes에 포함된다. zero-capacity snapshot은 `CapacityDisabled`, enabled snapshot의 exact
+miss는 `NotPrepared`로 구분한다. total count가 양수인데 두 replay-mode quota가 모두 0인
+configuration은 ambiguous enabled snapshot으로 만들지 않고 typed error로 거부한다.
+
+registry가 보관하는 replay slot은 native graph handle이나 address가 아닌 logical ID뿐이다. C07의
+owner가 slot을 실제 graph resource와 destruction/pointer-stability contract에 연결한다. 이 slice는
+registry mutation, CUDA/model adapter, dispatcher request wiring, capture/launch, CLI를 하지 않으므로
+`disabled` policy의 lookup-free exact-eager 계약도 그대로다.
 
 ## 2. Execution mode
 

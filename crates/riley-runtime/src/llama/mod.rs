@@ -16,6 +16,8 @@ mod gemm_policy;
 mod generation;
 #[path = "executor/graph.rs"]
 mod graph;
+#[path = "executor/graph_registry.rs"]
+mod graph_registry;
 mod plan;
 #[cfg(any(feature = "cuda", test))]
 mod reduction_profile;
@@ -49,6 +51,11 @@ pub use graph::{
     GraphModelSignature, GraphOperatorCapability, GraphReductionPolicyId, GraphRevisionFingerprint,
     GraphSamplingBackend, GraphSignature, GraphSignatureFingerprint, GraphStaticSignature,
     GraphTensorSignature, GraphWorkloadStage, select_execution_graph,
+};
+pub use graph_registry::{
+    GraphEntryFootprint, GraphRegistry, GraphRegistryAvailability, GraphRegistryBuildError,
+    GraphRegistryEntry, GraphRegistryEntryState, GraphRegistryLimits, GraphRegistryLookup,
+    GraphRegistryUsage, GraphReplayMode, GraphReplaySlot,
 };
 pub use plan::{
     HIDDEN_WORKSPACE_BUFFER_COUNT, INTERMEDIATE_WORKSPACE_BUFFER_COUNT,
