@@ -7,13 +7,16 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use riley_runtime::paged_kv::KvLayout;
+use riley_runtime::paged_kv::{KvBlockPoolStats, KvLayout};
 use riley_scheduler::{
-    IterationOutput, IterationPlan, IterationResult, OutputSlot, OverloadPolicy, RequestCompletion,
-    RequestDescriptor, RequestId, Scheduler, SchedulerConfig, TokenEvent,
+    ExecutionAbort, IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot,
+    OverloadPolicy, RequestCompletion, RequestDescriptor, RequestFinishReason, RequestId,
+    RequestSnapshot, Scheduler, SchedulerConfig, SchedulerError, SchedulerMetricsSnapshot,
+    TokenEvent,
 };
 
 const TRACE_COUNT: u64 = 10_000;
+const FAULT_TRACE_COUNT: u64 = 10_000;
 const MAX_ITERATIONS_PER_TRACE: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -385,5 +388,466 @@ fn ten_thousand_seeded_cpu_traces_route_permuted_outputs_by_slot() {
             forward, reverse,
             "seed {seed:#018x}: submission order changed another request's routed token history"
         );
+    }
+}
+
+#[derive(Clone, Copy)]
+enum FaultAction {
+    DeferredCancelThenCommit,
+    DeferredCancelThenAbortNotDispatched,
+    AbortDeviceQuiescedMutationUnknown,
+    TimeoutWaiting,
+    InvalidFeedback,
+}
+
+impl FaultAction {
+    fn for_trace_index(trace_index: u64) -> Self {
+        match trace_index % 5 {
+            0 => Self::DeferredCancelThenCommit,
+            1 => Self::DeferredCancelThenAbortNotDispatched,
+            2 => Self::AbortDeviceQuiescedMutationUnknown,
+            3 => Self::TimeoutWaiting,
+            _ => Self::InvalidFeedback,
+        }
+    }
+}
+
+struct FaultFixture {
+    scheduler: Scheduler,
+    plan: IterationPlan,
+    expected: Vec<ExpectedOutput>,
+    label_by_request: HashMap<RequestId, u32>,
+}
+
+struct SchedulerSurface {
+    request_ids: Vec<RequestId>,
+    request_snapshots: Vec<Option<RequestSnapshot>>,
+    pool_stats: KvBlockPoolStats,
+    metrics: SchedulerMetricsSnapshot,
+    inflight_iteration: Option<IterationId>,
+    pending_completions: usize,
+}
+
+#[derive(Default)]
+struct TerminalLedger(BTreeMap<RequestId, (RequestFinishReason, Vec<u32>)>);
+
+impl TerminalLedger {
+    fn record(&mut self, completions: &[RequestCompletion]) {
+        for completion in completions {
+            assert!(
+                self.0
+                    .insert(
+                        completion.request_id(),
+                        (
+                            completion.reason(),
+                            completion.generated_token_ids().to_vec()
+                        ),
+                    )
+                    .is_none(),
+                "terminal completion must be emitted at most once per request"
+            );
+        }
+    }
+}
+
+fn fault_config(max_active_sequences: usize, admission_timeout_ns: Option<u64>) -> SchedulerConfig {
+    SchedulerConfig {
+        max_waiting_requests: 4,
+        max_waiting_prompt_tokens: 16,
+        max_active_sequences,
+        max_sequence_tokens: 8,
+        iteration_token_budget: 4,
+        max_prefill_chunk_tokens: 1,
+        aging_threshold_ns: 3,
+        overload_policy: OverloadPolicy::Wait,
+        admission_timeout_ns,
+        max_promised_kv_blocks: 16,
+        metrics_window_samples: 8,
+    }
+}
+
+fn fault_fixture(seed: u64) -> FaultFixture {
+    let mut scheduler = new_scheduler(fault_config(2, None));
+    let requests = [(1_u32, 1_001_u32), (2_u32, 2_001_u32)];
+    let mut order = [0_usize, 1];
+    if seed & 1 == 1 {
+        order.reverse();
+    }
+    let mut label_by_request = HashMap::new();
+    for index in order {
+        let (label, prompt_token) = requests[index];
+        let submission = scheduler
+            .submit(RequestDescriptor::new(vec![prompt_token], 1), 0)
+            .expect("bounded fault-microtrace submission");
+        assert!(
+            label_by_request
+                .insert(submission.request_id(), label)
+                .is_none(),
+            "scheduler issued a duplicate request ID"
+        );
+    }
+    let planning = scheduler
+        .plan_iteration(0)
+        .expect("bounded fault-microtrace plan");
+    let (plan, completions) = planning.into_parts();
+    assert!(
+        completions.is_empty(),
+        "fault fixture does not enable admission timeouts"
+    );
+    let plan = plan.expect("fault fixture must produce work");
+    let histories = BTreeMap::from([(1_u32, Vec::new()), (2_u32, Vec::new())]);
+    let expected = expected_outputs(&plan, &label_by_request, &histories);
+    assert_eq!(
+        expected.len(),
+        requests.len(),
+        "fault fixture must give every active request one output slot"
+    );
+    FaultFixture {
+        scheduler,
+        plan,
+        expected,
+        label_by_request,
+    }
+}
+
+fn shuffled_outputs(expected: &[ExpectedOutput], seed: u64) -> Vec<IterationOutput> {
+    let mut outputs = expected
+        .iter()
+        .map(|output| IterationOutput::new(output.slot, output.token_id, false))
+        .collect::<Vec<_>>();
+    let mut random = Lcg(seed ^ 0x6a09_e667_f3bc_c909);
+    shuffle(&mut outputs, &mut random);
+    outputs
+}
+
+fn shuffled_result(
+    plan: &IterationPlan,
+    expected: &[ExpectedOutput],
+    seed: u64,
+) -> IterationResult {
+    IterationResult::new(plan.iteration_id(), shuffled_outputs(expected, seed), 0, 0)
+        .expect("unique fault-microtrace result slots")
+}
+
+fn completion_records(
+    completions: &[RequestCompletion],
+) -> BTreeMap<RequestId, (RequestFinishReason, Vec<u32>)> {
+    let mut ledger = TerminalLedger::default();
+    ledger.record(completions);
+    ledger.0
+}
+
+fn selected_output(expected: &[ExpectedOutput], seed: u64) -> ExpectedOutput {
+    expected[usize::try_from(seed >> 1).expect("u64 fits usize") % expected.len()]
+}
+
+fn assert_clean_close(scheduler: Scheduler, now_ns: u64, seed: u64) {
+    let closed = scheduler.close(now_ns, None).unwrap_or_else(|failure| {
+        panic!(
+            "seed {seed:#018x}: clean fault-microtrace close failed: {}",
+            failure.error()
+        )
+    });
+    assert!(closed.completions().is_empty());
+    assert!(closed.settlement_failures().is_empty());
+    let gauges = closed.final_metrics().gauges;
+    assert_eq!(gauges.waiting_requests, 0);
+    assert_eq!(gauges.waiting_prompt_tokens, 0);
+    assert_eq!(gauges.active_sequences, 0);
+    assert_eq!(gauges.promised_kv_blocks, 0);
+    assert_eq!(gauges.allocated_kv_blocks, 0);
+    assert_eq!(gauges.pending_completions, 0);
+    assert_eq!(gauges.outstanding_iterations, 0);
+}
+
+fn capture_surface(scheduler: &Scheduler, request_ids: Vec<RequestId>) -> SchedulerSurface {
+    let request_snapshots = request_ids
+        .iter()
+        .map(|request_id| scheduler.request_snapshot(*request_id))
+        .collect();
+    SchedulerSurface {
+        request_ids,
+        request_snapshots,
+        pool_stats: scheduler.pool_stats(),
+        metrics: scheduler
+            .metrics_snapshot()
+            .expect("bounded fault-microtrace metric snapshot"),
+        inflight_iteration: scheduler.inflight_iteration_id(),
+        pending_completions: scheduler.pending_completion_count(),
+    }
+}
+
+fn assert_surface_unchanged(scheduler: &Scheduler, expected: &SchedulerSurface) {
+    let actual_snapshots = expected
+        .request_ids
+        .iter()
+        .map(|request_id| scheduler.request_snapshot(*request_id))
+        .collect::<Vec<_>>();
+    assert_eq!(actual_snapshots, expected.request_snapshots);
+    assert_eq!(scheduler.pool_stats(), expected.pool_stats);
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .expect("bounded fault-microtrace metric snapshot"),
+        expected.metrics
+    );
+    assert_eq!(
+        scheduler.inflight_iteration_id(),
+        expected.inflight_iteration
+    );
+    assert_eq!(
+        scheduler.pending_completion_count(),
+        expected.pending_completions
+    );
+}
+
+fn run_deferred_cancel_then_commit(seed: u64) {
+    let FaultFixture {
+        mut scheduler,
+        plan,
+        expected,
+        ..
+    } = fault_fixture(seed);
+    let cancelled = selected_output(&expected, seed);
+    let cancellation = scheduler
+        .cancel(cancelled.request_id, 1)
+        .expect("defer cancellation for an in-flight output");
+    assert!(cancellation.deferred_until_iteration_settles());
+    assert!(cancellation.completion().is_none());
+    let result = shuffled_result(&plan, &expected, seed);
+    let updates = scheduler
+        .complete_iteration(&result, 1)
+        .expect("settle cancelled in-flight result");
+    assert!(updates.settlement_failures().is_empty());
+    let survivors = expected
+        .iter()
+        .copied()
+        .filter(|output| output.request_id != cancelled.request_id)
+        .collect::<Vec<_>>();
+    assert_token_events(&survivors, updates.token_events(), seed, 0);
+    let completions = completion_records(updates.completions());
+    assert_eq!(completions.len(), expected.len());
+    for output in expected {
+        let expected_record = if output.request_id == cancelled.request_id {
+            (RequestFinishReason::Cancelled, Vec::new())
+        } else {
+            (RequestFinishReason::Length, vec![output.token_id])
+        };
+        assert_eq!(completions.get(&output.request_id), Some(&expected_record));
+    }
+    assert_clean_close(scheduler, 2, seed);
+}
+
+fn run_deferred_cancel_then_abort_not_dispatched(seed: u64) {
+    let FaultFixture {
+        mut scheduler,
+        plan,
+        expected,
+        label_by_request,
+    } = fault_fixture(seed);
+    let cancelled = selected_output(&expected, seed);
+    let survivor = expected
+        .iter()
+        .copied()
+        .find(|output| output.request_id != cancelled.request_id)
+        .expect("two-request fault fixture has a survivor");
+    assert!(
+        scheduler
+            .cancel(cancelled.request_id, 1)
+            .expect("defer cancellation before an undispatched abort")
+            .deferred_until_iteration_settles()
+    );
+    let aborted = scheduler
+        .abort_iteration(plan.iteration_id(), ExecutionAbort::NotDispatched, 1)
+        .expect("rollback undispatched iteration");
+    assert!(aborted.token_events().is_empty());
+    assert!(aborted.settlement_failures().is_empty());
+    let mut terminal_ledger = TerminalLedger::default();
+    terminal_ledger.record(aborted.completions());
+    assert_eq!(terminal_ledger.0.len(), 1);
+    assert_eq!(
+        terminal_ledger.0.get(&cancelled.request_id),
+        Some(&(RequestFinishReason::Cancelled, Vec::new()))
+    );
+    let planning = scheduler
+        .plan_iteration(2)
+        .expect("replan surviving request after rollback");
+    let (retry_plan, retry_completions) = planning.into_parts();
+    assert!(retry_completions.is_empty());
+    let retry_plan = retry_plan.expect("survivor must be replanned after rollback");
+    let histories = BTreeMap::from([(1_u32, Vec::new()), (2_u32, Vec::new())]);
+    let retry_expected = expected_outputs(&retry_plan, &label_by_request, &histories);
+    assert_eq!(retry_expected.len(), 1);
+    assert_eq!(retry_expected[0].request_id, survivor.request_id);
+    assert_eq!(retry_expected[0].generated_index, 0);
+    assert_eq!(retry_expected[0].token_id, survivor.token_id);
+    let retry_result = shuffled_result(&retry_plan, &retry_expected, seed ^ 0x9e37_79b9);
+    let retried = scheduler
+        .complete_iteration(&retry_result, 2)
+        .expect("commit surviving request after rollback");
+    assert!(retried.settlement_failures().is_empty());
+    assert_token_events(&retry_expected, retried.token_events(), seed, 1);
+    terminal_ledger.record(retried.completions());
+    assert_eq!(terminal_ledger.0.len(), expected.len());
+    assert_eq!(
+        terminal_ledger.0.get(&survivor.request_id),
+        Some(&(RequestFinishReason::Length, vec![survivor.token_id]))
+    );
+    assert_clean_close(scheduler, 3, seed);
+}
+
+fn run_device_quiesced_abort(seed: u64) {
+    let FaultFixture {
+        mut scheduler,
+        plan,
+        expected,
+        ..
+    } = fault_fixture(seed);
+    let updates = scheduler
+        .abort_iteration(
+            plan.iteration_id(),
+            ExecutionAbort::DeviceQuiescedMutationUnknown,
+            1,
+        )
+        .expect("host-side quiesced abort disposition");
+    assert!(updates.token_events().is_empty());
+    assert!(updates.settlement_failures().is_empty());
+    let completions = completion_records(updates.completions());
+    assert_eq!(completions.len(), expected.len());
+    for output in expected {
+        assert_eq!(
+            completions.get(&output.request_id),
+            Some(&(RequestFinishReason::ExecutorFailure, Vec::new()))
+        );
+    }
+    assert_clean_close(scheduler, 2, seed);
+}
+
+fn run_timeout_waiting(seed: u64) {
+    let mut scheduler = new_scheduler(fault_config(1, Some(1)));
+    let requests = [(1_u32, 3_001_u32), (2_u32, 4_001_u32)];
+    let mut order = [0_usize, 1];
+    if seed & 1 == 1 {
+        order.reverse();
+    }
+    let mut label_by_request = HashMap::new();
+    let mut submitted = Vec::new();
+    for index in order {
+        let (label, prompt_token) = requests[index];
+        let submission = scheduler
+            .submit(RequestDescriptor::new(vec![prompt_token], 1), 0)
+            .expect("bounded timeout-microtrace submission");
+        label_by_request.insert(submission.request_id(), label);
+        submitted.push(submission.request_id());
+    }
+    let active = submitted[0];
+    let timed_out = submitted[1];
+    let planning = scheduler
+        .plan_iteration(1)
+        .expect("timeout-microtrace plan");
+    let (plan, timeout_completions) = planning.into_parts();
+    assert_eq!(timeout_completions.len(), 1);
+    let mut terminal_ledger = TerminalLedger::default();
+    terminal_ledger.record(&timeout_completions);
+    assert_eq!(
+        terminal_ledger.0.get(&timed_out),
+        Some(&(RequestFinishReason::AdmissionTimeout, Vec::new()))
+    );
+    let plan = plan.expect("active request remains runnable after waiting timeout");
+    let histories = BTreeMap::from([(1_u32, Vec::new()), (2_u32, Vec::new())]);
+    let expected = expected_outputs(&plan, &label_by_request, &histories);
+    assert_eq!(expected.len(), 1);
+    assert_eq!(expected[0].request_id, active);
+    let result = shuffled_result(&plan, &expected, seed);
+    let updates = scheduler
+        .complete_iteration(&result, 1)
+        .expect("commit active request after waiting timeout");
+    assert!(updates.settlement_failures().is_empty());
+    assert_token_events(&expected, updates.token_events(), seed, 0);
+    terminal_ledger.record(updates.completions());
+    assert_eq!(terminal_ledger.0.len(), requests.len());
+    assert_eq!(
+        terminal_ledger.0.get(&active),
+        Some(&(RequestFinishReason::Length, vec![expected[0].token_id]))
+    );
+    assert_clean_close(scheduler, 2, seed);
+}
+
+fn run_invalid_feedback(seed: u64) {
+    let FaultFixture {
+        mut scheduler,
+        plan,
+        expected,
+        ..
+    } = fault_fixture(seed);
+    let surface = capture_surface(
+        &scheduler,
+        expected.iter().map(|output| output.request_id).collect(),
+    );
+    let stale_id = IterationId::new(
+        plan.iteration_id()
+            .get()
+            .checked_add(1)
+            .expect("bounded fault-microtrace iteration ID"),
+    )
+    .expect("nonzero stale iteration ID");
+    let stale = IterationResult::new(stale_id, shuffled_outputs(&expected, seed), 0, 0)
+        .expect("unique stale result slots");
+    assert!(matches!(
+        scheduler.complete_iteration(&stale, 1),
+        Err(SchedulerError::UnexpectedIteration { .. })
+    ));
+    assert_surface_unchanged(&scheduler, &surface);
+
+    let mut missing_outputs = shuffled_outputs(&expected, seed ^ 0x517c_c1b7);
+    missing_outputs.pop();
+    let missing = IterationResult::new(plan.iteration_id(), missing_outputs, 0, 0)
+        .expect("unique missing-output result slots");
+    assert!(matches!(
+        scheduler.complete_iteration(&missing, 1),
+        Err(SchedulerError::InvalidIterationResult { .. })
+    ));
+    assert_surface_unchanged(&scheduler, &surface);
+
+    let mut unplanned_outputs = shuffled_outputs(&expected, seed ^ 0x94d0_49bb);
+    unplanned_outputs[0] = IterationOutput::new(OutputSlot::new(99), expected[0].token_id, false);
+    let unplanned = IterationResult::new(plan.iteration_id(), unplanned_outputs, 0, 0)
+        .expect("unique unplanned-output result slots");
+    assert!(matches!(
+        scheduler.complete_iteration(&unplanned, 1),
+        Err(SchedulerError::InvalidIterationResult { .. })
+    ));
+    assert_surface_unchanged(&scheduler, &surface);
+
+    let result = shuffled_result(&plan, &expected, seed);
+    let updates = scheduler
+        .complete_iteration(&result, 1)
+        .expect("valid result remains retryable after rejected feedback");
+    assert!(updates.settlement_failures().is_empty());
+    assert_token_events(&expected, updates.token_events(), seed, 0);
+    let completions = completion_records(updates.completions());
+    assert_eq!(completions.len(), expected.len());
+    for output in expected {
+        assert_eq!(
+            completions.get(&output.request_id),
+            Some(&(RequestFinishReason::Length, vec![output.token_id]))
+        );
+    }
+    assert_clean_close(scheduler, 2, seed);
+}
+
+#[test]
+fn ten_thousand_seeded_fault_microtraces_preserve_routing_and_quiescence() {
+    for trace_index in 0..FAULT_TRACE_COUNT {
+        let seed = 0xd1b5_4a32_d192_ed03_u64.wrapping_mul(trace_index.wrapping_add(1));
+        match FaultAction::for_trace_index(trace_index) {
+            FaultAction::DeferredCancelThenCommit => run_deferred_cancel_then_commit(seed),
+            FaultAction::DeferredCancelThenAbortNotDispatched => {
+                run_deferred_cancel_then_abort_not_dispatched(seed);
+            }
+            FaultAction::AbortDeviceQuiescedMutationUnknown => run_device_quiesced_abort(seed),
+            FaultAction::TimeoutWaiting => run_timeout_waiting(seed),
+            FaultAction::InvalidFeedback => run_invalid_feedback(seed),
+        }
     }
 }

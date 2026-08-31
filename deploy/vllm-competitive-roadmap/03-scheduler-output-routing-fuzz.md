@@ -105,6 +105,15 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 - nightly 또는 scheduled run에서 1,000,000 traces
 - failure 시 seed와 최소 축약 trace 출력
 
+현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
+`FaultAction` microtrace다. 후자는 deferred cancel 뒤 commit/`NotDispatched` abort,
+`DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
+output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. 이는 C03-A의
+부분 범위일 뿐이다. mixed operation generator, shrink/corpus/replay, scheduled seed rotation,
+사람이 읽을 수 있는 최소 trace와 post-validation sampling/commit fault injection은 남아 있다.
+마지막 항목은 현 public scheduler API에 injection seam이 없으므로 별도 test-only seam 계약으로
+설계한다.
+
 ### Deterministic corpus
 
 과거 defect와 발견된 모든 fuzz counterexample을 JSON 또는 Rust fixture로 영구 등록한다.
@@ -194,7 +203,9 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 
 ## 14. 완료 정의
 
-C03-A는 scheduler event 순서와 output slot permutation을 deterministic seeded CPU trace로
-생성해 reference model과 production state가 일치하고, failure seed/trace가 남을 때 완료다.
+C03-A의 formal CPU completion은 scheduler event 순서와 output slot permutation을 deterministic
+seeded CPU trace로 생성해 reference model과 production state가 일치하고, mixed-operation
+generator·shrink·counterexample corpus/replay·failure seed와 최소 trace까지 갖출 때다. 현재
+valid/fault microtrace slice는 이를 향한 partial coverage이며 아직 C03-A 완료 선언 근거가 아니다.
 C03의 formal completion은 C03-B가 C02 actual qualification 뒤 GPU corpus에서도 exact mapping을
 확인할 때만 선언한다.
