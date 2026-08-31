@@ -9,6 +9,7 @@ const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.r
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
 const EXECUTOR_POISON: &str = include_str!("../src/llama/executor/poison.rs");
+const EXECUTOR_ROPE: &str = include_str!("../src/llama/executor/rope.rs");
 
 #[test]
 fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
@@ -298,6 +299,66 @@ fn executor_output_only_decodes_and_sizes_canonical_host_results() {
         assert!(
             !EXECUTOR_OUTPUT.contains(forbidden),
             "executor output crossed its host-decoding boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_rope_only_materializes_cold_host_table_bytes() {
+    for required in [
+        "build_absolute_rope_angles",
+        "build_absolute_cpu_rope_tables",
+        "RopeTableBytes",
+        "theta.powf",
+        "angle.sin_cos",
+        "to_ne_bytes",
+        "try_reserve_exact",
+        "LlamaBatchExecutorError::ArithmeticOverflow",
+        "LlamaBatchExecutorError::HostAllocation",
+        "LlamaBatchExecutorResource::RopeCos",
+        "LlamaBatchExecutorResource::HostWorkspace",
+    ] {
+        assert!(
+            EXECUTOR_ROPE.contains(required),
+            "executor rope omitted required host-table token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "riley_cuda",
+        "batch_executor",
+        "super::buffers",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaForward",
+        "LlamaRopeTableProfile",
+        "LlamaForwardError",
+        "LlamaForwardResource",
+        "LlamaDecodeError",
+        "LlamaDecodeResource",
+        "CudaContext",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "LlamaExecutionPlan",
+        "LoadedModel",
+        "ForwardBuffers",
+        "BatchMetadataTransport",
+        "RopeTableParams",
+        "rope_table(",
+        "upload_from_slice",
+        "ExecutionSite",
+        "LlamaOp",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+    ] {
+        assert!(
+            !EXECUTOR_ROPE.contains(forbidden),
+            "executor rope crossed its host-table boundary with {forbidden:?}"
         );
     }
 }

@@ -11,7 +11,8 @@ canonical token map을, C04-10은 typed error poison routing과 command-submissi
 gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 packed batch의
 host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
 facade로, C04-15는 typed CUDA error construction을 error facade로, C04-16은 greedy output
-record의 checked byte length를 output helper로 분리했다. CUDA owner, KV,
+record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-table byte builder를
+rope helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -37,6 +38,7 @@ crates/riley-runtime/src/llama/executor/
   metadata.rs            # synchronous/packed transport
   dispatch.rs            # exact backend selection
   output.rs              # logits/token status and canonical output map
+  rope.rs                # cold host-side RoPE table bytes
   metrics.rs             # allocation-free counters/snapshots
   poison.rs              # post-dispatch failure state
 ```
@@ -268,6 +270,18 @@ length와 `GreedyResults` overflow error mapping을 소유한다. batch owner는
 invalid native result의 poison 판단을 그대로 보유한다.
 
 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-17 — absolute RoPE host-table builder extraction
+
+`llama/executor/rope.rs`는 selected cold path가 쓰는 absolute position-major RoPE angle bytes와
+CPU cosine/sine table bytes를 native-endian으로 materialize한다. element/offset overflow는 기존
+`RopeCos` category를, temporary host-byte sizing/allocation failure는 기존 `HostWorkspace` category를
+그대로 유지한다.
+
+batch owner는 RoPE profile 선택, device allocation, upload, CUDA table launch, stream/close와
+allocation-report ownership을 계속 보유한다. forward/decode의 유사 builder는 다른 error/resource
+contract이므로 이번 slice에서 공유하거나 변경하지 않는다. 이 source-only slice는 GPU parity나
+performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

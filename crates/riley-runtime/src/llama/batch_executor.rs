@@ -46,6 +46,7 @@ use super::executor::output::{
     GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes, output_logits_bytes,
 };
 use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
+use super::executor::rope::{build_absolute_cpu_rope_tables, build_absolute_rope_angles};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
     select_prepared_dense_rows,
@@ -64,7 +65,6 @@ use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const BF16_BYTES_USIZE: usize = 2;
-const F32_BYTES_USIZE: usize = 4;
 const SUPPORTED_HEAD_DIMENSION: usize = 64;
 const PER_OPERATION_BASE_DEVICE_ALLOCATIONS: u64 = 9;
 const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
@@ -2543,76 +2543,6 @@ fn allocate_zeroed_bytes(
         })?;
     bytes.resize(requested, 0);
     Ok(bytes.into_boxed_slice())
-}
-
-#[allow(clippy::cast_precision_loss)]
-fn build_absolute_rope_angles(
-    position_count: usize,
-    head_dimension: usize,
-    theta: f32,
-) -> LlamaBatchExecutorResult<Box<[u8]>> {
-    let half = head_dimension / 2;
-    let elements =
-        position_count
-            .checked_mul(half)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::RopeCos,
-            })?;
-    let mut angles = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
-    for position in 0..position_count {
-        for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
-            let angle = position as f32 * inverse_frequency;
-            let byte_offset = position
-                .checked_mul(half)
-                .and_then(|value| value.checked_add(pair))
-                .and_then(|value| value.checked_mul(F32_BYTES_USIZE))
-                .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                    resource: LlamaBatchExecutorResource::RopeCos,
-                })?;
-            angles[byte_offset..byte_offset + F32_BYTES_USIZE]
-                .copy_from_slice(&angle.to_ne_bytes());
-        }
-    }
-    Ok(angles)
-}
-
-type RopeTableBytes = (Box<[u8]>, Box<[u8]>);
-
-#[allow(clippy::cast_precision_loss)]
-fn build_absolute_cpu_rope_tables(
-    position_count: usize,
-    head_dimension: usize,
-    theta: f32,
-) -> LlamaBatchExecutorResult<RopeTableBytes> {
-    let half = head_dimension / 2;
-    let elements =
-        position_count
-            .checked_mul(half)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::RopeCos,
-            })?;
-    let mut cos = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
-    let mut sin = allocate_zeroed_bytes(elements, F32_BYTES_USIZE)?;
-    for position in 0..position_count {
-        for pair in 0..half {
-            let exponent = (2 * pair) as f32 / head_dimension as f32;
-            let inverse_frequency = 1.0 / theta.powf(exponent);
-            let angle = position as f32 * inverse_frequency;
-            let (sine, cosine) = angle.sin_cos();
-            let byte_offset = position
-                .checked_mul(half)
-                .and_then(|value| value.checked_add(pair))
-                .and_then(|value| value.checked_mul(F32_BYTES_USIZE))
-                .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                    resource: LlamaBatchExecutorResource::RopeCos,
-                })?;
-            cos[byte_offset..byte_offset + F32_BYTES_USIZE].copy_from_slice(&cosine.to_ne_bytes());
-            sin[byte_offset..byte_offset + F32_BYTES_USIZE].copy_from_slice(&sine.to_ne_bytes());
-        }
-    }
-    Ok((cos, sin))
 }
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
