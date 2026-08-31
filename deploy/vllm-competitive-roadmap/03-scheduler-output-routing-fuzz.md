@@ -106,23 +106,30 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 - failure 시 seed와 최소 축약 trace 출력
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
-`FaultAction` microtrace다. 후자는 deferred cancel 뒤 commit/`NotDispatched` abort,
-`DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
-output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. 이는 C03-A의
-부분 범위일 뿐이다. mixed operation generator, shrink/corpus/replay, scheduled seed rotation,
-사람이 읽을 수 있는 최소 trace와 post-validation sampling/commit fault injection은 남아 있다.
-마지막 항목은 현 public scheduler API에 injection seam이 없으므로 별도 test-only seam 계약으로
-설계한다.
+`FaultAction` microtrace, 그리고 10,000 bounded mixed-stage trace다. `FaultAction` microtrace는
+deferred cancel 뒤 commit/`NotDispatched` abort, `DeviceQuiescedMutationUnknown` abort, waiting
+timeout, stale/missing/unplanned feedback이 output-slot ledger·terminal-once·KV/queue quiescence를
+깨지 않는지 확인한다. bounded mixed-stage trace는 `MixedStageTraceV1 { seed,
+decoder_max_new_tokens, final_prefill_len, action }`를 seed에서 생성하고, `decoder prime → decoder
+decode slot 0 + final-prefill slot 1 → optional deferred decoder cancel → explicit [slot 1, slot 0]
+feedback/commit → close`를 public scheduler API로 재생한다. 실패 시 seed·bounded config·canonical
+operation list를 출력하며, close에 걸친 terminal-once와 quiescence도 확인한다.
+
+이는 여전히 C03-A의 부분 범위다. 일반 mixed-operation generator, shrink/minimized
+counterexample, 독립 reference model, scheduled 1,000,000 seed rotation, post-validation
+sampling/commit fault injection은 남아 있다. 마지막 항목은 현 public scheduler API에 injection seam이
+없으므로 별도 test-only seam 계약으로 설계한다.
 
 ### Deterministic corpus
 
 과거 defect와 발견된 모든 fuzz counterexample을 JSON 또는 Rust fixture로 영구 등록한다.
 
-현재 C03-A corpus는 RC1 mixed-stage 최소 재현으로 decoder A의 `slot 0`과 final-prefill
-B의 `slot 1`에 대해 physical feedback vector를 명시적으로 `[slot 1, slot 0]`으로 역순 제출한다.
-정상 commit과 deferred decoder cancellation 모두에서 host-side synthetic scheduler feedback의
-request/token/generation-index mapping과 terminal history를 검증한다. 이는 GPU mixed execution이나
-stream cancellation을 실행하거나 주장하지 않는다.
+현재 C03-A corpus는 Rust `MixedStageTraceV1` entries로 RC1 mixed-stage 최소 재현을 보존한다.
+decoder A의 `slot 0`과 final-prefill B의 `slot 1`에 대해 physical feedback vector를 명시적으로
+`[slot 1, slot 0]`으로 역순 제출한다. normal commit, deferred decoder cancellation, 그리고 남은
+decoder를 `close`가 정확히 한 번 취소해야 하는 output capacity 3/4 케이스를 재생한다. 모두 host-side
+synthetic scheduler feedback의 request/token/generation-index mapping·terminal history·quiescence를
+검증하며, GPU mixed execution이나 stream cancellation을 실행하거나 주장하지 않는다.
 
 ### C03-B — GPU integration slice
 

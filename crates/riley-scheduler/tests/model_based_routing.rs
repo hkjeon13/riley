@@ -6,17 +6,19 @@
 //! independent `OutputSlot -> (request, generation step)` ledger.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use riley_runtime::paged_kv::{KvBlockPoolStats, KvLayout};
 use riley_scheduler::{
     ExecutionAbort, IterationId, IterationOutput, IterationPlan, IterationResult, OutputSlot,
     OverloadPolicy, RequestCompletion, RequestDescriptor, RequestFinishReason, RequestId,
-    RequestSnapshot, RequestState, Scheduler, SchedulerConfig, SchedulerError,
-    SchedulerMetricsSnapshot, TokenEvent,
+    RequestSnapshot, RequestState, Scheduler, SchedulerCloseOutput, SchedulerConfig,
+    SchedulerError, SchedulerMetricsSnapshot, TokenEvent,
 };
 
 const TRACE_COUNT: u64 = 10_000;
 const FAULT_TRACE_COUNT: u64 = 10_000;
+const MIXED_STAGE_TRACE_COUNT: u64 = 10_000;
 const MAX_ITERATIONS_PER_TRACE: usize = 256;
 
 #[derive(Clone, Copy)]
@@ -550,6 +552,10 @@ fn assert_clean_close(scheduler: Scheduler, now_ns: u64, seed: u64) {
     });
     assert!(closed.completions().is_empty());
     assert!(closed.settlement_failures().is_empty());
+    assert_closed_quiescent(&closed);
+}
+
+fn assert_closed_quiescent(closed: &SchedulerCloseOutput) {
     let gauges = closed.final_metrics().gauges;
     assert_eq!(gauges.waiting_requests, 0);
     assert_eq!(gauges.waiting_prompt_tokens, 0);
@@ -853,6 +859,95 @@ fn ten_thousand_seeded_fault_microtraces_preserve_routing_and_quiescence() {
 }
 
 const MIXED_STAGE_SEED: u64 = 0x51f1_edc3_70a5_9b61;
+const MIXED_STAGE_SEED_FACTOR: u64 = 0x94d0_49bb_1331_11eb;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum MixedStageAction {
+    Commit,
+    DeferredCancelDecoder,
+}
+
+impl MixedStageAction {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Commit => "commit",
+            Self::DeferredCancelDecoder => "deferred-cancel-decoder then commit",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct MixedStageTraceV1 {
+    seed: u64,
+    decoder_max_new_tokens: usize,
+    final_prefill_len: usize,
+    action: MixedStageAction,
+}
+
+impl MixedStageTraceV1 {
+    fn from_seed(seed: u64) -> Self {
+        let mut random = Lcg(seed ^ 0x6c8e_9cf5_7093_2bd5);
+        Self {
+            seed,
+            decoder_max_new_tokens: 2 + random.bounded_usize(3),
+            final_prefill_len: 1 + random.bounded_usize(4),
+            action: if random.next() & 1 == 0 {
+                MixedStageAction::Commit
+            } else {
+                MixedStageAction::DeferredCancelDecoder
+            },
+        }
+    }
+
+    fn describe(self) -> String {
+        format!(
+            "v1 seed={:#018x}; decoder_max_new_tokens={}; final_prefill_len={}; \
+             action={}; operations=[submit decoder, plan/commit decoder prime slot 0, \
+             submit final-prefill, plan decode decoder slot 0 + final-prefill slot 1, \
+             synthetic feedback [slot 1, slot 0], {}, close]",
+            self.seed,
+            self.decoder_max_new_tokens,
+            self.final_prefill_len,
+            self.action.name(),
+            self.action.name(),
+        )
+    }
+}
+
+const RC1_REVERSE_COMMIT_TRACE_V1: MixedStageTraceV1 = MixedStageTraceV1 {
+    seed: MIXED_STAGE_SEED,
+    decoder_max_new_tokens: 2,
+    final_prefill_len: 1,
+    action: MixedStageAction::Commit,
+};
+
+const RC1_REVERSE_CANCEL_DECODER_TRACE_V1: MixedStageTraceV1 = MixedStageTraceV1 {
+    seed: MIXED_STAGE_SEED,
+    decoder_max_new_tokens: 2,
+    final_prefill_len: 1,
+    action: MixedStageAction::DeferredCancelDecoder,
+};
+
+const MIXED_STAGE_CLOSE_DECODER_THREE_TRACE_V1: MixedStageTraceV1 = MixedStageTraceV1 {
+    seed: MIXED_STAGE_SEED ^ 1,
+    decoder_max_new_tokens: 3,
+    final_prefill_len: 2,
+    action: MixedStageAction::Commit,
+};
+
+const MIXED_STAGE_CLOSE_DECODER_FOUR_TRACE_V1: MixedStageTraceV1 = MixedStageTraceV1 {
+    seed: MIXED_STAGE_SEED ^ 2,
+    decoder_max_new_tokens: 4,
+    final_prefill_len: 4,
+    action: MixedStageAction::Commit,
+};
+
+const MIXED_STAGE_CORPUS_V1: [MixedStageTraceV1; 4] = [
+    RC1_REVERSE_COMMIT_TRACE_V1,
+    RC1_REVERSE_CANCEL_DECODER_TRACE_V1,
+    MIXED_STAGE_CLOSE_DECODER_THREE_TRACE_V1,
+    MIXED_STAGE_CLOSE_DECODER_FOUR_TRACE_V1,
+];
 
 struct MixedStageFixture {
     scheduler: Scheduler,
@@ -873,16 +968,46 @@ struct MixedStageState {
     terminal_labels: BTreeSet<u32>,
 }
 
-fn prime_mixed_stage_decoder() -> MixedStageState {
-    let config = SchedulerConfig {
-        iteration_token_budget: 2,
-        max_prefill_chunk_tokens: 1,
+fn mixed_stage_config(trace: MixedStageTraceV1) -> SchedulerConfig {
+    assert!(
+        (2..=4).contains(&trace.decoder_max_new_tokens),
+        "{}: decoder capacity escaped the bounded generator",
+        trace.describe()
+    );
+    assert!(
+        (1..=4).contains(&trace.final_prefill_len),
+        "{}: final-prefill length escaped the bounded generator",
+        trace.describe()
+    );
+    let iteration_token_budget = trace
+        .final_prefill_len
+        .checked_add(1)
+        .expect("bounded mixed-stage iteration budget");
+    SchedulerConfig {
+        iteration_token_budget,
+        max_prefill_chunk_tokens: trace.final_prefill_len,
         aging_threshold_ns: 100,
         ..fault_config(2, None)
-    };
-    let mut scheduler = new_scheduler(config);
+    }
+}
+
+fn mixed_stage_final_prefill_prompt(length: usize) -> Vec<u32> {
+    (0..length)
+        .map(|offset| {
+            2_001_u32
+                .checked_add(u32::try_from(offset).expect("bounded prompt offset"))
+                .expect("bounded symbolic final-prefill token")
+        })
+        .collect()
+}
+
+fn prime_mixed_stage_decoder(trace: MixedStageTraceV1) -> MixedStageState {
+    let mut scheduler = new_scheduler(mixed_stage_config(trace));
     let decoder = scheduler
-        .submit(RequestDescriptor::new(vec![1_001], 2), 0)
+        .submit(
+            RequestDescriptor::new(vec![1_001], trace.decoder_max_new_tokens),
+            0,
+        )
         .expect("prime mixed-stage decoder");
     let label_by_request = HashMap::from([(decoder.request_id(), 1_u32)]);
     let mut histories = BTreeMap::from([(1_u32, Vec::new()), (2_u32, Vec::new())]);
@@ -917,24 +1042,14 @@ fn prime_mixed_stage_decoder() -> MixedStageState {
         .complete_iteration(&prime_result, 0)
         .expect("commit mixed-stage decoder prime");
     assert!(prime_updates.settlement_failures().is_empty());
-    assert_token_events(
-        &prime_expected,
-        prime_updates.token_events(),
-        MIXED_STAGE_SEED,
-        0,
-    );
-    for output in &prime_expected {
-        histories
-            .get_mut(&output.label)
-            .expect("prime label history")
-            .push(output.token_id);
-    }
+    assert_token_events(&prime_expected, prime_updates.token_events(), trace.seed, 0);
+    append_published_tokens(&mut histories, &prime_expected);
     assert_completions(
         prime_updates.completions(),
         &label_by_request,
         &histories,
         &mut terminal_labels,
-        MIXED_STAGE_SEED,
+        trace.seed,
         0,
     );
     assert_eq!(
@@ -950,26 +1065,25 @@ fn prime_mixed_stage_decoder() -> MixedStageState {
     }
 }
 
-fn mixed_stage_fixture() -> MixedStageFixture {
+fn mixed_stage_fixture(trace: MixedStageTraceV1) -> MixedStageFixture {
     let MixedStageState {
         mut scheduler,
         decoder,
         mut label_by_request,
         histories,
         terminal_labels,
-    } = prime_mixed_stage_decoder();
+    } = prime_mixed_stage_decoder(trace);
     let decoder_token = histories[&1][0];
+    let final_prefill_prompt = mixed_stage_final_prefill_prompt(trace.final_prefill_len);
     let final_prefill = scheduler
-        .submit(RequestDescriptor::new(vec![2_001], 1), 1)
+        .submit(RequestDescriptor::new(final_prefill_prompt.clone(), 1), 1)
         .expect("submit final-prefill peer");
     assert!(
         label_by_request
             .insert(final_prefill.request_id(), 2)
             .is_none()
     );
-    let planning = scheduler
-        .plan_iteration(1)
-        .expect("plan RC1 mixed-stage corpus");
+    let planning = scheduler.plan_iteration(1).expect("plan mixed-stage trace");
     let (plan, completions) = planning.into_parts();
     assert!(completions.is_empty());
     let plan = plan.expect("mixed-stage plan");
@@ -985,7 +1099,10 @@ fn mixed_stage_fixture() -> MixedStageFixture {
         plan.prefill_items()[0].request_id(),
         final_prefill.request_id()
     );
-    assert_eq!(plan.prefill_items()[0].input_tokens(), &[2_001]);
+    assert_eq!(
+        plan.prefill_items()[0].input_tokens(),
+        final_prefill_prompt.as_slice()
+    );
     assert_eq!(
         plan.prefill_items()[0].output_slot(),
         Some(OutputSlot::new(1))
@@ -994,7 +1111,12 @@ fn mixed_stage_fixture() -> MixedStageFixture {
         plan.output_slots(),
         &[OutputSlot::new(0), OutputSlot::new(1)]
     );
-    assert_eq!(plan.total_tokens(), 2);
+    assert_eq!(
+        plan.total_tokens(),
+        trace.final_prefill_len + 1,
+        "{}: mixed plan did not consume its bounded token budget",
+        trace.describe()
+    );
     let expected = expected_outputs(&plan, &label_by_request, &histories);
     assert_eq!(expected.len(), 2);
     MixedStageFixture {
@@ -1009,19 +1131,21 @@ fn mixed_stage_fixture() -> MixedStageFixture {
     }
 }
 
+fn mixed_stage_expected_output(
+    fixture: &MixedStageFixture,
+    request_id: RequestId,
+) -> ExpectedOutput {
+    fixture
+        .expected
+        .iter()
+        .copied()
+        .find(|output| output.request_id == request_id)
+        .expect("mixed-stage request has one output")
+}
+
 fn explicit_reverse_mixed_stage_result(fixture: &MixedStageFixture) -> IterationResult {
-    let decoder = fixture
-        .expected
-        .iter()
-        .copied()
-        .find(|output| output.request_id == fixture.decoder)
-        .expect("mixed-stage decoder output");
-    let final_prefill = fixture
-        .expected
-        .iter()
-        .copied()
-        .find(|output| output.request_id == fixture.final_prefill)
-        .expect("mixed-stage final-prefill output");
+    let decoder = mixed_stage_expected_output(fixture, fixture.decoder);
+    let final_prefill = mixed_stage_expected_output(fixture, fixture.final_prefill);
     assert_eq!(decoder.slot, OutputSlot::new(0));
     assert_eq!(final_prefill.slot, OutputSlot::new(1));
     IterationResult::new(
@@ -1045,88 +1169,166 @@ fn append_published_tokens(histories: &mut BTreeMap<u32, Vec<u32>>, outputs: &[E
     }
 }
 
-#[test]
-fn rc1_mixed_stage_corpus_routes_explicit_reverse_output_order() {
-    let mut fixture = mixed_stage_fixture();
-    let result = explicit_reverse_mixed_stage_result(&fixture);
-    let updates = fixture
-        .scheduler
-        .complete_iteration(&result, 1)
-        .expect("commit RC1 mixed-stage reverse result");
-    assert!(updates.settlement_failures().is_empty());
-    assert_token_events(
-        &fixture.expected,
-        updates.token_events(),
-        MIXED_STAGE_SEED,
-        1,
-    );
-    append_published_tokens(&mut fixture.histories, &fixture.expected);
-    assert_completions(
-        updates.completions(),
-        &fixture.label_by_request,
-        &fixture.histories,
-        &mut fixture.terminal_labels,
-        MIXED_STAGE_SEED,
-        1,
-    );
-    let completions = completion_records(updates.completions());
-    assert_eq!(completions.len(), 2);
-    assert_eq!(
-        completions.get(&fixture.decoder),
-        Some(&(
-            RequestFinishReason::Length,
-            vec![token_for(1, 0), token_for(1, 1)]
-        ))
-    );
-    assert_eq!(
-        completions.get(&fixture.final_prefill),
-        Some(&(RequestFinishReason::Length, vec![token_for(2, 0)]))
-    );
-    assert_eq!(fixture.terminal_labels.len(), 2);
-    assert_clean_close(fixture.scheduler, 2, MIXED_STAGE_SEED);
-}
-
-#[test]
-fn rc1_mixed_stage_corpus_suppresses_cancelled_decoder_output() {
-    let mut fixture = mixed_stage_fixture();
-    let cancellation = fixture
-        .scheduler
-        .cancel(fixture.decoder, 1)
-        .expect("defer RC1 mixed-stage decoder cancellation");
-    assert!(cancellation.deferred_until_iteration_settles());
-    assert!(cancellation.completion().is_none());
-    let result = explicit_reverse_mixed_stage_result(&fixture);
-    let updates = fixture
-        .scheduler
-        .complete_iteration(&result, 1)
-        .expect("commit cancelled RC1 mixed-stage result");
-    assert!(updates.settlement_failures().is_empty());
-    let published = fixture
+fn mixed_stage_published_outputs(
+    fixture: &MixedStageFixture,
+    action: MixedStageAction,
+) -> Vec<ExpectedOutput> {
+    fixture
         .expected
         .iter()
         .copied()
-        .filter(|output| output.request_id == fixture.final_prefill)
-        .collect::<Vec<_>>();
-    assert_token_events(&published, updates.token_events(), MIXED_STAGE_SEED, 1);
+        .filter(|output| {
+            action == MixedStageAction::Commit || output.request_id == fixture.final_prefill
+        })
+        .collect()
+}
+
+fn expected_mixed_stage_iteration_completions(
+    fixture: &MixedStageFixture,
+    trace: MixedStageTraceV1,
+) -> BTreeMap<RequestId, (RequestFinishReason, Vec<u32>)> {
+    let mut expected = BTreeMap::from([(
+        fixture.final_prefill,
+        (RequestFinishReason::Length, vec![token_for(2, 0)]),
+    )]);
+    match trace.action {
+        MixedStageAction::Commit if trace.decoder_max_new_tokens == 2 => {
+            expected.insert(
+                fixture.decoder,
+                (
+                    RequestFinishReason::Length,
+                    vec![token_for(1, 0), token_for(1, 1)],
+                ),
+            );
+        }
+        MixedStageAction::DeferredCancelDecoder => {
+            expected.insert(
+                fixture.decoder,
+                (RequestFinishReason::Cancelled, vec![token_for(1, 0)]),
+            );
+        }
+        MixedStageAction::Commit => {}
+    }
+    expected
+}
+
+fn expected_mixed_stage_close_completions(
+    fixture: &MixedStageFixture,
+    trace: MixedStageTraceV1,
+) -> BTreeMap<RequestId, (RequestFinishReason, Vec<u32>)> {
+    if trace.action == MixedStageAction::Commit && trace.decoder_max_new_tokens > 2 {
+        BTreeMap::from([(
+            fixture.decoder,
+            (
+                RequestFinishReason::Cancelled,
+                vec![token_for(1, 0), token_for(1, 1)],
+            ),
+        )])
+    } else {
+        BTreeMap::new()
+    }
+}
+
+fn settle_mixed_stage_trace(fixture: &mut MixedStageFixture, trace: MixedStageTraceV1) {
+    if trace.action == MixedStageAction::DeferredCancelDecoder {
+        let cancellation = fixture
+            .scheduler
+            .cancel(fixture.decoder, 1)
+            .expect("defer mixed-stage decoder cancellation");
+        assert!(cancellation.deferred_until_iteration_settles());
+        assert!(cancellation.completion().is_none());
+    }
+    let result = explicit_reverse_mixed_stage_result(fixture);
+    let updates = fixture
+        .scheduler
+        .complete_iteration(&result, 1)
+        .expect("commit mixed-stage reverse result");
+    assert!(updates.settlement_failures().is_empty());
+    let published = mixed_stage_published_outputs(fixture, trace.action);
+    assert_token_events(&published, updates.token_events(), trace.seed, 1);
     append_published_tokens(&mut fixture.histories, &published);
     assert_completions(
         updates.completions(),
         &fixture.label_by_request,
         &fixture.histories,
         &mut fixture.terminal_labels,
-        MIXED_STAGE_SEED,
+        trace.seed,
         1,
     );
-    let completions = completion_records(updates.completions());
-    assert_eq!(completions.len(), 2);
     assert_eq!(
-        completions.get(&fixture.decoder),
-        Some(&(RequestFinishReason::Cancelled, vec![token_for(1, 0)]))
+        completion_records(updates.completions()),
+        expected_mixed_stage_iteration_completions(fixture, trace),
+        "{}: mixed-stage iteration terminals drifted",
+        trace.describe()
+    );
+}
+
+fn close_mixed_stage_trace(fixture: MixedStageFixture, trace: MixedStageTraceV1) {
+    let expected_close = expected_mixed_stage_close_completions(&fixture, trace);
+    let MixedStageFixture {
+        scheduler,
+        label_by_request,
+        histories,
+        mut terminal_labels,
+        ..
+    } = fixture;
+    let closed = scheduler.close(2, None).unwrap_or_else(|failure| {
+        panic!(
+            "{}: mixed-stage close failed: {}",
+            trace.describe(),
+            failure.error()
+        )
+    });
+    assert!(closed.settlement_failures().is_empty());
+    assert_completions(
+        closed.completions(),
+        &label_by_request,
+        &histories,
+        &mut terminal_labels,
+        trace.seed,
+        2,
     );
     assert_eq!(
-        completions.get(&fixture.final_prefill),
-        Some(&(RequestFinishReason::Length, vec![token_for(2, 0)]))
+        completion_records(closed.completions()),
+        expected_close,
+        "{}: close terminals drifted",
+        trace.describe()
     );
-    assert_eq!(fixture.terminal_labels.len(), 2);
-    assert_clean_close(fixture.scheduler, 2, MIXED_STAGE_SEED);
+    assert_eq!(
+        terminal_labels.len(),
+        2,
+        "{}: every mixed-stage request must terminally settle exactly once",
+        trace.describe()
+    );
+    assert_closed_quiescent(&closed);
+}
+
+fn replay_mixed_stage_trace_inner(trace: MixedStageTraceV1) {
+    let mut fixture = mixed_stage_fixture(trace);
+    settle_mixed_stage_trace(&mut fixture, trace);
+    close_mixed_stage_trace(fixture, trace);
+}
+
+fn replay_mixed_stage_trace(trace: MixedStageTraceV1) {
+    let replay = catch_unwind(AssertUnwindSafe(|| replay_mixed_stage_trace_inner(trace)));
+    assert!(
+        replay.is_ok(),
+        "C03-A bounded mixed-stage trace failed: {}",
+        trace.describe()
+    );
+}
+
+#[test]
+fn replay_mixed_stage_corpus_v1() {
+    for trace in MIXED_STAGE_CORPUS_V1 {
+        replay_mixed_stage_trace(trace);
+    }
+}
+
+#[test]
+fn ten_thousand_seeded_mixed_stage_traces_preserve_routing_and_quiescence() {
+    for trace_index in 0..MIXED_STAGE_TRACE_COUNT {
+        let seed = MIXED_STAGE_SEED_FACTOR.wrapping_mul(trace_index.wrapping_add(1));
+        replay_mixed_stage_trace(MixedStageTraceV1::from_seed(seed));
+    }
 }
