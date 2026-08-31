@@ -17,7 +17,8 @@ RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iter
 completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte allocator를 host helper로
 C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 sequence-block-offset
 count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 error facade로 분리했다.
-C04-25는 cold output capacity sizing을 output helper로 연결했다. CUDA owner, KV,
+C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26은 typed packed-region
+validation을 metadata helper로 공유했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -369,6 +370,15 @@ calculation을 보유한다. greedy CUDA ABI capacity helper는 native-width con
 batch owner는 cold output-buffer allocation, allocation report, dispatch, download/poison lifecycle을
 계속 소유하며 shared sizing helper만 호출한다. 이 source-only slice는 GPU parity나 performance
 non-regression을 주장하지 않는다.
+
+### C04-26 — packed-region validation extraction
+
+`llama/executor/metadata.rs`는 typed U32/U16 host encoder가 공통으로 수행하는 source byte-length
+check, layout length mismatch, destination range validation을 shared helper로 보유한다. typed encoder는
+각자의 native-endian encoding과 기존 mismatch reason을 계속 명시한다.
+
+metadata packing order, destination ownership, CUDA upload/dispatch와 allocation lifecycle은 변경하지
+않는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

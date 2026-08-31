@@ -562,6 +562,7 @@ fn executor_metadata_is_a_checked_layout_and_host_packing_boundary() {
         "sequence_block_offset_count",
         "checked_add(1)",
         "SequenceBlockOffsets",
+        "checked_region_slice_mut",
         "TokenOutOfRange",
         "PositionOutOfRange",
     ] {

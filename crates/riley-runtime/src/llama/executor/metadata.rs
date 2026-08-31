@@ -351,14 +351,14 @@ fn encode_u32_region(
     region: ByteRegion,
     resource: LlamaBatchExecutorResource,
 ) -> LlamaBatchExecutorResult<()> {
-    let expected = checked_byte_len(source.len(), U32_BYTES, resource)?;
-    if region.byte_len != expected {
-        return Err(LlamaBatchExecutorError::InvalidConfiguration {
-            field: "packed_iteration_layout",
-            reason: "U32 region length does not match its host source",
-        });
-    }
-    let bytes = region_slice_mut(destination, region, resource)?;
+    let bytes = checked_region_slice_mut(
+        destination,
+        source.len(),
+        U32_BYTES,
+        region,
+        resource,
+        "U32 region length does not match its host source",
+    )?;
     encode_u32(source, bytes);
     Ok(())
 }
@@ -369,16 +369,34 @@ fn encode_u16_region(
     region: ByteRegion,
     resource: LlamaBatchExecutorResource,
 ) -> LlamaBatchExecutorResult<()> {
-    let expected = checked_byte_len(source.len(), U16_BYTES, resource)?;
+    let bytes = checked_region_slice_mut(
+        destination,
+        source.len(),
+        U16_BYTES,
+        region,
+        resource,
+        "U16 region length does not match its host source",
+    )?;
+    encode_u16(source, bytes);
+    Ok(())
+}
+
+fn checked_region_slice_mut<'a>(
+    destination: &'a mut [u8],
+    source_len: usize,
+    element_bytes: usize,
+    region: ByteRegion,
+    resource: LlamaBatchExecutorResource,
+    mismatch_reason: &'static str,
+) -> LlamaBatchExecutorResult<&'a mut [u8]> {
+    let expected = checked_byte_len(source_len, element_bytes, resource)?;
     if region.byte_len != expected {
         return Err(LlamaBatchExecutorError::InvalidConfiguration {
             field: "packed_iteration_layout",
-            reason: "U16 region length does not match its host source",
+            reason: mismatch_reason,
         });
     }
-    let bytes = region_slice_mut(destination, region, resource)?;
-    encode_u16(source, bytes);
-    Ok(())
+    region_slice_mut(destination, region, resource)
 }
 
 /// Encodes native-endian `u16` values into an already-sized byte prefix.
@@ -396,4 +414,121 @@ fn region_slice_mut(
     bytes
         .get_mut(region.offset..region.end()?)
         .ok_or(LlamaBatchExecutorError::ArithmeticOverflow { resource })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn checked_region_slice_preserves_error_precedence() {
+        let mut destination = [0_u8; U32_BYTES];
+        assert!(matches!(
+            checked_region_slice_mut(
+                &mut destination,
+                usize::MAX,
+                U32_BYTES,
+                ByteRegion {
+                    offset: U32_BYTES,
+                    byte_len: 0,
+                },
+                LlamaBatchExecutorResource::RowPositions,
+                "test mismatch",
+            ),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RowPositions,
+            })
+        ));
+
+        assert!(matches!(
+            checked_region_slice_mut(
+                &mut destination,
+                1,
+                U32_BYTES,
+                ByteRegion {
+                    offset: usize::MAX,
+                    byte_len: U32_BYTES,
+                },
+                LlamaBatchExecutorResource::RowPositions,
+                "test mismatch",
+            ),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::PackedIterationInput,
+            })
+        ));
+
+        assert!(matches!(
+            checked_region_slice_mut(
+                &mut destination,
+                1,
+                U32_BYTES,
+                ByteRegion {
+                    offset: U32_BYTES,
+                    byte_len: U16_BYTES,
+                },
+                LlamaBatchExecutorResource::RowPositions,
+                "test mismatch",
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "packed_iteration_layout",
+                reason: "test mismatch",
+            })
+        ));
+
+        assert!(matches!(
+            checked_region_slice_mut(
+                &mut destination,
+                1,
+                U32_BYTES,
+                ByteRegion {
+                    offset: U32_BYTES,
+                    byte_len: U32_BYTES,
+                },
+                LlamaBatchExecutorResource::RowPositions,
+                "test mismatch",
+            ),
+            Err(LlamaBatchExecutorError::ArithmeticOverflow {
+                resource: LlamaBatchExecutorResource::RowPositions,
+            })
+        ));
+    }
+
+    #[test]
+    fn typed_region_encoders_preserve_mismatch_reason_without_writing() {
+        let mut u32_destination = [0xA5_u8; U32_BYTES];
+        assert!(matches!(
+            encode_u32_region(
+                &[7],
+                &mut u32_destination,
+                ByteRegion {
+                    offset: 0,
+                    byte_len: U16_BYTES,
+                },
+                LlamaBatchExecutorResource::RowPositions,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "packed_iteration_layout",
+                reason: "U32 region length does not match its host source",
+            })
+        ));
+        assert_eq!(u32_destination, [0xA5; U32_BYTES]);
+
+        let mut u16_destination = [0x5A_u8; U16_BYTES];
+        assert!(matches!(
+            encode_u16_region(
+                &[7],
+                &mut u16_destination,
+                ByteRegion {
+                    offset: 0,
+                    byte_len: U32_BYTES,
+                },
+                LlamaBatchExecutorResource::ValidTokens,
+            ),
+            Err(LlamaBatchExecutorError::InvalidConfiguration {
+                field: "packed_iteration_layout",
+                reason: "U16 region length does not match its host source",
+            })
+        ));
+        assert_eq!(u16_destination, [0x5A; U16_BYTES]);
+    }
 }

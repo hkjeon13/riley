@@ -533,7 +533,7 @@ mod source_contract_tests {
         for (boundary, source, expected_calls) in [
             ("batch owner", include_str!("batch_executor.rs"), 7),
             ("batch buffers", include_str!("executor/buffers.rs"), 2),
-            ("packed metadata", include_str!("executor/metadata.rs"), 4),
+            ("packed metadata", include_str!("executor/metadata.rs"), 3),
         ] {
             assert!(
                 !source.contains("fn checked_host_byte_len(")
@@ -545,6 +545,35 @@ mod source_contract_tests {
                 expected_calls,
                 "{boundary} must use the shared typed byte-length helper at every existing boundary"
             );
+        }
+    }
+
+    #[test]
+    fn packed_metadata_encoders_share_checked_region_validation() {
+        let source = include_str!("executor/metadata.rs");
+        let helper_begin = source
+            .find("fn checked_region_slice_mut")
+            .expect("shared region validation remains explicit");
+        let helper_end = source[helper_begin..]
+            .find("/// Encodes native-endian `u16`")
+            .map(|offset| helper_begin + offset)
+            .expect("U16 encoder follows the shared region validator");
+        let helper = &source[helper_begin..helper_end];
+        assert!(helper.contains("checked_byte_len(source_len, element_bytes, resource)"));
+        assert!(helper.contains("region_slice_mut(destination, region, resource)"));
+
+        for function in ["fn encode_u32_region(", "fn encode_u16_region("] {
+            let begin = source
+                .find(function)
+                .expect("typed region encoder remains explicit");
+            let end = source[begin..]
+                .find("\n}\n")
+                .map(|offset| begin + offset + 3)
+                .expect("typed region encoder has one function boundary");
+            let body = &source[begin..end];
+            assert!(body.contains("checked_region_slice_mut("));
+            assert!(!body.contains("checked_byte_len("));
+            assert!(!body.contains("let bytes = region_slice_mut("));
         }
     }
 
