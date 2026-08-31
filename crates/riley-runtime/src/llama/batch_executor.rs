@@ -43,6 +43,7 @@ use super::executor::metadata::{
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens};
+use super::executor::poison::{BatchDispatchDisposition, poison_for_batch_error};
 use super::executor::shape::{
     LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
     select_smallest_prepared_dense_rows,
@@ -52,7 +53,7 @@ use super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile,
     PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig, execute_gemm,
     execute_profile_residual_rms_norm, execute_profile_rms_norm, execute_projection_bias,
-    poison_for_cuda_error, poison_for_forward_error, span, span_mut, weight_span,
+    poison_for_cuda_error, span, span_mut, weight_span,
 };
 use super::{ExecutionSite, LlamaExecutionPlan, LlamaOp, LlamaReductionProfile};
 use crate::cuda_weights::CudaUploadedWeights;
@@ -172,19 +173,6 @@ const fn runtime_selection_policy_id(profile: LlamaReductionProfile) -> &'static
 enum BatchOutputMode {
     Logits,
     GreedyTokens,
-}
-
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-enum BatchDispatchDisposition {
-    #[default]
-    PreDispatch,
-    CommandSubmissionStarted,
-}
-
-impl BatchDispatchDisposition {
-    const fn mutation_may_have_occurred(self) -> bool {
-        matches!(self, Self::CommandSubmissionStarted)
-    }
 }
 
 /// Cold bounds and shape policy for one reusable continuous-batch owner.
@@ -1188,7 +1176,10 @@ impl PreparedLlamaBatchExecutor {
                     *poisoned = true;
                     forward.poisoned = true;
                 }
-                poison_for_batch_error(poisoned, forward, &error);
+                let forward_gemms = &forward.gemms;
+                poison_for_batch_error(poisoned, &mut forward.poisoned, &error, || {
+                    forward_gemms.any_poisoned()
+                });
                 *poisoned |= shape_variants
                     .iter()
                     .any(|shape| shape.gemms.any_poisoned());
@@ -2965,29 +2956,6 @@ fn batch_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError
     LlamaBatchExecutorError::Cuda { site, source }
 }
 
-fn poison_for_batch_error(
-    poisoned: &mut bool,
-    forward: &mut PreparedLlamaForward,
-    error: &LlamaBatchExecutorError,
-) {
-    match error {
-        LlamaBatchExecutorError::Cuda { source, .. } => {
-            poison_for_cuda_error(poisoned, source);
-            poison_for_cuda_error(&mut forward.poisoned, source);
-        }
-        LlamaBatchExecutorError::Forward(source) => {
-            poison_for_forward_error(&mut forward.poisoned, source);
-            *poisoned |= forward.poisoned || forward.gemms.any_poisoned();
-        }
-        LlamaBatchExecutorError::InvalidConfiguration { .. }
-        | LlamaBatchExecutorError::ArithmeticOverflow { .. } => {
-            *poisoned = true;
-            forward.poisoned = true;
-        }
-        _ => {}
-    }
-}
-
 fn record_close(
     first: &mut Option<LlamaBatchExecutorError>,
     resource: LlamaBatchExecutorResource,
@@ -3167,15 +3135,6 @@ mod tests {
             residual_norm_implementation_id(ResidualNormImplementation::Fused),
             "fused"
         );
-    }
-
-    #[test]
-    fn dispatch_disposition_distinguishes_preflight_from_unknown_mutation() {
-        let mut disposition = BatchDispatchDisposition::PreDispatch;
-        assert!(!disposition.mutation_may_have_occurred());
-
-        disposition = BatchDispatchDisposition::CommandSubmissionStarted;
-        assert!(disposition.mutation_may_have_occurred());
     }
 
     #[test]

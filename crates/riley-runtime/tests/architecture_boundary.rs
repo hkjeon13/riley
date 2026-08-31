@@ -8,6 +8,7 @@ const EXECUTOR_DEVICE_VIEWS: &str = include_str!("../src/llama/executor/device_v
 const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
 const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs");
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
+const EXECUTOR_POISON: &str = include_str!("../src/llama/executor/poison.rs");
 
 #[test]
 fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
@@ -276,6 +277,68 @@ fn executor_output_only_decodes_canonical_host_results() {
         assert!(
             !EXECUTOR_OUTPUT.contains(forbidden),
             "executor output crossed its host-decoding boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_poison_only_routes_borrowed_failure_state() {
+    for required in [
+        "enum BatchDispatchDisposition",
+        "CommandSubmissionStarted",
+        "mutation_may_have_occurred",
+        "poison_for_batch_error",
+        "forward_gemms_poisoned",
+        "LlamaBatchExecutorError::Cuda",
+        "LlamaBatchExecutorError::Forward",
+        "LlamaBatchExecutorError::InvalidConfiguration",
+        "LlamaBatchExecutorError::ArithmeticOverflow",
+        "poison_for_cuda_error",
+        "poison_for_forward_error",
+    ] {
+        assert!(
+            EXECUTOR_POISON.contains(required),
+            "executor poison omitted required typed-routing token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "batch_executor",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaForward",
+        "CudaContext",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "LlamaExecutionPlan",
+        "ForwardBuffers",
+        "BatchDeviceInput",
+        "BatchHostInput",
+        "LlamaPackedBatchMetadata",
+        "PackedBatchV1",
+        "BatchMetadataTransport",
+        "ExecutionCompletionImplementation",
+        "LlamaOp",
+        "execute_gemm",
+        "execute_fixed_graph",
+        "upload_from_slice",
+        "copy_from_pinned",
+        "download_to_slice",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+        "Vec",
+        "Box",
+        "String",
+        "format!",
+    ] {
+        assert!(
+            !EXECUTOR_POISON.contains(forbidden),
+            "executor poison crossed its borrowed-routing boundary with {forbidden:?}"
         );
     }
 }

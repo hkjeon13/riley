@@ -11,4 +11,5 @@ pub(crate) mod gemm_plan;
 pub(crate) mod metadata;
 pub(crate) mod metrics;
 pub(crate) mod output;
+pub(crate) mod poison;
 pub(crate) mod shape;

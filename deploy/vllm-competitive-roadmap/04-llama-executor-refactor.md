@@ -6,7 +6,8 @@ shape policy·bucket·history를, C04-4는 raw batch-input buffer의 cold alloca
 C04-5는 packed metadata의 checked layout descriptor를, C04-6은 seven-source host slab packer를
 각각 분리했고, C04-7은 borrowed CUDA metadata view binding을, C04-8은 anchored GEMM
 shape-variant의 cold inventory preparation을, C04-9는 greedy output record의 host validation과
-canonical token map을 분리했다. CUDA owner, KV, buffer orchestration, pinned-memory
+canonical token map을, C04-10은 typed error poison routing과 command-submission disposition을
+분리했다. CUDA owner, KV, buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** CUDA Graph와 fusion을 안전하게 추가할 수 있도록 거대한 Llama executor의 ownership·shape·metadata·output 경계를 모듈로 분리한다.
@@ -188,6 +189,19 @@ record가 executor를 poison하는 판단은 batch owner에 그대로 남긴다.
 CUDA download, preallocated host/device result storage, output-ready/mode lifecycle, allocation
 report, dispatch와 public download API는 batch owner가 계속 소유한다. 이 source-only slice는
 GPU parity나 performance non-regression을 주장하지 않는다.
+
+### C04-10 — typed poison routing extraction
+
+`llama/executor/poison.rs`는 command batch가 시작되어 partial device mutation이 가능해진
+disposition과 typed batch error의 established poison mapping을 보유한다. CUDA validation failure의
+non-poisoning rule, nested forward failure routing, invalid configuration/overflow의 fail-closed
+rule은 그대로 유지한다. forward GEMM poison 상태는 owner가 error routing 뒤 지연 callback으로
+제공하므로 새 module은 forward owner나 CUDA resource를 소유하거나 보관하지 않는다.
+
+iteration-batch completion에서 submission-started 여부를 보고 executor 전체를 poison하는
+outer decision, shape variant GEMM poison fold, KV/buffer/stream lifecycle과 explicit close는 batch
+owner가 계속 소유한다. 이 source-only slice는 GPU parity나 performance non-regression을
+주장하지 않는다.
 
 ## 6. Allocation 검증
 
