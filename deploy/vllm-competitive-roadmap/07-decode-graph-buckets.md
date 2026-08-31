@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-13은 successful exact V1 host-slab payload를 same-owner read-only lease로 묶는다.
+**상태:** In progress — C07-14는 successful exact V1 host-slab lease를 cold pinned-host staging lease로 좁힌다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -184,6 +184,21 @@ no-mutation behavior는 그대로 보존되며 hot path allocation도 없다.
 lease는 successful host write의 freshness/ownership fact일 뿐 opaque-byte semantics, pinned host storage, H2D completion, device contents,
 C06 signature/registry/dispatch, CUDA capture/replay 또는 graph-safe/runnable authority를 만들지 않는다. 현재 V1 row/block tail·kernel mask
 semantics가 닫히기 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-14 — cold exact V1 pinned-host staging lease (CUDA feature; no GPU execution test)
+
+C07-14는 C07-13의 successful exact host-slab lease만 받아 same cold layout의 one-shot pinned-host staging write로 옮긴다. pinned owner는
+`layout.total_bytes()`와 정확히 같은 길이의 pinned allocation을 cold prepare에서 한 번만 만들고 layout·geometry digest와 함께 보관한다.
+staging 전에는 digest가 아니라 complete layout equality를 확인하므로 서로 다른 cold geometry가 섞이지 않으며, mismatch는 pinned/source digest를
+진단값으로 가진 typed error로 끝나고 pinned write를 하지 않는다. matching layout은 host lease의 exact bytes를 offset zero에 동기 write한 뒤에만
+same-owner read-only pinned lease를 반환한다. lease가 살아 있는 동안 Rust borrow가 re-stage, owner move, explicit close를 막고, lease가 끝난
+뒤에만 같은 pinned allocation을 다시 stage하거나 close할 수 있다.
+
+native pinned write failure에는 lease를 반환하지 않으며 pinned contents의 transactional rollback은 주장하지 않는다. 이 단계는 device slab,
+stream/command, host-to-device copy, copy completion, CUDA graph capture/replay, C06 signature/registry/dispatch, executor integration 또는
+graph-safe/runnable authority를 만들지 않는다. CPU-only source contract가 allocation/write count와 feature gating을 확인하고 CUDA feature는
+compile-only로 확인한다. actual GPU execution, transfer measurement, and graph replay는 이후 단계에 남기며 그 전까지 모든 path는 exact eager를
+유지한다.
 
 ## 1. 배경과 가설
 

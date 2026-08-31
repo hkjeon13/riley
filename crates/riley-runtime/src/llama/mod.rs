@@ -22,6 +22,9 @@ mod graph_decode_binding;
 mod graph_decode_exact_field_sources;
 #[allow(dead_code)] // C07-12 deliberately precedes device/pinned transfer ownership.
 mod graph_decode_exact_host_slab;
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // C07-14 deliberately precedes device/stream transfer ownership.
+mod graph_decode_exact_pinned_host_slab;
 #[allow(dead_code)] // C07-8 deliberately precedes opaque metadata-tail materialization.
 mod graph_decode_exact_projection;
 #[allow(dead_code)] // C07-11 deliberately precedes address ownership and transfer.
