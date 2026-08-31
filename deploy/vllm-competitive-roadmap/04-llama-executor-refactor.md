@@ -9,7 +9,8 @@ shape-variant의 cold inventory preparation을, C04-9는 greedy output record의
 canonical token map을, C04-10은 typed error poison routing과 command-submission disposition을
 분리했고, C04-11은 prepared dense-row variant selection을 scalar shape helper로, C04-12는
 gathered logits의 checked BF16 span byte length를 output helper로, C04-13은 packed batch의
-host preflight validation을 metadata helper로 분리했다. CUDA owner, KV,
+host preflight validation을 metadata helper로, C04-14는 cleanup 중 첫 CUDA 오류 보존을 error
+facade로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -237,6 +238,16 @@ Fixed37의 `8192` logical-token cap도 metadata validation 안에서 model posit
 metadata packing/allocation/H2D transport, prepared CUDA owner, shape selection, dispatch, poison,
 output lifecycle와 public API는 batch owner가 계속 소유한다. 이 source-only slice는 GPU parity나
 performance non-regression을 주장하지 않는다.
+
+### C04-14 — first cleanup-error routing extraction
+
+`llama/executor/error.rs`는 CUDA resource close가 실패할 때 first cleanup error만 보존하는
+`record_close` helper를 소유한다. batch owner와 metadata-input buffer helper는 기존 close 순서를
+그대로 유지하고, 이후 close도 계속 시도하며, cleanup error category와 첫 오류 우선순위도
+변경하지 않는다.
+
+forward/KV/output/stream의 owner lifecycle과 close 순서 결정은 각 owner에 남는다. 이
+source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

@@ -33,6 +33,7 @@ use super::executor::buffers::{
     close_device_input, close_host_input,
 };
 use super::executor::device_views::{packed_device_views, per_operation_device_views};
+use super::executor::error::record_close;
 pub use super::executor::error::{
     LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult,
 };
@@ -2870,18 +2871,6 @@ fn upload_prefix(
 
 fn batch_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
     LlamaBatchExecutorError::Cuda { site, source }
-}
-
-fn record_close(
-    first: &mut Option<LlamaBatchExecutorError>,
-    resource: LlamaBatchExecutorResource,
-    result: Result<(), CudaError>,
-) {
-    if let Err(source) = result {
-        if first.is_none() {
-            *first = Some(LlamaBatchExecutorError::Cleanup { resource, source });
-        }
-    }
 }
 
 fn checked_host_byte_len(

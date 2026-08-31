@@ -37,6 +37,12 @@ fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
 
 #[test]
 fn executor_error_vocabulary_does_not_own_runtime_resources_or_scheduling_policy() {
+    for required in ["record_close", "LlamaBatchExecutorError::Cleanup"] {
+        assert!(
+            EXECUTOR_ERROR.contains(required),
+            "executor error vocabulary omitted required cleanup token {required:?}"
+        );
+    }
     for forbidden in [
         "riley_scheduler",
         "riley_server",

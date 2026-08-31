@@ -8,7 +8,9 @@ use riley_cuda::{CudaContext, CudaDeviceBuffer, CudaError, CudaPinnedHostBuffer}
 
 use super::super::batch::LlamaBatchMetadataConfig;
 use super::super::error::{ExecutionSite, LlamaOp};
-use super::error::{LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult};
+use super::error::{
+    LlamaBatchExecutorError, LlamaBatchExecutorResource, LlamaBatchExecutorResult, record_close,
+};
 
 pub(crate) const U32_BYTES: usize = 4;
 pub(crate) const U16_BYTES: usize = 2;
@@ -293,16 +295,4 @@ fn allocate_zeroed_u32(elements: usize) -> LlamaBatchExecutorResult<Box<[u32]>> 
 
 fn allocation_cuda(site: ExecutionSite, source: CudaError) -> LlamaBatchExecutorError {
     LlamaBatchExecutorError::Cuda { site, source }
-}
-
-fn record_close(
-    first: &mut Option<LlamaBatchExecutorError>,
-    resource: LlamaBatchExecutorResource,
-    result: Result<(), CudaError>,
-) {
-    if let Err(source) = result {
-        if first.is_none() {
-            *first = Some(LlamaBatchExecutorError::Cleanup { resource, source });
-        }
-    }
 }

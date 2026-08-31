@@ -218,6 +218,19 @@ impl error::Error for LlamaBatchExecutorError {
     }
 }
 
+/// Records the first CUDA cleanup failure while later closes still run.
+pub(crate) fn record_close(
+    first: &mut Option<LlamaBatchExecutorError>,
+    resource: LlamaBatchExecutorResource,
+    result: Result<(), CudaError>,
+) {
+    if let Err(source) = result {
+        if first.is_none() {
+            *first = Some(LlamaBatchExecutorError::Cleanup { resource, source });
+        }
+    }
+}
+
 impl From<LlamaBatchError> for LlamaBatchExecutorError {
     fn from(source: LlamaBatchError) -> Self {
         Self::Metadata(source)
