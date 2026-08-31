@@ -14,6 +14,17 @@ const U16_BYTES: usize = 2;
 const U32_BYTES: usize = 4;
 const PACKED_ITERATION_ALIGNMENT: usize = U32_BYTES;
 
+/// Returns the CSR block-row offset count required for one bounded batch.
+pub(in crate::llama) fn sequence_block_offset_count(
+    maximum_rows: usize,
+) -> LlamaBatchExecutorResult<usize> {
+    maximum_rows
+        .checked_add(1)
+        .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
+            resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
+        })
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct ByteRegion {
     pub(crate) offset: usize,
@@ -140,11 +151,7 @@ impl PackedIterationLayout {
     }
 
     pub(crate) fn capacity(bounds: LlamaBatchMetadataConfig) -> LlamaBatchExecutorResult<Self> {
-        let offsets = bounds.max_rows().checked_add(1).ok_or(
-            LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-            },
-        )?;
+        let offsets = sequence_block_offset_count(bounds.max_rows())?;
         Self::checked(
             bounds.max_input_tokens(),
             offsets,

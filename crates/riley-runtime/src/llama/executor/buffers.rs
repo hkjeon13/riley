@@ -13,6 +13,7 @@ use super::error::{
     checked_byte_len, cuda_error as allocation_cuda, record_close,
 };
 use super::host::allocate_zeroed_host_bytes;
+use super::metadata::sequence_block_offset_count;
 
 pub(crate) const U32_BYTES: usize = 4;
 pub(crate) const U16_BYTES: usize = 2;
@@ -73,13 +74,7 @@ pub(crate) fn allocate_packed_device_input(
 pub(crate) fn allocate_synchronous_host_input(
     bounds: LlamaBatchMetadataConfig,
 ) -> LlamaBatchExecutorResult<BatchHostInput> {
-    let offsets =
-        bounds
-            .max_rows()
-            .checked_add(1)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-            })?;
+    let offsets = sequence_block_offset_count(bounds.max_rows())?;
     Ok(BatchHostInput::PerOperation(PerOperationHostWorkspace {
         padded_tokens: allocate_zeroed_u32(bounds.max_input_tokens())?,
         sequence_block_offsets: allocate_zeroed_host_bytes(offsets, U32_BYTES)?,
@@ -192,13 +187,7 @@ fn allocate_per_operation_device_metadata(
     context: &CudaContext,
     bounds: LlamaBatchMetadataConfig,
 ) -> LlamaBatchExecutorResult<PerOperationDeviceMetadata> {
-    let offsets =
-        bounds
-            .max_rows()
-            .checked_add(1)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-            })?;
+    let offsets = sequence_block_offset_count(bounds.max_rows())?;
     let allocate = |elements: usize,
                     element_bytes: usize,
                     resource: LlamaBatchExecutorResource|

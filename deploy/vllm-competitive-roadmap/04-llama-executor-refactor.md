@@ -15,7 +15,8 @@ record의 checked byte length를 output helper로, C04-17은 absolute RoPE host-
 rope helper로, C04-18은 borrowed output primitive dispatch를 dispatch helper로, C04-19는 absolute
 RoPE position-count scalar arithmetic을 rope helper로, C04-20은 borrowed iteration command-batch
 completion guard를 dispatch helper로, C04-21은 checked zeroed host-byte allocator를 host helper로
-C04-22는 typed checked byte-length arithmetic을 error facade로 분리했다. CUDA owner, KV,
+C04-22는 typed checked byte-length arithmetic을 error facade로, C04-23은 sequence-block-offset
+count를 metadata helper로 분리했다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -339,6 +340,15 @@ layout/encoder는 기존 resource와 호출 순서를 유지한 채 shared scala
 allocation, upload, packing cursor advance, CUDA span/primitive invocation과 error precedence는 각
 caller에 그대로 남는다. 이 source-only slice는 GPU parity나 performance non-regression을 주장하지
 않는다.
+
+### C04-23 — sequence-block-offset count extraction
+
+`llama/executor/metadata.rs`는 bounded batch의 CSR block-row offset count(`max_rows + 1`)와
+`SequenceBlockOffsets` overflow mapping을 보유한다. batch allocation report, synchronous host/device
+metadata allocation, packed-layout capacity가 같은 scalar helper를 사용한다.
+
+각 caller의 allocation/report/layout 순서와 byte sizing, CUDA resource ownership은 변경하지 않는다.
+이 source-only slice는 GPU parity나 performance non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 

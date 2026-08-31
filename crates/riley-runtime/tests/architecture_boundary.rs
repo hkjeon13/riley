@@ -556,6 +556,9 @@ fn executor_metadata_is_a_checked_layout_and_host_packing_boundary() {
     for required in [
         "validate_for_execution",
         "LLAMA_BATCH_METADATA_V1_VERSION",
+        "sequence_block_offset_count",
+        "checked_add(1)",
+        "SequenceBlockOffsets",
         "TokenOutOfRange",
         "PositionOutOfRange",
     ] {

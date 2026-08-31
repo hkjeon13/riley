@@ -43,7 +43,8 @@ use super::executor::error::{checked_byte_len, cuda_error as batch_cuda, record_
 use super::executor::gemm_plan::{PreparedLlamaBatchShape, prepare_shape_variants};
 use super::executor::host::allocate_zeroed_host_bytes;
 use super::executor::metadata::{
-    PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input, validate_for_execution,
+    PackedIterationLayout, encode_u16, encode_u32, pack_iteration_input,
+    sequence_block_offset_count, validate_for_execution,
 };
 pub use super::executor::metrics::{LlamaBatchShapeBucketHit, LlamaBatchShapeObservation};
 use super::executor::output::{GREEDY_RESULT_BYTES, decode_greedy_tokens, greedy_result_bytes};
@@ -2445,13 +2446,7 @@ fn build_batch_allocation_report(
     greedy_result_capacity_bytes: u64,
     host: &BatchHostWorkspace,
 ) -> LlamaBatchExecutorResult<PreparedLlamaBatchAllocationReport> {
-    let offset_count =
-        bounds
-            .max_rows()
-            .checked_add(1)
-            .ok_or(LlamaBatchExecutorError::ArithmeticOverflow {
-                resource: LlamaBatchExecutorResource::SequenceBlockOffsets,
-            })?;
+    let offset_count = sequence_block_offset_count(bounds.max_rows())?;
     let packed_metadata_device_bytes = [
         checked_byte_len(
             offset_count,

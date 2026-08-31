@@ -549,6 +549,48 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn sequence_block_offset_count_is_shared_before_capacity_or_allocation() {
+        assert_eq!(
+            super::executor::metadata::sequence_block_offset_count(0)
+                .expect("zero rows still need one CSR offset"),
+            1
+        );
+        assert!(matches!(
+            super::executor::metadata::sequence_block_offset_count(usize::MAX),
+            Err(
+                super::executor::error::LlamaBatchExecutorError::ArithmeticOverflow {
+                    resource:
+                        super::executor::error::LlamaBatchExecutorResource::SequenceBlockOffsets,
+                }
+            )
+        ));
+        for (boundary, source, expected_calls) in [
+            (
+                "batch allocation report",
+                include_str!("batch_executor.rs"),
+                1,
+            ),
+            ("buffer allocation", include_str!("executor/buffers.rs"), 2),
+            ("packed metadata", include_str!("executor/metadata.rs"), 2),
+        ] {
+            assert_eq!(
+                source.matches("sequence_block_offset_count(").count(),
+                expected_calls,
+                "{boundary} must share the sequence-block-offset count helper"
+            );
+        }
+        for (boundary, source) in [
+            ("batch allocation report", include_str!("batch_executor.rs")),
+            ("buffer allocation", include_str!("executor/buffers.rs")),
+        ] {
+            assert!(
+                !source.contains("checked_add(1)"),
+                "{boundary} must not retain a local sequence-block-offset count"
+            );
+        }
+    }
+
+    #[test]
     fn batch_shape_gemms_use_the_configured_cap_and_one_cold_shared_workspace() {
         let forward = include_str!("forward.rs");
         let variant_begin = forward
