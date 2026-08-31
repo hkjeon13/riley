@@ -12,7 +12,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use general_mixed_operation_trace::{
     GeneralMixedOperationOracle, GeneralMixedOperationSettlement, GeneralMixedOperationTrace,
     NamedGeneralMixedOperationTrace, decoder_symbolic_token, general_mixed_operation_corpus,
-    parse_general_mixed_operation_trace_descriptor,
+    minimize_general_mixed_operation_trace, parse_general_mixed_operation_trace_descriptor,
     serialize_general_mixed_operation_trace_descriptor,
 };
 use riley_runtime::paged_kv::KvLayout;
@@ -234,16 +234,48 @@ fn replay_general_mixed_operation_inner(trace: &GeneralMixedOperationTrace) {
     oracle.assert_closed();
 }
 
-fn replay_general_mixed_operation(case_id: &str, trace: &GeneralMixedOperationTrace) {
-    let document = serialize_general_mixed_operation_trace_descriptor(case_id, trace);
-    let replay = catch_unwind(AssertUnwindSafe(|| {
+fn general_mixed_operation_fails(trace: &GeneralMixedOperationTrace) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
         replay_general_mixed_operation_inner(trace);
-    }));
-    assert!(
-        replay.is_ok(),
-        "C03-A general mixed operation failed: case_id={case_id}; descriptor={} operations=[{}]",
-        document.trim_end(),
+    }))
+    .is_err()
+}
+
+fn general_mixed_operation_failure_report(
+    case_id: &str,
+    trace: &GeneralMixedOperationTrace,
+    minimized: &GeneralMixedOperationTrace,
+) -> String {
+    let original_descriptor = serialize_general_mixed_operation_trace_descriptor(case_id, trace);
+    let minimized_descriptor =
+        serialize_general_mixed_operation_trace_descriptor("failing-minimized", minimized);
+    format!(
+        "C03-A general-mixed-operation-v1 failed\n\
+         source_case_id={case_id}\n\
+         reducer_scope=v1-selector-local\n\
+         failure_predicate=inner-replayer-panicked-only\n\
+         original_descriptor_json:\n\
+         {}\n\
+         original_operations=[{}]\n\
+         minimized_descriptor_json:\n\
+         {}\n\
+         minimized_operations=[{}]\n\
+         note=local reducer preserves only the replay panic predicate, not panic site, payload, failure signature, or root cause",
+        original_descriptor.trim_end(),
         trace.describe_operations(),
+        minimized_descriptor.trim_end(),
+        minimized.describe_operations(),
+    )
+}
+
+fn replay_general_mixed_operation(case_id: &str, trace: &GeneralMixedOperationTrace) {
+    if !general_mixed_operation_fails(trace) {
+        return;
+    }
+    let minimized = minimize_general_mixed_operation_trace(trace, general_mixed_operation_fails);
+    panic!(
+        "{}",
+        general_mixed_operation_failure_report(case_id, trace, &minimized)
     );
 }
 
@@ -429,4 +461,381 @@ fn ten_thousand_seeded_general_mixed_operation_traces_round_trip_and_replay() {
         assert_eq!(parsed.trace, trace);
         replay_named_general_mixed_operation(&parsed);
     }
+}
+
+fn slot_permutations(slot_count: usize) -> Vec<Vec<u8>> {
+    let mut values = (0..slot_count)
+        .map(|slot| u8::try_from(slot).expect("bounded permutation slot"))
+        .collect::<Vec<_>>();
+    let mut permutations = Vec::new();
+    collect_slot_permutations(&mut values, 0, &mut permutations);
+    permutations
+}
+
+fn collect_slot_permutations(values: &mut [u8], start: usize, permutations: &mut Vec<Vec<u8>>) {
+    if start == values.len() {
+        permutations.push(values.to_vec());
+        return;
+    }
+    for index in start..values.len() {
+        values.swap(start, index);
+        collect_slot_permutations(values, start + 1, permutations);
+        values.swap(start, index);
+    }
+}
+
+fn canonical_slot_order(slot_count: usize) -> Vec<u8> {
+    (0..slot_count)
+        .map(|slot| u8::try_from(slot).expect("bounded canonical slot"))
+        .collect()
+}
+
+fn reducer_fixture() -> GeneralMixedOperationTrace {
+    GeneralMixedOperationTrace {
+        seed: 0x75c4_81a2_3b9d_e6f0,
+        decoder_count: 3,
+        final_prefill_count: 2,
+        prime_slot_order: vec![2, 0, 1],
+        mixed_slot_order: vec![4, 1, 3, 0, 2],
+        cancel_decoder_index: Some(2),
+        settlement: GeneralMixedOperationSettlement::AbortNotDispatched,
+    }
+}
+
+#[test]
+fn general_mixed_operation_reducer_rebases_removed_request_selectors() {
+    let source = reducer_fixture();
+    let candidates = source.shrink_candidates();
+    let remove_decoder_zero = GeneralMixedOperationTrace {
+        decoder_count: 2,
+        prime_slot_order: vec![1, 0],
+        mixed_slot_order: vec![3, 0, 2, 1],
+        cancel_decoder_index: Some(1),
+        ..source.clone()
+    };
+    let remove_decoder_one = GeneralMixedOperationTrace {
+        decoder_count: 2,
+        prime_slot_order: vec![1, 0],
+        mixed_slot_order: vec![3, 2, 0, 1],
+        cancel_decoder_index: Some(1),
+        ..source.clone()
+    };
+    let remove_decoder_two = GeneralMixedOperationTrace {
+        decoder_count: 2,
+        prime_slot_order: vec![0, 1],
+        mixed_slot_order: vec![3, 1, 2, 0],
+        cancel_decoder_index: None,
+        ..source.clone()
+    };
+    let remove_final_prefill_zero = GeneralMixedOperationTrace {
+        final_prefill_count: 1,
+        mixed_slot_order: vec![3, 1, 0, 2],
+        ..source.clone()
+    };
+    for expected in [
+        remove_decoder_zero,
+        remove_decoder_one,
+        remove_decoder_two,
+        remove_final_prefill_zero,
+    ] {
+        assert!(
+            candidates.contains(&expected),
+            "selector-aware reducer omitted the expected rebase candidate: {expected:?}"
+        );
+        let document =
+            serialize_general_mixed_operation_trace_descriptor("rebase-candidate", &expected);
+        let parsed = parse_general_mixed_operation_trace_descriptor(&document)
+            .expect("rebased candidate is strict-canonical");
+        assert_eq!(parsed.trace, expected);
+        replay_general_mixed_operation_inner(&parsed.trace);
+    }
+
+    let final_prefill_source = GeneralMixedOperationTrace {
+        seed: 0x0d1b_4e8a_7c02_f593,
+        decoder_count: 2,
+        final_prefill_count: 3,
+        prime_slot_order: vec![1, 0],
+        mixed_slot_order: vec![2, 0, 3, 1, 4],
+        cancel_decoder_index: Some(1),
+        settlement: GeneralMixedOperationSettlement::Commit,
+    };
+    let final_prefill_candidates = final_prefill_source.shrink_candidates();
+    for expected in [
+        GeneralMixedOperationTrace {
+            final_prefill_count: 2,
+            mixed_slot_order: vec![2, 0, 1, 3],
+            ..final_prefill_source.clone()
+        },
+        GeneralMixedOperationTrace {
+            final_prefill_count: 2,
+            mixed_slot_order: vec![2, 0, 3, 1],
+            ..final_prefill_source.clone()
+        },
+    ] {
+        assert!(
+            final_prefill_candidates.contains(&expected),
+            "selector-aware reducer omitted a later final-prefill rebase: {expected:?}"
+        );
+        let document =
+            serialize_general_mixed_operation_trace_descriptor("later-prefill-rebase", &expected);
+        let parsed = parse_general_mixed_operation_trace_descriptor(&document)
+            .expect("later final-prefill candidate is strict-canonical");
+        assert_eq!(parsed.trace, expected);
+        replay_general_mixed_operation_inner(&parsed.trace);
+    }
+}
+
+#[test]
+fn general_mixed_operation_reducer_orders_identity_before_adjacent_swaps() {
+    let source = reducer_fixture();
+    let candidates = source.shrink_candidates();
+    let cancellation_removed = GeneralMixedOperationTrace {
+        cancel_decoder_index: None,
+        ..source.clone()
+    };
+    let lower_cancel_zero = GeneralMixedOperationTrace {
+        cancel_decoder_index: Some(0),
+        ..source.clone()
+    };
+    let lower_cancel_one = GeneralMixedOperationTrace {
+        cancel_decoder_index: Some(1),
+        ..source.clone()
+    };
+    let direct_prime_identity = GeneralMixedOperationTrace {
+        prime_slot_order: canonical_slot_order(source.decoder_count),
+        ..source.clone()
+    };
+    let direct_mixed_identity = GeneralMixedOperationTrace {
+        mixed_slot_order: canonical_slot_order(source.decoder_count + source.final_prefill_count),
+        ..source.clone()
+    };
+    let adjacent_prime_swap = GeneralMixedOperationTrace {
+        prime_slot_order: vec![0, 2, 1],
+        ..source.clone()
+    };
+    let adjacent_mixed_swap = GeneralMixedOperationTrace {
+        mixed_slot_order: vec![1, 4, 3, 0, 2],
+        ..source.clone()
+    };
+    let cancellation_removed_position = candidates
+        .iter()
+        .position(|candidate| candidate == &cancellation_removed)
+        .expect("reducer removes the cancellation before structural edits");
+    let lower_cancel_zero_position = candidates
+        .iter()
+        .position(|candidate| candidate == &lower_cancel_zero)
+        .expect("reducer emits the lowest cancellation target");
+    let lower_cancel_one_position = candidates
+        .iter()
+        .position(|candidate| candidate == &lower_cancel_one)
+        .expect("reducer emits every lower cancellation target");
+    let first_decoder_removal_position = candidates
+        .iter()
+        .position(|candidate| candidate.decoder_count < source.decoder_count)
+        .expect("reducer emits decoder removals");
+    let first_final_prefill_removal_position = candidates
+        .iter()
+        .position(|candidate| candidate.final_prefill_count < source.final_prefill_count)
+        .expect("reducer emits final-prefill removals");
+    let direct_prime_position = candidates
+        .iter()
+        .position(|candidate| candidate == &direct_prime_identity)
+        .expect("reducer emits a direct prime identity candidate");
+    let direct_mixed_position = candidates
+        .iter()
+        .position(|candidate| candidate == &direct_mixed_identity)
+        .expect("reducer emits a direct mixed identity candidate");
+    let adjacent_prime_position = candidates
+        .iter()
+        .position(|candidate| candidate == &adjacent_prime_swap)
+        .expect("reducer emits the left-most adjacent prime inversion swap");
+    let adjacent_mixed_position = candidates
+        .iter()
+        .position(|candidate| candidate == &adjacent_mixed_swap)
+        .expect("reducer emits the left-most adjacent mixed inversion swap");
+    assert!(
+        cancellation_removed_position < lower_cancel_zero_position
+            && lower_cancel_zero_position < lower_cancel_one_position
+            && lower_cancel_one_position < first_decoder_removal_position
+            && first_decoder_removal_position < first_final_prefill_removal_position
+            && first_final_prefill_removal_position < direct_prime_position
+            && direct_prime_position < direct_mixed_position
+            && direct_mixed_position < adjacent_prime_position
+            && adjacent_prime_position < adjacent_mixed_position,
+        "V1 reducer candidate order must remain cancellation, removals, identities, then swaps"
+    );
+    assert_eq!(
+        adjacent_prime_swap.shrink_rank().3 + 1,
+        source.shrink_rank().3,
+        "one adjacent inversion swap must lower only one inversion"
+    );
+}
+
+#[test]
+fn general_mixed_operation_reducer_candidates_are_deduped_ranked_and_canonical() {
+    let mut source_count = 0_u64;
+    for decoder_count in 1..=3 {
+        let prime_orders = slot_permutations(decoder_count);
+        for final_prefill_count in 1..=3 {
+            let mixed_orders = slot_permutations(decoder_count + final_prefill_count);
+            for prime_slot_order in &prime_orders {
+                for mixed_slot_order in &mixed_orders {
+                    for cancel_decoder_index in
+                        std::iter::once(None).chain((0..decoder_count).map(Some))
+                    {
+                        for settlement in [
+                            GeneralMixedOperationSettlement::Commit,
+                            GeneralMixedOperationSettlement::AbortNotDispatched,
+                        ] {
+                            source_count += 1;
+                            let trace = GeneralMixedOperationTrace {
+                                seed: source_count,
+                                decoder_count,
+                                final_prefill_count,
+                                prime_slot_order: prime_slot_order.clone(),
+                                mixed_slot_order: mixed_slot_order.clone(),
+                                cancel_decoder_index,
+                                settlement,
+                            };
+                            let source_rank = trace.shrink_rank();
+                            let candidates = trace.shrink_candidates();
+                            for (index, candidate) in candidates.iter().enumerate() {
+                                assert!(
+                                    !candidates[..index].contains(candidate),
+                                    "reducer emitted a duplicate candidate"
+                                );
+                                assert!(
+                                    candidate.shrink_rank() < source_rank,
+                                    "reducer candidate rank must strictly decrease"
+                                );
+                                assert_eq!(candidate.seed, trace.seed);
+                                assert_eq!(candidate.settlement, trace.settlement);
+                                let document = serialize_general_mixed_operation_trace_descriptor(
+                                    "selector-candidate",
+                                    candidate,
+                                );
+                                let parsed =
+                                    parse_general_mixed_operation_trace_descriptor(&document)
+                                        .expect("every reducer candidate is strict-canonical");
+                                assert_eq!(parsed.trace, *candidate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(
+        source_count, 43_400,
+        "selector matrix must cover every bounded V1 descriptor shape"
+    );
+}
+
+fn synthetic_general_mixed_operation_failure(trace: &GeneralMixedOperationTrace) -> bool {
+    trace.decoder_count >= 2
+        && trace.final_prefill_count >= 2
+        && trace.cancel_decoder_index == Some(0)
+        && trace.settlement == GeneralMixedOperationSettlement::AbortNotDispatched
+        && trace.shrink_rank().3 > 0
+}
+
+#[test]
+fn general_mixed_operation_reducer_preserves_and_minimizes_a_synthetic_failure() {
+    let source = GeneralMixedOperationTrace {
+        seed: 0x9462_f1b8_0e37_a5cd,
+        decoder_count: 3,
+        final_prefill_count: 3,
+        prime_slot_order: vec![2, 0, 1],
+        mixed_slot_order: vec![5, 4, 3, 2, 1, 0],
+        cancel_decoder_index: Some(0),
+        settlement: GeneralMixedOperationSettlement::AbortNotDispatched,
+    };
+    assert!(synthetic_general_mixed_operation_failure(&source));
+    replay_general_mixed_operation_inner(&source);
+    let minimized =
+        minimize_general_mixed_operation_trace(&source, synthetic_general_mixed_operation_failure);
+    assert_eq!(minimized.seed, source.seed);
+    assert_eq!(minimized.decoder_count, 2);
+    assert_eq!(minimized.final_prefill_count, 2);
+    assert_eq!(minimized.cancel_decoder_index, Some(0));
+    assert_eq!(minimized.prime_slot_order, vec![0, 1]);
+    assert_eq!(minimized.mixed_slot_order, vec![1, 0, 2, 3]);
+    assert_eq!(
+        minimized.settlement,
+        GeneralMixedOperationSettlement::AbortNotDispatched
+    );
+    assert!(synthetic_general_mixed_operation_failure(&minimized));
+    replay_general_mixed_operation_inner(&minimized);
+    let document =
+        serialize_general_mixed_operation_trace_descriptor("synthetic-minimized", &minimized);
+    let parsed = parse_general_mixed_operation_trace_descriptor(&document)
+        .expect("minimized synthetic descriptor is strict-canonical");
+    assert_eq!(parsed.trace, minimized);
+    assert_eq!(
+        minimize_general_mixed_operation_trace(
+            &minimized,
+            synthetic_general_mixed_operation_failure
+        ),
+        minimized,
+        "V1 minimizer must be idempotent at its deterministic local minimum"
+    );
+    assert!(
+        minimized
+            .shrink_candidates()
+            .iter()
+            .all(|candidate| !synthetic_general_mixed_operation_failure(candidate)),
+        "V1 minimizer must return a local minimum for its deterministic candidate order"
+    );
+}
+
+#[test]
+fn general_mixed_operation_failure_report_delimits_its_panic_only_scope() {
+    let source = reducer_fixture();
+    let minimized = GeneralMixedOperationTrace {
+        decoder_count: 2,
+        final_prefill_count: 1,
+        prime_slot_order: vec![0, 1],
+        mixed_slot_order: vec![0, 1, 2],
+        cancel_decoder_index: None,
+        ..source.clone()
+    };
+    let report = general_mixed_operation_failure_report("report-source", &source, &minimized);
+    for expected in [
+        "source_case_id=report-source",
+        "reducer_scope=v1-selector-local",
+        "failure_predicate=inner-replayer-panicked-only",
+        "original_descriptor_json:",
+        "minimized_descriptor_json:",
+        "original_operations=[",
+        "minimized_operations=[",
+        "not panic site, payload, failure signature, or root cause",
+    ] {
+        assert!(
+            report.contains(expected),
+            "failure report omitted its required boundary: {expected}"
+        );
+    }
+    let original = serialize_general_mixed_operation_trace_descriptor("report-source", &source);
+    let minimized_document =
+        serialize_general_mixed_operation_trace_descriptor("failing-minimized", &minimized);
+    assert!(
+        report.contains(original.trim_end()),
+        "failure report must retain the full original canonical descriptor"
+    );
+    assert!(
+        report.contains(minimized_document.trim_end()),
+        "failure report must retain the full minimized canonical descriptor"
+    );
+    assert_eq!(
+        parse_general_mixed_operation_trace_descriptor(&original)
+            .expect("original report descriptor parses")
+            .trace,
+        source
+    );
+    assert_eq!(
+        parse_general_mixed_operation_trace_descriptor(&minimized_document)
+            .expect("minimized report descriptor parses")
+            .trace,
+        minimized
+    );
 }

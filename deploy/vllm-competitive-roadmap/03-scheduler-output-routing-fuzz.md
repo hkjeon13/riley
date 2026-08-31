@@ -170,13 +170,28 @@ cancel, permuted valid commit 또는 pre-dispatch abort, close의 terminal-once/
 `DeviceQuiescedMutationUnknown`, arbitrary raw operation sequence 또는 general shrinker를 구현·주장하지
 않는다. 그 영역은 기존 `FaultAction`/V2 또는 후속 general grammar PR의 범위다.
 
+V1에는 이 bounded grammar 전용 `GeneralMixedOperationTrace::shrink_candidates`와
+`minimize_general_mixed_operation_trace`가 있다. 후보 순서는 cancellation 제거, 더 작은 cancellation
+target, decoder index별 제거와 selector rebase, final-prefill index별 제거와 mixed-slot compaction,
+prime/mixed identity permutation, 각 order의 좌→우 adjacent inversion swap이다. candidate는 중복 제거와
+grammar validation 뒤 lexicographic `(total request width, cancellation presence, cancellation index,
+total inversion count)`를 반드시 낮춘다. source seed와 settlement 및 fixed two-wave topology는 바꾸지
+않으며, source와 각 candidate를 exact canonical descriptor JSON으로 strict serialize/parse한 뒤에만
+predicate에 전달한다.
+
+local-minimum 주장은 deterministic replay predicate에 한정한다. 실제 V1 replayer가 panic하면 source와
+minimized canonical descriptor 및 derived operation list를 test panic diagnostic에 함께 출력한다. 이
+predicate는 inner replayer가 panic하는지만 보존하므로 panic site, payload, failure signature 또는 root
+cause를 보존하지 않는다. 이 diagnostic은 파일을 쓰거나 durable CI receipt/checker를 만들지 않는다.
+그 receipt/checker는 다음 별도 PR에서 source/minimized descriptor와 scheduler configuration, Git SHA의
+검증 가능한 artifact contract로 설계한다.
+
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
 post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
-multi-edit/delta-debugging reduction도 별도 범위다. V2
-shrinker는 이 작은 grammar의 greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
-counterexample을 주장하지 않는다. 마지막 항목은 현 public scheduler API에 injection seam이 없으므로
-별도 test-only seam 계약으로 설계한다.
+multi-edit/delta-debugging reduction도 별도 범위다. V1/V2 shrinker는 각각 작은 grammar의 deterministic
+greedy local minimum일 뿐 일반 trace shrinker나 globally minimal counterexample을 주장하지 않는다.
+마지막 항목은 현 public scheduler API에 injection seam이 없으므로 별도 test-only seam 계약으로 설계한다.
 
 ### Deterministic corpus
 
@@ -226,10 +241,14 @@ shrunken replay 입력이다. 이 minimizer 자체는 deterministic synthetic pr
 replay로 candidate order·local-minimum 성질을 고정한다. 실제 defect counterexample이나 arbitrary trace를
 이 경로가 이미 global minimum으로 축약했다는 뜻은 아니다.
 
-`general-mixed-operation-v1`은 아직 fixed two-wave grammar라 request removal/operation deletion
-때 selector normalization이 필요하다. 따라서 이 PR에는 reducer를 넣지 않고 failure에 exact
-canonical descriptor와 derived operation list만 남긴다. 이를 general shrinker 또는 local minimum
-counterexample이라고 주장하지 않는다.
+`general-mixed-operation-v1`은 fixed two-wave grammar 전용 selector-aware local reducer를 사용한다.
+request 제거는 remaining request/slot selector를 compactly rebase하고, cancellation target과
+permutation을 다시 validate한다. reducer는 cancellation → request removal → direct identity
+permutation → adjacent inversion swap의 고정 순서로, strict codec round-trip 뒤 deterministic
+panic-only predicate가 재현되는 첫 candidate를 greedy하게 선택한다. 따라서 출력은 이 candidate
+order의 local minimum일 뿐 general shrinker, global minimum, panic site/payload/signature/root-cause
+preservation이 아니다. 현재 failure report는 test panic diagnostic이며 durable receipt file이나 CI
+checker는 다음 별도 slice다.
 
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
@@ -258,6 +277,10 @@ benchmarks/scripts/check_routing_fuzz_receipt.py
 ```
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
+
+현재 V1 local reducer는 `general_mixed_operation_routing.rs`와 support trace module만 변경하며,
+`check_routing_fuzz_receipt.py`와 CI workflow artifact wiring은 아직 만들지 않는다. 이 둘은 다음
+minimized-trace receipt/checker PR의 명시적 범위다.
 
 ## 9. Observability assertion
 
@@ -288,7 +311,8 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 - 기본 CPU workflow: deterministic seed set + 10,000 traces
 - scheduled workflow: random seed rotation + 1,000,000 traces
 - GPU manual/scheduled: 고정 corpus
-- CI failure artifact: seed, minimized trace, scheduler config, Git SHA
+- 현재 V1 failure는 source/minimized descriptor와 operation list를 test panic diagnostic으로만 출력
+- 다음 receipt/checker slice의 CI failure artifact: seed, minimized trace, scheduler config, Git SHA
 
 flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 test harness defect로 별도 실패한다.
 
@@ -297,6 +321,8 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 - C03-A: fixed/random CPU seed에서 invariant 위반 0, deterministic corpus와 shrink/replay test 통과
 - RC1 최소 재현 fixture가 수정 전 실패/현재 통과하는 contract test로 보존
 - shrink된 counterexample serialization/replay test 통과
+- V1 selector-local failure diagnostic은 durable receipt/checker 승인 근거가 아니며, 그 artifact
+  contract는 다음 별도 slice에서 검증한다.
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B: C02 actual qualification 뒤 GPU corpus에서 output token/request mapping exact

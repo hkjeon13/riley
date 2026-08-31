@@ -138,6 +138,126 @@ impl GeneralMixedOperationTrace {
         )
     }
 
+    /// Returns deterministic, valid simplifications for this V1 grammar only.
+    ///
+    /// The order is cancellation removal, lower cancellation target, one
+    /// decoder removal at each index, one final-prefill removal at each index,
+    /// direct identity permutations, then one adjacent inversion swap at a
+    /// time. Seed, settlement, and the two-wave topology never change.
+    #[must_use]
+    pub fn shrink_candidates(&self) -> Vec<Self> {
+        self.validate()
+            .expect("general mixed shrinker requires a valid source descriptor");
+        let source_rank = self.shrink_rank();
+        let mut candidates = Vec::new();
+        if let Some(cancelled) = self.cancel_decoder_index {
+            push_unique_candidate(
+                &mut candidates,
+                Self {
+                    cancel_decoder_index: None,
+                    ..self.clone()
+                },
+            );
+            for simplified in 0..cancelled {
+                push_unique_candidate(
+                    &mut candidates,
+                    Self {
+                        cancel_decoder_index: Some(simplified),
+                        ..self.clone()
+                    },
+                );
+            }
+        }
+        if self.decoder_count > 1 {
+            for removed in 0..self.decoder_count {
+                push_unique_candidate(&mut candidates, self.remove_decoder(removed));
+            }
+        }
+        if self.final_prefill_count > 1 {
+            for removed in 0..self.final_prefill_count {
+                push_unique_candidate(&mut candidates, self.remove_final_prefill(removed));
+            }
+        }
+        let canonical_prime = canonical_slot_order(self.decoder_count);
+        if self.prime_slot_order != canonical_prime {
+            push_unique_candidate(
+                &mut candidates,
+                Self {
+                    prime_slot_order: canonical_prime,
+                    ..self.clone()
+                },
+            );
+        }
+        let mixed_slot_count = self
+            .decoder_count
+            .checked_add(self.final_prefill_count)
+            .expect("bounded V1 mixed slot count");
+        let canonical_mixed = canonical_slot_order(mixed_slot_count);
+        if self.mixed_slot_order != canonical_mixed {
+            push_unique_candidate(
+                &mut candidates,
+                Self {
+                    mixed_slot_order: canonical_mixed,
+                    ..self.clone()
+                },
+            );
+        }
+        for index in 0..self.prime_slot_order.len().saturating_sub(1) {
+            if self.prime_slot_order[index] > self.prime_slot_order[index + 1] {
+                let mut prime_slot_order = self.prime_slot_order.clone();
+                prime_slot_order.swap(index, index + 1);
+                push_unique_candidate(
+                    &mut candidates,
+                    Self {
+                        prime_slot_order,
+                        ..self.clone()
+                    },
+                );
+            }
+        }
+        for index in 0..self.mixed_slot_order.len().saturating_sub(1) {
+            if self.mixed_slot_order[index] > self.mixed_slot_order[index + 1] {
+                let mut mixed_slot_order = self.mixed_slot_order.clone();
+                mixed_slot_order.swap(index, index + 1);
+                push_unique_candidate(
+                    &mut candidates,
+                    Self {
+                        mixed_slot_order,
+                        ..self.clone()
+                    },
+                );
+            }
+        }
+        for candidate in &candidates {
+            candidate
+                .validate()
+                .expect("general mixed shrink candidate remains a valid descriptor");
+            assert!(
+                candidate.shrink_rank() < source_rank,
+                "general mixed shrink candidate must strictly reduce its rank"
+            );
+            assert_eq!(candidate.seed, self.seed);
+            assert_eq!(candidate.settlement, self.settlement);
+        }
+        candidates
+    }
+
+    /// Returns the lexicographic rank used by the bounded V1 local reducer.
+    ///
+    /// It is total request width, cancellation presence, cancellation target,
+    /// and total inversion count. It is not a general counterexample metric.
+    #[must_use]
+    pub fn shrink_rank(&self) -> (usize, usize, usize, usize) {
+        self.validate()
+            .expect("general mixed shrink rank requires a valid descriptor");
+        (
+            self.decoder_count + self.final_prefill_count,
+            usize::from(self.cancel_decoder_index.is_some()),
+            self.cancel_decoder_index.unwrap_or_default(),
+            inversion_count(&self.prime_slot_order) + inversion_count(&self.mixed_slot_order),
+        )
+    }
+
     fn validate(&self) -> Result<(), String> {
         validate_trace_fields(
             self.decoder_count,
@@ -146,6 +266,42 @@ impl GeneralMixedOperationTrace {
             &self.mixed_slot_order,
             self.cancel_decoder_index,
         )
+    }
+
+    fn remove_decoder(&self, removed: usize) -> Self {
+        assert!(
+            self.decoder_count > 1 && removed < self.decoder_count,
+            "general mixed reducer must remove one existing decoder"
+        );
+        let cancel_decoder_index = match self.cancel_decoder_index {
+            None => None,
+            Some(index) if index == removed => None,
+            Some(index) if index < removed => Some(index),
+            Some(index) => Some(index - 1),
+        };
+        Self {
+            decoder_count: self.decoder_count - 1,
+            prime_slot_order: project_removed_slot(&self.prime_slot_order, removed),
+            mixed_slot_order: project_removed_slot(&self.mixed_slot_order, removed),
+            cancel_decoder_index,
+            ..self.clone()
+        }
+    }
+
+    fn remove_final_prefill(&self, removed: usize) -> Self {
+        assert!(
+            self.final_prefill_count > 1 && removed < self.final_prefill_count,
+            "general mixed reducer must remove one existing final-prefill"
+        );
+        let removed_slot = self
+            .decoder_count
+            .checked_add(removed)
+            .expect("bounded V1 final-prefill slot");
+        Self {
+            final_prefill_count: self.final_prefill_count - 1,
+            mixed_slot_order: project_removed_slot(&self.mixed_slot_order, removed_slot),
+            ..self.clone()
+        }
     }
 
     fn descriptor(&self, case_id: &str) -> Result<GeneralMixedOperationTraceDescriptorV1, String> {
@@ -249,6 +405,40 @@ pub fn parse_general_mixed_operation_trace_descriptor(
         return Err("general mixed descriptor JSON is not canonical".to_owned());
     }
     descriptor.into_named_trace()
+}
+
+/// Greedily minimizes a reproducing V1 trace over the fixed candidate order.
+///
+/// Every candidate is strict-codec serialized and parsed again before the
+/// caller's predicate sees it. The returned descriptor is a local minimum only
+/// for this bounded grammar and this predicate; it does not preserve a panic
+/// site, payload, failure signature, or root cause.
+pub fn minimize_general_mixed_operation_trace<F>(
+    trace: &GeneralMixedOperationTrace,
+    mut reproduces: F,
+) -> GeneralMixedOperationTrace
+where
+    F: FnMut(&GeneralMixedOperationTrace) -> bool,
+{
+    let mut minimized = strict_round_trip_trace(trace, "shrink-source");
+    assert!(
+        reproduces(&minimized),
+        "general mixed minimization requires a reproducing source trace"
+    );
+    loop {
+        let mut next = None;
+        for candidate in minimized.shrink_candidates() {
+            let candidate = strict_round_trip_trace(&candidate, "shrink-candidate");
+            if reproduces(&candidate) {
+                next = Some(candidate);
+                break;
+            }
+        }
+        let Some(candidate) = next else {
+            return minimized;
+        };
+        minimized = candidate;
+    }
 }
 
 const CORPUS_DOCUMENTS_V1: [(&str, &str); 3] = [
@@ -818,6 +1008,66 @@ fn descriptor_document(descriptor: &GeneralMixedOperationTraceDescriptorV1) -> S
         serde_json::to_string(descriptor).expect("general mixed descriptor serializes");
     document.push('\n');
     document
+}
+
+fn strict_round_trip_trace(
+    trace: &GeneralMixedOperationTrace,
+    case_id: &str,
+) -> GeneralMixedOperationTrace {
+    let document = serialize_general_mixed_operation_trace_descriptor(case_id, trace);
+    let parsed = parse_general_mixed_operation_trace_descriptor(&document)
+        .expect("general mixed reducer descriptor remains strict-canonical");
+    assert_eq!(
+        parsed.trace, *trace,
+        "general mixed reducer round-trip changed a selector"
+    );
+    parsed.trace
+}
+
+fn push_unique_candidate(
+    candidates: &mut Vec<GeneralMixedOperationTrace>,
+    candidate: GeneralMixedOperationTrace,
+) {
+    if !candidates.contains(&candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn canonical_slot_order(slot_count: usize) -> Vec<u8> {
+    (0..slot_count)
+        .map(|slot| u8::try_from(slot).expect("bounded V1 canonical slot fits u8"))
+        .collect()
+}
+
+fn project_removed_slot(order: &[u8], removed_slot: usize) -> Vec<u8> {
+    order
+        .iter()
+        .filter_map(|slot| {
+            let slot = usize::from(*slot);
+            match slot.cmp(&removed_slot) {
+                std::cmp::Ordering::Less => {
+                    Some(u8::try_from(slot).expect("bounded V1 retained slot fits u8"))
+                }
+                std::cmp::Ordering::Equal => None,
+                std::cmp::Ordering::Greater => {
+                    Some(u8::try_from(slot - 1).expect("bounded V1 compacted slot fits u8"))
+                }
+            }
+        })
+        .collect()
+}
+
+fn inversion_count(order: &[u8]) -> usize {
+    order
+        .iter()
+        .enumerate()
+        .map(|(index, slot)| {
+            order[index + 1..]
+                .iter()
+                .filter(|later| slot > *later)
+                .count()
+        })
+        .sum()
 }
 
 fn decoder_label(index: usize) -> u32 {
