@@ -2,7 +2,8 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaErrorKind,
-    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, SiluParams, silu,
+    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams, SiluParams,
+    gated_multiply, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -97,6 +98,24 @@ fn graph_silu_bf16_fixture_bytes(element_count: usize) -> Vec<u8> {
     ];
     (0..element_count)
         .flat_map(|index| PATTERN[index % PATTERN.len()].to_ne_bytes())
+        .collect()
+}
+
+fn graph_gated_multiply_bf16_fixture_bytes(element_count: usize, branch: usize) -> Vec<u8> {
+    // Use different BF16 inputs for the activated-gate and up branches, while
+    // retaining signed zero, finite values, infinities, and NaNs. Eager and
+    // graph execution must agree on the exact BF16 storage-rounding result.
+    const GATE: [u16; 12] = [
+        0x0000, 0x8000, 0x3f80, 0xbf80, 0x4080, 0xc080, 0x3d00, 0xbd00, 0x7f80, 0xff80, 0x7fc1,
+        0xffc1,
+    ];
+    const UP: [u16; 12] = [
+        0x3f80, 0xbf80, 0x4000, 0xc000, 0x3f00, 0xbf00, 0x4040, 0xc040, 0x0000, 0x8000, 0x7fc5,
+        0xffc5,
+    ];
+    let pattern = if branch == 0 { &GATE } else { &UP };
+    (0..element_count)
+        .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
         .collect()
 }
 
@@ -262,6 +281,209 @@ fn owned_bf16_silu_graph_preflight_and_abort_recover_every_resource() -> Result<
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-8-owned-bf16-silu-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_gated_multiply_graph_replays_fixed_inputs_byte_exact_against_eager()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 4_096;
+    const REPLAYS: usize = 32;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<u16>())?)
+        .ok_or("BF16 gated-multiply graph byte length overflow")?;
+    let host_activated_gate =
+        graph_gated_multiply_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?, 0);
+    let host_up = graph_gated_multiply_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?, 1);
+    assert_eq!(u64::try_from(host_activated_gate.len())?, byte_len);
+    assert_eq!(u64::try_from(host_up.len())?, byte_len);
+    let mut staging = context.allocate_pinned_host_buffer(byte_len)?;
+
+    let mut eager_activated_gate = context.allocate_device_buffer(byte_len)?;
+    eager_activated_gate.upload_from_slice(
+        0,
+        &host_activated_gate,
+        &mut staging,
+        &mut eager_stream,
+    )?;
+    let mut eager_up = context.allocate_device_buffer(byte_len)?;
+    eager_up.upload_from_slice(0, &host_up, &mut staging, &mut eager_stream)?;
+    let graph_activated_gate = {
+        let mut buffer = context.allocate_device_buffer(byte_len)?;
+        buffer.upload_from_slice(0, &host_activated_gate, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_up = {
+        let mut buffer = context.allocate_device_buffer(byte_len)?;
+        buffer.upload_from_slice(0, &host_up, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let mut eager_output = context.allocate_device_buffer(byte_len)?;
+    let graph_output = context.allocate_device_buffer(byte_len)?;
+
+    {
+        let mut eager = GatedMultiplyParams {
+            activated_gate: CudaBufferSpan::new(
+                &eager_activated_gate,
+                CudaDType::BF16,
+                0,
+                byte_len,
+            )?,
+            up: CudaBufferSpan::new(&eager_up, CudaDType::BF16, 0, byte_len)?,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, byte_len)?,
+            element_count: ELEMENT_COUNT,
+        };
+        gated_multiply(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_gated_multiply_bf16_capture(
+        graph_activated_gate,
+        graph_up,
+        graph_output,
+        ELEMENT_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_gated_multiply_bf16()?;
+    // The local one-node rejection must leave the first node/capture usable.
+    assert_invalid_state(
+        capture.enqueue_gated_multiply_bf16(),
+        "second fixed BF16 gated-multiply graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // This is a lifecycle assertion, not a CUDA Graph performance claim.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_activated_gate, mut graph_up, mut graph_output) =
+        resources.into_parts();
+    let mut eager_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_activated_gate_after = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_up_after = vec![0_u8; usize::try_from(byte_len)?];
+    eager_output.download_to_slice(0, &mut eager_bytes, &mut staging, &mut transfer_stream)?;
+    graph_output.download_to_slice(0, &mut graph_bytes, &mut staging, &mut transfer_stream)?;
+    graph_activated_gate.download_to_slice(
+        0,
+        &mut graph_activated_gate_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_up.download_to_slice(0, &mut graph_up_after, &mut staging, &mut transfer_stream)?;
+    assert_eq!(
+        graph_bytes, eager_bytes,
+        "fixed graph BF16 gated-multiply output must match eager output bit-for-bit"
+    );
+    assert_eq!(
+        graph_activated_gate_after, host_activated_gate,
+        "fixed graph replay must not mutate its retained activated-gate allocation"
+    );
+    assert_eq!(
+        graph_up_after, host_up,
+        "fixed graph replay must not mutate its retained up allocation"
+    );
+
+    graph_output.close()?;
+    graph_up.close()?;
+    graph_activated_gate.close()?;
+    eager_output.close()?;
+    eager_up.close()?;
+    eager_activated_gate.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-10-owned-bf16-gated-multiply-fixed-address replays={REPLAYS} elements={ELEMENT_COUNT} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_gated_multiply_graph_preflight_and_abort_recover_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 128;
+    const BYTE_LEN: u64 = ELEMENT_COUNT * 2;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let activated_gate = context.allocate_device_buffer(BYTE_LEN)?;
+    let up = context.allocate_device_buffer(BYTE_LEN)?;
+    let output = context.allocate_device_buffer(BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_gated_multiply_bf16_capture(
+        activated_gate,
+        up,
+        output,
+        0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => {
+            panic!("zero-element owned BF16 gated-multiply graph preflight unexpectedly succeeded")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("Rust BF16 gated-multiply preflight must return all untouched resources");
+    let (stream, activated_gate, up, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_gated_multiply_bf16_capture(
+            activated_gate,
+            up,
+            output,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, activated_gate, up, output) = resources.into_parts();
+    let error = match stream.begin_owned_graph_gated_multiply_bf16_capture(
+        activated_gate,
+        up,
+        output,
+        ELEMENT_COUNT + 1,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => {
+            panic!("oversized owned BF16 gated-multiply graph preflight unexpectedly succeeded")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized BF16 gated-multiply preflight must preserve all resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-10-owned-bf16-gated-multiply-preflight-abort-recovery status=passed");
     Ok(())
 }
 

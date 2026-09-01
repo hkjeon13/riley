@@ -191,6 +191,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)2)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16 \
   ((RileyCudaGraphCaptureOperationKind)3)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)4)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1247,6 +1249,30 @@ RileyCudaStatus riley_cuda_graph_capture_begin_silu_bf16(
 // riley_cuda_graph_capture_begin_silu_bf16. The captured input, output, and
 // element count are immutable for the lifetime of the graph.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_silu_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-10 capture containing exactly one fixed-address, out-of-place
+// BF16 activated-gate multiply node. `activated_gate`, `up`, and `output`
+// must be three distinct live device allocations in the stream's context;
+// `element_count` describes contiguous elements from allocation offset zero.
+// Every device allocation remains leased until the resulting graph or exec is
+// closed. This deliberately does not accept spans, offsets, dtype selection,
+// in-place aliasing, fresh replay input, or SiLU fusion.
+RileyCudaStatus riley_cuda_graph_capture_begin_gated_multiply_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* activated_gate,
+    RileyCudaDeviceBuffer* up,
+    RileyCudaDeviceBuffer* output,
+    uint64_t element_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole BF16 activated-gate multiply node for a capture created
+// by riley_cuda_graph_capture_begin_gated_multiply_bf16. The three captured
+// allocations and exact element count are immutable for the graph lifetime.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_gated_multiply_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

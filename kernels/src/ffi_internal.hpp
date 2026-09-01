@@ -164,6 +164,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kFillF32 = 1,
   kH2D = 2,
   kSiluBf16 = 3,
+  kGatedMultiplyBf16 = 4,
 };
 
 struct RileyCudaGraphCapture {
@@ -193,6 +194,12 @@ struct RileyCudaGraphCapture {
         silu_element_count(0),
         silu_enqueue_count(0),
         silu_input_lease_held(false),
+        gated_multiply_activated_gate(nullptr),
+        gated_multiply_up(nullptr),
+        gated_multiply_element_count(0),
+        gated_multiply_enqueue_count(0),
+        gated_multiply_activated_gate_lease_held(false),
+        gated_multiply_up_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -216,7 +223,8 @@ struct RileyCudaGraphCapture {
   // The current C05 operation family. `fill_buffer` continues to name the
   // retained primary device allocation for ABI continuity: it is the fill
   // target, H2D destination, or BF16 SiLU output. H2D retains a fixed pinned
-  // source, while SiLU retains a fixed device input.
+  // source, while the BF16 elementwise operations retain their fixed device
+  // inputs. Gated multiply keeps both its activated-gate and up inputs.
   RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
@@ -230,6 +238,12 @@ struct RileyCudaGraphCapture {
   uint64_t silu_element_count;
   uint32_t silu_enqueue_count;
   bool silu_input_lease_held;
+  RileyCudaDeviceBuffer* gated_multiply_activated_gate;
+  RileyCudaDeviceBuffer* gated_multiply_up;
+  uint64_t gated_multiply_element_count;
+  uint32_t gated_multiply_enqueue_count;
+  bool gated_multiply_activated_gate_lease_held;
+  bool gated_multiply_up_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -289,7 +303,10 @@ struct RileyCudaGraph {
                  RileyCudaPinnedHostBuffer* captured_h2d_source = nullptr,
                  uint64_t captured_h2d_byte_len = 0,
                  RileyCudaDeviceBuffer* captured_silu_input = nullptr,
-                 uint64_t captured_silu_element_count = 0) noexcept
+                 uint64_t captured_silu_element_count = 0,
+                 RileyCudaDeviceBuffer* captured_gated_multiply_activated_gate = nullptr,
+                 RileyCudaDeviceBuffer* captured_gated_multiply_up = nullptr,
+                 uint64_t captured_gated_multiply_element_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -298,6 +315,9 @@ struct RileyCudaGraph {
         h2d_byte_len(captured_h2d_byte_len),
         silu_input(captured_silu_input),
         silu_element_count(captured_silu_element_count),
+        gated_multiply_activated_gate(captured_gated_multiply_activated_gate),
+        gated_multiply_up(captured_gated_multiply_up),
+        gated_multiply_element_count(captured_gated_multiply_element_count),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -310,6 +330,9 @@ struct RileyCudaGraph {
   uint64_t h2d_byte_len;
   RileyCudaDeviceBuffer* silu_input;
   uint64_t silu_element_count;
+  RileyCudaDeviceBuffer* gated_multiply_activated_gate;
+  RileyCudaDeviceBuffer* gated_multiply_up;
+  uint64_t gated_multiply_element_count;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -329,7 +352,10 @@ struct RileyCudaGraphExec {
                      RileyCudaPinnedHostBuffer* captured_h2d_source = nullptr,
                      uint64_t captured_h2d_byte_len = 0,
                      RileyCudaDeviceBuffer* captured_silu_input = nullptr,
-                     uint64_t captured_silu_element_count = 0) noexcept
+                     uint64_t captured_silu_element_count = 0,
+                     RileyCudaDeviceBuffer* captured_gated_multiply_activated_gate = nullptr,
+                     RileyCudaDeviceBuffer* captured_gated_multiply_up = nullptr,
+                     uint64_t captured_gated_multiply_element_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -338,6 +364,9 @@ struct RileyCudaGraphExec {
         h2d_byte_len(captured_h2d_byte_len),
         silu_input(captured_silu_input),
         silu_element_count(captured_silu_element_count),
+        gated_multiply_activated_gate(captured_gated_multiply_activated_gate),
+        gated_multiply_up(captured_gated_multiply_up),
+        gated_multiply_element_count(captured_gated_multiply_element_count),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
@@ -355,6 +384,9 @@ struct RileyCudaGraphExec {
   uint64_t h2d_byte_len;
   RileyCudaDeviceBuffer* silu_input;
   uint64_t silu_element_count;
+  RileyCudaDeviceBuffer* gated_multiply_activated_gate;
+  RileyCudaDeviceBuffer* gated_multiply_up;
+  uint64_t gated_multiply_element_count;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;

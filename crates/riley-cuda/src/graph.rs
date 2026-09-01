@@ -123,6 +123,8 @@ pub enum CudaGraphCaptureOperation {
     H2D = 2,
     /// One fixed-address, out-of-place BF16 SiLU kernel.
     SiluBf16 = 3,
+    /// One fixed-address, out-of-place BF16 activated-gate × up kernel.
+    GatedMultiplyBf16 = 4,
 }
 
 impl CudaGraphCaptureOperation {
@@ -2978,6 +2980,505 @@ fn validate_graph_silu_bf16_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and three fixed device buffers recovered from a known
+/// BF16 gated-multiply graph lifecycle transition.
+///
+/// This bundle is only resource recovery evidence. It exposes no graph replay,
+/// graph-visible pointer, mutable span, or fresh-input staging capability.
+pub struct OwnedGraphGatedMultiplyBf16Resources {
+    stream: CudaStream,
+    activated_gate: CudaDeviceBuffer,
+    up: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+}
+
+impl OwnedGraphGatedMultiplyBf16Resources {
+    fn new(
+        stream: CudaStream,
+        activated_gate: CudaDeviceBuffer,
+        up: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            activated_gate,
+            up,
+            output,
+        }
+    }
+
+    /// Returns the exact stream, fixed activated-gate input, fixed up input,
+    /// and fixed output after known native graph-lease release.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            activated_gate,
+            up,
+            output,
+        } = self;
+        (stream, activated_gate, up, output)
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, activated_gate, up, output) = self.into_parts();
+        output.close()?;
+        up.close()?;
+        activated_gate.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning a by-value fixed-address BF16 gated-multiply graph
+/// capture.
+///
+/// Only Rust-side preflight failures return the untouched resource quartet.
+/// Once native capture begin is entered, an ambiguous CUDA transition may own
+/// raw addresses and resources remain deliberately fail-closed.
+#[must_use]
+pub struct OwnedGraphGatedMultiplyBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphGatedMultiplyBf16Resources>,
+}
+
+impl OwnedGraphGatedMultiplyBf16CaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphGatedMultiplyBf16Resources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched stream/input/input/output quartet only when
+    /// native capture ownership was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphGatedMultiplyBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphGatedMultiplyBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphGatedMultiplyBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphGatedMultiplyBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 gated-multiply capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphGatedMultiplyBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address, out-of-place BF16 gated
+/// multiply CUDA Graph capture.
+pub struct OwnedGraphGatedMultiplyBf16Capture {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    resources: Option<OwnedGraphGatedMultiplyBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphGatedMultiplyBf16Capture {
+    /// Captures the one immutable BF16 gated-multiply node.
+    pub fn enqueue_gated_multiply_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Capture::enqueue_gated_multiply_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 gated-multiply capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 gated-multiply enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 gated-multiply graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_gated_multiply_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed stream/input/input/output quartet
+    /// into a by-value captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedGatedMultiplyBf16Graph> {
+        const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 gated-multiply capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 gated-multiply enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 gated-multiply enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources =
+                take_owned_graph_gated_multiply_bf16_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedGatedMultiplyBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_gated_multiply_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphGatedMultiplyBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphGatedMultiplyBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphGatedMultiplyBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 gated-multiply CUDA Graph awaiting instantiate
+/// or close.
+pub struct OwnedCapturedGatedMultiplyBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphGatedMultiplyBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedGatedMultiplyBf16Graph {
+    /// Instantiates this graph while retaining its fixed stream/input/input/
+    /// output quartet by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_gated_multiply_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedGatedMultiplyBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphGatedMultiplyBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedGatedMultiplyBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns its resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_gated_multiply_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedGatedMultiplyBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedGatedMultiplyBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 gated-multiply CUDA Graph executable.
+///
+/// It only replays the capture-time input allocations. Fresh input staging,
+/// mutable spans, node updates, SiLU fusion, and model/executor wiring remain
+/// outside this C05 ownership slice.
+pub struct OwnedGraphGatedMultiplyBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphGatedMultiplyBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphGatedMultiplyBf16Exec {
+    /// Replays the fixed-address BF16 gated-multiply graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphGatedMultiplyBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 gated-multiply transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 gated-multiply exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphGatedMultiplyBf16Launch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns the fixed resource quartet only
+    /// after native close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphGatedMultiplyBf16Exec::close",
+                "an earlier graph BF16 gated-multiply transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_gated_multiply_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphGatedMultiplyBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphGatedMultiplyBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphGatedMultiplyBf16Exec`] replay.
+pub struct OwnedGraphGatedMultiplyBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphGatedMultiplyBf16Exec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphGatedMultiplyBf16Launch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphGatedMultiplyBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphGatedMultiplyBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_gated_multiply_bf16_resources(
+    resources: &mut Option<OwnedGraphGatedMultiplyBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphGatedMultiplyBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 gated-multiply owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_gated_multiply_bf16_capture_preflight(
+    stream: &CudaStream,
+    activated_gate: &CudaDeviceBuffer,
+    up: &CudaDeviceBuffer,
+    output: &CudaDeviceBuffer,
+    element_count: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, activated_gate.context_owner(), operation)?;
+    ensure_same_context(&stream.context, up.context_owner(), operation)?;
+    ensure_same_context(&stream.context, output.context_owner(), operation)?;
+    activated_gate.ensure_idle_for_operation(operation)?;
+    up.ensure_idle_for_operation(operation)?;
+    output.ensure_idle_for_operation(operation)?;
+    let required_bytes = element_count
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "element_count overflows the fixed BF16 gated-multiply capture byte range",
+            )
+        })?;
+    if element_count == 0
+        || required_bytes > activated_gate.byte_len()
+        || required_bytes > up.byte_len()
+        || required_bytes > output.byte_len()
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "element_count={element_count} requires {required_bytes} BF16 bytes, but activated_gate/up/output capacities are {}/{}/{} bytes",
+                activated_gate.byte_len(),
+                up.byte_len(),
+                output.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -3212,6 +3713,87 @@ impl CudaStream {
             let _ = (element_count, mode);
             Err(OwnedGraphSiluBf16CaptureBeginError::recoverable(
                 CudaError::unavailable("CudaStream::begin_owned_graph_silu_bf16_capture"),
+                resources,
+            ))
+        }
+    }
+
+    /// Begins a by-value C05-10 capture containing exactly one fixed-address,
+    /// out-of-place BF16 gated-multiply node.
+    ///
+    /// The moved activated-gate input, up input, and output remain inaccessible
+    /// until graph close. This slice deliberately replays capture-time input
+    /// bytes only: it does not expose spans, offsets, in-place aliasing, dtype
+    /// selection, fresh input staging, node updates, SiLU fusion, executor
+    /// wiring, or eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched quartet through
+    /// [`OwnedGraphGatedMultiplyBf16CaptureBeginError::into_resources`]. After
+    /// native entry, no resources are returned because CUDA may retain their
+    /// raw addresses while resolving a deferred capture failure.
+    pub fn begin_owned_graph_gated_multiply_bf16_capture(
+        self,
+        activated_gate: CudaDeviceBuffer,
+        up: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        element_count: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError>
+    {
+        #[cfg(feature = "cuda")]
+        let mut resources =
+            OwnedGraphGatedMultiplyBf16Resources::new(self, activated_gate, up, output);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphGatedMultiplyBf16Resources::new(self, activated_gate, up, output);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_gated_multiply_bf16_capture";
+            if let Err(error) = validate_graph_gated_multiply_bf16_capture_preflight(
+                &resources.stream,
+                &resources.activated_gate,
+                &resources.up,
+                &resources.output,
+                element_count,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphGatedMultiplyBf16CaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_gated_multiply_bf16_capture(
+                    resources.activated_gate.native_handle(),
+                    resources.up.native_handle(),
+                    resources.output.native_handle(),
+                    element_count,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphGatedMultiplyBf16CaptureBeginError::terminal(
+                        error,
+                    ));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphGatedMultiplyBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (element_count, mode);
+            Err(OwnedGraphGatedMultiplyBf16CaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_gated_multiply_bf16_capture"),
                 resources,
             ))
         }

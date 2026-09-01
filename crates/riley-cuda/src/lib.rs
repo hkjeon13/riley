@@ -58,12 +58,15 @@ pub use gemm::{
 pub use graph::{
     CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
     CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage,
-    GraphCapture, GraphExec, GraphFillCapture, GraphLaunch, OwnedCapturedGraph,
-    OwnedCapturedH2DGraph, OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
-    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphH2DCapture,
-    OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
-    OwnedGraphLaunch, OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError,
-    OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch, OwnedGraphSiluBf16Resources,
+    GraphCapture, GraphExec, GraphFillCapture, GraphLaunch, OwnedCapturedGatedMultiplyBf16Graph,
+    OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedCapturedSiluBf16Graph, OwnedGraphExec,
+    OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
+    OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError,
+    OwnedGraphGatedMultiplyBf16Exec, OwnedGraphGatedMultiplyBf16Launch,
+    OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError,
+    OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources, OwnedGraphLaunch,
+    OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError, OwnedGraphSiluBf16Exec,
+    OwnedGraphSiluBf16Launch, OwnedGraphSiluBf16Resources,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,

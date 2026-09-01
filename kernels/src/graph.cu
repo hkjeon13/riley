@@ -43,6 +43,10 @@ constexpr const char* kBeginSiluBf16Operation =
     "begin CUDA Graph BF16 SiLU capture";
 constexpr const char* kEnqueueSiluBf16Operation =
     "enqueue CUDA Graph BF16 SiLU";
+constexpr const char* kBeginGatedMultiplyBf16Operation =
+    "begin CUDA Graph BF16 gated-multiply capture";
+constexpr const char* kEnqueueGatedMultiplyBf16Operation =
+    "enqueue CUDA Graph BF16 gated multiply";
 constexpr const char* kQueryCaptureCapabilityOperation =
     "query CUDA Graph capture capability";
 constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
@@ -80,6 +84,25 @@ __global__ void graph_silu_bf16(const __nv_bfloat16* input,
   for (uint64_t index = first; index < element_count; index += stride) {
     const float value = __bfloat162float(input[index]);
     output[index] = __float2bfloat16_rn(value / (1.0F + expf(-value)));
+  }
+}
+
+// This is deliberately capture-local rather than riley_cuda_gated_multiply_execute:
+// eager multiply owns transient ExclusiveUses and synchronizes completion,
+// neither of which is admissible while graph capture owns permanent leases for
+// three fixed device allocations. Keep this BF16 conversion and grid-stride
+// topology equal to the eager primitive so graph parity includes its exact
+// storage-rounding boundary.
+__global__ void graph_gated_multiply_bf16(const __nv_bfloat16* activated_gate,
+                                          const __nv_bfloat16* up,
+                                          __nv_bfloat16* output,
+                                          uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    output[index] = __float2bfloat16_rn(__bfloat162float(activated_gate[index]) *
+                                        __bfloat162float(up[index]));
   }
 }
 
@@ -154,6 +177,12 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
       capture->silu_input != nullptr || capture->silu_element_count != 0 ||
       capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
+      capture->gated_multiply_activated_gate != nullptr ||
+      capture->gated_multiply_up != nullptr ||
+      capture->gated_multiply_element_count != 0 ||
+      capture->gated_multiply_enqueue_count != 0 ||
+      capture->gated_multiply_activated_gate_lease_held ||
+      capture->gated_multiply_up_lease_held ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -187,6 +216,14 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr) {
     return false;
   }
+  if (capture->gated_multiply_activated_gate != nullptr ||
+      capture->gated_multiply_up != nullptr ||
+      capture->gated_multiply_element_count != 0 ||
+      capture->gated_multiply_enqueue_count != 0 ||
+      capture->gated_multiply_activated_gate_lease_held ||
+      capture->gated_multiply_up_lease_held) {
+    return false;
+  }
   if (!capture->fill_lease_held) {
     return capture->fill_buffer == nullptr &&
            capture->operation != RileyCudaGraphCaptureOperation::kFillF32;
@@ -214,6 +251,12 @@ bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
       capture->fill_buffer == nullptr || capture->h2d_source == nullptr ||
       !capture->fill_lease_held || !capture->h2d_source_lease_held ||
       capture->h2d_byte_len == 0 ||
+      capture->gated_multiply_activated_gate != nullptr ||
+      capture->gated_multiply_up != nullptr ||
+      capture->gated_multiply_element_count != 0 ||
+      capture->gated_multiply_enqueue_count != 0 ||
+      capture->gated_multiply_activated_gate_lease_held ||
+      capture->gated_multiply_up_lease_held ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -246,6 +289,12 @@ bool release_capture_silu_bf16_leases(
       capture->fill_buffer == capture->silu_input ||
       !capture->fill_lease_held || !capture->silu_input_lease_held ||
       capture->silu_element_count == 0 ||
+      capture->gated_multiply_activated_gate != nullptr ||
+      capture->gated_multiply_up != nullptr ||
+      capture->gated_multiply_element_count != 0 ||
+      capture->gated_multiply_enqueue_count != 0 ||
+      capture->gated_multiply_activated_gate_lease_held ||
+      capture->gated_multiply_up_lease_held ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->silu_input->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -266,6 +315,56 @@ bool release_capture_silu_bf16_leases(
   return true;
 }
 
+// C05-10 retains three distinct BF16 device allocations. Every raw address is
+// graph-visible, so validate all immutable fields and every 1->0 transition
+// before releasing any lease. A malformed raw ABI owner remains fail-closed.
+bool release_capture_gated_multiply_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (capture == nullptr ||
+      capture->operation !=
+          RileyCudaGraphCaptureOperation::kGatedMultiplyBf16 ||
+      capture->fill_buffer == nullptr ||
+      capture->gated_multiply_activated_gate == nullptr ||
+      capture->gated_multiply_up == nullptr ||
+      capture->fill_buffer == capture->gated_multiply_activated_gate ||
+      capture->fill_buffer == capture->gated_multiply_up ||
+      capture->gated_multiply_activated_gate == capture->gated_multiply_up ||
+      !capture->fill_lease_held ||
+      !capture->gated_multiply_activated_gate_lease_held ||
+      !capture->gated_multiply_up_lease_held ||
+      capture->gated_multiply_element_count == 0 ||
+      capture->fill_element_count != 0 || capture->fill_enqueue_count != 0 ||
+      capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+      capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
+      capture->silu_input != nullptr || capture->silu_element_count != 0 ||
+      capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
+      capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      capture->gated_multiply_activated_gate->active_uses.load(
+          std::memory_order_acquire) != 1 ||
+      capture->gated_multiply_up->active_uses.load(std::memory_order_acquire) !=
+          1) {
+    return false;
+  }
+  if (!release_exclusive_use(capture->gated_multiply_up->active_uses) ||
+      !release_exclusive_use(
+          capture->gated_multiply_activated_gate->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->gated_multiply_activated_gate = nullptr;
+  capture->gated_multiply_up = nullptr;
+  capture->gated_multiply_element_count = 0;
+  capture->gated_multiply_enqueue_count = 0;
+  capture->gated_multiply_activated_gate_lease_held = false;
+  capture->gated_multiply_up_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -278,21 +377,43 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
     if (graph->operation != RileyCudaGraphCaptureOperation::kFillF32 ||
         graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
-        graph->silu_input != nullptr || graph->silu_element_count != 0) {
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
     if (graph->operation != RileyCudaGraphCaptureOperation::kH2D ||
         graph->h2d_source != capture->h2d_source ||
         graph->h2d_byte_len != capture->h2d_byte_len ||
-        graph->silu_input != nullptr || graph->silu_element_count != 0) {
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kSiluBf16) {
     if (graph->operation != RileyCudaGraphCaptureOperation::kSiluBf16 ||
         graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
         graph->silu_input != capture->silu_input ||
-        graph->silu_element_count != capture->silu_element_count) {
+        graph->silu_element_count != capture->silu_element_count ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0) {
+      return false;
+    }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kGatedMultiplyBf16) {
+    if (graph->operation !=
+            RileyCudaGraphCaptureOperation::kGatedMultiplyBf16 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        graph->gated_multiply_activated_gate !=
+            capture->gated_multiply_activated_gate ||
+        graph->gated_multiply_up != capture->gated_multiply_up ||
+        graph->gated_multiply_element_count !=
+            capture->gated_multiply_element_count) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
@@ -301,7 +422,10 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
     // fill graph, which has no pinned source pointer to preserve.
     if (graph->operation != RileyCudaGraphCaptureOperation::kFillF32 ||
         graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
-        graph->silu_input != nullptr || graph->silu_element_count != 0) {
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0) {
       return false;
     }
   } else {
@@ -338,7 +462,16 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
         capture->h2d_source_lease_held || graph->silu_input != nullptr ||
         graph->silu_element_count != 0 || capture->silu_input != nullptr ||
-        capture->silu_element_count != 0 || capture->silu_input_lease_held) {
+        capture->silu_element_count != 0 || capture->silu_input_lease_held ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_activated_gate != nullptr ||
+        capture->gated_multiply_up != nullptr ||
+        capture->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_enqueue_count != 0 ||
+        capture->gated_multiply_activated_gate_lease_held ||
+        capture->gated_multiply_up_lease_held) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
@@ -349,7 +482,16 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
         graph->silu_input != nullptr || graph->silu_element_count != 0 ||
         capture->silu_input != nullptr || capture->silu_element_count != 0 ||
-        capture->silu_input_lease_held) {
+        capture->silu_input_lease_held ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_activated_gate != nullptr ||
+        capture->gated_multiply_up != nullptr ||
+        capture->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_enqueue_count != 0 ||
+        capture->gated_multiply_activated_gate_lease_held ||
+        capture->gated_multiply_up_lease_held) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kSiluBf16) {
@@ -362,7 +504,42 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
         graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
         capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
-        capture->h2d_source_lease_held) {
+        capture->h2d_source_lease_held ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_activated_gate != nullptr ||
+        capture->gated_multiply_up != nullptr ||
+        capture->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_enqueue_count != 0 ||
+        capture->gated_multiply_activated_gate_lease_held ||
+        capture->gated_multiply_up_lease_held) {
+      return false;
+    }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kGatedMultiplyBf16) {
+    if (capture->gated_multiply_activated_gate == nullptr ||
+        capture->gated_multiply_up == nullptr ||
+        capture->gated_multiply_activated_gate == capture->gated_multiply_up ||
+        capture->gated_multiply_activated_gate == capture->fill_buffer ||
+        capture->gated_multiply_up == capture->fill_buffer ||
+        !capture->gated_multiply_activated_gate_lease_held ||
+        !capture->gated_multiply_up_lease_held ||
+        capture->gated_multiply_element_count == 0 ||
+        graph->gated_multiply_activated_gate !=
+            capture->gated_multiply_activated_gate ||
+        graph->gated_multiply_up != capture->gated_multiply_up ||
+        graph->gated_multiply_element_count !=
+            capture->gated_multiply_element_count ||
+        capture->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        capture->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+        capture->h2d_source_lease_held || graph->silu_input != nullptr ||
+        graph->silu_element_count != 0 || capture->silu_input != nullptr ||
+        capture->silu_element_count != 0 || capture->silu_input_lease_held) {
       return false;
     }
   } else {
@@ -386,6 +563,12 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->silu_element_count = 0;
   capture->silu_enqueue_count = 0;
   capture->silu_input_lease_held = false;
+  capture->gated_multiply_activated_gate = nullptr;
+  capture->gated_multiply_up = nullptr;
+  capture->gated_multiply_element_count = 0;
+  capture->gated_multiply_enqueue_count = 0;
+  capture->gated_multiply_activated_gate_lease_held = false;
+  capture->gated_multiply_up_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -441,6 +624,28 @@ bool release_graph_silu_bf16_leases(RileyCudaContext* owner,
     return false;
   }
   return release_exclusive_use(input->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_gated_multiply_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* activated_gate, RileyCudaDeviceBuffer* up,
+    RileyCudaDeviceBuffer* output) noexcept {
+  if (owner == nullptr || stream == nullptr || activated_gate == nullptr ||
+      up == nullptr || output == nullptr || activated_gate == up ||
+      activated_gate == output || up == output ||
+      !same_context(owner, stream->owner) ||
+      !same_context(owner, activated_gate->owner) ||
+      !same_context(owner, up->owner) || !same_context(owner, output->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      activated_gate->active_uses.load(std::memory_order_acquire) != 1 ||
+      up->active_uses.load(std::memory_order_acquire) != 1 ||
+      output->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(up->active_uses) &&
+         release_exclusive_use(activated_gate->active_uses) &&
          release_exclusive_use(output->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
@@ -1255,6 +1460,305 @@ RileyCudaStatus capture_begin_silu_bf16_impl(
   return status;
 }
 
+// C05-10 is a sibling of C05-8, not a fused graph. The three device pointers
+// and fixed BF16 geometry are established before capture begins and remain
+// leased through graph/exec close. It does not generalize eager spans,
+// aliasing, fresh inputs, or SiLU-plus-multiply fusion.
+RileyCudaStatus capture_begin_gated_multiply_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* activated_gate,
+    RileyCudaDeviceBuffer* up, RileyCudaDeviceBuffer* output,
+    uint64_t element_count, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginGatedMultiplyBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || activated_gate == nullptr || up == nullptr ||
+      output == nullptr || stream->owner == nullptr ||
+      activated_gate->owner == nullptr || up->owner == nullptr ||
+      output->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "stream, BF16 activated gate, up, output, or their owner is null");
+  }
+  if (!same_context(stream->owner, activated_gate->owner) ||
+      !same_context(stream->owner, up->owner) ||
+      !same_context(stream->owner, output->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "capture stream and BF16 gated-multiply allocations must share one context owner");
+  }
+  if (activated_gate == up || activated_gate == output || up == output) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "graph BF16 gated multiply requires three distinct device allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginGatedMultiplyBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  if (element_count == 0 ||
+      element_count > activated_gate->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > up->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > output->byte_len / sizeof(__nv_bfloat16)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "fixed BF16 gated-multiply element count exceeds an input or output allocation");
+  }
+  if (activated_gate->device_data == nullptr || up->device_data == nullptr ||
+      output->device_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "graph BF16 gated-multiply input or output has no live device allocation");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "a stream command batch blocks fixed-address BF16 gated-multiply graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginGatedMultiplyBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(activated_gate->active_uses)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "graph BF16 activated-gate input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(up->active_uses)) {
+    const bool activated_gate_released =
+        release_exclusive_use(activated_gate->active_uses);
+    if (!activated_gate_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+          "failed to release a rejected graph BF16 activated-gate lease");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "graph BF16 up input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(output->active_uses)) {
+    const bool up_released = release_exclusive_use(up->active_uses);
+    const bool activated_gate_released =
+        release_exclusive_use(activated_gate->active_uses);
+    if (!up_released || !activated_gate_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+          "failed to release rejected graph BF16 gated-multiply input leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "graph BF16 gated-multiply output has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool output_released = release_exclusive_use(output->active_uses);
+    const bool up_released = release_exclusive_use(up->active_uses);
+    const bool activated_gate_released =
+        release_exclusive_use(activated_gate->active_uses);
+    if (!output_released || !up_released || !activated_gate_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+          "failed to release rejected graph BF16 gated-multiply resource leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(up->active_uses);
+    (void)release_exclusive_use(activated_gate->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginGatedMultiplyBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(up->active_uses);
+    (void)release_exclusive_use(activated_gate->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginGatedMultiplyBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(up->active_uses);
+    (void)release_exclusive_use(activated_gate->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginGatedMultiplyBf16Operation,
+        "host allocation failed for graph BF16 gated-multiply capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(up->active_uses);
+    (void)release_exclusive_use(activated_gate->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginGatedMultiplyBf16Operation,
+        "host allocation failed for captured graph BF16 gated-multiply owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kGatedMultiplyBf16, nullptr, 0, nullptr,
+      0, activated_gate, up, element_count);
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->gated_multiply_activated_gate = activated_gate;
+  capture->gated_multiply_up = up;
+  capture->gated_multiply_element_count = element_count;
+  capture->gated_multiply_activated_gate_lease_held = true;
+  capture->gated_multiply_up_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_gated_multiply_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+          "failed to release a blocked graph BF16 gated-multiply capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_gated_multiply_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+          "failed to release a rejected graph BF16 gated-multiply capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginGatedMultiplyBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE, kBeginGatedMultiplyBf16Operation,
+      capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginGatedMultiplyBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginGatedMultiplyBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released = release_capture_gated_multiply_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginGatedMultiplyBf16Operation,
+        "failed to release an unstarted graph BF16 gated-multiply capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -1280,6 +1784,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_FILL_F32:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -1609,16 +2114,23 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           owner->operation == RileyCudaGraphCaptureOperation::kH2D;
       const bool is_silu_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+      const bool is_gated_multiply_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
-      const bool release_graph_first = is_h2d || is_silu_bf16;
+      const bool release_graph_first =
+          is_h2d || is_silu_bf16 || is_gated_multiply_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
           prepared_graph_released &&
           (is_h2d ? release_capture_h2d_leases(owner)
                   : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
+                                 : is_gated_multiply_bf16
+                                       ? release_capture_gated_multiply_bf16_leases(
+                                             owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
                                        : false);
@@ -1675,6 +2187,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_silu_bf16(
   return capture_begin_silu_bf16_impl(stream, input, output, element_count,
                                       mode, out_capture, out_graph_error,
                                       error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_gated_multiply_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* activated_gate,
+    RileyCudaDeviceBuffer* up, RileyCudaDeviceBuffer* output,
+    uint64_t element_count, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_gated_multiply_bf16_impl(
+      stream, activated_gate, up, output, element_count, mode, out_capture,
+      out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -1957,6 +2481,128 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_silu_bf16(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_gated_multiply_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueGatedMultiplyBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueGatedMultiplyBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->owner == nullptr || owner->stream == nullptr ||
+      owner->prepared_graph == nullptr || owner->fill_buffer == nullptr ||
+      owner->gated_multiply_activated_gate == nullptr ||
+      owner->gated_multiply_up == nullptr ||
+      owner->operation !=
+          RileyCudaGraphCaptureOperation::kGatedMultiplyBf16 ||
+      !owner->fill_lease_held ||
+      !owner->gated_multiply_activated_gate_lease_held ||
+      !owner->gated_multiply_up_lease_held || owner->capture_terminated ||
+      owner->unreleased_graph != nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueGatedMultiplyBf16Operation,
+        "capture owner is not a live graph BF16 gated-multiply capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueGatedMultiplyBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  if (!owner->capture_started ||
+      owner->gated_multiply_activated_gate == owner->gated_multiply_up ||
+      owner->gated_multiply_activated_gate == owner->fill_buffer ||
+      owner->gated_multiply_up == owner->fill_buffer ||
+      owner->gated_multiply_element_count == 0 ||
+      owner->gated_multiply_element_count >
+          owner->gated_multiply_activated_gate->byte_len /
+              sizeof(__nv_bfloat16) ||
+      owner->gated_multiply_element_count >
+          owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+      owner->gated_multiply_element_count >
+          owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+      owner->gated_multiply_activated_gate->device_data == nullptr ||
+      owner->gated_multiply_up->device_data == nullptr ||
+      owner->fill_buffer->device_data == nullptr ||
+      owner->gated_multiply_enqueue_count != 0 ||
+      owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+      owner->h2d_enqueue_count != 0 || owner->h2d_source_lease_held ||
+      owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+      owner->silu_enqueue_count != 0 || owner->silu_input_lease_held ||
+      owner->fill_element_count != 0 || owner->fill_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueGatedMultiplyBf16Operation,
+        "graph BF16 gated-multiply capture has invalid immutable geometry or already enqueued its sole node");
+  }
+  if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->gated_multiply_activated_gate->active_uses.load(
+          std::memory_order_acquire) != 1 ||
+      owner->gated_multiply_up->active_uses.load(std::memory_order_acquire) !=
+          1 ||
+      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueGatedMultiplyBf16Operation,
+        "graph BF16 gated-multiply capture resource lease is unavailable");
+  }
+  const uint64_t needed_blocks =
+      ((owner->gated_multiply_element_count - 1) / kGraphSiluThreads) + 1;
+  const uint32_t grid_x = static_cast<uint32_t>(
+      needed_blocks < kMaximumGraphSiluBlocks ? needed_blocks
+                                               : kMaximumGraphSiluBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueGatedMultiplyBf16Operation,
+      owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    graph_gated_multiply_bf16<<<grid_x, kGraphSiluThreads, 0,
+                                 owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(
+            owner->gated_multiply_activated_gate->device_data),
+        static_cast<const __nv_bfloat16*>(owner->gated_multiply_up->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        owner->gated_multiply_element_count);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueGatedMultiplyBf16Operation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      owner->gated_multiply_enqueue_count = 1;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueGatedMultiplyBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -2001,12 +2647,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
   const bool is_silu_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
-  if ((!is_fill && !is_h2d && !is_silu_bf16) ||
+  const bool is_gated_multiply_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
                    owner->silu_enqueue_count != 0 ||
-                   owner->silu_input_lease_held)) ||
+                   owner->silu_input_lease_held ||
+                   owner->gated_multiply_activated_gate != nullptr ||
+                   owner->gated_multiply_up != nullptr ||
+                   owner->gated_multiply_element_count != 0 ||
+                   owner->gated_multiply_enqueue_count != 0 ||
+                   owner->gated_multiply_activated_gate_lease_held ||
+                   owner->gated_multiply_up_lease_held)) ||
       (is_h2d && (owner->h2d_source == nullptr ||
                   !owner->h2d_source_lease_held || owner->h2d_byte_len == 0 ||
                   owner->h2d_source->host_data == nullptr ||
@@ -2014,7 +2668,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                   owner->fill_buffer->byte_len != owner->h2d_byte_len ||
                   owner->silu_input != nullptr || owner->silu_element_count != 0 ||
                   owner->silu_enqueue_count != 0 ||
-                  owner->silu_input_lease_held)) ||
+                  owner->silu_input_lease_held ||
+                  owner->gated_multiply_activated_gate != nullptr ||
+                  owner->gated_multiply_up != nullptr ||
+                  owner->gated_multiply_element_count != 0 ||
+                  owner->gated_multiply_enqueue_count != 0 ||
+                  owner->gated_multiply_activated_gate_lease_held ||
+                  owner->gated_multiply_up_lease_held)) ||
       (is_silu_bf16 &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
         owner->h2d_enqueue_count != 0 || owner->h2d_source_lease_held ||
@@ -2027,7 +2687,40 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
             owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
         owner->silu_element_count >
             owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
-        owner->fill_element_count != 0 || owner->fill_enqueue_count != 0))) {
+        owner->fill_element_count != 0 || owner->fill_enqueue_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0 ||
+        owner->gated_multiply_enqueue_count != 0 ||
+        owner->gated_multiply_activated_gate_lease_held ||
+        owner->gated_multiply_up_lease_held)) ||
+      (is_gated_multiply_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->h2d_enqueue_count != 0 || owner->h2d_source_lease_held ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->silu_enqueue_count != 0 || owner->silu_input_lease_held ||
+        owner->fill_element_count != 0 || owner->fill_enqueue_count != 0 ||
+        owner->gated_multiply_activated_gate == nullptr ||
+        owner->gated_multiply_up == nullptr ||
+        owner->gated_multiply_activated_gate == owner->gated_multiply_up ||
+        owner->gated_multiply_activated_gate == owner->fill_buffer ||
+        owner->gated_multiply_up == owner->fill_buffer ||
+        !owner->gated_multiply_activated_gate_lease_held ||
+        !owner->gated_multiply_up_lease_held ||
+        owner->gated_multiply_element_count == 0 ||
+        !same_context(owner->owner,
+                      owner->gated_multiply_activated_gate->owner) ||
+        !same_context(owner->owner, owner->gated_multiply_up->owner) ||
+        owner->gated_multiply_activated_gate->device_data == nullptr ||
+        owner->gated_multiply_up->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_activated_gate->byte_len /
+                sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16)))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -2041,7 +2734,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   if (!owner->capture_started || owner->capture_terminated ||
       (is_fill && owner->fill_enqueue_count == 0) ||
       (is_h2d && owner->h2d_enqueue_count != 1) ||
-      (is_silu_bf16 && owner->silu_enqueue_count != 1)) {
+      (is_silu_bf16 && owner->silu_enqueue_count != 1) ||
+      (is_gated_multiply_bf16 &&
+       owner->gated_multiply_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -2050,7 +2745,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       (is_h2d && owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1) ||
       (is_silu_bf16 &&
-       owner->silu_input->active_uses.load(std::memory_order_acquire) != 1)) {
+       owner->silu_input->active_uses.load(std::memory_order_acquire) != 1) ||
+      (is_gated_multiply_bf16 &&
+       (owner->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
                           "fixed graph capture resource lease was corrupted");
@@ -2154,15 +2854,22 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           owner->operation == RileyCudaGraphCaptureOperation::kH2D;
       const bool is_silu_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+      const bool is_gated_multiply_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
-      const bool release_graph_first = is_h2d || is_silu_bf16;
+      const bool release_graph_first =
+          is_h2d || is_silu_bf16 || is_gated_multiply_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
           prepared_graph_released &&
           (is_h2d ? release_capture_h2d_leases(owner)
                   : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
+                                 : is_gated_multiply_bf16
+                                       ? release_capture_gated_multiply_bf16_leases(
+                                             owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
       const bool cleanup_graph_released =
@@ -2227,9 +2934,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
   const bool is_silu_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+  const bool is_gated_multiply_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
-      !owner->owns_capture_leases || (!is_fill && !is_h2d && !is_silu_bf16) ||
+      !owner->owns_capture_leases ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -2241,7 +2951,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   }
   if ((is_fill &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
-        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_h2d &&
        (owner->h2d_byte_len == 0 ||
         owner->h2d_source == nullptr ||
@@ -2250,7 +2963,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
         owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
-        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_silu_bf16 &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
         owner->silu_input == nullptr || owner->silu_input == owner->fill_buffer ||
@@ -2262,7 +2978,36 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
             owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
         owner->silu_element_count >
             owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
-        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
+      (is_gated_multiply_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate == nullptr ||
+        owner->gated_multiply_up == nullptr ||
+        owner->gated_multiply_activated_gate == owner->gated_multiply_up ||
+        owner->gated_multiply_activated_gate == owner->fill_buffer ||
+        owner->gated_multiply_up == owner->fill_buffer ||
+        owner->gated_multiply_element_count == 0 ||
+        !same_context(owner->owner,
+                      owner->gated_multiply_activated_gate->owner) ||
+        !same_context(owner->owner, owner->gated_multiply_up->owner) ||
+        owner->gated_multiply_activated_gate->device_data == nullptr ||
+        owner->gated_multiply_up->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_activated_gate->byte_len /
+                sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kInstantiateOperation,
@@ -2292,7 +3037,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   auto* exec = new (storage) RileyCudaGraphExec(
       owner->owner, owner->stream, owner->fill_buffer, capture_id, exec_id,
       owner->operation, owner->h2d_source, owner->h2d_byte_len,
-      owner->silu_input, owner->silu_element_count);
+      owner->silu_input, owner->silu_element_count,
+      owner->gated_multiply_activated_gate, owner->gated_multiply_up,
+      owner->gated_multiply_element_count);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -2394,6 +3141,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       exec->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       source->active_uses.load(std::memory_order_acquire) != 1 ||
       exec->silu_input != nullptr || exec->silu_element_count != 0 ||
+      exec->gated_multiply_activated_gate != nullptr ||
+      exec->gated_multiply_up != nullptr ||
+      exec->gated_multiply_element_count != 0 ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -2447,12 +3197,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   const bool is_h2d = exec->operation == RileyCudaGraphCaptureOperation::kH2D;
   const bool is_silu_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+  const bool is_gated_multiply_bf16 =
+      exec->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
       exec->fill_buffer == nullptr || exec->graph == nullptr ||
       exec->exec == nullptr || !exec->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16)) {
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -2478,7 +3230,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   if ((is_fill &&
        (exec->h2d_source != nullptr || exec->h2d_byte_len != 0 ||
         exec->h2d_input_staged || exec->silu_input != nullptr ||
-        exec->silu_element_count != 0)) ||
+        exec->silu_element_count != 0 ||
+        exec->gated_multiply_activated_gate != nullptr ||
+        exec->gated_multiply_up != nullptr ||
+        exec->gated_multiply_element_count != 0)) ||
       (is_h2d &&
        (exec->h2d_byte_len == 0 ||
         exec->h2d_source == nullptr ||
@@ -2488,7 +3243,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
         exec->fill_buffer->byte_len != exec->h2d_byte_len ||
         exec->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
         !exec->h2d_input_staged || exec->silu_input != nullptr ||
-        exec->silu_element_count != 0)) ||
+        exec->silu_element_count != 0 ||
+        exec->gated_multiply_activated_gate != nullptr ||
+        exec->gated_multiply_up != nullptr ||
+        exec->gated_multiply_element_count != 0)) ||
       (is_silu_bf16 &&
        (exec->h2d_source != nullptr || exec->h2d_byte_len != 0 ||
         exec->h2d_input_staged || exec->silu_input == nullptr ||
@@ -2501,7 +3259,37 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
             exec->silu_input->byte_len / sizeof(__nv_bfloat16) ||
         exec->silu_element_count >
             exec->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
-        exec->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
+        exec->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+        exec->gated_multiply_activated_gate != nullptr ||
+        exec->gated_multiply_up != nullptr ||
+        exec->gated_multiply_element_count != 0)) ||
+      (is_gated_multiply_bf16 &&
+       (exec->h2d_source != nullptr || exec->h2d_byte_len != 0 ||
+        exec->h2d_input_staged || exec->silu_input != nullptr ||
+        exec->silu_element_count != 0 ||
+        exec->gated_multiply_activated_gate == nullptr ||
+        exec->gated_multiply_up == nullptr ||
+        exec->gated_multiply_activated_gate == exec->gated_multiply_up ||
+        exec->gated_multiply_activated_gate == exec->fill_buffer ||
+        exec->gated_multiply_up == exec->fill_buffer ||
+        exec->gated_multiply_element_count == 0 ||
+        !same_context(exec->owner,
+                      exec->gated_multiply_activated_gate->owner) ||
+        !same_context(exec->owner, exec->gated_multiply_up->owner) ||
+        exec->gated_multiply_activated_gate->device_data == nullptr ||
+        exec->gated_multiply_up->device_data == nullptr ||
+        exec->fill_buffer->device_data == nullptr ||
+        exec->gated_multiply_element_count >
+            exec->gated_multiply_activated_gate->byte_len /
+                sizeof(__nv_bfloat16) ||
+        exec->gated_multiply_element_count >
+            exec->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+        exec->gated_multiply_element_count >
+            exec->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        exec->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        exec->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -2676,11 +3464,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
   const bool is_silu_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+  const bool is_gated_multiply_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
-      !owner->owns_capture_leases || (!is_fill && !is_h2d && !is_silu_bf16) ||
+      !owner->owns_capture_leases ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -2693,7 +3484,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   }
   if ((is_fill &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
-        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_h2d &&
        (owner->h2d_byte_len == 0 ||
         owner->h2d_source == nullptr ||
@@ -2702,7 +3496,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
         owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
-        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_silu_bf16 &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
         owner->silu_input == nullptr || owner->silu_input == owner->fill_buffer ||
@@ -2714,7 +3511,36 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
             owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
         owner->silu_element_count >
             owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
-        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
+      (is_gated_multiply_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate == nullptr ||
+        owner->gated_multiply_up == nullptr ||
+        owner->gated_multiply_activated_gate == owner->gated_multiply_up ||
+        owner->gated_multiply_activated_gate == owner->fill_buffer ||
+        owner->gated_multiply_up == owner->fill_buffer ||
+        owner->gated_multiply_element_count == 0 ||
+        !same_context(owner->owner,
+                      owner->gated_multiply_activated_gate->owner) ||
+        !same_context(owner->owner, owner->gated_multiply_up->owner) ||
+        owner->gated_multiply_activated_gate->device_data == nullptr ||
+        owner->gated_multiply_up->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_activated_gate->byte_len /
+                sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseGraphOperation,
@@ -2753,6 +3579,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                                        owner->stream,
                                                        owner->silu_input,
                                                        owner->fill_buffer)
+                     : is_gated_multiply_bf16
+                           ? release_graph_gated_multiply_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->gated_multiply_activated_gate,
+                                 owner->gated_multiply_up, owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -2804,12 +3635,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
   const bool is_silu_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+  const bool is_gated_multiply_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       owner->exec == nullptr || !owner->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16) ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -2824,7 +3657,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   if ((is_fill &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
         owner->h2d_input_staged || owner->silu_input != nullptr ||
-        owner->silu_element_count != 0)) ||
+        owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_h2d &&
        (owner->h2d_byte_len == 0 ||
         owner->h2d_source == nullptr ||
@@ -2833,7 +3669,10 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
         owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
-        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
       (is_silu_bf16 &&
        (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
         owner->h2d_input_staged || owner->silu_input == nullptr ||
@@ -2846,7 +3685,37 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
             owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
         owner->silu_element_count >
             owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
-        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_activated_gate != nullptr ||
+        owner->gated_multiply_up != nullptr ||
+        owner->gated_multiply_element_count != 0)) ||
+      (is_gated_multiply_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->h2d_input_staged || owner->silu_input != nullptr ||
+        owner->silu_element_count != 0 ||
+        owner->gated_multiply_activated_gate == nullptr ||
+        owner->gated_multiply_up == nullptr ||
+        owner->gated_multiply_activated_gate == owner->gated_multiply_up ||
+        owner->gated_multiply_activated_gate == owner->fill_buffer ||
+        owner->gated_multiply_up == owner->fill_buffer ||
+        owner->gated_multiply_element_count == 0 ||
+        !same_context(owner->owner,
+                      owner->gated_multiply_activated_gate->owner) ||
+        !same_context(owner->owner, owner->gated_multiply_up->owner) ||
+        owner->gated_multiply_activated_gate->device_data == nullptr ||
+        owner->gated_multiply_up->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_activated_gate->byte_len /
+                sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->gated_multiply_activated_gate->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseExecOperation,
@@ -2897,6 +3766,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                                        owner->stream,
                                                        owner->silu_input,
                                                        owner->fill_buffer)
+                     : is_gated_multiply_bf16
+                           ? release_graph_gated_multiply_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->gated_multiply_activated_gate,
+                                 owner->gated_multiply_up, owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
