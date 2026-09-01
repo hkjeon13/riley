@@ -107,6 +107,52 @@ pub enum CudaGraphCaptureMode {
     ThreadLocal = 1,
 }
 
+/// One exact C05 operation that has an independently reviewed CUDA Graph
+/// capture contract.
+///
+/// This deliberately names only the narrow fixed-address vertical slices in
+/// the native ABI. It does not imply that sibling primitives, a whole model
+/// forward, or a CUDA stream/context are capture-safe.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+#[repr(u32)]
+pub enum CudaGraphCaptureOperation {
+    /// One or more fixed-shape f32 fills of one caller-owned device buffer.
+    FillF32 = 1,
+    /// One whole-slab H2D memcpy between retained pinned/device allocations.
+    H2D = 2,
+    /// One fixed-address, out-of-place BF16 SiLU kernel.
+    SiluBf16 = 3,
+}
+
+impl CudaGraphCaptureOperation {
+    /// Queries this exact operation's native capture admission result.
+    ///
+    /// The query is a read-only ABI vocabulary lookup: it does not initialize
+    /// CUDA, create a context, allocate, or inspect a stream. A result of
+    /// [`CudaGraphCaptureCapability::Supported`] is evidence only for this
+    /// exact operation and must not be broadened into graph execution
+    /// authority without validating the surrounding resources and semantics.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CudaErrorKind::Unavailable`] when this crate was built
+    /// without the native CUDA feature, or a translated ABI error otherwise.
+    pub fn capture_capability(self) -> CudaResult<CudaGraphCaptureCapability> {
+        #[cfg(feature = "cuda")]
+        {
+            crate::ffi::graph_capture_capability(self as u32)
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = self;
+            Err(CudaError::unavailable(
+                "CudaGraphCaptureOperation::capture_capability",
+            ))
+        }
+    }
+}
+
 /// Per-operation CUDA Graph capture admission result.
 ///
 /// `Unknown` is the default and is denied. This value does not claim that an

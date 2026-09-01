@@ -56,10 +56,10 @@ pub use gemm::{
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
 };
 pub use graph::{
-    CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo,
-    CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, GraphCapture, GraphExec,
-    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedCapturedH2DGraph,
-    OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
+    CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
+    CudaGraphFailureInfo, CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage,
+    GraphCapture, GraphExec, GraphFillCapture, GraphLaunch, OwnedCapturedGraph,
+    OwnedCapturedH2DGraph, OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
     OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphH2DCapture,
     OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
     OwnedGraphLaunch, OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError,

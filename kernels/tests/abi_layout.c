@@ -37,6 +37,13 @@ _Static_assert(RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN == 0 &&
                    RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNSUPPORTED == 1 &&
                    RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED == 2,
                "graph-capture-capability ABI discriminants changed");
+_Static_assert(sizeof(RileyCudaGraphCaptureOperationKind) == 4,
+               "graph-capture-operation-kind ABI width changed");
+_Static_assert(RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN == 0 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_FILL_F32 == 1 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D == 2 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16 == 3,
+               "graph-capture-operation-kind ABI discriminants changed");
 _Static_assert(sizeof(RileyCudaGraphStage) == 4,
                "graph-stage ABI width changed");
 _Static_assert(RILEY_CUDA_GRAPH_STAGE_NONE == 0 &&
@@ -531,6 +538,9 @@ _Static_assert(offsetof(RileyCudaFixed37GemmPlanInfo, reserved) == 72,
 static RileyCudaStatus (*const nvidia_environment_probe_symbol)(
     RileyCudaNvidiaEnvironmentSnapshot*, RileyCudaErrorInfo*) =
     riley_cuda_nvidia_environment_probe;
+static RileyCudaStatus (*const graph_capture_query_capability_symbol)(
+    RileyCudaGraphCaptureOperationKind, RileyCudaGraphCaptureCapability*,
+    RileyCudaErrorInfo*) = riley_cuda_graph_capture_query_capability;
 static RileyCudaStatus (*const graph_capture_begin_symbol)(
     RileyCudaStream*, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
     RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
@@ -815,6 +825,7 @@ static RileyCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 // warning configurations.
 const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
+    (const void*)&graph_capture_query_capability_symbol,
     (const void*)&graph_capture_begin_symbol,
     (const void*)&graph_capture_abort_symbol,
     (const void*)&graph_capture_begin_fill_f32_symbol,

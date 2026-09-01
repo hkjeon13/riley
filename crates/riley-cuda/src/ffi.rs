@@ -5,7 +5,8 @@ use std::ptr::{self, NonNull};
 
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
 use crate::graph::{
-    CudaGraphFailureInfo, CudaGraphStage, RawGraphErrorInfo, decode_graph_failure_info,
+    CudaGraphCaptureCapability, CudaGraphFailureInfo, CudaGraphStage, RawGraphErrorInfo,
+    decode_graph_failure_info,
 };
 
 const STATUS_SUCCESS: i32 = 0;
@@ -1318,6 +1319,11 @@ unsafe extern "C" {
     fn riley_cuda_stream_synchronize(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_begin(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
     fn riley_cuda_stream_command_batch_end(stream: *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_graph_capture_query_capability(
+        operation: u32,
+        out_capability: *mut u32,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_begin(
         stream: *mut RawStream,
         mode: u32,
@@ -1900,6 +1906,30 @@ pub(super) fn build_info() -> CudaResult<String> {
             "read native build info",
             format!("native build info is not UTF-8: {error}"),
         )
+    })
+}
+
+pub(super) fn graph_capture_capability(operation: u32) -> CudaResult<CudaGraphCaptureCapability> {
+    const OPERATION: &str = "query CUDA Graph capture capability";
+    let mut capability = CudaGraphCaptureCapability::Unknown as u32;
+    let mut error = ErrorInfo::new();
+    // SAFETY: capability and error are initialized, writable caller buffers.
+    // The native query is a pure fixed-vocabulary lookup and accepts no raw
+    // resource or CUDA context pointer.
+    let status = unsafe {
+        riley_cuda_graph_capture_query_capability(operation, &mut capability, &mut error)
+    };
+    status_result(status, OPERATION, &error)?;
+    Ok(match capability {
+        value if value == CudaGraphCaptureCapability::Unsupported as u32 => {
+            CudaGraphCaptureCapability::Unsupported
+        }
+        value if value == CudaGraphCaptureCapability::Supported as u32 => {
+            CudaGraphCaptureCapability::Supported
+        }
+        // Unknown future native output remains denied without treating a
+        // newer capability value as admission in this older safe wrapper.
+        _ => CudaGraphCaptureCapability::Unknown,
     })
 }
 
@@ -6494,6 +6524,18 @@ mod tests {
         assert!(
             graph_capture_abort_metadata_is_valid(&released, &released_decoded, STATUS_SUCCESS),
             "success requires known release with no poison flag"
+        );
+    }
+
+    #[test]
+    fn capture_capability_query_denies_unknown_native_operation_kinds() {
+        assert_eq!(
+            graph_capture_capability(0),
+            Ok(CudaGraphCaptureCapability::Unknown)
+        );
+        assert_eq!(
+            graph_capture_capability(u32::MAX),
+            Ok(CudaGraphCaptureCapability::Unknown)
         );
     }
 }

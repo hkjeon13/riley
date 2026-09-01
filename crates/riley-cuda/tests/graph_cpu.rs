@@ -2,10 +2,10 @@
 
 use riley_cuda::{
     CapturedGraph, CudaDeviceBuffer, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
-    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphLifecycle, CudaGraphLifecycleState,
-    CudaGraphStage, CudaPinnedHostBuffer, CudaResult, CudaStream, GraphCapture, GraphExec,
-    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedCapturedH2DGraph,
-    OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
+    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
+    CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer, CudaResult,
+    CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch, OwnedCapturedGraph,
+    OwnedCapturedH2DGraph, OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
     OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphH2DCapture,
     OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
     OwnedGraphLaunch, OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError,
@@ -27,6 +27,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL",
         "RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN",
         "RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16",
         "RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN",
         "RILEY_CUDA_GRAPH_STAGE_CLOSE",
         "RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE",
@@ -39,7 +40,9 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
     assert!(header.contains("rather than a tail extension of RileyCudaErrorInfo"));
     assert!(header.contains("riley_cuda_graph_capture_begin("));
     assert!(header.contains("riley_cuda_graph_capture_abort("));
+    assert!(header.contains("riley_cuda_graph_capture_query_capability("));
     for symbol in [
+        "riley_cuda_graph_capture_query_capability",
         "riley_cuda_graph_capture_begin_fill_f32",
         "riley_cuda_graph_capture_enqueue_fill_f32",
         "riley_cuda_graph_capture_begin_h2d",
@@ -71,9 +74,58 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
     assert!(ffi.contains("struct RawGraphCapture"));
     assert!(ffi.contains("riley_cuda_graph_capture_begin"));
     assert!(ffi.contains("riley_cuda_graph_capture_abort"));
+    assert!(ffi.contains("pub(super) fn graph_capture_capability"));
     assert!(ffi.contains("GraphCaptureHandle"));
     assert!(ffi.contains("graph_capture_begin_success_metadata_is_valid"));
     assert!(ffi.contains("graph_capture_abort_metadata_is_valid"));
+}
+
+#[test]
+fn capture_capability_query_is_pure_and_fail_closed() {
+    let native_graph = include_str!("../../../kernels/src/graph.cu");
+    let query = native_graph
+        .split("extern \"C\" RileyCudaStatus riley_cuda_graph_capture_query_capability")
+        .nth(1)
+        .expect("native graph capability query must remain exported")
+        .split("extern \"C\" RileyCudaStatus riley_cuda_graph_capture_begin")
+        .next()
+        .expect("capability query must end before graph capture begins");
+
+    assert!(query.contains("clear_error(error);"));
+    assert!(query.contains("*out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN;"));
+    assert!(query.contains("if (out_capability == nullptr)"));
+    assert!(query.contains("RILEY_CUDA_STATUS_INVALID_ARGUMENT"));
+    for operation in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_FILL_F32",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16",
+    ] {
+        assert!(
+            query.contains(operation),
+            "reviewed operation missing from native capability query: {operation}"
+        );
+    }
+    assert!(query.contains("RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN"));
+    assert!(query.contains("default:"));
+    assert!(query.contains("RILEY_CUDA_STATUS_SUCCESS"));
+
+    // It is a vocabulary lookup only. Capturing, creating a CUDA context, or
+    // allocating here would make the no-device ABI guarantee untrue.
+    for forbidden in [
+        "cudaStream",
+        "cudaMalloc",
+        "cudaFree",
+        "cuCtx",
+        "CurrentContext",
+        "try_acquire",
+        "std::calloc",
+        "std::malloc",
+    ] {
+        assert!(
+            !query.contains(forbidden),
+            "capability query must not perform CUDA/resource work: {forbidden}"
+        );
+    }
 }
 
 #[test]
@@ -154,6 +206,9 @@ fn successful_abort_requires_nonpoisoned_release_metadata() {
 #[test]
 fn graph_public_values_fix_the_cpu_only_contract() {
     assert_eq!(CudaGraphCaptureMode::ThreadLocal as u32, 1);
+    assert_eq!(CudaGraphCaptureOperation::FillF32 as u32, 1);
+    assert_eq!(CudaGraphCaptureOperation::H2D as u32, 2);
+    assert_eq!(CudaGraphCaptureOperation::SiluBf16 as u32, 3);
     assert_eq!(CudaGraphCaptureCapability::Unknown as u32, 0);
     assert_eq!(CudaGraphCaptureCapability::Unsupported as u32, 1);
     assert_eq!(CudaGraphCaptureCapability::Supported as u32, 2);
@@ -168,6 +223,17 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         .unwrap_err();
     assert_eq!(unknown.kind(), CudaErrorKind::NotSupported);
     assert_eq!(unknown.stage(), CudaErrorStage::Prepare);
+    for operation in [
+        CudaGraphCaptureOperation::FillF32,
+        CudaGraphCaptureOperation::H2D,
+        CudaGraphCaptureOperation::SiluBf16,
+    ] {
+        assert_eq!(
+            operation.capture_capability().unwrap_err().kind(),
+            CudaErrorKind::Unavailable,
+            "feature-off capability lookup must not fabricate native admission"
+        );
+    }
     assert!(matches!(
         CudaGraphStage::CaptureAbort,
         CudaGraphStage::CaptureAbort

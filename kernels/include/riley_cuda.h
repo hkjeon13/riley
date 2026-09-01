@@ -178,6 +178,20 @@ typedef uint32_t RileyCudaGraphCaptureCapability;
 #define RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED \
   ((RileyCudaGraphCaptureCapability)2)
 
+// Exact C05 capture operation whose capability is being queried. The zero
+// value and unrecognized future values intentionally produce `UNKNOWN` rather
+// than inferring admission from a related operation or a whole CUDA context.
+typedef uint32_t RileyCudaGraphCaptureOperationKind;
+
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN \
+  ((RileyCudaGraphCaptureOperationKind)0)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_FILL_F32 \
+  ((RileyCudaGraphCaptureOperationKind)1)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D \
+  ((RileyCudaGraphCaptureOperationKind)2)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)3)
+
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
 // a successful or reusable graph state by a caller.
@@ -1072,6 +1086,17 @@ extern "C" {
 // Compile-time ABI metadata. These functions do not initialize a device.
 uint32_t riley_cuda_abi_version(void) RILEY_CUDA_NOEXCEPT;
 const char* riley_cuda_build_info(void) RILEY_CUDA_NOEXCEPT;
+
+// Returns the graph-capture admission result for one exact C05 operation.
+// This is a pure ABI capability query: it initializes no CUDA runtime or
+// context, allocates nothing, and does not inspect a stream or resource. An
+// unrecognized operation kind succeeds with `UNKNOWN`, which callers must
+// deny; `out_capability` itself is required and initialized to `UNKNOWN`
+// before validation.
+RileyCudaStatus riley_cuda_graph_capture_query_capability(
+    RileyCudaGraphCaptureOperationKind operation,
+    RileyCudaGraphCaptureCapability* out_capability,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
 RileyCudaStatus riley_cuda_device_count(
     uint32_t* out_count,

@@ -43,6 +43,8 @@ constexpr const char* kBeginSiluBf16Operation =
     "begin CUDA Graph BF16 SiLU capture";
 constexpr const char* kEnqueueSiluBf16Operation =
     "enqueue CUDA Graph BF16 SiLU";
+constexpr const char* kQueryCaptureCapabilityOperation =
+    "query CUDA Graph capture capability";
 constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
 constexpr const char* kEndOperation = "end CUDA Graph capture";
 constexpr const char* kInstantiateOperation = "instantiate CUDA Graph";
@@ -1254,6 +1256,41 @@ RileyCudaStatus capture_begin_silu_bf16_impl(
 }
 
 }  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
+    RileyCudaGraphCaptureOperationKind operation,
+    RileyCudaGraphCaptureCapability* out_capability,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  // This query is deliberately outside every context/stream/capture path. It
+  // is evidence for a named C05 vertical slice, not a runtime probe or an
+  // admission shortcut for a larger graph.
+  clear_error(error);
+  if (out_capability != nullptr) {
+    *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN;
+  }
+  if (out_capability == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kQueryCaptureCapabilityOperation,
+                            "out_capability is null");
+  }
+  switch (operation) {
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_FILL_F32:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16:
+      *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
+      break;
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
+    default:
+      // A newer caller can ask this older archive about a newer operation
+      // value. Return the closed unknown value so it cannot accidentally
+      // inherit capture admission from a sibling operation.
+      break;
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_begin(
     RileyCudaStream* stream, RileyCudaGraphCaptureMode mode,
