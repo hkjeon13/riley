@@ -1,5 +1,16 @@
 {
   "$schema": "registry.schema.json",
   "schema_version": "riley.extension-registry.v1",
-  "extensions": []
+  "extensions": [
+    {
+      "extension_id": "prefix-cache-v1",
+      "status": "approved-for-implementation",
+      "track": "prefix-cache",
+      "semantic_class": "reference",
+      "proposal_path": "deploy/extensions/proposals/prefix-cache-v1.json",
+      "deploy_document_path": "deploy/extensions/plans/prefix-cache-v1.md",
+      "benchmark_contract_path": "benchmarks/extensions/contracts/prefix-cache-v1.json",
+      "implementation_link_path": null
+    }
+  ]
 }
