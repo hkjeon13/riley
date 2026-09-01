@@ -20,7 +20,7 @@ use super::graph::GraphOperatorCapability;
 /// Keep this count and [`PureDecodeGraphV1CaptureOperation::ALL`] synchronized
 /// whenever the reviewed chain changes.  A fixed array makes omission,
 /// duplication, and dynamic inventory construction impossible at this layer.
-pub(crate) const PURE_DECODE_GRAPH_V1_CAPTURE_OPERATION_COUNT: usize = 13;
+pub(crate) const PURE_DECODE_GRAPH_V1_CAPTURE_OPERATION_COUNT: usize = 14;
 
 /// One canonical operation that must be reviewed before full-graph capture.
 ///
@@ -44,8 +44,10 @@ pub(crate) enum PureDecodeGraphV1CaptureOperation {
     KvWrite,
     /// Decode attention computation.
     Attention,
-    /// Gated MLP activation and product computation.
-    Mlp,
+    /// C07 V1's out-of-place BF16 SiLU from gate projection to activated gate.
+    MlpSiluBf16,
+    /// Elementwise product of the activated gate and up-projection outputs.
+    MlpGatedMultiply,
     /// Attention and MLP residual additions.
     Residual,
     /// Final output normalization.
@@ -68,7 +70,8 @@ impl PureDecodeGraphV1CaptureOperation {
         Self::Rope,
         Self::KvWrite,
         Self::Attention,
-        Self::Mlp,
+        Self::MlpSiluBf16,
+        Self::MlpGatedMultiply,
         Self::Residual,
         Self::FinalNorm,
         Self::LmHead,
@@ -87,12 +90,13 @@ impl PureDecodeGraphV1CaptureOperation {
             Self::Rope => 4,
             Self::KvWrite => 5,
             Self::Attention => 6,
-            Self::Mlp => 7,
-            Self::Residual => 8,
-            Self::FinalNorm => 9,
-            Self::LmHead => 10,
-            Self::GpuGreedy => 11,
-            Self::CompletionBoundary => 12,
+            Self::MlpSiluBf16 => 7,
+            Self::MlpGatedMultiply => 8,
+            Self::Residual => 9,
+            Self::FinalNorm => 10,
+            Self::LmHead => 11,
+            Self::GpuGreedy => 12,
+            Self::CompletionBoundary => 13,
         }
     }
 
@@ -205,7 +209,8 @@ mod tests {
             PureDecodeGraphV1CaptureOperation::Rope,
             PureDecodeGraphV1CaptureOperation::KvWrite,
             PureDecodeGraphV1CaptureOperation::Attention,
-            PureDecodeGraphV1CaptureOperation::Mlp,
+            PureDecodeGraphV1CaptureOperation::MlpSiluBf16,
+            PureDecodeGraphV1CaptureOperation::MlpGatedMultiply,
             PureDecodeGraphV1CaptureOperation::Residual,
             PureDecodeGraphV1CaptureOperation::FinalNorm,
             PureDecodeGraphV1CaptureOperation::LmHead,
