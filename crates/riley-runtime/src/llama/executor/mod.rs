@@ -5,6 +5,7 @@
 //! scheduling policy unless their dedicated ownership boundary says so.
 
 pub(crate) mod buffers;
+pub(in crate::llama) mod config;
 pub(crate) mod device_views;
 pub(crate) mod dispatch;
 pub(crate) mod error;

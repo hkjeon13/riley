@@ -154,9 +154,10 @@ mod source_contract_tests {
     use super::batch::LlamaBatchMetadataConfig;
     use super::batch_executor::{
         ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
-        RaggedAttentionImplementation, ResidualNormImplementation, normalize_prepared_config,
+        RaggedAttentionImplementation, ResidualNormImplementation,
     };
     use super::decode::{LlamaKvCachePolicy, PreparedLlamaDecodeConfig};
+    use super::executor::config::normalize_prepared_config;
     use super::forward::{LlamaTracePoint, PreparedLlamaForwardConfig};
     use super::{LLAMA_FIXED37_MAX_SEQUENCE_TOKENS, LlamaReductionProfile};
     use riley_cuda::{AttentionPreference, AttentionReductionProfile};
@@ -173,6 +174,38 @@ mod source_contract_tests {
             super::executor::metrics::LlamaBatchShapeBucketHit::new(4);
         assert_eq!(hit.dense_rows(), 4);
         assert_eq!(hit.hit_count(), 0);
+    }
+
+    #[test]
+    fn batch_executor_facade_reexports_host_only_config_types() {
+        let completion: super::batch_executor::ExecutionCompletionImplementation =
+            super::executor::config::ExecutionCompletionImplementation::IterationBatch;
+        assert_eq!(
+            completion,
+            ExecutionCompletionImplementation::IterationBatch
+        );
+
+        let transport: super::batch_executor::BatchMetadataTransport =
+            super::executor::config::BatchMetadataTransport::PackedAsync;
+        assert_eq!(
+            transport,
+            super::batch_executor::BatchMetadataTransport::PackedAsync
+        );
+
+        let implementation: super::batch_executor::RaggedAttentionImplementation =
+            super::executor::config::RaggedAttentionImplementation::GroupedHeads;
+        assert_eq!(implementation, RaggedAttentionImplementation::GroupedHeads);
+
+        let residual: super::batch_executor::ResidualNormImplementation =
+            super::executor::config::ResidualNormImplementation::Fused;
+        assert_eq!(residual, ResidualNormImplementation::Fused);
+
+        let config: super::batch_executor::PreparedLlamaBatchExecutorConfig =
+            super::executor::config::PreparedLlamaBatchExecutorConfig::new(
+                LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1).expect("valid metadata bounds"),
+                PreparedLlamaForwardConfig::default(),
+            );
+        assert_eq!(config.metadata().max_input_tokens(), 1);
     }
 
     #[test]
@@ -877,7 +910,9 @@ mod source_contract_tests {
         assert!(pinned_write < packed_copy);
 
         let execution_match = hot
-            .find("match (config.execution_completion, config.metadata_transport)")
+            .find(
+                "match (\n        config.execution_completion_implementation(),\n        config.metadata_transport(),\n    )",
+            )
             .expect("execution and metadata policies dispatch together");
         let execution = &hot[execution_match..];
         let synchronous_arm = execution

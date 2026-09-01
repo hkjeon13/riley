@@ -31,6 +31,15 @@ use super::executor::buffers::{
     allocate_packed_host_input, allocate_synchronous_device_input, allocate_synchronous_host_input,
     close_device_input, close_host_input,
 };
+pub use super::executor::config::{
+    BatchMetadataTransport, ExecutionCompletionImplementation, PreparedLlamaBatchExecutorConfig,
+    RaggedAttentionImplementation, ResidualNormImplementation,
+};
+use super::executor::config::{
+    batch_metadata_transport_id, execution_completion_implementation_id, normalize_prepared_config,
+    ragged_attention_implementation_id, residual_norm_implementation_id,
+    runtime_selection_policy_id,
+};
 use super::executor::device_views::{packed_device_views, per_operation_device_views};
 use super::executor::dispatch::{
     BatchDispatchDisposition, OutputPrimitiveDispatch, dispatch_output_primitives,
@@ -56,13 +65,12 @@ use super::executor::rope::{
     absolute_rope_position_count, build_absolute_cpu_rope_tables, build_absolute_rope_angles,
 };
 use super::executor::shape::{
-    LlamaBatchShapeBuckets, LlamaBatchShapeHistory, batch_shape_policy_id,
-    select_prepared_dense_rows,
+    LlamaBatchShapeHistory, batch_shape_policy_id, select_prepared_dense_rows,
 };
 pub use super::executor::shape::{LlamaBatchShapePolicy, MAX_LLAMA_BATCH_SHAPE_BUCKETS};
 use super::forward::{
     ForwardBuffers, GemmPlans, LlamaForwardError, LlamaRmsNormProfile, LlamaRopeTableProfile,
-    PreparedLlamaAllocationReport, PreparedLlamaForward, PreparedLlamaForwardConfig, execute_gemm,
+    PreparedLlamaAllocationReport, PreparedLlamaForward, execute_gemm,
     execute_profile_residual_rms_norm, execute_profile_rms_norm, execute_projection_bias,
     poison_for_cuda_error, span, span_mut, weight_span,
 };
@@ -70,401 +78,28 @@ use super::{ExecutionSite, LlamaExecutionPlan, LlamaOp, LlamaReductionProfile};
 use crate::cuda_weights::CudaUploadedWeights;
 use crate::paged_kv::{KV_BLOCK_SIZE, KvLayout};
 
+#[cfg(test)]
+use super::forward::PreparedLlamaForwardConfig;
+
 const BF16_BYTES: u64 = 2;
 const F32_BYTES: u64 = 4;
 const BF16_BYTES_USIZE: usize = 2;
 const SUPPORTED_HEAD_DIMENSION: usize = 64;
 const PER_OPERATION_BASE_DEVICE_ALLOCATIONS: u64 = 9;
 const ITERATION_BATCH_BASE_DEVICE_ALLOCATIONS: u64 = 5;
-const RAGGED_PAGED_ATTENTION_LEGACY_D64_V1: &str =
-    "riley.cuda.ragged-paged-attention.legacy-d64-v1";
-const RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1: &str =
-    "riley.cuda.ragged-paged-attention.grouped-heads-d64-v1";
-const RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1: &str =
-    "riley.cuda.ragged-paged-attention.fixed37-two-pass-d64-s8192-v1";
-
-/// Exact implementation selected for the attention residual/post-norm pair.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum ResidualNormImplementation {
-    /// Standalone residual add followed by standalone `RMSNorm`.
-    #[default]
-    Separate,
-    /// One exact fused residual-add plus `RMSNorm` primitive.
-    Fused,
-}
-
-/// Completion boundary selected for one fixed-graph batch iteration.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum ExecutionCompletionImplementation {
-    /// Preserve the established primitive-local completion boundary.
-    #[default]
-    PerOperation,
-    /// Submit the fixed graph and optional output gather under one completion guard.
-    IterationBatch,
-}
-
-/// Host-to-device transport for tokens and packed batch metadata.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum BatchMetadataTransport {
-    /// Preserve the established token-plus-six-metadata synchronous uploads.
-    #[default]
-    Synchronous,
-    /// Pack tokens and all six metadata arrays into one aligned pinned slab and
-    /// enqueue one stream-ordered H2D copy inside iteration completion.
-    PackedAsync,
-}
-
-/// Launch implementation selected for canonical ragged paged attention.
-///
-/// Both variants preserve the canonical per-head online-softmax reduction
-/// contract. The grouped variant places several query-head warps in one CTA
-/// to reduce the M=1 decode launch count; the legacy variant preserves the
-/// established one-warp-per-head launch geometry as the rollback default.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum RaggedAttentionImplementation {
-    /// Preserve the established one warp per `(row, query-head)` launch.
-    #[default]
-    Legacy,
-    /// Reuse staged K/V tiles across the canonical query-head warps of a GQA
-    /// key/value head, with a bounded grouped-head fallback for other shapes.
-    GroupedHeads,
-}
-
-const fn execution_completion_implementation_id(
-    implementation: ExecutionCompletionImplementation,
-) -> &'static str {
-    match implementation {
-        ExecutionCompletionImplementation::PerOperation => "per-operation",
-        ExecutionCompletionImplementation::IterationBatch => "iteration-batch",
-    }
-}
-
-const fn batch_metadata_transport_id(transport: BatchMetadataTransport) -> &'static str {
-    match transport {
-        BatchMetadataTransport::Synchronous => "synchronous",
-        BatchMetadataTransport::PackedAsync => "packed-async",
-    }
-}
-
-const fn residual_norm_implementation_id(
-    implementation: ResidualNormImplementation,
-) -> &'static str {
-    match implementation {
-        ResidualNormImplementation::Separate => "separate",
-        ResidualNormImplementation::Fused => "fused",
-    }
-}
-
-const fn ragged_attention_implementation_id(
-    profile: AttentionReductionProfile,
-    implementation: RaggedAttentionImplementation,
-) -> &'static str {
-    match (profile, implementation) {
-        (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::Legacy) => {
-            RAGGED_PAGED_ATTENTION_LEGACY_D64_V1
-        }
-        (AttentionReductionProfile::CanonicalV1, RaggedAttentionImplementation::GroupedHeads) => {
-            RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1
-        }
-        (AttentionReductionProfile::FixedContiguous37BalancedV1, _) => {
-            RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
-        }
-    }
-}
-
-const fn runtime_selection_policy_id(profile: LlamaReductionProfile) -> &'static str {
-    match profile {
-        LlamaReductionProfile::CanonicalV1 => "exact-fallback-allowed",
-        LlamaReductionProfile::FixedContiguous37BalancedV1 => "fail-closed",
-    }
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum BatchOutputMode {
     Logits,
     GreedyTokens,
 }
 
-/// Cold bounds and shape policy for one reusable continuous-batch owner.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PreparedLlamaBatchExecutorConfig {
-    metadata: LlamaBatchMetadataConfig,
-    forward: PreparedLlamaForwardConfig,
-    ragged_attention_reduction_profile: AttentionReductionProfile,
-    ragged_attention_implementation: RaggedAttentionImplementation,
-    residual_norm: ResidualNormImplementation,
-    execution_completion: ExecutionCompletionImplementation,
-    metadata_transport: BatchMetadataTransport,
-    shape_policy: LlamaBatchShapePolicy,
-    shape_buckets: LlamaBatchShapeBuckets,
-}
-
-impl PreparedLlamaBatchExecutorConfig {
-    #[must_use]
-    pub const fn new(
-        metadata: LlamaBatchMetadataConfig,
-        forward: PreparedLlamaForwardConfig,
-    ) -> Self {
-        Self {
-            metadata,
-            forward,
-            ragged_attention_reduction_profile: forward.reduction_profile().attention_profile(),
-            ragged_attention_implementation: RaggedAttentionImplementation::Legacy,
-            residual_norm: ResidualNormImplementation::Separate,
-            execution_completion: ExecutionCompletionImplementation::PerOperation,
-            metadata_transport: BatchMetadataTransport::Synchronous,
-            shape_policy: LlamaBatchShapePolicy::FixedMaximum,
-            shape_buckets: LlamaBatchShapeBuckets::automatic(metadata.max_input_tokens()),
-        }
-    }
-
-    #[must_use]
-    pub const fn metadata(self) -> LlamaBatchMetadataConfig {
-        self.metadata
-    }
-
-    #[must_use]
-    pub const fn forward(self) -> PreparedLlamaForwardConfig {
-        self.forward
-    }
-
-    /// Selects one complete reduction implementation without cross-profile fallback.
-    #[must_use]
-    pub const fn with_reduction_profile(mut self, profile: LlamaReductionProfile) -> Self {
-        self.forward = self.forward.with_reduction_profile(profile);
-        self.ragged_attention_reduction_profile = profile.attention_profile();
-        self
-    }
-
-    /// Selects every established canonical reduction implementation.
-    #[must_use]
-    pub const fn with_canonical_reductions(self) -> Self {
-        self.with_reduction_profile(LlamaReductionProfile::CanonicalV1)
-    }
-
-    /// Selects the complete fixed-contiguous-37 balanced reduction profile.
-    #[must_use]
-    pub const fn with_fixed37_reductions(self) -> Self {
-        self.with_reduction_profile(LlamaReductionProfile::FixedContiguous37BalancedV1)
-    }
-
-    /// Returns the forward/decode reduction profile used as the whole-profile source.
-    ///
-    /// The compatibility-only ragged attention builders can deliberately make
-    /// that one primitive differ. Call [`Self::reduction_profile_is_coherent`]
-    /// before labeling the executor as a complete whole-profile run.
-    #[must_use]
-    pub const fn reduction_profile(self) -> LlamaReductionProfile {
-        self.forward.reduction_profile()
-    }
-
-    /// Whether ragged attention still matches the whole-profile source.
-    #[must_use]
-    pub fn reduction_profile_is_coherent(self) -> bool {
-        self.ragged_attention_reduction_profile
-            == self.forward.reduction_profile().attention_profile()
-    }
-
-    /// Selects the reduction profile used by ragged paged attention.
-    #[must_use]
-    pub const fn with_ragged_attention_reduction_profile(
-        mut self,
-        profile: AttentionReductionProfile,
-    ) -> Self {
-        self.ragged_attention_reduction_profile = profile;
-        self
-    }
-
-    /// Selects the existing canonical ragged online-softmax implementation.
-    #[must_use]
-    pub const fn with_canonical_ragged_attention(mut self) -> Self {
-        self.ragged_attention_reduction_profile = AttentionReductionProfile::CanonicalV1;
-        self
-    }
-
-    /// Selects fixed37 no-HBM two-pass ragged attention.
-    ///
-    /// Execution rejects logical prefixes above 8192 during host preflight,
-    /// before device metadata upload or paged-KV mutation.
-    #[must_use]
-    pub const fn with_fixed37_ragged_attention(mut self) -> Self {
-        self.ragged_attention_reduction_profile =
-            AttentionReductionProfile::FixedContiguous37BalancedV1;
-        self
-    }
-
-    #[must_use]
-    pub const fn ragged_attention_reduction_profile(self) -> AttentionReductionProfile {
-        self.ragged_attention_reduction_profile
-    }
-
-    /// Selects the canonical GQA shared-K/V ragged attention launch.
-    ///
-    /// The selection applies only to [`AttentionReductionProfile::CanonicalV1`].
-    /// Fixed37 retains its separately specified two-pass implementation.
-    #[must_use]
-    pub const fn with_grouped_ragged_attention_heads(mut self) -> Self {
-        self.ragged_attention_implementation = RaggedAttentionImplementation::GroupedHeads;
-        self
-    }
-
-    /// Restores the established one-warp-per-head ragged attention launch.
-    #[must_use]
-    pub const fn with_legacy_ragged_attention_heads(mut self) -> Self {
-        self.ragged_attention_implementation = RaggedAttentionImplementation::Legacy;
-        self
-    }
-
-    /// Returns the canonical ragged attention launch implementation.
-    #[must_use]
-    pub const fn ragged_attention_implementation(self) -> RaggedAttentionImplementation {
-        self.ragged_attention_implementation
-    }
-
-    /// Selects the exact fused attention residual/post-norm implementation.
-    #[must_use]
-    pub const fn with_fused_residual_norm(mut self) -> Self {
-        self.residual_norm = ResidualNormImplementation::Fused;
-        self
-    }
-
-    /// Selects the exact standalone rollback implementation.
-    #[must_use]
-    pub const fn with_separate_residual_norm(mut self) -> Self {
-        self.residual_norm = ResidualNormImplementation::Separate;
-        self
-    }
-
-    #[must_use]
-    pub const fn residual_norm_implementation(self) -> ResidualNormImplementation {
-        self.residual_norm
-    }
-
-    /// Selects the established primitive-local completion boundary.
-    #[must_use]
-    pub const fn with_per_operation_completion(mut self) -> Self {
-        self.execution_completion = ExecutionCompletionImplementation::PerOperation;
-        self
-    }
-
-    /// Selects one completion boundary for the fixed graph and output gather.
-    #[must_use]
-    pub const fn with_iteration_batch_completion(mut self) -> Self {
-        self.execution_completion = ExecutionCompletionImplementation::IterationBatch;
-        self
-    }
-
-    #[must_use]
-    pub const fn execution_completion_implementation(self) -> ExecutionCompletionImplementation {
-        self.execution_completion
-    }
-
-    /// Selects the opt-in one-copy pinned metadata transport.
-    ///
-    /// Packed async requires iteration-batch completion and is rejected during
-    /// cold preparation when paired with per-operation completion.
-    #[must_use]
-    pub const fn with_packed_async_metadata(mut self) -> Self {
-        self.metadata_transport = BatchMetadataTransport::PackedAsync;
-        self
-    }
-
-    /// Restores the established synchronous token-plus-metadata uploads.
-    #[must_use]
-    pub const fn with_synchronous_metadata(mut self) -> Self {
-        self.metadata_transport = BatchMetadataTransport::Synchronous;
-        self
-    }
-
-    #[must_use]
-    pub const fn metadata_transport(self) -> BatchMetadataTransport {
-        self.metadata_transport
-    }
-
-    fn validate_metadata_transport(self) -> LlamaBatchExecutorResult<()> {
-        if self.metadata_transport == BatchMetadataTransport::PackedAsync
-            && self.execution_completion != ExecutionCompletionImplementation::IterationBatch
-        {
-            return Err(LlamaBatchExecutorError::InvalidConfiguration {
-                field: "metadata_transport",
-                reason: "packed async metadata requires iteration-batch completion",
-            });
-        }
-        Ok(())
-    }
-
-    /// Enables exact active-row power-of-two execution shapes.
-    #[must_use]
-    pub const fn with_active_row_buckets(mut self) -> Self {
-        self.shape_policy = LlamaBatchShapePolicy::ActiveRowBuckets;
-        self.shape_buckets = LlamaBatchShapeBuckets::automatic(self.metadata.max_input_tokens());
-        self
-    }
-
-    /// Enables exact active-row execution with a caller-supplied cold bucket list.
-    ///
-    /// The list must start at one, be strictly increasing, contain no more
-    /// than [`MAX_LLAMA_BATCH_SHAPE_BUCKETS`] entries, and end at exactly the
-    /// configured `max_input_tokens` value.
-    ///
-    /// # Errors
-    ///
-    /// Returns before changing the configuration when any bucket invariant is
-    /// violated.
-    pub fn with_custom_active_row_buckets(
-        mut self,
-        buckets: &[usize],
-    ) -> LlamaBatchExecutorResult<Self> {
-        self.shape_buckets =
-            LlamaBatchShapeBuckets::custom(buckets, self.metadata.max_input_tokens())?;
-        self.shape_policy = LlamaBatchShapePolicy::ActiveRowBuckets;
-        Ok(self)
-    }
-
-    /// Restores the established fixed-maximum rollback graph.
-    #[must_use]
-    pub const fn with_fixed_maximum_shape(mut self) -> Self {
-        self.shape_policy = LlamaBatchShapePolicy::FixedMaximum;
-        self
-    }
-
-    #[must_use]
-    pub const fn shape_policy(self) -> LlamaBatchShapePolicy {
-        self.shape_policy
-    }
-
-    /// Returns the cold-configured active-row bucket list.
-    ///
-    /// Fixed-maximum mode ignores this list and executes only the maximum
-    /// shape. Re-enabling active-row mode rebuilds the automatic list unless a
-    /// custom list is supplied explicitly.
-    #[must_use]
-    pub const fn configured_shape_buckets(&self) -> &[usize] {
-        self.shape_buckets.as_slice()
-    }
-
-    /// Selects the exact dense row count for one prospective active batch.
-    ///
-    /// # Errors
-    ///
-    /// Returns when `active_rows` is empty or exceeds the metadata capacity.
-    pub fn select_dense_rows(self, active_rows: usize) -> LlamaBatchExecutorResult<usize> {
-        if self.shape_policy == LlamaBatchShapePolicy::FixedMaximum {
-            self.shape_policy
-                .select_dense_rows(active_rows, self.metadata.max_input_tokens())
-        } else {
-            self.shape_buckets.select(active_rows)
-        }
-    }
-}
-
 fn shape_history_for_config(
     config: PreparedLlamaBatchExecutorConfig,
 ) -> LlamaBatchExecutorResult<LlamaBatchShapeHistory> {
     LlamaBatchShapeHistory::new(
-        config.shape_policy,
-        config.shape_buckets.as_slice(),
-        config.metadata.max_input_tokens(),
+        config.shape_policy(),
+        config.configured_shape_buckets(),
+        config.metadata().max_input_tokens(),
     )
 }
 
@@ -654,7 +289,7 @@ impl PreparedLlamaBatchExecutor {
                 actual: attention.head_dimension(),
             });
         }
-        let bounds = config.metadata;
+        let bounds = config.metadata();
         if bounds.max_input_tokens() > spec.max_sequence_length() {
             return Err(LlamaBatchExecutorError::InvalidConfiguration {
                 field: "max_input_tokens",
@@ -668,14 +303,14 @@ impl PreparedLlamaBatchExecutor {
             context,
             stream,
             bounds.max_input_tokens(),
-            config.forward,
+            config.forward(),
         )?;
         let shape_variants = match prepare_shape_variants(
             model,
             context,
             &forward,
-            config.shape_policy,
-            config.shape_buckets.as_slice(),
+            config.shape_policy(),
+            config.configured_shape_buckets(),
         ) {
             Ok(variants) => variants,
             Err(error) => {
@@ -790,7 +425,7 @@ impl PreparedLlamaBatchExecutor {
                 .map_err(|source| batch_cuda(rope_site, source))?;
         }
 
-        let device_input = allocate_device_input(context, bounds, config.metadata_transport)?;
+        let device_input = allocate_device_input(context, bounds, config.metadata_transport())?;
         let gathered_logits_capacity_bytes =
             output_logits_bytes(bounds.max_output_slots(), dimensions.vocabulary_size())?;
         let gathered_logits = if bounds.max_output_slots() == 0 {
@@ -812,11 +447,11 @@ impl PreparedLlamaBatchExecutor {
                 ExecutionSite::global(LlamaOp::OutputGather),
             )?)
         };
-        let host = allocate_host_workspace(context, bounds, config.metadata_transport)?;
+        let host = allocate_host_workspace(context, bounds, config.metadata_transport())?;
         let allocation_report = build_batch_allocation_report(
             forward.allocation_report(),
             bounds,
-            config.metadata_transport,
+            config.metadata_transport(),
             layout,
             rope_bytes_per_kind,
             gathered_logits_capacity_bytes,
@@ -1162,7 +797,8 @@ impl PreparedLlamaBatchExecutor {
                 // have started, semantic KV state may be partial and the owner
                 // must never be reused. Established error-specific and nested
                 // GEMM poison handling remains active in both cases below.
-                if config.execution_completion == ExecutionCompletionImplementation::IterationBatch
+                if config.execution_completion_implementation()
+                    == ExecutionCompletionImplementation::IterationBatch
                     && dispatch_disposition.mutation_may_have_occurred()
                 {
                     *poisoned = true;
@@ -1200,7 +836,7 @@ impl PreparedLlamaBatchExecutor {
     /// Returns when `output_count` exceeds the cold-prepared bound or the byte
     /// length cannot be represented as a host `usize`.
     pub fn output_byte_len_for(&self, output_count: usize) -> LlamaBatchExecutorResult<usize> {
-        if output_count > self.config.metadata.max_output_slots() {
+        if output_count > self.config.metadata().max_output_slots() {
             return Err(LlamaBatchExecutorError::InvalidBatch {
                 field: "output_count",
                 reason: "prospective output count exceeds the cold-prepared bound",
@@ -1225,7 +861,7 @@ impl PreparedLlamaBatchExecutor {
         &self,
         output_count: usize,
     ) -> LlamaBatchExecutorResult<usize> {
-        if output_count > self.config.metadata.max_output_slots() {
+        if output_count > self.config.metadata().max_output_slots() {
             return Err(LlamaBatchExecutorError::InvalidBatch {
                 field: "output_count",
                 reason: "prospective output count exceeds the cold-prepared bound",
@@ -1447,22 +1083,6 @@ impl PreparedLlamaBatchExecutor {
     }
 }
 
-pub(super) const fn normalize_prepared_config(
-    config: PreparedLlamaBatchExecutorConfig,
-) -> PreparedLlamaBatchExecutorConfig {
-    PreparedLlamaBatchExecutorConfig {
-        metadata: config.metadata,
-        forward: config.forward.with_optimized_attention(),
-        ragged_attention_reduction_profile: config.ragged_attention_reduction_profile,
-        ragged_attention_implementation: config.ragged_attention_implementation,
-        residual_norm: config.residual_norm,
-        execution_completion: config.execution_completion,
-        metadata_transport: config.metadata_transport,
-        shape_policy: config.shape_policy,
-        shape_buckets: config.shape_buckets,
-    }
-}
-
 // HOT_BATCH_EXECUTE_BEGIN
 #[allow(
     clippy::too_many_arguments,
@@ -1489,7 +1109,7 @@ fn execute_packed(
     dispatch_disposition: &mut BatchDispatchDisposition,
     stream: &mut CudaStream,
 ) -> LlamaBatchExecutorResult<()> {
-    let bounds = config.metadata;
+    let bounds = config.metadata();
     let active = packed.total_input_tokens();
     if dense_rows != forward.plan.sequence_length()
         && !shape_variants
@@ -1514,7 +1134,7 @@ fn execute_packed(
         )?,
     )
     .map_err(|source| batch_cuda(metadata_site, source))?;
-    let packed_layout = match (&mut host.input, &mut *device, config.metadata_transport) {
+    let packed_layout = match (&mut host.input, &mut *device, config.metadata_transport()) {
         (
             BatchHostInput::PerOperation(host),
             BatchDeviceInput::PerOperation(device),
@@ -1643,10 +1263,10 @@ fn execute_packed(
             weights,
             gemms,
             buffers,
-            config.residual_norm,
+            config.residual_norm_implementation(),
             rms_norm_profile,
-            config.ragged_attention_reduction_profile,
-            config.ragged_attention_implementation,
+            config.ragged_attention_reduction_profile(),
+            config.ragged_attention_implementation(),
             layout,
             key_cache,
             value_cache,
@@ -1678,7 +1298,10 @@ fn execute_packed(
         Ok(())
     };
 
-    match (config.execution_completion, config.metadata_transport) {
+    match (
+        config.execution_completion_implementation(),
+        config.metadata_transport(),
+    ) {
         (ExecutionCompletionImplementation::PerOperation, BatchMetadataTransport::Synchronous) => {
             let BatchDeviceInput::PerOperation(device) = &*device else {
                 return Err(LlamaBatchExecutorError::InvalidConfiguration {
@@ -2768,7 +2391,7 @@ mod tests {
                 normalized.ragged_attention_reduction_profile(),
                 normalized.ragged_attention_implementation(),
             ),
-            RAGGED_PAGED_ATTENTION_GROUPED_HEADS_D64_V1
+            "riley.cuda.ragged-paged-attention.grouped-heads-d64-v1"
         );
         assert_eq!(
             runtime_selection_policy_id(normalized.reduction_profile()),
@@ -2781,7 +2404,7 @@ mod tests {
                 fixed.ragged_attention_reduction_profile(),
                 fixed.ragged_attention_implementation(),
             ),
-            RAGGED_PAGED_ATTENTION_FIXED37_TWO_PASS_D64_S8192_V1
+            "riley.cuda.ragged-paged-attention.fixed37-two-pass-d64-s8192-v1"
         );
         assert_eq!(
             runtime_selection_policy_id(fixed.reduction_profile()),

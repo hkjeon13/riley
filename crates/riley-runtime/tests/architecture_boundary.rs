@@ -4,6 +4,7 @@ const EXECUTOR_METRICS: &str = include_str!("../src/llama/executor/metrics.rs");
 const EXECUTOR_ERROR: &str = include_str!("../src/llama/executor/error.rs");
 const EXECUTOR_SHAPE: &str = include_str!("../src/llama/executor/shape.rs");
 const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
+const EXECUTOR_CONFIG: &str = include_str!("../src/llama/executor/config.rs");
 const EXECUTOR_DEVICE_VIEWS: &str = include_str!("../src/llama/executor/device_views.rs");
 const EXECUTOR_DISPATCH: &str = include_str!("../src/llama/executor/dispatch.rs");
 const EXECUTOR_GEMM_PLAN: &str = include_str!("../src/llama/executor/gemm_plan.rs");
@@ -34,6 +35,76 @@ fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
         assert!(
             !EXECUTOR_METRICS.contains(forbidden),
             "executor metrics crossed its value-only boundary with {forbidden:?}"
+        );
+    }
+}
+
+#[test]
+fn executor_config_only_selects_and_validates_host_preparation_policy() {
+    for required in [
+        "pub enum ResidualNormImplementation",
+        "pub enum ExecutionCompletionImplementation",
+        "pub enum BatchMetadataTransport",
+        "pub enum RaggedAttentionImplementation",
+        "const fn execution_completion_implementation_id",
+        "const fn batch_metadata_transport_id",
+        "const fn residual_norm_implementation_id",
+        "const fn ragged_attention_implementation_id",
+        "const fn runtime_selection_policy_id",
+        "pub struct PreparedLlamaBatchExecutorConfig",
+        "fn validate_metadata_transport",
+        "packed async metadata requires iteration-batch completion",
+        "LlamaBatchShapeBuckets::custom",
+        "fn normalize_prepared_config",
+    ] {
+        assert!(
+            EXECUTOR_CONFIG.contains(required),
+            "executor config omitted required host-preparation token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "batch_executor",
+        "CudaContext",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "LlamaExecutionPlan",
+        "LoadedModel",
+        "ForwardBuffers",
+        "GemmPlans",
+        "BatchDeviceInput",
+        "BatchHostInput",
+        "PreparedLlamaBatchMetadata",
+        "LlamaPackedBatchMetadata",
+        "PackedBatchV1",
+        "ExecutionSite",
+        "LlamaOp",
+        "pack_iteration_input",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+        "upload_from_slice",
+        "copy_from_pinned",
+        "download_to_slice",
+        "execute_iteration_command_batch",
+        "dispatch_output_primitives",
+        "decode_greedy_tokens",
+        "poison_for_batch_error",
+        "close(",
+        "Vec",
+        "Box",
+        "String",
+        "format!",
+    ] {
+        assert!(
+            !EXECUTOR_CONFIG.contains(forbidden),
+            "executor config crossed its host-preparation boundary with {forbidden:?}"
         );
     }
 }

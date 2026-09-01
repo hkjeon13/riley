@@ -20,7 +20,8 @@ count를 metadata helper로, C04-24는 typed `usize`-to-`u64` conversion을 erro
 C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26은 typed packed-region
 validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar conversion을 error facade로
 일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했으며, C04-29는
-absolute RoPE cold table shape preflight를 rope helper로 공유했다. CUDA owner, KV,
+absolute RoPE cold table shape preflight를 rope helper로 공유했다. C04-30은 host-only prepared
+executor configuration을 config helper로 분리한다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -39,6 +40,7 @@ write/metadata transport, dispatch, output public API와 production default는 �
 ```text
 crates/riley-runtime/src/llama/executor/
   mod.rs                # public composition and stable facade
+  config.rs             # host-only prepared executor configuration and validation
   owner.rs              # weights/KV/stream/workspace lifetime
   buffers.rs            # cold-reserved tensor/device/host buffers
   shape.rs              # active-row bucket and shape variant
@@ -409,6 +411,22 @@ floor semantics, zero-element table은 유지한다.
 F32 byte sizing, angles의 단일 allocation과 CPU cosine/sine의 순차 allocation, native-byte write loop,
 CUDA upload/launch와 owner lifecycle은 각 caller에 그대로 남는다. 이 source-only slice는 GPU parity나
 performance non-regression을 주장하지 않는다.
+
+### C04-30 — host-only prepared-executor configuration extraction
+
+selection enum/ID helper, `PreparedLlamaBatchExecutorConfig` builder/validation 및
+`normalize_prepared_config`는 `llama/executor/config.rs`로 이동한다. `BatchOutputMode`, mutable
+shape-history와 `shape_history_for_config`는 resource-owning batch owner에 그대로 남는다. config
+component는 scalar configuration과 validation만 다루며 CUDA context/buffer/stream, model weight, KV
+arena, metadata transport storage, allocation, dispatch, output 또는 poison owner를 소유하거나 호출하지
+않는다.
+
+기존 `riley_runtime::llama::*` public path와 nominal type은 `batch_executor` facade의 reexport로
+그대로 유지한다. batch owner는 normalized config의 기존 field/validation 순서와 cold prepare,
+resource ownership, cleanup/poison/dispatch 순서를 그대로 유지한다. source-boundary test는 config
+component가 scheduler/server와 runtime resource owner를 import하지 않음을 고정한다. 이
+behavior-preserving CPU-only slice는 CUDA parity, allocation evidence 또는 performance
+non-regression을 주장하지 않는다.
 
 ## 6. Allocation 검증
 
