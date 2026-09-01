@@ -649,14 +649,23 @@ mod tests {
         PreparedLlamaBatchMetadata,
     };
     use crate::llama::graph::{
-        GraphComputeType, GraphDataType, GraphDeviceSignature, GraphGemmPlanSetId,
+        ExecutionGraphPolicy, GraphCaptureSafety, GraphComputeType, GraphDataType,
+        GraphDeviceSignature, GraphDispatchEligibility, GraphDispatchRequest, GraphGemmPlanSetId,
         GraphGeometrySignature, GraphImplementationId, GraphImplementationSignature,
-        GraphLayoutSignature, GraphMetadataLayoutSignature, GraphModelArchitecture,
-        GraphModelSignature, GraphReductionPolicyId, GraphRevisionFingerprint,
-        GraphSamplingBackend, GraphStaticSignature, GraphTensorSignature,
+        GraphInventoryState, GraphLayoutSignature, GraphMetadataLayoutSignature,
+        GraphModelArchitecture, GraphModelSignature, GraphOperatorCapability,
+        GraphReductionPolicyId, GraphRevisionFingerprint, GraphSamplingBackend,
+        GraphStaticSignature, GraphTensorSignature, GraphWorkloadStage,
     };
     use crate::llama::graph_decode_binding::PureDecodeGraphMetadataBinding;
+    use crate::llama::graph_decode_c05_owned_h2d_exec_resolver::{
+        PureDecodeGraphV1C05H2DReplayResolution, PureDecodeGraphV1C05H2DReplayResolveError,
+    };
     use crate::llama::graph_decode_c06_identity::bind_pure_decode_graph_v1_c06_identity;
+    use crate::llama::graph_decode_c06_registry_dispatch::{
+        PureDecodeGraphV1C06RegistryDispatch, PureDecodeGraphV1C06RegistryDispatchBinding,
+        select_pure_decode_graph_v1_c06_registry_dispatch,
+    };
     use crate::llama::graph_decode_c06_signature::{
         PureDecodeGraphV1C06Signature, PureDecodeGraphV1C06SignatureBinding,
         compose_pure_decode_graph_v1_c06_signature,
@@ -672,7 +681,10 @@ mod tests {
     use crate::llama::graph_decode_layout_signature::pure_decode_graph_v1_metadata_layout_signature;
     use crate::llama::graph_decode_padding::plan_pure_decode_graph_padding;
     use crate::llama::graph_decode_preflight_binding::PureDecodeGraphV1LayoutBinding;
-    use crate::llama::graph_registry::GraphReplaySlot;
+    use crate::llama::graph_registry::{
+        GraphEntryFootprint, GraphRegistry, GraphRegistryEntry, GraphRegistryEntryState,
+        GraphRegistryLimits, GraphReplayMode, GraphReplaySlot,
+    };
     use crate::paged_kv::BLOCK_TABLE_V1_VERSION;
 
     type TestResult<T = ()> = Result<T, Box<dyn Error>>;
@@ -692,35 +704,46 @@ mod tests {
         .expect("C07 test layout must be valid")
     }
 
-    fn static_signature(metadata_layout: GraphMetadataLayoutSignature) -> GraphStaticSignature {
+    fn static_signature(
+        metadata_layout: GraphMetadataLayoutSignature,
+        revision: u8,
+    ) -> GraphStaticSignature {
+        let revision = u32::from(revision);
         GraphStaticSignature::new(
             GraphModelSignature::new(
                 GraphModelArchitecture::LlamaDecoder,
-                1,
-                GraphRevisionFingerprint::from_bytes([0xC7; 32]),
-                1,
+                revision,
+                GraphRevisionFingerprint::from_bytes([revision as u8; 32]),
+                revision,
             ),
-            GraphDeviceSignature::new(8, 9, 12_804, 12_804, 1),
+            GraphDeviceSignature::new(8, 9, 12_804, 12_804, revision),
             GraphTensorSignature::new(
                 GraphDataType::BFloat16,
                 GraphDataType::BFloat16,
                 GraphComputeType::Float32,
             ),
             GraphGeometrySignature::new(32, 4_096, 11_008, 32_000, 32, 8, 128),
-            GraphLayoutSignature::new(8_192, 16, 1, metadata_layout),
+            GraphLayoutSignature::new(8_192, 16, revision, metadata_layout),
             GraphImplementationSignature::new(
-                GraphImplementationId::new(1),
-                GraphImplementationId::new(2),
-                GraphImplementationId::new(3),
-                GraphImplementationId::new(4),
-                GraphGemmPlanSetId::new(1),
-                GraphReductionPolicyId::new(1),
+                GraphImplementationId::new(revision),
+                GraphImplementationId::new(revision + 1),
+                GraphImplementationId::new(revision + 2),
+                GraphImplementationId::new(revision + 3),
+                GraphGemmPlanSetId::new(revision),
+                GraphReductionPolicyId::new(revision),
             ),
         )
     }
 
     fn signature_binding(
         layout: PureDecodeGraphMetadataLayout,
+    ) -> PureDecodeGraphV1C06SignatureBinding {
+        signature_binding_with_revision(layout, 1)
+    }
+
+    fn signature_binding_with_revision(
+        layout: PureDecodeGraphMetadataLayout,
+        revision: u8,
     ) -> PureDecodeGraphV1C06SignatureBinding {
         let padding = plan_pure_decode_graph_padding(layout.bucket_rows())
             .expect("every exact C07 layout bucket must have a padding plan");
@@ -732,13 +755,63 @@ mod tests {
             bind_pure_decode_graph_v1_c06_identity(&binding, GraphSamplingBackend::GpuGreedy);
         match compose_pure_decode_graph_v1_c06_signature(
             &identity,
-            static_signature(pure_decode_graph_v1_metadata_layout_signature(layout)),
+            static_signature(
+                pure_decode_graph_v1_metadata_layout_signature(layout),
+                revision,
+            ),
         )
         .expect("matching C07 and C06 metadata identities must compose")
         {
             PureDecodeGraphV1C06Signature::Bound(binding) => binding,
             PureDecodeGraphV1C06Signature::Ineligible(reason) => {
                 panic!("exact C07 test layout unexpectedly ineligible: {reason:?}")
+            }
+        }
+    }
+
+    fn request() -> GraphDispatchRequest {
+        GraphDispatchRequest::new(
+            ExecutionGraphPolicy::Auto,
+            GraphDispatchEligibility::new(
+                GraphWorkloadStage::PureDecode,
+                true,
+                true,
+                true,
+                GraphCaptureSafety::new(
+                    GraphSamplingBackend::GpuGreedy,
+                    GraphOperatorCapability::Supported,
+                    true,
+                ),
+            ),
+            GraphInventoryState::NotPrepared,
+        )
+    }
+
+    fn selected_binding(
+        signature_binding: PureDecodeGraphV1C06SignatureBinding,
+        replay_slot: GraphReplaySlot,
+    ) -> PureDecodeGraphV1C06RegistryDispatchBinding {
+        let registry = GraphRegistry::<1>::try_new(
+            GraphRegistryLimits::new(1, 1, 0, 16, 16),
+            &[GraphRegistryEntry::new(
+                signature_binding.signature(),
+                GraphReplayMode::FullGraph,
+                replay_slot,
+                GraphRegistryEntryState::Prepared,
+                GraphEntryFootprint::new(1, 1),
+            )],
+        )
+        .expect("one prepared C07 full-graph entry must fit");
+        match select_pure_decode_graph_v1_c06_registry_dispatch(
+            &PureDecodeGraphV1C06Signature::Bound(signature_binding),
+            request(),
+            &registry,
+        )
+        .expect("matching C07 registry entry must select")
+        {
+            PureDecodeGraphV1C06RegistryDispatch::Bound(binding) => binding,
+            PureDecodeGraphV1C06RegistryDispatch::Ineligible(reason) => {
+                panic!("exact C07 test fixture unexpectedly ineligible: {reason:?}")
             }
         }
     }
@@ -991,6 +1064,177 @@ mod tests {
         assert!(stream_context.allocation_stats()?.is_zero());
         stream_context.close()?;
         resource_context.close()?;
+        Ok(())
+    }
+
+    /// Exercises the complete C07-26/25 test-only H2D selection boundary.
+    ///
+    /// This regression intentionally remains outside production execution. It
+    /// combines C07's exact host/pinned/device provenance with C07-25's
+    /// complete-signature and logical-slot selection, then uses C05's existing
+    /// test-only replay accessor to establish byte-exact H2D lifecycle parity.
+    #[test]
+    #[ignore = "requires a remote CUDA GPU"]
+    fn c07_27_resolves_exact_metadata_owner_and_replays_fresh_host_leases() -> TestResult {
+        const REPLAYS: usize = 32;
+        const REPLAY_SLOT: u32 = 27;
+
+        let (context, stream) = first_context()?;
+        let layout = layout(1, 1, 3, 5);
+        let owner_signature_binding = signature_binding(layout);
+        let mismatched_signature_binding = signature_binding_with_revision(layout, 2);
+        let mut prepared =
+            PreparedLlamaBatchMetadata::prepare(LlamaBatchMetadataConfig::new(1, 1, 1, 1, 1)?)?;
+        let token_ids = [0x0102_0304_u32];
+        let physical_block_ids = [0_u32];
+        let valid_tokens = [1_u16];
+        let rows = [LlamaBatchRow::new(
+            0xfeed_beef,
+            LlamaBatchRowKind::Decode,
+            &token_ids,
+            1,
+            LlamaBatchBlockTable::new(
+                BLOCK_TABLE_V1_VERSION,
+                &physical_block_ids,
+                &valid_tokens,
+                1,
+            ),
+            Some(0),
+        )];
+        let metadata = prepared.pack(&rows)?;
+        let mut host_slab = PureDecodeGraphV1ExactHostSlab::prepare(layout)?;
+        let pinned = PureDecodeGraphV1ExactPinnedHostSlab::prepare(&context, layout)?;
+        let device = PureDecodeGraphV1ExactDeviceSlab::prepare(&context, layout)?;
+        let allocation_baseline = context.allocation_stats()?;
+        let cold_resources = PureDecodeGraphV1C05H2DColdResources::try_new(
+            owner_signature_binding,
+            stream,
+            pinned,
+            device,
+        )
+        .expect("matching C07 typed slabs must bind to their complete signature");
+        let initial_header = [0xA0_u8, 0xA1, 0x00];
+        let initial_control_status = [0xC0_u8, 0xC1, 0xC2, 0xC3, 0x00];
+        let initial_lease = match host_slab
+            .write_exact_v1_leased(&metadata, &initial_header, &initial_control_status)
+            .map_err(|error| {
+                std::io::Error::other(format!("C07 exact initial host write failed: {error:?}"))
+            })? {
+            PureDecodeGraphV1ExactHostSlabWrite::Written(lease) => lease,
+            PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason) => {
+                return Err(format!("strict C07 M1 fixture was ineligible: {reason:?}").into());
+            }
+        };
+        let replay_slot = GraphReplaySlot::new(REPLAY_SLOT);
+        let mut owner = cold_resources
+            .instantiate_exact_owner(initial_lease, replay_slot)
+            .expect("exact C07 metadata slabs must instantiate one C05 H2D owner");
+
+        let signature_mismatch = match owner
+            .resolve(selected_binding(mismatched_signature_binding, replay_slot))
+        {
+            Ok(_) => {
+                return Err(
+                    "a mismatched C07 signature unexpectedly resolved the retained owner".into(),
+                );
+            }
+            Err(error) => error,
+        };
+        assert_eq!(
+            signature_mismatch,
+            PureDecodeGraphV1C05H2DReplayResolveError::SignatureMismatch {
+                selected: mismatched_signature_binding.signature(),
+                owned: owner_signature_binding.signature(),
+            },
+            "signature mismatch must leave the C07 typed owner reusable",
+        );
+        let slot_mismatch = match owner.resolve(selected_binding(
+            owner_signature_binding,
+            GraphReplaySlot::new(REPLAY_SLOT + 1),
+        )) {
+            Ok(_) => {
+                return Err(
+                    "a mismatched C07 replay slot unexpectedly resolved the retained owner".into(),
+                );
+            }
+            Err(error) => error,
+        };
+        assert_eq!(
+            slot_mismatch,
+            PureDecodeGraphV1C05H2DReplayResolveError::SlotMismatch {
+                selected: GraphReplaySlot::new(REPLAY_SLOT + 1),
+                owned: replay_slot,
+            },
+            "slot mismatch must leave the C07 typed owner reusable",
+        );
+
+        let mut expected = Vec::new();
+        for replay in 0..REPLAYS {
+            let replay = u8::try_from(replay)?;
+            let header = [0xA0_u8, 0xA1, replay];
+            let control_status = [0xC0_u8, 0xC1, 0xC2, 0xC3, replay];
+            let host_lease = match host_slab
+                .write_exact_v1_leased(&metadata, &header, &control_status)
+                .map_err(|error| {
+                    std::io::Error::other(format!("C07 exact host write failed: {error:?}"))
+                })? {
+                PureDecodeGraphV1ExactHostSlabWrite::Written(lease) => lease,
+                PureDecodeGraphV1ExactHostSlabWrite::Ineligible(reason) => {
+                    return Err(
+                        format!("strict C07 M1 replay fixture was ineligible: {reason:?}").into(),
+                    );
+                }
+            };
+            let payload = host_lease.bytes().to_vec();
+            {
+                let mut resolved =
+                    match owner.resolve(selected_binding(owner_signature_binding, replay_slot))? {
+                        PureDecodeGraphV1C05H2DReplayResolution::FullGraph(resolved) => resolved,
+                        PureDecodeGraphV1C05H2DReplayResolution::ExactEager { reason } => {
+                            return Err(format!(
+                                "matching C07 owner unexpectedly fell back: {reason:?}"
+                            )
+                            .into());
+                        }
+                    };
+                assert_eq!(resolved.replay_slot(), replay_slot);
+                resolved
+                    .exec_for_gpu_test()
+                    .launch_with_source(host_lease.bytes())?
+                    .finish()?;
+            }
+            expected = payload;
+            assert_eq!(
+                context.allocation_stats()?,
+                allocation_baseline,
+                "C07-27 replay changed cold CUDA allocation accounting on replay {replay}",
+            );
+        }
+
+        let PureDecodeGraphV1C05H2DColdResources {
+            stream: mut capture_stream,
+            pinned,
+            device,
+            ..
+        } = owner.close()?;
+        let mut source = pinned.into_c05_owned_graph_h2d_source();
+        let mut destination = device.into_c05_owned_graph_h2d_destination();
+        let mut actual = vec![0_u8; expected.len()];
+        destination.download_to_slice(0, &mut actual, &mut source, &mut capture_stream)?;
+        assert_eq!(
+            actual, expected,
+            "last selected C07 host lease must reach the provenance-bound device slab byte-exactly",
+        );
+        source.close()?;
+        destination.close()?;
+        capture_stream.close()?;
+        drop(host_slab);
+        assert!(context.allocation_stats()?.is_zero());
+        context.close()?;
+        println!(
+            "c07-27-metadata-owner-selection slot={REPLAY_SLOT} replays={REPLAYS} bytes={} status=passed",
+            actual.len(),
+        );
         Ok(())
     }
 }
