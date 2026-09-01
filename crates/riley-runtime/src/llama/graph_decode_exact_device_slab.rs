@@ -162,4 +162,15 @@ impl PureDecodeGraphV1ExactDeviceSlab {
     pub(crate) fn close(self) -> CudaResult<()> {
         self.device.close()
     }
+
+    /// Exposes the owned device buffer only to the internal CUDA parity test.
+    ///
+    /// Production C07 code must continue to reach the allocation through an
+    /// exact pinned/device binding or a completed device-fresh lease.  The
+    /// test probe exists solely to perform an independent D2H byte comparison
+    /// after that lease has ended.
+    #[cfg(test)]
+    pub(crate) fn device_buffer_for_gpu_test(&mut self) -> &mut CudaDeviceBuffer {
+        &mut self.device
+    }
 }

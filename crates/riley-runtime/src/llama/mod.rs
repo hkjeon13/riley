@@ -34,6 +34,8 @@ mod graph_decode_exact_field_sources;
 #[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-17 deliberately precedes graph/capture ownership.
 mod graph_decode_exact_h2d_completion;
+#[cfg(all(test, feature = "cuda"))]
+mod graph_decode_exact_h2d_gpu;
 #[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-16 deliberately precedes completion ownership.
 mod graph_decode_exact_h2d_submission;
