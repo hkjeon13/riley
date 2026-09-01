@@ -15,12 +15,87 @@
 #include <limits>
 #include <new>
 
+// CUDA's primary context is shared by every RileyCudaContext for one device.
+// Keep a small process-lifetime domain per device so a capture begun through
+// one wrapper can safely gate context-wide controls reached through another.
+// Domains are intentionally never reclaimed: a CUDA primary context can be
+// retained by code outside this ABI, so retiring shared host metadata would
+// otherwise create a use-after-free race. The set is bounded by the devices a
+// process can observe.
+struct RileyCudaCaptureDomain {
+  explicit RileyCudaCaptureDomain(CUdevice selected_device) noexcept
+      : device(selected_device),
+        active_captures(0),
+        broad_control_uses(0),
+        pending_smoke_fills(0),
+        pending_copies(0),
+        next(nullptr) {}
+
+  CUdevice device;
+  std::atomic_flag admission_lock = ATOMIC_FLAG_INIT;
+  std::atomic<uint32_t> active_captures;
+  std::atomic<uint32_t> broad_control_uses;
+  // A diagnostic smoke buffer owns allocation, completion, and free work that
+  // cannot be abandoned into a live capture. This count remains published from
+  // before allocation through successful native-buffer consumption.
+  std::atomic<uint32_t> pending_smoke_fills;
+  // A pending asynchronous copy owns Rust-side buffer-borrow state that must
+  // settle through CUDA synchronization. Keep it visible from before enqueue
+  // through native-copy consumption so capture cannot strand that owner.
+  std::atomic<uint32_t> pending_copies;
+  RileyCudaCaptureDomain* next;
+};
+
+struct RileyCudaContext;
+struct RileyCudaGraphCapture;
+struct RileyCudaDeferredCloseNode;
+
+// `consumed` records native close ownership independently of status. CUDA may
+// report a deferred error after consuming an object, so a consumed node must be
+// removed from the FIFO even if `status` is non-success; retaining it would be
+// a dangling pointer. A non-consumed failed node stays queued fail-closed.
+struct RileyCudaDeferredCloseResult {
+  RileyCudaStatus status;
+  bool consumed;
+};
+
+// A deferred callback owns the payload and may destroy the containing node.
+// The exact active capture owner is supplied so callbacks may enter the
+// resource's own (including foreign) context through CurrentContext.
+using RileyCudaDeferredCloseCallback = RileyCudaDeferredCloseResult (*)(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept;
+
+// This node is embedded in a resource that has a CUDA-bearing close path. No
+// allocation occurs when a safe close transfers that resource to an active
+// capture. `owner` is the resource's actual context, not necessarily the
+// capture owner's context; that distinction is required for foreign wrappers
+// sharing the same primary-device capture domain.
+struct RileyCudaDeferredCloseNode {
+  RileyCudaDeferredCloseNode() noexcept
+      : next(nullptr),
+        owner(nullptr),
+        payload(nullptr),
+        callback(nullptr),
+        queued(false) {}
+
+  RileyCudaDeferredCloseNode* next;
+  RileyCudaContext* owner;
+  void* payload;
+  RileyCudaDeferredCloseCallback callback;
+  bool queued;
+};
+
 struct RileyCudaContext {
   RileyCudaContext(CUdevice selected_device, CUcontext primary_context,
-                       int32_t device_ordinal) noexcept
+                   int32_t device_ordinal,
+                   RileyCudaCaptureDomain* selected_capture_domain) noexcept
       : device(selected_device),
         context(primary_context),
         ordinal(device_ordinal),
+        capture_domain(selected_capture_domain),
+        deferred_close(),
         live_children(0),
         restoration_failed(false),
         device_live_bytes(0),
@@ -31,6 +106,8 @@ struct RileyCudaContext {
   CUdevice device;
   CUcontext context;
   int32_t ordinal;
+  RileyCudaCaptureDomain* capture_domain;
+  RileyCudaDeferredCloseNode deferred_close;
   std::atomic<uint32_t> live_children;
   std::atomic<bool> restoration_failed;
   std::atomic_flag allocation_stats_lock = ATOMIC_FLAG_INIT;
@@ -51,6 +128,7 @@ struct RileyCudaStream {
       : owner(owning_context),
         stream(native_stream),
         active_uses(0),
+        deferred_close(),
         command_batch_owner(nullptr),
         command_batch_use_count(0),
         command_batch_uses{} {}
@@ -60,6 +138,7 @@ struct RileyCudaStream {
   // One exclusive asynchronous-use lease covers copies and synchronously
   // completing primitives. A stuck value is an intentional fail-closed leak.
   std::atomic<uint32_t> active_uses;
+  RileyCudaDeferredCloseNode deferred_close;
   // A command batch owns the stream from begin through successful end. Only
   // the owner thread may touch this cold-preallocated ledger. Each entry is
   // the active-use counter of one unique buffer or GEMM plan retained by work
@@ -71,9 +150,51 @@ struct RileyCudaStream {
       command_batch_uses[kCommandBatchUseCapacity];
 };
 
+// An active ThreadLocal stream capture owns this wrapper until a single
+// cudaStreamEndCapture attempt has a fully known recovery result. Keeping the
+// stream's active-use lease in parallel prevents unrelated entry points from
+// dereferencing the stream while CUDA is capturing it.
+struct RileyCudaGraphCapture {
+  RileyCudaGraphCapture(RileyCudaContext* owning_context,
+                        RileyCudaStream* captured_stream,
+                        RileyCudaCaptureDomain* owning_capture_domain,
+                        const void* capture_thread,
+                        uint64_t identifier) noexcept
+      : owner(owning_context),
+        stream(captured_stream),
+        capture_domain(owning_capture_domain),
+        owner_thread(capture_thread),
+        capture_id(identifier),
+        capture_started(false),
+        capture_terminated(false),
+        deferred_close_head(nullptr),
+        deferred_close_tail(nullptr),
+        unreleased_graph(nullptr) {}
+
+  RileyCudaContext* owner;
+  RileyCudaStream* stream;
+  RileyCudaCaptureDomain* capture_domain;
+  const void* owner_thread;
+  uint64_t capture_id;
+  bool capture_started;
+  // Set only after end capture, returned-graph destruction, and the capture
+  // context restoration are all known. Deferred context release may use this
+  // narrow post-physical-capture state while the TLS owner stays published.
+  bool capture_terminated;
+  // Capture-thread-only FIFO. A successful callback can free its node, so the
+  // drain saves `next` before invoking it and never touches that node again.
+  RileyCudaDeferredCloseNode* deferred_close_head;
+  RileyCudaDeferredCloseNode* deferred_close_tail;
+  // Non-null only after an end/destroy ambiguity. The wrapper is intentionally
+  // leaked together with its context child lease; retrying cudaGraphDestroy
+  // could double-destroy a graph consumed before a deferred CUDA error.
+  cudaGraph_t unreleased_graph;
+};
+
 struct RileyCudaEvent {
   RileyCudaContext* owner;
   cudaEvent_t event;
+  RileyCudaDeferredCloseNode deferred_close;
 };
 
 struct RileyCudaSmokeBuffer {
@@ -81,6 +202,11 @@ struct RileyCudaSmokeBuffer {
   float* device_data;
   uint64_t element_count;
   bool in_flight;
+  // Every successful create, including zero-element diagnostic fills, reserves
+  // the primary-context capture domain. It is released only when native buffer
+  // consumption is known, so capture cannot strand a recoverable Rust Drop
+  // path.
+  bool capture_admission_held;
   cudaStream_t launch_stream;
 };
 
@@ -90,12 +216,14 @@ struct RileyCudaDeviceBuffer {
       : owner(owning_context),
         device_data(allocation),
         byte_len(allocation_bytes),
-        active_uses(0) {}
+        active_uses(0),
+        deferred_close() {}
 
   RileyCudaContext* owner;
   void* device_data;
   uint64_t byte_len;
   std::atomic<uint32_t> active_uses;
+  RileyCudaDeferredCloseNode deferred_close;
 };
 
 struct RileyCudaPinnedHostBuffer {
@@ -105,12 +233,14 @@ struct RileyCudaPinnedHostBuffer {
       : owner(owning_context),
         host_data(allocation),
         byte_len(allocation_bytes),
-        active_uses(0) {}
+        active_uses(0),
+        deferred_close() {}
 
   RileyCudaContext* owner;
   void* host_data;
   uint64_t byte_len;
   std::atomic<uint32_t> active_uses;
+  RileyCudaDeferredCloseNode deferred_close;
 };
 
 struct RileyCudaCopy {
@@ -124,7 +254,8 @@ struct RileyCudaCopy {
         host(host_buffer),
         deferred_status(RILEY_CUDA_STATUS_SUCCESS),
         deferred_error{},
-        completed(false) {
+        completed(false),
+        capture_admission_held(true) {
     deferred_error.struct_size = sizeof(deferred_error);
   }
 
@@ -135,6 +266,7 @@ struct RileyCudaCopy {
   RileyCudaStatus deferred_status;
   RileyCudaErrorInfo deferred_error;
   bool completed;
+  bool capture_admission_held;
 };
 
 namespace riley_cuda_internal {
@@ -149,6 +281,109 @@ class AllocationStatsGuard final {
   AllocationStatsGuard(const AllocationStatsGuard&) = delete;
   AllocationStatsGuard& operator=(const AllocationStatsGuard&) = delete;
   ~AllocationStatsGuard() noexcept { lock_.clear(std::memory_order_release); }
+
+ private:
+  std::atomic_flag& lock_;
+};
+
+class CaptureDomainRegistryGuard final {
+ public:
+  CaptureDomainRegistryGuard() noexcept : lock_(capture_domain_registry_lock()) {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }
+  }
+  CaptureDomainRegistryGuard(const CaptureDomainRegistryGuard&) = delete;
+  CaptureDomainRegistryGuard& operator=(const CaptureDomainRegistryGuard&) = delete;
+  ~CaptureDomainRegistryGuard() noexcept {
+    lock_.clear(std::memory_order_release);
+  }
+
+ private:
+  static std::atomic_flag& capture_domain_registry_lock() noexcept {
+    static std::atomic_flag lock = ATOMIC_FLAG_INIT;
+    return lock;
+  }
+
+  std::atomic_flag& lock_;
+};
+
+inline RileyCudaCaptureDomain*& capture_domain_registry_head() noexcept {
+  static RileyCudaCaptureDomain* head = nullptr;
+  return head;
+}
+
+inline RileyCudaCaptureDomain* capture_domain_for_device(
+    CUdevice device) noexcept {
+  const CaptureDomainRegistryGuard guard;
+  for (RileyCudaCaptureDomain* domain = capture_domain_registry_head();
+       domain != nullptr; domain = domain->next) {
+    if (domain->device == device) {
+      return domain;
+    }
+  }
+
+  void* storage = std::calloc(1, sizeof(RileyCudaCaptureDomain));
+  if (storage == nullptr) {
+    return nullptr;
+  }
+  auto* domain = new (storage) RileyCudaCaptureDomain(device);
+  domain->next = capture_domain_registry_head();
+  capture_domain_registry_head() = domain;
+  return domain;
+}
+
+class CaptureDomainAdmissionGuard final {
+ public:
+  explicit CaptureDomainAdmissionGuard(RileyCudaCaptureDomain* domain) noexcept
+      : lock_(domain->admission_lock) {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }
+  }
+  CaptureDomainAdmissionGuard(const CaptureDomainAdmissionGuard&) = delete;
+  CaptureDomainAdmissionGuard& operator=(const CaptureDomainAdmissionGuard&) =
+      delete;
+  ~CaptureDomainAdmissionGuard() noexcept {
+    lock_.clear(std::memory_order_release);
+  }
+
+ private:
+  std::atomic_flag& lock_;
+};
+
+// ThreadLocal CUDA capture is scoped to a host thread, but a pending safe-Rust
+// copy/fill token can be moved to that thread and later need CUDA to settle.
+// Make capture-vs-pending-token admission process-global so a token on device
+// A cannot be stranded by a capture on device B. This gate intentionally does
+// not serialize independent captures: it only excludes pending lifecycle work.
+inline std::atomic_flag& capture_lifecycle_admission_lock() noexcept {
+  static std::atomic_flag lock = ATOMIC_FLAG_INIT;
+  return lock;
+}
+
+inline std::atomic<uint32_t>& capture_lifecycle_active_captures() noexcept {
+  static std::atomic<uint32_t> active_captures{0};
+  return active_captures;
+}
+
+inline std::atomic<uint32_t>& capture_lifecycle_pending_lifecycles() noexcept {
+  static std::atomic<uint32_t> pending_lifecycles{0};
+  return pending_lifecycles;
+}
+
+class CaptureLifecycleAdmissionGuard final {
+ public:
+  CaptureLifecycleAdmissionGuard() noexcept
+      : lock_(capture_lifecycle_admission_lock()) {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }
+  }
+  CaptureLifecycleAdmissionGuard(const CaptureLifecycleAdmissionGuard&) =
+      delete;
+  CaptureLifecycleAdmissionGuard& operator=(
+      const CaptureLifecycleAdmissionGuard&) = delete;
+  ~CaptureLifecycleAdmissionGuard() noexcept {
+    lock_.clear(std::memory_order_release);
+  }
 
  private:
   std::atomic_flag& lock_;
@@ -555,6 +790,149 @@ inline RileyCudaStatus runtime_error(cudaError_t result,
                    cudaGetErrorString(result));
 }
 
+// CUDA's ThreadLocal capture mode forbids potentially unsafe CUDA calls made
+// by the same host thread. Keep the exact native owner in TLS so every normal
+// context entry can reject before touching the CUDA driver. The owner remains
+// published until abort has proved end/destroy/context restoration and every
+// local lease release; uncertainty intentionally strands this gate.
+inline RileyCudaGraphCapture*& thread_graph_capture_owner() noexcept {
+  static thread_local RileyCudaGraphCapture* owner = nullptr;
+  return owner;
+}
+
+inline bool thread_has_active_graph_capture() noexcept {
+  return thread_graph_capture_owner() != nullptr;
+}
+
+inline bool try_publish_thread_graph_capture(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (capture == nullptr || thread_has_active_graph_capture()) {
+    return false;
+  }
+  thread_graph_capture_owner() = capture;
+  return true;
+}
+
+inline bool thread_graph_capture_is_owner(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr && thread_graph_capture_owner() == capture;
+}
+
+inline bool clear_thread_graph_capture_owner(
+    const RileyCudaGraphCapture* capture) noexcept {
+  if (!thread_graph_capture_is_owner(capture)) {
+    return false;
+  }
+  thread_graph_capture_owner() = nullptr;
+  return true;
+}
+
+// Resource-specific constructors configure an embedded node before returning
+// the resource to safe Rust. Existing raw `*_close` entry points deliberately
+// do not call this path: their retry-on-InvalidState ABI remains unchanged.
+inline bool initialize_capture_deferred_close_node(
+    RileyCudaDeferredCloseNode* node, RileyCudaContext* owner, void* payload,
+    RileyCudaDeferredCloseCallback callback) noexcept {
+  if (node == nullptr || owner == nullptr || payload == nullptr ||
+      callback == nullptr || node->queued) {
+    return false;
+  }
+  node->next = nullptr;
+  node->owner = owner;
+  node->payload = payload;
+  node->callback = callback;
+  return true;
+}
+
+enum class CaptureDeferredCloseEnqueueResult : uint8_t {
+  kNotCapturing,
+  kQueued,
+  kInvalidNode,
+};
+
+// This is a capture-thread-only, allocation-free handoff. A resource-specific
+// additive `*_defer_to_active_capture` entry point must consume its raw handle
+// only after this returns kQueued. The callback receives this exact owner and
+// can therefore use CurrentContext with a foreign resource context safely.
+inline CaptureDeferredCloseEnqueueResult enqueue_capture_deferred_close(
+    RileyCudaDeferredCloseNode* node) noexcept {
+  RileyCudaGraphCapture* const capture = thread_graph_capture_owner();
+  if (capture == nullptr) {
+    return CaptureDeferredCloseEnqueueResult::kNotCapturing;
+  }
+  if (!capture->capture_started || capture->owner == nullptr ||
+      capture->stream == nullptr || node == nullptr || node->owner == nullptr ||
+      node->payload == nullptr || node->callback == nullptr || node->queued ||
+      node->next != nullptr ||
+      ((capture->deferred_close_head == nullptr) !=
+       (capture->deferred_close_tail == nullptr))) {
+    return CaptureDeferredCloseEnqueueResult::kInvalidNode;
+  }
+
+  node->queued = true;
+  if (capture->deferred_close_tail == nullptr) {
+    capture->deferred_close_head = node;
+  } else {
+    capture->deferred_close_tail->next = node;
+  }
+  capture->deferred_close_tail = node;
+  return CaptureDeferredCloseEnqueueResult::kQueued;
+}
+
+// A consumed callback may destroy the resource and its embedded node. Save the
+// next link first and never touch that node after invocation. A consumed error
+// pops the current node but retains the unvisited FIFO suffix. A non-consumed
+// error retains the current node plus that suffix. That fail-closed owner is
+// intentionally never retried because CUDA close side effects may be ambiguous.
+inline RileyCudaStatus drain_capture_deferred_closes(
+    RileyCudaGraphCapture* capture, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kDrainOperation = "drain deferred CUDA capture closes";
+  if (capture == nullptr || !thread_graph_capture_is_owner(capture)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, kDrainOperation,
+        "the supplied CUDA Graph capture owner is not active on this host thread");
+  }
+  if ((capture->deferred_close_head == nullptr) !=
+      (capture->deferred_close_tail == nullptr)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kDrainOperation,
+                          "deferred-close FIFO head/tail state is corrupt");
+  }
+
+  while (capture->deferred_close_head != nullptr) {
+    RileyCudaDeferredCloseNode* const node = capture->deferred_close_head;
+    RileyCudaDeferredCloseNode* const next = node->next;
+    if (!node->queued || node->owner == nullptr || node->payload == nullptr ||
+        node->callback == nullptr ||
+        (node == capture->deferred_close_tail && next != nullptr) ||
+        (node != capture->deferred_close_tail && next == nullptr)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kDrainOperation,
+                            "deferred-close FIFO node state is corrupt");
+    }
+
+    const RileyCudaDeferredCloseResult result =
+        node->callback(node, capture, error);
+    if (result.consumed) {
+      capture->deferred_close_head = next;
+      if (next == nullptr) {
+        capture->deferred_close_tail = nullptr;
+      }
+      if (result.status != RILEY_CUDA_STATUS_SUCCESS) {
+        return result.status;
+      }
+      continue;
+    }
+    if (result.status == RILEY_CUDA_STATUS_SUCCESS) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kDrainOperation,
+                            "deferred-close callback succeeded without consuming its node");
+    }
+    return result.status;
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 class CurrentContext final {
  public:
   explicit CurrentContext(RileyCudaContext* context) noexcept
@@ -577,8 +955,9 @@ class CurrentContext final {
 
   bool active() const noexcept { return active_; }
 
-  RileyCudaStatus enter(RileyCudaErrorInfo* error, uint32_t stage,
-                            const char* operation) noexcept {
+  RileyCudaStatus enter(
+      RileyCudaErrorInfo* error, uint32_t stage, const char* operation,
+      const RileyCudaGraphCapture* capture_owner = nullptr) noexcept {
     if (context_ == nullptr) {
       return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                               stage, operation, "context is null");
@@ -587,6 +966,17 @@ class CurrentContext final {
       return validation_error(
           error, RILEY_CUDA_STATUS_INVALID_STATE, stage, operation,
           "a prior CUDA context-stack restoration failed");
+    }
+    if (capture_owner != nullptr) {
+      if (!thread_graph_capture_is_owner(capture_owner)) {
+        return validation_error(
+            error, RILEY_CUDA_STATUS_INVALID_STATE, stage, operation,
+            "the supplied CUDA Graph capture owner is not active on this host thread");
+      }
+    } else if (thread_has_active_graph_capture()) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE, stage, operation,
+          "this host thread has an active thread-local CUDA Graph capture");
     }
 
     const CUresult snapshot_result = cuCtxGetCurrent(&previous_);
@@ -687,6 +1077,216 @@ class CurrentContext final {
   bool active_;
 };
 
+inline bool try_increment_capture_domain_counter(
+    std::atomic<uint32_t>& counter) noexcept {
+  uint32_t current = counter.load(std::memory_order_relaxed);
+  while (current != std::numeric_limits<uint32_t>::max()) {
+    if (counter.compare_exchange_weak(current, current + 1,
+                                      std::memory_order_acq_rel,
+                                      std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+inline bool release_capture_domain_counter(
+    std::atomic<uint32_t>& counter) noexcept {
+  uint32_t current = counter.load(std::memory_order_relaxed);
+  while (current != 0) {
+    if (counter.compare_exchange_weak(current, current - 1,
+                                      std::memory_order_release,
+                                      std::memory_order_relaxed)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Acquire the process-global lock before the per-domain lock everywhere. The
+// global token gate and the primary-context control gate are then both
+// linearized with their corresponding counter mark before any CUDA entry.
+inline bool try_begin_capture_domain(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  const CaptureLifecycleAdmissionGuard lifecycle_admission;
+  const CaptureDomainAdmissionGuard admission(domain);
+  std::atomic<uint32_t>& global_active = capture_lifecycle_active_captures();
+  std::atomic<uint32_t>& global_pending =
+      capture_lifecycle_pending_lifecycles();
+  if (global_pending.load(std::memory_order_acquire) != 0 ||
+      domain->broad_control_uses.load(std::memory_order_acquire) != 0 ||
+      domain->pending_smoke_fills.load(std::memory_order_acquire) != 0 ||
+      domain->pending_copies.load(std::memory_order_acquire) != 0) {
+    return false;
+  }
+  if (!try_increment_capture_domain_counter(global_active)) {
+    return false;
+  }
+  if (try_increment_capture_domain_counter(domain->active_captures)) {
+    return true;
+  }
+  (void)release_capture_domain_counter(global_active);
+  return false;
+}
+
+inline bool release_capture_domain_capture(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  const CaptureLifecycleAdmissionGuard lifecycle_admission;
+  const CaptureDomainAdmissionGuard admission(domain);
+  std::atomic<uint32_t>& global_active = capture_lifecycle_active_captures();
+  if (global_active.load(std::memory_order_acquire) == 0 ||
+      domain->active_captures.load(std::memory_order_acquire) == 0) {
+    return false;
+  }
+  return release_capture_domain_counter(domain->active_captures) &&
+         release_capture_domain_counter(global_active);
+}
+
+// Pending lifecycle work has to survive a later safe-Rust Drop, which may
+// need CUDA synchronization. Pair one global token with the per-domain token
+// before the first CUDA call. The global gate is deliberately broader than
+// primary-context ownership: ThreadLocal capture blocks ordinary CUDA entries
+// on its host thread even when the pending token belongs to another device.
+inline bool try_begin_capture_domain_pending_lifecycle(
+    RileyCudaCaptureDomain* domain,
+    std::atomic<uint32_t>& pending_counter) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  const CaptureLifecycleAdmissionGuard lifecycle_admission;
+  const CaptureDomainAdmissionGuard admission(domain);
+  std::atomic<uint32_t>& global_active = capture_lifecycle_active_captures();
+  std::atomic<uint32_t>& global_pending =
+      capture_lifecycle_pending_lifecycles();
+  if (global_active.load(std::memory_order_acquire) != 0 ||
+      domain->active_captures.load(std::memory_order_acquire) != 0 ||
+      domain->broad_control_uses.load(std::memory_order_acquire) != 0) {
+    return false;
+  }
+  if (!try_increment_capture_domain_counter(global_pending)) {
+    return false;
+  }
+  if (try_increment_capture_domain_counter(pending_counter)) {
+    return true;
+  }
+  (void)release_capture_domain_counter(global_pending);
+  return false;
+}
+
+inline bool release_capture_domain_pending_lifecycle(
+    RileyCudaCaptureDomain* domain,
+    std::atomic<uint32_t>& pending_counter) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  const CaptureLifecycleAdmissionGuard lifecycle_admission;
+  const CaptureDomainAdmissionGuard admission(domain);
+  std::atomic<uint32_t>& global_pending =
+      capture_lifecycle_pending_lifecycles();
+  if (global_pending.load(std::memory_order_acquire) == 0 ||
+      pending_counter.load(std::memory_order_acquire) == 0) {
+    return false;
+  }
+  return release_capture_domain_counter(pending_counter) &&
+         release_capture_domain_counter(global_pending);
+}
+
+// A launched smoke fill can require synchronization and allocation release on
+// Drop. Reserve it before enqueue, and keep that reservation until the native
+// buffer is consumed, so capture and this recoverable lifecycle never overlap.
+inline bool try_begin_capture_domain_smoke_fill(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  return try_begin_capture_domain_pending_lifecycle(
+      domain, domain->pending_smoke_fills);
+}
+
+inline bool release_capture_domain_smoke_fill(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  return release_capture_domain_pending_lifecycle(
+      domain, domain->pending_smoke_fills);
+}
+
+// Pending copies carry a Rust-side borrow token whose Drop must synchronize
+// before releasing it. Reserve before cudaMemcpyAsync and retain until the
+// native copy is consumed, so a capture on any device cannot make that Drop
+// unrecoverable.
+inline bool try_begin_capture_domain_pending_copy(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  return try_begin_capture_domain_pending_lifecycle(
+      domain, domain->pending_copies);
+}
+
+inline bool release_capture_domain_pending_copy(
+    RileyCudaCaptureDomain* domain) noexcept {
+  if (domain == nullptr) {
+    return false;
+  }
+  return release_capture_domain_pending_lifecycle(
+      domain, domain->pending_copies);
+}
+
+class CaptureDomainControlLease final {
+ public:
+  explicit CaptureDomainControlLease(
+      RileyCudaCaptureDomain* domain,
+      const RileyCudaGraphCapture* terminated_capture_owner = nullptr) noexcept
+      : domain_(nullptr) {
+    if (domain == nullptr) {
+      return;
+    }
+    const CaptureDomainAdmissionGuard admission(domain);
+    if (domain->active_captures.load(std::memory_order_acquire) != 0) {
+      // The only permitted exception is drain-time release of a childless
+      // foreign context after this exact capture is physically terminated. It
+      // remains bounded to one capture in the same primary-context domain;
+      // ordinary controls and concurrent capture still fail closed.
+      if (terminated_capture_owner == nullptr ||
+          !thread_graph_capture_is_owner(terminated_capture_owner) ||
+          !terminated_capture_owner->capture_terminated ||
+          terminated_capture_owner->capture_domain != domain ||
+          domain->active_captures.load(std::memory_order_acquire) != 1) {
+        return;
+      }
+    }
+    if (try_increment_capture_domain_counter(domain->broad_control_uses)) {
+      domain_ = domain;
+    }
+  }
+  CaptureDomainControlLease(const CaptureDomainControlLease&) = delete;
+  CaptureDomainControlLease& operator=(const CaptureDomainControlLease&) =
+      delete;
+  ~CaptureDomainControlLease() noexcept { (void)release(); }
+
+  bool active() const noexcept { return domain_ != nullptr; }
+
+  bool release() noexcept {
+    if (domain_ == nullptr) {
+      return true;
+    }
+    RileyCudaCaptureDomain* const domain = domain_;
+    domain_ = nullptr;
+    return release_capture_domain_counter(domain->broad_control_uses);
+  }
+
+ private:
+  RileyCudaCaptureDomain* domain_;
+};
+
 inline bool same_context(const RileyCudaContext* left,
                          const RileyCudaContext* right) noexcept {
   return left != nullptr && left == right;
@@ -709,9 +1309,61 @@ inline bool release_exclusive_use(std::atomic<uint32_t>& active) noexcept {
 // The address of this thread-local byte is a process-unique, allocation-free
 // ownership token. Unlike std::thread::id it can be published atomically and
 // compared by native entry points without racing a non-atomic object.
-inline const void* command_batch_thread_token() noexcept {
+inline const void* native_thread_token() noexcept {
   static thread_local const uint8_t token = 0;
   return &token;
+}
+
+// A command batch has a stream-local owner, but it also carries pending work
+// that its owner thread must finish with CUDA synchronization. Capture cannot
+// begin on any stream of that same host thread until every such batch closes.
+// A count preserves the existing ability to batch multiple streams while
+// avoiding a dangling TLS pointer if a stream is later destroyed.
+inline uint32_t& thread_command_batch_count() noexcept {
+  static thread_local uint32_t count = 0;
+  return count;
+}
+
+inline bool thread_has_active_command_batch() noexcept {
+  return thread_command_batch_count() != 0;
+}
+
+inline bool try_publish_thread_command_batch() noexcept {
+  uint32_t& count = thread_command_batch_count();
+  if (count == std::numeric_limits<uint32_t>::max()) {
+    return false;
+  }
+  ++count;
+  return true;
+}
+
+inline bool release_thread_command_batch() noexcept {
+  uint32_t& count = thread_command_batch_count();
+  if (count == 0) {
+    return false;
+  }
+  --count;
+  return true;
+}
+
+inline const void* command_batch_thread_token() noexcept {
+  return native_thread_token();
+}
+
+inline uint64_t next_graph_capture_id() noexcept {
+  static std::atomic<uint64_t> next{1};
+  // An all-zero externally visible identity is reserved for "no capture".
+  // Once the finite ID space wraps, leave the counter at zero and fail all
+  // later allocations rather than reuse an observable identity.
+  uint64_t identifier = next.load(std::memory_order_relaxed);
+  while (identifier != 0) {
+    if (next.compare_exchange_weak(identifier, identifier + 1,
+                                   std::memory_order_relaxed,
+                                   std::memory_order_relaxed)) {
+      return identifier;
+    }
+  }
+  return 0;
 }
 
 inline bool command_batch_is_active(

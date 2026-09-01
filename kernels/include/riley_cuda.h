@@ -1104,6 +1104,13 @@ RileyCudaStatus riley_cuda_context_allocation_stats(
 RileyCudaStatus riley_cuda_context_close(
     RileyCudaContext** context,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Additive safe-wrapper-only ownership transfer. When the calling host thread
+// owns a live ThreadLocal graph capture, moves *context into that capture's
+// post-end cleanup queue and nulls it. It never changes the retry semantics of
+// riley_cuda_context_close for raw C callers.
+RileyCudaStatus riley_cuda_context_defer_to_active_capture(
+    RileyCudaContext** context,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
 // Streams are explicitly created as non-blocking, non-default streams.
 RileyCudaStatus riley_cuda_stream_create(
@@ -1121,14 +1128,28 @@ RileyCudaStatus riley_cuda_stream_command_batch_begin(
 RileyCudaStatus riley_cuda_stream_command_batch_end(
     RileyCudaStream* stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
-// C05-1 ABI probe only: this validates the capture-begin contract and returns
-// NOT_SUPPORTED without beginning CUDA capture, changing stream ownership, or
-// allocating a graph. out_capture is required and is null on every return;
-// out_graph_error is optional companion metadata for the attempted begin.
+// Begins one thread-local CUDA Graph capture and returns a native capture owner
+// only when the stream lease, CUDA begin call, and current-context restoration
+// are all known to have succeeded. out_capture is required and is initialized
+// to null before validation. A non-null capture may also accompany a failing
+// begin when CUDA may have entered capture while reporting a prior asynchronous
+// error; that owner must be passed to riley_cuda_graph_capture_abort exactly
+// once before the stream can be reused. out_graph_error is optional companion
+// metadata for the attempted begin.
 RileyCudaStatus riley_cuda_graph_capture_begin(
     RileyCudaStream* stream,
     RileyCudaGraphCaptureMode mode,
     RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Ends and discards an active or invalidated capture without exposing a graph.
+// The capture must be ended from the thread that began this thread-local
+// capture. Once CUDA end has been attempted, *capture is null even when an
+// asynchronous error leaves recovery ambiguous; native then retains the
+// owner/stream lease fail-closed rather than permitting a retry. A validation
+// failure before the CUDA end attempt leaves *capture unchanged.
+RileyCudaStatus riley_cuda_graph_capture_abort(
+    RileyCudaGraphCapture** capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_stream_query(
@@ -1145,6 +1166,11 @@ RileyCudaStatus riley_cuda_stream_wait_event(
 // Once native destruction is attempted, *stream is null even if a deferred
 // asynchronous error is returned; callers must inspect both status and handle.
 RileyCudaStatus riley_cuda_stream_close(
+    RileyCudaStream** stream,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// See riley_cuda_context_defer_to_active_capture. The captured stream itself
+// has an active use lease and is therefore not transferable through this API.
+RileyCudaStatus riley_cuda_stream_defer_to_active_capture(
     RileyCudaStream** stream,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
@@ -1173,6 +1199,9 @@ RileyCudaStatus riley_cuda_event_elapsed_ms(
 RileyCudaStatus riley_cuda_event_close(
     RileyCudaEvent** event,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_event_defer_to_active_capture(
+    RileyCudaEvent** event,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
 // General byte-addressed allocations. A zero-byte allocation still returns an
 // owned opaque handle and contributes one live allocation with zero live bytes.
@@ -1186,6 +1215,9 @@ RileyCudaStatus riley_cuda_device_buffer_create(
 // An ambiguous failed free stays logically accounted and keeps a context-child
 // lease so allocation stats/context teardown remain fail closed.
 RileyCudaStatus riley_cuda_device_buffer_close(
+    RileyCudaDeviceBuffer** buffer,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_device_buffer_defer_to_active_capture(
     RileyCudaDeviceBuffer** buffer,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
@@ -1211,6 +1243,9 @@ RileyCudaStatus riley_cuda_pinned_host_buffer_read(
 // otherwise single-shot even when CUDA reports a deferred earlier error;
 // ambiguous failure remains logically live/accounted.
 RileyCudaStatus riley_cuda_pinned_host_buffer_close(
+    RileyCudaPinnedHostBuffer** buffer,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_pinned_host_buffer_defer_to_active_capture(
     RileyCudaPinnedHostBuffer** buffer,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
@@ -1526,6 +1561,9 @@ RileyCudaStatus riley_cuda_hf_prefill_attention_plan_execute(
 RileyCudaStatus riley_cuda_hf_prefill_attention_plan_close(
     RileyCudaHfPrefillAttentionPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_hf_prefill_attention_plan_defer_to_active_capture(
+    RileyCudaHfPrefillAttentionPlan** plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 
 // These single-request cache/decode calls are allocation-free, exclusively
 // borrow every distinct opaque buffer and the explicit stream, and synchronize
@@ -1678,6 +1716,9 @@ RileyCudaStatus riley_cuda_gemm_plan_execute(
 // destruction and context restoration must both complete before *plan is
 // consumed and its context-child lease is released.
 RileyCudaStatus riley_cuda_gemm_plan_close(
+    RileyCudaGemmPlan** plan,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_gemm_plan_defer_to_active_capture(
     RileyCudaGemmPlan** plan,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 

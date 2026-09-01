@@ -1,16 +1,95 @@
 //! CUDA Graph ABI vocabulary and fail-closed lifecycle policy.
 //!
-//! C05-1 wires one native capture-begin ABI stub while still fixing ownership
-//! vocabulary and lifecycle transitions on the CPU. The stub fails closed, so
-//! a later successful capture slice cannot silently widen this contract.
+//! C05-4 owns real thread-local capture begin and one-shot abort/recovery while
+//! keeping graph end, instantiate, and replay behind a later resource-lifetime
+//! slice. CPU vocabulary/lifecycle validation still fails closed.
 
 use std::marker::PhantomData;
 #[cfg(any(feature = "cuda", test))]
 use std::mem::{align_of, offset_of, size_of};
 use std::num::NonZeroU64;
 use std::rc::Rc;
+#[cfg(feature = "cuda")]
+use std::{cell::RefCell, sync::Arc};
 
+#[cfg(feature = "cuda")]
+use crate::runtime::ContextInner;
 use crate::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult, CudaStream};
+
+// A native close deferred into a live capture still owns a RileyCudaContext
+// child, but a foreign safe wrapper may otherwise drop the final Arc backing
+// that native context before abort gets a chance to drain the close. Keep the
+// corresponding Rust context leases in the capture thread until native abort
+// has proved all deferred cleanup. ThreadLocal capture itself is !Send, so one
+// thread-local ledger is enough and intentionally never crosses host threads.
+#[cfg(feature = "cuda")]
+struct DeferredCaptureContexts {
+    active: bool,
+    contexts: Vec<Arc<ContextInner>>,
+}
+
+#[cfg(feature = "cuda")]
+impl DeferredCaptureContexts {
+    const fn new() -> Self {
+        Self {
+            active: false,
+            contexts: Vec::new(),
+        }
+    }
+}
+
+#[cfg(feature = "cuda")]
+thread_local! {
+    static DEFERRED_CAPTURE_CONTEXTS: RefCell<DeferredCaptureContexts> =
+        const { RefCell::new(DeferredCaptureContexts::new()) };
+}
+
+#[cfg(feature = "cuda")]
+fn begin_deferred_capture_contexts() {
+    DEFERRED_CAPTURE_CONTEXTS.with(|ledger| {
+        let mut ledger = ledger.borrow_mut();
+        debug_assert!(
+            !ledger.active,
+            "native capture admission must reject a second safe capture on one thread"
+        );
+        ledger.active = true;
+    });
+}
+
+/// Retains a safe context owner when its native child may hand its close to
+/// the currently active capture. This is deliberately crate-private: public
+/// resource wrappers call it from Drop before their native handle's Drop runs.
+#[cfg(feature = "cuda")]
+pub(crate) fn retain_context_for_active_graph_capture(context: &Arc<ContextInner>) -> bool {
+    DEFERRED_CAPTURE_CONTEXTS.with(|ledger| {
+        let mut ledger = ledger.borrow_mut();
+        if !ledger.active {
+            return false;
+        }
+        ledger.contexts.push(Arc::clone(context));
+        true
+    })
+}
+
+#[cfg(feature = "cuda")]
+pub(crate) fn has_active_graph_capture() -> bool {
+    DEFERRED_CAPTURE_CONTEXTS.with(|ledger| ledger.borrow().active)
+}
+
+#[cfg(feature = "cuda")]
+fn finish_deferred_capture_contexts() {
+    let contexts = DEFERRED_CAPTURE_CONTEXTS.with(|ledger| {
+        let mut ledger = ledger.borrow_mut();
+        // Mark this false before Arc destruction: a ContextInner Drop can make
+        // a native close call, and it must never append a new lease while the
+        // successful native abort is dismantling this ledger.
+        ledger.active = false;
+        std::mem::take(&mut ledger.contexts)
+    });
+    // Drop after the RefCell borrow is gone. A final ContextInner destructor
+    // may close its native context, which consults the same TLS capture state.
+    drop(contexts);
+}
 
 /// The only CUDA Graph capture mode currently admitted by the Riley ABI.
 ///
@@ -154,6 +233,22 @@ impl RawGraphErrorInfo {
     pub(crate) const fn struct_size(&self) -> u32 {
         self.struct_size
     }
+
+    #[cfg(all(test, feature = "cuda"))]
+    pub(crate) const fn capture_abort_for_test(resource_release_known: u8, poisoned: u8) -> Self {
+        Self {
+            struct_size: Self::ABI_SIZE,
+            graph_stage: 4,
+            capture_id: 1,
+            exec_id: 0,
+            submission_started: 0,
+            completion_known: 0,
+            resource_release_known,
+            poisoned,
+            reserved0: 0,
+            reserved: [0; 3],
+        }
+    }
 }
 
 #[cfg(any(feature = "cuda", test))]
@@ -249,7 +344,7 @@ impl CudaGraphFailureInfo {
     /// record. C05-1 deliberately remains stricter: its native stub must
     /// report the exact v1 record with capture-begin stage and no ownership or
     /// completion evidence.
-    #[cfg(any(feature = "cuda", test))]
+    #[cfg(test)]
     #[must_use]
     pub(crate) fn is_empty_capture_begin_attempt(&self) -> bool {
         matches!(self.stage, Some(CudaGraphStage::CaptureBegin))
@@ -576,14 +671,13 @@ impl CudaGraphLifecycle {
     }
 }
 
-/// Borrowed graph-capture owner reserved for the linked native graph ABI.
+/// Borrowed owner of one active thread-local CUDA Graph capture.
 ///
-/// This initial ABI foundation never constructs a capture. It still reserves
-/// the mutable stream borrow in the safe API so the eventual native capture
-/// cannot be introduced as an aliasing-compatible change.
-/// A live capture is also deliberately `!Send + !Sync`: capture invalidation
-/// and recovery remain bound to the stream-owning host thread until a future
-/// native owner can close that lifecycle explicitly.
+/// The owner holds both the native capture handle and the mutable stream
+/// borrow. A live capture is deliberately `!Send + !Sync`: CUDA requires a
+/// thread-local capture to end on its begin thread, and recovery must never be
+/// detached from that owner. C05-4 exposes only [`Self::abort`]; graph end,
+/// instantiate, and replay wait for C05-5's retained-resource contract.
 ///
 /// ```compile_fail
 /// fn cannot_query_stream_while_capturing(stream: &mut riley_cuda::CudaStream) {
@@ -634,40 +728,88 @@ impl CudaGraphLifecycle {
 /// fn assert_sync<T: Sync>() {}
 /// assert_sync::<riley_cuda::GraphCapture<'static>>();
 /// ```
-#[derive(Debug)]
 pub struct GraphCapture<'stream> {
-    _stream: PhantomData<&'stream mut CudaStream>,
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    stream: &'stream mut CudaStream,
+    active: bool,
     _not_send_or_sync: PhantomData<Rc<()>>,
 }
 
-impl CudaStream {
-    /// Starts CUDA Graph capture on this stream when the linked native ABI
-    /// provides it.
+impl GraphCapture<'_> {
+    /// Terminates capture, discards its graph, and restores the stream only
+    /// when native recovery is fully known.
     ///
-    /// With CUDA disabled this returns an actionable unavailable error. With
-    /// CUDA enabled it calls the linked native ABI, which currently returns
-    /// not-supported without mutating stream ownership or falling back to
-    /// eager execution.
+    /// The owner is marked consumed before native code runs, so neither this
+    /// method nor Drop can retry an `cudaStreamEndCapture` attempt that may
+    /// already have taken effect while reporting a deferred error.
     ///
     /// # Errors
     ///
-    /// Always returns an error until a later native slice can return a safely
-    /// owned capture handle.
+    /// Returns a native close/recovery error. On an ambiguous native outcome
+    /// the stream is intentionally retained busy rather than reused.
+    pub fn abort(mut self) -> CudaResult<()> {
+        self.abort_once()
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        // Keep the concrete mutable borrow observable in both feature modes;
+        // its lifetime is the safe stream lease even though native abort owns
+        // the actual CUDA transition.
+        let _ = &mut *self.stream;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.abort();
+            if result.is_ok() {
+                // Native abort has already ended capture, destroyed its
+                // transient graph, drained every deferred close, and released
+                // the exact native owner. Only now may the Rust context leases
+                // used by those deferred native children be dropped.
+                finish_deferred_capture_contexts();
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable("GraphCapture::abort"))
+        }
+    }
+}
+
+impl Drop for GraphCapture<'_> {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+impl CudaStream {
+    /// Starts one owned thread-local CUDA Graph capture on this stream.
+    ///
+    /// With CUDA disabled this returns an actionable unavailable error. With
+    /// CUDA enabled, success exclusively borrows this stream until the returned
+    /// [`GraphCapture`] is explicitly aborted or dropped. No eager fallback is
+    /// performed.
+    ///
+    /// # Errors
+    ///
     pub fn begin_graph_capture(
         &mut self,
         mode: CudaGraphCaptureMode,
     ) -> CudaResult<GraphCapture<'_>> {
         #[cfg(feature = "cuda")]
         {
-            self.native.begin_graph_capture(mode as u32)?;
-            Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Prepare,
-                0,
-                "CudaStream::begin_graph_capture",
-                "native graph capture returned success without an owned capture handle",
-            ))
+            let native = self.native.begin_graph_capture(mode as u32)?;
+            begin_deferred_capture_contexts();
+            Ok(GraphCapture {
+                native,
+                stream: self,
+                active: true,
+                _not_send_or_sync: PhantomData,
+            })
         }
         #[cfg(not(feature = "cuda"))]
         {

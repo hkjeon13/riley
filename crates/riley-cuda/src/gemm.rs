@@ -722,6 +722,18 @@ impl CudaPreparedGemm {
     }
 }
 
+impl Drop for CudaPreparedGemm {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            // cuBLASLt descriptor teardown enters CUDA. Retain the safe
+            // context until a live graph capture either drains the native
+            // deferred close or intentionally remains fail-closed.
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+        }
+    }
+}
+
 /// Immutable provenance for the custom fixed37 GEMM implementation.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct CudaFixed37GemmMetadata {

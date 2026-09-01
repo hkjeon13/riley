@@ -39,6 +39,11 @@ path = "tests/host_runtime_gpu.rs"
 required-features = ["cuda"]
 
 [[test]]
+name = "graph_gpu"
+path = "tests/graph_gpu.rs"
+required-features = ["cuda"]
+
+[[test]]
 name = "nvml_gpu"
 path = "tests/nvml_gpu.rs"
 required-features = ["nvml"]

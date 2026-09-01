@@ -6,17 +6,22 @@
 namespace {
 
 using riley_cuda_internal::AllocationStatsGuard;
+using riley_cuda_internal::CaptureDeferredCloseEnqueueResult;
 using riley_cuda_internal::CurrentContext;
 using riley_cuda_internal::clear_error;
 using riley_cuda_internal::command_batch_is_active;
 using riley_cuda_internal::command_batch_is_owned_by_current_thread;
 using riley_cuda_internal::command_batch_register_use;
 using riley_cuda_internal::internal_error;
+using riley_cuda_internal::enqueue_capture_deferred_close;
+using riley_cuda_internal::initialize_capture_deferred_close_node;
 using riley_cuda_internal::release_child;
+using riley_cuda_internal::release_capture_domain_pending_copy;
 using riley_cuda_internal::retain_child;
 using riley_cuda_internal::runtime_error;
 using riley_cuda_internal::same_context;
 using riley_cuda_internal::set_error;
+using riley_cuda_internal::try_begin_capture_domain_pending_copy;
 using riley_cuda_internal::validation_error;
 
 #if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
@@ -301,14 +306,26 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
     return RILEY_CUDA_STATUS_SUCCESS;
   }
 
+  // A pending copy token can later synchronize in its Drop path. Reserve its
+  // lifecycle before allocating the token or entering CUDA so graph capture on
+  // any device cannot make that recoverable cleanup impossible.
+  if (!try_begin_capture_domain_pending_copy(device->owner->capture_domain)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "submit CUDA copy",
+        "a graph capture, pending lifecycle, or broad control operation blocks a new pending copy");
+  }
+
   void* copy_storage = std::calloc(1, sizeof(RileyCudaCopy));
   if (copy_storage == nullptr) {
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
                      RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
                      RILEY_CUDA_ERROR_STAGE_CREATE, "submit CUDA copy",
                      "host copy-token allocation failed");
   }
   if (!try_acquire_copy(device->active_uses)) {
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     std::free(copy_storage);
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -317,6 +334,7 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
   }
   if (!try_acquire_copy(host->active_uses)) {
     (void)release_copy(device->active_uses);
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     std::free(copy_storage);
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -326,6 +344,7 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
   if (!try_acquire_copy(stream->active_uses)) {
     (void)release_copy(host->active_uses);
     (void)release_copy(device->active_uses);
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     std::free(copy_storage);
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -336,6 +355,7 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
     (void)release_copy(stream->active_uses);
     (void)release_copy(host->active_uses);
     (void)release_copy(device->active_uses);
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     std::free(copy_storage);
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
                           "submit CUDA copy",
@@ -396,6 +416,7 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
     (void)release_copy(stream->active_uses);
     (void)release_copy(host->active_uses);
     (void)release_copy(device->active_uses);
+    (void)release_capture_domain_pending_copy(device->owner->capture_domain);
     publish_error(error, operation_error);
     return status;
   }
@@ -407,6 +428,212 @@ RileyCudaStatus submit_copy(RileyCudaDeviceBuffer* device,
   clear_error(error);
   *out_copy = copy;
   return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+RileyCudaStatus device_buffer_close_impl(
+    RileyCudaDeviceBuffer** buffer, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close CUDA device buffer";
+  clear_error(error);
+  if (buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "buffer pointer is null");
+  }
+  if (*buffer == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "device buffer still has an active asynchronous use");
+  }
+
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
+  bool free_attempted = false;
+  bool free_confirmed = (*buffer)->device_data == nullptr;
+  if ((*buffer)->device_data != nullptr) {
+    CurrentContext scope((*buffer)->owner);
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                         capture_owner);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      free_attempted = true;
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (injector_owns((*buffer)->owner)) {
+        g_memory_faults.device_free_attempts.fetch_add(
+            1, std::memory_order_relaxed);
+      }
+#endif
+      const cudaError_t result = cudaFree((*buffer)->device_data);
+      free_confirmed = result == cudaSuccess;
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                             "free CUDA device buffer");
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (consume_fault(
+              (*buffer)->owner,
+              RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS)) {
+        free_confirmed = false;
+        status = injected_runtime_error(
+            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+            "close test-injected CUDA device buffer");
+      }
+#endif
+      // cudaFree may surface an earlier asynchronous error after performing
+      // its destructive side effect. Never retry an attempted free.
+      (*buffer)->device_data = nullptr;
+    }
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                         kOperation);
+  }
+  const bool consume = free_confirmed || free_attempted;
+  if (consume) {
+    RileyCudaContext* owner = (*buffer)->owner;
+    const uint64_t byte_len = (*buffer)->byte_len;
+    bool accounted = true;
+    bool released = true;
+    if (free_confirmed) {
+      accounted = release_allocation(owner, owner->device_live_bytes,
+                                     owner->device_live_allocations, byte_len);
+      released = release_child(owner);
+    }
+    (*buffer)->~RileyCudaDeviceBuffer();
+    std::free(*buffer);
+    *buffer = nullptr;
+    // An ambiguous failed free intentionally leaves allocation accounting and
+    // the native context-child lease live. That fail-closed leak prevents the
+    // primary context from being released around possibly live device memory.
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "allocation or context accounting underflow");
+    }
+  }
+  return status;
+}
+
+RileyCudaDeferredCloseResult deferred_device_buffer_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred CUDA device buffer close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred device-buffer node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaDeviceBuffer*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred device-buffer node owner does not match its payload"),
+            false};
+  }
+  RileyCudaDeviceBuffer* raw = value;
+  const RileyCudaStatus status =
+      device_buffer_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
+}
+
+RileyCudaStatus pinned_host_buffer_close_impl(
+    RileyCudaPinnedHostBuffer** buffer, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close pinned host buffer";
+  clear_error(error);
+  if (buffer == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "buffer pointer is null");
+  }
+  if (*buffer == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "pinned host buffer still has an active copy token");
+  }
+
+  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
+  bool free_attempted = false;
+  bool free_confirmed = (*buffer)->host_data == nullptr;
+  if ((*buffer)->host_data != nullptr) {
+    CurrentContext scope((*buffer)->owner);
+    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                         capture_owner);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      free_attempted = true;
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (injector_owns((*buffer)->owner)) {
+        g_memory_faults.pinned_free_attempts.fetch_add(
+            1, std::memory_order_relaxed);
+      }
+#endif
+      const cudaError_t result = cudaFreeHost((*buffer)->host_data);
+      free_confirmed = result == cudaSuccess;
+      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                             "free pinned host buffer");
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+      if (consume_fault(
+              (*buffer)->owner,
+              RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS)) {
+        free_confirmed = false;
+        status = injected_runtime_error(
+            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+            "close test-injected CUDA pinned host buffer");
+      }
+#endif
+      // cudaFreeHost is likewise single-shot when its reported error may be
+      // deferred from earlier work.
+      (*buffer)->host_data = nullptr;
+    }
+    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                         kOperation);
+  }
+  const bool consume = free_confirmed || free_attempted;
+  if (consume) {
+    RileyCudaContext* owner = (*buffer)->owner;
+    const uint64_t byte_len = (*buffer)->byte_len;
+    bool accounted = true;
+    bool released = true;
+    if (free_confirmed) {
+      accounted = release_allocation(owner, owner->pinned_host_live_bytes,
+                                     owner->pinned_host_live_allocations,
+                                     byte_len);
+      released = release_child(owner);
+    }
+    (*buffer)->~RileyCudaPinnedHostBuffer();
+    std::free(*buffer);
+    *buffer = nullptr;
+    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "allocation or context accounting underflow");
+    }
+  }
+  return status;
+}
+
+RileyCudaDeferredCloseResult deferred_pinned_host_buffer_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred pinned host buffer close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred pinned-buffer node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaPinnedHostBuffer*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred pinned-buffer node owner does not match its payload"),
+            false};
+  }
+  RileyCudaPinnedHostBuffer* raw = value;
+  const RileyCudaStatus status =
+      pinned_host_buffer_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
 }
 
 }  // namespace
@@ -507,10 +734,19 @@ extern "C" RileyCudaStatus riley_cuda_device_buffer_close(
     RileyCudaDeviceBuffer** buffer,
     RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  return device_buffer_close_impl(buffer, error, nullptr);
+}
+
+extern "C" RileyCudaStatus riley_cuda_device_buffer_defer_to_active_capture(
+    RileyCudaDeviceBuffer** buffer,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "defer CUDA device buffer close to active capture";
+  clear_error(error);
   if (buffer == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA device buffer", "buffer pointer is null");
+                            kOperation, "buffer pointer is null");
   }
   if (*buffer == nullptr) {
     return RILEY_CUDA_STATUS_SUCCESS;
@@ -518,70 +754,28 @@ extern "C" RileyCudaStatus riley_cuda_device_buffer_close(
   if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA device buffer",
+                            kOperation,
                             "device buffer still has an active asynchronous use");
   }
-
-  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
-  bool free_attempted = false;
-  bool free_confirmed = (*buffer)->device_data == nullptr;
-  if ((*buffer)->device_data != nullptr) {
-    CurrentContext scope((*buffer)->owner);
-    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                         "close CUDA device buffer");
-    if (status == RILEY_CUDA_STATUS_SUCCESS) {
-      free_attempted = true;
-#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (injector_owns((*buffer)->owner)) {
-        g_memory_faults.device_free_attempts.fetch_add(
-            1, std::memory_order_relaxed);
-      }
-#endif
-      const cudaError_t result = cudaFree((*buffer)->device_data);
-      free_confirmed = result == cudaSuccess;
-      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                             "free CUDA device buffer");
-#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (consume_fault(
-              (*buffer)->owner,
-              RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CLOSE_AMBIGUOUS)) {
-        free_confirmed = false;
-        status = injected_runtime_error(
-            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-            "close test-injected CUDA device buffer");
-      }
-#endif
-      // cudaFree may surface an earlier asynchronous error after performing
-      // its destructive side effect. Never retry an attempted free.
-      (*buffer)->device_data = nullptr;
-    }
-    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                         "close CUDA device buffer");
+  if (!initialize_capture_deferred_close_node(
+          &(*buffer)->deferred_close, (*buffer)->owner, *buffer,
+          deferred_device_buffer_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred device-buffer node");
   }
-  const bool consume = free_confirmed || free_attempted;
-  if (consume) {
-    RileyCudaContext* owner = (*buffer)->owner;
-    const uint64_t byte_len = (*buffer)->byte_len;
-    bool accounted = true;
-    bool released = true;
-    if (free_confirmed) {
-      accounted = release_allocation(owner, owner->device_live_bytes,
-                                     owner->device_live_allocations, byte_len);
-      released = release_child(owner);
-    }
-    (*buffer)->~RileyCudaDeviceBuffer();
-    std::free(*buffer);
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*buffer)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
     *buffer = nullptr;
-    // An ambiguous failed free intentionally leaves allocation accounting and
-    // the native context-child lease live. That fail-closed leak prevents the
-    // primary context from being released around possibly live device memory.
-    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA device buffer",
-                            "allocation or context accounting underflow");
-    }
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  return status;
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred device-buffer node");
 }
 
 extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_create(
@@ -742,10 +936,20 @@ extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_close(
     RileyCudaPinnedHostBuffer** buffer,
     RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  return pinned_host_buffer_close_impl(buffer, error, nullptr);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_pinned_host_buffer_defer_to_active_capture(
+    RileyCudaPinnedHostBuffer** buffer,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "defer pinned host buffer close to active capture";
+  clear_error(error);
   if (buffer == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close pinned host buffer", "buffer pointer is null");
+                            kOperation, "buffer pointer is null");
   }
   if (*buffer == nullptr) {
     return RILEY_CUDA_STATUS_SUCCESS;
@@ -753,70 +957,28 @@ extern "C" RileyCudaStatus riley_cuda_pinned_host_buffer_close(
   if ((*buffer)->active_uses.load(std::memory_order_acquire) != 0) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close pinned host buffer",
+                            kOperation,
                             "pinned host buffer still has an active copy token");
   }
-
-  RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
-  bool free_attempted = false;
-  bool free_confirmed = (*buffer)->host_data == nullptr;
-  if ((*buffer)->host_data != nullptr) {
-    CurrentContext scope((*buffer)->owner);
-    status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                         "close pinned host buffer");
-    if (status == RILEY_CUDA_STATUS_SUCCESS) {
-      free_attempted = true;
-#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (injector_owns((*buffer)->owner)) {
-        g_memory_faults.pinned_free_attempts.fetch_add(
-            1, std::memory_order_relaxed);
-      }
-#endif
-      const cudaError_t result = cudaFreeHost((*buffer)->host_data);
-      free_confirmed = result == cudaSuccess;
-      status = runtime_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                             "free pinned host buffer");
-#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
-      if (consume_fault(
-              (*buffer)->owner,
-              RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS)) {
-        free_confirmed = false;
-        status = injected_runtime_error(
-            error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-            "close test-injected CUDA pinned host buffer");
-      }
-#endif
-      // cudaFreeHost is likewise single-shot when its reported error may be
-      // deferred from earlier work.
-      (*buffer)->host_data = nullptr;
-    }
-    status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                         "close pinned host buffer");
+  if (!initialize_capture_deferred_close_node(
+          &(*buffer)->deferred_close, (*buffer)->owner, *buffer,
+          deferred_pinned_host_buffer_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred pinned-buffer node");
   }
-  const bool consume = free_confirmed || free_attempted;
-  if (consume) {
-    RileyCudaContext* owner = (*buffer)->owner;
-    const uint64_t byte_len = (*buffer)->byte_len;
-    bool accounted = true;
-    bool released = true;
-    if (free_confirmed) {
-      accounted = release_allocation(owner, owner->pinned_host_live_bytes,
-                                     owner->pinned_host_live_allocations,
-                                     byte_len);
-      released = release_child(owner);
-    }
-    (*buffer)->~RileyCudaPinnedHostBuffer();
-    std::free(*buffer);
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*buffer)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
     *buffer = nullptr;
-    // Preserve non-zero logical accounting and the context lease if the
-    // destructive result was ambiguous; reporting zero would be unsafe.
-    if (status == RILEY_CUDA_STATUS_SUCCESS && (!accounted || !released)) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close pinned host buffer",
-                            "allocation or context accounting underflow");
-    }
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  return status;
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred pinned-buffer node");
 }
 
 extern "C" RileyCudaStatus riley_cuda_copy_h2d_async(
@@ -1041,13 +1203,19 @@ extern "C" RileyCudaStatus riley_cuda_copy_close(
   }
   if (complete != 0) {
     RileyCudaContext* owner = (*copy)->owner;
+    const bool held_capture_admission = (*copy)->capture_admission_held;
     (*copy)->~RileyCudaCopy();
     std::free(*copy);
     *copy = nullptr;
-    if (!release_child(owner) && status == RILEY_CUDA_STATUS_SUCCESS) {
+    const bool admission_released =
+        !held_capture_admission ||
+        release_capture_domain_pending_copy(owner->capture_domain);
+    const bool child_released = release_child(owner);
+    if (status == RILEY_CUDA_STATUS_SUCCESS &&
+        (!admission_released || !child_released)) {
       return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             "close CUDA copy",
-                            "context child-resource counter underflow");
+                            "pending-copy or context-child accounting underflow");
     }
   }
   return status;

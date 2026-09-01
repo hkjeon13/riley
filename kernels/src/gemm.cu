@@ -50,7 +50,8 @@ struct RileyCudaGemmPlan {
         weight_bytes(lengths.weight),
         output_bytes(lengths.output),
         algorithm_ready(false),
-        active_uses(0) {
+        active_uses(0),
+        deferred_close() {
     algorithm_info.struct_size = sizeof(algorithm_info);
   }
 
@@ -69,6 +70,7 @@ struct RileyCudaGemmPlan {
   uint64_t output_bytes;
   bool algorithm_ready;
   std::atomic<uint32_t> active_uses;
+  RileyCudaDeferredCloseNode deferred_close;
 };
 
 namespace {
@@ -1387,14 +1389,20 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_execute(
                             matmul_attempted, error);
 }
 
-extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
-    RileyCudaGemmPlan** plan,
-    RileyCudaErrorInfo* error) noexcept {
+namespace {
+
+using riley_cuda_internal::CaptureDeferredCloseEnqueueResult;
+using riley_cuda_internal::enqueue_capture_deferred_close;
+using riley_cuda_internal::initialize_capture_deferred_close_node;
+
+RileyCudaStatus gemm_plan_close_impl(
+    RileyCudaGemmPlan** plan, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close cuBLASLt GEMM plan";
   clear_error(error);
   if (plan == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
-                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
-                            "close cuBLASLt GEMM plan",
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "plan pointer is null");
   }
   if (*plan == nullptr) {
@@ -1403,30 +1411,26 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
   RileyCudaGemmPlan* value = *plan;
   if (value->owner == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
-                            RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close cuBLASLt GEMM plan",
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "plan context owner is null");
   }
   if (!try_acquire_exclusive_use(value->active_uses)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
-                            RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close cuBLASLt GEMM plan",
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "the GEMM plan has an active or permanent use guard");
   }
 
   CurrentContext scope(value->owner);
-  RileyCudaStatus status = scope.enter(
-      error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-      "close cuBLASLt GEMM plan");
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                        kOperation, capture_owner);
   bool destruction_attempted = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destruction_attempted = true;
-    status = destroy_plan_resources(value, error,
-                                    RILEY_CUDA_ERROR_STAGE_CLOSE,
-                                    "close cuBLASLt GEMM plan");
+    status = destroy_plan_resources(value, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                    kOperation);
   }
   status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                       "close cuBLASLt GEMM plan");
+                       kOperation);
 
   const bool restoration_confirmed =
       !value->owner->restoration_failed.load(std::memory_order_acquire);
@@ -1437,8 +1441,7 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
     std::free(value);
     *plan = nullptr;
     if (!release_child(owner)) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close cuBLASLt GEMM plan",
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "context child-resource counter underflow");
     }
     return RILEY_CUDA_STATUS_SUCCESS;
@@ -1446,12 +1449,83 @@ extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
 
   if (!destruction_attempted && restoration_confirmed) {
     if (!release_exclusive_use(value->active_uses)) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close cuBLASLt GEMM plan",
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "plan use accounting was corrupted");
     }
   }
   // A destruction attempt or ambiguous context restoration leaves the plan's
   // exclusive-use guard set forever, preserving its context-child lease.
   return status;
+}
+
+RileyCudaDeferredCloseResult deferred_gemm_plan_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred cuBLASLt GEMM plan close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred GEMM-plan node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaGemmPlan*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred GEMM-plan node owner does not match its payload"),
+            false};
+  }
+  RileyCudaGemmPlan* raw = value;
+  const RileyCudaStatus status =
+      gemm_plan_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_close(
+    RileyCudaGemmPlan** plan,
+    RileyCudaErrorInfo* error) noexcept {
+  return gemm_plan_close_impl(plan, error, nullptr);
+}
+
+extern "C" RileyCudaStatus riley_cuda_gemm_plan_defer_to_active_capture(
+    RileyCudaGemmPlan** plan, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "defer cuBLASLt GEMM plan close to active capture";
+  clear_error(error);
+  if (plan == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "plan pointer is null");
+  }
+  if (*plan == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*plan)->owner == nullptr ||
+      (*plan)->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "plan has no closeable idle native owner");
+  }
+  if (!initialize_capture_deferred_close_node(
+          &(*plan)->deferred_close, (*plan)->owner, *plan,
+          deferred_gemm_plan_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred GEMM-plan node");
+  }
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*plan)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
+    *plan = nullptr;
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred GEMM-plan node");
 }

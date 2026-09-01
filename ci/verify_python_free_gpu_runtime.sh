@@ -77,12 +77,15 @@ device_list_log="$RILEY_GPU_EVIDENCE_DIR/nvidia-smi-list.txt"
 device_csv="$RILEY_GPU_EVIDENCE_DIR/nvidia-smi-device-metadata.csv"
 test_list_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-list.txt"
 test_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-tests.log"
+graph_test_list_log="$RILEY_GPU_EVIDENCE_DIR/graph-test-list.txt"
+graph_test_log="$RILEY_GPU_EVIDENCE_DIR/graph-tests.log"
 memory_test_list_log="$RILEY_GPU_EVIDENCE_DIR/memory-test-list.txt"
 memory_test_log="$RILEY_GPU_EVIDENCE_DIR/memory-tests.log"
 memory_fault_test_list_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-list.txt"
 memory_fault_test_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-tests.log"
 memory_fault_test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-binary.sha256"
 test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-binary"
+graph_test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/graph-test-binary"
 memory_test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/memory-test-binary"
 memory_fault_test_binary_evidence="$RILEY_GPU_EVIDENCE_DIR/memory-fault-test-binary"
 checksum_file="$RILEY_GPU_EVIDENCE_DIR/SHA256SUMS"
@@ -98,6 +101,7 @@ memory_fault_ldd_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-ldd.txt"
 memory_fault_readelf_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-readelf.txt"
 memory_fault_nm_log="$RILEY_GPU_EVIDENCE_DIR/memory-fault-nm.txt"
 test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/host-runtime-test-binary.sha256"
+graph_test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/graph-test-binary.sha256"
 memory_test_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/memory-test-binary.sha256"
 release_binary_checksum_log="$RILEY_GPU_EVIDENCE_DIR/release-binary.sha256"
 release_ldd_log="$RILEY_GPU_EVIDENCE_DIR/release-ldd.txt"
@@ -111,12 +115,15 @@ for output in \
     "$device_csv" \
     "$test_list_log" \
     "$test_log" \
+    "$graph_test_list_log" \
+    "$graph_test_log" \
     "$memory_test_list_log" \
     "$memory_test_log" \
     "$memory_fault_test_list_log" \
     "$memory_fault_test_log" \
     "$memory_fault_test_binary_checksum_log" \
     "$test_binary_evidence" \
+    "$graph_test_binary_evidence" \
     "$memory_test_binary_evidence" \
     "$memory_fault_test_binary_evidence" \
     "$ldd_log" \
@@ -129,6 +136,7 @@ for output in \
     "$memory_fault_readelf_log" \
     "$memory_fault_nm_log" \
     "$test_binary_checksum_log" \
+    "$graph_test_binary_checksum_log" \
     "$memory_test_binary_checksum_log" \
     "$release_binary_checksum_log" \
     "$release_ldd_log" \
@@ -236,6 +244,44 @@ if ! CARGO_TERM_COLOR=never cargo test \
     --package riley-cuda \
     --no-default-features \
     --features cuda \
+    --test graph_gpu \
+    -- --list --format terse --color never >"$graph_test_list_log" 2>&1
+then
+    cat "$graph_test_list_log"
+    exit 1
+fi
+cat "$graph_test_list_log"
+
+expected_graph_tests='explicit_abort_restores_stream_for_eager_work
+drop_abort_restores_stream_for_eager_work
+repeated_abort_releases_stream_and_context_leases
+pending_fills_block_capture_until_both_complete
+same_context_resource_drops_and_closes_are_deferred_until_abort
+foreign_context_resource_drops_and_closes_survive_abort
+bare_foreign_context_close_is_deferred_until_abort
+pending_copy_blocks_capture_until_consumed
+zero_element_pending_fill_blocks_capture_until_consumed
+same_thread_capture_blocks_context_and_foreign_stream_cuda_work
+cross_thread_context_controls_are_rejected_while_capturing'
+
+for test_name in $expected_graph_tests; do
+    if ! grep -Fqx "$test_name: test" "$graph_test_list_log"; then
+        echo "CUDA Graph integration target is missing required test: $test_name" >&2
+        exit 1
+    fi
+done
+graph_test_list_count=$(grep -Ec ': test$' "$graph_test_list_log" || true)
+if [ "$graph_test_list_count" -ne 11 ]; then
+    echo "expected exactly 11 CUDA Graph integration tests, found $graph_test_list_count" >&2
+    exit 1
+fi
+
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package riley-cuda \
+    --no-default-features \
+    --features cuda \
     --test memory_gpu \
     -- --list --format terse --color never >"$memory_test_list_log" 2>&1
 then
@@ -296,6 +342,19 @@ if [ "$binary_count" -ne 1 ]; then
     exit 1
 fi
 
+graph_test_binary=
+graph_binary_count=0
+for candidate in target/debug/deps/graph_gpu-*; do
+    if [ -f "$candidate" ] && [ -x "$candidate" ]; then
+        graph_test_binary=$candidate
+        graph_binary_count=$((graph_binary_count + 1))
+    fi
+done
+if [ "$graph_binary_count" -ne 1 ]; then
+    echo "expected one graph_gpu test executable, found $graph_binary_count" >&2
+    exit 1
+fi
+
 memory_test_binary=
 memory_binary_count=0
 for candidate in target/debug/deps/memory_gpu-*; do
@@ -323,16 +382,20 @@ if [ "$memory_fault_binary_count" -ne 1 ]; then
 fi
 
 sha256sum "$test_binary" >"$test_binary_checksum_log"
+sha256sum "$graph_test_binary" >"$graph_test_binary_checksum_log"
 sha256sum "$memory_test_binary" >"$memory_test_binary_checksum_log"
 sha256sum "$memory_fault_test_binary" >"$memory_fault_test_binary_checksum_log"
 cp -- "$test_binary" "$test_binary_evidence"
+cp -- "$graph_test_binary" "$graph_test_binary_evidence"
 cp -- "$memory_test_binary" "$memory_test_binary_evidence"
 cp -- "$memory_fault_test_binary" "$memory_fault_test_binary_evidence"
 chmod 0644 \
     "$test_binary_evidence" \
+    "$graph_test_binary_evidence" \
     "$memory_test_binary_evidence" \
     "$memory_fault_test_binary_evidence"
 cat "$test_binary_checksum_log"
+cat "$graph_test_binary_checksum_log"
 cat "$memory_test_binary_checksum_log"
 cat "$memory_fault_test_binary_checksum_log"
 
@@ -357,6 +420,32 @@ grep -Eq \
     "riley-cuda-leak-smoke iterations=${RILEY_CUDA_LEAK_ITERATIONS}( |$)" \
     "$test_log"
 grep -Eq 'test result: ok\. 8 passed; 0 failed; 0 ignored;' "$test_log"
+
+if ! CARGO_TERM_COLOR=never cargo test \
+    --color never \
+    --locked \
+    --package riley-cuda \
+    --no-default-features \
+    --features cuda \
+    --test graph_gpu \
+    -- --ignored --test-threads=1 --nocapture --color never >"$graph_test_log" 2>&1
+then
+    cat "$graph_test_log"
+    exit 1
+fi
+cat "$graph_test_log"
+grep -Fqx 'c05-4-explicit-abort-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-drop-abort-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-repeated-abort-recovery iterations=8 status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-pending-fill-admission-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-deferred-same-context-resources status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-deferred-foreign-context-resources status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-deferred-foreign-context-close status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-pending-copy-admission-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-zero-element-fill-admission-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-thread-local-gate-recovery status=passed' "$graph_test_log"
+grep -Fqx 'c05-4-cross-thread-context-gate-recovery status=passed' "$graph_test_log"
+grep -Eq 'test result: ok\. 11 passed; 0 failed; 0 ignored;' "$graph_test_log"
 
 if ! CARGO_TERM_COLOR=never cargo test \
     --color never \
@@ -649,6 +738,10 @@ host-runtime-readelf.txt
 host-runtime-nm.txt
 host-runtime-test-binary.sha256
 host-runtime-test-binary
+graph-test-list.txt
+graph-tests.log
+graph-test-binary.sha256
+graph-test-binary
 memory-test-list.txt
 memory-tests.log
 memory-fault-test-list.txt

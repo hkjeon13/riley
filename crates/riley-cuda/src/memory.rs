@@ -733,6 +733,18 @@ impl CudaDeviceBuffer {
     }
 }
 
+impl Drop for CudaDeviceBuffer {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            // The native handle's Drop runs after this wrapper hook. When a
+            // thread-local graph capture is live it may hand the raw close to
+            // the native capture owner; retain this Arc until abort drains it.
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+        }
+    }
+}
+
 /// Opaque CUDA-pinned host allocation used for explicit asynchronous copies.
 ///
 /// CPU reads and writes are synchronous and are rejected while any copy token
@@ -855,6 +867,15 @@ impl CudaPinnedHostBuffer {
         {
             let _ = self;
             Err(CudaError::unavailable("CudaPinnedHostBuffer::close"))
+        }
+    }
+}
+
+impl Drop for CudaPinnedHostBuffer {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
         }
     }
 }

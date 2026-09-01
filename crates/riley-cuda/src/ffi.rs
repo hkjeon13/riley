@@ -4,7 +4,9 @@ use std::mem::{offset_of, size_of};
 use std::ptr::{self, NonNull};
 
 use crate::error::{CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult};
-use crate::graph::{CudaGraphFailureInfo, RawGraphErrorInfo, decode_graph_failure_info};
+use crate::graph::{
+    CudaGraphFailureInfo, CudaGraphStage, RawGraphErrorInfo, decode_graph_failure_info,
+};
 
 const STATUS_SUCCESS: i32 = 0;
 const STATUS_INVALID_ARGUMENT: i32 = 1;
@@ -1281,6 +1283,10 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_context_close(context: *mut *mut RawContext, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_context_defer_to_active_capture(
+        context: *mut *mut RawContext,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_stream_create(
         context: *mut RawContext,
         out_stream: *mut *mut RawStream,
@@ -1301,12 +1307,21 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_abort(
+        capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_stream_wait_event(
         stream: *mut RawStream,
         event: *mut RawEvent,
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_stream_close(stream: *mut *mut RawStream, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_stream_defer_to_active_capture(
+        stream: *mut *mut RawStream,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_event_create(
         context: *mut RawContext,
         out_event: *mut *mut RawEvent,
@@ -1330,6 +1345,10 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_event_close(event: *mut *mut RawEvent, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_event_defer_to_active_capture(
+        event: *mut *mut RawEvent,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_device_buffer_create(
         context: *mut RawContext,
         byte_len: u64,
@@ -1337,6 +1356,10 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_device_buffer_close(
+        buffer: *mut *mut RawDeviceBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_device_buffer_defer_to_active_capture(
         buffer: *mut *mut RawDeviceBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1361,6 +1384,10 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_pinned_host_buffer_close(
+        buffer: *mut *mut RawPinnedHostBuffer,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_pinned_host_buffer_defer_to_active_capture(
         buffer: *mut *mut RawPinnedHostBuffer,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -1648,6 +1675,10 @@ unsafe extern "C" {
         plan: *mut *mut RawHfPrefillAttentionPlan,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_hf_prefill_attention_plan_defer_to_active_capture(
+        plan: *mut *mut RawHfPrefillAttentionPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_ragged_paged_attention_two_pass_execute(
         params: *const RawFixed37RaggedPagedAttentionParams,
         stream: *mut RawStream,
@@ -1681,6 +1712,10 @@ unsafe extern "C" {
         error: *mut ErrorInfo,
     ) -> i32;
     fn riley_cuda_gemm_plan_close(plan: *mut *mut RawGemmPlan, error: *mut ErrorInfo) -> i32;
+    fn riley_cuda_gemm_plan_defer_to_active_capture(
+        plan: *mut *mut RawGemmPlan,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_fixed37_gemm_plan_create(
         context: *mut RawContext,
         config: *const RawGemmConfig,
@@ -2063,9 +2098,17 @@ impl ContextHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw is this handle's unique owned pointer; the native close
-        // contract nulls it only after consuming the resource.
-        let status = unsafe { riley_cuda_context_close(&mut raw, &mut error) };
+        // SAFETY: raw is this handle's unique owned pointer. During a safe
+        // Rust graph capture, transfer that ownership to native abort cleanup
+        // instead of issuing a CUDA context release from the capture thread.
+        // The ordinary C close entry point remains retryable for raw callers.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_context_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_context_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA context", &error)
     }
@@ -2135,14 +2178,15 @@ impl StreamHandle {
         status_result(status, "end CUDA stream command batch", &error)
     }
 
-    pub(super) fn begin_graph_capture(&mut self, mode: u32) -> CudaResult<()> {
+    pub(super) fn begin_graph_capture(&mut self, mode: u32) -> CudaResult<GraphCaptureHandle> {
         const OPERATION: &str = "begin CUDA Graph capture";
         let mut capture = ptr::null_mut::<RawGraphCapture>();
         let mut graph_error = RawGraphErrorInfo::new();
         let mut error = ErrorInfo::new();
         // SAFETY: self uniquely owns the stream; every output points to a
-        // correctly sized local record. C05-1 requires the native stub to
-        // leave capture null and avoid mutating stream ownership.
+        // correctly sized local record. A non-null output transfers exactly
+        // one native capture owner to this FFI boundary, including the rare
+        // deferred-error case that must be aborted before returning an error.
         let status = unsafe {
             riley_cuda_graph_capture_begin(
                 self.as_ptr(),
@@ -2152,35 +2196,63 @@ impl StreamHandle {
                 &mut error,
             )
         };
-        if !capture.is_null() {
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        // Never return a decoder/status/contract error while silently dropping
+        // a capture owner. CUDA may have entered capture while surfacing an
+        // earlier asynchronous failure; aborting here either restores the
+        // stream or intentionally strands the native lease fail-closed.
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
             return Err(CudaError::new(
                 CudaErrorKind::Internal,
                 CudaErrorDomain::Internal,
-                CudaErrorStage::Prepare,
-                0,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
                 OPERATION,
-                "native graph-capture stub returned an unexpected owning capture handle",
+                format!(
+                    "native begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
             ));
         }
-        let graph_failure = decode_graph_failure_info(&graph_error)?;
-        if !graph_capture_begin_metadata_is_valid(&graph_error, &graph_failure) {
-            return Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Prepare,
-                0,
-                OPERATION,
-                "native graph-capture stub returned malformed graph companion metadata",
-            ));
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
         }
-        status_result(status, OPERATION, &error)?;
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
         Err(CudaError::new(
             CudaErrorKind::Internal,
             CudaErrorDomain::Internal,
             CudaErrorStage::Prepare,
             0,
             OPERATION,
-            "native graph-capture stub returned success without an owning capture handle",
+            "native graph capture returned success without a valid owned capture handle",
         ))
     }
 
@@ -2207,8 +2279,16 @@ impl StreamHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw is uniquely owned and native nulls it only on consume.
-        let status = unsafe { riley_cuda_stream_close(&mut raw, &mut error) };
+        // SAFETY: the active-capture path transfers this unique owner to the
+        // native capture's post-end cleanup queue; ordinary raw C close keeps
+        // its existing retryable semantics.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_stream_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_stream_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA stream", &error)
     }
@@ -2217,6 +2297,62 @@ impl StreamHandle {
 impl Drop for StreamHandle {
     fn drop(&mut self) {
         let _ = self.close();
+    }
+}
+
+/// One native capture owner. This remains private because the public graph
+/// guard supplies the stream borrow and thread confinement required to use it.
+#[derive(Debug)]
+pub(super) struct GraphCaptureHandle {
+    pointer: Option<NonNull<RawGraphCapture>>,
+}
+
+impl GraphCaptureHandle {
+    /// Ends an active capture exactly once without exposing its graph. This
+    /// takes the Rust pointer before FFI so a native validation/deferred error
+    /// can never cause Drop to retry a potentially consumed CUDA transition.
+    pub(super) fn abort(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "abort CUDA Graph capture";
+        let Some(pointer) = self.pointer.take() else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: this handle is uniquely owned. The native ABI consumes the
+        // in/out owner after an end attempt; a pre-attempt failure may leave it
+        // non-null, which this wrapper deliberately leaks instead of retrying.
+        let status =
+            unsafe { riley_cuda_graph_capture_abort(&mut raw, &mut graph_error, &mut error) };
+        let decoded = decode_graph_failure_info(&graph_error);
+        if !raw.is_null() {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                0,
+                OPERATION,
+                "native abort retained its capture handle; the safe wrapper abandoned it to avoid retrying an ambiguous lifecycle",
+            ));
+        }
+        let graph_failure = decoded?;
+        if !graph_capture_abort_metadata_is_valid(&graph_error, &graph_failure, status) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Validation,
+                0,
+                OPERATION,
+                "native graph abort returned malformed graph companion metadata",
+            ));
+        }
+        status_result(status, OPERATION, &error)
+    }
+}
+
+impl Drop for GraphCaptureHandle {
+    fn drop(&mut self) {
+        let _ = self.abort();
     }
 }
 
@@ -2286,8 +2422,15 @@ impl EventHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw is uniquely owned and native nulls it only on consume.
-        let status = unsafe { riley_cuda_event_close(&mut raw, &mut error) };
+        // SAFETY: see StreamHandle::close; graph-active safe owners move to
+        // native cleanup rather than calling CUDA from the capture body.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_event_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_event_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA event", &error)
     }
@@ -2380,9 +2523,16 @@ impl DeviceBufferHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw is uniquely owned; native either retains it before a
-        // destructive attempt or consumes and nulls it single-shot.
-        let status = unsafe { riley_cuda_device_buffer_close(&mut raw, &mut error) };
+        // SAFETY: graph-active safe Drop transfers this raw owner to the
+        // capture's native post-end queue. Outside capture, ordinary close
+        // preserves its single-shot/ambiguous-destruction contract.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_device_buffer_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_device_buffer_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA device buffer", &error)
     }
@@ -2482,9 +2632,16 @@ impl PinnedHostBufferHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw is uniquely owned; native active-copy validation occurs
-        // before any destructive attempt and single-shot close updates raw.
-        let status = unsafe { riley_cuda_pinned_host_buffer_close(&mut raw, &mut error) };
+        // SAFETY: native validates deferred transfer before consuming the raw
+        // owner. Direct close retains its existing active-copy and retry
+        // behavior for non-capture callers.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_pinned_host_buffer_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_pinned_host_buffer_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA pinned host buffer", &error)
     }
@@ -4532,9 +4689,15 @@ impl HfPrefillAttentionPlanHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw uniquely owns the plan. Native nulls it only after all
-        // descriptors and the retained context lease are cleanly released.
-        let status = unsafe { riley_cuda_hf_prefill_attention_plan_close(&mut raw, &mut error) };
+        // SAFETY: a live safe capture transfers this unique plan to native
+        // post-end cleanup. Raw callers still use the unchanged close ABI.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_hf_prefill_attention_plan_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_hf_prefill_attention_plan_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close HF cuBLASLt prefill attention", &error)
     }
@@ -4713,10 +4876,16 @@ impl GemmPlanHandle {
         };
         let mut raw = pointer.as_ptr();
         let mut error = ErrorInfo::new();
-        // SAFETY: raw uniquely owns the native plan. Native leaves it non-null
-        // after any ambiguous destruction or permanent-use failure and nulls
-        // it only after descriptor teardown and context restoration complete.
-        let status = unsafe { riley_cuda_gemm_plan_close(&mut raw, &mut error) };
+        // SAFETY: native capture cleanup takes this unique owner only after
+        // validating that it can later close it under the exact capture owner.
+        // Ordinary C close remains the retryable raw API.
+        let status = unsafe {
+            if crate::graph::has_active_graph_capture() {
+                riley_cuda_gemm_plan_defer_to_active_capture(&mut raw, &mut error)
+            } else {
+                riley_cuda_gemm_plan_close(&mut raw, &mut error)
+            }
+        };
         self.pointer = NonNull::new(raw);
         status_result(status, "close CUDA GEMM plan", &error)
     }
@@ -5027,11 +5196,32 @@ fn missing_output(operation: &'static str, message: &'static str) -> CudaError {
     )
 }
 
-fn graph_capture_begin_metadata_is_valid(
+fn graph_capture_begin_success_metadata_is_valid(
     raw: &RawGraphErrorInfo,
     decoded: &CudaGraphFailureInfo,
 ) -> bool {
-    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE && decoded.is_empty_capture_begin_attempt()
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::CaptureBegin))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_none()
+        && !decoded.submission_started()
+        && !decoded.completion_known()
+        && !decoded.resource_release_known()
+        && !decoded.poisoned()
+}
+
+fn graph_capture_abort_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+    status: i32,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::CaptureAbort))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_none()
+        && !decoded.submission_started()
+        && !decoded.completion_known()
+        && (status != STATUS_SUCCESS || (decoded.resource_release_known() && !decoded.poisoned()))
 }
 
 #[cfg(feature = "nvml")]
@@ -5234,3 +5424,27 @@ const _: () = assert!(size_of::<RawFixed37GemmPlanInfo>() == 96);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, dynamic_shared_memory_bytes) == 32);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, m) == 48);
 const _: () = assert!(offset_of!(RawFixed37GemmPlanInfo, reserved) == 72);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn successful_graph_abort_rejects_poisoned_release_evidence() {
+        let poisoned = RawGraphErrorInfo::capture_abort_for_test(1, 1);
+        let poisoned_decoded = decode_graph_failure_info(&poisoned)
+            .expect("well-formed poisoned capture-abort evidence must decode");
+        assert!(
+            !graph_capture_abort_metadata_is_valid(&poisoned, &poisoned_decoded, STATUS_SUCCESS),
+            "success must not accept an abort record that leaves the owner poisoned"
+        );
+
+        let released = RawGraphErrorInfo::capture_abort_for_test(1, 0);
+        let released_decoded = decode_graph_failure_info(&released)
+            .expect("well-formed released capture-abort evidence must decode");
+        assert!(
+            graph_capture_abort_metadata_is_valid(&released, &released_decoded, STATUS_SUCCESS),
+            "success requires known release with no poison flag"
+        );
+    }
+}

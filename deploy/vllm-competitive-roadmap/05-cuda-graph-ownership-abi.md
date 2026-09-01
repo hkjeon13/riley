@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-3은 `GraphCapture`의 exclusive stream lease와 thread confinement를 compile-fail 계약으로 고정했다.
+**상태:** In progress — C05-4는 실제 thread-local capture owner와 abort/recovery를 닫는다. graph end·instantiate·replay는 C05-5로 분리한다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -66,6 +66,54 @@ close를 호출할 수 없고, `GraphCapture<'static>`을 다른 thread로 보�
 FFI, stream/context mutation, command-batch/resource lease, abort/end/instantiate/replay를 추가하지
 않는다. 따라서 실제 capture owner는 non-null native handle의 consume-on-error, invalidation abort와
 recovery, resource lifetime을 함께 닫는 다음 native slice에서만 도입한다.
+
+### C05-4 — native capture owner and abort recovery (CUDA)
+
+`riley_cuda_graph_capture_begin`은 이제 `cudaStreamBeginCapture`를 실제 호출하고, 성공한 경우에만
+non-null `RileyCudaGraphCapture` owner와 non-zero capture ID를 돌려준다. owner는 시작 stream/context,
+thread-local capture의 시작 host-thread token, 그리고 stream exclusive-use lease를 함께 보관한다.
+따라서 **같은 host thread**에서 nested capture, active command batch, CUDA query/synchronize/close 및 다른 일반
+CUDA stream 작업은 CUDA 호출 전에 거부된다. 이 gate는 `ThreadLocal` capture owner와 정확히 결합되며, CUDA가
+정의한 ThreadLocal semantics처럼 다른 host thread의 independent stream work를 전역으로 serialize하지 않는다.
+단, `cudaDeviceSynchronize`·`cudaMemGetInfo`·primary-context retain/release처럼 capture stream을 포함하는
+**context-wide control**은 다른 host thread에서도 안전한 독립 작업이 아니다. primary-context별 active-capture
+domain의 짧은 admission lock이 control lease와 capture begin의 check-and-mark를 단일 전이로 직렬화한다.
+따라서 다른 wrapper/thread가 그런 control을 CUDA에 넘기기 전에 거부되며, 관측 순서 경쟁으로 둘 다 CUDA에
+들어갈 수 없다. capture가 끝난 뒤에는 그 lease도 해제되어 independent work는 정상적으로 재개된다.
+
+진단용 `CudaPendingFill`과 async H2D/D2H copy는 예외다. 이 값들의 finish/Drop은 allocation,
+completion 또는 release를 수행하므로, 모든 smoke buffer create(0-element 포함)는 `cudaMalloc` **전**,
+copy는 `cudaMemcpyAsync`와 token allocation **전** 같은 global+primary-context admission lock에 pending
+lease를 게시하고 native owner가 확실히 소비될 때까지 유지한다. capture begin은 어느 device의 pending
+lease라도 있으면 거부하고, capture가 먼저 시작된 경우에는 다른 host thread의 `CudaKernel::launch_fill`과
+copy submission도 CUDA 호출 전에 거부한다. 하나의 native smoke buffer는 재launch되어도 create-time
+lease 하나만 유지한다. 따라서 abort 뒤 재시도 가능한 `InvalidState` 때문에 Rust Drop이 native child
+owner를 잃는 경로를 만들지 않는다. 이는 diagnostic pending lifecycle만 보수적으로 직렬화하며, C05-4가
+일반 capture enqueue/replay를 지원한다는 의미는 아니다.
+
+새 additive `riley_cuda_graph_capture_abort(RileyCudaGraphCapture** ...)`는 one-shot owner를 받는다.
+abort는 시작 thread에서만 `cudaStreamEndCapture`를 호출하고, 반환된 (empty 또는 invalidated) graph는
+즉시 destroy한다. end/destroy/context restoration이 모두 확실할 때만 capture child와 stream lease를
+해제한다. 이 시점에만 capture 중 Drop/close된 foreign 또는 same-context stream, event, context,
+device/pinned buffer, cuBLASLt/HF plan의 embedded deferred-close FIFO를 순서대로 drain한다. 어느 한
+단계나 deferred close가 불명확하면 raw handle은 재시도하지 않도록 consume하고, native owner와 stream
+lease를 의도적으로 retained/poisoned 상태로 남긴다. 성공하지 않은 begin이 실제 capture를 시작했을
+가능성이 있으면 output owner를 통해 Rust boundary가 같은 abort recovery를 먼저 시도한다.
+
+Rust `GraphCapture<'stream>`은 이제 phantom marker가 아니라 실제 FFI owner와 mutable `CudaStream`
+borrow를 함께 소유한다. `abort(self)`와 Drop은 정확히 한 번만 native abort를 시도한다. 이 slice는
+capture 안에 enqueue 가능한 public operation, `capture_end -> CapturedGraph`, instantiate, launch,
+replay 또는 성능 향상을 추가하지 않는다. GPU test는 begin → abort/Drop → 동일 stream eager fill의
+recovery와 repeated lifecycle close, 그리고 같은 primary context의 다른 host thread에서 context-wide control이
+거부되고 abort 뒤 다시 허용되는지를 검증한다.
+
+### C05-5 — admitted operation, graph end, and replay (planned)
+
+C05-5는 C05-4의 recovery-proven capture owner 위에서만 시작한다. 사전 할당된 capture-safe custom
+fill을 명시 whitelist로 넣고, `CapturedGraph`/`GraphExec`/`GraphLaunch`의 end·instantiate·replay·completion
+owner를 추가한다. graph exec가 retained resource lease를 소유하고 launch completion 전 close를 막는
+계약, multi-replay parity 및 foreign-stream rejection을 이 slice에서 검증한다. H2D/D2H chain,
+cuBLASLt capture, node update, fault-injection 및 1000-replay performance claim은 그 이후 slice로 남긴다.
 
 ## 2. 범위
 
@@ -229,6 +277,7 @@ launch 후 completion 미확정 오류는 graph exec와 resource lease를 유지
 kernels/include/riley_cuda.h
 kernels/src/graph.cu
 kernels/src/ffi_internal.hpp
+kernels/src/smoke_fill.cu
 kernels/CMakeLists.txt
 kernels/tests/abi_layout.c
 crates/riley-cuda/src/graph.rs

@@ -126,9 +126,9 @@ if [ "$abi_link_binary_count" -ne 1 ]; then
     exit 1
 fi
 
-# Compile the cumulative PR 03 host-runtime and PR 04 memory GPU integration
-# targets into the reusable image without executing them. Device access is
-# reserved for verify_python_free_gpu_runtime.sh.
+# Compile the cumulative PR 03 host-runtime, PR 04 memory, and C05 graph GPU
+# integration targets into the reusable image without executing them. Device
+# access is reserved for verify_python_free_gpu_runtime.sh.
 cargo test \
     --locked \
     --package riley-cuda \
@@ -143,6 +143,14 @@ cargo test \
     --no-default-features \
     --features cuda \
     --test memory_gpu \
+    --no-run
+
+cargo test \
+    --locked \
+    --package riley-cuda \
+    --no-default-features \
+    --features cuda \
+    --test graph_gpu \
     --no-run
 
 # Compile, but never execute, the subprocess-only destructive fault gate while
@@ -164,7 +172,7 @@ cargo test \
     --features cuda \
     --no-run
 
-# Lint the complete CUDA-enabled Rust surface, including both ignored GPU test
+# Lint the complete CUDA-enabled Rust surface, including all ignored GPU test
 # targets, without executing a device operation in this compile-only image.
 cargo clippy \
     --locked \

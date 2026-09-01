@@ -1247,7 +1247,18 @@ impl PreparedPrefillAttention {
     pub fn close(self) -> CudaResult<()> {
         #[cfg(feature = "cuda")]
         {
-            if let Some(owner) = self.hf_eager_plan {
+            let mut this = self;
+            // `take` below leaves the wrapper's Drop hook unable to observe
+            // the plan. Preserve the context lease first for the capture-time
+            // native close handoff, if there is an owned HF plan to close.
+            if this.hf_eager_plan.is_some() {
+                let _ = crate::graph::retain_context_for_active_graph_capture(&this.context);
+            }
+            // This wrapper now has a Drop hook that can retain its context
+            // while capture drains a deferred native plan close. Take the
+            // optional Arc explicitly instead of moving a field out of a
+            // Drop type, and leave the wrapper empty before its destructor.
+            if let Some(owner) = this.hf_eager_plan.take() {
                 let state = Arc::try_unwrap(owner)
                     .map_err(|_| {
                         CudaError::invalid_state(
@@ -1277,6 +1288,20 @@ impl PreparedPrefillAttention {
         {
             let _ = self;
             Ok(())
+        }
+    }
+}
+
+impl Drop for PreparedPrefillAttention {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            // The HF eager plan is behind an Arc<Mutex<_>>, so the final plan
+            // destructor can run after this wrapper has begun dropping. Keep
+            // its context lease alive across capture-owner deferred cleanup.
+            if self.hf_eager_plan.is_some() {
+                let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+            }
         }
     }
 }

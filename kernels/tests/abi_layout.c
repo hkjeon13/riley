@@ -534,6 +534,24 @@ static RileyCudaStatus (*const graph_capture_begin_symbol)(
     RileyCudaStream*, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
     RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_begin;
+static RileyCudaStatus (*const graph_capture_abort_symbol)(
+    RileyCudaGraphCapture**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_abort;
+static RileyCudaStatus (*const context_defer_to_active_capture_symbol)(
+    RileyCudaContext**, RileyCudaErrorInfo*) =
+    riley_cuda_context_defer_to_active_capture;
+static RileyCudaStatus (*const stream_defer_to_active_capture_symbol)(
+    RileyCudaStream**, RileyCudaErrorInfo*) =
+    riley_cuda_stream_defer_to_active_capture;
+static RileyCudaStatus (*const event_defer_to_active_capture_symbol)(
+    RileyCudaEvent**, RileyCudaErrorInfo*) =
+    riley_cuda_event_defer_to_active_capture;
+static RileyCudaStatus (*const device_buffer_defer_to_active_capture_symbol)(
+    RileyCudaDeviceBuffer**, RileyCudaErrorInfo*) =
+    riley_cuda_device_buffer_defer_to_active_capture;
+static RileyCudaStatus (*const pinned_host_buffer_defer_to_active_capture_symbol)(
+    RileyCudaPinnedHostBuffer**, RileyCudaErrorInfo*) =
+    riley_cuda_pinned_host_buffer_defer_to_active_capture;
 static RileyCudaStatus (*const command_batch_copy_h2d_symbol)(
     RileyCudaDeviceBuffer*, uint64_t, RileyCudaPinnedHostBuffer*, uint64_t,
     uint64_t, RileyCudaStream*, RileyCudaErrorInfo*) =
@@ -644,6 +662,10 @@ static RileyCudaStatus (*const hf_prefill_attention_plan_execute_symbol)(
 static RileyCudaStatus (*const hf_prefill_attention_plan_close_symbol)(
     RileyCudaHfPrefillAttentionPlan**, RileyCudaErrorInfo*) =
     riley_cuda_hf_prefill_attention_plan_close;
+static RileyCudaStatus (*const
+                                hf_prefill_attention_plan_defer_to_active_capture_symbol)(
+    RileyCudaHfPrefillAttentionPlan**, RileyCudaErrorInfo*) =
+    riley_cuda_hf_prefill_attention_plan_defer_to_active_capture;
 static RileyCudaStatus (*const kv_cache_write_symbol)(
     const RileyCudaKvCacheWriteParams*, RileyCudaStream*,
     RileyCudaErrorInfo*) = riley_cuda_kv_cache_write_execute;
@@ -722,6 +744,9 @@ static RileyCudaStatus (*const gemm_plan_execute_symbol)(
 static RileyCudaStatus (*const gemm_plan_close_symbol)(
     RileyCudaGemmPlan**,
     RileyCudaErrorInfo*) = riley_cuda_gemm_plan_close;
+static RileyCudaStatus (*const gemm_plan_defer_to_active_capture_symbol)(
+    RileyCudaGemmPlan**, RileyCudaErrorInfo*) =
+    riley_cuda_gemm_plan_defer_to_active_capture;
 static RileyCudaStatus (*const fixed37_gemm_plan_create_symbol)(
     RileyCudaContext*, const RileyCudaGemmConfig*,
     RileyCudaFixed37GemmPlan**, RileyCudaErrorInfo*) =
@@ -743,6 +768,12 @@ static RileyCudaStatus (*const fixed37_gemm_plan_close_symbol)(
 const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
     (const void*)&graph_capture_begin_symbol,
+    (const void*)&graph_capture_abort_symbol,
+    (const void*)&context_defer_to_active_capture_symbol,
+    (const void*)&stream_defer_to_active_capture_symbol,
+    (const void*)&event_defer_to_active_capture_symbol,
+    (const void*)&device_buffer_defer_to_active_capture_symbol,
+    (const void*)&pinned_host_buffer_defer_to_active_capture_symbol,
     (const void*)&command_batch_copy_h2d_symbol,
     (const void*)&embedding_symbol,      (const void*)&rms_norm_symbol,
     (const void*)&hugging_face_smollm2_rms_norm_symbol,
@@ -770,6 +801,7 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&hf_prefill_attention_plan_info_symbol,
     (const void*)&hf_prefill_attention_plan_execute_symbol,
     (const void*)&hf_prefill_attention_plan_close_symbol,
+    (const void*)&hf_prefill_attention_plan_defer_to_active_capture_symbol,
     (const void*)&kv_cache_write_symbol,
     (const void*)&decode_attention_reference_symbol,
     (const void*)&fixed37_decode_attention_reference_symbol,
@@ -790,6 +822,7 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&gemm_plan_info_symbol,
     (const void*)&gemm_plan_execute_symbol,
     (const void*)&gemm_plan_close_symbol,
+    (const void*)&gemm_plan_defer_to_active_capture_symbol,
     (const void*)&fixed37_gemm_plan_create_symbol,
     (const void*)&fixed37_gemm_plan_info_symbol,
     (const void*)&fixed37_gemm_plan_execute_symbol,

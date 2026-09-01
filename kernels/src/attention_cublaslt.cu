@@ -449,7 +449,8 @@ struct RileyCudaHfPrefillAttentionPlan {
         qk{},
         av{},
         bytes(plan_bytes),
-        active_uses(0) {
+        active_uses(0),
+        deferred_close() {
     info.struct_size = sizeof(info);
   }
 
@@ -461,6 +462,7 @@ struct RileyCudaHfPrefillAttentionPlan {
   MatmulState av;
   ByteCounts bytes;
   std::atomic<uint32_t> active_uses;
+  RileyCudaDeferredCloseNode deferred_close;
 };
 
 namespace {
@@ -1604,10 +1606,15 @@ riley_cuda_hf_prefill_attention_plan_execute(
                             error, kOperation);
 }
 
-extern "C" RileyCudaStatus
-riley_cuda_hf_prefill_attention_plan_close(
-    RileyCudaHfPrefillAttentionPlan** plan,
-    RileyCudaErrorInfo* error) noexcept {
+namespace {
+
+using riley_cuda_internal::CaptureDeferredCloseEnqueueResult;
+using riley_cuda_internal::enqueue_capture_deferred_close;
+using riley_cuda_internal::initialize_capture_deferred_close_node;
+
+RileyCudaStatus hf_prefill_attention_plan_close_impl(
+    RileyCudaHfPrefillAttentionPlan** plan, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
   constexpr const char* kOperation = "close HF cuBLASLt prefill attention";
   clear_error(error);
   if (plan == nullptr) {
@@ -1619,19 +1626,19 @@ riley_cuda_hf_prefill_attention_plan_close(
     return RILEY_CUDA_STATUS_SUCCESS;
   }
   RileyCudaHfPrefillAttentionPlan* value = *plan;
-  if (!try_acquire_exclusive_use(value->active_uses)) {
+  if (value->owner == nullptr ||
+      !try_acquire_exclusive_use(value->active_uses)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
-                            "plan has an active or permanent use guard");
+                            "plan has no closeable idle native owner");
   }
   CurrentContext scope(value->owner);
-  RileyCudaStatus status = scope.enter(
-      error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                        kOperation, capture_owner);
   bool destruction_attempted = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
     destruction_attempted = true;
-    status = destroy_plan_resources(value, error,
-                                    RILEY_CUDA_ERROR_STAGE_CLOSE,
+    status = destroy_plan_resources(value, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                                     kOperation);
   }
   status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
@@ -1645,14 +1652,91 @@ riley_cuda_hf_prefill_attention_plan_close(
     std::free(value);
     *plan = nullptr;
     if (!release_child(owner)) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            kOperation,
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
                             "context child-resource counter underflow");
     }
     return status;
   }
-  if (!destruction_attempted && restored) {
-    (void)release_exclusive_use(value->active_uses);
+  if (!destruction_attempted && restored &&
+      !release_exclusive_use(value->active_uses)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "plan use accounting was corrupted");
   }
   return status;
+}
+
+RileyCudaDeferredCloseResult deferred_hf_prefill_attention_plan_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "drain deferred HF cuBLASLt prefill attention close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred HF prefill-plan node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaHfPrefillAttentionPlan*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred HF prefill-plan node owner does not match its payload"),
+            false};
+  }
+  RileyCudaHfPrefillAttentionPlan* raw = value;
+  const RileyCudaStatus status =
+      hf_prefill_attention_plan_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
+}
+
+}  // namespace
+
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_close(
+    RileyCudaHfPrefillAttentionPlan** plan,
+    RileyCudaErrorInfo* error) noexcept {
+  return hf_prefill_attention_plan_close_impl(plan, error, nullptr);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_hf_prefill_attention_plan_defer_to_active_capture(
+    RileyCudaHfPrefillAttentionPlan** plan,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation =
+      "defer HF cuBLASLt prefill attention close to active capture";
+  clear_error(error);
+  if (plan == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "plan pointer is null");
+  }
+  if (*plan == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*plan)->owner == nullptr ||
+      (*plan)->active_uses.load(std::memory_order_acquire) != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "plan has no closeable idle native owner");
+  }
+  if (!initialize_capture_deferred_close_node(
+          &(*plan)->deferred_close, (*plan)->owner, *plan,
+          deferred_hf_prefill_attention_plan_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred HF prefill-plan node");
+  }
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*plan)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
+    *plan = nullptr;
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred HF prefill-plan node");
 }

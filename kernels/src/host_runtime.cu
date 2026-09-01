@@ -8,18 +8,27 @@
 namespace {
 
 using riley_cuda_internal::AllocationStatsGuard;
+using riley_cuda_internal::CaptureDeferredCloseEnqueueResult;
+using riley_cuda_internal::CaptureDomainControlLease;
 using riley_cuda_internal::CurrentContext;
+using riley_cuda_internal::capture_domain_for_device;
 using riley_cuda_internal::clear_error;
 using riley_cuda_internal::command_batch_thread_token;
 using riley_cuda_internal::driver_error;
+using riley_cuda_internal::enqueue_capture_deferred_close;
+using riley_cuda_internal::initialize_capture_deferred_close_node;
 using riley_cuda_internal::internal_error;
 using riley_cuda_internal::release_exclusive_use;
+using riley_cuda_internal::release_thread_command_batch;
 using riley_cuda_internal::runtime_error;
 using riley_cuda_internal::retain_child;
 using riley_cuda_internal::release_child;
 using riley_cuda_internal::same_context;
 using riley_cuda_internal::set_error;
+using riley_cuda_internal::thread_has_active_graph_capture;
+using riley_cuda_internal::thread_graph_capture_is_owner;
 using riley_cuda_internal::try_acquire_exclusive_use;
+using riley_cuda_internal::try_publish_thread_command_batch;
 using riley_cuda_internal::validation_error;
 
 #if defined(RILEY_CUDA_ENABLE_NVML_PROBE)
@@ -164,6 +173,247 @@ void destroy_event_after_failed_create(RileyCudaContext* context,
                         RILEY_CUDA_ERROR_STAGE_CLOSE,
                         "cleanup event after create");
   }
+}
+
+RileyCudaStatus validate_context_close_preconditions(
+    RileyCudaContext* context, RileyCudaErrorInfo* error,
+    const char* operation) noexcept {
+  if (context->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, operation,
+        "a prior CUDA context-stack restoration failed; refusing to release the primary-context lease");
+  }
+  const uint32_t live_children =
+      context->live_children.load(std::memory_order_acquire);
+  if (live_children != 0) {
+    char detail[128]{};
+    std::snprintf(detail, sizeof(detail),
+                  "context still owns %u live stream/event/buffer/copy resources",
+                  live_children);
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, operation, detail);
+  }
+  bool has_live_allocation_accounting = false;
+  {
+    const AllocationStatsGuard guard(context);
+    has_live_allocation_accounting =
+        context->device_live_bytes.load(std::memory_order_relaxed) != 0 ||
+        context->device_live_allocations.load(std::memory_order_relaxed) != 0 ||
+        context->pinned_host_live_bytes.load(std::memory_order_relaxed) != 0 ||
+        context->pinned_host_live_allocations.load(std::memory_order_relaxed) != 0;
+  }
+  if (has_live_allocation_accounting) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, operation,
+        "context allocation accounting is non-zero; refusing to release the primary-context lease");
+  }
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
+RileyCudaStatus context_close_impl(
+    RileyCudaContext** context, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close CUDA context";
+  clear_error(error);
+  if (context == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "context pointer is null");
+  }
+  if (*context == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (capture_owner == nullptr) {
+    if (thread_has_active_graph_capture()) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+          "this host thread has an active thread-local CUDA Graph capture");
+    }
+  } else if (!thread_graph_capture_is_owner(capture_owner) ||
+             !capture_owner->capture_terminated) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+        "deferred context close requires this exact physically terminated CUDA Graph capture");
+  }
+  const CaptureDomainControlLease capture_control(
+      (*context)->capture_domain, capture_owner);
+  if (!capture_control.active()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+        "the CUDA primary context has an active graph capture or broad control operation");
+  }
+  RileyCudaStatus status =
+      validate_context_close_preconditions(*context, error, kOperation);
+  if (status != RILEY_CUDA_STATUS_SUCCESS) {
+    return status;
+  }
+  const CUresult result = cuDevicePrimaryCtxRelease((*context)->device);
+  status = driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                        "release CUDA primary context");
+  // Driver release may report an earlier asynchronous error after decrementing
+  // the primary-context refcount. Consume the wrapper after the single release
+  // attempt; a genuine failure becomes a safe lease leak, never a double
+  // release of another module's shared primary-context ownership.
+  (*context)->~RileyCudaContext();
+  std::free(*context);
+  *context = nullptr;
+  return status;
+}
+
+RileyCudaDeferredCloseResult deferred_context_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred CUDA context close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred context node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaContext*>(node->payload);
+  if (value != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred context node owner does not match its payload"),
+            false};
+  }
+  RileyCudaContext* raw = value;
+  const RileyCudaStatus status =
+      context_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
+}
+
+RileyCudaStatus stream_close_impl(
+    RileyCudaStream** stream, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close CUDA stream";
+  clear_error(error);
+  if (stream == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "stream pointer is null");
+  }
+  if (*stream == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if ((*stream)->active_uses.load(std::memory_order_acquire) != 0 ||
+      (*stream)->command_batch_owner.load(std::memory_order_acquire) !=
+          nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "stream still has an active asynchronous use");
+  }
+  CurrentContext scope((*stream)->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                        kOperation, capture_owner);
+  bool destroy_attempted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    destroy_attempted = true;
+    status = runtime_error(cudaStreamDestroy((*stream)->stream), error,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                       kOperation);
+  if (destroy_attempted) {
+    const bool released = release_child((*stream)->owner);
+    (*stream)->~RileyCudaStream();
+    std::free(*stream);
+    *stream = nullptr;
+    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "context child-resource counter underflow");
+    }
+  }
+  return status;
+}
+
+RileyCudaDeferredCloseResult deferred_stream_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred CUDA stream close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred stream node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaStream*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred stream node owner does not match its payload"),
+            false};
+  }
+  RileyCudaStream* raw = value;
+  const RileyCudaStatus status = stream_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
+}
+
+RileyCudaStatus event_close_impl(
+    RileyCudaEvent** event, RileyCudaErrorInfo* error,
+    const RileyCudaGraphCapture* capture_owner) noexcept {
+  constexpr const char* kOperation = "close CUDA event";
+  clear_error(error);
+  if (event == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "event pointer is null");
+  }
+  if (*event == nullptr) {
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  CurrentContext scope((*event)->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                                        kOperation, capture_owner);
+  bool destroy_attempted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    destroy_attempted = true;
+    status = runtime_error(cudaEventDestroy((*event)->event), error,
+                           RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation);
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                       kOperation);
+  if (destroy_attempted) {
+    const bool released = release_child((*event)->owner);
+    (*event)->~RileyCudaEvent();
+    std::free(*event);
+    *event = nullptr;
+    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "context child-resource counter underflow");
+    }
+  }
+  return status;
+}
+
+RileyCudaDeferredCloseResult deferred_event_close(
+    RileyCudaDeferredCloseNode* node,
+    const RileyCudaGraphCapture* capture_owner,
+    RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "drain deferred CUDA event close";
+  if (node == nullptr || node->payload == nullptr || node->owner == nullptr) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred event node is incomplete"),
+            false};
+  }
+  auto* value = static_cast<RileyCudaEvent*>(node->payload);
+  if (value->owner != node->owner) {
+    return {validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                             RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                             "deferred event node owner does not match its payload"),
+            false};
+  }
+  RileyCudaEvent* raw = value;
+  const RileyCudaStatus status = event_close_impl(&raw, error, capture_owner);
+  return {status, raw == nullptr};
 }
 
 }  // namespace
@@ -393,6 +643,12 @@ extern "C" RileyCudaStatus riley_cuda_device_count(
                             "device count", "out_count is null");
   }
   *out_count = 0;
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "device count",
+        "this host thread has an active thread-local CUDA Graph capture");
+  }
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
     return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
@@ -432,6 +688,12 @@ extern "C" RileyCudaStatus riley_cuda_device_properties(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "query device properties",
                             "device ordinal must be non-negative");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query device properties",
+        "this host thread has an active thread-local CUDA Graph capture");
   }
 
   CUresult result = cuInit(0);
@@ -523,6 +785,12 @@ extern "C" RileyCudaStatus riley_cuda_context_create(
                             "create CUDA context",
                             "device ordinal must be non-negative");
   }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "create CUDA context",
+        "this host thread has an active thread-local CUDA Graph capture");
+  }
   CUresult result = cuInit(0);
   if (result != CUDA_SUCCESS) {
     return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_INITIALIZE,
@@ -533,6 +801,21 @@ extern "C" RileyCudaStatus riley_cuda_context_create(
   if (result != CUDA_SUCCESS) {
     return driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CREATE,
                         "select CUDA context device");
+  }
+  RileyCudaCaptureDomain* const capture_domain =
+      capture_domain_for_device(device);
+  if (capture_domain == nullptr) {
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, "create CUDA context",
+                     "host allocation failed for primary-context capture domain");
+  }
+  const CaptureDomainControlLease capture_control(capture_domain);
+  if (!capture_control.active()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "create CUDA context",
+        "the CUDA primary context has an active graph capture or broad control operation");
   }
   CUcontext primary = nullptr;
   result = cuDevicePrimaryCtxRetain(&primary, device);
@@ -549,7 +832,8 @@ extern "C" RileyCudaStatus riley_cuda_context_create(
                      "host allocation failed");
   }
   auto* context =
-      new (context_storage) RileyCudaContext(device, primary, ordinal);
+      new (context_storage) RileyCudaContext(device, primary, ordinal,
+                                             capture_domain);
 
   RileyCudaStatus status = RILEY_CUDA_STATUS_SUCCESS;
   bool context_stack_restored = false;
@@ -594,6 +878,24 @@ extern "C" RileyCudaStatus riley_cuda_context_create(
 extern "C" RileyCudaStatus riley_cuda_context_synchronize(
     RileyCudaContext* context, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  if (context == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "synchronize CUDA context", "context is null");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "synchronize CUDA context",
+        "this host thread has an active thread-local CUDA Graph capture");
+  }
+  const CaptureDomainControlLease capture_control(context->capture_domain);
+  if (!capture_control.active()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "synchronize CUDA context",
+        "the CUDA primary context has an active graph capture or broad control operation");
+  }
   CurrentContext scope(context);
   RileyCudaStatus status = scope.enter(
       error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE, "synchronize CUDA context");
@@ -618,6 +920,24 @@ extern "C" RileyCudaStatus riley_cuda_context_memory_info(
   }
   *out_free_bytes = 0;
   *out_total_bytes = 0;
+  if (context == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            "query CUDA memory info", "context is null");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query CUDA memory info",
+        "this host thread has an active thread-local CUDA Graph capture");
+  }
+  const CaptureDomainControlLease capture_control(context->capture_domain);
+  if (!capture_control.active()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, "query CUDA memory info",
+        "the CUDA primary context has an active graph capture or broad control operation");
+  }
   CurrentContext scope(context);
   RileyCudaStatus status = scope.enter(
       error, RILEY_CUDA_ERROR_STAGE_QUERY, "query CUDA memory info");
@@ -665,60 +985,45 @@ extern "C" RileyCudaStatus riley_cuda_context_allocation_stats(
 extern "C" RileyCudaStatus riley_cuda_context_close(
     RileyCudaContext** context, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  return context_close_impl(context, error, nullptr);
+}
+
+extern "C" RileyCudaStatus riley_cuda_context_defer_to_active_capture(
+    RileyCudaContext** context, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "defer CUDA context close to active capture";
+  clear_error(error);
   if (context == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
-                            RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA context", "context pointer is null");
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "context pointer is null");
   }
   if (*context == nullptr) {
     return RILEY_CUDA_STATUS_SUCCESS;
   }
-  if ((*context)->restoration_failed.load(std::memory_order_acquire)) {
-    return validation_error(
-        error, RILEY_CUDA_STATUS_INVALID_STATE,
-        RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
-        "a prior CUDA context-stack restoration failed; refusing to release the primary-context lease");
+  const RileyCudaStatus ready =
+      validate_context_close_preconditions(*context, error, kOperation);
+  if (ready != RILEY_CUDA_STATUS_SUCCESS) {
+    return ready;
   }
-  const uint32_t live_children =
-      (*context)->live_children.load(std::memory_order_acquire);
-  if (live_children != 0) {
-    char detail[128]{};
-    std::snprintf(detail, sizeof(detail),
-                  "context still owns %u live stream/event/buffer/copy resources",
-                  live_children);
+  if (!initialize_capture_deferred_close_node(
+          &(*context)->deferred_close, *context, *context,
+          deferred_context_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred context-close node");
+  }
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*context)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
+    *context = nullptr;
+    return RILEY_CUDA_STATUS_SUCCESS;
+  }
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
-                            RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA context", detail);
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
   }
-  bool has_live_allocation_accounting = false;
-  {
-    const AllocationStatsGuard guard(*context);
-    has_live_allocation_accounting =
-        (*context)->device_live_bytes.load(std::memory_order_relaxed) != 0 ||
-        (*context)->device_live_allocations.load(std::memory_order_relaxed) != 0 ||
-        (*context)->pinned_host_live_bytes.load(std::memory_order_relaxed) != 0 ||
-        (*context)->pinned_host_live_allocations.load(
-            std::memory_order_relaxed) != 0;
-  }
-  if (has_live_allocation_accounting) {
-    return validation_error(
-        error, RILEY_CUDA_STATUS_INVALID_STATE,
-        RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA context",
-        "context allocation accounting is non-zero; refusing to release the "
-        "primary-context lease");
-  }
-  const CUresult result = cuDevicePrimaryCtxRelease((*context)->device);
-  const RileyCudaStatus status =
-      driver_error(result, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                   "release CUDA primary context");
-  // Driver release may report an earlier asynchronous error after decrementing
-  // the primary-context refcount. Consume the wrapper after the single release
-  // attempt; a genuine failure becomes a safe lease leak, never a double
-  // release of another module's shared primary-context ownership.
-  (*context)->~RileyCudaContext();
-  std::free(*context);
-  *context = nullptr;
-  return status;
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred context-close node");
 }
 
 extern "C" RileyCudaStatus riley_cuda_stream_create(
@@ -778,6 +1083,12 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_begin(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream is null");
   }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
+        "this host thread has an active thread-local CUDA Graph capture");
+  }
   if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -800,12 +1111,22 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_begin(
                           kOperation,
                           "inactive command batch retained ledger entries");
   }
+  if (!try_publish_thread_command_batch()) {
+    (void)release_exclusive_use(stream->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE, kOperation,
+                          "thread-local command-batch counter overflow");
+  }
 
   const void* expected = nullptr;
   if (!stream->command_batch_owner.compare_exchange_strong(
           expected, command_batch_thread_token(), std::memory_order_release,
           std::memory_order_acquire)) {
-    (void)release_exclusive_use(stream->active_uses);
+    const bool thread_released = release_thread_command_batch();
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    if (!thread_released || !stream_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "failed to release a rejected command-batch owner");
+    }
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kOperation,
                             "stream already has an active command batch");
@@ -890,6 +1211,11 @@ extern "C" RileyCudaStatus riley_cuda_stream_command_batch_end(
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
                           kOperation,
                           "command-batch stream release was corrupted");
+  }
+  if (!release_thread_command_batch()) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_SYNCHRONIZE,
+                          kOperation,
+                          "thread-local command-batch counter was corrupted");
   }
   return RILEY_CUDA_STATUS_SUCCESS;
 }
@@ -993,10 +1319,17 @@ extern "C" RileyCudaStatus riley_cuda_stream_wait_event(
 extern "C" RileyCudaStatus riley_cuda_stream_close(
     RileyCudaStream** stream, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  return stream_close_impl(stream, error, nullptr);
+}
+
+extern "C" RileyCudaStatus riley_cuda_stream_defer_to_active_capture(
+    RileyCudaStream** stream, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "defer CUDA stream close to active capture";
+  clear_error(error);
   if (stream == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA stream", "stream pointer is null");
+                            kOperation, "stream pointer is null");
   }
   if (*stream == nullptr) {
     return RILEY_CUDA_STATUS_SUCCESS;
@@ -1006,39 +1339,28 @@ extern "C" RileyCudaStatus riley_cuda_stream_close(
           nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA stream",
+                            kOperation,
                             "stream still has an active asynchronous use");
   }
-  CurrentContext scope((*stream)->owner);
-  RileyCudaStatus status = scope.enter(
-      error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA stream");
-  bool destroy_attempted = false;
-  cudaError_t destroy_result = cudaErrorUnknown;
-  if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    destroy_attempted = true;
-    destroy_result = cudaStreamDestroy((*stream)->stream);
-    status = runtime_error(destroy_result, error,
-                           RILEY_CUDA_ERROR_STAGE_CLOSE,
-                           "close CUDA stream");
+  if (!initialize_capture_deferred_close_node(
+          &(*stream)->deferred_close, (*stream)->owner, *stream,
+          deferred_stream_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred stream-close node");
   }
-  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                       "close CUDA stream");
-  if (destroy_attempted) {
-    // Runtime destroy calls may report a prior asynchronous error after the
-    // resource has already been consumed. Null the opaque owner after the
-    // single destroy attempt; retrying could double-destroy. A genuine destroy
-    // failure is therefore fail-closed as a native-resource leak.
-    const bool released = release_child((*stream)->owner);
-    (*stream)->~RileyCudaStream();
-    std::free(*stream);
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*stream)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
     *stream = nullptr;
-    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA stream",
-                            "context child-resource counter underflow");
-    }
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  return status;
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred stream-close node");
 }
 
 extern "C" RileyCudaStatus riley_cuda_event_create(
@@ -1203,40 +1525,38 @@ extern "C" RileyCudaStatus riley_cuda_event_elapsed_ms(
 extern "C" RileyCudaStatus riley_cuda_event_close(
     RileyCudaEvent** event, RileyCudaErrorInfo* error) noexcept {
   clear_error(error);
+  return event_close_impl(event, error, nullptr);
+}
+
+extern "C" RileyCudaStatus riley_cuda_event_defer_to_active_capture(
+    RileyCudaEvent** event, RileyCudaErrorInfo* error) noexcept {
+  constexpr const char* kOperation = "defer CUDA event close to active capture";
+  clear_error(error);
   if (event == nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA event", "event pointer is null");
+                            kOperation, "event pointer is null");
   }
   if (*event == nullptr) {
     return RILEY_CUDA_STATUS_SUCCESS;
   }
-  CurrentContext scope((*event)->owner);
-  RileyCudaStatus status = scope.enter(
-      error, RILEY_CUDA_ERROR_STAGE_CLOSE, "close CUDA event");
-  bool destroy_attempted = false;
-  cudaError_t destroy_result = cudaErrorUnknown;
-  if (status == RILEY_CUDA_STATUS_SUCCESS) {
-    destroy_attempted = true;
-    destroy_result = cudaEventDestroy((*event)->event);
-    status = runtime_error(destroy_result, error,
-                           RILEY_CUDA_ERROR_STAGE_CLOSE,
-                           "close CUDA event");
+  if (!initialize_capture_deferred_close_node(
+          &(*event)->deferred_close, (*event)->owner, *event,
+          deferred_event_close)) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                          "could not initialize the embedded deferred event-close node");
   }
-  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                       "close CUDA event");
-  if (destroy_attempted) {
-    // See stream_close: a non-success may be a deferred error even when the
-    // event was consumed, so ownership is single-shot after destroy begins.
-    const bool released = release_child((*event)->owner);
-    (*event)->~RileyCudaEvent();
-    std::free(*event);
+  const CaptureDeferredCloseEnqueueResult enqueue_result =
+      enqueue_capture_deferred_close(&(*event)->deferred_close);
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kQueued) {
     *event = nullptr;
-    if (status == RILEY_CUDA_STATUS_SUCCESS && !released) {
-      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
-                            "close CUDA event",
-                            "context child-resource counter underflow");
-    }
+    return RILEY_CUDA_STATUS_SUCCESS;
   }
-  return status;
+  if (enqueue_result == CaptureDeferredCloseEnqueueResult::kNotCapturing) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                            "no active thread-local CUDA Graph capture owns this host thread");
+  }
+  return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE, kOperation,
+                        "the active capture rejected the deferred event-close node");
 }

@@ -560,6 +560,18 @@ impl CudaStream {
     }
 }
 
+impl Drop for CudaStream {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            // A stream other than the stream borrowed by GraphCapture can be
+            // consumed on the capture thread. Preserve its Rust context lease
+            // in case native close hands destruction to capture recovery.
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
+        }
+    }
+}
+
 /// Exclusive RAII guard for one native stream command batch.
 ///
 /// The guard is deliberately `!Send + !Sync` because the native batch is owned
@@ -818,6 +830,15 @@ impl CudaEvent {
         {
             let _ = self;
             Err(CudaError::unavailable("CudaEvent::close"))
+        }
+    }
+}
+
+impl Drop for CudaEvent {
+    fn drop(&mut self) {
+        #[cfg(feature = "cuda")]
+        {
+            let _ = crate::graph::retain_context_for_active_graph_capture(&self.context);
         }
     }
 }
