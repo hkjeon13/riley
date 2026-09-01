@@ -1,6 +1,9 @@
 # C01 — vLLM 승리 계약 v1
 
-**상태:** Planned  
+**상태:** In progress — `ae28891`에서 source-level contract/schema, canonical matrix/lane template,
+plan-only generator, fail-closed checker, synthetic fixture suite를 추가했다. executable lane, remote
+execution adapter, raw result collection, Tier D dry-run 및 closed M4/M5 report는 아직 없으며 M4/M5
+성능 주장은 하지 않는다.
 **의미 등급:** `reference`  
 **한 가지 목적:** Riley와 vLLM을 같은 조건에서 비교하고 M4 parity/M5 win을 기계적으로 판정하는 immutable benchmark contract를 만든다.
 
