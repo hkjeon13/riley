@@ -35,6 +35,8 @@ mod graph_decode_c06_registry_dispatch;
 mod graph_decode_c06_registry_observation;
 #[allow(dead_code)] // C07-20 deliberately precedes registry/capture ownership.
 mod graph_decode_c06_signature;
+#[allow(dead_code)] // C07-28 records cold pure-decode capture evidence before any real graph owner.
+mod graph_decode_capture_inventory;
 #[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-15 deliberately precedes command-stream transfer ownership.
 mod graph_decode_exact_device_slab;
