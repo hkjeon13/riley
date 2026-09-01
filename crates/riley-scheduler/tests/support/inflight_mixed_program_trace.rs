@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 const DESCRIPTOR_FORMAT: &str = "riley.scheduler.inflight-mixed-program";
 const DESCRIPTOR_FORMAT_VERSION: u8 = 1;
 const DESCRIPTOR_TRACE_KIND: &str = "inflight-mixed-program-v1";
+const DESCRIPTOR_TRACE_KIND_V2: &str = "inflight-mixed-program-v2";
 const MAX_LOGICAL_REQUESTS: usize = 4;
 const MAX_LIVE_REQUESTS: usize = 3;
 const MAX_PLAN_OPERATIONS: usize = 4;
@@ -1389,6 +1390,49 @@ impl InflightMixedProgramOracle {
         self.phase = OraclePhase::Idle;
     }
 
+    /// Compares a caller-asserted quiesced abort with terminal failure for
+    /// every pending request. The currently in-flight plan contributes no
+    /// tokens, and a deferred cancellation is overridden by executor failure.
+    pub fn record_device_quiesced_mutation_unknown_abort(
+        &mut self,
+        updates: &IterationUpdates,
+        now_ns: u64,
+    ) {
+        self.assert_phase(OraclePhase::InFlight);
+        let pending = self
+            .pending
+            .take()
+            .expect("in-flight program oracle retained its plan projection");
+        let mut expected_completions = BTreeMap::new();
+        for item in &pending {
+            let request = self.request(item.label);
+            assert!(request.live);
+            assert_eq!(request.request_id, item.request_id);
+            assert_eq!(request.generated_token_ids.len(), item.generated_index);
+            assert!(
+                expected_completions
+                    .insert(
+                        item.request_id,
+                        CompletionProjection {
+                            reason: RequestFinishReason::ExecutorFailure,
+                            generated_token_ids: request.generated_token_ids.clone(),
+                            completed_at_ns: now_ns,
+                        },
+                    )
+                    .is_none(),
+                "seed {:#018x}: in-flight program repeated a quiesced-abort completion",
+                self.seed
+            );
+        }
+        self.assert_updates(updates, &BTreeMap::new(), expected_completions);
+        for item in pending {
+            let request = self.request_mut(item.label);
+            request.cancellation_deferred = false;
+            request.live = false;
+        }
+        self.phase = OraclePhase::Idle;
+    }
+
     /// Compares consuming close with every remaining live request.
     pub fn record_close(&mut self, closed: &SchedulerCloseOutput, now_ns: u64) {
         self.assert_phase(OraclePhase::Idle);
@@ -1567,4 +1611,806 @@ fn completion_projections(
         );
     }
     projections
+}
+
+/// One explicit operation in the bounded in-flight mixed-program V2 grammar.
+///
+/// V2 is a parallel descriptor surface. It does not widen V1's parser or
+/// operation enum, and adds the explicit caller-asserted quiesced abort.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
+pub enum InflightMixedProgramOperationV2 {
+    /// Admits one unique request with a fixed one-token prompt.
+    Submit {
+        /// Logical label in the bounded program domain.
+        label: u8,
+        /// Output capacity in the bounded 1..=2 domain.
+        max_new_tokens: u8,
+    },
+    /// Opens one immutable plan for every currently live request.
+    Plan,
+    /// Defers cancellation of one request selected by the outstanding plan.
+    Cancel {
+        /// Logical label selected by the outstanding plan.
+        label: u8,
+    },
+    /// Commits exact permuted feedback for every outstanding dense slot.
+    Complete {
+        /// Exact permutation of the outstanding semantic slot domain.
+        feedback_slot_order: Vec<u8>,
+    },
+    /// Rolls back an undispatched plan and requires a fresh plan next.
+    AbortNotDispatched,
+    /// Terminally consumes a caller-asserted quiesced, mutation-unknown plan.
+    AbortDeviceQuiescedMutationUnknown,
+    /// Consumes the scheduler after every preceding plan has settled.
+    Close,
+}
+
+impl InflightMixedProgramOperationV2 {
+    /// Returns a stable, human-readable operation spelling for diagnostics.
+    #[must_use]
+    pub fn describe(&self) -> String {
+        match self {
+            Self::Submit {
+                label,
+                max_new_tokens,
+            } => format!("submit(label={label}, max_new={max_new_tokens})"),
+            Self::Plan => "plan".to_owned(),
+            Self::Cancel { label } => format!("cancel(label={label})"),
+            Self::Complete {
+                feedback_slot_order,
+            } => format!("complete(order={feedback_slot_order:?})"),
+            Self::AbortNotDispatched => "abort(not-dispatched)".to_owned(),
+            Self::AbortDeviceQuiescedMutationUnknown => {
+                "abort(device-quiesced-mutation-unknown)".to_owned()
+            }
+            Self::Close => "close".to_owned(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct InflightMixedProgramV2DescriptorV1 {
+    format: String,
+    format_version: u8,
+    trace_kind: String,
+    case_id: String,
+    source_seed: String,
+    operations: Vec<InflightMixedProgramOperationV2>,
+}
+
+/// Fully specified bounded in-flight raw program within the V2 grammar.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InflightMixedProgramTraceV2 {
+    /// Source provenance retained in reports and fixtures.
+    pub seed: u64,
+    /// Complete raw program within the bounded V2 grammar.
+    pub operations: Vec<InflightMixedProgramOperationV2>,
+}
+
+impl InflightMixedProgramTraceV2 {
+    /// Produces one valid bounded V2 program from a deterministic seed.
+    ///
+    /// Its topology selector deliberately mirrors V1 while its five-way
+    /// settlement selector adds two terminal quiesced-abort branches. V1's
+    /// three-way seed mapping is intentionally untouched.
+    #[must_use]
+    pub fn from_seed(seed: u64) -> Self {
+        let mut random = Lcg(seed ^ 0x2bb7_91d4_e86f_30ca);
+        let mut state = GenerationState::default();
+        let mut operations = Vec::new();
+        let mut next_label = 1_u8;
+        let mode = (seed >> 2) % 5;
+        let final_max_new_tokens = if mode == 1 { 2 } else { 1 };
+
+        match seed & 0b11 {
+            0 | 3 => {
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 2);
+                append_generated_plan_v2(&mut operations);
+                append_generated_complete_v2(&mut state, &mut operations, &mut random, None);
+                append_generated_submit_v2(
+                    &mut state,
+                    &mut operations,
+                    &mut next_label,
+                    final_max_new_tokens,
+                );
+                append_generated_submit_v2(
+                    &mut state,
+                    &mut operations,
+                    &mut next_label,
+                    final_max_new_tokens,
+                );
+            }
+            1 => {
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 2);
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 2);
+                append_generated_plan_v2(&mut operations);
+                append_generated_complete_v2(&mut state, &mut operations, &mut random, None);
+                append_generated_submit_v2(
+                    &mut state,
+                    &mut operations,
+                    &mut next_label,
+                    final_max_new_tokens,
+                );
+            }
+            2 => {
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 2);
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 2);
+                append_generated_submit_v2(&mut state, &mut operations, &mut next_label, 1);
+                append_generated_plan_v2(&mut operations);
+                append_generated_complete_v2(&mut state, &mut operations, &mut random, None);
+                append_generated_submit_v2(
+                    &mut state,
+                    &mut operations,
+                    &mut next_label,
+                    final_max_new_tokens,
+                );
+            }
+            _ => unreachable!("two-bit topology selector"),
+        }
+
+        append_generated_plan_v2(&mut operations);
+        let deferred_label = if matches!(mode, 1 | 3) {
+            None
+        } else {
+            let labels = state.live_labels();
+            let label = labels[random.bounded_usize(labels.len())];
+            operations.push(InflightMixedProgramOperationV2::Cancel { label });
+            Some(label)
+        };
+        match mode {
+            0 => append_generated_complete_v2(
+                &mut state,
+                &mut operations,
+                &mut random,
+                deferred_label,
+            ),
+            1 | 2 => {
+                operations.push(InflightMixedProgramOperationV2::AbortNotDispatched);
+                state.abort_not_dispatched(deferred_label);
+                append_generated_plan_v2(&mut operations);
+                append_generated_complete_v2(&mut state, &mut operations, &mut random, None);
+            }
+            3 | 4 => {
+                operations
+                    .push(InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown);
+            }
+            _ => unreachable!("five-way V2 settlement selector"),
+        }
+        operations.push(InflightMixedProgramOperationV2::Close);
+
+        let trace = Self { seed, operations };
+        trace
+            .validate()
+            .expect("seeded in-flight mixed program remains in the V2 grammar");
+        trace
+    }
+
+    /// Returns the explicit V2 program spelling without consulting a public plan.
+    #[must_use]
+    pub fn describe_operations(&self) -> String {
+        self.operations
+            .iter()
+            .map(InflightMixedProgramOperationV2::describe)
+            .collect::<Vec<_>>()
+            .join(" -> ")
+    }
+
+    /// Returns deterministic raw-lifecycle simplifications for V2.
+    ///
+    /// Device-quiesced abort is intentionally preserved: deleting, transforming,
+    /// or contracting it would require rewriting the terminal ledger and falls
+    /// outside this raw local reducer.
+    #[must_use]
+    pub fn shrink_candidates(&self) -> Vec<Self> {
+        self.validate()
+            .expect("in-flight mixed V2 shrinker requires a valid source descriptor");
+        let source_rank = self.shrink_rank();
+        let mut candidates = Vec::new();
+
+        if let Some(cancel_index) = self.operations.iter().position(|operation| {
+            matches!(operation, InflightMixedProgramOperationV2::Cancel { .. })
+        }) {
+            let mut candidate = self.clone();
+            candidate.operations.remove(cancel_index);
+            push_v2_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for operation_index in 0..self.operations.len().saturating_sub(1) {
+            if matches!(
+                self.operations[operation_index],
+                InflightMixedProgramOperationV2::AbortNotDispatched
+            ) && matches!(
+                self.operations[operation_index + 1],
+                InflightMixedProgramOperationV2::Plan
+            ) {
+                let mut candidate = self.clone();
+                candidate.operations.remove(operation_index);
+                candidate.operations.remove(operation_index);
+                push_v2_reduction_candidate(&mut candidates, source_rank, &candidate);
+            }
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperationV2::Submit {
+                max_new_tokens: 2, ..
+            } = operation
+            else {
+                continue;
+            };
+            let mut candidate = self.clone();
+            let InflightMixedProgramOperationV2::Submit { max_new_tokens, .. } =
+                &mut candidate.operations[operation_index]
+            else {
+                unreachable!("in-flight V2 submit index stays a submit");
+            };
+            *max_new_tokens = 1;
+            push_v2_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            let canonical = canonical_slot_order(feedback_slot_order.len());
+            if *feedback_slot_order != canonical {
+                let mut candidate = self.clone();
+                let InflightMixedProgramOperationV2::Complete {
+                    feedback_slot_order,
+                } = &mut candidate.operations[operation_index]
+                else {
+                    unreachable!("in-flight V2 complete index stays a complete");
+                };
+                *feedback_slot_order = canonical;
+                push_v2_reduction_candidate(&mut candidates, source_rank, &candidate);
+            }
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            for slot_index in 0..feedback_slot_order.len().saturating_sub(1) {
+                if feedback_slot_order[slot_index] > feedback_slot_order[slot_index + 1] {
+                    let mut candidate = self.clone();
+                    let InflightMixedProgramOperationV2::Complete {
+                        feedback_slot_order,
+                    } = &mut candidate.operations[operation_index]
+                    else {
+                        unreachable!("in-flight V2 complete index stays a complete");
+                    };
+                    feedback_slot_order.swap(slot_index, slot_index + 1);
+                    push_v2_reduction_candidate(&mut candidates, source_rank, &candidate);
+                }
+            }
+        }
+        candidates
+    }
+
+    /// Returns the lexicographic rank used by the bounded V2 local reducer.
+    #[must_use]
+    pub fn shrink_rank(&self) -> (usize, usize, usize, usize) {
+        self.validate()
+            .expect("in-flight mixed V2 shrink rank requires a valid descriptor");
+        let mut cancellation_count = 0_usize;
+        let mut total_max_new_tokens = 0_usize;
+        let mut feedback_inversions = 0_usize;
+        for operation in &self.operations {
+            match operation {
+                InflightMixedProgramOperationV2::Submit { max_new_tokens, .. } => {
+                    total_max_new_tokens += usize::from(*max_new_tokens);
+                }
+                InflightMixedProgramOperationV2::Cancel { .. } => cancellation_count += 1,
+                InflightMixedProgramOperationV2::Complete {
+                    feedback_slot_order,
+                } => feedback_inversions += inversion_count(feedback_slot_order),
+                InflightMixedProgramOperationV2::Plan
+                | InflightMixedProgramOperationV2::AbortNotDispatched
+                | InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown
+                | InflightMixedProgramOperationV2::Close => {}
+            }
+        }
+        (
+            self.operations.len(),
+            cancellation_count,
+            total_max_new_tokens,
+            feedback_inversions,
+        )
+    }
+
+    /// Validates all syntax-independent V2 state-machine bounds and transitions.
+    pub fn validate(&self) -> Result<(), String> {
+        validate_operations_v2(&self.operations)
+    }
+
+    fn descriptor(&self, case_id: &str) -> Result<InflightMixedProgramV2DescriptorV1, String> {
+        self.validate()?;
+        validate_case_id(case_id)?;
+        Ok(InflightMixedProgramV2DescriptorV1 {
+            format: DESCRIPTOR_FORMAT.to_owned(),
+            format_version: DESCRIPTOR_FORMAT_VERSION,
+            trace_kind: DESCRIPTOR_TRACE_KIND_V2.to_owned(),
+            case_id: case_id.to_owned(),
+            source_seed: format!("0x{:016x}", self.seed),
+            operations: self.operations.clone(),
+        })
+    }
+}
+
+/// A parsed V2 corpus descriptor with its stable case identifier.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NamedInflightMixedProgramTraceV2 {
+    /// Durable V2 corpus or failure-report identifier.
+    pub case_id: String,
+    /// Fully validated V2 raw program.
+    pub trace: InflightMixedProgramTraceV2,
+}
+
+impl InflightMixedProgramV2DescriptorV1 {
+    fn validate(&self) -> Result<(), String> {
+        if self.format != DESCRIPTOR_FORMAT {
+            return Err("in-flight mixed V2 descriptor format is unsupported".to_owned());
+        }
+        if self.format_version != DESCRIPTOR_FORMAT_VERSION {
+            return Err("in-flight mixed V2 descriptor format_version is unsupported".to_owned());
+        }
+        if self.trace_kind != DESCRIPTOR_TRACE_KIND_V2 {
+            return Err("in-flight mixed V2 descriptor trace_kind is unsupported".to_owned());
+        }
+        validate_case_id(&self.case_id)?;
+        parse_source_seed(&self.source_seed)?;
+        validate_operations_v2(&self.operations)
+    }
+
+    fn into_named_trace(self) -> Result<NamedInflightMixedProgramTraceV2, String> {
+        self.validate()?;
+        Ok(NamedInflightMixedProgramTraceV2 {
+            case_id: self.case_id,
+            trace: InflightMixedProgramTraceV2 {
+                seed: parse_source_seed(&self.source_seed)?,
+                operations: self.operations,
+            },
+        })
+    }
+}
+
+/// Serializes one valid V2 raw program as exact canonical JSON with a newline.
+#[must_use]
+pub fn serialize_inflight_mixed_program_v2_descriptor(
+    case_id: &str,
+    trace: &InflightMixedProgramTraceV2,
+) -> String {
+    let descriptor = trace
+        .descriptor(case_id)
+        .expect("in-flight mixed V2 program is valid before serialization");
+    descriptor_document_v2(&descriptor)
+}
+
+/// Parses only exact canonical in-flight mixed program V2 JSON documents.
+pub fn parse_inflight_mixed_program_v2_descriptor(
+    document: &str,
+) -> Result<NamedInflightMixedProgramTraceV2, String> {
+    let descriptor = serde_json::from_str::<InflightMixedProgramV2DescriptorV1>(document)
+        .map_err(|error| format!("in-flight mixed V2 descriptor JSON is invalid: {error}"))?;
+    if document != descriptor_document_v2(&descriptor) {
+        return Err("in-flight mixed V2 descriptor JSON is not canonical".to_owned());
+    }
+    descriptor.into_named_trace()
+}
+
+fn descriptor_document_v2(descriptor: &InflightMixedProgramV2DescriptorV1) -> String {
+    let mut document =
+        serde_json::to_string(descriptor).expect("in-flight mixed V2 descriptor serializes");
+    document.push('\n');
+    document
+}
+
+/// Greedily minimizes a reproducing bounded V2 raw program over the fixed
+/// raw-lifecycle candidate order.
+pub fn minimize_inflight_mixed_program_v2_trace<F>(
+    trace: &InflightMixedProgramTraceV2,
+    mut reproduces: F,
+) -> InflightMixedProgramTraceV2
+where
+    F: FnMut(&InflightMixedProgramTraceV2) -> bool,
+{
+    let mut minimized = strict_round_trip_v2_trace(trace, "shrink-source");
+    assert!(
+        reproduces(&minimized),
+        "in-flight mixed V2 minimization requires a reproducing source trace"
+    );
+    loop {
+        let mut next = None;
+        for candidate in minimized.shrink_candidates() {
+            let candidate = strict_round_trip_v2_trace(&candidate, "shrink-candidate");
+            if reproduces(&candidate) {
+                next = Some(candidate);
+                break;
+            }
+        }
+        let Some(candidate) = next else {
+            return minimized;
+        };
+        minimized = candidate;
+    }
+}
+
+fn strict_round_trip_v2_trace(
+    trace: &InflightMixedProgramTraceV2,
+    case_id: &str,
+) -> InflightMixedProgramTraceV2 {
+    let document = serialize_inflight_mixed_program_v2_descriptor(case_id, trace);
+    let parsed = parse_inflight_mixed_program_v2_descriptor(&document)
+        .expect("in-flight mixed V2 shrink descriptor stays strict-canonical");
+    assert_eq!(parsed.case_id, case_id);
+    assert_eq!(parsed.trace, *trace);
+    parsed.trace
+}
+
+fn push_v2_reduction_candidate(
+    candidates: &mut Vec<InflightMixedProgramTraceV2>,
+    source_rank: (usize, usize, usize, usize),
+    candidate: &InflightMixedProgramTraceV2,
+) {
+    if candidate.validate().is_err() {
+        return;
+    }
+    let candidate = strict_round_trip_v2_trace(candidate, "shrink-candidate");
+    assert!(
+        candidate.shrink_rank() < source_rank,
+        "in-flight mixed V2 shrink candidate must strictly reduce its rank"
+    );
+    if !candidates.contains(&candidate) {
+        candidates.push(candidate);
+    }
+}
+
+fn append_generated_submit_v2(
+    state: &mut GenerationState,
+    operations: &mut Vec<InflightMixedProgramOperationV2>,
+    next_label: &mut u8,
+    max_new_tokens: u8,
+) {
+    let label = *next_label;
+    state.submit(label, max_new_tokens);
+    operations.push(InflightMixedProgramOperationV2::Submit {
+        label,
+        max_new_tokens,
+    });
+    *next_label = next_label
+        .checked_add(1)
+        .expect("in-flight mixed V2 next logical label");
+}
+
+fn append_generated_plan_v2(operations: &mut Vec<InflightMixedProgramOperationV2>) {
+    operations.push(InflightMixedProgramOperationV2::Plan);
+}
+
+fn append_generated_complete_v2(
+    state: &mut GenerationState,
+    operations: &mut Vec<InflightMixedProgramOperationV2>,
+    random: &mut Lcg,
+    deferred_label: Option<u8>,
+) {
+    let mut feedback_slot_order = (0..state.live_count())
+        .map(|slot| u8::try_from(slot).expect("in-flight mixed V2 feedback slot"))
+        .collect::<Vec<_>>();
+    for index in (1..feedback_slot_order.len()).rev() {
+        let other = random.bounded_usize(index + 1);
+        feedback_slot_order.swap(index, other);
+    }
+    operations.push(InflightMixedProgramOperationV2::Complete {
+        feedback_slot_order,
+    });
+    state.complete(deferred_label);
+}
+
+// Keeping the V2 finite transition table together makes the strict V2
+// lifecycle auditable without widening or coupling the V1 parser.
+#[allow(clippy::too_many_lines)]
+fn validate_operations_v2(operations: &[InflightMixedProgramOperationV2]) -> Result<(), String> {
+    if operations.is_empty() || operations.len() > MAX_OPERATIONS {
+        return Err(format!(
+            "in-flight mixed V2 descriptor operations must contain 1..={MAX_OPERATIONS} entries"
+        ));
+    }
+    let mut requests = BTreeMap::<u8, ValidationRequest>::new();
+    let mut pending = None::<PendingValidation>;
+    let mut close_seen = false;
+    let mut plan_count = 0_usize;
+    let mut abort_count = 0_usize;
+    let mut cancellation_count = 0_usize;
+    let mut next_submission_order = 0_usize;
+    let mut mixed_plan_seen = false;
+
+    for (index, operation) in operations.iter().enumerate() {
+        if close_seen {
+            return Err(
+                "in-flight mixed V2 descriptor contains an operation after close".to_owned(),
+            );
+        }
+        match operation {
+            InflightMixedProgramOperationV2::Submit {
+                label,
+                max_new_tokens,
+            } => {
+                if pending.is_some() {
+                    return Err(
+                        "in-flight mixed V2 descriptor submits while a plan is outstanding"
+                            .to_owned(),
+                    );
+                }
+                validate_label(*label)?;
+                if !(1..=2).contains(max_new_tokens) {
+                    return Err(
+                        "in-flight mixed V2 descriptor max_new_tokens must be in 1..=2".to_owned(),
+                    );
+                }
+                if requests.len() >= MAX_LOGICAL_REQUESTS {
+                    return Err(
+                        "in-flight mixed V2 descriptor exceeds its unique request cap".to_owned(),
+                    );
+                }
+                if live_request_count(&requests) >= MAX_LIVE_REQUESTS {
+                    return Err(
+                        "in-flight mixed V2 descriptor exceeds its live request cap".to_owned()
+                    );
+                }
+                if requests
+                    .insert(
+                        *label,
+                        ValidationRequest {
+                            max_new_tokens: usize::from(*max_new_tokens),
+                            generated_tokens: 0,
+                            submission_order: next_submission_order,
+                            live: true,
+                        },
+                    )
+                    .is_some()
+                {
+                    return Err(
+                        "in-flight mixed V2 descriptor submits one label more than once".to_owned(),
+                    );
+                }
+                next_submission_order = next_submission_order.checked_add(1).ok_or_else(|| {
+                    "in-flight mixed V2 descriptor submission order overflowed".to_owned()
+                })?;
+            }
+            InflightMixedProgramOperationV2::Plan => {
+                if pending.is_some() {
+                    return Err(
+                        "in-flight mixed V2 descriptor plans while a plan is outstanding"
+                            .to_owned(),
+                    );
+                }
+                if plan_count >= MAX_PLAN_OPERATIONS {
+                    return Err("in-flight mixed V2 descriptor exceeds its plan cap".to_owned());
+                }
+                let labels = plan_labels(&requests);
+                if labels.is_empty() {
+                    return Err(
+                        "in-flight mixed V2 descriptor plans without live requests".to_owned()
+                    );
+                }
+                let has_decode = labels
+                    .iter()
+                    .any(|label| requests[label].generated_tokens != 0);
+                let has_prefill = labels
+                    .iter()
+                    .any(|label| requests[label].generated_tokens == 0);
+                mixed_plan_seen |= has_decode && has_prefill;
+                pending = Some(PendingValidation {
+                    labels,
+                    deferred_label: None,
+                });
+                plan_count += 1;
+            }
+            InflightMixedProgramOperationV2::Cancel { label } => {
+                validate_label(*label)?;
+                if cancellation_count >= 1 {
+                    return Err(
+                        "in-flight mixed V2 descriptor allows at most one deferred cancellation"
+                            .to_owned(),
+                    );
+                }
+                let pending = pending.as_mut().ok_or_else(|| {
+                    "in-flight mixed V2 descriptor cancels without an outstanding plan".to_owned()
+                })?;
+                if pending.deferred_label.is_some() {
+                    return Err(
+                        "in-flight mixed V2 descriptor cancels more than one pending label"
+                            .to_owned(),
+                    );
+                }
+                if !pending.labels.contains(label) {
+                    return Err(
+                        "in-flight mixed V2 descriptor cancels a label outside its outstanding plan"
+                            .to_owned(),
+                    );
+                }
+                if !requests.get(label).is_some_and(|request| request.live) {
+                    return Err("in-flight mixed V2 descriptor cancels a non-live label".to_owned());
+                }
+                pending.deferred_label = Some(*label);
+                cancellation_count += 1;
+            }
+            InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order,
+            } => {
+                let pending = pending.take().ok_or_else(|| {
+                    "in-flight mixed V2 descriptor completes without an outstanding plan".to_owned()
+                })?;
+                validate_slot_order(
+                    feedback_slot_order,
+                    pending.labels.len(),
+                    "feedback_slot_order",
+                )?;
+                for label in pending.labels {
+                    let request = requests.get_mut(&label).ok_or_else(|| {
+                        "in-flight mixed V2 descriptor lost a pending request".to_owned()
+                    })?;
+                    if !request.live {
+                        return Err(
+                            "in-flight mixed V2 descriptor completed a non-live request".to_owned()
+                        );
+                    }
+                    if pending.deferred_label == Some(label) {
+                        request.live = false;
+                        continue;
+                    }
+                    request.generated_tokens =
+                        request.generated_tokens.checked_add(1).ok_or_else(|| {
+                            "in-flight mixed V2 descriptor generation count overflowed".to_owned()
+                        })?;
+                    if request.generated_tokens == request.max_new_tokens {
+                        request.live = false;
+                    }
+                }
+            }
+            InflightMixedProgramOperationV2::AbortNotDispatched => {
+                if abort_count >= 1 {
+                    return Err(
+                        "in-flight mixed V2 descriptor allows at most one abort disposition"
+                            .to_owned(),
+                    );
+                }
+                if index + 1 == operations.len()
+                    || !matches!(operations[index + 1], InflightMixedProgramOperationV2::Plan)
+                {
+                    return Err(
+                        "in-flight mixed V2 descriptor requires a fresh plan immediately after not-dispatched abort"
+                            .to_owned(),
+                    );
+                }
+                let pending = pending.take().ok_or_else(|| {
+                    "in-flight mixed V2 descriptor aborts without an outstanding plan".to_owned()
+                })?;
+                if let Some(label) = pending.deferred_label {
+                    let request = requests.get_mut(&label).ok_or_else(|| {
+                        "in-flight mixed V2 descriptor lost a deferred request".to_owned()
+                    })?;
+                    request.live = false;
+                }
+                abort_count += 1;
+            }
+            InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown => {
+                if abort_count >= 1 {
+                    return Err(
+                        "in-flight mixed V2 descriptor allows at most one abort disposition"
+                            .to_owned(),
+                    );
+                }
+                if index + 1 == operations.len()
+                    || !matches!(
+                        operations[index + 1],
+                        InflightMixedProgramOperationV2::Close
+                    )
+                {
+                    return Err(
+                        "in-flight mixed V2 descriptor requires immediate close after quiesced abort"
+                            .to_owned(),
+                    );
+                }
+                let pending = pending.take().ok_or_else(|| {
+                    "in-flight mixed V2 descriptor aborts without an outstanding plan".to_owned()
+                })?;
+                let has_decode = pending
+                    .labels
+                    .iter()
+                    .any(|label| requests[label].generated_tokens != 0);
+                let has_prefill = pending
+                    .labels
+                    .iter()
+                    .any(|label| requests[label].generated_tokens == 0);
+                if !has_decode || !has_prefill {
+                    return Err(
+                        "in-flight mixed V2 descriptor requires quiesced abort from a mixed decode/prefill plan"
+                            .to_owned(),
+                    );
+                }
+                for label in pending.labels {
+                    let request = requests.get_mut(&label).ok_or_else(|| {
+                        "in-flight mixed V2 descriptor lost a pending request".to_owned()
+                    })?;
+                    if !request.live {
+                        return Err(
+                            "in-flight mixed V2 descriptor quiesced-aborted a non-live request"
+                                .to_owned(),
+                        );
+                    }
+                    request.live = false;
+                }
+                abort_count += 1;
+            }
+            InflightMixedProgramOperationV2::Close => {
+                if pending.is_some() {
+                    return Err(
+                        "in-flight mixed V2 descriptor closes with a plan outstanding".to_owned(),
+                    );
+                }
+                if index + 1 != operations.len() {
+                    return Err(
+                        "in-flight mixed V2 descriptor close must be the final operation"
+                            .to_owned(),
+                    );
+                }
+                close_seen = true;
+                for request in requests.values_mut() {
+                    request.live = false;
+                }
+            }
+        }
+    }
+    if !close_seen {
+        return Err("in-flight mixed V2 descriptor must end with close".to_owned());
+    }
+    if plan_count < 2 {
+        return Err(
+            "in-flight mixed V2 descriptor requires at least two plan operations".to_owned(),
+        );
+    }
+    if !mixed_plan_seen {
+        return Err(
+            "in-flight mixed V2 descriptor requires one decode plus prefill mixed plan".to_owned(),
+        );
+    }
+    Ok(())
+}
+
+const CORPUS_DOCUMENTS_V2: [(&str, &str); 2] = [
+    (
+        "inflight-mixed-program-v2/deferred-decoder-cancel-device-quiesced.json",
+        include_str!(
+            "../corpus/output-routing/inflight-mixed-program-v2/deferred-decoder-cancel-device-quiesced.json"
+        ),
+    ),
+    (
+        "inflight-mixed-program-v2/device-quiesced-no-cancel.json",
+        include_str!(
+            "../corpus/output-routing/inflight-mixed-program-v2/device-quiesced-no-cancel.json"
+        ),
+    ),
+];
+
+/// Loads the committed canonical V2 corpus and rejects duplicate case identifiers.
+#[must_use]
+pub fn inflight_mixed_program_v2_corpus() -> Vec<NamedInflightMixedProgramTraceV2> {
+    let mut case_ids = BTreeSet::new();
+    let mut corpus = Vec::with_capacity(CORPUS_DOCUMENTS_V2.len());
+    for (path, document) in CORPUS_DOCUMENTS_V2 {
+        let named = parse_inflight_mixed_program_v2_descriptor(document).unwrap_or_else(|error| {
+            panic!("{path}: in-flight mixed V2 corpus is invalid: {error}")
+        });
+        assert!(
+            case_ids.insert(named.case_id.clone()),
+            "{path}: in-flight mixed V2 corpus repeats case_id {:?}",
+            named.case_id
+        );
+        corpus.push(named);
+    }
+    corpus
 }

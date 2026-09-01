@@ -91,7 +91,7 @@ jobs:
           RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
         run: install -d -m 700 "$RILEY_ROUTING_FUZZ_RECEIPT_DIR"
 
-      - name: Run C03 70,000-trace seed-rotation slot
+      - name: Run C03 80,000-trace seed-rotation slot
         id: routing_fuzz
         env:
           RILEY_C03_SEED_ROTATION_BASE: ${{ needs.seed-plan.outputs.rotation_base }}

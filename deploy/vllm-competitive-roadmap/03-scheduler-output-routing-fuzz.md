@@ -2,8 +2,10 @@
 
 **상태:** In progress — C03-A CPU-only reference harness의 일부와 C03-Ax의 deterministic
 test-only post-validation fault-containment unit contract, C03-Ay의 scheduled CPU seed-band rotation,
-C03-Az의 bounded raw-program stateful local reducer와 in-flight raw-program local reducer가 구현되었다. C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할
-수 있다. C03-B의 actual CUDA fixed-corpus execution과 C03의 formal completion은 C02 actual qualification
+C03-Az의 bounded raw-program stateful local reducer와 in-flight raw-program local reducer, 그리고
+`inflight-mixed-program-v2`의 caller-asserted quiesced terminal-abort CPU contract가 구현되었다.
+C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다.
+C03-B의 actual CUDA fixed-corpus execution과 C03의 formal completion은 C02 actual qualification
 뒤에만 수행한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** scheduler plan부터 sampling/commit/terminal event까지 request-token 대응 관계를 model-based property test로 고정한다.
@@ -29,7 +31,10 @@ receipt/checker, 환경변수·설정 또는 C02 qualification을 추가·변경
 
 in-flight raw-program local reducer도 같은 test-only CPU 경계에 남는다. 그것은 raw descriptor의
 label/feedback slot을 rebase하지 않으며, 기존 grammar validation과 strict codec이 허용한 lifecycle
-contraction만 actual inner replayer panic 뒤에 다시 재생한다.
+contraction만 actual inner replayer panic 뒤에 다시 재생한다. 별도 `inflight-mixed-program-v2`는
+caller가 이미 quiesced라고 단언한 `DeviceQuiescedMutationUnknown` disposition을 public host API로
+소비하는 terminal branch만 검증한다. CUDA synchronization, 실제 device mutation, GPU replay 또는
+성능 evidence는 이 CPU contract로부터 성립하지 않는다.
 
 **C03-B**의 GPU corpus/fixture source는 same-candidate integration replay를 주장하려면 C02
 candidate freeze 전에 그 candidate source archive에 포함되어야 한다. GPU fixed-corpus execution,
@@ -148,20 +153,21 @@ C03-Ax는 actual device mutation, CUDA stream fault, multi-event trace grammar, 
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
 V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace, 10,000
 bounded raw `bounded-mixed-program-v1` trace, 10,000 bounded raw in-flight
-`inflight-mixed-program-v1` trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
+`inflight-mixed-program-v1` trace, 그리고 10,000 bounded raw in-flight
+`inflight-mixed-program-v2` caller-asserted terminal-abort trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
 `DeviceQuiescedMutationUnknown` abort, waiting timeout, stale/missing/unplanned feedback이
 output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확인한다. bounded mixed-stage
 trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
 생성하고, `decoder prime → decoder decode slot 0 + final-prefill slot 1 → optional deferred decoder
 cancel → explicit [slot 1, slot 0] feedback/commit → close`를 public scheduler API로 재생한다.
 
-C03-Ay는 기본 PR의 일곱 10,000-trace CPU lane(총 70,000 trace)을 바꾸지 않는다. 전용
+C03-Ay는 기본 PR의 여덟 10,000-trace CPU lane(총 80,000 trace)을 바꾸지 않는다. 전용
 c03-routing-fuzz.yml scheduled/manual workflow는 매 run마다 기록 가능한 canonical decimal base를
 선택하고, 15개 matrix slot에 서로 겹치지 않는 10,000-index band를 배정한다. 따라서 한 scheduled run은
-7 × 10,000 × 15 = 1,050,000 CPU trace를 실행한다. test-only routing_fuzz_rotation helper는
+8 × 10,000 × 15 = 1,200,000 CPU trace를 실행한다. test-only routing_fuzz_rotation helper는
 base/slot/slot-count가 모두 absent일 때 기존 seed와 FaultAction 순서를 정확히 유지하고, 부분 설정,
 non-canonical decimal, overflow를 fail closed한다. 각 lane의 final seed 또는 descriptor가 재현
-identity이며, 기존 fault/general lane이 seed factor를 공유하므로 이것은 1,050,000 trace 실행이지
+identity이며, 기존 fault/general lane이 seed factor를 공유하므로 이것은 1,200,000 trace 실행이지
 전역 unique seed 수 주장이 아니다. 이 workflow는 GPU target, CUDA feature, production runtime API 또는
 성능 주장을 추가하지 않는다.
 
@@ -322,9 +328,18 @@ JSON으로 보존한다. 각 case는 token/index, deferred cancellation priority
 canonical descriptor와 각 operation list를 test panic diagnostic으로 남기며, receipt/checker를 재사용하지
 않는다.
 
-이는 `DeviceQuiescedMutationUnknown`, pending close disposition, stale/missing/unplanned feedback,
+`inflight-mixed-program-v1` 자체는 `DeviceQuiescedMutationUnknown`, pending close disposition, stale/missing/unplanned feedback,
 settled-boundary cancellation, partial prefill, queue/aging/timeout, multiple deferred cancel/abort,
 C03-Ax boundary seam, general reducer/receipt 또는 GPU evidence를 구현·주장하지 않는다.
+
+`inflight-mixed-program-v2`는 V1 acceptance를 넓히지 않는 별도 strict `trace_kind`다. V1과 같은
+normal complete 및 `NotDispatched`/fresh-`Plan` retry branch를 보존하면서, prior decoder history가
+있는 decode+prefill mixed plan 뒤의 no-cancel·deferred-cancel terminal
+`DeviceQuiescedMutationUnknown` abort와 즉시 `Close`를 추가한다. adapter는 caller-supplied
+disposition을 public scheduler API에 전달한 뒤 pending request가 token 없이 `ExecutorFailure`로
+terminal-once 처리되고 ownership이 quiescent한지만 확인한다. 이는 caller가 실제로 CUDA stream을
+synchronize했는지, device mutation 결과가 같은지, GPU에서 replay되는지 또는 성능이 향상됐는지를
+검증·주장하지 않는다.
 
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler,
@@ -372,6 +387,15 @@ three-slot abort/retry와 retry 뒤 live decoder close를 committed canonical de
 decode/exact canonical round-trip, descriptor-only pure oracle, public plan projection, one outstanding
 plan rejection, host-side replay와 close quiescence를 모두 통과해야 한다. 이는 fixed V2 selector grammar의
 확장이나 device-executed abort/GPU evidence가 아니다.
+
+`InflightMixedProgramTraceV2` corpus는
+`crates/riley-scheduler/tests/corpus/output-routing/inflight-mixed-program-v2/*.json`에 prior decoder
+history를 가진 deferred-cancel case와 no-cancel sibling의 decode+prefill mixed plan,
+caller-asserted terminal quiesced abort 및 immediate close를 strict canonical descriptor로 보존한다.
+V2 fixture와 seeded trace는 strict decode/exact canonical round-trip, descriptor-only oracle, public
+host-side abort disposition replay, `ExecutorFailure` terminal-once 및 close quiescence를 통과해야
+한다. 이 fixture는 V1 grammar를 확장하지 않으며 actual CUDA synchronization, device mutation parity,
+GPU replay 또는 performance evidence가 아니다.
 
 ### C03-B — GPU integration slice
 
@@ -452,6 +476,12 @@ minimum일 뿐 panic site/payload/failure signature/root cause, label/slot rebas
 deletion, `Plan/Complete` block deletion, deferred-cancel target/timing 변경, general/global minimum,
 receipt/checker, GPU 또는 C02 evidence를 보존·주장하지 않는다.
 
+`inflight-mixed-program-v2` reducer는 V1의 `AbortNotDispatched`/fresh-`Plan` retry contraction을
+terminal quiesced branch에 적용하지 않는다. V2 candidate는 trace kind와 terminal abort·immediate close
+contract를 유지한 strict codec round-trip 뒤에만 replay하며, 이 local reduction도 caller-provided host
+disposition의 CPU semantics만 다룬다. CUDA stream synchronization, device mutation parity, GPU replay,
+performance 또는 C02 evidence는 보존·주장하지 않는다.
+
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
@@ -479,14 +509,17 @@ crates/riley-scheduler/tests/corpus/output-routing/bounded-mixed-program-v1/*.js
 crates/riley-scheduler/tests/inflight_mixed_program_routing.rs
 crates/riley-scheduler/tests/support/inflight_mixed_program_trace.rs
 crates/riley-scheduler/tests/corpus/output-routing/inflight-mixed-program-v1/*.json
+crates/riley-scheduler/tests/corpus/output-routing/inflight-mixed-program-v2/*.json
+crates/riley-scheduler/tests/support/routing_fuzz_rotation.rs
 benchmarks/scripts/check_routing_fuzz_receipt.py
 benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 .github/workflows/production-cpu.yml
+.github/workflows/c03-routing-fuzz.yml
 ```
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer와 in-flight raw-lifecycle reducer 포함)는 기존 test-only `serde_json` dev-dependency만
+현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer와 V1/V2 in-flight raw-lifecycle reducer 포함)는 기존 test-only `serde_json` dev-dependency만
 사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
 않는다. C03-Ax도 동일하게 private test-only source만 바꾼다. 이후 arbitrary general grammar,
 durable cross-version replay contract, failure corpus 자동 등록, delta debugging, arbitrary/multi-event
@@ -518,9 +551,9 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 
 ## 11. CI 정책
 
-- 기본 CPU workflow: 각 property lane의 deterministic 10,000-trace seed set(총 70,000 trace)
-- scheduled workflow: fresh recorded base와 15개 disjoint slot으로 일곱 10,000-trace lane을
-  회전해 총 1,050,000 CPU trace; 네 C03 CPU target만 실행하고 GPU/CUDA target은 제외
+- 기본 CPU workflow: 각 property lane의 deterministic 10,000-trace seed set(총 80,000 trace)
+- scheduled workflow: fresh recorded base와 15개 disjoint slot으로 여덟 10,000-trace lane을
+  회전해 총 1,200,000 CPU trace; 네 C03 CPU target만 실행하고 GPU/CUDA target은 제외
 - GPU manual/scheduled: 고정 corpus
 - C03-B source contract: `gpu_fixed_corpus_contract`는 기본 CPU workflow에서 실행하며, ignored
   `c03_gpu_fixed_corpus`는 C02 actual qualification과 explicit GPU operation approval 뒤에만
@@ -549,15 +582,22 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   replay, deterministic synthetic local-minimum/idempotence, source/minimized failure-report binding test 통과
 - in-flight raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
   10,000 seeded replay, deferred cancel complete/abort-retry/terminal-once/final quiescence test 통과
-- in-flight raw-lifecycle reducer의 valid cancel/abort-retry/capacity/permutation contraction,
+- in-flight raw-program V2의 V1과 분리된 strict canonical codec, committed corpus, 10,000 seeded
+  replay(두 caller-asserted quiesced terminal-abort branch 포함), deferred cancel을 포함한
+  `ExecutorFailure` terminal-once/final quiescence test 통과. 이는 CUDA synchronization, device mutation
+  parity, GPU replay 또는 performance evidence가 아님
+- in-flight raw-lifecycle V1 reducer의 valid cancel/abort-retry/capacity/permutation contraction,
   candidate dedupe/rank/strict-codec replay, deterministic synthetic local-minimum/idempotence,
   source/minimized failure-report binding test 통과
+- in-flight raw-lifecycle V2 reducer의 terminal quiesced abort·immediate-close preservation 및
+  V1 `AbortNotDispatched`/retry contraction 미적용 test 통과; caller-asserted host disposition 밖의
+  CUDA/GPU semantics는 검증하지 않음
 - C03-Ax test-only seam이 valid sample validation 뒤 owning abort-safe failure를 돌려주고, 첫
   reservation commit 뒤 두 번째 forced failure에서 token 미발행, terminal-once, KV reclaim,
   completed 0/aborted 1 및 close ownership quiescence를 통과
 - C03-Ay는 all-unset PR environment에서 기존 seed/action window를 유지하고, scheduled all-set
   base/slot/slot-count의 malformed·partial·overflow 입력을 fail closed하며, 15 slot이 총
-  1,050,000 CPU trace를 실행
+  1,200,000 CPU trace를 실행
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B source: strict `gpu-fixed-v1` corpus parse와 CPU topology/KV/deferred-cancel/abort contract 통과

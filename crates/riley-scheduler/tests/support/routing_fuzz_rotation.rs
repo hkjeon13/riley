@@ -27,7 +27,7 @@ impl SeedRotation {
 
     /// Returns the globally selected zero-based trace index for one local lane.
     ///
-    /// The scheduled workflow has seven independent 10,000-trace lanes. Each
+    /// The scheduled workflow has eight independent 10,000-trace lanes. Each
     /// matrix slot gets the same 10,000-index band in each lane; their seed
     /// factors remain the replay identity. Bounds are checked so malformed CI
     /// values cannot silently wrap into another slot's coverage.

@@ -13,18 +13,22 @@ use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use inflight_mixed_program_trace::{
-    InflightMixedProgramExpectedPlan, InflightMixedProgramOperation, InflightMixedProgramOracle,
-    InflightMixedProgramTrace, inflight_mixed_program_corpus, inflight_symbolic_prompt_token,
-    minimize_inflight_mixed_program_trace, parse_inflight_mixed_program_descriptor,
-    serialize_inflight_mixed_program_descriptor,
+    InflightMixedProgramExpectedPlan, InflightMixedProgramOperation,
+    InflightMixedProgramOperationV2, InflightMixedProgramOracle, InflightMixedProgramTrace,
+    InflightMixedProgramTraceV2, inflight_mixed_program_corpus, inflight_mixed_program_v2_corpus,
+    inflight_symbolic_prompt_token, minimize_inflight_mixed_program_trace,
+    minimize_inflight_mixed_program_v2_trace, parse_inflight_mixed_program_descriptor,
+    parse_inflight_mixed_program_v2_descriptor, serialize_inflight_mixed_program_descriptor,
+    serialize_inflight_mixed_program_v2_descriptor,
 };
 use riley_runtime::paged_kv::KvLayout;
 use riley_scheduler::{
-    ExecutionAbort, IterationPlan, OverloadPolicy, RequestDescriptor, RequestId, Scheduler,
-    SchedulerCloseOutput, SchedulerConfig, SchedulerError, WorkKind,
+    ExecutionAbort, IterationPlan, OverloadPolicy, RequestDescriptor, RequestId, RequestState,
+    Scheduler, SchedulerCloseOutput, SchedulerConfig, SchedulerError, WorkKind,
 };
 
 const INFLIGHT_MIXED_PROGRAM_TRACE_COUNT: u64 = 10_000;
+const INFLIGHT_MIXED_PROGRAM_V2_TRACE_COUNT: u64 = 10_000;
 
 fn inflight_mixed_program_config() -> SchedulerConfig {
     SchedulerConfig {
@@ -417,6 +421,12 @@ fn report_descriptor(report: &str, start: &str, end: &str) -> String {
 fn descriptor_document_with_operations(operations: &str) -> String {
     format!(
         "{{\"format\":\"riley.scheduler.inflight-mixed-program\",\"format_version\":1,\"trace_kind\":\"inflight-mixed-program-v1\",\"case_id\":\"codec-strict\",\"source_seed\":\"0x4c3d2e1f0a9b8c7d\",\"operations\":[{operations}]}}\n"
+    )
+}
+
+fn v2_descriptor_document_with_operations(operations: &str) -> String {
+    format!(
+        "{{\"format\":\"riley.scheduler.inflight-mixed-program\",\"format_version\":1,\"trace_kind\":\"inflight-mixed-program-v2\",\"case_id\":\"codec-strict-v2\",\"source_seed\":\"0x4c3d2e1f0a9b8c7d\",\"operations\":[{operations}]}}\n"
     )
 }
 
@@ -891,4 +901,582 @@ fn ten_thousand_seeded_inflight_mixed_programs_round_trip_and_replay() {
     assert!(saw_abort_without_cancel);
     assert!(saw_deferred_abort);
     assert!(saw_abort_retry_with_live_close);
+}
+
+// V2 is intentionally a separate public-API adapter: the V1 raw descriptor
+// remains a closed grammar and cannot accidentally begin accepting a terminal
+// device-quiesced disposition.
+#[allow(clippy::too_many_lines)]
+fn replay_inflight_mixed_program_v2_inner(trace: &InflightMixedProgramTraceV2) {
+    trace
+        .validate()
+        .expect("in-flight mixed program V2 replay receives a valid descriptor");
+    let mut scheduler = Some(new_scheduler());
+    let mut oracle = InflightMixedProgramOracle::new(trace.seed);
+    let mut request_ids = BTreeMap::<u8, RequestId>::new();
+    let mut pending_plan = None::<IterationPlan>;
+    let mut retry_after_not_dispatched_abort = None;
+    let mut now_ns = 0_u64;
+    let mut close_seen = false;
+
+    for operation in &trace.operations {
+        match operation {
+            InflightMixedProgramOperationV2::Submit {
+                label,
+                max_new_tokens,
+            } => {
+                let submission = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .submit(
+                        RequestDescriptor::new(
+                            vec![inflight_symbolic_prompt_token(*label)],
+                            usize::from(*max_new_tokens),
+                        ),
+                        now_ns,
+                    )
+                    .expect("in-flight mixed program V2 submission");
+                assert!(
+                    request_ids
+                        .insert(*label, submission.request_id())
+                        .is_none(),
+                    "in-flight mixed program V2 submitted one label twice"
+                );
+                oracle.bind_submit(*label, *max_new_tokens, submission.request_id());
+            }
+            InflightMixedProgramOperationV2::Plan => {
+                let expected = oracle.begin_plan();
+                let planning = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .plan_iteration(now_ns)
+                    .expect("in-flight mixed program V2 plan succeeds");
+                let (plan, completions) = planning.into_parts();
+                assert!(
+                    completions.is_empty(),
+                    "in-flight mixed program V2 does not enable admission timeouts"
+                );
+                let plan = plan.expect("in-flight mixed program V2 has live work to plan");
+                if let Some(aborted_iteration_id) = retry_after_not_dispatched_abort.take() {
+                    assert_ne!(
+                        plan.iteration_id(),
+                        aborted_iteration_id,
+                        "in-flight mixed program V2 retry reused its aborted iteration ID"
+                    );
+                }
+                assert_plan_projection(&plan, &expected);
+                assert_eq!(
+                    scheduler
+                        .as_ref()
+                        .expect("in-flight V2 scheduler remains live")
+                        .inflight_iteration_id(),
+                    Some(plan.iteration_id())
+                );
+                let concurrent_plan = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live")
+                    .plan_iteration(now_ns);
+                assert!(
+                    matches!(
+                        concurrent_plan,
+                        Err(SchedulerError::IterationInFlight { iteration_id })
+                            if iteration_id == plan.iteration_id()
+                    ),
+                    "in-flight mixed program V2 allowed a second plan before settlement"
+                );
+                assert!(
+                    pending_plan.replace(plan).is_none(),
+                    "in-flight mixed program V2 replaced its outstanding plan"
+                );
+            }
+            InflightMixedProgramOperationV2::Cancel { label } => {
+                let request_id = *request_ids
+                    .get(label)
+                    .expect("in-flight mixed program V2 cancel label is submitted");
+                let outcome = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .cancel(request_id, now_ns)
+                    .expect("in-flight mixed program V2 cancellation succeeds");
+                let snapshot = scheduler
+                    .as_ref()
+                    .expect("in-flight V2 scheduler remains live")
+                    .request_snapshot(request_id)
+                    .expect("deferred V2 cancellation retains its live request snapshot");
+                assert!(snapshot.cancellation_deferred());
+                oracle.defer_cancel(*label, &outcome);
+            }
+            InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order,
+            } => {
+                let plan = pending_plan
+                    .take()
+                    .expect("in-flight mixed program V2 has a plan to complete");
+                let result = oracle.feedback(plan.iteration_id(), feedback_slot_order);
+                let updates = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .complete_iteration(&result, now_ns)
+                    .expect("in-flight mixed program V2 completion succeeds");
+                assert_eq!(
+                    scheduler
+                        .as_ref()
+                        .expect("in-flight V2 scheduler remains live")
+                        .inflight_iteration_id(),
+                    None
+                );
+                oracle.record_complete(&updates, now_ns);
+            }
+            InflightMixedProgramOperationV2::AbortNotDispatched => {
+                let plan = pending_plan
+                    .take()
+                    .expect("in-flight mixed program V2 has a plan to abort");
+                let aborted_iteration_id = plan.iteration_id();
+                let updates = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .abort_iteration(plan.iteration_id(), ExecutionAbort::NotDispatched, now_ns)
+                    .expect("in-flight mixed program V2 not-dispatched abort succeeds");
+                assert_eq!(
+                    scheduler
+                        .as_ref()
+                        .expect("in-flight V2 scheduler remains live")
+                        .inflight_iteration_id(),
+                    None
+                );
+                oracle.record_not_dispatched_abort(&updates, now_ns);
+                assert!(
+                    retry_after_not_dispatched_abort
+                        .replace(aborted_iteration_id)
+                        .is_none(),
+                    "in-flight mixed program V2 aborted more than one retryable plan"
+                );
+            }
+            InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown => {
+                let plan = pending_plan
+                    .take()
+                    .expect("in-flight mixed program V2 has a plan to terminally abort");
+                let planned_request_ids = plan
+                    .decode_items()
+                    .iter()
+                    .chain(plan.prefill_items())
+                    .map(riley_scheduler::WorkItem::request_id)
+                    .collect::<Vec<_>>();
+                let updates = scheduler
+                    .as_mut()
+                    .expect("in-flight V2 scheduler remains live before close")
+                    .abort_iteration(
+                        plan.iteration_id(),
+                        ExecutionAbort::DeviceQuiescedMutationUnknown,
+                        now_ns,
+                    )
+                    .expect("in-flight mixed program V2 quiesced abort succeeds");
+                let scheduler_ref = scheduler
+                    .as_ref()
+                    .expect("in-flight V2 scheduler remains live");
+                assert_eq!(scheduler_ref.inflight_iteration_id(), None);
+                assert_eq!(scheduler_ref.active_sequence_count(), 0);
+                assert!(
+                    updates.iteration_metric().is_none(),
+                    "device-quiesced terminal abort must not publish an iteration metric"
+                );
+                assert!(
+                    updates.token_events().is_empty(),
+                    "device-quiesced terminal abort must not publish token events"
+                );
+                assert!(
+                    updates.settlement_failures().is_empty(),
+                    "device-quiesced terminal abort must not report settlement failures"
+                );
+                for request_id in planned_request_ids {
+                    assert_eq!(
+                        scheduler_ref.request_state(request_id),
+                        Some(RequestState::Failed),
+                        "device-quiesced terminal abort must mark every planned request failed"
+                    );
+                }
+                oracle.record_device_quiesced_mutation_unknown_abort(&updates, now_ns);
+            }
+            InflightMixedProgramOperationV2::Close => {
+                assert!(pending_plan.is_none());
+                let closed = scheduler
+                    .take()
+                    .expect("in-flight mixed program V2 closes its scheduler exactly once")
+                    .close(now_ns, None)
+                    .unwrap_or_else(|failure| {
+                        panic!(
+                            "seed {:#018x}: in-flight mixed program V2 close failed: {}",
+                            trace.seed,
+                            failure.error()
+                        )
+                    });
+                oracle.record_close(&closed, now_ns);
+                assert_closed_quiescent(&closed);
+                close_seen = true;
+            }
+        }
+        now_ns = now_ns
+            .checked_add(1)
+            .expect("in-flight mixed program V2 operation clock");
+    }
+    assert!(close_seen);
+    assert!(scheduler.is_none());
+    assert!(pending_plan.is_none());
+    assert!(retry_after_not_dispatched_abort.is_none());
+    oracle.assert_closed();
+}
+
+fn inflight_mixed_program_v2_fails(trace: &InflightMixedProgramTraceV2) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        replay_inflight_mixed_program_v2_inner(trace);
+    }))
+    .is_err()
+}
+
+fn inflight_mixed_program_v2_failure_report(
+    source: &InflightMixedProgramTraceV2,
+    minimized: &InflightMixedProgramTraceV2,
+) -> String {
+    let source_descriptor =
+        serialize_inflight_mixed_program_v2_descriptor("failing-original", source);
+    let minimized_descriptor =
+        serialize_inflight_mixed_program_v2_descriptor("failing-minimized", minimized);
+    format!(
+        "C03-A inflight-mixed-program-v2 failed\n\\
+         original_descriptor_json:\n\\
+         {source_descriptor}\\
+         minimized_descriptor_json:\n\\
+         {minimized_descriptor}\\
+         original_operations=[{}]\n\\
+         minimized_operations=[{}]\n\\
+         reducer_scope=v2-raw-pending-lifecycle-local\n\\
+         failure_predicate=inner-replayer-panicked-only\n\\
+         not_established=panic-site,payload,failure-signature,root-cause,general-or-global-minimum,label-or-slot-rebase,arbitrary-operation-deletion,unbounded-or-general-scheduler,actual-cuda-stream-quiescence,device-mutation-parity,pending-close,invalid-feedback,partial-prefill,queue-aging,fault-injection,receipt,gpu,c02-qualification",
+        source.describe_operations(),
+        minimized.describe_operations(),
+    )
+}
+
+fn replay_inflight_mixed_program_v2(trace: &InflightMixedProgramTraceV2) {
+    if !inflight_mixed_program_v2_fails(trace) {
+        return;
+    }
+    let minimized =
+        minimize_inflight_mixed_program_v2_trace(trace, inflight_mixed_program_v2_fails);
+    panic!(
+        "{}",
+        inflight_mixed_program_v2_failure_report(trace, &minimized)
+    );
+}
+
+fn raw_v2_device_quiesced_abort_trace() -> InflightMixedProgramTraceV2 {
+    InflightMixedProgramTraceV2 {
+        seed: 0x7e6d_5c4b_3a29_1807,
+        operations: vec![
+            InflightMixedProgramOperationV2::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperationV2::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperationV2::Plan,
+            InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order: vec![1, 0],
+            },
+            InflightMixedProgramOperationV2::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            InflightMixedProgramOperationV2::Plan,
+            InflightMixedProgramOperationV2::Cancel { label: 1 },
+            InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown,
+            InflightMixedProgramOperationV2::Close,
+        ],
+    }
+}
+
+fn raw_v2_not_dispatched_retry_trace() -> InflightMixedProgramTraceV2 {
+    InflightMixedProgramTraceV2 {
+        seed: 0x6d5c_4b3a_2918_07f6,
+        operations: vec![
+            InflightMixedProgramOperationV2::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperationV2::Plan,
+            InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order: vec![0],
+            },
+            InflightMixedProgramOperationV2::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperationV2::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            InflightMixedProgramOperationV2::Plan,
+            InflightMixedProgramOperationV2::AbortNotDispatched,
+            InflightMixedProgramOperationV2::Plan,
+            InflightMixedProgramOperationV2::Complete {
+                feedback_slot_order: vec![2, 1, 0],
+            },
+            InflightMixedProgramOperationV2::Close,
+        ],
+    }
+}
+
+fn raw_v2_device_abort_reducer_predicate(trace: &InflightMixedProgramTraceV2) -> bool {
+    trace.operations.iter().any(|operation| {
+        matches!(
+            operation,
+            InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown
+        )
+    }) && trace
+        .operations
+        .iter()
+        .any(|operation| matches!(operation, InflightMixedProgramOperationV2::Cancel { .. }))
+}
+
+#[test]
+fn inflight_mixed_program_v2_corpus_is_canonical_and_replays() {
+    for named in inflight_mixed_program_v2_corpus() {
+        let document = serialize_inflight_mixed_program_v2_descriptor(&named.case_id, &named.trace);
+        let parsed = parse_inflight_mixed_program_v2_descriptor(&document)
+            .expect("in-flight mixed program V2 corpus stays strict-canonical");
+        assert_eq!(parsed, named);
+        replay_inflight_mixed_program_v2(&parsed.trace);
+    }
+}
+
+#[test]
+fn inflight_mixed_program_v2_codec_keeps_v1_and_v2_parser_surfaces_disjoint() {
+    let v1_document = serialize_inflight_mixed_program_descriptor(
+        "cross-parser-v1",
+        &three_slot_mixed_trace(vec![2, 1, 0]),
+    );
+    let v2_trace = raw_v2_device_quiesced_abort_trace();
+    let v2_document = serialize_inflight_mixed_program_v2_descriptor("cross-parser-v2", &v2_trace);
+
+    assert!(
+        parse_inflight_mixed_program_descriptor(&v1_document).is_ok(),
+        "V1 parser must continue to accept the V1 grammar"
+    );
+    assert!(
+        parse_inflight_mixed_program_v2_descriptor(&v2_document).is_ok(),
+        "V2 parser must accept the V2 grammar"
+    );
+    let parsed_v2 = parse_inflight_mixed_program_v2_descriptor(&v2_document)
+        .expect("canonical V2 descriptor parses");
+    assert_eq!(parsed_v2.case_id, "cross-parser-v2");
+    assert_eq!(parsed_v2.trace, v2_trace);
+    assert_eq!(
+        serialize_inflight_mixed_program_v2_descriptor(&parsed_v2.case_id, &parsed_v2.trace),
+        v2_document,
+        "V2 codec must round-trip its canonical document byte-for-byte"
+    );
+    assert!(
+        parse_inflight_mixed_program_descriptor(&v2_document).is_err(),
+        "V1 parser must reject the V2 quiesced-abort grammar"
+    );
+    let retagged_v2_document = v2_document.replacen(
+        "\"trace_kind\":\"inflight-mixed-program-v2\"",
+        "\"trace_kind\":\"inflight-mixed-program-v1\"",
+        1,
+    );
+    assert!(
+        parse_inflight_mixed_program_descriptor(&retagged_v2_document).is_err(),
+        "V1 parser must reject V2-only abort operations even if a document is retagged"
+    );
+    assert!(
+        parse_inflight_mixed_program_v2_descriptor(&v1_document).is_err(),
+        "V2 parser must reject the V1 descriptor kind"
+    );
+}
+
+#[test]
+fn inflight_mixed_program_v2_codec_rejects_noncanonical_and_invalid_documents() {
+    let valid = serialize_inflight_mixed_program_v2_descriptor(
+        "codec-strict-v2",
+        &raw_v2_device_quiesced_abort_trace(),
+    );
+    let invalid_documents = [
+        (
+            "unsupported V2 trace kind",
+            valid.replacen(
+                "\"trace_kind\":\"inflight-mixed-program-v2\"",
+                "\"trace_kind\":\"inflight-mixed-program-v3\"",
+                1,
+            ),
+        ),
+        (
+            "unsupported version",
+            valid.replacen("\"format_version\":1", "\"format_version\":2", 1),
+        ),
+        (
+            "duplicate outer field",
+            valid.replacen(
+                "{\"format\":\"riley.scheduler.inflight-mixed-program\",",
+                "{\"format\":\"riley.scheduler.inflight-mixed-program\",\"format\":\"riley.scheduler.inflight-mixed-program\",",
+                1,
+            ),
+        ),
+        (
+            "reordered outer field",
+            valid.replacen(
+                "\"format\":\"riley.scheduler.inflight-mixed-program\",\"format_version\":1",
+                "\"format_version\":1,\"format\":\"riley.scheduler.inflight-mixed-program\"",
+                1,
+            ),
+        ),
+        (
+            "unknown outer field",
+            valid.replacen("\"operations\":[", "\"unexpected\":true,\"operations\":[", 1),
+        ),
+        (
+            "unknown nested field",
+            valid.replacen(
+                "{\"op\":\"abort_device_quiesced_mutation_unknown\"}",
+                "{\"op\":\"abort_device_quiesced_mutation_unknown\",\"unexpected\":true}",
+                1,
+            ),
+        ),
+        (
+            "duplicate nested field",
+            valid.replacen(
+                "{\"op\":\"submit\",\"label\":1,\"max_new_tokens\":2}",
+                "{\"op\":\"submit\",\"label\":1,\"label\":1,\"max_new_tokens\":2}",
+                1,
+            ),
+        ),
+        (
+            "terminal device abort must be immediately closed",
+            valid.replacen(
+                "{\"op\":\"abort_device_quiesced_mutation_unknown\"},{\"op\":\"close\"}",
+                "{\"op\":\"abort_device_quiesced_mutation_unknown\"},{\"op\":\"plan\"},{\"op\":\"close\"}",
+                1,
+            ),
+        ),
+        (
+            "terminal device abort must consume a mixed plan",
+            v2_descriptor_document_with_operations(
+                r#"{"op":"submit","label":1,"max_new_tokens":2},{"op":"plan"},{"op":"complete","feedback_slot_order":[0]},{"op":"submit","label":2,"max_new_tokens":2},{"op":"plan"},{"op":"complete","feedback_slot_order":[0,1]},{"op":"plan"},{"op":"abort_device_quiesced_mutation_unknown"},{"op":"close"}"#,
+            ),
+        ),
+        ("malformed JSON", "{not-json}\n".to_owned()),
+        ("noncanonical whitespace", format!(" {valid}")),
+    ];
+    for (case, document) in invalid_documents {
+        assert!(
+            parse_inflight_mixed_program_v2_descriptor(&document).is_err(),
+            "{case}: invalid V2 in-flight mixed program descriptor was accepted: {document:?}"
+        );
+    }
+}
+
+#[test]
+fn inflight_mixed_program_v2_replays_not_dispatched_retry_separately() {
+    let trace = raw_v2_not_dispatched_retry_trace();
+    trace
+        .validate()
+        .expect("V2 not-dispatched retry fixture stays within the V2 grammar");
+    replay_inflight_mixed_program_v2(&trace);
+}
+
+#[test]
+fn inflight_mixed_program_v2_reducer_preserves_terminal_device_abort() {
+    let source = raw_v2_device_quiesced_abort_trace();
+    source
+        .validate()
+        .expect("V2 quiesced-abort reducer fixture stays valid");
+    let candidates = source.shrink_candidates();
+
+    let mut abort_removed = source.clone();
+    abort_removed.operations.remove(7);
+    assert!(
+        abort_removed.validate().is_err(),
+        "removing the terminal device abort leaves the plan pending at close"
+    );
+    assert!(
+        !candidates.contains(&abort_removed),
+        "V2 reducer must not remove the terminal device abort"
+    );
+    assert!(
+        candidates.iter().all(|candidate| {
+            candidate.operations.iter().any(|operation| {
+                matches!(
+                    operation,
+                    InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown
+                )
+            })
+        }),
+        "every V2 reduction must retain the terminal device abort"
+    );
+
+    let minimized =
+        minimize_inflight_mixed_program_v2_trace(&source, raw_v2_device_abort_reducer_predicate);
+    assert!(raw_v2_device_abort_reducer_predicate(&minimized));
+    assert!(
+        minimized.operations.iter().any(|operation| {
+            matches!(
+                operation,
+                InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown
+            )
+        }),
+        "a V2 local minimum preserving the predicate retains the terminal device abort"
+    );
+    let document = serialize_inflight_mixed_program_v2_descriptor("v2-device-abort", &minimized);
+    let parsed = parse_inflight_mixed_program_v2_descriptor(&document)
+        .expect("V2 reducer result stays strict-canonical");
+    assert_eq!(parsed.trace, minimized);
+    replay_inflight_mixed_program_v2(&source);
+    replay_inflight_mixed_program_v2(&minimized);
+}
+
+#[test]
+fn ten_thousand_seeded_inflight_mixed_program_v2s_round_trip_and_replay() {
+    let mut saw_quiesced_abort_without_deferred_cancel = false;
+    let mut saw_quiesced_abort_with_deferred_cancel = false;
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..INFLIGHT_MIXED_PROGRAM_V2_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, INFLIGHT_MIXED_PROGRAM_V2_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the V2 in-flight mixed trace window");
+        let seed = 0x4dc1_5e5d_9c2a_73b1_u64.wrapping_mul(trace_index.wrapping_add(1));
+        let trace = InflightMixedProgramTraceV2::from_seed(seed);
+        let has_deferred_cancel = trace
+            .operations
+            .iter()
+            .any(|operation| matches!(operation, InflightMixedProgramOperationV2::Cancel { .. }));
+        let quiesced_abort_count = trace
+            .operations
+            .iter()
+            .filter(|operation| {
+                matches!(
+                    operation,
+                    InflightMixedProgramOperationV2::AbortDeviceQuiescedMutationUnknown
+                )
+            })
+            .count();
+        assert!(
+            quiesced_abort_count <= 1,
+            "a seeded V2 trace must not mix terminal device-quiesced aborts"
+        );
+        if quiesced_abort_count == 1 {
+            if has_deferred_cancel {
+                saw_quiesced_abort_with_deferred_cancel = true;
+            } else {
+                saw_quiesced_abort_without_deferred_cancel = true;
+            }
+        }
+        let document = serialize_inflight_mixed_program_v2_descriptor("seeded-program-v2", &trace);
+        let parsed = parse_inflight_mixed_program_v2_descriptor(&document)
+            .expect("seeded in-flight mixed program V2 stays strict-canonical");
+        assert_eq!(parsed.trace, trace);
+        replay_inflight_mixed_program_v2(&parsed.trace);
+    }
+    assert!(saw_quiesced_abort_without_deferred_cancel);
+    assert!(saw_quiesced_abort_with_deferred_cancel);
 }
