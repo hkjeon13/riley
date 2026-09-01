@@ -58,7 +58,8 @@ pub use gemm::{
 pub use graph::{
     CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo,
     CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, GraphCapture, GraphExec,
-    GraphFillCapture, GraphLaunch,
+    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedGraphExec, OwnedGraphFillCapture,
+    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphLaunch,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,

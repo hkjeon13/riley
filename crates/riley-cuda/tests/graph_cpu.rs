@@ -4,6 +4,8 @@ use riley_cuda::{
     CapturedGraph, CudaDeviceBuffer, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
     CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphLifecycle, CudaGraphLifecycleState,
     CudaGraphStage, CudaResult, CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
+    OwnedCapturedGraph, OwnedGraphExec, OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError,
+    OwnedGraphFillResources, OwnedGraphLaunch,
 };
 
 #[test]
@@ -217,6 +219,33 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    fn begin_owned_fill(
+        stream: CudaStream,
+        buffer: CudaDeviceBuffer,
+    ) -> Result<OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError> {
+        stream.begin_owned_graph_fill_capture(buffer, 16, CudaGraphCaptureMode::ThreadLocal)
+    }
+
+    fn end_owned_fill(capture: OwnedGraphFillCapture) -> CudaResult<OwnedCapturedGraph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_fill(graph: OwnedCapturedGraph) -> CudaResult<OwnedGraphExec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_fill(exec: &mut OwnedGraphExec) -> CudaResult<OwnedGraphLaunch<'_>> {
+        exec.launch()
+    }
+
+    fn finish_owned_fill(launch: OwnedGraphLaunch<'_>) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_exec(exec: OwnedGraphExec) -> CudaResult<OwnedGraphFillResources> {
+        exec.close()
+    }
+
     let _ = (
         begin_fill,
         end_fill,
@@ -224,11 +253,18 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_fill,
         finish_fill,
         close_exec,
+        begin_owned_fill,
+        end_owned_fill,
+        instantiate_owned_fill,
+        launch_owned_fill,
+        finish_owned_fill,
+        close_owned_exec,
     );
 
     let graph_source = include_str!("../src/graph.rs");
     assert!(graph_source.contains("CudaError::unavailable(\"CudaStream::begin_graph_capture\")"));
     assert!(graph_source.contains("\"CudaStream::begin_graph_fill_capture\""));
+    assert!(graph_source.contains("\"CudaStream::begin_owned_graph_fill_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -305,6 +341,128 @@ fn fill_graph_owners_keep_stream_buffer_and_launch_close_ordering_in_safe_types(
             "C05-5 safe lifetime/close-ordering contract is missing: {required}"
         );
     }
+}
+
+#[test]
+fn owned_fill_graph_owners_move_cold_resources_and_fail_closed_on_uncertain_replay() {
+    let graph = include_str!("../src/graph.rs");
+    let ffi = include_str!("../src/ffi.rs");
+
+    for required in [
+        "pub struct OwnedGraphFillResources",
+        "pub struct OwnedGraphFillCaptureBeginError",
+        "pub struct OwnedGraphFillCapture",
+        "pub struct OwnedCapturedGraph",
+        "pub struct OwnedGraphExec",
+        "pub struct OwnedGraphLaunch<'exec>",
+        "pub fn begin_owned_graph_fill_capture",
+        "pub fn into_parts(self) -> (CudaStream, CudaDeviceBuffer)",
+        "pub fn close(mut self) -> CudaResult<OwnedGraphFillResources>",
+        "exec: &'exec mut OwnedGraphExec",
+        "terminal: bool",
+        "OwnedGraphFillCaptureBeginError::recoverable",
+        "OwnedGraphFillCaptureBeginError::terminal",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-6 owned graph contract is missing: {required}"
+        );
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_fill_capture")
+        .nth(1)
+        .expect("owned graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned graph capture entry point must end before borrowed capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_fill_capture_preflight",
+        "resources.stream.native.begin_graph_fill_capture",
+        "C05-6 owned capture preflight",
+    );
+    assert!(
+        owned_begin.contains("OwnedGraphFillCaptureBeginError::recoverable"),
+        "native-unentered owned begin errors must return the moved resource pair"
+    );
+    assert!(
+        owned_begin.contains("OwnedGraphFillCaptureBeginError::terminal"),
+        "native-entered owned begin errors must withhold reusable resources"
+    );
+
+    for owner in [
+        "pub struct OwnedGraphFillCapture {",
+        "pub struct OwnedCapturedGraph {",
+        "pub struct OwnedGraphExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain its native handle first"));
+        let stream = source
+            .find("stream: Option<CudaStream>")
+            .unwrap_or_else(|| panic!("{owner} must retain its stream by value"));
+        let buffer = source
+            .find("buffer: Option<CudaDeviceBuffer>")
+            .unwrap_or_else(|| panic!("{owner} must retain its buffer by value"));
+        assert!(
+            native < stream && stream < buffer,
+            "{owner} must drop native graph ownership before its backing resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphExec")
+        .nth(1)
+        .expect("owned graph exec implementation must remain present")
+        .split("/// Completion owner for one replay")
+        .next()
+        .expect("owned graph exec implementation must end before completion owner");
+    assert!(
+        owned_exec.contains("self.terminal = true;") && owned_exec.contains("if self.terminal"),
+        "any owned replay uncertainty must make resource-returning close terminal"
+    );
+
+    for close in ["impl GraphHandle", "impl GraphExecHandle"] {
+        let source = ffi
+            .split(close)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {close}"))
+            .split("impl Drop")
+            .next()
+            .expect("graph close implementation must end before Drop");
+        assert!(
+            source.contains("status == STATUS_SUCCESS")
+                && source.contains("!graph_resources_released(&graph_failure)"),
+            "{close} must reject successful close metadata that cannot prove resource release"
+        );
+        assert!(
+            source.contains("graph_failure.submission_started()")
+                && source.contains("graph_failure.completion_known()"),
+            "{close} must reject success metadata that still claims an in-flight launch"
+        );
+    }
+    let completion = ffi
+        .split("impl GraphLaunchHandle")
+        .nth(1)
+        .expect("missing graph launch completion owner")
+        .split("impl Drop for GraphLaunchHandle")
+        .next()
+        .expect("graph launch completion implementation must end before Drop");
+    assert!(
+        completion.contains("!graph_failure.submission_started()")
+            && completion.contains("!graph_failure.completion_known()")
+            && completion.contains("!graph_resources_released(&graph_failure)"),
+        "completion success must prove submission, settled work, and retained graph resource state"
+    );
 }
 
 #[test]

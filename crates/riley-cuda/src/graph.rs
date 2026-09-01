@@ -1238,6 +1238,590 @@ impl Drop for GraphLaunch<'_, '_, '_> {
     }
 }
 
+/// A by-value stream and fixed device-buffer pair recovered from a known graph
+/// close.
+///
+/// This bundle is deliberately not a graph capability. It merely returns the
+/// exact resources that an [`OwnedGraphExec`] or [`OwnedCapturedGraph`] held
+/// while native graph leases kept them busy. Call [`Self::into_parts`] to use
+/// them normally, or [`Self::close`] when the cold resources are no longer
+/// needed.
+pub struct OwnedGraphFillResources {
+    stream: CudaStream,
+    buffer: CudaDeviceBuffer,
+}
+
+impl OwnedGraphFillResources {
+    fn new(stream: CudaStream, buffer: CudaDeviceBuffer) -> Self {
+        Self { stream, buffer }
+    }
+
+    /// Returns the exact stream and device buffer after a known graph release.
+    #[must_use]
+    pub fn into_parts(self) -> (CudaStream, CudaDeviceBuffer) {
+        let Self { stream, buffer } = self;
+        (stream, buffer)
+    }
+
+    /// Explicitly destroys both recovered cold resources.
+    ///
+    /// The device buffer closes before its stream, matching the ordinary
+    /// caller-owned cleanup order. If either native close is ambiguous, its
+    /// existing one-shot fail-closed contract remains in force.
+    ///
+    /// # Errors
+    ///
+    /// Returns a resource-close error. Use [`Self::into_parts`] when callers
+    /// need to observe each resource close independently.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, buffer) = self.into_parts();
+        buffer.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning a by-value fixed-fill graph capture.
+///
+/// Rust-side preflight failures return the untouched stream/buffer pair through
+/// [`Self::into_resources`]. Once the native capture entry point has been
+/// called, this error deliberately withholds the pair: native may have entered
+/// capture or retained its raw leases while recovering a deferred CUDA error.
+/// In that case the values are dropped into the existing fail-closed native
+/// ownership path rather than being made reusable without evidence.
+#[must_use]
+pub struct OwnedGraphFillCaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphFillResources>,
+}
+
+impl OwnedGraphFillCaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphFillResources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The original CUDA validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched values only when capture had not entered native
+    /// ownership.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphFillResources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphFillCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphFillCaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphFillCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph fill capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphFillCaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address f32 CUDA Graph capture.
+///
+/// Unlike [`GraphFillCapture`], this state moves the exact stream and device
+/// buffer into the graph owner. It therefore has no self-referential borrow and
+/// can move into a cold, same-thread graph holder after capture. It remains
+/// `!Send + !Sync`: a thread-local capture must end on its begin thread.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphFillCapture>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphFillCapture>();
+/// ```
+pub struct OwnedGraphFillCapture {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    // Native must drop before these raw-resource wrappers. An ambiguous native
+    // capture owns their raw addresses and must keep them fail-closed.
+    stream: Option<CudaStream>,
+    buffer: Option<CudaDeviceBuffer>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphFillCapture {
+    /// Enqueues one immutable f32 fill node on this by-value capture.
+    ///
+    /// # Errors
+    ///
+    /// A native enqueue failure makes this capture terminal; Drop performs the
+    /// same one-shot abort/recovery path as the borrowed C05-5 owner.
+    pub fn enqueue_fill(&mut self, value: f32) -> CudaResult<()> {
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphFillCapture::enqueue_fill",
+                "the owned graph fill capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphFillCapture::enqueue_fill",
+                "a prior graph fill enqueue failed and this capture must be aborted",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_fill(value);
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = value;
+            Err(CudaError::unavailable(
+                "OwnedGraphFillCapture::enqueue_fill",
+            ))
+        }
+    }
+
+    /// Ends capture and transfers the moved resources into an owned graph.
+    ///
+    /// # Errors
+    ///
+    /// The consuming error path never returns raw resources after a native end
+    /// attempt. Native graph/capture recovery retains any uncertain leases
+    /// fail-closed, exactly as C05-5's borrowed owner does.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedGraph> {
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphFillCapture::end",
+                "the owned graph fill capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphFillCapture::end",
+                "a prior graph fill enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphFillCapture::end",
+                "capture end requires at least one successful fixed-fill enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_fill_resources(
+                &mut self.stream,
+                &mut self.buffer,
+                "OwnedGraphFillCapture::end",
+            )?;
+            let (stream, buffer) = resources.into_parts();
+            Ok(OwnedCapturedGraph {
+                native,
+                stream: Some(stream),
+                buffer: Some(buffer),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.buffer);
+            self.active = false;
+            Err(CudaError::unavailable("OwnedGraphFillCapture::end"))
+        }
+    }
+
+    /// Aborts capture and returns the moved resources only after native
+    /// recovery has proved their graph leases released.
+    ///
+    /// # Errors
+    ///
+    /// An error retains no reusable resources. Any uncertain native owner is
+    /// deliberately left in its existing fail-closed state.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphFillResources> {
+        self.abort_once()?;
+        take_owned_graph_fill_resources(
+            &mut self.stream,
+            &mut self.buffer,
+            "OwnedGraphFillCapture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable("OwnedGraphFillCapture::abort"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphFillCapture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value captured f32-fill CUDA Graph awaiting instantiate or close.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedCapturedGraph>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedCapturedGraph>();
+/// ```
+pub struct OwnedCapturedGraph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    stream: Option<CudaStream>,
+    buffer: Option<CudaDeviceBuffer>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedGraph {
+    /// Instantiates this graph exactly once while retaining its moved
+    /// stream/buffer pair.
+    ///
+    /// # Errors
+    ///
+    /// An instantiate error is terminal for this consuming owner; no resource
+    /// pair is returned without native release evidence.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphExec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_fill_resources(
+                &mut self.stream,
+                &mut self.buffer,
+                "OwnedCapturedGraph::instantiate",
+            )?;
+            let (stream, buffer) = resources.into_parts();
+            Ok(OwnedGraphExec {
+                native,
+                stream: Some(stream),
+                buffer: Some(buffer),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.buffer);
+            Err(CudaError::unavailable("OwnedCapturedGraph::instantiate"))
+        }
+    }
+
+    /// Destroys this graph and returns its resources only after the native
+    /// close companion proves graph leases were released.
+    ///
+    /// # Errors
+    ///
+    /// A native close error consumes the value without returning resources;
+    /// raw ownership remains fail-closed rather than becoming reusable.
+    pub fn close(mut self) -> CudaResult<OwnedGraphFillResources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_fill_resources(
+                &mut self.stream,
+                &mut self.buffer,
+                "OwnedCapturedGraph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.buffer);
+            Err(CudaError::unavailable("OwnedCapturedGraph::close"))
+        }
+    }
+}
+
+/// By-value instantiated fixed-fill CUDA Graph executable.
+///
+/// It can move into a cold same-thread owner because it stores, rather than
+/// borrows, its capture stream and fixed device buffer. Neither is exposed
+/// until [`Self::close`] has native resource-release evidence.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphExec>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphExec>();
+/// ```
+pub struct OwnedGraphExec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    stream: Option<CudaStream>,
+    buffer: Option<CudaDeviceBuffer>,
+    // An attempted launch/completion that returns an error cannot prove this
+    // native exec remains safe to close and hand resources back to Rust.
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphExec {
+    /// Launches one replay on the exact stream moved into this executable.
+    ///
+    /// The returned completion owner holds an exclusive mutable borrow of this
+    /// value, preventing relaunch or close until the one replay settles.
+    ///
+    /// # Errors
+    ///
+    /// Any launch error makes this by-value owner terminal. C05-6 deliberately
+    /// prefers retaining native leases over returning resources from a
+    /// malformed or deferred launch outcome.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphLaunch<'exec>> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphExec::launch",
+                "an earlier owned graph replay left native completion state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            if self.buffer.is_none() {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    "OwnedGraphExec::launch",
+                    "the owned graph exec lost its fixed device buffer",
+                ));
+            }
+            let native = match self.stream.as_mut() {
+                Some(stream) => self.native.launch(&mut stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        "OwnedGraphExec::launch",
+                        "the owned graph exec lost its capture stream",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphLaunch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.terminal = true;
+            Err(CudaError::unavailable("OwnedGraphExec::launch"))
+        }
+    }
+
+    /// Destroys this executable and returns the captured resources only after
+    /// native close proves all graph leases released.
+    ///
+    /// ```compile_fail
+    /// fn cannot_close_an_owned_exec_while_launch_is_live(
+    ///     mut exec: riley_cuda::OwnedGraphExec,
+    /// ) {
+    ///     let launch = exec.launch().unwrap();
+    ///     let _ = exec.close();
+    ///     drop(launch);
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// The consuming error path returns no resources. This preserves native's
+    /// one-shot destroy semantics when CUDA destruction or context restoration
+    /// may be ambiguous.
+    pub fn close(mut self) -> CudaResult<OwnedGraphFillResources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphExec::close",
+                "an earlier owned graph replay left native completion state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_fill_resources(
+                &mut self.stream,
+                &mut self.buffer,
+                "OwnedGraphExec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.buffer);
+            Err(CudaError::unavailable("OwnedGraphExec::close"))
+        }
+    }
+}
+
+/// Completion owner for one replay of an [`OwnedGraphExec`].
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphLaunch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphLaunch<'static>>();
+/// ```
+pub struct OwnedGraphLaunch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphExec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphLaunch<'_> {
+    /// Waits for replay completion exactly once.
+    ///
+    /// # Errors
+    ///
+    /// An ambiguous completion makes the retained executable terminal and
+    /// never retries CUDA synchronization.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable("OwnedGraphLaunch::finish"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphLaunch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_fill_resources(
+    stream: &mut Option<CudaStream>,
+    buffer: &mut Option<CudaDeviceBuffer>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphFillResources> {
+    let stream = stream.take().ok_or_else(|| {
+        CudaError::invalid_state(operation, "the owned graph owner lost its capture stream")
+    })?;
+    let buffer = buffer.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph owner lost its fixed device buffer",
+        )
+    })?;
+    Ok(OwnedGraphFillResources::new(stream, buffer))
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_fill_capture_preflight(
+    stream: &CudaStream,
+    buffer: &CudaDeviceBuffer,
+    element_count: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, buffer.context_owner(), operation)?;
+    buffer.ensure_idle_for_operation(operation)?;
+    let required_bytes = element_count
+        .checked_mul(std::mem::size_of::<f32>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "element_count overflows the fixed f32 capture byte range",
+            )
+        })?;
+    if required_bytes > buffer.byte_len() {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "element_count={element_count} requires {required_bytes} bytes, but the device buffer has {} bytes",
+                buffer.byte_len()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -1270,6 +1854,74 @@ impl CudaStream {
         }
     }
 
+    /// Begins the C05-5 fixed-fill capture with ownership of both its stream
+    /// and device buffer moved into the returned state machine.
+    ///
+    /// This is the cold-owner counterpart to [`Self::begin_graph_fill_capture`].
+    /// It exists so an instantiated graph can be stored by value without a
+    /// self-referential Rust borrow. It admits exactly the same fixed-address
+    /// f32-fill operation set; it does not add H2D, node updates, model work,
+    /// registry lookup, or eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// A Rust-side preflight error is returned with the untouched resources in
+    /// [`OwnedGraphFillCaptureBeginError::into_resources`]. After native entry,
+    /// errors deliberately return no reusable resources because native capture
+    /// recovery may retain their raw leases fail-closed.
+    pub fn begin_owned_graph_fill_capture(
+        self,
+        buffer: CudaDeviceBuffer,
+        element_count: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphFillResources::new(self, buffer);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphFillResources::new(self, buffer);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_fill_capture";
+            if let Err(error) = validate_graph_fill_capture_preflight(
+                &resources.stream,
+                &resources.buffer,
+                element_count,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphFillCaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources.stream.native.begin_graph_fill_capture(
+                resources.buffer.native_handle(),
+                element_count,
+                mode as u32,
+            ) {
+                Ok(native) => native,
+                Err(error) => return Err(OwnedGraphFillCaptureBeginError::terminal(error)),
+            };
+            begin_deferred_capture_contexts();
+            let (stream, buffer) = resources.into_parts();
+            Ok(OwnedGraphFillCapture {
+                native,
+                stream: Some(stream),
+                buffer: Some(buffer),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (element_count, mode);
+            Err(OwnedGraphFillCaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_fill_capture"),
+                resources,
+            ))
+        }
+    }
+
     /// Begins the sole C05-5 capture-admitted operation set: one or more
     /// fixed-shape f32 fills of a caller-preallocated device buffer.
     ///
@@ -1291,25 +1943,7 @@ impl CudaStream {
         #[cfg(feature = "cuda")]
         {
             const OPERATION: &str = "CudaStream::begin_graph_fill_capture";
-            ensure_same_context(&self.context, buffer.context_owner(), OPERATION)?;
-            buffer.ensure_idle_for_operation(OPERATION)?;
-            let required_bytes = element_count
-                .checked_mul(std::mem::size_of::<f32>() as u64)
-                .ok_or_else(|| {
-                    CudaError::out_of_range(
-                        OPERATION,
-                        "element_count overflows the fixed f32 capture byte range",
-                    )
-                })?;
-            if required_bytes > buffer.byte_len() {
-                return Err(CudaError::out_of_range(
-                    OPERATION,
-                    format!(
-                        "element_count={element_count} requires {required_bytes} bytes, but the device buffer has {} bytes",
-                        buffer.byte_len()
-                    ),
-                ));
-            }
+            validate_graph_fill_capture_preflight(self, buffer, element_count, OPERATION)?;
             let native = self.native.begin_graph_fill_capture(
                 buffer.native_handle(),
                 element_count,

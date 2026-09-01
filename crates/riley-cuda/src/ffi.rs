@@ -2739,7 +2739,12 @@ impl GraphHandle {
             };
         }
         let graph_failure = decode_graph_failure_info(&graph_error)?;
-        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, false) {
+        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, false)
+            || (status == STATUS_SUCCESS
+                && (!graph_resources_released(&graph_failure)
+                    || graph_failure.submission_started()
+                    || graph_failure.completion_known()))
+        {
             return Err(malformed_graph_metadata(OPERATION));
         }
         status_result(status, OPERATION, &error)
@@ -2839,7 +2844,12 @@ impl GraphExecHandle {
             };
         }
         let graph_failure = decode_graph_failure_info(&graph_error)?;
-        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, true) {
+        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, true)
+            || (status == STATUS_SUCCESS
+                && (!graph_resources_released(&graph_failure)
+                    || graph_failure.submission_started()
+                    || graph_failure.completion_known()))
+        {
             return Err(malformed_graph_metadata(OPERATION));
         }
         status_result(status, OPERATION, &error)
@@ -2944,7 +2954,12 @@ impl GraphLaunchHandle {
             };
         }
         let graph_failure = decode_graph_failure_info(&graph_error)?;
-        if !graph_launch_complete_metadata_is_valid(&graph_error, &graph_failure) {
+        if !graph_launch_complete_metadata_is_valid(&graph_error, &graph_failure)
+            || (status == STATUS_SUCCESS
+                && (!graph_failure.submission_started()
+                    || !graph_failure.completion_known()
+                    || !graph_resources_released(&graph_failure)))
+        {
             return Err(malformed_graph_metadata(OPERATION));
         }
         status_result(status, OPERATION, &error)

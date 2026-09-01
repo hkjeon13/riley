@@ -70,6 +70,138 @@ fn download_f32_buffer(
     Ok(values)
 }
 
+fn move_into_cold_owner(exec: riley_cuda::OwnedGraphExec) -> riley_cuda::OwnedGraphExec {
+    exec
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_fixed_fill_exec_moves_replays_and_returns_resources() -> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 1_024;
+    const REPLAYS: usize = 32;
+    const FINAL_VALUE: f32 = -13.5;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let capture_stream = context.create_stream()?;
+    let mut download_stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("owned graph capture allocation byte length overflow")?;
+    let buffer = context.allocate_device_buffer(byte_len)?;
+
+    let mut capture = capture_stream.begin_owned_graph_fill_capture(
+        buffer,
+        ELEMENT_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_fill(2.0)?;
+    capture.enqueue_fill(FINAL_VALUE)?;
+    let captured = capture.end()?;
+    // This value move is the C05-6 boundary: the executable has no lexical
+    // borrow into its stream/buffer pair and can live in a cold owner.
+    let mut exec = move_into_cold_owner(captured.instantiate()?);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+
+    let resources = exec.close()?;
+    let (capture_stream, mut buffer) = resources.into_parts();
+    let values = download_f32_buffer(&context, &mut buffer, &mut download_stream, ELEMENT_COUNT)?;
+    assert_eq!(values.len(), usize::try_from(ELEMENT_COUNT)?);
+    assert!(all_f32_bits_equal(&values, FINAL_VALUE));
+
+    // A known exec close releases both Rust and native graph leases. The same
+    // moved resources are therefore admissible for a fresh value-owning
+    // capture, not just for independent D2H.
+    let resources = capture_stream
+        .begin_owned_graph_fill_capture(buffer, ELEMENT_COUNT, CudaGraphCaptureMode::ThreadLocal)?
+        .abort()?;
+    let (capture_stream, buffer) = resources.into_parts();
+    buffer.close()?;
+    capture_stream.close()?;
+    download_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-6-owned-fill-replay replays={REPLAYS} elements={ELEMENT_COUNT} final_value={FINAL_VALUE} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_zero_enqueue_end_drop_recovers_and_releases_cold_resources() -> Result<(), Box<dyn Error>>
+{
+    const ELEMENT_COUNT: u64 = 256;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("owned zero-enqueue capture allocation byte length overflow")?;
+    let buffer = context.allocate_device_buffer(byte_len)?;
+
+    let error = match stream
+        .begin_owned_graph_fill_capture(buffer, ELEMENT_COUNT, CudaGraphCaptureMode::ThreadLocal)?
+        .end()
+    {
+        Ok(_) => panic!("owned zero-enqueue graph capture unexpectedly ended"),
+        Err(error) => error,
+    };
+    assert_eq!(error.kind(), CudaErrorKind::InvalidState);
+    // `end` consumed the by-value capture. Its Drop must abort natively before
+    // the moved stream/buffer destructors run, leaving no allocation ledger
+    // residue and no resource available for accidental reuse.
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-6-owned-zero-enqueue-drop-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_fill_capture_preflight_error_returns_untouched_resources() -> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 128;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("owned preflight capture allocation byte length overflow")?;
+    let buffer = context.allocate_device_buffer(byte_len)?;
+
+    let error = match stream.begin_owned_graph_fill_capture(
+        buffer,
+        ELEMENT_COUNT + 1,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("oversized owned capture preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("Rust-side preflight must return its untouched moved resources");
+    let (mut stream, buffer) = resources.into_parts();
+    assert_eager_fill_after_recovery(&context, &mut stream, 9.25)?;
+
+    buffer.close()?;
+    stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-6-owned-preflight-resource-recovery status=passed");
+    Ok(())
+}
+
 #[test]
 #[ignore = "remote GPU"]
 fn fixed_buffer_fill_graph_replays_exactly_and_releases_every_lease() -> Result<(), Box<dyn Error>>
