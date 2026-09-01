@@ -91,7 +91,7 @@ jobs:
           RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
         run: install -d -m 700 "$RILEY_ROUTING_FUZZ_RECEIPT_DIR"
 
-      - name: Run C03 90,000-trace seed-rotation slot
+      - name: Run C03 100,000-trace seed-rotation slot
         id: routing_fuzz
         env:
           RILEY_C03_SEED_ROTATION_BASE: ${{ needs.seed-plan.outputs.rotation_base }}
@@ -102,7 +102,7 @@ jobs:
         run: |
           test "$(git rev-parse HEAD)" = "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
           exit_code=0
-          for target in model_based_routing general_mixed_operation_routing bounded_mixed_program_routing inflight_mixed_program_routing; do
+          for target in model_based_routing general_mixed_operation_routing general_mixed_program_routing bounded_mixed_program_routing inflight_mixed_program_routing; do
             cargo test --locked -p riley-scheduler --no-default-features --test "$target" || exit_code=1
           done
           exit "$exit_code"

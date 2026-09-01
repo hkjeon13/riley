@@ -3,8 +3,10 @@
 **상태:** In progress — C03-A CPU-only reference harness의 일부와 C03-Ax의 deterministic
 test-only post-validation fault-containment unit contract, C03-Ay의 scheduled CPU seed-band rotation,
 C03-Az의 bounded raw-program stateful local reducer와 in-flight raw-program local reducer,
-`general-mixed-operation-v2`의 strict rejected-feedback CPU contract, 그리고
-`inflight-mixed-program-v2`의 caller-asserted quiesced terminal-abort CPU contract가 구현되었다.
+`general-mixed-operation-v2`의 strict rejected-feedback CPU contract,
+`general-mixed-program-v1`의 validator-bounded variable-length raw-program·독립 model·semantic-local
+reducer CPU contract, 그리고 `inflight-mixed-program-v2`의 caller-asserted quiesced terminal-abort
+CPU contract가 구현되었다.
 C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다.
 C03-B의 actual CUDA fixed-corpus execution과 C03의 formal completion은 C02 actual qualification
 뒤에만 수행한다.
@@ -36,6 +38,13 @@ contraction만 actual inner replayer panic 뒤에 다시 재생한다. 별도 `i
 caller가 이미 quiesced라고 단언한 `DeviceQuiescedMutationUnknown` disposition을 public host API로
 소비하는 terminal branch만 검증한다. CUDA synchronization, 실제 device mutation, GPU replay 또는
 성능 evidence는 이 CPU contract로부터 성립하지 않는다.
+
+`general-mixed-program-v1`도 별도 strict canonical descriptor와 test-only CPU adapter 안에만
+존재한다. 이는 기존 `general-mixed-operation-v1/v2`, `bounded-mixed-program-v1`,
+`inflight-mixed-program-v1/v2`의 acceptance surface·codec·receipt를 넓히거나 재사용하지 않는다.
+독립 model은 `Scheduler`나 `IterationPlan`을 import하지 않고 public update와 opaque
+request/iteration ID만 소비한다. 따라서 이 slice 역시 production scheduler/runtime API, CUDA/GPU,
+C02 qualification 또는 성능 evidence를 변경하거나 주장하지 않는다.
 
 **C03-B**의 GPU corpus/fixture source는 same-candidate integration replay를 주장하려면 C02
 candidate freeze 전에 그 candidate source archive에 포함되어야 한다. GPU fixed-corpus execution,
@@ -154,6 +163,7 @@ C03-Ax는 actual device mutation, CUDA stream fault, multi-event trace grammar, 
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
 V2 trace, 10,000 parameterized two-wave `general-mixed-operation-v1` trace, 10,000 strict
 two-wave `general-mixed-operation-v2` rejected-feedback/retry trace, 10,000
+validator-bounded variable-length raw `general-mixed-program-v1` trace, 10,000
 bounded raw `bounded-mixed-program-v1` trace, 10,000 bounded raw in-flight
 `inflight-mixed-program-v1` trace, 그리고 10,000 bounded raw in-flight
 `inflight-mixed-program-v2` caller-asserted terminal-abort trace다. `FaultAction` microtrace는 deferred cancel 뒤 commit/`NotDispatched` abort,
@@ -175,16 +185,33 @@ semantic slot ownership이 유지되어야 한다.
 V1 parser는 V2 document를, V2 parser는 V1 document를 각각 거부한다. 이 slice는 synthetic public
 CPU feedback만 다루며 GPU/CUDA execution, C02 qualification, C03-B evidence 또는 성능을 주장하지
 않는다. V1 전용 routing-fuzz receipt/checker를 재사용하거나 새 receipt artifact를 만들지 않으며,
-arbitrary/general raw operation vector, admission/aging/KV general reference scheduler, general
+unbounded/arbitrary raw operation vector, admission/aging/KV general reference scheduler, general
 shrinker 또는 multi-event fault-injection grammar를 추가하지 않는다.
 
-C03-Ay는 기본 PR의 아홉 10,000-trace CPU lane(총 90,000 trace)을 바꾸지 않는다. 전용
+`general-mixed-program-v1`은 `format="riley.scheduler.general-mixed-program"`,
+`trace_kind="general-mixed-program-v1"`의 별도 strict canonical descriptor다. operation vector는
+variable-length이지만 validator가 `1..=24` operation, unique label `1..=6`, live request 최대 4개,
+plan 최대 8개로 닫는다. 허용 operation은
+`Submit { label, prompt_len: 1..=3, max_new_tokens: 1..=3 }`, `Plan`,
+`Cancel { label }`, exact dense-slot permutation을 담은 `Complete`,
+`AbortNotDispatched`, 마지막 idle `Close`뿐이다. validator는 최소 두 plan과 그중 하나의
+decode+prefill mixed plan을 요구하며, cancel은 idle 즉시 취소 또는 pending selected label의
+deferred 취소로만 허용한다.
+
+순수 `GeneralMixedProgramReferenceModel`은 opaque request/iteration ID와 public update로 label
+history, pending semantic slot, immediate/deferred cancel, rollback, terminal-once 및 close ledger를
+독립 계산한다. 고정된 all-live configuration만 다루므로 queue/aging, partial prefill, KV allocation
+policy, invalid feedback, timeout, `DeviceQuiescedMutationUnknown`은 의도적으로 범위 밖이다.
+seeded sampler는 valid next operation만 statefully 고르는 10,000-trace generator이며 exhaustive 또는
+unbounded enumerator가 아니다.
+
+C03-Ay는 기본 PR의 10개 10,000-trace CPU lane(총 100,000 trace)을 바꾸지 않는다. 전용
 c03-routing-fuzz.yml scheduled/manual workflow는 매 run마다 기록 가능한 canonical decimal base를
 선택하고, 15개 matrix slot에 서로 겹치지 않는 10,000-index band를 배정한다. 따라서 한 scheduled run은
-9 × 10,000 × 15 = 1,350,000 CPU trace를 실행한다. test-only routing_fuzz_rotation helper는
+10 × 10,000 × 15 = 1,500,000 CPU trace를 실행한다. test-only routing_fuzz_rotation helper는
 base/slot/slot-count가 모두 absent일 때 기존 seed와 FaultAction 순서를 정확히 유지하고, 부분 설정,
 non-canonical decimal, overflow를 fail closed한다. 각 lane의 final seed 또는 descriptor가 재현
-identity이며, 기존 fault/general lane이 seed factor를 공유하므로 이것은 1,350,000 trace 실행이지
+identity이며, 기존 fault/general lane이 seed factor를 공유하므로 이것은 1,500,000 trace 실행이지
 전역 unique seed 수 주장이 아니다. 이 workflow는 GPU target, CUDA feature, production runtime API 또는
 성능 주장을 추가하지 않는다.
 
@@ -476,6 +503,15 @@ stale/missing/unplanned rejection의 surface non-mutation과 same-pending-plan s
 general raw operation grammar·general/global minimization·cross-version receipt artifact 또는
 arbitrary multi-event shrinker를 주장하지 않는다.
 
+`general-mixed-program-v1` reducer는 raw vector의 semantic-local contraction만 한다. candidate order는
+(1) `Cancel` 제거, (2) `Submit` 및 종속 `Cancel` 제거, (3) prompt/`max_new_tokens` 축소,
+(4) `Complete`의 direct identity화, (5) adjacent inversion swap이다. 각 candidate는 semantic label
+state를 다시 재생해 이후 `Complete` slot order를 projection/rebase하고, validator·strict codec
+round-trip·rank decrease를 모두 통과할 때만 replay한다. 이는 V1 자체의 local minimum일 뿐
+`Plan`/`Complete`/`AbortNotDispatched` block deletion, label renumber, arbitrary delta debugging,
+global minimum, failure signature/root cause preservation을 하지 않는다. 기존 V1/V2 receipt/checker를
+재사용하지 않으며 CUDA/device mutation/GPU semantics 또는 production runtime behavior를 다루지 않는다.
+
 `bounded-mixed-program-v1`은 C03-Az의 fixed stateful local reducer를 사용한다. settled cancel/submit
 removal 뒤의 slot projection은 위 semantic rebase로 한정하고, plan deletion·output-capacity 축소·label
 renumber·arbitrary multi-edit/delta debugging은 후속 별도 contract다. source와 minimized descriptor는
@@ -505,7 +541,7 @@ contract를 유지한 strict codec round-trip 뒤에만 replay하며, 이 local 
 disposition의 CPU semantics만 다룬다. CUDA stream synchronization, device mutation parity, GPU replay,
 performance 또는 C02 evidence는 보존·주장하지 않는다.
 
-일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
+이 V1보다 넓은 general grammar가 별도로 승인되면 다음 순서로 trace를 축약한다.
 
 1. request 수 감소
 2. iteration 수 감소
@@ -514,9 +550,10 @@ performance 또는 C02 evidence는 보존·주장하지 않는다.
 5. output slot permutation 단순화
 6. cancellation/failure 시점 단순화
 
-그 general final report는 source seed와 full replay descriptor, 사람이 읽을 수 있는 globally minimized
-operation list를 함께 포함한다. general grammar의 durable format은 V2 codec을 재사용한다고 미리
-가정하지 않고 별도 versioned contract로 설계한다. 이는 현재 V2 local shrinker보다 강한 후속 기준이다.
+그 future general final report는 source seed와 full replay descriptor, 사람이 읽을 수 있는 globally
+minimized operation list를 함께 포함한다. durable format은 `general-mixed-program-v1` 또는 기존
+V1/V2 codec을 재사용한다고 미리 가정하지 않고 별도 versioned contract로 설계한다. 이는 현재
+semantic-local reducer보다 강한 후속 기준이다.
 
 ## 8. 파일 변경
 
@@ -527,6 +564,9 @@ crates/riley-scheduler/tests/general_mixed_operation_routing.rs
 crates/riley-scheduler/tests/support/general_mixed_operation_trace.rs
 crates/riley-scheduler/tests/support/routing_fuzz_receipt.rs
 crates/riley-scheduler/tests/corpus/output-routing/general-mixed-operation-v2/*.json
+crates/riley-scheduler/tests/general_mixed_program_routing.rs
+crates/riley-scheduler/tests/support/general_mixed_program_trace.rs
+crates/riley-scheduler/tests/corpus/output-routing/general-mixed-program-v1/*.json
 crates/riley-scheduler/tests/bounded_mixed_program_routing.rs
 crates/riley-scheduler/tests/support/bounded_mixed_program_trace.rs
 crates/riley-scheduler/tests/corpus/output-routing/bounded-mixed-program-v1/*.json
@@ -543,15 +583,21 @@ benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer와 V1/V2 in-flight raw-lifecycle reducer 포함)는 기존 test-only `serde_json` dev-dependency만
-사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
-않는다. C03-Ax도 동일하게 private test-only source만 바꾼다. 이후 arbitrary general grammar,
-durable cross-version replay contract, failure corpus 자동 등록, delta debugging, arbitrary/multi-event
-fault-injection grammar는 별도 PR 범위다.
+현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer와
+V1/V2 in-flight raw-lifecycle reducer 포함), 그리고 `general-mixed-program-v1`은 기존 test-only
+`serde_json` dev-dependency만 사용하며 production dependency graph, scheduler runtime semantic, GPU,
+C02 qualification을 변경하지 않는다. C03-Ax도 동일하게 private test-only source만 바꾼다. 이후
+unbounded general grammar, durable cross-version replay contract, failure corpus 자동 등록, delta debugging,
+arbitrary/multi-event fault-injection grammar는 별도 PR 범위다.
 
 `general-mixed-operation-v2`도 같은 test-only CPU 경계에 남는다. strict V1/V2 parser separation과
 rejected-feedback non-mutation은 C03-A/V1 receipt, GPU/C02 또는 arbitrary raw-general grammar의
 acceptance를 대신하지 않는다.
+
+`general-mixed-program-v1`의 V1은 그 독립 descriptor의 grammar version일 뿐
+`general-mixed-operation-v1/v2` 또는 다른 raw-program V1/V2와 compatibility를 뜻하지 않는다.
+strict codec/model/reducer 성공도 CPU test support의 partial coverage이며 production path, CUDA/GPU,
+C02/C03-B evidence 또는 performance claim이 아니다.
 
 ## 9. Observability assertion
 
@@ -579,9 +625,9 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 
 ## 11. CI 정책
 
-- 기본 CPU workflow: 각 property lane의 deterministic 10,000-trace seed set(총 90,000 trace)
-- scheduled workflow: fresh recorded base와 15개 disjoint slot으로 아홉 10,000-trace lane을
-  회전해 총 1,350,000 CPU trace; 네 C03 CPU target만 실행하고 GPU/CUDA target은 제외
+- 기본 CPU workflow: 각 property lane의 deterministic 10,000-trace seed set(총 100,000 trace)
+- scheduled workflow: fresh recorded base와 15개 disjoint slot으로 10개 10,000-trace lane을
+  회전해 총 1,500,000 CPU trace; 다섯 C03 CPU target만 실행하고 GPU/CUDA target은 제외
 - GPU manual/scheduled: 고정 corpus
 - C03-B source contract: `gpu_fixed_corpus_contract`는 기본 CPU workflow에서 실행하며, ignored
   `c03_gpu_fixed_corpus`는 C02 actual qualification과 explicit GPU operation approval 뒤에만
@@ -590,6 +636,9 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
   source Git SHA를 diagnostic-only receipt로 create-new 기록
 - general-mixed-operation-v2 rejection/retry failure: strict canonical descriptor와 operation spelling은
   test diagnostic에만 남기며, V1 receipt/checker 또는 별도 artifact를 만들지 않음
+- general-mixed-program-v1 failure: semantic-local reducer의 source/minimized strict descriptor와
+  operation list는 test panic diagnostic에만 남기며, existing V1/V2 receipt/checker 또는 별도
+  artifact를 만들지 않음
 - bounded raw-program failure: C03-Az reducer가 source/minimized canonical descriptor와 각 operation
   list를 test panic diagnostic으로 남기며, V1 전용 receipt/checker를 재사용하지 않음
 - in-flight raw-program failure: local reducer가 source/minimized canonical descriptor와 각 operation
@@ -610,6 +659,10 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   stale/missing/unplanned rejection의 public surface non-mutation 및 same-pending-plan
   commit/`NotDispatched` settlement contract 통과; 이는 V1 receipt, arbitrary raw-general grammar,
   GPU/C02/C03-B evidence 또는 성능을 뜻하지 않음
+- general-mixed-program-v1의 strict validator/canonical codec, 10,000 seeded CPU replay, independent
+  model의 public update/terminal-once/close ledger 비교와 semantic-local reducer의 rebase/rank/round-trip
+  contract 통과; 이는 existing V1/V2 grammar·receipt, production runtime, CUDA/GPU, C02/C03-B evidence
+  또는 성능을 확장·변경·주장하지 않음
 - bounded raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
   10,000 seeded replay, settled cancel/terminal-once/final quiescence test 통과
 - C03-Az bounded local reducer의 stateful cancel/submit slot rebase, candidate dedupe/rank/strict-codec
@@ -631,7 +684,7 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   completed 0/aborted 1 및 close ownership quiescence를 통과
 - C03-Ay는 all-unset PR environment에서 기존 seed/action window를 유지하고, scheduled all-set
   base/slot/slot-count의 malformed·partial·overflow 입력을 fail closed하며, 15 slot이 총
-  1,350,000 CPU trace를 실행
+  1,500,000 CPU trace를 실행
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B source: strict `gpu-fixed-v1` corpus parse와 CPU topology/KV/deferred-cancel/abort contract 통과
@@ -647,7 +700,7 @@ C03-A의 formal CPU completion은 scheduler event 순서와 output slot permutat
 seeded CPU trace로 생성해 reference model과 production state가 일치하고, mixed-operation
 generator·shrink·counterexample corpus/replay·failure seed와 최소 trace까지 갖출 때다. 현재
 valid/fault microtrace, two-wave, strict general-mixed-operation-v2 rejection/retry, bounded raw-program
-및 C03-Ax의 두 deterministic post-validation seam은 이를 향한 partial coverage이며 아직 C03-A 완료
-선언 근거가 아니다.
+및 `general-mixed-program-v1` semantic-local raw slice, C03-Ax의 두 deterministic post-validation
+seam은 이를 향한 partial coverage이며 아직 C03-A 완료 선언 근거가 아니다.
 C03의 formal completion은 C03-B가 C02 actual qualification 뒤 GPU corpus에서도 exact mapping을
 확인할 때만 선언한다.
