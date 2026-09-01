@@ -15,14 +15,21 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use general_mixed_operation_trace::{
-    GeneralMixedOperationOracle, GeneralMixedOperationSettlement, GeneralMixedOperationTrace,
-    NamedGeneralMixedOperationTrace, decoder_symbolic_token, general_mixed_operation_corpus,
-    minimize_general_mixed_operation_trace, parse_general_mixed_operation_trace_descriptor,
+    GeneralMixedOperationOracle, GeneralMixedOperationOracleV2,
+    GeneralMixedOperationRejectedFeedback, GeneralMixedOperationSettlement,
+    GeneralMixedOperationTrace, GeneralMixedOperationTraceV2, NamedGeneralMixedOperationTrace,
+    NamedGeneralMixedOperationTraceV2, decoder_symbolic_token, general_mixed_operation_corpus,
+    general_mixed_operation_v2_corpus, minimize_general_mixed_operation_trace,
+    minimize_general_mixed_operation_v2_trace, parse_general_mixed_operation_trace_descriptor,
+    parse_general_mixed_operation_v2_trace_descriptor,
     serialize_general_mixed_operation_trace_descriptor,
+    serialize_general_mixed_operation_v2_trace_descriptor,
 };
+use riley_runtime::paged_kv::KvBlockPoolStats;
 use riley_scheduler::{
-    ExecutionAbort, IterationPlan, OutputSlot, RequestDescriptor, RequestId, RequestState,
-    Scheduler, SchedulerCloseOutput, SchedulerConfig,
+    ExecutionAbort, IterationId, IterationPlan, OutputSlot, RequestDescriptor, RequestId,
+    RequestSnapshot, RequestState, Scheduler, SchedulerCloseOutput, SchedulerConfig,
+    SchedulerError, SchedulerMetricsSnapshot,
 };
 use routing_fuzz_receipt::{
     GeneralMixedOperationSchedulerConfig, general_mixed_operation_receipt_document,
@@ -33,6 +40,7 @@ use routing_fuzz_receipt::{
 };
 
 const GENERAL_MIXED_OPERATION_TRACE_COUNT: u64 = 10_000;
+const GENERAL_MIXED_OPERATION_V2_TRACE_COUNT: u64 = 10_000;
 const RECEIPT_TEST_SOURCE_REVISION: &str = "0123456789abcdef0123456789abcdef01234567";
 static NEXT_RECEIPT_TEST_NONCE: AtomicU64 = AtomicU64::new(0);
 
@@ -1165,5 +1173,634 @@ fn general_mixed_operation_receipt_rejects_seed_settlement_and_rank_drift() {
         )
         .is_err(),
         "receipt must reject a minimized trace that increases the reducer rank"
+    );
+}
+
+fn general_mixed_operation_v2_config(trace: &GeneralMixedOperationTraceV2) -> SchedulerConfig {
+    let width = trace
+        .decoder_count
+        .checked_add(trace.final_prefill_count)
+        .expect("bounded V2 general mixed request width");
+    SchedulerConfig {
+        max_waiting_requests: width,
+        max_waiting_prompt_tokens: width,
+        max_active_sequences: width,
+        max_sequence_tokens: 3,
+        iteration_token_budget: width,
+        max_prefill_chunk_tokens: 1,
+        aging_threshold_ns: 2,
+        overload_policy: riley_scheduler::OverloadPolicy::Wait,
+        admission_timeout_ns: None,
+        max_promised_kv_blocks: width,
+        metrics_window_samples: 8,
+    }
+}
+
+fn take_v2_plan(planning: riley_scheduler::PlanningOutput, stage: &str) -> IterationPlan {
+    let (plan, completions) = planning.into_parts();
+    assert!(
+        completions.is_empty(),
+        "{stage}: V2 grammar does not enable timeout completions"
+    );
+    plan.unwrap_or_else(|| panic!("{stage}: V2 grammar must produce a plan"))
+}
+
+fn assert_v2_prime_plan(
+    trace: &GeneralMixedOperationTraceV2,
+    plan: &IterationPlan,
+    decoder_ids: &[RequestId],
+) {
+    assert_eq!(decoder_ids.len(), trace.decoder_count);
+    assert_eq!(plan.prefill_items().len(), trace.decoder_count);
+    assert!(plan.decode_items().is_empty());
+    for (index, request_id) in decoder_ids.iter().copied().enumerate() {
+        let item = &plan.prefill_items()[index];
+        assert_eq!(item.request_id(), request_id);
+        assert_eq!(item.input_tokens(), &[decoder_prompt_token(index)]);
+        assert_eq!(item.output_slot(), Some(slot(index)));
+    }
+    assert_eq!(
+        plan.output_slots(),
+        expected_slots(trace.decoder_count).as_slice()
+    );
+    assert_eq!(plan.total_tokens(), trace.decoder_count);
+}
+
+fn assert_v2_mixed_plan(
+    trace: &GeneralMixedOperationTraceV2,
+    plan: &IterationPlan,
+    decoder_ids: &[RequestId],
+    final_prefill_ids: &[RequestId],
+) {
+    assert_eq!(decoder_ids.len(), trace.decoder_count);
+    assert_eq!(final_prefill_ids.len(), trace.final_prefill_count);
+    assert_eq!(plan.decode_items().len(), trace.decoder_count);
+    assert_eq!(plan.prefill_items().len(), trace.final_prefill_count);
+    for (index, request_id) in decoder_ids.iter().copied().enumerate() {
+        let item = &plan.decode_items()[index];
+        assert_eq!(item.request_id(), request_id);
+        assert_eq!(item.input_tokens(), &[decoder_symbolic_token(index, 0)]);
+        assert_eq!(item.output_slot(), Some(slot(index)));
+    }
+    for (index, request_id) in final_prefill_ids.iter().copied().enumerate() {
+        let item = &plan.prefill_items()[index];
+        assert_eq!(item.request_id(), request_id);
+        assert_eq!(item.input_tokens(), &[final_prefill_prompt_token(index)]);
+        assert_eq!(item.output_slot(), Some(slot(trace.decoder_count + index)));
+    }
+    let total_slots = trace
+        .decoder_count
+        .checked_add(trace.final_prefill_count)
+        .expect("bounded V2 general mixed slot count");
+    assert_eq!(plan.output_slots(), expected_slots(total_slots).as_slice());
+    assert_eq!(plan.total_tokens(), total_slots);
+}
+
+struct GeneralMixedOperationV2Surface {
+    request_ids: Vec<RequestId>,
+    request_snapshots: Vec<Option<RequestSnapshot>>,
+    pool_stats: KvBlockPoolStats,
+    metrics: SchedulerMetricsSnapshot,
+    inflight_iteration: Option<IterationId>,
+    pending_completions: usize,
+}
+
+fn capture_general_mixed_operation_v2_surface(
+    scheduler: &Scheduler,
+    request_ids: Vec<RequestId>,
+) -> GeneralMixedOperationV2Surface {
+    let request_snapshots = request_ids
+        .iter()
+        .map(|request_id| scheduler.request_snapshot(*request_id))
+        .collect();
+    GeneralMixedOperationV2Surface {
+        request_ids,
+        request_snapshots,
+        pool_stats: scheduler.pool_stats(),
+        metrics: scheduler
+            .metrics_snapshot()
+            .expect("V2 routing surface metric snapshot"),
+        inflight_iteration: scheduler.inflight_iteration_id(),
+        pending_completions: scheduler.pending_completion_count(),
+    }
+}
+
+fn assert_general_mixed_operation_v2_surface_unchanged(
+    scheduler: &Scheduler,
+    expected: &GeneralMixedOperationV2Surface,
+) {
+    let snapshots = expected
+        .request_ids
+        .iter()
+        .map(|request_id| scheduler.request_snapshot(*request_id))
+        .collect::<Vec<_>>();
+    assert_eq!(snapshots, expected.request_snapshots);
+    assert_eq!(scheduler.pool_stats(), expected.pool_stats);
+    assert_eq!(
+        scheduler
+            .metrics_snapshot()
+            .expect("V2 routing surface metric snapshot"),
+        expected.metrics
+    );
+    assert_eq!(
+        scheduler.inflight_iteration_id(),
+        expected.inflight_iteration
+    );
+    assert_eq!(
+        scheduler.pending_completion_count(),
+        expected.pending_completions
+    );
+}
+
+fn reject_v2_mixed_feedback_without_mutation(
+    scheduler: &mut Scheduler,
+    oracle: &GeneralMixedOperationOracleV2,
+    trace: &GeneralMixedOperationTraceV2,
+    decoder_ids: &[RequestId],
+    final_prefill_ids: &[RequestId],
+    mixed_iteration_id: IterationId,
+) {
+    let Some(rejected_feedback) = trace.rejected_feedback else {
+        return;
+    };
+    let request_ids = decoder_ids
+        .iter()
+        .chain(final_prefill_ids.iter())
+        .copied()
+        .collect::<Vec<_>>();
+    let surface = capture_general_mixed_operation_v2_surface(scheduler, request_ids);
+    assert_eq!(
+        surface.inflight_iteration,
+        Some(mixed_iteration_id),
+        "V2 rejection must begin with the original mixed iteration in flight"
+    );
+    let rejected = oracle.rejected_mixed_feedback(
+        mixed_iteration_id,
+        &trace.mixed_slot_order,
+        rejected_feedback,
+    );
+    match (
+        rejected_feedback,
+        scheduler.complete_iteration(&rejected, 1),
+    ) {
+        (
+            GeneralMixedOperationRejectedFeedback::Stale,
+            Err(SchedulerError::UnexpectedIteration { .. }),
+        )
+        | (
+            GeneralMixedOperationRejectedFeedback::Missing
+            | GeneralMixedOperationRejectedFeedback::Unplanned,
+            Err(SchedulerError::InvalidIterationResult { .. }),
+        ) => {}
+        (kind, result) => panic!(
+            "V2 rejected feedback {kind:?} must return its grammar-defined scheduler error, got {result:?}"
+        ),
+    }
+    assert_general_mixed_operation_v2_surface_unchanged(scheduler, &surface);
+    assert_eq!(
+        scheduler.inflight_iteration_id(),
+        Some(mixed_iteration_id),
+        "V2 rejection must retain the original pending iteration"
+    );
+    oracle.assert_rejection_preserves_pending();
+}
+
+fn replay_general_mixed_operation_v2_inner(trace: &GeneralMixedOperationTraceV2) {
+    let mut scheduler = new_scheduler(general_mixed_operation_v2_config(trace));
+    let mut oracle = GeneralMixedOperationOracleV2::new(
+        trace.seed,
+        trace.decoder_count,
+        trace.final_prefill_count,
+    );
+    let mut decoder_ids = Vec::with_capacity(trace.decoder_count);
+    for index in 0..trace.decoder_count {
+        let submission = scheduler
+            .submit(
+                RequestDescriptor::new(vec![decoder_prompt_token(index)], 2),
+                0,
+            )
+            .expect("submit bounded V2 general mixed decoder");
+        oracle.bind_decoder(index, submission.request_id());
+        decoder_ids.push(submission.request_id());
+    }
+
+    let prime_plan = take_v2_plan(
+        scheduler
+            .plan_iteration(0)
+            .expect("plan V2 general mixed prime"),
+        "prime",
+    );
+    assert_v2_prime_plan(trace, &prime_plan, &decoder_ids);
+    oracle.observe_prime_plan();
+    let prime_result = oracle.prime_feedback(prime_plan.iteration_id(), &trace.prime_slot_order);
+    let prime_updates = scheduler
+        .complete_iteration(&prime_result, 0)
+        .expect("commit V2 general mixed prime");
+    oracle.record_prime_commit(&prime_updates);
+    for request_id in &decoder_ids {
+        assert_eq!(
+            scheduler.request_state(*request_id),
+            Some(RequestState::Decoding)
+        );
+    }
+
+    let mut final_prefill_ids = Vec::with_capacity(trace.final_prefill_count);
+    for index in 0..trace.final_prefill_count {
+        let submission = scheduler
+            .submit(
+                RequestDescriptor::new(vec![final_prefill_prompt_token(index)], 1),
+                1,
+            )
+            .expect("submit bounded V2 general mixed final-prefill");
+        oracle.bind_final_prefill(index, submission.request_id());
+        final_prefill_ids.push(submission.request_id());
+    }
+
+    let mixed_plan = take_v2_plan(
+        scheduler
+            .plan_iteration(1)
+            .expect("plan V2 general mixed wave"),
+        "mixed",
+    );
+    assert_v2_mixed_plan(trace, &mixed_plan, &decoder_ids, &final_prefill_ids);
+    let mixed_iteration_id = mixed_plan.iteration_id();
+    oracle.observe_mixed_plan();
+    if let Some(index) = trace.cancel_decoder_index {
+        let cancellation = scheduler
+            .cancel(decoder_ids[index], 1)
+            .expect("defer bounded V2 general mixed decoder cancellation");
+        assert!(cancellation.deferred_until_iteration_settles());
+        assert!(cancellation.completion().is_none());
+        oracle.defer_decoder_cancel(index);
+    }
+
+    reject_v2_mixed_feedback_without_mutation(
+        &mut scheduler,
+        &oracle,
+        trace,
+        &decoder_ids,
+        &final_prefill_ids,
+        mixed_iteration_id,
+    );
+
+    match trace.settlement {
+        GeneralMixedOperationSettlement::Commit => {
+            let result = oracle.mixed_feedback(mixed_iteration_id, &trace.mixed_slot_order);
+            let updates = scheduler
+                .complete_iteration(&result, 1)
+                .expect("commit bounded V2 general mixed wave after rejection");
+            oracle.record_mixed_commit(&updates, 1);
+        }
+        GeneralMixedOperationSettlement::AbortNotDispatched => {
+            let updates = scheduler
+                .abort_iteration(mixed_iteration_id, ExecutionAbort::NotDispatched, 1)
+                .expect("abort bounded V2 general mixed wave after rejection");
+            oracle.record_not_dispatched_abort(&updates, 1);
+        }
+    }
+
+    let closed = scheduler.close(2, None).unwrap_or_else(|failure| {
+        panic!(
+            "general mixed V2 close failed for seed {:#018x}: {}",
+            trace.seed,
+            failure.error()
+        )
+    });
+    oracle.record_close(&closed, 2);
+    assert_closed_quiescent(&closed);
+    oracle.assert_closed();
+}
+
+fn general_mixed_operation_v2_fails(trace: &GeneralMixedOperationTraceV2) -> bool {
+    catch_unwind(AssertUnwindSafe(|| {
+        replay_general_mixed_operation_v2_inner(trace);
+    }))
+    .is_err()
+}
+
+fn general_mixed_operation_v2_failure_report(
+    case_id: &str,
+    trace: &GeneralMixedOperationTraceV2,
+    minimized: &GeneralMixedOperationTraceV2,
+) -> String {
+    let original_descriptor = serialize_general_mixed_operation_v2_trace_descriptor(case_id, trace);
+    let minimized_descriptor =
+        serialize_general_mixed_operation_v2_trace_descriptor("failing-minimized", minimized);
+    format!(
+        "C03-A general-mixed-operation-v2 failed\n\
+         source_case_id={case_id}\n\
+         reducer_scope=v2-selector-local\n\
+         failure_predicate=inner-replayer-panicked-only\n\
+         original_descriptor_json:\n\
+         {}\n\
+         original_operations=[{}]\n\
+         minimized_descriptor_json:\n\
+         {}\n\
+         minimized_operations=[{}]\n\
+         note=local reducer preserves only the replay panic predicate, not panic site, payload, failure signature, or root cause",
+        original_descriptor.trim_end(),
+        trace.describe_operations(),
+        minimized_descriptor.trim_end(),
+        minimized.describe_operations(),
+    )
+}
+
+fn replay_general_mixed_operation_v2(case_id: &str, trace: &GeneralMixedOperationTraceV2) {
+    if !general_mixed_operation_v2_fails(trace) {
+        return;
+    }
+    let minimized =
+        minimize_general_mixed_operation_v2_trace(trace, general_mixed_operation_v2_fails);
+    panic!(
+        "{}",
+        general_mixed_operation_v2_failure_report(case_id, trace, &minimized)
+    );
+}
+
+fn replay_named_general_mixed_operation_v2(named: &NamedGeneralMixedOperationTraceV2) {
+    replay_general_mixed_operation_v2(&named.case_id, &named.trace);
+}
+
+fn v2_descriptor_fixture() -> GeneralMixedOperationTraceV2 {
+    GeneralMixedOperationTraceV2 {
+        seed: 0x67d1_4b2a_c982_ef30,
+        decoder_count: 3,
+        final_prefill_count: 2,
+        prime_slot_order: vec![2, 0, 1],
+        mixed_slot_order: vec![4, 1, 3, 0, 2],
+        cancel_decoder_index: Some(2),
+        rejected_feedback: Some(GeneralMixedOperationRejectedFeedback::Missing),
+        settlement: GeneralMixedOperationSettlement::AbortNotDispatched,
+    }
+}
+
+#[test]
+fn general_mixed_operation_v2_codec_is_strict_and_isolated_from_v1() {
+    let trace = v2_descriptor_fixture();
+    let document =
+        serialize_general_mixed_operation_v2_trace_descriptor("v2-codec-round-trip", &trace);
+    let parsed = parse_general_mixed_operation_v2_trace_descriptor(&document)
+        .expect("canonical V2 descriptor parses");
+    assert_eq!(parsed.case_id, "v2-codec-round-trip");
+    assert_eq!(parsed.trace, trace);
+    assert_eq!(
+        serialize_general_mixed_operation_v2_trace_descriptor(&parsed.case_id, &parsed.trace),
+        document
+    );
+    assert!(
+        trace
+            .describe_operations()
+            .contains("reject-feedback(missing)"),
+        "V2 operation spelling must retain the rejected-feedback selector"
+    );
+    assert!(
+        parse_general_mixed_operation_trace_descriptor(&document).is_err(),
+        "V1 parser must reject V2 documents"
+    );
+
+    let v1 = GeneralMixedOperationTrace {
+        seed: trace.seed,
+        decoder_count: trace.decoder_count,
+        final_prefill_count: trace.final_prefill_count,
+        prime_slot_order: trace.prime_slot_order.clone(),
+        mixed_slot_order: trace.mixed_slot_order.clone(),
+        cancel_decoder_index: trace.cancel_decoder_index,
+        settlement: trace.settlement,
+    };
+    let v1_document = serialize_general_mixed_operation_trace_descriptor("v1-retag", &v1);
+    assert!(
+        parse_general_mixed_operation_v2_trace_descriptor(&v1_document).is_err(),
+        "V2 parser must reject V1 documents"
+    );
+    let v1_retagged_as_v2 = v1_document.replacen(
+        "\"trace_kind\":\"general-mixed-operation-v1\"",
+        "\"trace_kind\":\"general-mixed-operation-v2\"",
+        1,
+    );
+    assert!(
+        parse_general_mixed_operation_v2_trace_descriptor(&v1_retagged_as_v2).is_err(),
+        "V2 parser must reject a retagged V1 document without required nullable rejected_feedback"
+    );
+    let nullable = GeneralMixedOperationTraceV2 {
+        rejected_feedback: None,
+        ..trace.clone()
+    };
+    let nullable_document =
+        serialize_general_mixed_operation_v2_trace_descriptor("v2-required-null", &nullable);
+    assert!(
+        nullable_document.contains("\"rejected_feedback\":null"),
+        "V2 rejected feedback is required but nullable"
+    );
+    assert_eq!(
+        parse_general_mixed_operation_v2_trace_descriptor(&nullable_document)
+            .expect("explicit null V2 rejected feedback parses")
+            .trace,
+        nullable
+    );
+    for invalid in [
+        document.replacen("\"rejected_feedback\":\"missing\",", "", 1),
+        document.replacen(
+            "\"rejected_feedback\":\"missing\"",
+            "\"rejected_feedback\":\"unknown\"",
+            1,
+        ),
+        document.replacen(
+            "\"trace_kind\":\"general-mixed-operation-v2\"",
+            "\"trace_kind\":\"general-mixed-operation-v1\"",
+            1,
+        ),
+        format!(" {document}"),
+    ] {
+        assert!(
+            parse_general_mixed_operation_v2_trace_descriptor(&invalid).is_err(),
+            "noncanonical or invalid V2 descriptor unexpectedly parsed: {invalid}"
+        );
+    }
+}
+
+#[test]
+fn general_mixed_operation_v2_corpus_is_canonical_and_replays_rejections() {
+    let mut rejection_kinds = Vec::new();
+    for named in general_mixed_operation_v2_corpus() {
+        let document =
+            serialize_general_mixed_operation_v2_trace_descriptor(&named.case_id, &named.trace);
+        let parsed = parse_general_mixed_operation_v2_trace_descriptor(&document)
+            .expect("re-serialized V2 corpus document parses");
+        assert_eq!(parsed, named);
+        rejection_kinds.push(
+            parsed
+                .trace
+                .rejected_feedback
+                .expect("V2 rejection corpus has an explicit rejection"),
+        );
+        replay_named_general_mixed_operation_v2(&parsed);
+    }
+    assert_eq!(
+        rejection_kinds,
+        vec![
+            GeneralMixedOperationRejectedFeedback::Stale,
+            GeneralMixedOperationRejectedFeedback::Missing,
+            GeneralMixedOperationRejectedFeedback::Unplanned,
+        ]
+    );
+}
+
+#[test]
+fn general_mixed_operation_v2_matrix_preserves_rejection_surface_routing_and_quiescence() {
+    for decoder_count in 1..=3 {
+        for final_prefill_count in 1..=3 {
+            for prime_reversed in [false, true] {
+                for mixed_reversed in [false, true] {
+                    let mut cancellations = vec![None, Some(0)];
+                    if decoder_count > 1 {
+                        cancellations.push(Some(decoder_count - 1));
+                    }
+                    for cancel_decoder_index in cancellations {
+                        for settlement in [
+                            GeneralMixedOperationSettlement::Commit,
+                            GeneralMixedOperationSettlement::AbortNotDispatched,
+                        ] {
+                            for rejected_feedback in [
+                                None,
+                                Some(GeneralMixedOperationRejectedFeedback::Stale),
+                                Some(GeneralMixedOperationRejectedFeedback::Missing),
+                                Some(GeneralMixedOperationRejectedFeedback::Unplanned),
+                            ] {
+                                let mut prime_slot_order = (0..decoder_count)
+                                    .map(|slot| {
+                                        u8::try_from(slot).expect("bounded V2 matrix prime slot")
+                                    })
+                                    .collect::<Vec<_>>();
+                                let mut mixed_slot_order = (0..decoder_count + final_prefill_count)
+                                    .map(|slot| {
+                                        u8::try_from(slot).expect("bounded V2 matrix mixed slot")
+                                    })
+                                    .collect::<Vec<_>>();
+                                if prime_reversed {
+                                    prime_slot_order.reverse();
+                                }
+                                if mixed_reversed {
+                                    mixed_slot_order.reverse();
+                                }
+                                let seed = u64::try_from(decoder_count)
+                                    .expect("small V2 decoder count")
+                                    | (u64::try_from(final_prefill_count)
+                                        .expect("small V2 final-prefill count")
+                                        << 8)
+                                    | (u64::from(u8::from(prime_reversed)) << 16)
+                                    | (u64::from(u8::from(mixed_reversed)) << 17)
+                                    | (u64::from(u8::from(cancel_decoder_index.is_some())) << 18)
+                                    | (u64::from(u8::from(matches!(
+                                        settlement,
+                                        GeneralMixedOperationSettlement::AbortNotDispatched
+                                    ))) << 19)
+                                    | (u64::from(u8::from(rejected_feedback.is_some())) << 20);
+                                let trace = GeneralMixedOperationTraceV2 {
+                                    seed,
+                                    decoder_count,
+                                    final_prefill_count,
+                                    prime_slot_order,
+                                    mixed_slot_order,
+                                    cancel_decoder_index,
+                                    rejected_feedback,
+                                    settlement,
+                                };
+                                let rejected_component = rejected_feedback.map_or_else(
+                                    || "none".to_owned(),
+                                    |kind| kind.name().to_owned(),
+                                );
+                                let case_id = format!(
+                                    "v2-matrix-d{decoder_count}-p{final_prefill_count}-prime-{prime_reversed}-mixed-{mixed_reversed}-cancel-{}-reject-{rejected_component}-{}",
+                                    cancel_case_component(cancel_decoder_index),
+                                    settlement_case_component(settlement),
+                                );
+                                let document =
+                                    serialize_general_mixed_operation_v2_trace_descriptor(
+                                        &case_id, &trace,
+                                    );
+                                let parsed =
+                                    parse_general_mixed_operation_v2_trace_descriptor(&document)
+                                        .expect("V2 matrix descriptor parses");
+                                assert_eq!(parsed.trace, trace);
+                                replay_named_general_mixed_operation_v2(&parsed);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn ten_thousand_seeded_general_mixed_operation_v2_traces_round_trip_and_replay() {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..GENERAL_MIXED_OPERATION_V2_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, GENERAL_MIXED_OPERATION_V2_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the V2 general mixed trace window");
+        let seed = 0x5af3_4c19_e2d7_b806_u64.wrapping_mul(trace_index.wrapping_add(1));
+        let trace = GeneralMixedOperationTraceV2::from_seed(seed);
+        let case_id = format!("v2-seed-{seed:016x}");
+        let document = serialize_general_mixed_operation_v2_trace_descriptor(&case_id, &trace);
+        let parsed = parse_general_mixed_operation_v2_trace_descriptor(&document)
+            .expect("seeded V2 general mixed descriptor parses");
+        assert_eq!(parsed.trace, trace);
+        replay_named_general_mixed_operation_v2(&parsed);
+    }
+}
+
+#[test]
+fn general_mixed_operation_v2_reducer_is_strict_local_and_idempotent() {
+    let source = v2_descriptor_fixture();
+    let candidates = source.shrink_candidates();
+    assert_eq!(
+        candidates
+            .first()
+            .map(|candidate| candidate.rejected_feedback),
+        Some(None),
+        "V2 reducer removes its optional rejected feedback first"
+    );
+    let source_rank = source.shrink_rank();
+    for (index, candidate) in candidates.iter().enumerate() {
+        assert!(
+            !candidates[..index].contains(candidate),
+            "V2 reducer emitted a duplicate candidate"
+        );
+        assert!(
+            candidate.shrink_rank() < source_rank,
+            "V2 reducer candidate must strictly lower rank"
+        );
+        let document = serialize_general_mixed_operation_v2_trace_descriptor(
+            "v2-reducer-candidate",
+            candidate,
+        );
+        let parsed = parse_general_mixed_operation_v2_trace_descriptor(&document)
+            .expect("V2 reducer candidate is strict-canonical");
+        assert_eq!(parsed.trace, *candidate);
+        replay_general_mixed_operation_v2_inner(&parsed.trace);
+    }
+    let predicate = |trace: &GeneralMixedOperationTraceV2| {
+        trace.rejected_feedback == Some(GeneralMixedOperationRejectedFeedback::Missing)
+            && trace.decoder_count >= 2
+            && trace.final_prefill_count >= 2
+            && trace.shrink_rank().4 > 0
+    };
+    assert!(predicate(&source));
+    replay_general_mixed_operation_v2_inner(&source);
+    let minimized = minimize_general_mixed_operation_v2_trace(&source, predicate);
+    assert!(predicate(&minimized));
+    replay_general_mixed_operation_v2_inner(&minimized);
+    assert_eq!(
+        minimize_general_mixed_operation_v2_trace(&minimized, predicate),
+        minimized,
+        "V2 minimizer must be idempotent at its deterministic local minimum"
+    );
+    assert!(
+        minimized
+            .shrink_candidates()
+            .iter()
+            .all(|candidate| !predicate(candidate)),
+        "V2 minimizer must return a local minimum for its deterministic candidate order"
     );
 }
