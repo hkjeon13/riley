@@ -6,9 +6,11 @@
 //! pure-decode operation slot and therefore supplies no C07 evidence.
 //!
 //! A native `Supported` result is mapped only to the semantically identical
-//! C07 operation: whole-slab H2D to metadata transfer, and fixed-address BF16
-//! SiLU to the MLP BF16-SiLU activation.  Every other C07 operation stays
-//! unknown until an equally exact reviewed C05 primitive exists.
+//! C07 operation: whole-slab H2D to metadata transfer, fixed-address BF16
+//! SiLU to the MLP BF16-SiLU activation, and fixed-address BF16 multiplication
+//! of an activated gate with an up projection to the MLP gated multiply.
+//! Every other C07 operation stays unknown until an equally exact reviewed C05
+//! primitive exists.
 
 use riley_cuda::{CudaGraphCaptureCapability, CudaGraphCaptureOperation, CudaResult};
 
@@ -31,10 +33,10 @@ fn map_exact_c05_capability(capability: CudaGraphCaptureCapability) -> GraphOper
 /// Queries reviewed C05 primitive evidence for the C07 pure-decode inventory.
 ///
 /// The returned value remains an incomplete inventory: it can only carry the
-/// exact metadata-H2D and MLP-BF16-SiLU facts.  Its aggregate capability
-/// therefore remains `Unknown` unless future reviewed adapters fill every
-/// remaining operation.  Query failures are preserved rather than being
-/// reinterpreted as execution permission.
+/// exact metadata-H2D, MLP-BF16-SiLU, and MLP-gated-multiply facts.  Its
+/// aggregate capability therefore remains `Unknown` unless future reviewed
+/// adapters fill every remaining operation.  Query failures are preserved
+/// rather than being reinterpreted as execution permission.
 ///
 /// # Errors
 ///
@@ -46,10 +48,17 @@ pub(crate) fn pure_decode_graph_v1_c05_capture_capability_evidence()
         map_exact_c05_capability(CudaGraphCaptureOperation::H2D.capture_capability()?);
     let mlp_silu =
         map_exact_c05_capability(CudaGraphCaptureOperation::SiluBf16.capture_capability()?);
+    let mlp_gated_multiply = map_exact_c05_capability(
+        CudaGraphCaptureOperation::GatedMultiplyBf16.capture_capability()?,
+    );
 
     Ok(PureDecodeGraphV1CaptureCapabilityInventory::default()
         .with_capability(PureDecodeGraphV1CaptureOperation::MetadataH2d, metadata_h2d)
-        .with_capability(PureDecodeGraphV1CaptureOperation::MlpSiluBf16, mlp_silu))
+        .with_capability(PureDecodeGraphV1CaptureOperation::MlpSiluBf16, mlp_silu)
+        .with_capability(
+            PureDecodeGraphV1CaptureOperation::MlpGatedMultiply,
+            mlp_gated_multiply,
+        ))
 }
 
 #[cfg(test)]
@@ -92,18 +101,19 @@ mod tests {
         );
         assert_eq!(
             inventory.capability_for(PureDecodeGraphV1CaptureOperation::MlpGatedMultiply),
-            GraphOperatorCapability::Unknown
+            GraphOperatorCapability::Supported
         );
         assert_eq!(
             inventory.operator_capability(),
             GraphOperatorCapability::Unknown,
-            "two reviewed primitives must not admit the incomplete decode chain"
+            "three reviewed primitives must not admit the incomplete decode chain"
         );
         for operation in PureDecodeGraphV1CaptureOperation::all() {
             if matches!(
                 operation,
                 PureDecodeGraphV1CaptureOperation::MetadataH2d
                     | PureDecodeGraphV1CaptureOperation::MlpSiluBf16
+                    | PureDecodeGraphV1CaptureOperation::MlpGatedMultiply
             ) {
                 continue;
             }

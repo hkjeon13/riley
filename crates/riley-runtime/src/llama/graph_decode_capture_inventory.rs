@@ -46,7 +46,8 @@ pub(crate) enum PureDecodeGraphV1CaptureOperation {
     Attention,
     /// C07 V1's out-of-place BF16 SiLU from gate projection to activated gate.
     MlpSiluBf16,
-    /// Elementwise product of the activated gate and up-projection outputs.
+    /// C07 V1's fixed-address, out-of-place BF16 product of the activated
+    /// gate and up-projection outputs.
     MlpGatedMultiply,
     /// Attention and MLP residual additions.
     Residual,
