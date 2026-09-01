@@ -4,6 +4,7 @@
 //! must not take ownership of CUDA buffers, weights, KV storage, streams, or
 //! scheduling policy unless their dedicated ownership boundary says so.
 
+pub(crate) mod allocation;
 pub(crate) mod buffers;
 pub(in crate::llama) mod config;
 pub(crate) mod device_views;

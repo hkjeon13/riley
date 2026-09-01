@@ -177,6 +177,13 @@ mod source_contract_tests {
     }
 
     #[test]
+    fn batch_executor_facade_reexports_the_allocation_report_nominal_type() {
+        let report: Option<super::batch_executor::PreparedLlamaBatchAllocationReport> =
+            None::<super::executor::allocation::PreparedLlamaBatchAllocationReport>;
+        assert!(report.is_none());
+    }
+
+    #[test]
     fn batch_executor_facade_reexports_host_only_config_types() {
         let completion: super::batch_executor::ExecutionCompletionImplementation =
             super::executor::config::ExecutionCompletionImplementation::IterationBatch;
@@ -649,7 +656,12 @@ mod source_contract_tests {
     #[test]
     fn executor_byte_lengths_share_one_typed_overflow_facade() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 7),
+            ("batch owner", include_str!("batch_executor.rs"), 1),
+            (
+                "batch allocation",
+                include_str!("executor/allocation.rs"),
+                6,
+            ),
             ("batch buffers", include_str!("executor/buffers.rs"), 2),
             ("packed metadata", include_str!("executor/metadata.rs"), 3),
         ] {
@@ -747,7 +759,7 @@ mod source_contract_tests {
         for (boundary, source, expected_calls) in [
             (
                 "batch allocation report",
-                include_str!("batch_executor.rs"),
+                include_str!("executor/allocation.rs"),
                 1,
             ),
             ("buffer allocation", include_str!("executor/buffers.rs"), 2),
@@ -760,7 +772,10 @@ mod source_contract_tests {
             );
         }
         for (boundary, source) in [
-            ("batch allocation report", include_str!("batch_executor.rs")),
+            (
+                "batch allocation report",
+                include_str!("executor/allocation.rs"),
+            ),
             ("buffer allocation", include_str!("executor/buffers.rs")),
         ] {
             assert!(
@@ -773,7 +788,12 @@ mod source_contract_tests {
     #[test]
     fn executor_usize_u64_conversions_share_one_typed_error_facade() {
         for (boundary, source, expected_calls) in [
-            ("batch owner", include_str!("batch_executor.rs"), 14),
+            ("batch owner", include_str!("batch_executor.rs"), 11),
+            (
+                "batch allocation",
+                include_str!("executor/allocation.rs"),
+                3,
+            ),
             ("batch buffers", include_str!("executor/buffers.rs"), 3),
             ("device views", include_str!("executor/device_views.rs"), 3),
             ("output dispatch", include_str!("executor/dispatch.rs"), 5),

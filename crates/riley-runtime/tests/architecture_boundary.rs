@@ -1,6 +1,7 @@
 //! Source-level architecture contracts for incremental executor extraction.
 
 const EXECUTOR_METRICS: &str = include_str!("../src/llama/executor/metrics.rs");
+const EXECUTOR_ALLOCATION: &str = include_str!("../src/llama/executor/allocation.rs");
 const EXECUTOR_ERROR: &str = include_str!("../src/llama/executor/error.rs");
 const EXECUTOR_SHAPE: &str = include_str!("../src/llama/executor/shape.rs");
 const EXECUTOR_BUFFERS: &str = include_str!("../src/llama/executor/buffers.rs");
@@ -13,6 +14,7 @@ const EXECUTOR_METADATA: &str = include_str!("../src/llama/executor/metadata.rs"
 const EXECUTOR_OUTPUT: &str = include_str!("../src/llama/executor/output.rs");
 const EXECUTOR_POISON: &str = include_str!("../src/llama/executor/poison.rs");
 const EXECUTOR_ROPE: &str = include_str!("../src/llama/executor/rope.rs");
+const BATCH_EXECUTOR: &str = include_str!("../src/llama/batch_executor.rs");
 
 #[test]
 fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
@@ -37,6 +39,65 @@ fn executor_metrics_do_not_own_runtime_resources_or_scheduling_policy() {
             "executor metrics crossed its value-only boundary with {forbidden:?}"
         );
     }
+}
+
+#[test]
+fn executor_allocation_only_aggregates_cold_scalar_facts() {
+    for required in [
+        "pub struct PreparedLlamaBatchAllocationReport",
+        "pub(in crate::llama) fn build_batch_allocation_report",
+        "sequence_block_offset_count",
+        "checked_byte_len",
+        "PackedIterationLayout::capacity",
+        "BatchMetadataTransport",
+        "total_device_allocation_count",
+    ] {
+        assert!(
+            EXECUTOR_ALLOCATION.contains(required),
+            "executor allocation omitted required cold-accounting token {required:?}"
+        );
+    }
+    for forbidden in [
+        "riley_scheduler",
+        "riley_server",
+        "riley_cuda",
+        "batch_executor",
+        "CudaContext",
+        "CudaDeviceBuffer",
+        "CudaPinnedHostBuffer",
+        "CudaStream",
+        "CudaExecutionStream",
+        "CudaBufferSpan",
+        "CudaUploadedWeights",
+        "KvLayout",
+        "BatchHostInput",
+        "BatchHostWorkspace",
+        "PreparedLlamaBatchExecutor",
+        "PreparedLlamaForward",
+        "LoadedModel",
+        "allocate_device_buffer",
+        "allocate_pinned_host_buffer",
+        "upload_from_slice",
+        "copy_from_pinned",
+        "execute_fixed_graph",
+        "dispatch_output_primitives",
+        "close(",
+        "Vec",
+        "Box",
+        "String",
+        "format!",
+    ] {
+        assert!(
+            !EXECUTOR_ALLOCATION.contains(forbidden),
+            "executor allocation crossed its cold scalar boundary with {forbidden:?}"
+        );
+    }
+    assert!(
+        BATCH_EXECUTOR
+            .contains("pub use super::executor::allocation::PreparedLlamaBatchAllocationReport;")
+    );
+    assert!(!BATCH_EXECUTOR.contains("pub struct PreparedLlamaBatchAllocationReport"));
+    assert!(!BATCH_EXECUTOR.contains("fn build_batch_allocation_report"));
 }
 
 #[test]

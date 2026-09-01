@@ -21,7 +21,8 @@ C04-25는 cold output capacity sizing을 output helper로 연결했고, C04-26�
 validation을 metadata helper로 공유했으며, C04-27은 output/RoPE scalar conversion을 error facade로
 일관화했고, C04-28은 packed CUDA slab capacity 검증을 metadata helper로 공유했으며, C04-29는
 absolute RoPE cold table shape preflight를 rope helper로 공유했다. C04-30은 host-only prepared
-executor configuration을 config helper로 분리한다. CUDA owner, KV,
+executor configuration을 config helper로 분리했고, C04-31은 cold allocation-accounting을
+allocation helper로 분리한다. CUDA owner, KV,
 buffer orchestration, pinned-memory
 write/metadata transport, dispatch, output public API와 production default는 유지한다.
 **의미 등급:** `reference`  
@@ -41,6 +42,7 @@ write/metadata transport, dispatch, output public API와 production default는 �
 crates/riley-runtime/src/llama/executor/
   mod.rs                # public composition and stable facade
   config.rs             # host-only prepared executor configuration and validation
+  allocation.rs         # cold scalar allocation-accounting/report
   owner.rs              # weights/KV/stream/workspace lifetime
   buffers.rs            # cold-reserved tensor/device/host buffers
   shape.rs              # active-row bucket and shape variant
@@ -427,6 +429,20 @@ resource ownership, cleanup/poison/dispatch 순서를 그대로 유지한다. so
 component가 scheduler/server와 runtime resource owner를 import하지 않음을 고정한다. 이
 behavior-preserving CPU-only slice는 CUDA parity, allocation evidence 또는 performance
 non-regression을 주장하지 않는다.
+
+### C04-31 — cold allocation-accounting extraction
+
+`PreparedLlamaBatchAllocationReport`와 `build_batch_allocation_report`는
+`llama/executor/allocation.rs`로 이동한다. helper는 forward allocation report, immutable batch
+bounds/transport, KV byte scalar 및 RoPE/output capacity scalar만 받는다. CUDA context/buffer/stream,
+KV layout, host-workspace owner, model/forward executor owner를 받거나 소유하지 않는다.
+
+batch owner는 모든 cold resource allocation이 성공한 기존 지점에서 helper를 호출하고, helper는 같은
+bounds와 transport로 host/pinned capacity를 다시 계산한다. 따라서 allocation/cleanup/poison 순서와
+resource ownership은 batch owner에 그대로 남으며, 기존 `riley_runtime::llama::*` public path와
+nominal type은 `batch_executor` facade reexport로 유지한다. source-boundary 및 nominal-type test만
+추가하는 CPU-only slice이며, CUDA allocation parity, GPU evidence 또는 performance improvement를
+주장하지 않는다.
 
 ## 6. Allocation 검증
 
