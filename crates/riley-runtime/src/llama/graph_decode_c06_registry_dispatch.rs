@@ -104,6 +104,7 @@ mod tests {
     };
     use crate::llama::graph_decode_binding::PureDecodeGraphMetadataBinding;
     use crate::llama::graph_decode_c06_identity::bind_pure_decode_graph_v1_c06_identity;
+    use crate::llama::graph_decode_c06_registry_observation::observe_pure_decode_graph_v1_c06_registry_dispatch;
     use crate::llama::graph_decode_c06_signature::{
         PureDecodeGraphV1C06Signature, PureDecodeGraphV1C06SignatureBinding,
         compose_pure_decode_graph_v1_c06_signature,
@@ -114,6 +115,7 @@ mod tests {
     use crate::llama::graph_decode_padding::plan_pure_decode_graph_padding;
     use crate::llama::graph_decode_preflight::PureDecodeGraphV1Ineligibility;
     use crate::llama::graph_decode_preflight_binding::PureDecodeGraphV1LayoutBinding;
+    use crate::llama::graph_metrics::GraphDispatchMetrics;
     use crate::llama::graph_registry::{
         GraphEntryFootprint, GraphRegistry, GraphRegistryEntry, GraphRegistryEntryState,
         GraphRegistryLimits, GraphReplayMode, GraphReplaySlot,
@@ -472,6 +474,60 @@ mod tests {
                 &registry,
             ),
             Ok(PureDecodeGraphV1C06RegistryDispatch::Ineligible(reason)),
+        );
+    }
+
+    #[test]
+    fn c07_22_observes_bound_full_and_eager_decisions_once() {
+        let candidate = complete_candidate(GraphSamplingBackend::GpuGreedy);
+        let signature_binding = expect_signature_binding(&candidate);
+        let prepared = registry(
+            &signature_binding.signature(),
+            GraphRegistryEntryState::Prepared,
+        );
+        let request = request(
+            ExecutionGraphPolicy::Auto,
+            GraphWorkloadStage::PureDecode,
+            GraphSamplingBackend::GpuGreedy,
+            true,
+            true,
+            true,
+        );
+        let mut metrics = GraphDispatchMetrics::new();
+
+        let full =
+            select_pure_decode_graph_v1_c06_registry_dispatch(&candidate, request, &prepared);
+        observe_pure_decode_graph_v1_c06_registry_dispatch(&full, &mut metrics);
+        let full = full.expect("C07-22 must preserve the prepared C06 decision");
+        assert_eq!(
+            expect_bound(&full).decision(),
+            GraphRegistryDispatchDecision::FullGraph {
+                replay_slot: GraphReplaySlot::new(17),
+            },
+        );
+        assert_eq!(metrics.snapshot().full_graph_selected_count(), 1);
+        assert_eq!(metrics.snapshot().exact_eager_count(), 0);
+
+        let capacity_disabled = GraphRegistry::<0>::capacity_disabled();
+        let eager = select_pure_decode_graph_v1_c06_registry_dispatch(
+            &candidate,
+            request,
+            &capacity_disabled,
+        );
+        observe_pure_decode_graph_v1_c06_registry_dispatch(&eager, &mut metrics);
+        let eager = eager.expect("C07-22 must preserve C06's capacity eager outcome");
+        assert_eq!(
+            expect_bound(&eager).decision(),
+            GraphRegistryDispatchDecision::ExactEager {
+                reason: GraphFallbackReason::CapacityDisabled,
+            },
+        );
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.full_graph_selected_count(), 1);
+        assert_eq!(snapshot.exact_eager_count(), 1);
+        assert_eq!(
+            snapshot.fallback_reason_count(GraphFallbackReason::CapacityDisabled),
+            1,
         );
     }
 }

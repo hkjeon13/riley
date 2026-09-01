@@ -22,6 +22,8 @@ mod graph_decode_binding;
 mod graph_decode_c06_identity;
 #[allow(dead_code)] // C07-21 deliberately precedes replay-slot ownership.
 mod graph_decode_c06_registry_dispatch;
+#[allow(dead_code)] // C07-22 deliberately observes selection before replay-slot ownership.
+mod graph_decode_c06_registry_observation;
 #[allow(dead_code)] // C07-20 deliberately precedes registry/capture ownership.
 mod graph_decode_c06_signature;
 #[cfg(feature = "cuda")]
