@@ -15,6 +15,18 @@ use super::graph_decode_layout::{
     PureDecodeGraphMetadataGeometryDigest, PureDecodeGraphMetadataLayout,
 };
 
+/// Checks complete C07 metadata-layout equality for two cold slab owners.
+///
+/// The layout is the authority; a digest remains diagnostic/provenance data
+/// and must never be used as a substitute for this complete comparison.
+#[must_use]
+pub(crate) fn pure_decode_graph_v1_exact_metadata_layouts_match(
+    expected: PureDecodeGraphMetadataLayout,
+    actual: PureDecodeGraphMetadataLayout,
+) -> bool {
+    expected == actual
+}
+
 /// Closed failure while binding one pinned exact V1 slab to device storage.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum PureDecodeGraphV1ExactPinnedDeviceSlabBindingError {
@@ -130,6 +142,12 @@ impl PureDecodeGraphV1ExactDeviceSlab {
         self.geometry_digest
     }
 
+    /// Returns the fixed payload length of this cold device allocation.
+    #[must_use]
+    pub(crate) const fn payload_byte_len(&self) -> u64 {
+        self.device.byte_len()
+    }
+
     /// Binds one successful pinned lease to this same-layout device allocation.
     ///
     /// Admission compares complete layouts before creating the borrowed binding.
@@ -142,7 +160,7 @@ impl PureDecodeGraphV1ExactDeviceSlab {
     ) -> PureDecodeGraphV1ExactPinnedDeviceSlabBindingResult<
         PureDecodeGraphV1ExactPinnedDeviceSlabBinding<'device, 'pinned>,
     > {
-        if source.layout() != self.layout {
+        if !pure_decode_graph_v1_exact_metadata_layouts_match(self.layout, source.layout()) {
             return Err(
                 PureDecodeGraphV1ExactPinnedDeviceSlabBindingError::LayoutMismatch {
                     device_geometry_digest: self.geometry_digest,
@@ -161,6 +179,32 @@ impl PureDecodeGraphV1ExactDeviceSlab {
     /// Explicitly frees this device allocation after all bindings have ended.
     pub(crate) fn close(self) -> CudaResult<()> {
         self.device.close()
+    }
+
+    /// Moves this exact device allocation into C05's by-value H2D owner.
+    ///
+    /// This narrow transfer is private to the C07 metadata graph-preparation
+    /// boundary. It does not expose an address, bytes, command submission, or
+    /// execution authority.
+    pub(crate) fn into_c05_owned_graph_h2d_destination(self) -> CudaDeviceBuffer {
+        self.device
+    }
+
+    /// Rewraps a device allocation recovered from a known C05 H2D graph close.
+    ///
+    /// The input must originate from this owner's corresponding
+    /// [`Self::into_c05_owned_graph_h2d_destination`] call and may be supplied
+    /// only after C05 has returned it following known native resource release.
+    /// It is not a general raw-buffer constructor.
+    pub(crate) fn recover_from_c05_owned_graph_h2d_destination(
+        layout: PureDecodeGraphMetadataLayout,
+        device: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            layout,
+            geometry_digest: layout.geometry_digest(),
+            device,
+        }
     }
 
     /// Exposes the owned device buffer only to the internal CUDA parity test.

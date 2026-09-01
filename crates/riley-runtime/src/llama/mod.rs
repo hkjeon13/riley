@@ -19,6 +19,9 @@ mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
 #[cfg(feature = "cuda")]
+#[allow(dead_code)] // C07-26 binds exact C07 metadata slab provenance to that C05 H2D owner.
+mod graph_decode_c05_h2d_metadata_owner;
+#[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-24 binds one selected full-graph identity to a C05 owner.
 mod graph_decode_c05_owned_exec_resolver;
 #[cfg(feature = "cuda")]

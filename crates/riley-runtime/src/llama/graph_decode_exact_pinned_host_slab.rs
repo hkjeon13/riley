@@ -135,6 +135,12 @@ impl PureDecodeGraphV1ExactPinnedHostSlab {
         self.geometry_digest
     }
 
+    /// Returns the fixed payload length of this cold pinned allocation.
+    #[must_use]
+    pub(crate) const fn payload_byte_len(&self) -> u64 {
+        self.pinned.byte_len()
+    }
+
     /// Synchronously records one successful exact host lease into pinned storage.
     ///
     /// Admission compares complete layouts before the native pinned write. A
@@ -165,6 +171,33 @@ impl PureDecodeGraphV1ExactPinnedHostSlab {
     /// Explicitly frees this pinned allocation after all leases have ended.
     pub(crate) fn close(self) -> CudaResult<()> {
         self.pinned.close()
+    }
+
+    /// Moves this exact pinned allocation into C05's by-value H2D owner.
+    ///
+    /// This narrow transfer is private to the C07 metadata graph-preparation
+    /// boundary.  It deliberately transfers no layout authority: the caller
+    /// must retain and later re-establish the original exact layout only after
+    /// C05 has proved graph-resource release.
+    pub(crate) fn into_c05_owned_graph_h2d_source(self) -> CudaPinnedHostBuffer {
+        self.pinned
+    }
+
+    /// Rewraps a pinned allocation recovered from a known C05 H2D graph close.
+    ///
+    /// The input must originate from this owner's corresponding
+    /// [`Self::into_c05_owned_graph_h2d_source`] call and may be supplied only
+    /// after C05 has returned it following known native resource release.  It
+    /// is not a general raw-buffer constructor.
+    pub(crate) fn recover_from_c05_owned_graph_h2d_source(
+        layout: PureDecodeGraphMetadataLayout,
+        pinned: CudaPinnedHostBuffer,
+    ) -> Self {
+        Self {
+            layout,
+            geometry_digest: layout.geometry_digest(),
+            pinned,
+        }
     }
 
     fn successful_stage_lease(&self) -> PureDecodeGraphV1ExactPinnedHostSlabLease<'_> {
