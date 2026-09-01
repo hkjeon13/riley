@@ -18,6 +18,9 @@ mod generation;
 mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
+#[cfg(feature = "cuda")]
+#[allow(dead_code)] // C07-24 binds one selected full-graph identity to a C05 owner.
+mod graph_decode_c05_owned_exec_resolver;
 #[allow(dead_code)] // C07-19 deliberately precedes whole-signature/capture ownership.
 mod graph_decode_c06_identity;
 #[allow(dead_code)] // C07-21 deliberately precedes replay-slot ownership.
