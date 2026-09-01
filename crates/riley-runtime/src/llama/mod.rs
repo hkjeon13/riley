@@ -19,6 +19,9 @@ mod graph;
 #[allow(dead_code)] // C07-4 deliberately precedes its future metadata packer.
 mod graph_decode_binding;
 #[cfg(feature = "cuda")]
+#[allow(dead_code)] // C07-30 binds exact C05 evidence to C06 policy without enabling execution.
+mod graph_decode_c05_capture_capability_dispatch_binding;
+#[cfg(feature = "cuda")]
 #[allow(dead_code)] // C07-29 maps only exact reviewed C05 primitives into that cold inventory.
 mod graph_decode_c05_capture_capability_evidence;
 #[cfg(feature = "cuda")]

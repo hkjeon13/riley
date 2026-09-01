@@ -788,6 +788,27 @@ impl GraphDispatchEligibility {
             ..self
         }
     }
+
+    /// Returns this eligibility bundle with only operator-capture evidence changed.
+    ///
+    /// This remains an immutable scalar transform.  It preserves the stage,
+    /// bucket, metadata-layout, inventory, sampling-backend, and backend-safe
+    /// facts so a narrower evidence source cannot fabricate broader admission.
+    #[must_use]
+    #[allow(dead_code)] // C07-30 consumes this only from the CUDA-gated evidence binding.
+    pub(crate) const fn with_operator_capability(
+        self,
+        operator_capability: GraphOperatorCapability,
+    ) -> Self {
+        Self {
+            capture_safety: GraphCaptureSafety::new(
+                self.capture_safety.sampling_backend,
+                operator_capability,
+                self.capture_safety.backend_capture_safe,
+            ),
+            ..self
+        }
+    }
 }
 
 /// Policy selected at startup or by an explicit benchmark/qualification caller.
@@ -1216,6 +1237,36 @@ mod tests {
             ))
         );
         assert_eq!(GraphFallbackReason::LayoutMismatch.id(), "layout-mismatch");
+    }
+
+    #[test]
+    fn replacing_operator_evidence_preserves_every_other_eligibility_fact() {
+        let original = GraphDispatchEligibility::new(
+            GraphWorkloadStage::Mixed,
+            false,
+            true,
+            false,
+            GraphCaptureSafety::new(
+                GraphSamplingBackend::Unsupported,
+                GraphOperatorCapability::Supported,
+                false,
+            ),
+        );
+
+        assert_eq!(
+            original.with_operator_capability(GraphOperatorCapability::Unknown),
+            GraphDispatchEligibility::new(
+                GraphWorkloadStage::Mixed,
+                false,
+                true,
+                false,
+                GraphCaptureSafety::new(
+                    GraphSamplingBackend::Unsupported,
+                    GraphOperatorCapability::Unknown,
+                    false,
+                ),
+            )
+        );
     }
 
     #[test]
