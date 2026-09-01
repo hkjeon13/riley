@@ -193,6 +193,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)3)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16 \
   ((RileyCudaGraphCaptureOperationKind)4)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)5)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1273,6 +1275,30 @@ RileyCudaStatus riley_cuda_graph_capture_begin_gated_multiply_bf16(
 // by riley_cuda_graph_capture_begin_gated_multiply_bf16. The three captured
 // allocations and exact element count are immutable for the graph lifetime.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_gated_multiply_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-11 capture containing exactly one fixed-address, out-of-place
+// BF16 residual-add node. `left`, `right`, and `output` must be three distinct
+// live device allocations in the stream's context; `element_count` describes
+// contiguous elements from allocation offset zero. Every device allocation
+// remains leased until the resulting graph or exec is closed. This deliberately
+// does not accept spans, offsets, dtype selection, in-place aliasing, fresh
+// replay input, or fused normalization.
+RileyCudaStatus riley_cuda_graph_capture_begin_residual_add_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* left,
+    RileyCudaDeviceBuffer* right,
+    RileyCudaDeviceBuffer* output,
+    uint64_t element_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole BF16 residual-add node for a capture created by
+// riley_cuda_graph_capture_begin_residual_add_bf16. The three captured
+// allocations and exact element count are immutable for the graph lifetime.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_residual_add_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

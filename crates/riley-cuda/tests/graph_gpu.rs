@@ -2,8 +2,8 @@ use std::error::Error;
 
 use riley_cuda::{
     CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaErrorKind,
-    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams, SiluParams,
-    gated_multiply, silu,
+    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
+    ResidualAddParams, SiluParams, gated_multiply, residual_add, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -114,6 +114,25 @@ fn graph_gated_multiply_bf16_fixture_bytes(element_count: usize, branch: usize) 
         0xffc5,
     ];
     let pattern = if branch == 0 { &GATE } else { &UP };
+    (0..element_count)
+        .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
+        .collect()
+}
+
+fn graph_residual_add_bf16_fixture_bytes(element_count: usize, branch: usize) -> Vec<u8> {
+    // Keep the exact BF16 edge values relevant to add: signed zero, opposite
+    // finite values, infinities, and distinct NaN payloads. The expected
+    // bytes come from the eager primitive so graph parity includes its storage
+    // rounding behavior rather than an f32 tolerance.
+    const LEFT: [u16; 12] = [
+        0x0000, 0x8000, 0x3f80, 0xbf80, 0x4080, 0xc080, 0x3d00, 0xbd00, 0x7f80, 0xff80, 0x7fc1,
+        0xffc1,
+    ];
+    const RIGHT: [u16; 12] = [
+        0x8000, 0x0000, 0x3f80, 0x3f80, 0xc080, 0x4080, 0x3d00, 0x3d00, 0xff80, 0x7f80, 0x7fc5,
+        0xffc5,
+    ];
+    let pattern = if branch == 0 { &LEFT } else { &RIGHT };
     (0..element_count)
         .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
         .collect()
@@ -484,6 +503,196 @@ fn owned_bf16_gated_multiply_graph_preflight_and_abort_recover_every_resource()
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-10-owned-bf16-gated-multiply-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_residual_add_graph_replays_fixed_inputs_byte_exact_against_eager()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 4_096;
+    const REPLAYS: usize = 32;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<u16>())?)
+        .ok_or("BF16 residual-add graph byte length overflow")?;
+    let host_left = graph_residual_add_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?, 0);
+    let host_right = graph_residual_add_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?, 1);
+    assert_eq!(u64::try_from(host_left.len())?, byte_len);
+    assert_eq!(u64::try_from(host_right.len())?, byte_len);
+    let mut staging = context.allocate_pinned_host_buffer(byte_len)?;
+
+    let mut eager_left = context.allocate_device_buffer(byte_len)?;
+    eager_left.upload_from_slice(0, &host_left, &mut staging, &mut eager_stream)?;
+    let mut eager_right = context.allocate_device_buffer(byte_len)?;
+    eager_right.upload_from_slice(0, &host_right, &mut staging, &mut eager_stream)?;
+    let graph_left = {
+        let mut buffer = context.allocate_device_buffer(byte_len)?;
+        buffer.upload_from_slice(0, &host_left, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_right = {
+        let mut buffer = context.allocate_device_buffer(byte_len)?;
+        buffer.upload_from_slice(0, &host_right, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let mut eager_output = context.allocate_device_buffer(byte_len)?;
+    let graph_output = context.allocate_device_buffer(byte_len)?;
+
+    {
+        let mut eager = ResidualAddParams {
+            left: CudaBufferSpan::new(&eager_left, CudaDType::BF16, 0, byte_len)?,
+            right: CudaBufferSpan::new(&eager_right, CudaDType::BF16, 0, byte_len)?,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, byte_len)?,
+            element_count: ELEMENT_COUNT,
+        };
+        residual_add(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_residual_add_bf16_capture(
+        graph_left,
+        graph_right,
+        graph_output,
+        ELEMENT_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_residual_add_bf16()?;
+    // The local one-node rejection must leave the first node/capture usable.
+    assert_invalid_state(
+        capture.enqueue_residual_add_bf16(),
+        "second fixed BF16 residual-add graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // This is a lifecycle assertion, not a CUDA Graph performance claim.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_left, mut graph_right, mut graph_output) =
+        resources.into_parts();
+    let mut eager_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_left_after = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_right_after = vec![0_u8; usize::try_from(byte_len)?];
+    eager_output.download_to_slice(0, &mut eager_bytes, &mut staging, &mut transfer_stream)?;
+    graph_output.download_to_slice(0, &mut graph_bytes, &mut staging, &mut transfer_stream)?;
+    graph_left.download_to_slice(0, &mut graph_left_after, &mut staging, &mut transfer_stream)?;
+    graph_right.download_to_slice(
+        0,
+        &mut graph_right_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_bytes, eager_bytes,
+        "fixed graph BF16 residual-add output must match eager output bit-for-bit"
+    );
+    assert_eq!(
+        graph_left_after, host_left,
+        "fixed graph replay must not mutate its retained left allocation"
+    );
+    assert_eq!(
+        graph_right_after, host_right,
+        "fixed graph replay must not mutate its retained right allocation"
+    );
+
+    graph_output.close()?;
+    graph_right.close()?;
+    graph_left.close()?;
+    eager_output.close()?;
+    eager_right.close()?;
+    eager_left.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-11-owned-bf16-residual-add-fixed-address replays={REPLAYS} elements={ELEMENT_COUNT} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_residual_add_graph_preflight_and_abort_recover_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 128;
+    const BYTE_LEN: u64 = ELEMENT_COUNT * 2;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let left = context.allocate_device_buffer(BYTE_LEN)?;
+    let right = context.allocate_device_buffer(BYTE_LEN)?;
+    let output = context.allocate_device_buffer(BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_residual_add_bf16_capture(
+        left,
+        right,
+        output,
+        0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => {
+            panic!("zero-element owned BF16 residual-add graph preflight unexpectedly succeeded")
+        }
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("Rust BF16 residual-add preflight must return all untouched resources");
+    let (stream, left, right, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_residual_add_bf16_capture(
+            left,
+            right,
+            output,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, left, right, output) = resources.into_parts();
+    let error = match stream.begin_owned_graph_residual_add_bf16_capture(
+        left,
+        right,
+        output,
+        ELEMENT_COUNT + 1,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("oversized owned BF16 residual-add graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized BF16 residual-add preflight must preserve all resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-11-owned-bf16-residual-add-preflight-abort-recovery status=passed");
     Ok(())
 }
 

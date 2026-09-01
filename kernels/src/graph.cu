@@ -47,6 +47,10 @@ constexpr const char* kBeginGatedMultiplyBf16Operation =
     "begin CUDA Graph BF16 gated-multiply capture";
 constexpr const char* kEnqueueGatedMultiplyBf16Operation =
     "enqueue CUDA Graph BF16 gated multiply";
+constexpr const char* kBeginResidualAddBf16Operation =
+    "begin CUDA Graph BF16 residual-add capture";
+constexpr const char* kEnqueueResidualAddBf16Operation =
+    "enqueue CUDA Graph BF16 residual add";
 constexpr const char* kQueryCaptureCapabilityOperation =
     "query CUDA Graph capture capability";
 constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
@@ -104,6 +108,180 @@ __global__ void graph_gated_multiply_bf16(const __nv_bfloat16* activated_gate,
     output[index] = __float2bfloat16_rn(__bfloat162float(activated_gate[index]) *
                                         __bfloat162float(up[index]));
   }
+}
+
+// This is deliberately capture-local rather than riley_cuda_residual_add_execute:
+// eager residual add owns transient ExclusiveUses and synchronizes completion,
+// neither of which is admissible while graph capture owns permanent leases for
+// three fixed device allocations. Keep the conversion and grid-stride topology
+// equal to the eager BF16 primitive so graph parity includes its exact
+// storage-rounding boundary.
+__global__ void graph_residual_add_bf16(const __nv_bfloat16* left,
+                                        const __nv_bfloat16* right,
+                                        __nv_bfloat16* output,
+                                        uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    output[index] = __float2bfloat16_rn(__bfloat162float(left[index]) +
+                                        __bfloat162float(right[index]));
+  }
+}
+
+bool residual_add_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr && capture->residual_add_left == nullptr &&
+         capture->residual_add_right == nullptr &&
+         capture->residual_add_element_count == 0 &&
+         capture->residual_add_enqueue_count == 0 &&
+         !capture->residual_add_left_lease_held &&
+         !capture->residual_add_right_lease_held;
+}
+
+bool residual_add_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && graph->residual_add_left == nullptr &&
+         graph->residual_add_right == nullptr &&
+         graph->residual_add_element_count == 0;
+}
+
+bool residual_add_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && exec->residual_add_left == nullptr &&
+         exec->residual_add_right == nullptr &&
+         exec->residual_add_element_count == 0;
+}
+
+// These predicates are intentionally structural only: callers separately
+// establish whether a capture is live, whether its CUDA graph/exec handle is
+// present, and which one-shot lifecycle boundary has occurred. Keeping the
+// immutable three-buffer contract here lets every transition reject mixed
+// operation state without borrowing or repurposing C05-10's gated fields.
+bool residual_add_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         capture->operation ==
+             RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
+         capture->owner != nullptr && capture->stream != nullptr &&
+         capture->fill_buffer != nullptr &&
+         capture->residual_add_left != nullptr &&
+         capture->residual_add_right != nullptr &&
+         capture->fill_buffer != capture->residual_add_left &&
+         capture->fill_buffer != capture->residual_add_right &&
+         capture->residual_add_left != capture->residual_add_right &&
+         capture->fill_lease_held &&
+         capture->residual_add_left_lease_held &&
+         capture->residual_add_right_lease_held &&
+         capture->residual_add_element_count != 0 &&
+         capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 &&
+         !capture->h2d_source_lease_held && capture->silu_input == nullptr &&
+         capture->silu_element_count == 0 && capture->silu_enqueue_count == 0 &&
+         !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         same_context(capture->owner, capture->stream->owner) &&
+         same_context(capture->owner, capture->fill_buffer->owner) &&
+         same_context(capture->owner, capture->residual_add_left->owner) &&
+         same_context(capture->owner, capture->residual_add_right->owner) &&
+         capture->fill_buffer->device_data != nullptr &&
+         capture->residual_add_left->device_data != nullptr &&
+         capture->residual_add_right->device_data != nullptr &&
+         capture->residual_add_element_count <=
+             capture->fill_buffer->byte_len / sizeof(__nv_bfloat16) &&
+         capture->residual_add_element_count <=
+             capture->residual_add_left->byte_len / sizeof(__nv_bfloat16) &&
+         capture->residual_add_element_count <=
+             capture->residual_add_right->byte_len / sizeof(__nv_bfloat16) &&
+         capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->fill_buffer->active_uses.load(std::memory_order_acquire) ==
+             1 &&
+         capture->residual_add_left->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->residual_add_right->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool residual_add_graph_state_is_valid(const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
+         graph->owner != nullptr && graph->stream != nullptr &&
+         graph->fill_buffer != nullptr && graph->residual_add_left != nullptr &&
+         graph->residual_add_right != nullptr &&
+         graph->fill_buffer != graph->residual_add_left &&
+         graph->fill_buffer != graph->residual_add_right &&
+         graph->residual_add_left != graph->residual_add_right &&
+         graph->residual_add_element_count != 0 &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         same_context(graph->owner, graph->stream->owner) &&
+         same_context(graph->owner, graph->fill_buffer->owner) &&
+         same_context(graph->owner, graph->residual_add_left->owner) &&
+         same_context(graph->owner, graph->residual_add_right->owner) &&
+         graph->fill_buffer->device_data != nullptr &&
+         graph->residual_add_left->device_data != nullptr &&
+         graph->residual_add_right->device_data != nullptr &&
+         graph->residual_add_element_count <=
+             graph->fill_buffer->byte_len / sizeof(__nv_bfloat16) &&
+         graph->residual_add_element_count <=
+             graph->residual_add_left->byte_len / sizeof(__nv_bfloat16) &&
+         graph->residual_add_element_count <=
+             graph->residual_add_right->byte_len / sizeof(__nv_bfloat16) &&
+         graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->residual_add_left->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->residual_add_right->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool residual_add_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr &&
+         exec->operation ==
+             RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
+         exec->owner != nullptr && exec->stream != nullptr &&
+         exec->fill_buffer != nullptr && exec->residual_add_left != nullptr &&
+         exec->residual_add_right != nullptr &&
+         exec->fill_buffer != exec->residual_add_left &&
+         exec->fill_buffer != exec->residual_add_right &&
+         exec->residual_add_left != exec->residual_add_right &&
+         exec->residual_add_element_count != 0 &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         same_context(exec->owner, exec->stream->owner) &&
+         same_context(exec->owner, exec->fill_buffer->owner) &&
+         same_context(exec->owner, exec->residual_add_left->owner) &&
+         same_context(exec->owner, exec->residual_add_right->owner) &&
+         exec->fill_buffer->device_data != nullptr &&
+         exec->residual_add_left->device_data != nullptr &&
+         exec->residual_add_right->device_data != nullptr &&
+         exec->residual_add_element_count <=
+             exec->fill_buffer->byte_len / sizeof(__nv_bfloat16) &&
+         exec->residual_add_element_count <=
+             exec->residual_add_left->byte_len / sizeof(__nv_bfloat16) &&
+         exec->residual_add_element_count <=
+             exec->residual_add_right->byte_len / sizeof(__nv_bfloat16) &&
+         exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->residual_add_left->active_uses.load(std::memory_order_acquire) ==
+             1 &&
+         exec->residual_add_right->active_uses.load(
+             std::memory_order_acquire) == 1;
 }
 
 bool graph_error_is_compatible(const RileyCudaGraphErrorInfo* error) noexcept {
@@ -183,6 +361,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
+      !residual_add_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -221,7 +400,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_element_count != 0 ||
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
-      capture->gated_multiply_up_lease_held) {
+      capture->gated_multiply_up_lease_held ||
+      !residual_add_capture_fields_are_clear(capture)) {
     return false;
   }
   if (!capture->fill_lease_held) {
@@ -257,6 +437,7 @@ bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
+      !residual_add_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -295,6 +476,7 @@ bool release_capture_silu_bf16_leases(
       capture->gated_multiply_enqueue_count != 0 ||
       capture->gated_multiply_activated_gate_lease_held ||
       capture->gated_multiply_up_lease_held ||
+      !residual_add_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->silu_input->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -338,6 +520,7 @@ bool release_capture_gated_multiply_bf16_leases(
       capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
       capture->silu_input != nullptr || capture->silu_element_count != 0 ||
       capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
+      !residual_add_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->gated_multiply_activated_gate->active_uses.load(
           std::memory_order_acquire) != 1 ||
@@ -365,6 +548,58 @@ bool release_capture_gated_multiply_bf16_leases(
   return true;
 }
 
+// C05-11 retains three distinct BF16 device allocations. Every raw address is
+// graph-visible, so validate all immutable fields and every 1->0 transition
+// before releasing any lease. A malformed raw ABI owner remains fail-closed.
+bool release_capture_residual_add_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (capture == nullptr ||
+      capture->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 ||
+      capture->fill_buffer == nullptr || capture->residual_add_left == nullptr ||
+      capture->residual_add_right == nullptr ||
+      capture->fill_buffer == capture->residual_add_left ||
+      capture->fill_buffer == capture->residual_add_right ||
+      capture->residual_add_left == capture->residual_add_right ||
+      !capture->fill_lease_held || !capture->residual_add_left_lease_held ||
+      !capture->residual_add_right_lease_held ||
+      capture->residual_add_element_count == 0 ||
+      capture->fill_element_count != 0 || capture->fill_enqueue_count != 0 ||
+      capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+      capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
+      capture->silu_input != nullptr || capture->silu_element_count != 0 ||
+      capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
+      capture->gated_multiply_activated_gate != nullptr ||
+      capture->gated_multiply_up != nullptr ||
+      capture->gated_multiply_element_count != 0 ||
+      capture->gated_multiply_enqueue_count != 0 ||
+      capture->gated_multiply_activated_gate_lease_held ||
+      capture->gated_multiply_up_lease_held ||
+      capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      capture->residual_add_left->active_uses.load(std::memory_order_acquire) !=
+          1 ||
+      capture->residual_add_right->active_uses.load(std::memory_order_acquire) !=
+          1) {
+    return false;
+  }
+  if (!release_exclusive_use(capture->residual_add_right->active_uses) ||
+      !release_exclusive_use(capture->residual_add_left->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->residual_add_left = nullptr;
+  capture->residual_add_right = nullptr;
+  capture->residual_add_element_count = 0;
+  capture->residual_add_enqueue_count = 0;
+  capture->residual_add_left_lease_held = false;
+  capture->residual_add_right_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -372,6 +607,11 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   RileyCudaGraph* const graph = capture->prepared_graph;
   if (graph->owner != capture->owner || graph->stream != capture->stream ||
       graph->graph != nullptr || graph->owns_capture_leases) {
+    return false;
+  }
+  if (capture->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
+      (!residual_add_capture_fields_are_clear(capture) ||
+       !residual_add_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -416,6 +656,20 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->gated_multiply_element_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kResidualAddBf16) {
+    if (graph->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0 ||
+        graph->residual_add_left != capture->residual_add_left ||
+        graph->residual_add_right != capture->residual_add_right ||
+        graph->residual_add_element_count !=
+            capture->residual_add_element_count) {
+      return false;
+    }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
@@ -455,6 +709,11 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
       graph->owns_capture_leases ||
       capture->stream->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  if (capture->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 &&
+      (!residual_add_capture_fields_are_clear(capture) ||
+       !residual_add_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -542,6 +801,39 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->silu_element_count != 0 || capture->silu_input_lease_held) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kResidualAddBf16) {
+    if (capture->residual_add_left == nullptr ||
+        capture->residual_add_right == nullptr ||
+        capture->residual_add_left == capture->residual_add_right ||
+        capture->residual_add_left == capture->fill_buffer ||
+        capture->residual_add_right == capture->fill_buffer ||
+        !capture->residual_add_left_lease_held ||
+        !capture->residual_add_right_lease_held ||
+        capture->residual_add_element_count == 0 ||
+        graph->residual_add_left != capture->residual_add_left ||
+        graph->residual_add_right != capture->residual_add_right ||
+        graph->residual_add_element_count != capture->residual_add_element_count ||
+        capture->residual_add_left->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        capture->residual_add_right->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+        capture->h2d_source_lease_held || graph->silu_input != nullptr ||
+        graph->silu_element_count != 0 || capture->silu_input != nullptr ||
+        capture->silu_element_count != 0 || capture->silu_input_lease_held ||
+        graph->gated_multiply_activated_gate != nullptr ||
+        graph->gated_multiply_up != nullptr ||
+        graph->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_activated_gate != nullptr ||
+        capture->gated_multiply_up != nullptr ||
+        capture->gated_multiply_element_count != 0 ||
+        capture->gated_multiply_enqueue_count != 0 ||
+        capture->gated_multiply_activated_gate_lease_held ||
+        capture->gated_multiply_up_lease_held) {
+      return false;
+    }
   } else {
     return false;
   }
@@ -569,6 +861,12 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->gated_multiply_enqueue_count = 0;
   capture->gated_multiply_activated_gate_lease_held = false;
   capture->gated_multiply_up_lease_held = false;
+  capture->residual_add_left = nullptr;
+  capture->residual_add_right = nullptr;
+  capture->residual_add_element_count = 0;
+  capture->residual_add_enqueue_count = 0;
+  capture->residual_add_left_lease_held = false;
+  capture->residual_add_right_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -646,6 +944,27 @@ bool release_graph_gated_multiply_bf16_leases(
   }
   return release_exclusive_use(up->active_uses) &&
          release_exclusive_use(activated_gate->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_residual_add_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* left, RileyCudaDeviceBuffer* right,
+    RileyCudaDeviceBuffer* output) noexcept {
+  if (owner == nullptr || stream == nullptr || left == nullptr ||
+      right == nullptr || output == nullptr || left == right ||
+      left == output || right == output || !same_context(owner, stream->owner) ||
+      !same_context(owner, left->owner) || !same_context(owner, right->owner) ||
+      !same_context(owner, output->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      left->active_uses.load(std::memory_order_acquire) != 1 ||
+      right->active_uses.load(std::memory_order_acquire) != 1 ||
+      output->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(right->active_uses) &&
+         release_exclusive_use(left->active_uses) &&
          release_exclusive_use(output->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
@@ -1759,6 +2078,299 @@ RileyCudaStatus capture_begin_gated_multiply_bf16_impl(
   return status;
 }
 
+// C05-11 is a sibling of C05-10, not a fused residual-plus-normalization
+// graph. The two fixed BF16 inputs and fixed BF16 output remain independently
+// leased for the entire capture/graph/exec lifecycle. It deliberately admits
+// neither aliases, offsets, fresh replay inputs, nor a fused RMSNorm.
+RileyCudaStatus capture_begin_residual_add_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* left,
+    RileyCudaDeviceBuffer* right, RileyCudaDeviceBuffer* output,
+    uint64_t element_count, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginResidualAddBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || left == nullptr || right == nullptr ||
+      output == nullptr || stream->owner == nullptr || left->owner == nullptr ||
+      right->owner == nullptr || output->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "stream, BF16 residual left, right, output, or their owner is null");
+  }
+  if (!same_context(stream->owner, left->owner) ||
+      !same_context(stream->owner, right->owner) ||
+      !same_context(stream->owner, output->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "capture stream and BF16 residual-add allocations must share one context owner");
+  }
+  if (left == right || left == output || right == output) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "graph BF16 residual add requires three distinct device allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginResidualAddBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  if (element_count == 0 ||
+      element_count > left->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > right->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > output->byte_len / sizeof(__nv_bfloat16)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "fixed BF16 residual-add element count exceeds an input or output allocation");
+  }
+  if (left->device_data == nullptr || right->device_data == nullptr ||
+      output->device_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "graph BF16 residual-add input or output has no live device allocation");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "a stream command batch blocks fixed-address BF16 residual-add graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginResidualAddBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(left->active_uses)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "graph BF16 residual-left input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(right->active_uses)) {
+    const bool left_released = release_exclusive_use(left->active_uses);
+    if (!left_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+          "failed to release a rejected graph BF16 residual-left lease");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "graph BF16 residual-right input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(output->active_uses)) {
+    const bool right_released = release_exclusive_use(right->active_uses);
+    const bool left_released = release_exclusive_use(left->active_uses);
+    if (!right_released || !left_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+          "failed to release rejected graph BF16 residual-add input leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "graph BF16 residual-add output has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool output_released = release_exclusive_use(output->active_uses);
+    const bool right_released = release_exclusive_use(right->active_uses);
+    const bool left_released = release_exclusive_use(left->active_uses);
+    if (!output_released || !right_released || !left_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+          "failed to release rejected graph BF16 residual-add resource leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(right->active_uses);
+    (void)release_exclusive_use(left->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginResidualAddBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(right->active_uses);
+    (void)release_exclusive_use(left->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginResidualAddBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(right->active_uses);
+    (void)release_exclusive_use(left->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginResidualAddBf16Operation,
+        "host allocation failed for graph BF16 residual-add capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(right->active_uses);
+    (void)release_exclusive_use(left->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginResidualAddBf16Operation,
+        "host allocation failed for captured graph BF16 residual-add owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kResidualAddBf16, nullptr, 0, nullptr,
+      0, nullptr, nullptr, 0, left, right, element_count);
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->residual_add_left = left;
+  capture->residual_add_right = right;
+  capture->residual_add_element_count = element_count;
+  capture->residual_add_left_lease_held = true;
+  capture->residual_add_right_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_residual_add_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+          "failed to release a blocked graph BF16 residual-add capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_residual_add_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+          "failed to release a rejected graph BF16 residual-add capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginResidualAddBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE, kBeginResidualAddBf16Operation,
+      capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginResidualAddBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginResidualAddBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released = release_capture_residual_add_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginResidualAddBf16Operation,
+        "failed to release an unstarted graph BF16 residual-add capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -1785,6 +2397,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -2117,11 +2730,15 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
       const bool is_gated_multiply_bf16 =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+      const bool is_residual_add_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kResidualAddBf16;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
       const bool release_graph_first =
-          is_h2d || is_silu_bf16 || is_gated_multiply_bf16;
+          is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
+          is_residual_add_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -2130,6 +2747,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                   : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
                                  : is_gated_multiply_bf16
                                        ? release_capture_gated_multiply_bf16_leases(
+                                             owner)
+                                 : is_residual_add_bf16
+                                       ? release_capture_residual_add_bf16_leases(
                                              owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
@@ -2198,6 +2818,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_gated_multiply_bf16(
     RileyCudaErrorInfo* error) noexcept {
   return capture_begin_gated_multiply_bf16_impl(
       stream, activated_gate, up, output, element_count, mode, out_capture,
+      out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_residual_add_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* left,
+    RileyCudaDeviceBuffer* right, RileyCudaDeviceBuffer* output,
+    uint64_t element_count, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_residual_add_bf16_impl(
+      stream, left, right, output, element_count, mode, out_capture,
       out_graph_error, error);
 }
 
@@ -2603,6 +3235,130 @@ riley_cuda_graph_capture_enqueue_gated_multiply_bf16(
   return status;
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_residual_add_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueResidualAddBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueResidualAddBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->owner == nullptr || owner->stream == nullptr ||
+      owner->prepared_graph == nullptr || owner->fill_buffer == nullptr ||
+      owner->residual_add_left == nullptr ||
+      owner->residual_add_right == nullptr ||
+      owner->operation != RileyCudaGraphCaptureOperation::kResidualAddBf16 ||
+      !owner->fill_lease_held || !owner->residual_add_left_lease_held ||
+      !owner->residual_add_right_lease_held || owner->capture_terminated ||
+      owner->unreleased_graph != nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueResidualAddBf16Operation,
+        "capture owner is not a live graph BF16 residual-add capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueResidualAddBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  if (!owner->capture_started ||
+      owner->residual_add_left == owner->residual_add_right ||
+      owner->residual_add_left == owner->fill_buffer ||
+      owner->residual_add_right == owner->fill_buffer ||
+      owner->residual_add_element_count == 0 ||
+      owner->residual_add_element_count >
+          owner->residual_add_left->byte_len / sizeof(__nv_bfloat16) ||
+      owner->residual_add_element_count >
+          owner->residual_add_right->byte_len / sizeof(__nv_bfloat16) ||
+      owner->residual_add_element_count >
+          owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+      owner->residual_add_left->device_data == nullptr ||
+      owner->residual_add_right->device_data == nullptr ||
+      owner->fill_buffer->device_data == nullptr ||
+      owner->residual_add_enqueue_count != 0 ||
+      owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+      owner->h2d_enqueue_count != 0 || owner->h2d_source_lease_held ||
+      owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+      owner->silu_enqueue_count != 0 || owner->silu_input_lease_held ||
+      owner->gated_multiply_activated_gate != nullptr ||
+      owner->gated_multiply_up != nullptr ||
+      owner->gated_multiply_element_count != 0 ||
+      owner->gated_multiply_enqueue_count != 0 ||
+      owner->gated_multiply_activated_gate_lease_held ||
+      owner->gated_multiply_up_lease_held ||
+      owner->fill_element_count != 0 || owner->fill_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueResidualAddBf16Operation,
+        "graph BF16 residual-add capture has invalid immutable geometry or already enqueued its sole node");
+  }
+  if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->residual_add_left->active_uses.load(std::memory_order_acquire) !=
+          1 ||
+      owner->residual_add_right->active_uses.load(std::memory_order_acquire) !=
+          1 ||
+      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueResidualAddBf16Operation,
+        "graph BF16 residual-add capture resource lease is unavailable");
+  }
+  const uint64_t needed_blocks =
+      ((owner->residual_add_element_count - 1) / kGraphSiluThreads) + 1;
+  const uint32_t grid_x = static_cast<uint32_t>(
+      needed_blocks < kMaximumGraphSiluBlocks ? needed_blocks
+                                               : kMaximumGraphSiluBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueResidualAddBf16Operation,
+      owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    graph_residual_add_bf16<<<grid_x, kGraphSiluThreads, 0,
+                              owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(owner->residual_add_left->device_data),
+        static_cast<const __nv_bfloat16*>(
+            owner->residual_add_right->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        owner->residual_add_element_count);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueResidualAddBf16Operation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      owner->residual_add_enqueue_count = 1;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueResidualAddBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -2649,7 +3405,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   const bool is_gated_multiply_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
-  if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
+  const bool is_residual_add_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
+       !is_residual_add_bf16) ||
+      (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
@@ -2720,7 +3480,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
         owner->gated_multiply_element_count >
             owner->gated_multiply_up->byte_len / sizeof(__nv_bfloat16) ||
         owner->gated_multiply_element_count >
-            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16)))) {
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16))) ||
+      (is_residual_add_bf16 &&
+       !residual_add_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -2736,7 +3498,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_h2d && owner->h2d_enqueue_count != 1) ||
       (is_silu_bf16 && owner->silu_enqueue_count != 1) ||
       (is_gated_multiply_bf16 &&
-       owner->gated_multiply_enqueue_count != 1)) {
+       owner->gated_multiply_enqueue_count != 1) ||
+      (is_residual_add_bf16 && owner->residual_add_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -2750,6 +3513,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        (owner->gated_multiply_activated_gate->active_uses.load(
             std::memory_order_acquire) != 1 ||
         owner->gated_multiply_up->active_uses.load(
+            std::memory_order_acquire) != 1)) ||
+      (is_residual_add_bf16 &&
+       (owner->residual_add_left->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->residual_add_right->active_uses.load(
             std::memory_order_acquire) != 1))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
@@ -2857,10 +3625,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       const bool is_gated_multiply_bf16 =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+      const bool is_residual_add_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kResidualAddBf16;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
-          is_h2d || is_silu_bf16 || is_gated_multiply_bf16;
+          is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
+          is_residual_add_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -2869,6 +3641,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                   : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
                                  : is_gated_multiply_bf16
                                        ? release_capture_gated_multiply_bf16_leases(
+                                             owner)
+                                 : is_residual_add_bf16
+                                       ? release_capture_residual_add_bf16_leases(
                                              owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
@@ -2936,10 +3711,25 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   const bool is_gated_multiply_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  const bool is_residual_add_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kInstantiateOperation,
+                            "captured residual-add graph has invalid fixed resource state");
+  }
+  if (!is_residual_add_bf16 && !residual_add_graph_fields_are_clear(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kInstantiateOperation,
+                            "captured graph mixes residual-add state with another operation");
+  }
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
+       !is_residual_add_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -3039,7 +3829,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->operation, owner->h2d_source, owner->h2d_byte_len,
       owner->silu_input, owner->silu_element_count,
       owner->gated_multiply_activated_gate, owner->gated_multiply_up,
-      owner->gated_multiply_element_count);
+      owner->gated_multiply_element_count, owner->residual_add_left,
+      owner->residual_add_right, owner->residual_add_element_count);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -3144,6 +3935,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       exec->gated_multiply_activated_gate != nullptr ||
       exec->gated_multiply_up != nullptr ||
       exec->gated_multiply_element_count != 0 ||
+      !residual_add_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -3199,12 +3991,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       exec->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   const bool is_gated_multiply_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  const bool is_residual_add_bf16 =
+      exec->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kLaunchOperation,
+                            "residual-add graph exec has invalid fixed resource state");
+  }
+  if (!is_residual_add_bf16 && !residual_add_exec_fields_are_clear(exec)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kLaunchOperation,
+                            "graph exec mixes residual-add state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
       exec->fill_buffer == nullptr || exec->graph == nullptr ||
       exec->exec == nullptr || !exec->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16)) {
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
+       !is_residual_add_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -3466,12 +4273,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   const bool is_gated_multiply_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  const bool is_residual_add_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseGraphOperation,
+                            "residual-add graph has invalid fixed resource state");
+  }
+  if (!is_residual_add_bf16 && !residual_add_graph_fields_are_clear(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseGraphOperation,
+                            "captured graph mixes residual-add state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
+       !is_residual_add_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -3584,6 +4406,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->owner, owner->stream,
                                  owner->gated_multiply_activated_gate,
                                  owner->gated_multiply_up, owner->fill_buffer)
+                     : is_residual_add_bf16
+                           ? release_graph_residual_add_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->residual_add_left,
+                                 owner->residual_add_right, owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -3637,12 +4464,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   const bool is_gated_multiply_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kGatedMultiplyBf16;
+  const bool is_residual_add_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kResidualAddBf16;
+  if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseExecOperation,
+                            "residual-add graph exec has invalid fixed resource state");
+  }
+  if (!is_residual_add_bf16 && !residual_add_exec_fields_are_clear(owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseExecOperation,
+                            "graph exec mixes residual-add state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       owner->exec == nullptr || !owner->owns_capture_leases ||
-      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16) ||
+      (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
+       !is_residual_add_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -3771,6 +4613,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->owner, owner->stream,
                                  owner->gated_multiply_activated_gate,
                                  owner->gated_multiply_up, owner->fill_buffer)
+                     : is_residual_add_bf16
+                           ? release_graph_residual_add_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->residual_add_left,
+                                 owner->residual_add_right, owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {

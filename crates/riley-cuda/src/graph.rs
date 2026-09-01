@@ -125,6 +125,8 @@ pub enum CudaGraphCaptureOperation {
     SiluBf16 = 3,
     /// One fixed-address, out-of-place BF16 activated-gate × up kernel.
     GatedMultiplyBf16 = 4,
+    /// One fixed-address, out-of-place BF16 residual-add kernel.
+    ResidualAddBf16 = 5,
 }
 
 impl CudaGraphCaptureOperation {
@@ -3479,6 +3481,506 @@ fn validate_graph_gated_multiply_bf16_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and three fixed device buffers recovered from one known
+/// BF16 residual-add graph lifecycle transition.
+///
+/// This recovery bundle exposes no graph-visible pointer, mutable span, or
+/// fresh replay input. The two inputs and output remain distinct throughout
+/// capture, graph, and exec ownership.
+pub struct OwnedGraphResidualAddBf16Resources {
+    stream: CudaStream,
+    left: CudaDeviceBuffer,
+    right: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+}
+
+impl OwnedGraphResidualAddBf16Resources {
+    fn new(
+        stream: CudaStream,
+        left: CudaDeviceBuffer,
+        right: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            left,
+            right,
+            output,
+        }
+    }
+
+    /// Returns the exact stream, left input, right input, and output after a
+    /// known native graph-lease release.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            left,
+            right,
+            output,
+        } = self;
+        (stream, left, right, output)
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, left, right, output) = self.into_parts();
+        output.close()?;
+        right.close()?;
+        left.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning an owned fixed-address BF16 residual-add graph
+/// capture.
+///
+/// Only Rust-side preflight errors recover the untouched resource quartet.
+/// Once native begin is attempted, ambiguous CUDA state retains all raw
+/// addresses fail-closed.
+#[must_use]
+pub struct OwnedGraphResidualAddBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphResidualAddBf16Resources>,
+}
+
+impl OwnedGraphResidualAddBf16CaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphResidualAddBf16Resources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched stream/input/input/output quartet only when
+    /// native capture ownership was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphResidualAddBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphResidualAddBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphResidualAddBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphResidualAddBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 residual-add capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphResidualAddBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address, out-of-place BF16 residual-add
+/// CUDA Graph capture.
+pub struct OwnedGraphResidualAddBf16Capture {
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphResidualAddBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphResidualAddBf16Capture {
+    /// Captures the one immutable BF16 residual-add node.
+    pub fn enqueue_residual_add_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphResidualAddBf16Capture::enqueue_residual_add_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 residual-add capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 residual-add enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 residual-add graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_residual_add_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed stream/input/input/output quartet
+    /// into a by-value captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedResidualAddBf16Graph> {
+        const OPERATION: &str = "OwnedGraphResidualAddBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 residual-add capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 residual-add enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 residual-add enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources =
+                take_owned_graph_residual_add_bf16_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedResidualAddBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_residual_add_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphResidualAddBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphResidualAddBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphResidualAddBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 residual-add CUDA Graph awaiting instantiate or
+/// close.
+pub struct OwnedCapturedResidualAddBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphResidualAddBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedResidualAddBf16Graph {
+    /// Instantiates this graph while retaining its fixed stream/input/input/
+    /// output quartet by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphResidualAddBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_residual_add_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedResidualAddBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphResidualAddBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedResidualAddBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_residual_add_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedResidualAddBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedResidualAddBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 residual-add CUDA Graph executable.
+///
+/// It replays only the capture-time input allocations. Fresh input staging,
+/// mutable spans, node updates, fused RMSNorm, and model/executor wiring stay
+/// outside this narrow C05 ownership slice.
+pub struct OwnedGraphResidualAddBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphResidualAddBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphResidualAddBf16Exec {
+    /// Replays the fixed-address BF16 residual-add graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphResidualAddBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphResidualAddBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 residual-add transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 residual-add exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphResidualAddBf16Launch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its resource quartet only after
+    /// native close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphResidualAddBf16Exec::close",
+                "an earlier graph BF16 residual-add transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_residual_add_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphResidualAddBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphResidualAddBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphResidualAddBf16Exec`] replay.
+pub struct OwnedGraphResidualAddBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphResidualAddBf16Exec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphResidualAddBf16Launch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphResidualAddBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphResidualAddBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_residual_add_bf16_resources(
+    resources: &mut Option<OwnedGraphResidualAddBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 residual-add owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_residual_add_bf16_capture_preflight(
+    stream: &CudaStream,
+    left: &CudaDeviceBuffer,
+    right: &CudaDeviceBuffer,
+    output: &CudaDeviceBuffer,
+    element_count: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, left.context_owner(), operation)?;
+    ensure_same_context(&stream.context, right.context_owner(), operation)?;
+    ensure_same_context(&stream.context, output.context_owner(), operation)?;
+    left.ensure_idle_for_operation(operation)?;
+    right.ensure_idle_for_operation(operation)?;
+    output.ensure_idle_for_operation(operation)?;
+    let required_bytes = element_count
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "element_count overflows the fixed BF16 residual-add capture byte range",
+            )
+        })?;
+    if element_count == 0
+        || required_bytes > left.byte_len()
+        || required_bytes > right.byte_len()
+        || required_bytes > output.byte_len()
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "element_count={element_count} requires {required_bytes} BF16 bytes, but left/right/output capacities are {}/{}/{} bytes",
+                left.byte_len(),
+                right.byte_len(),
+                output.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -3794,6 +4296,82 @@ impl CudaStream {
             let _ = (element_count, mode);
             Err(OwnedGraphGatedMultiplyBf16CaptureBeginError::recoverable(
                 CudaError::unavailable("CudaStream::begin_owned_graph_gated_multiply_bf16_capture"),
+                resources,
+            ))
+        }
+    }
+
+    /// Begins a by-value C05-11 capture containing exactly one fixed-address,
+    /// out-of-place BF16 residual-add node.
+    ///
+    /// The moved left input, right input, and output remain inaccessible until
+    /// graph close. This slice replays capture-time inputs only; it does not
+    /// expose in-place aliases, offsets, fresh inputs, node updates, fused
+    /// normalization, executor wiring, or eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched quartet through
+    /// [`OwnedGraphResidualAddBf16CaptureBeginError::into_resources`]. After
+    /// native entry, no resource is returned because CUDA may retain the raw
+    /// addresses while resolving an ambiguous capture failure.
+    pub fn begin_owned_graph_residual_add_bf16_capture(
+        self,
+        left: CudaDeviceBuffer,
+        right: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        element_count: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphResidualAddBf16Resources::new(self, left, right, output);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphResidualAddBf16Resources::new(self, left, right, output);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_residual_add_bf16_capture";
+            if let Err(error) = validate_graph_residual_add_bf16_capture_preflight(
+                &resources.stream,
+                &resources.left,
+                &resources.right,
+                &resources.output,
+                element_count,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphResidualAddBf16CaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_residual_add_bf16_capture(
+                    resources.left.native_handle(),
+                    resources.right.native_handle(),
+                    resources.output.native_handle(),
+                    element_count,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphResidualAddBf16CaptureBeginError::terminal(error));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphResidualAddBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (element_count, mode);
+            Err(OwnedGraphResidualAddBf16CaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_residual_add_bf16_capture"),
                 resources,
             ))
         }

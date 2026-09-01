@@ -6,13 +6,17 @@ use riley_cuda::{
     CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer, CudaResult,
     CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
     OwnedCapturedGatedMultiplyBf16Graph, OwnedCapturedGraph, OwnedCapturedH2DGraph,
-    OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
-    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphGatedMultiplyBf16Capture,
-    OwnedGraphGatedMultiplyBf16CaptureBeginError, OwnedGraphGatedMultiplyBf16Exec,
-    OwnedGraphGatedMultiplyBf16Launch, OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture,
-    OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
-    OwnedGraphLaunch, OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError,
-    OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch, OwnedGraphSiluBf16Resources,
+    OwnedCapturedResidualAddBf16Graph, OwnedCapturedSiluBf16Graph, OwnedGraphExec,
+    OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
+    OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError,
+    OwnedGraphGatedMultiplyBf16Exec, OwnedGraphGatedMultiplyBf16Launch,
+    OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError,
+    OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources, OwnedGraphLaunch,
+    OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError,
+    OwnedGraphResidualAddBf16Exec, OwnedGraphResidualAddBf16Launch,
+    OwnedGraphResidualAddBf16Resources, OwnedGraphSiluBf16Capture,
+    OwnedGraphSiluBf16CaptureBeginError, OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch,
+    OwnedGraphSiluBf16Resources,
 };
 
 #[test]
@@ -32,6 +36,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16",
         "RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN",
         "RILEY_CUDA_GRAPH_STAGE_CLOSE",
         "RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE",
@@ -55,6 +60,8 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "riley_cuda_graph_capture_enqueue_silu_bf16",
         "riley_cuda_graph_capture_begin_gated_multiply_bf16",
         "riley_cuda_graph_capture_enqueue_gated_multiply_bf16",
+        "riley_cuda_graph_capture_begin_residual_add_bf16",
+        "riley_cuda_graph_capture_enqueue_residual_add_bf16",
         "riley_cuda_graph_capture_end",
         "riley_cuda_graph_instantiate",
         "riley_cuda_graph_exec_launch",
@@ -106,6 +113,7 @@ fn capture_capability_query_is_pure_and_fail_closed() {
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_H2D",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16",
     ] {
         assert!(
             query.contains(operation),
@@ -217,6 +225,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
     assert_eq!(CudaGraphCaptureOperation::H2D as u32, 2);
     assert_eq!(CudaGraphCaptureOperation::SiluBf16 as u32, 3);
     assert_eq!(CudaGraphCaptureOperation::GatedMultiplyBf16 as u32, 4);
+    assert_eq!(CudaGraphCaptureOperation::ResidualAddBf16 as u32, 5);
     assert_eq!(CudaGraphCaptureCapability::Unknown as u32, 0);
     assert_eq!(CudaGraphCaptureCapability::Unsupported as u32, 1);
     assert_eq!(CudaGraphCaptureCapability::Supported as u32, 2);
@@ -236,6 +245,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         CudaGraphCaptureOperation::H2D,
         CudaGraphCaptureOperation::SiluBf16,
         CudaGraphCaptureOperation::GatedMultiplyBf16,
+        CudaGraphCaptureOperation::ResidualAddBf16,
     ] {
         assert_eq!(
             operation.capture_capability().unwrap_err().kind(),
@@ -453,6 +463,51 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    fn begin_owned_residual_add_bf16(
+        stream: CudaStream,
+        left: CudaDeviceBuffer,
+        right: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+    ) -> Result<OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError> {
+        stream.begin_owned_graph_residual_add_bf16_capture(
+            left,
+            right,
+            output,
+            16,
+            CudaGraphCaptureMode::ThreadLocal,
+        )
+    }
+
+    fn end_owned_residual_add_bf16(
+        capture: OwnedGraphResidualAddBf16Capture,
+    ) -> CudaResult<OwnedCapturedResidualAddBf16Graph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_residual_add_bf16(
+        graph: OwnedCapturedResidualAddBf16Graph,
+    ) -> CudaResult<OwnedGraphResidualAddBf16Exec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_residual_add_bf16(
+        exec: &mut OwnedGraphResidualAddBf16Exec,
+    ) -> CudaResult<OwnedGraphResidualAddBf16Launch<'_>> {
+        exec.launch()
+    }
+
+    fn finish_owned_residual_add_bf16(
+        launch: OwnedGraphResidualAddBf16Launch<'_>,
+    ) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_residual_add_bf16(
+        exec: OwnedGraphResidualAddBf16Exec,
+    ) -> CudaResult<OwnedGraphResidualAddBf16Resources> {
+        exec.close()
+    }
+
     let _ = (
         begin_fill,
         end_fill,
@@ -484,6 +539,12 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_owned_gated_multiply_bf16,
         finish_owned_gated_multiply_bf16,
         close_owned_gated_multiply_bf16,
+        begin_owned_residual_add_bf16,
+        end_owned_residual_add_bf16,
+        instantiate_owned_residual_add_bf16,
+        launch_owned_residual_add_bf16,
+        finish_owned_residual_add_bf16,
+        close_owned_residual_add_bf16,
     );
 
     let graph_source = include_str!("../src/graph.rs");
@@ -493,6 +554,7 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_h2d_capture\""));
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_silu_bf16_capture\""));
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_gated_multiply_bf16_capture\""));
+    assert!(graph_source.contains("\"CudaStream::begin_owned_graph_residual_add_bf16_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -1190,6 +1252,167 @@ fn owned_bf16_gated_multiply_graph_uses_fixed_three_buffer_lifecycle_without_mod
         assert!(
             !graph.contains(forbidden),
             "C05-10 graph ownership must remain model/runtime independent: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_bf16_residual_add_graph_uses_fixed_three_buffer_lifecycle_without_model_wiring() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+
+    for required in [
+        "riley_cuda_graph_capture_begin_residual_add_bf16",
+        "riley_cuda_graph_capture_enqueue_residual_add_bf16",
+    ] {
+        assert!(header.contains(required), "missing C05-11 ABI: {required}");
+        assert!(
+            ffi.contains(required),
+            "missing C05-11 Rust FFI: {required}"
+        );
+    }
+    assert!(abi_layout.contains("graph_capture_begin_residual_add_bf16_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_residual_add_bf16_symbol"));
+
+    for required in [
+        "kResidualAddBf16 = 5",
+        "residual_add_left",
+        "residual_add_right",
+        "residual_add_element_count",
+        "residual_add_enqueue_count",
+        "residual_add_left_lease_held",
+        "residual_add_right_lease_held",
+        "RileyCudaGraphCaptureOperation operation",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-11 native graph ownership state is missing: {required}"
+        );
+    }
+    assert!(native.contains("release_capture_residual_add_bf16_leases"));
+    assert!(native.contains("release_graph_residual_add_bf16_leases"));
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_residual_add_bf16_impl(")
+        .nth(1)
+        .expect("BF16 residual-add capture admission helper must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("BF16 residual-add capture admission helper must end before C exports");
+    for lease in [
+        "try_acquire_exclusive_use(left->active_uses)",
+        "try_acquire_exclusive_use(right->active_uses)",
+        "try_acquire_exclusive_use(output->active_uses)",
+        "try_acquire_exclusive_use(stream->active_uses)",
+    ] {
+        assert_precedes(
+            begin,
+            lease,
+            "cudaStreamBeginCapture(",
+            "C05-11 BF16 residual-add capture lease admission",
+        );
+    }
+    assert!(begin.contains("left == right || left == output || right == output"));
+    assert!(begin.contains("element_count == 0"));
+    assert!(begin.contains("RileyCudaGraphCaptureOperation::kResidualAddBf16"));
+
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_residual_add_bf16");
+    assert!(enqueue.contains("graph_residual_add_bf16<<<"));
+    assert!(enqueue.contains("cudaGetLastError"));
+    assert!(enqueue.contains("owner->residual_add_enqueue_count != 0"));
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "riley_cuda_residual_add_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-11 capture enqueue must stay allocation-free and capture-safe: {forbidden}"
+        );
+    }
+
+    for required in [
+        "pub struct OwnedGraphResidualAddBf16Resources",
+        "pub struct OwnedGraphResidualAddBf16CaptureBeginError",
+        "pub struct OwnedGraphResidualAddBf16Capture",
+        "pub struct OwnedCapturedResidualAddBf16Graph",
+        "pub struct OwnedGraphResidualAddBf16Exec",
+        "pub struct OwnedGraphResidualAddBf16Launch<'exec>",
+        "pub fn begin_owned_graph_residual_add_bf16_capture",
+        "pub fn enqueue_residual_add_bf16(&mut self)",
+        "pub fn launch<'exec>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-11 safe owner contract is missing: {required}"
+        );
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_residual_add_bf16_capture")
+        .nth(1)
+        .expect("owned BF16 residual-add graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned BF16 residual-add capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_residual_add_bf16_capture_preflight",
+        "begin_graph_residual_add_bf16_capture",
+        "C05-11 BF16 residual-add Rust preflight",
+    );
+    assert!(owned_begin.contains("OwnedGraphResidualAddBf16CaptureBeginError::recoverable"));
+    assert!(owned_begin.contains("OwnedGraphResidualAddBf16CaptureBeginError::terminal"));
+
+    for owner in [
+        "pub struct OwnedGraphResidualAddBf16Capture {",
+        "pub struct OwnedCapturedResidualAddBf16Graph {",
+        "pub struct OwnedGraphResidualAddBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphResidualAddBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before its captured resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphResidualAddBf16Exec")
+        .nth(1)
+        .expect("owned BF16 residual-add exec must remain present")
+        .split("/// Completion owner for one [`OwnedGraphResidualAddBf16Exec`] replay")
+        .next()
+        .expect("owned BF16 residual-add exec must end before its completion owner");
+    assert!(owned_exec.contains("pub fn launch<'exec>"));
+    assert!(
+        !owned_exec.contains("launch_with_input")
+            && !owned_exec.contains("launch_with_source")
+            && !owned_exec.contains("CudaBufferSpan"),
+        "C05-11 must not expose fresh-input, span, or H2D replay capability"
+    );
+
+    for forbidden in ["riley_runtime", "riley_server", "graph_decode", "llama"] {
+        assert!(
+            !graph.contains(forbidden),
+            "C05-11 graph ownership must remain model/runtime independent: {forbidden}"
         );
     }
 }

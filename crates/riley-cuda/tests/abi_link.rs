@@ -18,6 +18,7 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         CudaGraphCaptureOperation::H2D,
         CudaGraphCaptureOperation::SiluBf16,
         CudaGraphCaptureOperation::GatedMultiplyBf16,
+        CudaGraphCaptureOperation::ResidualAddBf16,
     ] {
         assert_eq!(
             operation
