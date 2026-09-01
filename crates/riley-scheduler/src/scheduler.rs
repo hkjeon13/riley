@@ -521,6 +521,8 @@ pub struct Scheduler {
     metrics: SchedulerMetrics,
     metrics_degraded: bool,
     accepting: bool,
+    #[cfg(test)]
+    test_post_validation_commit_fault_after_successful_commits: Option<usize>,
 }
 
 /// A failed consuming close that returns ownership for correction or retry.
@@ -655,6 +657,8 @@ impl Scheduler {
             metrics,
             metrics_degraded: false,
             accepting: true,
+            #[cfg(test)]
+            test_post_validation_commit_fault_after_successful_commits: None,
         };
         scheduler.refresh_metric_gauges();
         Ok(scheduler)
@@ -964,7 +968,19 @@ impl Scheduler {
         let mut commit_failed = false;
         for (item, settled) in inflight.items.into_iter().zip(settled_items) {
             let request_id = item.request_id;
-            match self.commit_reservation(item) {
+            #[cfg(test)]
+            let commit_result =
+                if self.take_test_post_validation_commit_fault(committed_items.len()) {
+                    Err(SchedulerError::InvalidPlan {
+                        field: "test fault injection",
+                        reason: "post-validation reservation commit was forced to fail",
+                    })
+                } else {
+                    self.commit_reservation(item)
+                };
+            #[cfg(not(test))]
+            let commit_result = self.commit_reservation(item);
+            match commit_result {
                 Ok(()) => committed_items.push(settled),
                 Err(error) => {
                     commit_failed = true;
@@ -1388,6 +1404,29 @@ impl Scheduler {
         snapshot.metrics_degraded = self.metrics_degraded;
         snapshot.gauges = self.current_gauges();
         Ok(snapshot)
+    }
+
+    #[cfg(test)]
+    fn arm_test_post_validation_commit_fault(&mut self, after_successful_commits: usize) {
+        assert!(
+            self.test_post_validation_commit_fault_after_successful_commits
+                .is_none(),
+            "only one post-validation test commit fault may be armed"
+        );
+        self.test_post_validation_commit_fault_after_successful_commits =
+            Some(after_successful_commits);
+    }
+
+    #[cfg(test)]
+    fn take_test_post_validation_commit_fault(&mut self, successful_commits: usize) -> bool {
+        if self.test_post_validation_commit_fault_after_successful_commits
+            == Some(successful_commits)
+        {
+            self.test_post_validation_commit_fault_after_successful_commits = None;
+            true
+        } else {
+            false
+        }
     }
 
     fn expire_waiting(&mut self, now_ns: u64) -> SchedulerResult<()> {
@@ -2635,17 +2674,24 @@ fn observe_metric(degraded: &mut bool, result: SchedulerResult<()>, operation: &
 mod tests {
     use riley_runtime::paged_kv::KvLayout;
 
-    use super::{ExecutionAbort, RequestDescriptor, RequestFinishReason, RequestId, Scheduler};
+    use super::{
+        ExecutionAbort, IterationUpdates, RequestDescriptor, RequestFinishReason, RequestId,
+        RequestState, Scheduler, SchedulerCloseOutput,
+    };
     use crate::{
         IterationOutput, IterationResult, OutputSlot, OverloadPolicy, SchedulerConfig,
         SchedulerError,
     };
 
     fn test_scheduler() -> Scheduler {
+        test_scheduler_with_max_active_sequences(1)
+    }
+
+    fn test_scheduler_with_max_active_sequences(max_active_sequences: usize) -> Scheduler {
         let config = SchedulerConfig {
             max_waiting_requests: 4,
             max_waiting_prompt_tokens: 32,
-            max_active_sequences: 1,
+            max_active_sequences,
             max_sequence_tokens: 32,
             iteration_token_budget: 4,
             max_prefill_chunk_tokens: 4,
@@ -2660,6 +2706,90 @@ mod tests {
             KvLayout::checked(1, 8, 1, 64).expect("test KV layout"),
         )
         .expect("test scheduler")
+    }
+
+    fn assert_contained_commit_updates(
+        updates: &IterationUpdates,
+        first_request_id: RequestId,
+        second_request_id: RequestId,
+    ) {
+        assert!(updates.token_events().is_empty());
+        assert!(updates.iteration_metric().is_none());
+        assert_eq!(updates.settlement_failures().len(), 1);
+        assert_eq!(
+            updates.settlement_failures()[0].request_id(),
+            second_request_id
+        );
+        assert!(matches!(
+            updates.settlement_failures()[0].error(),
+            SchedulerError::InvalidPlan {
+                field: "test fault injection",
+                reason: "post-validation reservation commit was forced to fail",
+            }
+        ));
+        assert_eq!(updates.completions().len(), 2);
+        for request_id in [first_request_id, second_request_id] {
+            assert_eq!(
+                updates
+                    .completions()
+                    .iter()
+                    .filter(|completion| completion.request_id() == request_id)
+                    .count(),
+                1,
+                "request {request_id:?} must have exactly one terminal completion"
+            );
+        }
+        assert!(updates.completions().iter().all(|completion| {
+            completion.reason() == RequestFinishReason::ExecutorFailure
+                && completion.generated_token_ids().is_empty()
+        }));
+    }
+
+    fn assert_contained_commit_scheduler_state(
+        scheduler: &Scheduler,
+        first_request_id: RequestId,
+        second_request_id: RequestId,
+    ) {
+        assert_eq!(
+            scheduler.request_state(first_request_id),
+            Some(RequestState::Failed)
+        );
+        assert_eq!(
+            scheduler.request_state(second_request_id),
+            Some(RequestState::Failed)
+        );
+        assert!(scheduler.inflight_iteration_id().is_none());
+        assert_eq!(scheduler.active_sequence_count(), 0);
+        assert_eq!(scheduler.waiting_request_count(), 0);
+        assert_eq!(scheduler.promised_kv_blocks(), 0);
+        assert_eq!(scheduler.pending_completion_count(), 0);
+        assert_eq!(scheduler.pool_stats().allocated_block_count(), 0);
+
+        let metrics = scheduler.metrics_snapshot().expect("metrics snapshot");
+        assert_eq!(metrics.requests_failed, 2);
+        assert_eq!(metrics.iterations_completed, 0);
+        assert_eq!(metrics.iterations_aborted, 1);
+        assert_eq!(metrics.gauges.waiting_requests, 0);
+        assert_eq!(metrics.gauges.waiting_prompt_tokens, 0);
+        assert_eq!(metrics.gauges.active_sequences, 0);
+        assert_eq!(metrics.gauges.promised_kv_blocks, 0);
+        assert_eq!(metrics.gauges.allocated_kv_blocks, 0);
+        assert_eq!(metrics.gauges.pending_completions, 0);
+        assert_eq!(metrics.gauges.outstanding_iterations, 0);
+    }
+
+    fn assert_closed_ownership_quiescent(closed: &SchedulerCloseOutput) {
+        assert!(closed.completions().is_empty());
+        assert!(closed.settlement_failures().is_empty());
+        let gauges = closed.final_metrics().gauges;
+        assert!(!gauges.accepting);
+        assert_eq!(gauges.waiting_requests, 0);
+        assert_eq!(gauges.waiting_prompt_tokens, 0);
+        assert_eq!(gauges.active_sequences, 0);
+        assert_eq!(gauges.promised_kv_blocks, 0);
+        assert_eq!(gauges.allocated_kv_blocks, 0);
+        assert_eq!(gauges.pending_completions, 0);
+        assert_eq!(gauges.outstanding_iterations, 0);
     }
 
     #[test]
@@ -2787,5 +2917,58 @@ mod tests {
 
         scheduler.active_sequences = 1;
         scheduler.close(3, None).expect("exact scheduler cleanup");
+    }
+
+    #[test]
+    fn post_validation_commit_fault_after_one_commit_is_contained() {
+        let mut scheduler = test_scheduler_with_max_active_sequences(2);
+        let first = scheduler
+            .submit(RequestDescriptor::new(vec![1], 1), 0)
+            .expect("first active request");
+        let second = scheduler
+            .submit(RequestDescriptor::new(vec![2], 1), 0)
+            .expect("second active request");
+        let plan = scheduler
+            .plan_iteration(1)
+            .expect("two-request iteration plan")
+            .into_parts()
+            .0
+            .expect("both active requests must be planned");
+        assert_eq!(plan.prefill_items().len(), 2);
+        assert_eq!(plan.prefill_items()[0].request_id(), first.request_id());
+        assert_eq!(
+            plan.prefill_items()[0].output_slot(),
+            Some(OutputSlot::new(0))
+        );
+        assert_eq!(plan.prefill_items()[1].request_id(), second.request_id());
+        assert_eq!(
+            plan.prefill_items()[1].output_slot(),
+            Some(OutputSlot::new(1))
+        );
+        let result = IterationResult::new(
+            plan.iteration_id(),
+            vec![
+                IterationOutput::new(OutputSlot::new(0), 11, false),
+                IterationOutput::new(OutputSlot::new(1), 12, false),
+            ],
+            23,
+            29,
+        )
+        .expect("fully validated two-output result");
+
+        scheduler.arm_test_post_validation_commit_fault(1);
+        let updates = scheduler
+            .complete_iteration(&result, 2)
+            .expect("post-validation fault must be contained");
+        assert_contained_commit_updates(&updates, first.request_id(), second.request_id());
+        assert_contained_commit_scheduler_state(
+            &scheduler,
+            first.request_id(),
+            second.request_id(),
+        );
+        let closed = scheduler
+            .close(3, None)
+            .expect("contained scheduler cleanup");
+        assert_closed_ownership_quiescent(&closed);
     }
 }

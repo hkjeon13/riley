@@ -1,8 +1,9 @@
 # C03 — Scheduler Output Routing Property Fuzz
 
-**상태:** In progress — C03-A CPU-only reference harness와 C03-B의 fixed corpus/CPU topology
-contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다. C03-B의 actual CUDA fixed-corpus
-execution과 C03의 formal completion은 C02 actual qualification 뒤에만 수행한다.
+**상태:** In progress — C03-A CPU-only reference harness의 일부와 C03-Ax의 deterministic
+test-only post-validation fault-containment unit contract가 구현되었다. C03-B의 fixed corpus/CPU
+topology contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다. C03-B의 actual CUDA
+fixed-corpus execution과 C03의 formal completion은 C02 actual qualification 뒤에만 수행한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** scheduler plan부터 sampling/commit/terminal event까지 request-token 대응 관계를 model-based property test로 고정한다.
 
@@ -16,6 +17,10 @@ synthetic `IterationResult`만 사용하며 CUDA, server, Docker, root service, 
 freeze, evidence 또는 qualification을 실행하거나 주장하지 않는다. 따라서 C02-P2의
 administrator provisioning과 병렬로 구현할 수 있지만, 그 결과는 candidate-bound routing
 evidence나 C02 pass가 아니며 이후 actual C02 candidate에 포함해 재검증한다.
+
+C03-Ax는 완전한 validation 뒤 containment만 검증하는 좁은 예외로, 두 private `#[cfg(test)]`
+unit seam을 사용한다. 이는 public API/re-export, Cargo feature, 환경변수·설정, server/CUDA path를
+추가하거나 바꾸지 않고 arbitrary trace operation으로 노출되지 않는다.
 
 **C03-B**의 GPU corpus/fixture source는 same-candidate integration replay를 주장하려면 C02
 candidate freeze 전에 그 candidate source archive에 포함되어야 한다. GPU fixed-corpus execution,
@@ -105,6 +110,30 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 - nightly 또는 scheduled run에서 1,000,000 traces
 - failure 시 source seed와 full descriptor를 출력한다. candidate-minimized trace는 reducer가 명시적으로
   구현된 grammar slice에만 추가한다.
+
+#### C03-Ax — test-only post-validation fault-containment seam
+
+C03-Ax는 public scheduler API로는 도달할 수 없는, 이미 valid한 feedback의 publication 직전
+failure containment만 CPU unit test로 고정한다. 이는 general fault-injection grammar나 production
+failure mode를 추가하는 작업이 아니다.
+
+- sampling seam은 dense sample count, output-count의 `u32` 변환, vocabulary 검증이 모두 끝난 뒤,
+  commit output DTO를 push하기 직전에 한 번만 실패한다. 실패는 owning `IterationCommitFailure`로
+  downloaded output을 돌려주며, abort data는 계속 `DeviceQuiescedMutationUnknown`이다.
+- scheduler seam은 iteration-result validation, output/completion capacity 확보, completion publication
+  prevalidation이 모두 성공한 뒤 각 reservation의 `commit_reservation` 직전에만 동작한다.
+  `after_successful_commits = 1`은 첫 reservation을 실제로 commit한 뒤 두 번째 reservation만
+  실패시킨다.
+- 두 seam은 private `#[cfg(test)]` state/method로만 존재한다. Cargo feature, CLI, 환경변수, config,
+  public/reexported API, server/runtime/CUDA 경로를 추가하거나 바꾸지 않는다.
+- acceptance는 valid sample이 token DTO로 publish되기 전 owning failure로 되돌아오는지, commit
+  containment이 token 0개 publication, affected request 각각 정확히 한 번의 terminal
+  `ExecutorFailure`, KV reclaim, iteration metric 부재, completed 0/aborted 1 metric, close 뒤
+  ownership gauge 0을 보장하는지 검증한다. terminal tombstone, physical capacity, completion capacity는
+  의도적으로 0이 아닌 gauge이므로 이 검사의 대상이 아니다.
+
+C03-Ax는 actual device mutation, CUDA stream fault, multi-event trace grammar, reducer, candidate evidence
+또는 C03 formal completion을 주장하지 않는다.
 
 현재 구현 slice는 CUDA를 쓰지 않는 10,000 valid-feedback permutation trace와 10,000
 `FaultAction` microtrace, 10,000 bounded mixed-stage trace, 10,000 bounded operation-sequence
@@ -259,17 +288,18 @@ JSON으로 보존한다. 각 case는 token/index, deferred cancellation priority
 
 이는 `DeviceQuiescedMutationUnknown`, pending close disposition, stale/missing/unplanned feedback,
 settled-boundary cancellation, partial prefill, queue/aging/timeout, multiple deferred cancel/abort,
-fault injection, general reducer/receipt 또는 GPU evidence를 구현·주장하지 않는다.
+C03-Ax boundary seam, general reducer/receipt 또는 GPU evidence를 구현·주장하지 않는다.
 
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
-shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler, scheduled 1,000,000 seed rotation,
-post-validation sampling/commit fault injection은 남아 있다. failure-signature/same-assertion preservation,
-multi-edit/delta-debugging reduction도 별도 범위다. `bounded-mixed-program-v1`도 Plan/Complete
+shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler,
+scheduled 1,000,000 seed rotation, generalized multi-event fault-injection grammar는 남아 있다.
+failure-signature/same-assertion preservation, multi-edit/delta-debugging reduction도 별도 범위다.
+`bounded-mixed-program-v1`도 Plan/Complete
 분리, in-flight deferred cancel, abort/retry, stale/missing/unplanned feedback, `DeviceQuiescedMutationUnknown`,
 queue/aging/timeout, partial prefill 또는 injection seam을 구현·주장하지 않는다. V1/V2 shrinker는 각각
 작은 grammar의 deterministic greedy local minimum일 뿐 일반 trace shrinker나 globally minimal
-counterexample을 주장하지 않는다. 마지막 항목은 현 public scheduler API에 injection seam이 없으므로
-별도 test-only seam 계약으로 설계한다.
+counterexample을 주장하지 않는다. C03-Ax는 bounded-mixed-program-v1의 grammar를 확장하지 않는
+별도 unit-only containment contract다.
 
 ### Deterministic corpus
 
@@ -390,6 +420,8 @@ operation list를 함께 포함한다. general grammar의 durable format은 V2 c
 ## 8. 파일 변경
 
 ```text
+crates/riley-scheduler/src/execution.rs
+crates/riley-scheduler/src/scheduler.rs
 crates/riley-scheduler/tests/general_mixed_operation_routing.rs
 crates/riley-scheduler/tests/support/general_mixed_operation_trace.rs
 crates/riley-scheduler/tests/support/routing_fuzz_receipt.rs
@@ -408,8 +440,9 @@ benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 
 현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice는 기존 test-only `serde_json` dev-dependency만
 사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
-않는다. 이후 arbitrary general grammar, durable cross-version replay contract, failure corpus 자동 등록,
-delta debugging, fault injection seam은 별도 PR 범위다.
+않는다. C03-Ax도 동일하게 private test-only source만 바꾼다. 이후 arbitrary general grammar,
+durable cross-version replay contract, failure corpus 자동 등록, delta debugging, arbitrary/multi-event
+fault-injection grammar는 별도 PR 범위다.
 
 ## 9. Observability assertion
 
@@ -465,6 +498,9 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   10,000 seeded replay, settled cancel/terminal-once/final quiescence test 통과
 - in-flight raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
   10,000 seeded replay, deferred cancel complete/abort-retry/terminal-once/final quiescence test 통과
+- C03-Ax test-only seam이 valid sample validation 뒤 owning abort-safe failure를 돌려주고, 첫
+  reservation commit 뒤 두 번째 forced failure에서 token 미발행, terminal-once, KV reclaim,
+  completed 0/aborted 1 및 close ownership quiescence를 통과
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B source: strict `gpu-fixed-v1` corpus parse와 CPU topology/KV/deferred-cancel/abort contract 통과
@@ -479,7 +515,7 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 C03-A의 formal CPU completion은 scheduler event 순서와 output slot permutation을 deterministic
 seeded CPU trace로 생성해 reference model과 production state가 일치하고, mixed-operation
 generator·shrink·counterexample corpus/replay·failure seed와 최소 trace까지 갖출 때다. 현재
-valid/fault microtrace, two-wave, bounded raw-program slice는 이를 향한 partial coverage이며 아직
-C03-A 완료 선언 근거가 아니다.
+valid/fault microtrace, two-wave, bounded raw-program 및 C03-Ax의 두 deterministic post-validation
+seam은 이를 향한 partial coverage이며 아직 C03-A 완료 선언 근거가 아니다.
 C03의 formal completion은 C03-B가 C02 actual qualification 뒤 GPU corpus에서도 exact mapping을
 확인할 때만 선언한다.

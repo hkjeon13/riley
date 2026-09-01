@@ -637,6 +637,12 @@ pub struct DownloadedLlamaIteration {
     commit_outputs: Vec<IterationOutput>,
 }
 
+#[cfg(test)]
+thread_local! {
+    static AFTER_SAMPLE_VALIDATION_TEST_FAULT: std::cell::Cell<bool> =
+        const { std::cell::Cell::new(false) };
+}
+
 #[derive(Debug)]
 #[cfg_attr(not(feature = "cuda"), allow(dead_code))]
 enum DownloadedLlamaOutput {
@@ -798,6 +804,21 @@ impl DownloadedLlamaIteration {
         )
     }
 
+    #[cfg(test)]
+    fn arm_after_sample_validation_test_fault() {
+        AFTER_SAMPLE_VALIDATION_TEST_FAULT.with(|fault| {
+            assert!(
+                !fault.replace(true),
+                "only one post-validation sample test fault may be armed"
+            );
+        });
+    }
+
+    #[cfg(test)]
+    fn take_after_sample_validation_test_fault() -> bool {
+        AFTER_SAMPLE_VALIDATION_TEST_FAULT.with(|fault| fault.replace(false))
+    }
+
     /// Consumes sampled tokens in dense slot order and builds commit feedback.
     ///
     /// The output vector was reserved before device dispatch, so successful
@@ -846,6 +867,16 @@ impl DownloadedLlamaIteration {
                     },
                 ));
             }
+        }
+        #[cfg(test)]
+        if Self::take_after_sample_validation_test_fault() {
+            return Err(IterationCommitFailure::new(
+                self,
+                IterationAdapterError::InvalidRuntimeOutput {
+                    field: "test fault injection",
+                    reason: "sample validation completed before commit output assembly",
+                },
+            ));
         }
         for (raw_slot, sample) in (0..output_count_u32).zip(samples.iter().copied()) {
             self.commit_outputs.push(IterationOutput::new(
@@ -1749,6 +1780,66 @@ mod tests {
             crate::ExecutionAbort::DeviceQuiescedMutationUnknown
         );
         assert_eq!(failure.iteration().logits_bf16_native(), &[0; 4]);
+    }
+
+    #[test]
+    fn post_validation_test_fault_retains_unpublished_download_and_is_one_shot() {
+        let downloaded = DownloadedLlamaIteration {
+            iteration_id: IterationId::new(12).expect("iteration"),
+            vocabulary_size: 3,
+            output_count: 1,
+            output: DownloadedLlamaOutput::Logits(vec![0; 6]),
+            commit_outputs: Vec::with_capacity(1),
+        };
+        DownloadedLlamaIteration::arm_after_sample_validation_test_fault();
+
+        let validation_failure = downloaded
+            .into_result(
+                &[SampledIterationToken::new(3, false)],
+                IterationTiming::new(80, 5),
+            )
+            .expect_err("sample validation must take precedence over the test seam");
+        assert!(matches!(
+            validation_failure.error(),
+            IterationAdapterError::SampleTokenOutOfRange {
+                slot,
+                token_id: 3,
+                vocabulary_size: 3,
+            } if *slot == OutputSlot::new(0)
+        ));
+
+        let (downloaded, _) = validation_failure.into_parts();
+        let injected_failure = downloaded
+            .into_result(
+                &[SampledIterationToken::new(2, false)],
+                IterationTiming::new(80, 5),
+            )
+            .expect_err("test seam must fail after valid sample validation");
+        assert!(matches!(
+            injected_failure.error(),
+            IterationAdapterError::InvalidRuntimeOutput {
+                field: "test fault injection",
+                reason: "sample validation completed before commit output assembly",
+            }
+        ));
+        assert!(injected_failure.iteration().commit_outputs.is_empty());
+        assert_eq!(injected_failure.iteration().logits_bf16_native(), &[0; 6]);
+        assert_eq!(injected_failure.abort_data().0.get(), 12);
+        assert_eq!(
+            injected_failure.abort_data().1,
+            crate::ExecutionAbort::DeviceQuiescedMutationUnknown
+        );
+
+        let (downloaded, _) = injected_failure.into_parts();
+        let result = downloaded
+            .into_result(
+                &[SampledIterationToken::new(2, false)],
+                IterationTiming::new(80, 5),
+            )
+            .expect("one-shot seam must leave the recovered download retryable");
+        assert_eq!(result.outputs().len(), 1);
+        assert_eq!(result.outputs()[0].slot(), OutputSlot::new(0));
+        assert_eq!(result.outputs()[0].token_id(), 2);
     }
 
     #[test]
