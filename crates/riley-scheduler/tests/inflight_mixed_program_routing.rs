@@ -15,7 +15,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use inflight_mixed_program_trace::{
     InflightMixedProgramExpectedPlan, InflightMixedProgramOperation, InflightMixedProgramOracle,
     InflightMixedProgramTrace, inflight_mixed_program_corpus, inflight_symbolic_prompt_token,
-    parse_inflight_mixed_program_descriptor, serialize_inflight_mixed_program_descriptor,
+    minimize_inflight_mixed_program_trace, parse_inflight_mixed_program_descriptor,
+    serialize_inflight_mixed_program_descriptor,
 };
 use riley_runtime::paged_kv::KvLayout;
 use riley_scheduler::{
@@ -261,16 +262,26 @@ fn inflight_mixed_program_fails(trace: &InflightMixedProgramTrace) -> bool {
     .is_err()
 }
 
-fn inflight_mixed_program_failure_report(trace: &InflightMixedProgramTrace) -> String {
-    let descriptor = serialize_inflight_mixed_program_descriptor("failing-original", trace);
+fn inflight_mixed_program_failure_report(
+    source: &InflightMixedProgramTrace,
+    minimized: &InflightMixedProgramTrace,
+) -> String {
+    let source_descriptor = serialize_inflight_mixed_program_descriptor("failing-original", source);
+    let minimized_descriptor =
+        serialize_inflight_mixed_program_descriptor("failing-minimized", minimized);
     format!(
         "C03-A inflight-mixed-program-v1 failed\n\
-         source_descriptor_json:\n\
-         {descriptor}\
-         source_operations=[{}]\n\
-         scope=bounded-valid-inflight-plan-lifecycle-only\n\
-         not_established=unbounded-or-general-scheduler,device-quiesced-abort,pending-close,invalid-feedback,partial-prefill,queue-aging,fault-injection,general-reducer,receipt,gpu,c02-qualification",
-        trace.describe_operations(),
+         original_descriptor_json:\n\
+         {source_descriptor}\
+         minimized_descriptor_json:\n\
+         {minimized_descriptor}\
+         original_operations=[{}]\n\
+         minimized_operations=[{}]\n\
+         reducer_scope=v1-raw-pending-lifecycle-local\n\
+         failure_predicate=inner-replayer-panicked-only\n\
+         not_established=panic-site,payload,failure-signature,root-cause,general-or-global-minimum,label-or-slot-rebase,arbitrary-operation-deletion,unbounded-or-general-scheduler,device-quiesced-abort,pending-close,invalid-feedback,partial-prefill,queue-aging,fault-injection,receipt,gpu,c02-qualification",
+        source.describe_operations(),
+        minimized.describe_operations(),
     )
 }
 
@@ -278,7 +289,11 @@ fn replay_inflight_mixed_program(trace: &InflightMixedProgramTrace) {
     if !inflight_mixed_program_fails(trace) {
         return;
     }
-    panic!("{}", inflight_mixed_program_failure_report(trace));
+    let minimized = minimize_inflight_mixed_program_trace(trace, inflight_mixed_program_fails);
+    panic!(
+        "{}",
+        inflight_mixed_program_failure_report(trace, &minimized)
+    );
 }
 
 fn three_slot_mixed_trace(feedback_slot_order: Vec<u8>) -> InflightMixedProgramTrace {
@@ -308,6 +323,95 @@ fn three_slot_mixed_trace(feedback_slot_order: Vec<u8>) -> InflightMixedProgramT
             InflightMixedProgramOperation::Close,
         ],
     }
+}
+
+fn raw_abort_retry_trace() -> InflightMixedProgramTrace {
+    InflightMixedProgramTrace {
+        seed: 0x7b6a_5948_3726_1504,
+        operations: vec![
+            InflightMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperation::Plan,
+            InflightMixedProgramOperation::Complete {
+                feedback_slot_order: vec![0],
+            },
+            InflightMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            InflightMixedProgramOperation::Plan,
+            InflightMixedProgramOperation::AbortNotDispatched,
+            InflightMixedProgramOperation::Plan,
+            InflightMixedProgramOperation::Complete {
+                feedback_slot_order: vec![2, 1, 0],
+            },
+            InflightMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn raw_deferred_complete_trace() -> InflightMixedProgramTrace {
+    InflightMixedProgramTrace {
+        seed: 0x5a4b_3c2d_1e0f_9876,
+        operations: vec![
+            InflightMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            InflightMixedProgramOperation::Plan,
+            InflightMixedProgramOperation::Complete {
+                feedback_slot_order: vec![0],
+            },
+            InflightMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 1,
+            },
+            InflightMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            InflightMixedProgramOperation::Plan,
+            InflightMixedProgramOperation::Cancel { label: 3 },
+            InflightMixedProgramOperation::Complete {
+                feedback_slot_order: vec![2, 0, 1],
+            },
+            InflightMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn raw_lifecycle_reducer_predicate(trace: &InflightMixedProgramTrace) -> bool {
+    trace
+        .operations
+        .iter()
+        .filter(|operation| matches!(operation, InflightMixedProgramOperation::Plan))
+        .count()
+        >= 2
+        && trace.operations.iter().any(|operation| {
+            matches!(
+                operation,
+                InflightMixedProgramOperation::Complete {
+                    feedback_slot_order
+                } if feedback_slot_order == &[2, 1, 0]
+            )
+        })
+}
+
+fn report_descriptor(report: &str, start: &str, end: &str) -> String {
+    report
+        .split_once(start)
+        .expect("in-flight reducer report contains the descriptor start")
+        .1
+        .split_once(end)
+        .expect("in-flight reducer report contains the descriptor end")
+        .0
+        .to_owned()
 }
 
 fn descriptor_document_with_operations(operations: &str) -> String {
@@ -505,6 +609,231 @@ fn inflight_mixed_program_replays_every_three_slot_feedback_permutation() {
     ] {
         replay_inflight_mixed_program(&three_slot_mixed_trace(feedback_slot_order));
     }
+}
+
+#[test]
+fn inflight_mixed_program_reducer_contracts_only_valid_raw_lifecycles() {
+    let abort_source = raw_abort_retry_trace();
+    abort_source
+        .validate()
+        .expect("raw abort-retry reducer fixture stays valid");
+    let mut contracted = abort_source.clone();
+    contracted.operations.remove(6);
+    contracted.operations.remove(6);
+    contracted
+        .validate()
+        .expect("raw abort-retry contraction stays valid");
+
+    let mut reduced_capacity = abort_source.clone();
+    let InflightMixedProgramOperation::Submit { max_new_tokens, .. } =
+        &mut reduced_capacity.operations[3]
+    else {
+        panic!("raw abort-retry fixture keeps label-two submission at index three");
+    };
+    *max_new_tokens = 1;
+    reduced_capacity
+        .validate()
+        .expect("raw output-capacity reduction stays valid");
+
+    let mut identity = abort_source.clone();
+    let InflightMixedProgramOperation::Complete {
+        feedback_slot_order,
+    } = &mut identity.operations[8]
+    else {
+        panic!("raw abort-retry fixture keeps final complete at index eight");
+    };
+    *feedback_slot_order = vec![0, 1, 2];
+    let mut adjacent = abort_source.clone();
+    let InflightMixedProgramOperation::Complete {
+        feedback_slot_order,
+    } = &mut adjacent.operations[8]
+    else {
+        panic!("raw abort-retry fixture keeps final complete at index eight");
+    };
+    *feedback_slot_order = vec![1, 2, 0];
+
+    let abort_candidates = abort_source.shrink_candidates();
+    assert_eq!(abort_candidates.first(), Some(&contracted));
+    assert!(abort_candidates.contains(&reduced_capacity));
+    assert!(abort_candidates.contains(&identity));
+    assert!(abort_candidates.contains(&adjacent));
+
+    let deferred_source = raw_deferred_complete_trace();
+    deferred_source
+        .validate()
+        .expect("raw deferred-complete reducer fixture stays valid");
+    let mut cancel_removed = deferred_source.clone();
+    cancel_removed.operations.remove(6);
+    cancel_removed
+        .validate()
+        .expect("raw deferred cancellation removal stays valid");
+    assert_eq!(
+        deferred_source.shrink_candidates().first(),
+        Some(&cancel_removed)
+    );
+
+    for candidate in [
+        contracted,
+        reduced_capacity,
+        identity,
+        adjacent,
+        cancel_removed,
+    ] {
+        let document = serialize_inflight_mixed_program_descriptor("raw-lifecycle", &candidate);
+        let parsed = parse_inflight_mixed_program_descriptor(&document)
+            .expect("raw lifecycle candidate stays strict-canonical");
+        assert_eq!(parsed.trace, candidate);
+        replay_inflight_mixed_program_inner(&candidate);
+    }
+}
+
+#[test]
+fn inflight_mixed_program_reducer_rejects_raw_lifecycle_mutations_that_need_rebase() {
+    let source = inflight_mixed_program_corpus()
+        .into_iter()
+        .find(|named| named.case_id == "deferred-decoder-cancel-abort-retry")
+        .expect("C03 in-flight corpus keeps the deferred decoder abort/retry boundary")
+        .trace;
+    let candidates = source.shrink_candidates();
+
+    let mut cancel_removed = source.clone();
+    cancel_removed.operations.remove(6);
+    assert!(
+        cancel_removed.validate().is_err(),
+        "removing the deferred cancel changes the retry complete arity without slot rebase"
+    );
+    assert!(
+        !candidates.contains(&cancel_removed),
+        "raw reducer must reject deferred-cancel deletion that needs slot rebase"
+    );
+
+    let mut abort_retry_removed = source.clone();
+    abort_retry_removed.operations.remove(7);
+    abort_retry_removed.operations.remove(7);
+    assert!(
+        abort_retry_removed.validate().is_err(),
+        "removing abort/retry keeps a two-slot complete for its original three-slot plan"
+    );
+    assert!(
+        !candidates.contains(&abort_retry_removed),
+        "raw reducer must reject abort/retry deletion that needs pending-plan rebase"
+    );
+
+    let mut first_wave_capacity_reduced = source.clone();
+    let InflightMixedProgramOperation::Submit { max_new_tokens, .. } =
+        &mut first_wave_capacity_reduced.operations[1]
+    else {
+        panic!("deferred decoder corpus keeps first-wave label-two submit at index one");
+    };
+    *max_new_tokens = 1;
+    assert!(
+        first_wave_capacity_reduced.validate().is_err(),
+        "reducing first-wave capacity changes the retry complete arity without slot rebase"
+    );
+    assert!(
+        !candidates.contains(&first_wave_capacity_reduced),
+        "raw reducer must reject capacity reduction that needs retry-slot rebase"
+    );
+}
+
+#[test]
+fn inflight_mixed_program_reducer_candidates_are_deduped_ranked_and_canonical() {
+    let mut sources = inflight_mixed_program_corpus()
+        .into_iter()
+        .map(|named| named.trace)
+        .collect::<Vec<_>>();
+    sources.push(raw_abort_retry_trace());
+    sources.push(raw_deferred_complete_trace());
+    sources.extend((1_u64..=1_024).map(|index| {
+        InflightMixedProgramTrace::from_seed(0x9c54_0fe2_a731_b86d_u64.wrapping_mul(index))
+    }));
+
+    for source in sources {
+        let source_rank = source.shrink_rank();
+        let candidates = source.shrink_candidates();
+        for (candidate_index, candidate) in candidates.iter().enumerate() {
+            assert!(
+                !candidates[..candidate_index].contains(candidate),
+                "in-flight reducer emitted a duplicate candidate"
+            );
+            assert_eq!(candidate.seed, source.seed);
+            assert!(matches!(
+                candidate.operations.last(),
+                Some(InflightMixedProgramOperation::Close)
+            ));
+            assert!(candidate.shrink_rank() < source_rank);
+            let document =
+                serialize_inflight_mixed_program_descriptor("candidate-canonical", candidate);
+            let parsed = parse_inflight_mixed_program_descriptor(&document)
+                .expect("in-flight reducer candidate stays strict-canonical");
+            assert_eq!(parsed.trace, *candidate);
+            replay_inflight_mixed_program_inner(candidate);
+        }
+    }
+}
+
+#[test]
+fn inflight_mixed_program_reducer_finds_a_raw_lifecycle_local_minimum() {
+    let source = raw_abort_retry_trace();
+    assert!(raw_lifecycle_reducer_predicate(&source));
+    let minimized = minimize_inflight_mixed_program_trace(&source, raw_lifecycle_reducer_predicate);
+    assert_eq!(minimized.seed, source.seed);
+    assert!(minimized.shrink_rank() < source.shrink_rank());
+    assert!(raw_lifecycle_reducer_predicate(&minimized));
+    assert!(
+        !minimized.operations.iter().any(|operation| {
+            matches!(operation, InflightMixedProgramOperation::AbortNotDispatched)
+        }),
+        "synthetic predicate keeps the raw abort/retry contraction"
+    );
+    let document = serialize_inflight_mixed_program_descriptor("raw-local-minimum", &minimized);
+    let parsed = parse_inflight_mixed_program_descriptor(&document)
+        .expect("raw in-flight local minimum stays strict-canonical");
+    assert_eq!(parsed.trace, minimized);
+    replay_inflight_mixed_program_inner(&source);
+    replay_inflight_mixed_program_inner(&minimized);
+    assert_eq!(
+        minimize_inflight_mixed_program_trace(&minimized, raw_lifecycle_reducer_predicate),
+        minimized
+    );
+    assert!(
+        minimized
+            .shrink_candidates()
+            .iter()
+            .all(|candidate| !raw_lifecycle_reducer_predicate(candidate)),
+        "in-flight reducer result must be a local minimum for its fixed candidate order"
+    );
+}
+
+#[test]
+fn inflight_mixed_program_failure_report_preserves_source_and_local_minimum() {
+    let source = raw_abort_retry_trace();
+    let minimized = minimize_inflight_mixed_program_trace(&source, raw_lifecycle_reducer_predicate);
+    let report = inflight_mixed_program_failure_report(&source, &minimized);
+    assert!(report.contains("reducer_scope=v1-raw-pending-lifecycle-local"));
+    assert!(report.contains("failure_predicate=inner-replayer-panicked-only"));
+    assert!(report.contains("not_established=panic-site,payload,failure-signature,root-cause"));
+    assert!(report.contains("original_operations=["));
+    assert!(report.contains("minimized_operations=["));
+
+    let original_document = report_descriptor(
+        &report,
+        "original_descriptor_json:\n",
+        "minimized_descriptor_json:\n",
+    );
+    let minimized_document = report_descriptor(
+        &report,
+        "minimized_descriptor_json:\n",
+        "original_operations=[",
+    );
+    let parsed_original = parse_inflight_mixed_program_descriptor(&original_document)
+        .expect("failure report source descriptor stays strict-canonical");
+    let parsed_minimized = parse_inflight_mixed_program_descriptor(&minimized_document)
+        .expect("failure report minimized descriptor stays strict-canonical");
+    assert_eq!(parsed_original.case_id, "failing-original");
+    assert_eq!(parsed_original.trace, source);
+    assert_eq!(parsed_minimized.case_id, "failing-minimized");
+    assert_eq!(parsed_minimized.trace, minimized);
 }
 
 #[test]

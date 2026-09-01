@@ -187,6 +187,140 @@ impl InflightMixedProgramTrace {
             .join(" -> ")
     }
 
+    /// Returns deterministic raw-lifecycle simplifications for the bounded
+    /// in-flight V1 grammar.
+    ///
+    /// The candidate order is deferred-cancel removal, one adjacent
+    /// `abort(not-dispatched) -> plan` contraction, each `max_new_tokens`
+    /// reduction from two to one, direct identity complete permutations, then
+    /// one left-to-right adjacent inversion swap. Candidates intentionally
+    /// retain their raw labels and feedback slots: the grammar validator and
+    /// strict codec reject every lifecycle contraction whose later pending
+    /// plan or complete arity no longer matches. This is not a label-aware
+    /// rebase or a general operation reducer.
+    #[must_use]
+    pub fn shrink_candidates(&self) -> Vec<Self> {
+        self.validate()
+            .expect("in-flight mixed shrinker requires a valid source descriptor");
+        let source_rank = self.shrink_rank();
+        let mut candidates = Vec::new();
+
+        if let Some(cancel_index) = self
+            .operations
+            .iter()
+            .position(|operation| matches!(operation, InflightMixedProgramOperation::Cancel { .. }))
+        {
+            let mut candidate = self.clone();
+            candidate.operations.remove(cancel_index);
+            push_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for operation_index in 0..self.operations.len().saturating_sub(1) {
+            if matches!(
+                self.operations[operation_index],
+                InflightMixedProgramOperation::AbortNotDispatched
+            ) && matches!(
+                self.operations[operation_index + 1],
+                InflightMixedProgramOperation::Plan
+            ) {
+                let mut candidate = self.clone();
+                candidate.operations.remove(operation_index);
+                candidate.operations.remove(operation_index);
+                push_reduction_candidate(&mut candidates, source_rank, &candidate);
+            }
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperation::Submit {
+                max_new_tokens: 2, ..
+            } = operation
+            else {
+                continue;
+            };
+            let mut candidate = self.clone();
+            let InflightMixedProgramOperation::Submit { max_new_tokens, .. } =
+                &mut candidate.operations[operation_index]
+            else {
+                unreachable!("in-flight submit index stays a submit");
+            };
+            *max_new_tokens = 1;
+            push_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperation::Complete {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            let canonical = canonical_slot_order(feedback_slot_order.len());
+            if *feedback_slot_order != canonical {
+                let mut candidate = self.clone();
+                let InflightMixedProgramOperation::Complete {
+                    feedback_slot_order,
+                } = &mut candidate.operations[operation_index]
+                else {
+                    unreachable!("in-flight complete index stays a complete");
+                };
+                *feedback_slot_order = canonical;
+                push_reduction_candidate(&mut candidates, source_rank, &candidate);
+            }
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let InflightMixedProgramOperation::Complete {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            for slot_index in 0..feedback_slot_order.len().saturating_sub(1) {
+                if feedback_slot_order[slot_index] > feedback_slot_order[slot_index + 1] {
+                    let mut candidate = self.clone();
+                    let InflightMixedProgramOperation::Complete {
+                        feedback_slot_order,
+                    } = &mut candidate.operations[operation_index]
+                    else {
+                        unreachable!("in-flight complete index stays a complete");
+                    };
+                    feedback_slot_order.swap(slot_index, slot_index + 1);
+                    push_reduction_candidate(&mut candidates, source_rank, &candidate);
+                }
+            }
+        }
+        candidates
+    }
+
+    /// Returns the lexicographic rank used by this raw in-flight local
+    /// reducer: operation count, deferred-cancel presence, total output
+    /// capacity, then complete-feedback inversions. It is not a general
+    /// counterexample metric.
+    #[must_use]
+    pub fn shrink_rank(&self) -> (usize, usize, usize, usize) {
+        self.validate()
+            .expect("in-flight mixed shrink rank requires a valid descriptor");
+        let mut cancellation_count = 0_usize;
+        let mut total_max_new_tokens = 0_usize;
+        let mut feedback_inversions = 0_usize;
+        for operation in &self.operations {
+            match operation {
+                InflightMixedProgramOperation::Submit { max_new_tokens, .. } => {
+                    total_max_new_tokens += usize::from(*max_new_tokens);
+                }
+                InflightMixedProgramOperation::Cancel { .. } => cancellation_count += 1,
+                InflightMixedProgramOperation::Complete {
+                    feedback_slot_order,
+                } => feedback_inversions += inversion_count(feedback_slot_order),
+                InflightMixedProgramOperation::Plan
+                | InflightMixedProgramOperation::AbortNotDispatched
+                | InflightMixedProgramOperation::Close => {}
+            }
+        }
+        (
+            self.operations.len(),
+            cancellation_count,
+            total_max_new_tokens,
+            feedback_inversions,
+        )
+    }
+
     /// Validates all syntax-independent V1 state-machine bounds and transitions.
     pub fn validate(&self) -> Result<(), String> {
         validate_operations(&self.operations)
@@ -267,6 +401,71 @@ pub fn parse_inflight_mixed_program_descriptor(
         return Err("in-flight mixed program descriptor JSON is not canonical".to_owned());
     }
     descriptor.into_named_trace()
+}
+
+/// Greedily minimizes a reproducing bounded in-flight raw program over the
+/// fixed raw-lifecycle candidate order.
+///
+/// The source and every candidate are strict-codec round-tripped before the
+/// caller's predicate sees them. The returned descriptor is only a local
+/// minimum for this bounded grammar and predicate; it does not preserve a
+/// panic site, payload, failure signature, or root cause.
+pub fn minimize_inflight_mixed_program_trace<F>(
+    trace: &InflightMixedProgramTrace,
+    mut reproduces: F,
+) -> InflightMixedProgramTrace
+where
+    F: FnMut(&InflightMixedProgramTrace) -> bool,
+{
+    let mut minimized = strict_round_trip_trace(trace, "shrink-source");
+    assert!(
+        reproduces(&minimized),
+        "in-flight mixed minimization requires a reproducing source trace"
+    );
+    loop {
+        let mut next = None;
+        for candidate in minimized.shrink_candidates() {
+            let candidate = strict_round_trip_trace(&candidate, "shrink-candidate");
+            if reproduces(&candidate) {
+                next = Some(candidate);
+                break;
+            }
+        }
+        let Some(candidate) = next else {
+            return minimized;
+        };
+        minimized = candidate;
+    }
+}
+
+fn strict_round_trip_trace(
+    trace: &InflightMixedProgramTrace,
+    case_id: &str,
+) -> InflightMixedProgramTrace {
+    let document = serialize_inflight_mixed_program_descriptor(case_id, trace);
+    let parsed = parse_inflight_mixed_program_descriptor(&document)
+        .expect("in-flight mixed shrink descriptor stays strict-canonical");
+    assert_eq!(parsed.case_id, case_id);
+    assert_eq!(parsed.trace, *trace);
+    parsed.trace
+}
+
+fn push_reduction_candidate(
+    candidates: &mut Vec<InflightMixedProgramTrace>,
+    source_rank: (usize, usize, usize, usize),
+    candidate: &InflightMixedProgramTrace,
+) {
+    if candidate.validate().is_err() {
+        return;
+    }
+    let candidate = strict_round_trip_trace(candidate, "shrink-candidate");
+    assert!(
+        candidate.shrink_rank() < source_rank,
+        "in-flight mixed shrink candidate must strictly reduce its rank"
+    );
+    if !candidates.contains(&candidate) {
+        candidates.push(candidate);
+    }
 }
 
 const CORPUS_DOCUMENTS_V1: [(&str, &str); 4] = [
@@ -607,6 +806,25 @@ fn validate_slot_order(order: &[u8], slot_count: usize, field: &str) -> Result<(
         }
     }
     Ok(())
+}
+
+fn canonical_slot_order(slot_count: usize) -> Vec<u8> {
+    (0..slot_count)
+        .map(|slot| u8::try_from(slot).expect("in-flight mixed slot fits u8"))
+        .collect()
+}
+
+fn inversion_count(order: &[u8]) -> usize {
+    order
+        .iter()
+        .enumerate()
+        .map(|(index, slot)| {
+            order[index + 1..]
+                .iter()
+                .filter(|other| slot > *other)
+                .count()
+        })
+        .sum()
 }
 
 fn validate_label(label: u8) -> Result<(), String> {

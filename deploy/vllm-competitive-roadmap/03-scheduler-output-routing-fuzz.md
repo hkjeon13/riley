@@ -2,7 +2,7 @@
 
 **상태:** In progress — C03-A CPU-only reference harness의 일부와 C03-Ax의 deterministic
 test-only post-validation fault-containment unit contract, C03-Ay의 scheduled CPU seed-band rotation,
-C03-Az의 bounded raw-program stateful local reducer가 구현되었다. C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할
+C03-Az의 bounded raw-program stateful local reducer와 in-flight raw-program local reducer가 구현되었다. C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할
 수 있다. C03-B의 actual CUDA fixed-corpus execution과 C03의 formal completion은 C02 actual qualification
 뒤에만 수행한다.
 **의미 등급:** `reference`  
@@ -26,6 +26,10 @@ unit seam을 사용한다. 이는 public API/re-export, Cargo feature, 환경변
 C03-Az도 bounded raw-program test support와 CPU adapter 안에서만 실행된다. 실제 inner replayer가
 panic한 뒤에만 fixed local candidate order를 재생하며, production scheduler semantic, CUDA, GPU,
 receipt/checker, 환경변수·설정 또는 C02 qualification을 추가·변경·주장하지 않는다.
+
+in-flight raw-program local reducer도 같은 test-only CPU 경계에 남는다. 그것은 raw descriptor의
+label/feedback slot을 rebase하지 않으며, 기존 grammar validation과 strict codec이 허용한 lifecycle
+contraction만 actual inner replayer panic 뒤에 다시 재생한다.
 
 **C03-B**의 GPU corpus/fixture source는 same-candidate integration replay를 주장하려면 C02
 candidate freeze 전에 그 candidate source archive에 포함되어야 한다. GPU fixed-corpus execution,
@@ -314,7 +318,9 @@ public plan의 request ID, work kind, input, dense slot, total token 및 single-
 assert한 뒤 iteration ID만 oracle feedback builder에 전달한다. corpus는 deferred prefill cancel의 reverse
 complete, generated-history decoder cancel의 abort/retry, cancel 없는 three-slot abort/retry를 canonical
 JSON으로 보존한다. 각 case는 token/index, deferred cancellation priority, terminal-once, final zero gauge를
-검증한다. 이 slice도 source descriptor만 failure diagnostic에 남기며 reducer/receipt를 추가하지 않는다.
+검증한다. 이 slice의 raw-pending-lifecycle reducer는 actual inner replayer panic 뒤에만 source/minimized
+canonical descriptor와 각 operation list를 test panic diagnostic으로 남기며, receipt/checker를 재사용하지
+않는다.
 
 이는 `DeviceQuiescedMutationUnknown`, pending close disposition, stale/missing/unplanned feedback,
 settled-boundary cancellation, partial prefill, queue/aging/timeout, multiple deferred cancel/abort,
@@ -430,10 +436,21 @@ strict codec을 거쳐 panic-only predicate에만 전달되며, report는 두 ca
 출력한다. 따라서 출력은 fixed candidate order의 local minimum일 뿐 general/global minimum, failure
 signature 또는 root cause preservation을 주장하지 않는다.
 
-`inflight-mixed-program-v1`도 pending-plan lifecycle을 raw descriptor로 보존할 뿐 reducer를 추가하지
-않는다. plan/complete 쌍 삭제, abort/retry 쌍 축소, deferred-cancel target rebase와 permutation 단순화를
-함께 보장하는 minimizer는 별도 contract다. 따라서 source-only diagnostic은 local/global minimum, failure
-signature 또는 root-cause preservation을 주장하지 않는다.
+`inflight-mixed-program-v1`은 fixed raw-pending-lifecycle local reducer를 사용한다. candidate order는
+(1) deferred `Cancel` 하나 제거, (2) 인접한 `AbortNotDispatched`와 그 mandatory fresh `Plan` 제거,
+(3) 각 `Submit.max_new_tokens`의 `2 → 1` 축소, (4) 각 non-identity `Complete` feedback order의 direct
+identity화, (5) 각 order의 좌→우 adjacent inversion swap이다. raw label과 feedback slot은 그대로 두며,
+특히 abort/retry contraction은 original pending `Plan`을 그대로 남긴다. 따라서 cancel/abort 뒤의
+later pending-plan 또는 complete arity가 달라진 candidate는 기존 grammar validation과 strict canonical
+codec round-trip에서 거절된다. accepted candidate는 seed와 final `Close`를 보존하고
+`(operation_count, deferred_cancel_count, total_max_new_tokens, total_feedback_inversions)` rank를
+lexicographically 엄격히 낮춘다.
+
+actual inner replayer panic 뒤에만 panic-only predicate로 이 fixed candidate order를 greedy replay하고,
+report는 source/minimized canonical descriptor와 각 operation list를 남긴다. 이는 raw vector local
+minimum일 뿐 panic site/payload/failure signature/root cause, label/slot rebase, arbitrary operation
+deletion, `Plan/Complete` block deletion, deferred-cancel target/timing 변경, general/global minimum,
+receipt/checker, GPU 또는 C02 evidence를 보존·주장하지 않는다.
 
 일반 generator가 추가된 뒤에는 다음 순서로 trace를 축약한다.
 
@@ -469,7 +486,7 @@ benchmarks/scripts/tests/test_check_routing_fuzz_receipt.py
 
 새 dependency를 추가할 경우 production dependency graph에 포함되지 않는 dev-dependency여야 하고 `Cargo.lock`을 고정한다.
 
-현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer 포함)는 기존 test-only `serde_json` dev-dependency만
+현재 V1 reducer/receipt와 bounded raw-program/in-flight raw-program slice(C03-Az stateful reducer와 in-flight raw-lifecycle reducer 포함)는 기존 test-only `serde_json` dev-dependency만
 사용하며 production dependency graph, scheduler runtime semantic, GPU, C02 qualification을 변경하지
 않는다. C03-Ax도 동일하게 private test-only source만 바꾼다. 이후 arbitrary general grammar,
 durable cross-version replay contract, failure corpus 자동 등록, delta debugging, arbitrary/multi-event
@@ -512,8 +529,8 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
   source Git SHA를 diagnostic-only receipt로 create-new 기록
 - bounded raw-program failure: C03-Az reducer가 source/minimized canonical descriptor와 각 operation
   list를 test panic diagnostic으로 남기며, V1 전용 receipt/checker를 재사용하지 않음
-- in-flight raw-program failure: source canonical descriptor와 operation list를 test panic diagnostic으로
-  남기며 reducer/receipt/checker를 재사용하지 않음
+- in-flight raw-program failure: local reducer가 source/minimized canonical descriptor와 각 operation
+  list를 test panic diagnostic으로 남기며 receipt/checker를 재사용하지 않음
 - CI: unit-test step의 failure 때 receipt가 존재하면 strict checker를 실행하고 run/attempt-scoped
   temp directory를 14일 artifact로 upload; receipt가 없는 unrelated test failure는 그대로 보존
 
@@ -532,6 +549,9 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
   replay, deterministic synthetic local-minimum/idempotence, source/minimized failure-report binding test 통과
 - in-flight raw-program V1의 strict canonical codec, 3-slot feedback permutation 전수, committed corpus,
   10,000 seeded replay, deferred cancel complete/abort-retry/terminal-once/final quiescence test 통과
+- in-flight raw-lifecycle reducer의 valid cancel/abort-retry/capacity/permutation contraction,
+  candidate dedupe/rank/strict-codec replay, deterministic synthetic local-minimum/idempotence,
+  source/minimized failure-report binding test 통과
 - C03-Ax test-only seam이 valid sample validation 뒤 owning abort-safe failure를 돌려주고, 첫
   reservation commit 뒤 두 번째 forced failure에서 token 미발행, terminal-once, KV reclaim,
   completed 0/aborted 1 및 close ownership quiescence를 통과
