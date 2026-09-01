@@ -1,6 +1,6 @@
 # C08 — Executable Pattern Registry
 
-**상태:** Planned  
+**상태:** In progress — C08-0는 model-owned closed semantic pattern schema만 고정했다. static executable registry, existing dispatch migration, CUDA parity 및 성능 판정은 C07의 actual native graph ownership·capture/replay parity 결과 뒤에 남아 있다.
 **의미 등급:** `reference`  
 **한 가지 목적:** canonical model semantics와 실제 CUDA/cuBLASLt 구현 선택을 분리하는 bounded executable pattern registry를 도입한다.
 
@@ -11,6 +11,20 @@
 현재 최적화가 Llama executor의 구체 경로에 직접 연결되면 model family, shape, GPU별 candidate가 늘어날수록 조건문과 fallback이 복잡해진다. Riley의 장기 차별점은 model별 클래스를 복제하는 것이 아니라 반복되는 semantic pattern에 여러 implementation을 연결하는 것이다.
 
 이 PR은 새로운 fused kernel을 추가하지 않는다. 기존 reference/exact implementation을 registry를 통해 선택하도록 구조를 바꾸고 observable behavior를 유지한다.
+
+### C08-0 — model-owned closed semantic schema (completed)
+
+C07-22 뒤에는 실행 경계를 바꾸지 않는 CPU-only 준비 단위로 `riley-model`에 schema v1의
+`PatternId`와 `SemanticPattern`만 고정한다. ID `1..=8`은 아래 semantic pattern 순서와
+동일하고 `0` 및 unknown raw value는 fail-closed다. model 계층에는 numeric identity,
+schema version, raw-ID decode만 두며 CUDA/dtype/layout/GPU capability, candidate,
+`ImplementationId`, fallback, registry, planner receipt를 넣지 않는다.
+
+이 단위는 full C08 registry migration을 시작하거나 완료한 것이 아니다. 특히 existing direct
+dispatch, `riley-runtime::kernel`, executor default, C06/C07 registry decision, CUDA graph
+capture/replay 또는 metric은 변경하지 않고 성능 향상도 주장하지 않는다. C05 native owner와
+C07 capture/replay parity가 검증된 뒤에만 아래 runtime-owned executable registry migration을
+시작한다.
 
 ## 2. 두 계층
 
@@ -143,7 +157,17 @@ source/build revision
 
 request마다 전체 dump를 만들지 않고 plan ID만 trace/metric에 사용한다.
 
-## 9. 예상 파일 변경
+## 9. 변경 파일 범위
+
+### C08-0 completed files
+
+```text
+crates/riley-model/src/pattern.rs
+crates/riley-model/src/lib.rs
+crates/riley-model/tests/semantic_pattern.rs
+```
+
+### C08-1+ runtime migration files (C07 capture/replay parity 이후)
 
 ```text
 crates/riley-runtime/src/pattern.rs
@@ -160,7 +184,8 @@ crates/riley-server/src/service.rs
 
 ## 10. Migration 순서
 
-1. Pattern/Implementation stable ID와 schema 정의
+0. **C08-0 (completed):** model-owned closed `PatternId`/`SemanticPattern` schema v1을 CPU-only로 고정한다. runtime implementation ID나 dispatch migration은 하지 않는다.
+1. **C08-1 (C07 capture/replay parity 이후):** runtime-owned `ImplementationId`와 executable schema를 정의한다.
 2. 기존 decode attention implementations 등록
 3. 기존 norm/MLP/LM-head reference 등록
 4. current direct dispatch와 registry dispatch를 test-only dual 실행

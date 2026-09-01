@@ -208,7 +208,7 @@ Riley는 vLLM의 전체 기능을 복제하지 않고 다음 범위부터 이긴
 | C05 | [CUDA Graph ownership ABI](05-cuda-graph-ownership-abi.md) | capture/instantiate/replay/close의 native ownership 경계 구현 | C04 |
 | C06 | [Graph signature dispatcher](06-graph-signature-dispatcher.md) | full/piecewise/eager 선택과 exact fallback 구현 | C05 |
 | C07 | [Decode graph buckets](07-decode-graph-buckets.md) | `M=1..32` pure-decode graph fast path로 M2 판정 | C06 |
-| C08 | [Executable pattern registry](08-executable-pattern-registry.md) | semantic IR과 kernel implementation 선택 분리 | C04, C07 결과 |
+| C08 | [Executable pattern registry](08-executable-pattern-registry.md) | semantic IR과 kernel implementation 선택 분리 | C04, C05 native owner 및 C07 actual capture/replay parity 결과 (C08-0 model semantic schema-only 준비는 C07-22 뒤 CPU-only로 가능) |
 | C09 | [Packed QKV/Gate-Up weights](09-packed-projection-weights.md) | 중복 projection과 weight ownership 정리 | C08 |
 | C10 | [Transformer subgraph fusion](10-transformer-subgraph-fusion.md) | QKV-RoPE-KV 및 MLP 반복 subgraph의 E0 fusion | C09 |
 | C11 | [LM-head/sampling fusion](11-lm-head-sampling-fusion.md) | greedy 경로의 full logits materialization 제거 | C08, C10 권장 |

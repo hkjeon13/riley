@@ -12,6 +12,7 @@ mod error;
 mod ir;
 mod limits;
 mod model;
+mod pattern;
 mod provenance;
 mod qwen;
 mod safetensors;
@@ -29,6 +30,7 @@ pub use ir::{
 };
 pub use limits::LoadLimits;
 pub use model::{CONFIG_FILENAME, LoadedModel, TOKENIZER_CONFIG_FILENAME, TOKENIZER_FILENAME};
+pub use pattern::{PatternId, SEMANTIC_PATTERN_SCHEMA_VERSION, SemanticPattern};
 pub use provenance::{CheckpointProvenance, PROVENANCE_FILENAME, ProvenanceFile};
 pub use qwen::{ChatMessage, ChatRole, ChatTemplateOptions, Qwen2Tokenizer, Qwen2TokenizerConfig};
 pub use tokenizer::{DecodeOptions, EncodeOptions, SmolLm2Tokenizer, Tokenizer};
