@@ -7,6 +7,8 @@
 
 #[path = "support/bounded_mixed_program_trace.rs"]
 mod bounded_mixed_program_trace;
+#[path = "support/routing_fuzz_rotation.rs"]
+mod routing_fuzz_rotation;
 
 use std::collections::BTreeMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -500,7 +502,11 @@ fn bounded_mixed_program_replays_every_three_slot_feedback_permutation() {
 fn ten_thousand_seeded_bounded_mixed_programs_round_trip_and_replay() {
     let mut saw_two_prefill_first_commit = false;
     let mut saw_three_prefill_first_commit = false;
-    for trace_index in 0..BOUNDED_MIXED_PROGRAM_TRACE_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..BOUNDED_MIXED_PROGRAM_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, BOUNDED_MIXED_PROGRAM_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the bounded mixed trace window");
         let seed = 0xe703_7ed1_a0b4_285d_u64.wrapping_mul(trace_index.wrapping_add(1));
         let trace = BoundedMixedProgramTrace::from_seed(seed);
         let first_plan_index = trace

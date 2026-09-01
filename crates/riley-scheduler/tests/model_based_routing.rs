@@ -7,6 +7,8 @@
 
 #[path = "support/reference_scheduler.rs"]
 mod reference_scheduler;
+#[path = "support/routing_fuzz_rotation.rs"]
+mod routing_fuzz_rotation;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -387,7 +389,11 @@ fn run_trace(
 
 #[test]
 fn ten_thousand_seeded_cpu_traces_route_permuted_outputs_by_slot() {
-    for trace_index in 0..TRACE_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the valid-feedback trace window");
         let seed = 0x9e37_79b9_7f4a_7c15_u64.wrapping_mul(trace_index.wrapping_add(1));
         let spec = trace_spec(seed);
         let forward = run_trace(&spec, seed, false);
@@ -850,7 +856,11 @@ fn run_invalid_feedback(seed: u64) {
 
 #[test]
 fn ten_thousand_seeded_fault_microtraces_preserve_routing_and_quiescence() {
-    for trace_index in 0..FAULT_TRACE_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..FAULT_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, FAULT_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the fault trace window");
         let seed = 0xd1b5_4a32_d192_ed03_u64.wrapping_mul(trace_index.wrapping_add(1));
         match FaultAction::for_trace_index(trace_index) {
             FaultAction::DeferredCancelThenCommit => run_deferred_cancel_then_commit(seed),
@@ -1342,7 +1352,11 @@ fn replay_mixed_stage_corpus_v1() {
 
 #[test]
 fn ten_thousand_seeded_mixed_stage_traces_preserve_routing_and_quiescence() {
-    for trace_index in 0..MIXED_STAGE_TRACE_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..MIXED_STAGE_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, MIXED_STAGE_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the mixed-stage trace window");
         let seed = MIXED_STAGE_SEED_FACTOR.wrapping_mul(trace_index.wrapping_add(1));
         replay_mixed_stage_trace(MixedStageTraceV1::from_seed(seed));
     }
@@ -2405,7 +2419,11 @@ fn operation_trace_v2_codec_rejects_noncanonical_or_invalid_documents() {
 
 #[test]
 fn ten_thousand_seeded_operation_traces_round_trip_and_preserve_routing_and_quiescence() {
-    for trace_index in 0..OPERATION_TRACE_V2_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..OPERATION_TRACE_V2_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, OPERATION_TRACE_V2_COUNT)
+            .expect("configured routing-fuzz rotation fits the operation-V2 trace window");
         let seed = 0xa24b_aed4_963e_e407_u64.wrapping_mul(trace_index.wrapping_add(1));
         let trace = OperationTraceV2::from_seed(seed);
         let case_id = format!("generated-{seed:016x}");
@@ -2416,4 +2434,91 @@ fn ten_thousand_seeded_operation_traces_round_trip_and_preserve_routing_and_quie
         assert_eq!(parsed.trace, trace);
         replay_operation_trace_v2(parsed.trace);
     }
+}
+
+#[test]
+fn scheduled_routing_fuzz_seed_rotation_is_canonical_and_disjoint() {
+    use std::ffi::OsString;
+
+    let baseline = routing_fuzz_rotation::seed_rotation_from_values(None, None, None)
+        .expect("unset scheduled rotation selects the historical PR seed window");
+    assert_eq!(baseline.trace_index(0, TRACE_COUNT), Ok(0));
+    assert_eq!(
+        baseline.trace_index(TRACE_COUNT - 1, TRACE_COUNT),
+        Ok(TRACE_COUNT - 1)
+    );
+
+    let explicit_zero = routing_fuzz_rotation::seed_rotation_from_values(
+        Some(OsString::from("0")),
+        Some(OsString::from("0")),
+        Some(OsString::from("15")),
+    )
+    .expect("canonical zero scheduled rotation values parse");
+    assert_eq!(explicit_zero.trace_index(0, TRACE_COUNT), Ok(0));
+
+    let scheduled = routing_fuzz_rotation::seed_rotation_from_values(
+        Some(OsString::from("37")),
+        Some(OsString::from("14")),
+        Some(OsString::from("15")),
+    )
+    .expect("canonical scheduled rotation values parse");
+    assert_eq!(scheduled.trace_index(0, TRACE_COUNT), Ok(140_037));
+    assert_eq!(
+        scheduled.trace_index(TRACE_COUNT - 1, TRACE_COUNT),
+        Ok(150_036)
+    );
+    assert!(scheduled.trace_index(TRACE_COUNT, TRACE_COUNT).is_err());
+    assert!(scheduled.trace_index(0, 0).is_err());
+
+    let malformed = [
+        ("", "0", "15"),
+        (" 1", "0", "15"),
+        ("+1", "0", "15"),
+        ("-1", "0", "15"),
+        ("01", "0", "15"),
+        ("1", "01", "15"),
+        ("1", "15", "15"),
+        ("1", "0", "14"),
+        ("18446744073709551616", "0", "15"),
+    ];
+    for (base, slot, slot_count) in malformed {
+        assert!(
+            routing_fuzz_rotation::seed_rotation_from_values(
+                Some(OsString::from(base)),
+                Some(OsString::from(slot)),
+                Some(OsString::from(slot_count)),
+            )
+            .is_err(),
+            "malformed scheduled rotation {base:?}/{slot:?}/{slot_count:?} unexpectedly parsed"
+        );
+    }
+    assert!(
+        routing_fuzz_rotation::seed_rotation_from_values(Some(OsString::from("1")), None, None,)
+            .is_err(),
+        "partial scheduled rotation unexpectedly selected baseline coverage"
+    );
+
+    let maximum_base = u64::MAX
+        - (routing_fuzz_rotation::SCHEDULED_SLOT_COUNT * routing_fuzz_rotation::TRACES_PER_STREAM);
+    let maximum_rotation = routing_fuzz_rotation::seed_rotation_from_values(
+        Some(OsString::from(maximum_base.to_string())),
+        Some(OsString::from("14")),
+        Some(OsString::from("15")),
+    )
+    .expect("maximum bounded scheduled base parses");
+    assert_eq!(
+        maximum_rotation.trace_index(TRACE_COUNT - 1, TRACE_COUNT),
+        Ok(u64::MAX - 1)
+    );
+    assert!(
+        routing_fuzz_rotation::seed_rotation_from_values(
+            Some(OsString::from(
+                maximum_base.checked_add(1).unwrap().to_string()
+            )),
+            Some(OsString::from("0")),
+            Some(OsString::from("15")),
+        )
+        .is_err(),
+        "base without enough room for every scheduled slot unexpectedly parsed"
+    );
 }

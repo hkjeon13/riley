@@ -1,9 +1,10 @@
 # C03 — Scheduler Output Routing Property Fuzz
 
 **상태:** In progress — C03-A CPU-only reference harness의 일부와 C03-Ax의 deterministic
-test-only post-validation fault-containment unit contract가 구현되었다. C03-B의 fixed corpus/CPU
-topology contract source는 C02-P1 source closure 뒤 병렬로 진행할 수 있다. C03-B의 actual CUDA
-fixed-corpus execution과 C03의 formal completion은 C02 actual qualification 뒤에만 수행한다.
+test-only post-validation fault-containment unit contract, C03-Ay의 scheduled CPU seed-band rotation이
+구현되었다. C03-B의 fixed corpus/CPU topology contract source는 C02-P1 source closure 뒤 병렬로 진행할
+수 있다. C03-B의 actual CUDA fixed-corpus execution과 C03의 formal completion은 C02 actual qualification
+뒤에만 수행한다.
 **의미 등급:** `reference`  
 **한 가지 목적:** scheduler plan부터 sampling/commit/terminal event까지 request-token 대응 관계를 model-based property test로 고정한다.
 
@@ -106,8 +107,8 @@ Generator는 valid operation을 주로 만들되, duplicate slot, missing output
 
 ### C03-A — CPU fast property
 
-- PR마다 최소 10,000 generated traces
-- nightly 또는 scheduled run에서 1,000,000 traces
+- PR마다 각 CPU property lane의 deterministic 10,000 generated traces
+- nightly 또는 scheduled run에서 최소 1,000,000 traces
 - failure 시 source seed와 full descriptor를 출력한다. candidate-minimized trace는 reducer가 명시적으로
   구현된 grammar slice에만 추가한다.
 
@@ -145,6 +146,16 @@ output-slot ledger·terminal-once·KV/queue quiescence를 깨지 않는지 확�
 trace는 `MixedStageTraceV1 { seed, decoder_max_new_tokens, final_prefill_len, action }`를 seed에서
 생성하고, `decoder prime → decoder decode slot 0 + final-prefill slot 1 → optional deferred decoder
 cancel → explicit [slot 1, slot 0] feedback/commit → close`를 public scheduler API로 재생한다.
+
+C03-Ay는 기본 PR의 일곱 10,000-trace CPU lane(총 70,000 trace)을 바꾸지 않는다. 전용
+c03-routing-fuzz.yml scheduled/manual workflow는 매 run마다 기록 가능한 canonical decimal base를
+선택하고, 15개 matrix slot에 서로 겹치지 않는 10,000-index band를 배정한다. 따라서 한 scheduled run은
+7 × 10,000 × 15 = 1,050,000 CPU trace를 실행한다. test-only routing_fuzz_rotation helper는
+base/slot/slot-count가 모두 absent일 때 기존 seed와 FaultAction 순서를 정확히 유지하고, 부분 설정,
+non-canonical decimal, overflow를 fail closed한다. 각 lane의 final seed 또는 descriptor가 재현
+identity이며, 기존 fault/general lane이 seed factor를 공유하므로 이것은 1,050,000 trace 실행이지
+전역 unique seed 수 주장이 아니다. 이 workflow는 GPU target, CUDA feature, production runtime API 또는
+성능 주장을 추가하지 않는다.
 
 V2는 같은 RC1 mixed prefix를 concrete `Submit`, `Plan`, `Complete`, `Cancel`, `RejectFeedback`,
 `AbortNotDispatched`, `Close` operation list로 canonicalize한다. seed가 선택한 최대 9개 operation은
@@ -292,7 +303,7 @@ C03-Ax boundary seam, general reducer/receipt 또는 GPU evidence를 구현·주
 
 이는 여전히 C03-A의 부분 범위다. arbitrary/unbounded mixed-operation generator와 그 전체 grammar의
 shrink/global-minimum counterexample, admission/aging/KV까지 포함하는 general reference scheduler,
-scheduled 1,000,000 seed rotation, generalized multi-event fault-injection grammar는 남아 있다.
+generalized multi-event fault-injection grammar는 남아 있다.
 failure-signature/same-assertion preservation, multi-edit/delta-debugging reduction도 별도 범위다.
 `bounded-mixed-program-v1`도 Plan/Complete
 분리, in-flight deferred cancel, abort/retry, stale/missing/unplanned feedback, `DeviceQuiescedMutationUnknown`,
@@ -470,8 +481,9 @@ metric recording 실패를 주입한 경우 inference ownership은 유지되고 
 
 ## 11. CI 정책
 
-- 기본 CPU workflow: deterministic seed set + 10,000 traces
-- scheduled workflow: random seed rotation + 1,000,000 traces
+- 기본 CPU workflow: 각 property lane의 deterministic 10,000-trace seed set(총 70,000 trace)
+- scheduled workflow: fresh recorded base와 15개 disjoint slot으로 일곱 10,000-trace lane을
+  회전해 총 1,050,000 CPU trace; 네 C03 CPU target만 실행하고 GPU/CUDA target은 제외
 - GPU manual/scheduled: 고정 corpus
 - C03-B source contract: `gpu_fixed_corpus_contract`는 기본 CPU workflow에서 실행하며, ignored
   `c03_gpu_fixed_corpus`는 C02 actual qualification과 explicit GPU operation approval 뒤에만
@@ -501,6 +513,9 @@ flaky retry로 통과시키지 않는다. 동일 seed가 재현되지 않으면 
 - C03-Ax test-only seam이 valid sample validation 뒤 owning abort-safe failure를 돌려주고, 첫
   reservation commit 뒤 두 번째 forced failure에서 token 미발행, terminal-once, KV reclaim,
   completed 0/aborted 1 및 close ownership quiescence를 통과
+- C03-Ay는 all-unset PR environment에서 기존 seed/action window를 유지하고, scheduled all-set
+  base/slot/slot-count의 malformed·partial·overflow 입력을 fail closed하며, 15 slot이 총
+  1,050,000 CPU trace를 실행
 - production runtime 코드의 semantic change 없음
 - CPU test runtime이 일반 PR CI budget 내
 - C03-B source: strict `gpu-fixed-v1` corpus parse와 CPU topology/KV/deferred-cancel/abort contract 통과

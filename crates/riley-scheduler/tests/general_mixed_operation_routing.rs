@@ -8,6 +8,8 @@
 mod general_mixed_operation_trace;
 #[path = "support/routing_fuzz_receipt.rs"]
 mod routing_fuzz_receipt;
+#[path = "support/routing_fuzz_rotation.rs"]
+mod routing_fuzz_rotation;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -453,7 +455,11 @@ fn general_mixed_operation_matrix_preserves_routing_and_quiescence() {
 
 #[test]
 fn ten_thousand_seeded_general_mixed_operation_traces_round_trip_and_replay() {
-    for trace_index in 0..GENERAL_MIXED_OPERATION_TRACE_COUNT {
+    let rotation = routing_fuzz_rotation::configured_seed_rotation();
+    for local_trace_index in 0..GENERAL_MIXED_OPERATION_TRACE_COUNT {
+        let trace_index = rotation
+            .trace_index(local_trace_index, GENERAL_MIXED_OPERATION_TRACE_COUNT)
+            .expect("configured routing-fuzz rotation fits the general mixed trace window");
         let seed = 0xd1b5_4a32_d192_ed03_u64.wrapping_mul(trace_index.wrapping_add(1));
         let trace = GeneralMixedOperationTrace::from_seed(seed);
         let case_id = format!("seed-{seed:016x}");

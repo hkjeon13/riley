@@ -1,0 +1,131 @@
+name: C03 routing-fuzz seed rotation
+
+on:
+  schedule:
+    - cron: "43 4 * * *"
+  workflow_dispatch:
+    inputs:
+      rotation_base:
+        description: Optional canonical decimal seed-band base; blank chooses a fresh value.
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: c03-routing-fuzz-seed-rotation-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  RUSTUP_TOOLCHAIN: 1.85.0
+
+jobs:
+  seed-plan:
+    name: Choose C03 seed-rotation base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rotation_base: ${{ steps.seed.outputs.rotation_base }}
+    steps:
+      - id: seed
+        env:
+          INPUT_ROTATION_BASE: ${{ inputs.rotation_base }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_ROTATION_BASE" ]; then
+            python3 - "$INPUT_ROTATION_BASE" <<'PY'
+          import sys
+
+          value = sys.argv[1]
+          max_base = (1 << 64) - 150_001
+          if (
+              not value.isascii()
+              or not value.isdecimal()
+              or (value != "0" and value.startswith("0"))
+              or int(value) > max_base
+          ):
+              raise SystemExit(
+                  "rotation_base must be canonical decimal and leave room for 15 10,000-trace slots"
+              )
+          PY
+            rotation_base="$INPUT_ROTATION_BASE"
+          else
+            rotation_base="$(python3 - <<'PY'
+          import secrets
+
+          max_base = (1 << 64) - 150_001
+          print(secrets.randbelow(max_base + 1))
+          PY
+            )"
+          fi
+          printf 'rotation_base=%s\n' "$rotation_base" >> "$GITHUB_OUTPUT"
+          printf 'C03 scheduled seed-rotation base: %s\n' "$rotation_base"
+
+  routing-fuzz:
+    name: C03 routing fuzz (slot ${{ matrix.slot }}/15)
+    needs: seed-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        slot: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install exact Rust toolchain
+        run: |
+          rustup toolchain install 1.85.0 --profile minimal
+          rustc --version | grep -E '^rustc 1\.85\.0 '
+          cargo --version | grep -E '^cargo 1\.85\.0 '
+
+      - name: Prepare C03 routing-fuzz diagnostic directory
+        env:
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
+        run: install -d -m 700 "$RILEY_ROUTING_FUZZ_RECEIPT_DIR"
+
+      - name: Run C03 70,000-trace seed-rotation slot
+        id: routing_fuzz
+        env:
+          RILEY_C03_SEED_ROTATION_BASE: ${{ needs.seed-plan.outputs.rotation_base }}
+          RILEY_C03_SEED_ROTATION_SLOT: ${{ matrix.slot }}
+          RILEY_C03_SEED_ROTATION_SLOT_COUNT: "15"
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
+          RILEY_ROUTING_FUZZ_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
+          exit_code=0
+          for target in model_based_routing general_mixed_operation_routing bounded_mixed_program_routing inflight_mixed_program_routing; do
+            cargo test --locked -p riley-scheduler --no-default-features --test "$target" || exit_code=1
+          done
+          exit "$exit_code"
+
+      - name: Validate C03 routing-fuzz diagnostics
+        if: failure() && steps.routing_fuzz.outcome == 'failure'
+        env:
+          RILEY_ROUTING_FUZZ_RECEIPT_DIR: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
+          RILEY_ROUTING_FUZZ_SOURCE_REVISION: ${{ github.sha }}
+        run: |
+          shopt -s nullglob
+          receipts=("$RILEY_ROUTING_FUZZ_RECEIPT_DIR"/*.json)
+          for receipt in "${receipts[@]}"; do
+            python3 benchmarks/scripts/check_routing_fuzz_receipt.py \
+              --receipt "$receipt" \
+              --expected-source-revision "$RILEY_ROUTING_FUZZ_SOURCE_REVISION"
+          done
+
+      - name: Upload C03 routing-fuzz diagnostics
+        if: failure() && steps.routing_fuzz.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: c03-routing-fuzz-rotation-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
+          path: ${{ runner.temp }}/riley-routing-fuzz-${{ github.run_id }}-${{ github.run_attempt }}-slot-${{ matrix.slot }}
+          if-no-files-found: warn
+          retention-days: 14
