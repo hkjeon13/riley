@@ -537,6 +537,33 @@ static RileyCudaStatus (*const graph_capture_begin_symbol)(
 static RileyCudaStatus (*const graph_capture_abort_symbol)(
     RileyCudaGraphCapture**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_abort;
+static RileyCudaStatus (*const graph_capture_begin_fill_f32_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, uint64_t,
+    RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_fill_f32;
+static RileyCudaStatus (*const graph_capture_enqueue_fill_f32_symbol)(
+    RileyCudaGraphCapture*, float, RileyCudaGraphErrorInfo*,
+    RileyCudaErrorInfo*) = riley_cuda_graph_capture_enqueue_fill_f32;
+static RileyCudaStatus (*const graph_capture_end_symbol)(
+    RileyCudaGraphCapture**, RileyCudaGraph**, RileyCudaGraphErrorInfo*,
+    RileyCudaErrorInfo*) = riley_cuda_graph_capture_end;
+static RileyCudaStatus (*const graph_instantiate_symbol)(
+    RileyCudaGraph**, RileyCudaGraphExec**, RileyCudaGraphErrorInfo*,
+    RileyCudaErrorInfo*) = riley_cuda_graph_instantiate;
+static RileyCudaStatus (*const graph_exec_launch_symbol)(
+    RileyCudaGraphExec*, RileyCudaStream*, RileyCudaGraphLaunch**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_exec_launch;
+static RileyCudaStatus (*const graph_launch_complete_symbol)(
+    RileyCudaGraphLaunch**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_launch_complete;
+static RileyCudaStatus (*const graph_close_symbol)(
+    RileyCudaGraph**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_close;
+static RileyCudaStatus (*const graph_exec_close_symbol)(
+    RileyCudaGraphExec**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_exec_close;
 static RileyCudaStatus (*const context_defer_to_active_capture_symbol)(
     RileyCudaContext**, RileyCudaErrorInfo*) =
     riley_cuda_context_defer_to_active_capture;
@@ -769,6 +796,14 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&nvidia_environment_probe_symbol,
     (const void*)&graph_capture_begin_symbol,
     (const void*)&graph_capture_abort_symbol,
+    (const void*)&graph_capture_begin_fill_f32_symbol,
+    (const void*)&graph_capture_enqueue_fill_f32_symbol,
+    (const void*)&graph_capture_end_symbol,
+    (const void*)&graph_instantiate_symbol,
+    (const void*)&graph_exec_launch_symbol,
+    (const void*)&graph_launch_complete_symbol,
+    (const void*)&graph_close_symbol,
+    (const void*)&graph_exec_close_symbol,
     (const void*)&context_defer_to_active_capture_symbol,
     (const void*)&stream_defer_to_active_capture_symbol,
     (const void*)&event_defer_to_active_capture_symbol,

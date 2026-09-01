@@ -154,6 +154,7 @@ typedef struct RileyCudaHfPrefillAttentionPlan
 typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;
 typedef struct RileyCudaGraph RileyCudaGraph;
 typedef struct RileyCudaGraphExec RileyCudaGraphExec;
+typedef struct RileyCudaGraphLaunch RileyCudaGraphLaunch;
 
 // CUDA's raw capture-mode numeric values are deliberately not part of the
 // Riley ABI. The first graph ABI slice admits only thread-local capture; more
@@ -1150,6 +1151,73 @@ RileyCudaStatus riley_cuda_graph_capture_begin(
 // failure before the CUDA end attempt leaves *capture unchanged.
 RileyCudaStatus riley_cuda_graph_capture_abort(
     RileyCudaGraphCapture** capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins the only C05-5 capture-admitted operation set: repeated fixed-shape
+// f32 fills of one caller-owned, preallocated device buffer. The exact buffer,
+// element count, final graph storage, and native resource leases are prepared
+// before cudaStreamBeginCapture. A successful graph/exec retains the captured
+// stream and buffer until graph/exec close; ordinary stream/buffer close and
+// use therefore remain busy while the graph exists.
+RileyCudaStatus riley_cuda_graph_capture_begin_fill_f32(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* buffer,
+    uint64_t element_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues one fill node into a capture created by
+// riley_cuda_graph_capture_begin_fill_f32. It has no allocation, pointer, or
+// shape input: the begin call fixed all graph-visible resource addresses and
+// geometry. At least one successful enqueue is required before capture_end.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
+    RileyCudaGraphCapture* capture,
+    float value,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Ends one prepared fill capture and transfers its context-child, exact-stream
+// and exact-buffer leases to the returned graph. Once CUDA end has been
+// attempted, *capture is null even if recovery is ambiguous. A validation
+// failure before that attempt leaves it intact.
+RileyCudaStatus riley_cuda_graph_capture_end(
+    RileyCudaGraphCapture** capture,
+    RileyCudaGraph** out_graph,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Instantiation consumes the captured graph on every CUDA instantiate attempt.
+// A non-null exec is returned only after native state and context restoration
+// are known; ambiguous attempted instantiation is retained fail-closed.
+RileyCudaStatus riley_cuda_graph_instantiate(
+    RileyCudaGraph** graph,
+    RileyCudaGraphExec** out_exec,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Launch is restricted to the exact stream retained by the graph capture.
+// A non-null completion owner can accompany a failing launch attempt so the
+// caller can settle or deliberately retain the in-flight native lease.
+RileyCudaStatus riley_cuda_graph_exec_launch(
+    RileyCudaGraphExec* exec,
+    RileyCudaStream* stream,
+    RileyCudaGraphLaunch** out_launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Performs the one completion boundary for an in-flight graph launch. After a
+// CUDA completion attempt, *launch is null even on an ambiguous error; native
+// retains the graph exec and its leases fail-closed in that case.
+RileyCudaStatus riley_cuda_graph_launch_complete(
+    RileyCudaGraphLaunch** launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// These one-shot closes consume their raw owner once CUDA destruction is
+// attempted. Close is rejected before CUDA entry while an exec launch is
+// in-flight; a destroy ambiguity retains all leases fail-closed.
+RileyCudaStatus riley_cuda_graph_close(
+    RileyCudaGraph** graph,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+RileyCudaStatus riley_cuda_graph_exec_close(
+    RileyCudaGraphExec** exec,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 RileyCudaStatus riley_cuda_stream_query(

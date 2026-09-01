@@ -56,8 +56,9 @@ pub use gemm::{
     FIXED37_MAX_REDUCTION_ELEMENTS, FIXED37_REDUCTION_VERSION, Fixed37GemmParams, GemmParams,
 };
 pub use graph::{
-    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo, CudaGraphLifecycle,
-    CudaGraphLifecycleState, CudaGraphStage, GraphCapture,
+    CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo,
+    CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, GraphCapture, GraphExec,
+    GraphFillCapture, GraphLaunch,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,

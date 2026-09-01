@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-4는 실제 thread-local capture owner와 abort/recovery를 닫는다. graph end·instantiate·replay는 C05-5로 분리한다.
+**상태:** In progress — C05-4의 실제 thread-local capture owner와 abort/recovery 위에 C05-5의 제한된 fill capture·end·instantiate·replay를 추가한다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -107,13 +107,25 @@ replay 또는 성능 향상을 추가하지 않는다. GPU test는 begin → abo
 recovery와 repeated lifecycle close, 그리고 같은 primary context의 다른 host thread에서 context-wide control이
 거부되고 abort 뒤 다시 허용되는지를 검증한다.
 
-### C05-5 — admitted operation, graph end, and replay (planned)
+### C05-5 — admitted fill operation, graph end, and replay (in progress)
 
-C05-5는 C05-4의 recovery-proven capture owner 위에서만 시작한다. 사전 할당된 capture-safe custom
-fill을 명시 whitelist로 넣고, `CapturedGraph`/`GraphExec`/`GraphLaunch`의 end·instantiate·replay·completion
-owner를 추가한다. graph exec가 retained resource lease를 소유하고 launch completion 전 close를 막는
-계약, multi-replay parity 및 foreign-stream rejection을 이 slice에서 검증한다. H2D/D2H chain,
-cuBLASLt capture, node update, fault-injection 및 1000-replay performance claim은 그 이후 slice로 남긴다.
+C05-5는 C05-4의 recovery-proven capture owner 위에서만 동작한다. 유일한 whitelist는 caller가
+사전 할당한 하나의 `CudaDeviceBuffer`에 대해 같은 fixed shape의 f32 fill kernel을 한 번 이상 순차
+enqueue하는 것이다. begin은 buffer active-use lease와 최종 graph의 host storage를
+`cudaStreamBeginCapture` **전**에 확보하고, enqueue는 value만 받으며 host allocation/free를 수행하지
+않는다. 적어도 하나의 성공한 enqueue가 있어야 end가 가능하다.
+
+`GraphFillCapture<'stream, 'buffer>` → `CapturedGraph<'stream, 'buffer>` →
+`GraphExec<'stream, 'buffer>` → `GraphLaunch<'exec, 'stream, 'buffer>` safe owner는 capture stream과
+buffer를 계속 mutable-borrow한다. native graph/exec도 capture context child, **정확히 그** stream과
+buffer의 active-use lease를 유지한다. launch는 해당 capture stream 외의 raw stream pointer를 CUDA 호출 전에
+거부하고, `GraphLaunch::finish`가 completion 경계다. completion 전 exec close는 거부되며 close가 성공한
+뒤에만 stream/buffer와 D2H를 재사용할 수 있다.
+
+GPU regression은 fill node 3개를 capture한 뒤 instantiate하고 1,000회 `launch → finish`를 순차 실행한다.
+마지막 fill 값의 bit-exact D2H 결과와 모든 explicit close 뒤 allocation statistics 0을 확인한다. 이 1,000회는
+correctness/lifetime regression이지 성능 향상 주장이 아니다. fixed H2D/D2H capture chain, cuBLASLt capture,
+node update, fault injection과 latency microbenchmark는 후속 slice로 남긴다.
 
 ## 2. 범위
 
@@ -121,11 +133,10 @@ cuBLASLt capture, node update, fault-injection 및 1000-replay performance claim
 
 - stream capture begin/end/abort
 - captured graph instantiate
-- graph executable launch
-- 제한된 node parameter update capability
+- 사전 할당된 f32 fill node의 graph executable launch/completion
 - graph/graph-exec destroy
 - resource retention과 close ordering
-- capture/instantiate/launch/update 오류 분리
+- capture/enqueue/end/instantiate/launch/completion/close 오류 분리
 - public C ABI layout 및 Rust safe wrapper
 - feature-off stub와 source contract
 - 실제 GPU lifecycle/fault/sanitizer test
@@ -169,35 +180,61 @@ Uninitialized
 실제 이름은 ABI v1 naming 규칙을 따른다.
 
 ```c
+typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;
 typedef struct RileyCudaGraph RileyCudaGraph;
 typedef struct RileyCudaGraphExec RileyCudaGraphExec;
+typedef struct RileyCudaGraphLaunch RileyCudaGraphLaunch;
 
-RileyStatus riley_cuda_graph_capture_begin(
+RileyCudaStatus riley_cuda_graph_capture_begin_fill_f32(
     RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* buffer,
+    uint64_t element_count,
     RileyCudaGraphCaptureMode mode,
-    RileyCudaGraphCapture** out_capture);
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 
-RileyStatus riley_cuda_graph_capture_end(
+RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
     RileyCudaGraphCapture* capture,
-    RileyCudaGraph** out_graph);
+    float value,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 
-RileyStatus riley_cuda_graph_capture_abort(
-    RileyCudaGraphCapture* capture);
+RileyCudaStatus riley_cuda_graph_capture_end(
+    RileyCudaGraphCapture** capture,
+    RileyCudaGraph** out_graph,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 
-RileyStatus riley_cuda_graph_instantiate(
-    RileyCudaGraph* graph,
-    RileyCudaGraphExec** out_exec);
+RileyCudaStatus riley_cuda_graph_instantiate(
+    RileyCudaGraph** graph,
+    RileyCudaGraphExec** out_exec,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 
-RileyStatus riley_cuda_graph_exec_launch(
+RileyCudaStatus riley_cuda_graph_exec_launch(
     RileyCudaGraphExec* exec,
     RileyCudaStream* stream,
-    RileyCudaCompletionToken** out_completion);
+    RileyCudaGraphLaunch** out_launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 
-RileyStatus riley_cuda_graph_exec_close(RileyCudaGraphExec* exec);
-RileyStatus riley_cuda_graph_close(RileyCudaGraph* graph);
+RileyCudaStatus riley_cuda_graph_launch_complete(
+    RileyCudaGraphLaunch** launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
+RileyCudaStatus riley_cuda_graph_close(
+    RileyCudaGraph** graph,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
+RileyCudaStatus riley_cuda_graph_exec_close(
+    RileyCudaGraphExec** exec,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error);
 ```
 
-Node update는 arbitrary raw pointer API로 열지 않는다. C06에서 필요한 closed update descriptor가 정해지기 전에는 capability query와 최소 memcpy/kernel parameter update만 추가한다.
+C05-4의 generic `riley_cuda_graph_capture_begin`/`abort`는 recovery-only path로 그대로 유지한다.
+C05-5는 arbitrary node update, memcpy 또는 raw pointer API를 열지 않는다.
 
 ## 5. Resource ownership
 
@@ -235,12 +272,11 @@ compile-fail doctest로 early drop, double mutable borrow, launch 중 close 시�
 
 ## 7. Capture-safe whitelist
 
-C05 시점에는 다음 operation만 graph capture admission 대상으로 선언한다.
+C05-5 시점에는 다음 operation만 graph capture admission 대상으로 선언한다.
 
-- validated fixed-size H2D/D2H memcpy
-- 기존 custom CUDA kernel launch
-- capture 지원이 확인된 cuBLASLt matmul plan
-- event-free same-stream dependency
+- one caller-owned, preallocated device buffer에 대한 fixed-shape f32 fill kernel
+
+H2D/D2H memcpy, 다른 custom kernel, cuBLASLt matmul과 event dependency는 아직 admission 대상이 아니다.
 
 다음은 기본 거부한다.
 
@@ -304,11 +340,10 @@ C ABI는 기존 symbol/layout을 깨지 않는 additive 변경이어야 한다.
 ### GPU
 
 - fill kernel 2~3개 capture/instantiate/1000 replay
-- fixed memcpy+kernel chain parity
-- 두 stream/context handle 혼용 거부
+- 마지막 fill의 D2H bit-exact parity
+- native exact-stream launch rejection과 safe Rust lifetime lease
 - launch completion 전 resource close 거부
-- capture abort 후 stream 재사용
-- instantiate/launch fault injection
+- fill capture abort 후 stream/buffer 재사용
 - explicit close 후 live native/Rust allocation 0
 
 ### Sanitizer
@@ -319,13 +354,9 @@ C ABI는 기존 symbol/layout을 깨지 않는 additive 변경이어야 한다.
 
 ## 11. Performance scope
 
-이 PR은 LLM latency 개선을 주장하지 않는다. graph wrapper 자체의 launch overhead microbenchmark만 기록한다.
-
-- direct kernel chain submission
-- captured graph replay
-- wrapper/native API overhead
-
-결과는 C07의 가설 입력이며 production promotion 근거가 아니다.
+이 slice는 LLM latency나 graph launch overhead 개선을 주장하지 않는다. 1,000회 replay는 output,
+completion, resource-close ordering regression만 검증한다. 별도 microbenchmark와 C07의 promotion 근거는
+capture-safe operation set이 넓어진 뒤 기록한다.
 
 ## 12. 승인 기준
 

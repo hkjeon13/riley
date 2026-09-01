@@ -362,6 +362,24 @@ struct RawGraphCapture {
 }
 
 #[repr(C)]
+struct RawGraph {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawGraphExec {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
+struct RawGraphLaunch {
+    _private: [u8; 0],
+    _not_send_sync: PhantomData<*mut ()>,
+}
+
+#[repr(C)]
 struct RawEvent {
     _private: [u8; 0],
     _not_send_sync: PhantomData<*mut ()>,
@@ -1312,6 +1330,55 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_fill_f32(
+        stream: *mut RawStream,
+        buffer: *mut RawDeviceBuffer,
+        element_count: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_fill_f32(
+        capture: *mut RawGraphCapture,
+        value: f32,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_end(
+        capture: *mut *mut RawGraphCapture,
+        out_graph: *mut *mut RawGraph,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_instantiate(
+        graph: *mut *mut RawGraph,
+        out_exec: *mut *mut RawGraphExec,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_exec_launch(
+        exec: *mut RawGraphExec,
+        stream: *mut RawStream,
+        out_launch: *mut *mut RawGraphLaunch,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_launch_complete(
+        launch: *mut *mut RawGraphLaunch,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_close(
+        graph: *mut *mut RawGraph,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_exec_close(
+        exec: *mut *mut RawGraphExec,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_stream_wait_event(
         stream: *mut RawStream,
         event: *mut RawEvent,
@@ -2256,6 +2323,91 @@ impl StreamHandle {
         ))
     }
 
+    pub(super) fn begin_graph_fill_capture(
+        &mut self,
+        buffer: &DeviceBufferHandle,
+        element_count: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph f32 fill capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe graph owner exclusively borrows the stream and
+        // device buffer for the entire graph lifetime. Native validates their
+        // exact context, fixed byte range, and persistent graph-use leases
+        // before it can enter CUDA capture.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_fill_f32(
+                self.as_ptr(),
+                buffer.as_ptr(),
+                element_count,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        // A failed begin can still have entered capture after surfacing a
+        // deferred CUDA error. Never let the buffer/stream borrow unwind while
+        // silently abandoning that native owner: one abort attempt either
+        // restores the native leases or deliberately retains them fail-closed.
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native fill-capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph fill capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -2300,59 +2452,538 @@ impl Drop for StreamHandle {
     }
 }
 
+/// Private result for a one-shot native graph transition.
+///
+/// Native graph metadata is the only evidence that capture-owned deferred
+/// Rust context leases may be released. Keep that evidence separate from the
+/// public `CudaResult`: CUDA can report a non-success status after all native
+/// resource release work is nonetheless known complete.
+pub(super) struct GraphTransition<T> {
+    pub(super) result: CudaResult<T>,
+    pub(super) resource_release_known: bool,
+    /// Whether native consumed the in/out owner. A non-null owner returned
+    /// from a pre-CUDA validation failure remains retryable by its enclosing
+    /// safe guard; an owner consumed by a CUDA lifecycle attempt never is.
+    pub(super) owner_consumed: bool,
+}
+
+impl<T> GraphTransition<T> {
+    fn consumed(result: CudaResult<T>, resource_release_known: bool) -> Self {
+        Self {
+            result,
+            resource_release_known,
+            owner_consumed: true,
+        }
+    }
+
+    fn retained(result: CudaResult<T>) -> Self {
+        Self {
+            result,
+            resource_release_known: false,
+            owner_consumed: false,
+        }
+    }
+}
+
 /// One native capture owner. This remains private because the public graph
-/// guard supplies the stream borrow and thread confinement required to use it.
+/// guard supplies the stream/buffer borrows and thread confinement required to
+/// use it.
 #[derive(Debug)]
 pub(super) struct GraphCaptureHandle {
     pointer: Option<NonNull<RawGraphCapture>>,
 }
 
 impl GraphCaptureHandle {
+    pub(super) fn enqueue_fill(&mut self, value: f32) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph f32 fill";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public GraphFillCapture keeps this capture owner, its
+        // exact stream, and its fixed device buffer exclusively borrowed.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_fill_f32(
+                pointer.as_ptr(),
+                value,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    /// Ends an active capture and transfers a fully-known graph owner out of
+    /// it. The input pointer is taken before FFI because a native end attempt
+    /// is one-shot. Native validation before CUDA entry is allowed to return
+    /// the raw owner unchanged; restore that owner so the enclosing safe guard
+    /// can abort it during Drop rather than silently stranding a live capture.
+    pub(super) fn end(&mut self) -> GraphTransition<GraphHandle> {
+        const OPERATION: &str = "end CUDA Graph capture";
+        let Some(pointer) = self.pointer.take() else {
+            return GraphTransition::consumed(Err(graph_owner_missing(OPERATION)), false);
+        };
+        let mut raw = pointer.as_ptr();
+        let mut graph = ptr::null_mut::<RawGraph>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: this uniquely owns the capture. Native consumes it after an
+        // end attempt and returns a graph only after ownership transfer is
+        // known, otherwise retaining its native leases fail-closed.
+        let status = unsafe {
+            riley_cuda_graph_capture_end(&mut raw, &mut graph, &mut graph_error, &mut error)
+        };
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return GraphTransition::retained(if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native capture end returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            });
+        }
+        let graph_failure = match decode_graph_failure_info(&graph_error) {
+            Ok(value) => value,
+            Err(error) => return GraphTransition::consumed(Err(error), false),
+        };
+        if !graph_capture_end_metadata_is_valid(&graph_error, &graph_failure) {
+            return GraphTransition::consumed(Err(malformed_graph_metadata(OPERATION)), false);
+        }
+        let resource_release_known = graph_resources_released(&graph_failure);
+        if status != STATUS_SUCCESS {
+            return GraphTransition::consumed(
+                close_unreturned_graph(
+                    graph,
+                    non_success_status_error::<()>(status, OPERATION, &error)
+                        .expect_err("a non-success native status must decode as an error"),
+                ),
+                resource_release_known,
+            );
+        }
+        if !resource_release_known {
+            return GraphTransition::consumed(
+                close_unreturned_graph(graph, malformed_graph_metadata(OPERATION)),
+                false,
+            );
+        }
+        let Some(pointer) = NonNull::new(graph) else {
+            return GraphTransition::consumed(
+                Err(missing_output(
+                    OPERATION,
+                    "native captured graph handle is null",
+                )),
+                false,
+            );
+        };
+        GraphTransition::consumed(
+            Ok(GraphHandle {
+                pointer: Some(pointer),
+            }),
+            true,
+        )
+    }
+
     /// Ends an active capture exactly once without exposing its graph. This
-    /// takes the Rust pointer before FFI so a native validation/deferred error
-    /// can never cause Drop to retry a potentially consumed CUDA transition.
+    /// takes the Rust pointer before FFI so a native CUDA lifecycle attempt can
+    /// never cause Drop to retry it. A documented pre-attempt validation error
+    /// restores the raw owner and remains retryable by the enclosing guard.
     pub(super) fn abort(&mut self) -> CudaResult<()> {
+        self.abort_with_transition().result
+    }
+
+    pub(super) fn abort_with_transition(&mut self) -> GraphTransition<()> {
         const OPERATION: &str = "abort CUDA Graph capture";
         let Some(pointer) = self.pointer.take() else {
-            return Ok(());
+            return GraphTransition::consumed(Ok(()), true);
         };
         let mut raw = pointer.as_ptr();
         let mut graph_error = RawGraphErrorInfo::new();
         let mut error = ErrorInfo::new();
         // SAFETY: this handle is uniquely owned. The native ABI consumes the
-        // in/out owner after an end attempt; a pre-attempt failure may leave it
-        // non-null, which this wrapper deliberately leaks instead of retrying.
+        // in/out owner after an end attempt; a documented pre-attempt failure
+        // leaves it non-null and is restored below.
         let status =
             unsafe { riley_cuda_graph_capture_abort(&mut raw, &mut graph_error, &mut error) };
-        let decoded = decode_graph_failure_info(&graph_error);
-        if !raw.is_null() {
-            return Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Close,
-                0,
-                OPERATION,
-                "native abort retained its capture handle; the safe wrapper abandoned it to avoid retrying an ambiguous lifecycle",
-            ));
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return GraphTransition::retained(if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native capture abort returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            });
         }
-        let graph_failure = decoded?;
+        let graph_failure = match decode_graph_failure_info(&graph_error) {
+            Ok(value) => value,
+            Err(error) => return GraphTransition::consumed(Err(error), false),
+        };
         if !graph_capture_abort_metadata_is_valid(&graph_error, &graph_failure, status) {
-            return Err(CudaError::new(
-                CudaErrorKind::Internal,
-                CudaErrorDomain::Internal,
-                CudaErrorStage::Validation,
-                0,
-                OPERATION,
-                "native graph abort returned malformed graph companion metadata",
-            ));
+            return GraphTransition::consumed(Err(malformed_graph_metadata(OPERATION)), false);
         }
-        status_result(status, OPERATION, &error)
+        GraphTransition::consumed(
+            status_result(status, OPERATION, &error),
+            graph_resources_released(&graph_failure),
+        )
     }
 }
 
 impl Drop for GraphCaptureHandle {
     fn drop(&mut self) {
         let _ = self.abort();
+    }
+}
+
+/// Captured graph owner. It is consumed by instantiate or one-shot close.
+pub(super) struct GraphHandle {
+    pointer: Option<NonNull<RawGraph>>,
+}
+
+impl GraphHandle {
+    pub(super) fn instantiate(&mut self) -> CudaResult<GraphExecHandle> {
+        const OPERATION: &str = "instantiate CUDA Graph";
+        let Some(pointer) = self.pointer.take() else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut raw = pointer.as_ptr();
+        let mut exec = ptr::null_mut::<RawGraphExec>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe CapturedGraph uniquely owns the graph and keeps its
+        // retained stream/buffer borrows alive. Native consumes graph ownership
+        // after a CUDA instantiate attempt; a pre-attempt validation error
+        // returns it unchanged and is restored below.
+        let status = unsafe {
+            riley_cuda_graph_instantiate(&mut raw, &mut exec, &mut graph_error, &mut error)
+        };
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native graph instantiate returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            };
+        }
+        let graph_failure = match decode_graph_failure_info(&graph_error) {
+            Ok(value) => value,
+            Err(error) => return close_unreturned_graph_exec(exec, error),
+        };
+        if !graph_instantiate_metadata_is_valid(&graph_error, &graph_failure) {
+            return close_unreturned_graph_exec(exec, malformed_graph_metadata(OPERATION));
+        }
+        if status != STATUS_SUCCESS {
+            return close_unreturned_graph_exec(
+                exec,
+                non_success_status_error::<()>(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            );
+        }
+        if graph_failure.poisoned() {
+            return close_unreturned_graph_exec(exec, malformed_graph_metadata(OPERATION));
+        }
+        let pointer = NonNull::new(exec)
+            .ok_or_else(|| missing_output(OPERATION, "native graph exec handle is null"))?;
+        Ok(GraphExecHandle {
+            pointer: Some(pointer),
+        })
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "close CUDA Graph";
+        let Some(pointer) = self.pointer.take() else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: graph close is one-shot after CUDA destruction is attempted.
+        // A documented validation failure leaves the owner unchanged and is
+        // restored below for the enclosing safe owner to clean up on Drop.
+        let status = unsafe { riley_cuda_graph_close(&mut raw, &mut graph_error, &mut error) };
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native graph close returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            };
+        }
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, false) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+}
+
+impl Drop for GraphHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+/// Instantiated CUDA Graph owner. Launch is separate so an in-flight launch
+/// can borrow both this owner and the capture stream until completion.
+pub(super) struct GraphExecHandle {
+    pointer: Option<NonNull<RawGraphExec>>,
+}
+
+impl GraphExecHandle {
+    pub(super) fn launch(&mut self, stream: &mut StreamHandle) -> CudaResult<GraphLaunchHandle> {
+        const OPERATION: &str = "launch CUDA Graph exec";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut launch = ptr::null_mut::<RawGraphLaunch>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: GraphExec and the exact captured stream remain uniquely
+        // borrowed by GraphLaunch. Native rejects any foreign stream before
+        // issuing cudaGraphLaunch.
+        let status = unsafe {
+            riley_cuda_graph_exec_launch(
+                pointer.as_ptr(),
+                stream.as_ptr(),
+                &mut launch,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = match decode_graph_failure_info(&graph_error) {
+            Ok(value) => value,
+            Err(error) => return settle_unreturned_graph_launch(launch, error),
+        };
+        if !graph_exec_launch_metadata_is_valid(&graph_error, &graph_failure) {
+            return settle_unreturned_graph_launch(launch, malformed_graph_metadata(OPERATION));
+        }
+        if status != STATUS_SUCCESS {
+            return settle_unreturned_graph_launch(
+                launch,
+                non_success_status_error::<()>(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            );
+        }
+        if graph_failure.poisoned() || !graph_failure.submission_started() {
+            return settle_unreturned_graph_launch(launch, malformed_graph_metadata(OPERATION));
+        }
+        let Some(pointer) = NonNull::new(launch) else {
+            // A successful submission without its required completion owner is
+            // an ABI violation. Never let the safe wrapper issue another
+            // launch or close against an exec whose in-flight state is unknown.
+            self.pointer = None;
+            return Err(missing_output(
+                OPERATION,
+                "native graph launch owner is null",
+            ));
+        };
+        Ok(GraphLaunchHandle {
+            pointer: Some(pointer),
+        })
+    }
+
+    pub(super) fn close(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "close CUDA Graph exec";
+        let Some(pointer) = self.pointer.take() else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: graph-exec close is one-shot after CUDA destruction is
+        // attempted. A documented pre-attempt validation rejection leaves the
+        // owner unchanged and is restored below.
+        let status = unsafe { riley_cuda_graph_exec_close(&mut raw, &mut graph_error, &mut error) };
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native graph exec close returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            };
+        }
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_close_metadata_is_valid(&graph_error, &graph_failure, true) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+}
+
+impl Drop for GraphExecHandle {
+    fn drop(&mut self) {
+        let _ = self.close();
+    }
+}
+
+/// A consuming safe transition cannot return a native graph alongside an
+/// error. If native did produce a valid output owner after a deferred failure,
+/// close it synchronously so its permanent stream/buffer leases do not become
+/// an accidental invisible leak.
+fn close_unreturned_graph(
+    raw_graph: *mut RawGraph,
+    transition_error: CudaError,
+) -> CudaResult<GraphHandle> {
+    let Some(pointer) = NonNull::new(raw_graph) else {
+        return Err(transition_error);
+    };
+    let mut graph = GraphHandle {
+        pointer: Some(pointer),
+    };
+    match graph.close() {
+        Ok(()) => Err(transition_error),
+        Err(close_error) => Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Close,
+            close_error.native_code(),
+            "end CUDA Graph capture",
+            format!(
+                "native capture end did not yield a safe graph result ({transition_error}) and mandatory graph-close recovery also failed ({close_error}); native leases are retained fail-closed"
+            ),
+        )),
+    }
+}
+
+/// Mirrors [`close_unreturned_graph`] for a graph exec returned with an
+/// otherwise failing instantiate transition.
+fn close_unreturned_graph_exec(
+    raw_exec: *mut RawGraphExec,
+    transition_error: CudaError,
+) -> CudaResult<GraphExecHandle> {
+    let Some(pointer) = NonNull::new(raw_exec) else {
+        return Err(transition_error);
+    };
+    let mut exec = GraphExecHandle {
+        pointer: Some(pointer),
+    };
+    match exec.close() {
+        Ok(()) => Err(transition_error),
+        Err(close_error) => Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Close,
+            close_error.native_code(),
+            "instantiate CUDA Graph",
+            format!(
+                "native graph instantiate did not yield a safe exec result ({transition_error}) and mandatory exec-close recovery also failed ({close_error}); native leases are retained fail-closed"
+            ),
+        )),
+    }
+}
+
+/// One completion owner for a submitted graph launch.
+pub(super) struct GraphLaunchHandle {
+    pointer: Option<NonNull<RawGraphLaunch>>,
+}
+
+impl GraphLaunchHandle {
+    pub(super) fn complete(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "complete CUDA Graph launch";
+        let Some(pointer) = self.pointer.take() else {
+            return Ok(());
+        };
+        let mut raw = pointer.as_ptr();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: this is the unique native completion owner. Native consumes
+        // it after one CUDA completion attempt and retains graph leases on an
+        // ambiguous result. A pre-attempt validation failure returns it
+        // unchanged and is restored below.
+        let status =
+            unsafe { riley_cuda_graph_launch_complete(&mut raw, &mut graph_error, &mut error) };
+        if let Some(pointer) = NonNull::new(raw) {
+            self.pointer = Some(pointer);
+            return if status == STATUS_SUCCESS {
+                Err(CudaError::new(
+                    CudaErrorKind::Internal,
+                    CudaErrorDomain::Internal,
+                    CudaErrorStage::Close,
+                    0,
+                    OPERATION,
+                    "native graph completion returned success while retaining its input owner",
+                ))
+            } else {
+                non_success_status_error(status, OPERATION, &error)
+            };
+        }
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_launch_complete_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+}
+
+impl Drop for GraphLaunchHandle {
+    fn drop(&mut self) {
+        let _ = self.complete();
+    }
+}
+
+/// A safe `GraphExec::launch` cannot return a completion owner alongside an
+/// error. If native reports one anyway, settle it synchronously before
+/// returning so an otherwise recoverable launch error cannot strand the exec
+/// and its stream/buffer leases forever. A failed settlement is deliberately
+/// reported as an internal close error; native then keeps the exec fail-closed.
+fn settle_unreturned_graph_launch(
+    raw_launch: *mut RawGraphLaunch,
+    launch_error: CudaError,
+) -> CudaResult<GraphLaunchHandle> {
+    let Some(pointer) = NonNull::new(raw_launch) else {
+        return Err(launch_error);
+    };
+    let mut launch = GraphLaunchHandle {
+        pointer: Some(pointer),
+    };
+    match launch.complete() {
+        Ok(()) => Err(launch_error),
+        Err(completion_error) => Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Close,
+            completion_error.native_code(),
+            "launch CUDA Graph exec",
+            format!(
+                "native graph launch failed ({launch_error}) and mandatory completion recovery also failed ({completion_error}); the graph exec is retained fail-closed"
+            ),
+        )),
     }
 }
 
@@ -5185,6 +5816,20 @@ fn status_result(status: i32, operation: &'static str, error: &ErrorInfo) -> Cud
     ))
 }
 
+/// Preserves the native error for an operation that documented a retryable
+/// pre-CUDA validation failure by returning its in/out owner unchanged.
+fn non_success_status_error<T>(
+    status: i32,
+    operation: &'static str,
+    error: &ErrorInfo,
+) -> CudaResult<T> {
+    debug_assert_ne!(status, STATUS_SUCCESS);
+    match status_result(status, operation, error) {
+        Ok(()) => unreachable!("a non-success native status must decode as an error"),
+        Err(error) => Err(error),
+    }
+}
+
 fn missing_output(operation: &'static str, message: &'static str) -> CudaError {
     CudaError::new(
         CudaErrorKind::Internal,
@@ -5222,6 +5867,93 @@ fn graph_capture_abort_metadata_is_valid(
         && !decoded.submission_started()
         && !decoded.completion_known()
         && (status != STATUS_SUCCESS || (decoded.resource_release_known() && !decoded.poisoned()))
+}
+
+fn graph_capture_enqueue_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::CaptureEnqueue))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_none()
+}
+
+fn graph_capture_end_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::CaptureEnd))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_none()
+}
+
+fn graph_instantiate_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::Instantiate))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_some()
+}
+
+fn graph_exec_launch_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::Launch))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_some()
+}
+
+fn graph_launch_complete_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::Completion))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_some()
+}
+
+fn graph_close_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+    requires_exec_id: bool,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::Close))
+        && decoded.capture_id().is_some()
+        && (decoded.exec_id().is_some() == requires_exec_id)
+}
+
+fn graph_resources_released(decoded: &CudaGraphFailureInfo) -> bool {
+    decoded.resource_release_known() && !decoded.poisoned()
+}
+
+fn graph_owner_missing(operation: &'static str) -> CudaError {
+    CudaError::new(
+        CudaErrorKind::InvalidState,
+        CudaErrorDomain::Rust,
+        CudaErrorStage::Validation,
+        0,
+        operation,
+        "the safe CUDA Graph owner was already consumed or intentionally abandoned",
+    )
+}
+
+fn malformed_graph_metadata(operation: &'static str) -> CudaError {
+    CudaError::new(
+        CudaErrorKind::Internal,
+        CudaErrorDomain::Internal,
+        CudaErrorStage::Validation,
+        0,
+        operation,
+        "native CUDA Graph operation returned malformed lifecycle metadata",
+    )
 }
 
 #[cfg(feature = "nvml")]

@@ -48,6 +48,10 @@ struct RileyCudaCaptureDomain {
 
 struct RileyCudaContext;
 struct RileyCudaGraphCapture;
+struct RileyCudaGraph;
+struct RileyCudaGraphExec;
+struct RileyCudaGraphLaunch;
+struct RileyCudaDeviceBuffer;
 struct RileyCudaDeferredCloseNode;
 
 // `consumed` records native close ownership independently of status. CUDA may
@@ -167,6 +171,11 @@ struct RileyCudaGraphCapture {
         capture_id(identifier),
         capture_started(false),
         capture_terminated(false),
+        prepared_graph(nullptr),
+        fill_buffer(nullptr),
+        fill_element_count(0),
+        fill_enqueue_count(0),
+        fill_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -181,6 +190,16 @@ struct RileyCudaGraphCapture {
   // context restoration are all known. Deferred context release may use this
   // narrow post-physical-capture state while the TLS owner stays published.
   bool capture_terminated;
+  // C05-5's sole capture whitelist is a fixed-address f32 fill. Its graph
+  // wrapper is allocated before cudaStreamBeginCapture, so capture enqueue
+  // itself cannot allocate host bookkeeping. The buffer's active-use lease is
+  // acquired before begin and transfers to the graph/exec after successful
+  // end; abort releases it with the capture's other leases.
+  RileyCudaGraph* prepared_graph;
+  RileyCudaDeviceBuffer* fill_buffer;
+  uint64_t fill_element_count;
+  uint32_t fill_enqueue_count;
+  bool fill_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -224,6 +243,76 @@ struct RileyCudaDeviceBuffer {
   uint64_t byte_len;
   std::atomic<uint32_t> active_uses;
   RileyCudaDeferredCloseNode deferred_close;
+};
+
+// A captured graph owns the existing capture context-child lease, the exact
+// captured stream's active-use lease, and the fixed fill buffer's active-use
+// lease. Those leases remain at one for the whole graph/exec lifetime. This
+// intentionally makes ordinary stream/buffer operations busy while preserving
+// a stable raw stream and device address for graph replay.
+struct RileyCudaGraph {
+  RileyCudaGraph(RileyCudaContext* owning_context,
+                 RileyCudaStream* captured_stream,
+                 RileyCudaDeviceBuffer* captured_fill_buffer,
+                 uint64_t capture_identifier) noexcept
+      : owner(owning_context),
+        stream(captured_stream),
+        fill_buffer(captured_fill_buffer),
+        capture_id(capture_identifier),
+        graph(nullptr),
+        owns_capture_leases(false) {}
+
+  RileyCudaContext* owner;
+  RileyCudaStream* stream;
+  RileyCudaDeviceBuffer* fill_buffer;
+  uint64_t capture_id;
+  cudaGraph_t graph;
+  bool owns_capture_leases;
+};
+
+// Instantiation consumes RileyCudaGraph and transfers its immutable graph,
+// exact stream, fixed buffer, and capture leases into this exec. C05-5 admits
+// at most one in-flight replay; normal stream work remains blocked by the
+// permanent graph lease rather than a second active-use count.
+struct RileyCudaGraphExec {
+  RileyCudaGraphExec(RileyCudaContext* owning_context,
+                     RileyCudaStream* captured_stream,
+                     RileyCudaDeviceBuffer* captured_fill_buffer,
+                     uint64_t capture_identifier,
+                     uint64_t executable_identifier) noexcept
+      : owner(owning_context),
+        stream(captured_stream),
+        fill_buffer(captured_fill_buffer),
+        capture_id(capture_identifier),
+        exec_id(executable_identifier),
+        graph(nullptr),
+        exec(nullptr),
+        owns_capture_leases(false),
+        launch_in_flight(false),
+        poisoned(false) {}
+
+  RileyCudaContext* owner;
+  RileyCudaStream* stream;
+  RileyCudaDeviceBuffer* fill_buffer;
+  uint64_t capture_id;
+  uint64_t exec_id;
+  cudaGraph_t graph;
+  cudaGraphExec_t exec;
+  bool owns_capture_leases;
+  bool launch_in_flight;
+  bool poisoned;
+};
+
+// One launch owner exists only between cudaGraphLaunch and a single explicit
+// completion attempt. An ambiguous completion intentionally retains this
+// owner, the graph exec, and all graph leases fail-closed.
+struct RileyCudaGraphLaunch {
+  RileyCudaGraphLaunch(RileyCudaGraphExec* owning_exec,
+                       RileyCudaStream* launch_stream) noexcept
+      : exec(owning_exec), stream(launch_stream) {}
+
+  RileyCudaGraphExec* exec;
+  RileyCudaStream* stream;
 };
 
 struct RileyCudaPinnedHostBuffer {
@@ -1355,6 +1444,22 @@ inline uint64_t next_graph_capture_id() noexcept {
   // An all-zero externally visible identity is reserved for "no capture".
   // Once the finite ID space wraps, leave the counter at zero and fail all
   // later allocations rather than reuse an observable identity.
+  uint64_t identifier = next.load(std::memory_order_relaxed);
+  while (identifier != 0) {
+    if (next.compare_exchange_weak(identifier, identifier + 1,
+                                   std::memory_order_relaxed,
+                                   std::memory_order_relaxed)) {
+      return identifier;
+    }
+  }
+  return 0;
+}
+
+inline uint64_t next_graph_exec_id() noexcept {
+  static std::atomic<uint64_t> next{1};
+  // Exec IDs are independently observable from capture IDs. Preserve zero as
+  // the ABI's no-exec sentinel and fail closed instead of wrapping/reusing an
+  // externally visible identifier.
   uint64_t identifier = next.load(std::memory_order_relaxed);
   while (identifier != 0) {
     if (next.compare_exchange_weak(identifier, identifier + 1,

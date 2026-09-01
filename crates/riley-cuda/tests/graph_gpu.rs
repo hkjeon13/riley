@@ -48,6 +48,214 @@ fn assert_eager_fill_after_recovery(
     Ok(())
 }
 
+fn download_f32_buffer(
+    context: &CudaContext,
+    buffer: &mut riley_cuda::CudaDeviceBuffer,
+    stream: &mut CudaStream,
+    element_count: u64,
+) -> Result<Vec<f32>, Box<dyn Error>> {
+    let byte_len = element_count
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("f32 capture output byte length overflow")?;
+    let host_len = usize::try_from(byte_len)?;
+    let mut staging = context.allocate_pinned_host_buffer(byte_len)?;
+    let mut bytes = vec![0_u8; host_len];
+    buffer.download_to_slice(0, &mut bytes, &mut staging, stream)?;
+    staging.close()?;
+
+    let values = bytes
+        .chunks_exact(std::mem::size_of::<f32>())
+        .map(|chunk| f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect();
+    Ok(values)
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn fixed_buffer_fill_graph_replays_exactly_and_releases_every_lease() -> Result<(), Box<dyn Error>>
+{
+    const ELEMENT_COUNT: u64 = 4_096;
+    const REPLAYS: usize = 1_000;
+    const FINAL_VALUE: f32 = -7.25;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut capture_stream = context.create_stream()?;
+    let mut download_stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("f32 capture allocation byte length overflow")?;
+    let mut buffer = context.allocate_device_buffer(byte_len)?;
+
+    let captured = {
+        let mut capture = capture_stream.begin_graph_fill_capture(
+            &mut buffer,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?;
+        // The final node makes every replay's expected output unambiguous.
+        capture.enqueue_fill(1.5)?;
+        capture.enqueue_fill(-3.0)?;
+        capture.enqueue_fill(FINAL_VALUE)?;
+        capture.end()?
+    };
+    let mut exec = captured.instantiate()?;
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+
+    // Safe Rust keeps the capture stream and buffer mutably borrowed until
+    // this close succeeds. The native graph exec retains matching raw leases
+    // too, so only a known close may return them for this independent D2H.
+    exec.close()?;
+    let values = download_f32_buffer(&context, &mut buffer, &mut download_stream, ELEMENT_COUNT)?;
+    assert_eq!(values.len(), usize::try_from(ELEMENT_COUNT)?);
+    assert!(all_f32_bits_equal(&values, FINAL_VALUE));
+
+    buffer.close()?;
+    capture_stream.close()?;
+    download_stream.close()?;
+    assert_eq!(
+        context.allocation_stats()?,
+        allocation_baseline,
+        "successful graph/exec close plus D2H staging close must restore the exact allocation baseline"
+    );
+    close_context(context)?;
+    println!(
+        "c05-5-fixed-fill-replay replays={REPLAYS} elements={ELEMENT_COUNT} final_value={FINAL_VALUE} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn captured_graph_close_releases_stream_and_buffer_for_reuse() -> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 256;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("captured graph close allocation byte length overflow")?;
+    let mut buffer = context.allocate_device_buffer(byte_len)?;
+
+    let captured = {
+        let mut capture = stream.begin_graph_fill_capture(
+            &mut buffer,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?;
+        capture.enqueue_fill(4.0)?;
+        capture.end()?
+    };
+    // This exercises graph destruction without instantiation. Success must
+    // return both the native graph leases and the Rust mutable borrows.
+    captured.close()?;
+    assert_eager_fill_after_recovery(&context, &mut stream, 4.0)?;
+
+    buffer.close()?;
+    stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-5-captured-graph-close-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn fixed_buffer_fill_capture_abort_releases_stream_and_buffer_for_reuse()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 256;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("f32 abort-recovery allocation byte length overflow")?;
+    let mut buffer = context.allocate_device_buffer(byte_len)?;
+
+    for _ in 0..2 {
+        stream
+            .begin_graph_fill_capture(
+                &mut buffer,
+                ELEMENT_COUNT,
+                CudaGraphCaptureMode::ThreadLocal,
+            )?
+            .abort()?;
+    }
+    assert_eager_fill_after_recovery(&context, &mut stream, 2.5)?;
+
+    // The buffer comes back from the capture borrow only after native abort
+    // has released its active-use lease; explicit close is the observable
+    // proof that capture did not strand it busy.
+    buffer.close()?;
+    stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-5-fixed-fill-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn zero_enqueue_fill_end_rejects_before_native_end_and_abort_restores_reuse()
+-> Result<(), Box<dyn Error>> {
+    const ELEMENT_COUNT: u64 = 256;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let mut stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<f32>())?)
+        .ok_or("zero-enqueue capture allocation byte length overflow")?;
+    let mut buffer = context.allocate_device_buffer(byte_len)?;
+
+    // `end` rejects the missing admitted node in safe Rust, before calling
+    // native end. Its consuming error path drops the still-active capture and
+    // performs the one-shot abort/recovery instead of leaving either lease
+    // stranded.
+    let error = {
+        let capture = stream.begin_graph_fill_capture(
+            &mut buffer,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?;
+        match capture.end() {
+            Ok(_) => panic!("zero-enqueue graph capture unexpectedly ended"),
+            Err(error) => error,
+        }
+    };
+    assert_eq!(error.kind(), CudaErrorKind::InvalidState);
+
+    // Both the same preallocated buffer and stream must be immediately
+    // admissible for a fresh capture after that automatic abort.
+    stream
+        .begin_graph_fill_capture(
+            &mut buffer,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    assert_eager_fill_after_recovery(&context, &mut stream, -1.5)?;
+
+    buffer.close()?;
+    stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-5-zero-enqueue-end-abort-recovery status=passed");
+    Ok(())
+}
+
 #[test]
 #[ignore = "remote GPU"]
 fn explicit_abort_restores_stream_for_eager_work() -> Result<(), Box<dyn Error>> {

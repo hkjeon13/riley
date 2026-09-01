@@ -1,9 +1,9 @@
 #![cfg(not(feature = "cuda"))]
 
 use riley_cuda::{
-    CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaGraphCaptureCapability,
-    CudaGraphCaptureMode, CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaResult,
-    CudaStream, GraphCapture,
+    CapturedGraph, CudaDeviceBuffer, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
+    CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphLifecycle, CudaGraphLifecycleState,
+    CudaGraphStage, CudaResult, CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
 };
 
 #[test]
@@ -16,6 +16,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "typedef struct RileyCudaGraphCapture RileyCudaGraphCapture;",
         "typedef struct RileyCudaGraph RileyCudaGraph;",
         "typedef struct RileyCudaGraphExec RileyCudaGraphExec;",
+        "typedef struct RileyCudaGraphLaunch RileyCudaGraphLaunch;",
         "typedef struct RileyCudaGraphErrorInfo",
         "RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL",
         "RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_UNKNOWN",
@@ -31,6 +32,25 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
     assert!(header.contains("rather than a tail extension of RileyCudaErrorInfo"));
     assert!(header.contains("riley_cuda_graph_capture_begin("));
     assert!(header.contains("riley_cuda_graph_capture_abort("));
+    for symbol in [
+        "riley_cuda_graph_capture_begin_fill_f32",
+        "riley_cuda_graph_capture_enqueue_fill_f32",
+        "riley_cuda_graph_capture_end",
+        "riley_cuda_graph_instantiate",
+        "riley_cuda_graph_exec_launch",
+        "riley_cuda_graph_launch_complete",
+        "riley_cuda_graph_close",
+        "riley_cuda_graph_exec_close",
+    ] {
+        assert!(
+            header.contains(symbol),
+            "missing additive C05-5 graph ABI: {symbol}"
+        );
+        assert!(
+            ffi.contains(symbol),
+            "missing Rust FFI binding for C05-5 graph ABI: {symbol}"
+        );
+    }
     assert!(graph.contains("pub(crate) struct RawGraphErrorInfo"));
     assert!(graph.contains("pub(crate) fn decode_graph_failure_info"));
     assert_eq!(graph.matches("struct RawGraphErrorInfo").count(), 1);
@@ -162,8 +182,53 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
     // constructing an unavailable CUDA stream or manufacturing a graph.
     let _ = begin;
 
+    fn begin_fill<'stream, 'buffer>(
+        stream: &'stream mut CudaStream,
+        buffer: &'buffer mut CudaDeviceBuffer,
+    ) -> CudaResult<GraphFillCapture<'stream, 'buffer>> {
+        stream.begin_graph_fill_capture(buffer, 16, CudaGraphCaptureMode::ThreadLocal)
+    }
+
+    fn end_fill<'stream, 'buffer>(
+        capture: GraphFillCapture<'stream, 'buffer>,
+    ) -> CudaResult<CapturedGraph<'stream, 'buffer>> {
+        capture.end()
+    }
+
+    fn instantiate_fill<'stream, 'buffer>(
+        graph: CapturedGraph<'stream, 'buffer>,
+    ) -> CudaResult<GraphExec<'stream, 'buffer>> {
+        graph.instantiate()
+    }
+
+    fn launch_fill<'exec, 'stream, 'buffer>(
+        exec: &'exec mut GraphExec<'stream, 'buffer>,
+    ) -> CudaResult<GraphLaunch<'exec, 'stream, 'buffer>> {
+        exec.launch()
+    }
+
+    fn finish_fill<'exec, 'stream, 'buffer>(
+        launch: GraphLaunch<'exec, 'stream, 'buffer>,
+    ) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_exec<'stream, 'buffer>(exec: GraphExec<'stream, 'buffer>) -> CudaResult<()> {
+        exec.close()
+    }
+
+    let _ = (
+        begin_fill,
+        end_fill,
+        instantiate_fill,
+        launch_fill,
+        finish_fill,
+        close_exec,
+    );
+
     let graph_source = include_str!("../src/graph.rs");
     assert!(graph_source.contains("CudaError::unavailable(\"CudaStream::begin_graph_capture\")"));
+    assert!(graph_source.contains("\"CudaStream::begin_graph_fill_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -181,9 +246,9 @@ fn graph_capture_is_a_real_type_level_exclusive_stream_lease() {
         .split("/// Borrowed owner of one active thread-local CUDA Graph capture")
         .nth(1)
         .expect("graph contract must retain the GraphCapture owner declaration")
-        .split("impl CudaStream")
+        .split("/// Borrowed owner of the C05-5 fixed-address f32 fill capture")
         .next()
-        .expect("GraphCapture owner declaration must precede CudaStream methods");
+        .expect("GraphCapture owner declaration must precede C05-5 graph owners");
 
     for required in [
         "stream: &'stream mut CudaStream",
@@ -216,7 +281,34 @@ fn graph_capture_is_a_real_type_level_exclusive_stream_lease() {
 }
 
 #[test]
-fn native_capture_owner_is_wired_with_one_shot_abort_recovery() {
+fn fill_graph_owners_keep_stream_buffer_and_launch_close_ordering_in_safe_types() {
+    let graph_source = include_str!("../src/graph.rs");
+
+    for required in [
+        "pub struct GraphFillCapture<'stream, 'buffer>",
+        "pub struct CapturedGraph<'stream, 'buffer>",
+        "pub struct GraphExec<'stream, 'buffer>",
+        "pub struct GraphLaunch<'exec, 'stream, 'buffer>",
+        "stream: Option<&'stream mut CudaStream>",
+        "buffer: Option<&'buffer mut CudaDeviceBuffer>",
+        "exec: &'exec mut GraphExec<'stream, 'buffer>",
+        "cannot_use_the_capture_stream",
+        "cannot_close_the_capture_buffer",
+        "cannot_reuse_resources_while_graph_is_live",
+        "cannot_close_or_relaunch_an_exec",
+        "assert_send::<riley_cuda::GraphFillCapture<'static, 'static>>();",
+        "assert_sync::<riley_cuda::GraphExec<'static, 'static>>();",
+        "assert_send::<riley_cuda::GraphLaunch<'static, 'static, 'static>>();",
+    ] {
+        assert!(
+            graph_source.contains(required),
+            "C05-5 safe lifetime/close-ordering contract is missing: {required}"
+        );
+    }
+}
+
+#[test]
+fn native_graph_owners_are_wired_with_c05_5_fill_capture_replay() {
     let header = include_str!("../../../kernels/include/riley_cuda.h");
     let native = include_str!("../../../kernels/src/graph.cu");
     let cmake = include_str!("../../../kernels/CMakeLists.txt");
@@ -224,6 +316,13 @@ fn native_capture_owner_is_wired_with_one_shot_abort_recovery() {
     let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
 
     assert!(header.contains("riley_cuda_graph_capture_abort("));
+    assert!(header.contains("riley_cuda_graph_capture_begin_fill_f32("));
+    assert!(header.contains("riley_cuda_graph_capture_enqueue_fill_f32("));
+    assert!(header.contains("riley_cuda_graph_capture_end("));
+    assert!(header.contains("riley_cuda_graph_instantiate("));
+    assert!(header.contains("riley_cuda_graph_exec_launch("));
+    assert!(header.contains("riley_cuda_graph_launch_complete("));
+    assert!(header.contains("riley_cuda_graph_exec_close("));
     assert!(native.contains("*out_capture = nullptr;"));
     assert!(
         native.contains("clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN)")
@@ -231,6 +330,9 @@ fn native_capture_owner_is_wired_with_one_shot_abort_recovery() {
     assert!(native.contains("cudaStreamBeginCapture"));
     assert!(native.contains("cudaStreamEndCapture"));
     assert!(native.contains("cudaGraphDestroy"));
+    assert!(native.contains("cudaGraphInstantiate"));
+    assert!(native.contains("cudaGraphLaunch"));
+    assert!(native.contains("cudaGraphExecDestroy"));
     assert!(native.contains("try_acquire_exclusive_use(stream->active_uses)"));
     assert!(native.contains("native_thread_token"));
     assert!(native.contains("*capture = nullptr;"));
@@ -239,15 +341,120 @@ fn native_capture_owner_is_wired_with_one_shot_abort_recovery() {
     assert!(build_script.contains("kernels_dir.join(\"src/graph.cu\")"));
     assert!(abi_layout.contains("graph_capture_begin_symbol"));
     assert!(abi_layout.contains("graph_capture_abort_symbol"));
+    assert!(abi_layout.contains("graph_capture_begin_fill_f32_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_fill_f32_symbol"));
+    assert!(abi_layout.contains("graph_capture_end_symbol"));
+    assert!(abi_layout.contains("graph_instantiate_symbol"));
+    assert!(abi_layout.contains("graph_exec_launch_symbol"));
+    assert!(abi_layout.contains("graph_launch_complete_symbol"));
+    assert!(abi_layout.contains("graph_close_symbol"));
+    assert!(abi_layout.contains("graph_exec_close_symbol"));
+}
 
-    for forbidden in [
-        "cudaGraphInstantiate",
-        "cudaGraphLaunch",
-        "riley_cuda_smoke_fill",
+#[test]
+fn fill_capture_is_preallocated_and_replay_is_bound_to_its_exact_stream() {
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let graph = include_str!("../src/graph.rs");
+
+    let capture_begin_impl = native
+        .split("RileyCudaStatus capture_begin_impl(")
+        .nth(1)
+        .expect("C05-5 fill-capture admission helper must remain present")
+        .split("extern \"C\" RileyCudaStatus")
+        .next()
+        .expect("fill-capture admission helper must end before C exports");
+    assert_precedes(
+        capture_begin_impl,
+        "try_acquire_exclusive_use(fill_buffer->active_uses)",
+        "cudaStreamBeginCapture(stream->stream",
+        "C05-5 fixed-buffer capture admission",
+    );
+    assert_precedes(
+        capture_begin_impl,
+        "require_stream_capture_idle(stream, error, kBeginFillOperation)",
+        "cudaStreamBeginCapture(stream->stream",
+        "C05-5 foreign-capture provenance admission",
+    );
+    assert!(capture_begin_impl.contains("prepared_graph"));
+    assert!(
+        native.contains("RileyCudaStatus require_stream_capture_idle("),
+        "graph begin must prove the stream was not already captured by foreign CUDA work"
+    );
+
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_fill_f32");
+    assert!(enqueue.contains("graph_fill_f32<<<"));
+    assert!(enqueue.contains("++owner->fill_enqueue_count"));
+    assert!(
+        !enqueue.contains("std::calloc") && !enqueue.contains("std::free"),
+        "the whitelisted capture enqueue must not allocate or free host bookkeeping"
+    );
+
+    let end = native_export_body(native, "riley_cuda_graph_capture_end");
+    assert!(end.contains("owner->fill_enqueue_count == 0"));
+    assert!(end.contains("owner->prepared_graph"));
+
+    let launch = native_export_body(native, "riley_cuda_graph_exec_launch");
+    assert!(launch.contains("stream != exec->stream"));
+    assert!(launch.contains("graph exec must launch on its exact captured stream"));
+
+    let complete = native_export_body(native, "riley_cuda_graph_launch_complete");
+    assert!(
+        complete.contains("exec->poisoned = false;"),
+        "a known completion must settle a launch-side deferred error so its exec can close"
+    );
+    assert!(
+        !complete.contains("exec->poisoned ||"),
+        "launch completion must remain reachable when launch reported a deferred error"
+    );
+
+    let safe_fill_capture = graph
+        .split("impl<'stream, 'buffer> GraphFillCapture<'stream, 'buffer>")
+        .nth(1)
+        .expect("safe fixed-fill graph capture must remain present")
+        .split("impl Drop for GraphFillCapture")
+        .next()
+        .expect("safe fixed-fill graph capture must end before its Drop hook");
+    assert_precedes(
+        safe_fill_capture,
+        "if !self.enqueued",
+        "let transition = self.native.end()",
+        "zero-enqueue end rejection before native end",
+    );
+    assert!(safe_fill_capture.contains("Multiple successful enqueue calls are allowed"));
+    assert!(
+        !safe_fill_capture.contains("enqueue_attempted"),
+        "C05-5 must permit the 2-3 fixed-fill nodes captured by its replay regression"
+    );
+
+    let safe_exec = graph
+        .split("impl<'stream, 'buffer> GraphExec<'stream, 'buffer>")
+        .nth(1)
+        .expect("safe graph exec must remain present")
+        .split("/// Borrowed completion owner")
+        .next()
+        .expect("safe graph exec must end before graph-launch declaration");
+    assert!(
+        safe_exec.contains("pub fn launch<'exec>(")
+            && safe_exec.contains("self.native.launch(&mut stream.native)?"),
+        "safe graph replay must source its stream solely from the retained capture lease"
+    );
+    assert!(
+        !safe_exec.contains("launch(&mut self, stream:"),
+        "safe graph replay must not accept a substitutable foreign stream"
+    );
+
+    for required in [
+        "RileyCudaGraphLaunch",
+        "fill_buffer",
+        "fill_element_count",
+        "fill_enqueue_count",
+        "launch_in_flight",
+        "owns_capture_leases",
     ] {
         assert!(
-            !native.contains(forbidden),
-            "C05-4 must not expose replay or an unreviewed capture operation: {forbidden}"
+            internal.contains(required),
+            "missing fixed-buffer graph ownership contract: {required}"
         );
     }
 }
