@@ -10,13 +10,14 @@ mod bounded_mixed_program_trace;
 #[path = "support/routing_fuzz_rotation.rs"]
 mod routing_fuzz_rotation;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use bounded_mixed_program_trace::{
     BoundedMixedProgramExpectedPlan, BoundedMixedProgramOperation, BoundedMixedProgramOracle,
-    BoundedMixedProgramTrace, bounded_mixed_program_corpus, parse_bounded_mixed_program_descriptor,
-    serialize_bounded_mixed_program_descriptor, symbolic_prompt_token,
+    BoundedMixedProgramTrace, bounded_mixed_program_corpus, minimize_bounded_mixed_program_trace,
+    parse_bounded_mixed_program_descriptor, serialize_bounded_mixed_program_descriptor,
+    symbolic_prompt_token,
 };
 use riley_runtime::paged_kv::KvLayout;
 use riley_scheduler::{
@@ -183,16 +184,26 @@ fn bounded_mixed_program_fails(trace: &BoundedMixedProgramTrace) -> bool {
     .is_err()
 }
 
-fn bounded_mixed_program_failure_report(trace: &BoundedMixedProgramTrace) -> String {
-    let descriptor = serialize_bounded_mixed_program_descriptor("failing-original", trace);
+fn bounded_mixed_program_failure_report(
+    source: &BoundedMixedProgramTrace,
+    minimized: &BoundedMixedProgramTrace,
+) -> String {
+    let source_descriptor = serialize_bounded_mixed_program_descriptor("failing-original", source);
+    let minimized_descriptor =
+        serialize_bounded_mixed_program_descriptor("failing-minimized", minimized);
     format!(
         "C03-A bounded-mixed-program-v1 failed\n\
-         source_descriptor_json:\n\
-         {descriptor}\
-         source_operations=[{}]\n\
-         scope=bounded-valid-settled-boundary-program-only\n\
-         not_established=unbounded-or-general-scheduler,plan-complete-split,inflight-cancel,abort-retry,invalid-feedback,partial-prefill,queue-aging,fault-injection,general-reducer,receipt,gpu,c02-qualification",
-        trace.describe_operations(),
+         original_descriptor_json:\n\
+         {source_descriptor}\
+         minimized_descriptor_json:\n\
+         {minimized_descriptor}\
+         original_operations=[{}]\n\
+         minimized_operations=[{}]\n\
+         reducer_scope=v1-stateful-operation-local\n\
+         failure_predicate=inner-replayer-panicked-only\n\
+         not_established=panic-site,payload,failure-signature,root-cause,general-or-global-minimum,unbounded-or-general-scheduler,plan-complete-split,inflight-cancel,abort-retry,invalid-feedback,partial-prefill,queue-aging,fault-injection,receipt,gpu,c02-qualification",
+        source.describe_operations(),
+        minimized.describe_operations(),
     )
 }
 
@@ -200,7 +211,11 @@ fn replay_bounded_mixed_program(trace: &BoundedMixedProgramTrace) {
     if !bounded_mixed_program_fails(trace) {
         return;
     }
-    panic!("{}", bounded_mixed_program_failure_report(trace));
+    let minimized = minimize_bounded_mixed_program_trace(trace, bounded_mixed_program_fails);
+    panic!(
+        "{}",
+        bounded_mixed_program_failure_report(trace, &minimized)
+    );
 }
 
 fn three_slot_mixed_trace(feedback_slot_order: Vec<u8>) -> BoundedMixedProgramTrace {
@@ -228,6 +243,177 @@ fn three_slot_mixed_trace(feedback_slot_order: Vec<u8>) -> BoundedMixedProgramTr
             BoundedMixedProgramOperation::Close,
         ],
     }
+}
+
+fn stateful_reduction_trace() -> BoundedMixedProgramTrace {
+    BoundedMixedProgramTrace {
+        seed: 0x7b6a_5948_3726_1504,
+        operations: vec![
+            BoundedMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![2, 0, 1],
+            },
+            BoundedMixedProgramOperation::Cancel { label: 2 },
+            BoundedMixedProgramOperation::Submit {
+                label: 4,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn stateful_cancel_removal_trace() -> BoundedMixedProgramTrace {
+    BoundedMixedProgramTrace {
+        seed: 0x7b6a_5948_3726_1504,
+        operations: vec![
+            BoundedMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![2, 0, 1],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 4,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![1, 0],
+            },
+            BoundedMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn stateful_label_two_removal_trace() -> BoundedMixedProgramTrace {
+    BoundedMixedProgramTrace {
+        seed: 0x7b6a_5948_3726_1504,
+        operations: vec![
+            BoundedMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![1, 0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 4,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn stateful_label_three_removal_trace() -> BoundedMixedProgramTrace {
+    BoundedMixedProgramTrace {
+        seed: 0x7b6a_5948_3726_1504,
+        operations: vec![
+            BoundedMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0, 1],
+            },
+            BoundedMixedProgramOperation::Cancel { label: 2 },
+            BoundedMixedProgramOperation::Submit {
+                label: 4,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Close,
+        ],
+    }
+}
+
+fn stateful_reducer_predicate(trace: &BoundedMixedProgramTrace) -> bool {
+    let submitted_labels = trace
+        .operations
+        .iter()
+        .filter_map(|operation| match operation {
+            BoundedMixedProgramOperation::Submit { label, .. } => Some(*label),
+            BoundedMixedProgramOperation::Cancel { .. }
+            | BoundedMixedProgramOperation::PlanCommit { .. }
+            | BoundedMixedProgramOperation::Close => None,
+        })
+        .collect::<BTreeSet<_>>();
+    submitted_labels.iter().copied().eq([1, 2, 3, 4])
+        && trace
+            .operations
+            .iter()
+            .filter(|operation| {
+                matches!(operation, BoundedMixedProgramOperation::PlanCommit { .. })
+            })
+            .count()
+            == 3
+        && trace.operations.iter().any(|operation| {
+            matches!(
+                operation,
+                BoundedMixedProgramOperation::PlanCommit {
+                    feedback_slot_order
+                } if feedback_slot_order == &[2, 0, 1]
+            )
+        })
+}
+
+fn report_descriptor(report: &str, start: &str, end: &str) -> String {
+    report
+        .split_once(start)
+        .expect("bounded reducer report contains the descriptor start")
+        .1
+        .split_once(end)
+        .expect("bounded reducer report contains the descriptor end")
+        .0
+        .to_owned()
 }
 
 fn descriptor_document_with_operations(operations: &str) -> String {
@@ -496,6 +682,156 @@ fn bounded_mixed_program_replays_every_three_slot_feedback_permutation() {
     ] {
         replay_bounded_mixed_program(&three_slot_mixed_trace(feedback_slot_order));
     }
+}
+
+#[test]
+fn bounded_mixed_program_reducer_rebases_stateful_removals() {
+    let source = stateful_reduction_trace();
+    source
+        .validate()
+        .expect("stateful bounded reducer fixture stays valid");
+    let cancel_removed = stateful_cancel_removal_trace();
+    let label_two_removed = stateful_label_two_removal_trace();
+    let label_three_removed = stateful_label_three_removal_trace();
+    let candidates = source.shrink_candidates();
+
+    assert_eq!(candidates.first(), Some(&cancel_removed));
+    assert!(
+        candidates.contains(&label_two_removed),
+        "label-two removal must rebase later feedback slots"
+    );
+    assert!(
+        candidates.contains(&label_three_removed),
+        "label-three removal must project later feedback slots"
+    );
+    for candidate in [cancel_removed, label_two_removed, label_three_removed] {
+        let document = serialize_bounded_mixed_program_descriptor("stateful-rebase", &candidate);
+        let parsed = parse_bounded_mixed_program_descriptor(&document)
+            .expect("stateful bounded reducer candidate stays strict-canonical");
+        assert_eq!(parsed.trace, candidate);
+        replay_bounded_mixed_program_inner(&candidate);
+    }
+}
+
+#[test]
+fn bounded_mixed_program_reducer_candidates_are_deduped_ranked_and_canonical() {
+    let mut sources = bounded_mixed_program_corpus()
+        .into_iter()
+        .map(|named| named.trace)
+        .collect::<Vec<_>>();
+    sources.push(stateful_reduction_trace());
+    sources.extend((1_u64..=1_024).map(|index| {
+        BoundedMixedProgramTrace::from_seed(0xe703_7ed1_a0b4_285d_u64.wrapping_mul(index))
+    }));
+
+    for source in sources {
+        let source_rank = source.shrink_rank();
+        let candidates = source.shrink_candidates();
+        for (candidate_index, candidate) in candidates.iter().enumerate() {
+            assert!(
+                !candidates[..candidate_index].contains(candidate),
+                "bounded reducer emitted a duplicate candidate"
+            );
+            assert_eq!(candidate.seed, source.seed);
+            assert!(candidate.shrink_rank() < source_rank);
+            let document =
+                serialize_bounded_mixed_program_descriptor("candidate-canonical", candidate);
+            let parsed = parse_bounded_mixed_program_descriptor(&document)
+                .expect("bounded reducer candidate stays strict-canonical");
+            assert_eq!(parsed.trace, *candidate);
+            replay_bounded_mixed_program_inner(candidate);
+        }
+    }
+}
+
+#[test]
+fn bounded_mixed_program_reducer_finds_a_stateful_local_minimum() {
+    let source = stateful_reduction_trace();
+    assert!(stateful_reducer_predicate(&source));
+    let minimized = minimize_bounded_mixed_program_trace(&source, stateful_reducer_predicate);
+    let expected = BoundedMixedProgramTrace {
+        seed: source.seed,
+        operations: vec![
+            BoundedMixedProgramOperation::Submit {
+                label: 1,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 2,
+                max_new_tokens: 2,
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 3,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![2, 0, 1],
+            },
+            BoundedMixedProgramOperation::Submit {
+                label: 4,
+                max_new_tokens: 1,
+            },
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order: vec![0, 1],
+            },
+            BoundedMixedProgramOperation::Close,
+        ],
+    };
+    assert_eq!(minimized, expected);
+    assert_eq!(minimized.seed, source.seed);
+    assert!(minimized.shrink_rank() < source.shrink_rank());
+    assert!(stateful_reducer_predicate(&minimized));
+    let document = serialize_bounded_mixed_program_descriptor("stateful-minimized", &minimized);
+    let parsed = parse_bounded_mixed_program_descriptor(&document)
+        .expect("stateful bounded local minimum stays strict-canonical");
+    assert_eq!(parsed.trace, minimized);
+    replay_bounded_mixed_program_inner(&source);
+    replay_bounded_mixed_program_inner(&minimized);
+    assert_eq!(
+        minimize_bounded_mixed_program_trace(&minimized, stateful_reducer_predicate),
+        minimized
+    );
+    assert!(
+        minimized
+            .shrink_candidates()
+            .iter()
+            .all(|candidate| !stateful_reducer_predicate(candidate)),
+        "bounded reducer result must be a local minimum for its fixed candidate order"
+    );
+}
+
+#[test]
+fn bounded_mixed_program_failure_report_preserves_source_and_local_minimum() {
+    let source = stateful_reduction_trace();
+    let minimized = minimize_bounded_mixed_program_trace(&source, stateful_reducer_predicate);
+    let report = bounded_mixed_program_failure_report(&source, &minimized);
+    assert!(report.contains("reducer_scope=v1-stateful-operation-local"));
+    assert!(report.contains("failure_predicate=inner-replayer-panicked-only"));
+    assert!(report.contains("not_established=panic-site,payload,failure-signature,root-cause"));
+    assert!(report.contains("original_operations=["));
+    assert!(report.contains("minimized_operations=["));
+
+    let original_document = report_descriptor(
+        &report,
+        "original_descriptor_json:\n",
+        "minimized_descriptor_json:\n",
+    );
+    let minimized_document = report_descriptor(
+        &report,
+        "minimized_descriptor_json:\n",
+        "original_operations=[",
+    );
+    let parsed_original = parse_bounded_mixed_program_descriptor(&original_document)
+        .expect("failure report source descriptor stays strict-canonical");
+    let parsed_minimized = parse_bounded_mixed_program_descriptor(&minimized_document)
+        .expect("failure report minimized descriptor stays strict-canonical");
+    assert_eq!(parsed_original.case_id, "failing-original");
+    assert_eq!(parsed_original.trace, source);
+    assert_eq!(parsed_minimized.case_id, "failing-minimized");
+    assert_eq!(parsed_minimized.trace, minimized);
 }
 
 #[test]

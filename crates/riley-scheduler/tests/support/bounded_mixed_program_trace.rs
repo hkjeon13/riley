@@ -202,6 +202,99 @@ impl BoundedMixedProgramTrace {
             .join(" -> ")
     }
 
+    /// Returns deterministic, state-preserving simplifications for the bounded
+    /// raw-program V1 grammar.
+    ///
+    /// The candidate order is settled-cancel removal, one logical submission
+    /// removal (and its dependent settled cancel), direct identity feedback
+    /// permutations, then one left-to-right adjacent inversion swap. Removing
+    /// a cancel or submission recomputes later feedback slots from the
+    /// descriptor's semantic label state: submission order first, with decode
+    /// requests before prefills. This preserves the source feedback order for
+    /// surviving labels and appends candidate-only labels in semantic slot
+    /// order. Close, labels, plan topology, and output capacities do not
+    /// change in this local reducer.
+    #[must_use]
+    pub fn shrink_candidates(&self) -> Vec<Self> {
+        self.validate()
+            .expect("bounded mixed shrinker requires a valid source descriptor");
+        let source_rank = self.shrink_rank();
+        let mut candidates = Vec::new();
+
+        if let Some(candidate) = self.remove_settled_cancel() {
+            push_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for label in self.submission_labels() {
+            let candidate = self.remove_logical_submission(label);
+            push_reduction_candidate(&mut candidates, source_rank, &candidate);
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            let canonical = canonical_slot_order(feedback_slot_order.len());
+            if *feedback_slot_order != canonical {
+                let mut candidate = self.clone();
+                let BoundedMixedProgramOperation::PlanCommit {
+                    feedback_slot_order,
+                } = &mut candidate.operations[operation_index]
+                else {
+                    unreachable!("bounded mixed plan index stays a plan commit");
+                };
+                *feedback_slot_order = canonical;
+                push_reduction_candidate(&mut candidates, source_rank, &candidate);
+            }
+        }
+        for (operation_index, operation) in self.operations.iter().enumerate() {
+            let BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order,
+            } = operation
+            else {
+                continue;
+            };
+            for slot_index in 0..feedback_slot_order.len().saturating_sub(1) {
+                if feedback_slot_order[slot_index] > feedback_slot_order[slot_index + 1] {
+                    let mut candidate = self.clone();
+                    let BoundedMixedProgramOperation::PlanCommit {
+                        feedback_slot_order,
+                    } = &mut candidate.operations[operation_index]
+                    else {
+                        unreachable!("bounded mixed plan index stays a plan commit");
+                    };
+                    feedback_slot_order.swap(slot_index, slot_index + 1);
+                    push_reduction_candidate(&mut candidates, source_rank, &candidate);
+                }
+            }
+        }
+        candidates
+    }
+
+    /// Returns the lexicographic rank used by the bounded raw-program local
+    /// reducer: submitted logical requests, settled-cancel presence, then
+    /// feedback-order inversions. It is not a general counterexample metric.
+    #[must_use]
+    pub fn shrink_rank(&self) -> (usize, usize, usize) {
+        self.validate()
+            .expect("bounded mixed shrink rank requires a valid descriptor");
+        let mut submission_count = 0_usize;
+        let mut cancellation_count = 0_usize;
+        let mut feedback_inversions = 0_usize;
+        for operation in &self.operations {
+            match operation {
+                BoundedMixedProgramOperation::Submit { .. } => submission_count += 1,
+                BoundedMixedProgramOperation::Cancel { .. } => cancellation_count += 1,
+                BoundedMixedProgramOperation::PlanCommit {
+                    feedback_slot_order,
+                } => feedback_inversions += inversion_count(feedback_slot_order),
+                BoundedMixedProgramOperation::Close => {}
+            }
+        }
+        (submission_count, cancellation_count, feedback_inversions)
+    }
+
     /// Validates all syntax-independent V1 state-machine bounds and transitions.
     pub fn validate(&self) -> Result<(), String> {
         validate_operations(&self.operations)
@@ -218,6 +311,237 @@ impl BoundedMixedProgramTrace {
             source_seed: format!("0x{:016x}", self.seed),
             operations: self.operations.clone(),
         })
+    }
+
+    fn submission_labels(&self) -> Vec<u8> {
+        self.operations
+            .iter()
+            .filter_map(|operation| match operation {
+                BoundedMixedProgramOperation::Submit { label, .. } => Some(*label),
+                BoundedMixedProgramOperation::Cancel { .. }
+                | BoundedMixedProgramOperation::PlanCommit { .. }
+                | BoundedMixedProgramOperation::Close => None,
+            })
+            .collect()
+    }
+
+    fn remove_settled_cancel(&self) -> Option<Self> {
+        let label = self
+            .operations
+            .iter()
+            .find_map(|operation| match operation {
+                BoundedMixedProgramOperation::Cancel { label } => Some(*label),
+                BoundedMixedProgramOperation::Submit { .. }
+                | BoundedMixedProgramOperation::PlanCommit { .. }
+                | BoundedMixedProgramOperation::Close => None,
+            })?;
+        Some(remap_after_removal(
+            self,
+            ReductionRemoval::SettledCancel { label },
+        ))
+    }
+
+    fn remove_logical_submission(&self, label: u8) -> Self {
+        remap_after_removal(self, ReductionRemoval::Submission { label })
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ReductionRemoval {
+    SettledCancel { label: u8 },
+    Submission { label: u8 },
+}
+
+impl ReductionRemoval {
+    const fn removes_submission(self, label: u8) -> bool {
+        matches!(self, Self::Submission { label: removed } if removed == label)
+    }
+
+    const fn removes_cancel(self, label: u8) -> bool {
+        matches!(
+            self,
+            Self::SettledCancel { label: removed } | Self::Submission { label: removed }
+                if removed == label
+        )
+    }
+}
+
+#[derive(Clone)]
+struct ReductionRequest {
+    label: u8,
+    max_new_tokens: u8,
+    generated_tokens: u8,
+    live: bool,
+    submission_order: usize,
+}
+
+/// Small semantic state used only to rebase feedback after a local removal.
+///
+/// Unlike descriptor validation, this preserves public-plan slot semantics:
+/// live labels are ordered by submission order inside decode and prefill
+/// partitions. It intentionally permits an intermediate candidate to exceed a
+/// grammar cap; the caller filters that candidate through `validate` before it
+/// becomes observable.
+#[derive(Default)]
+struct ReductionState {
+    requests: Vec<ReductionRequest>,
+}
+
+impl ReductionState {
+    fn submit(&mut self, label: u8, max_new_tokens: u8) {
+        let submission_order = self.requests.len();
+        self.requests.push(ReductionRequest {
+            label,
+            max_new_tokens,
+            generated_tokens: 0,
+            live: true,
+            submission_order,
+        });
+    }
+
+    fn cancel(&mut self, label: u8) {
+        let request = self
+            .requests
+            .iter_mut()
+            .find(|request| request.label == label)
+            .expect("valid bounded source cancellation has a submitted label");
+        assert!(
+            request.live,
+            "valid bounded source cancellation has a live label"
+        );
+        request.live = false;
+    }
+
+    fn semantic_slot_labels(&self) -> Vec<u8> {
+        let mut live = self
+            .requests
+            .iter()
+            .filter(|request| request.live)
+            .collect::<Vec<_>>();
+        live.sort_unstable_by_key(|request| {
+            (request.generated_tokens == 0, request.submission_order)
+        });
+        live.into_iter().map(|request| request.label).collect()
+    }
+
+    fn commit(&mut self) {
+        for request in self.requests.iter_mut().filter(|request| request.live) {
+            request.generated_tokens = request
+                .generated_tokens
+                .checked_add(1)
+                .expect("bounded reduction generation count");
+            if request.generated_tokens == request.max_new_tokens {
+                request.live = false;
+            }
+        }
+    }
+}
+
+fn remap_after_removal(
+    trace: &BoundedMixedProgramTrace,
+    removal: ReductionRemoval,
+) -> BoundedMixedProgramTrace {
+    let mut source_state = ReductionState::default();
+    let mut candidate_state = ReductionState::default();
+    let mut operations = Vec::with_capacity(trace.operations.len());
+
+    for operation in &trace.operations {
+        match operation {
+            BoundedMixedProgramOperation::Submit {
+                label,
+                max_new_tokens,
+            } => {
+                source_state.submit(*label, *max_new_tokens);
+                if !removal.removes_submission(*label) {
+                    candidate_state.submit(*label, *max_new_tokens);
+                    operations.push(operation.clone());
+                }
+            }
+            BoundedMixedProgramOperation::Cancel { label } => {
+                source_state.cancel(*label);
+                if !removal.removes_cancel(*label) {
+                    candidate_state.cancel(*label);
+                    operations.push(operation.clone());
+                }
+            }
+            BoundedMixedProgramOperation::PlanCommit {
+                feedback_slot_order,
+            } => {
+                let source_slots = source_state.semantic_slot_labels();
+                let candidate_slots = candidate_state.semantic_slot_labels();
+                operations.push(BoundedMixedProgramOperation::PlanCommit {
+                    feedback_slot_order: remap_feedback_slot_order(
+                        &source_slots,
+                        feedback_slot_order,
+                        &candidate_slots,
+                    ),
+                });
+                source_state.commit();
+                candidate_state.commit();
+            }
+            BoundedMixedProgramOperation::Close => operations.push(operation.clone()),
+        }
+    }
+
+    BoundedMixedProgramTrace {
+        seed: trace.seed,
+        operations,
+    }
+}
+
+fn remap_feedback_slot_order(
+    source_slots: &[u8],
+    source_feedback_slot_order: &[u8],
+    candidate_slots: &[u8],
+) -> Vec<u8> {
+    let candidate_slot_by_label = candidate_slots
+        .iter()
+        .enumerate()
+        .map(|(slot, label)| {
+            (
+                *label,
+                u8::try_from(slot).expect("bounded reduction slot fits u8"),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut emitted_labels = BTreeSet::new();
+    let mut remapped = Vec::with_capacity(candidate_slots.len());
+
+    for source_slot in source_feedback_slot_order {
+        let label = source_slots[usize::from(*source_slot)];
+        if let Some(candidate_slot) = candidate_slot_by_label.get(&label) {
+            if emitted_labels.insert(label) {
+                remapped.push(*candidate_slot);
+            }
+        }
+    }
+    for label in candidate_slots {
+        if emitted_labels.insert(*label) {
+            remapped.push(
+                *candidate_slot_by_label
+                    .get(label)
+                    .expect("candidate semantic slot has its label mapping"),
+            );
+        }
+    }
+    remapped
+}
+
+fn push_reduction_candidate(
+    candidates: &mut Vec<BoundedMixedProgramTrace>,
+    source_rank: (usize, usize, usize),
+    candidate: &BoundedMixedProgramTrace,
+) {
+    if candidate.validate().is_err() {
+        return;
+    }
+    let candidate = strict_round_trip_trace(candidate, "shrink-candidate");
+    assert!(
+        candidate.shrink_rank() < source_rank,
+        "bounded mixed shrink candidate must strictly reduce its rank"
+    );
+    if !candidates.contains(&candidate) {
+        candidates.push(candidate);
     }
 }
 
@@ -283,6 +607,53 @@ pub fn parse_bounded_mixed_program_descriptor(
         return Err("bounded mixed program descriptor JSON is not canonical".to_owned());
     }
     descriptor.into_named_trace()
+}
+
+/// Greedily minimizes a reproducing bounded raw program over the fixed local
+/// candidate order.
+///
+/// The source and every candidate are strict-codec round-tripped before the
+/// caller's predicate sees them. The returned descriptor is only a local
+/// minimum for this bounded grammar and predicate; it does not preserve a
+/// panic site, payload, failure signature, or root cause.
+pub fn minimize_bounded_mixed_program_trace<F>(
+    trace: &BoundedMixedProgramTrace,
+    mut reproduces: F,
+) -> BoundedMixedProgramTrace
+where
+    F: FnMut(&BoundedMixedProgramTrace) -> bool,
+{
+    let mut minimized = strict_round_trip_trace(trace, "shrink-source");
+    assert!(
+        reproduces(&minimized),
+        "bounded mixed minimization requires a reproducing source trace"
+    );
+    loop {
+        let mut next = None;
+        for candidate in minimized.shrink_candidates() {
+            let candidate = strict_round_trip_trace(&candidate, "shrink-candidate");
+            if reproduces(&candidate) {
+                next = Some(candidate);
+                break;
+            }
+        }
+        let Some(candidate) = next else {
+            return minimized;
+        };
+        minimized = candidate;
+    }
+}
+
+fn strict_round_trip_trace(
+    trace: &BoundedMixedProgramTrace,
+    case_id: &str,
+) -> BoundedMixedProgramTrace {
+    let document = serialize_bounded_mixed_program_descriptor(case_id, trace);
+    let parsed = parse_bounded_mixed_program_descriptor(&document)
+        .expect("bounded mixed shrink descriptor stays strict-canonical");
+    assert_eq!(parsed.case_id, case_id);
+    assert_eq!(parsed.trace, *trace);
+    parsed.trace
 }
 
 const CORPUS_DOCUMENTS_V1: [(&str, &str); 7] = [
@@ -989,6 +1360,25 @@ fn validate_slot_order(order: &[u8], slot_count: usize, field: &str) -> Result<(
         }
     }
     Ok(())
+}
+
+fn canonical_slot_order(slot_count: usize) -> Vec<u8> {
+    (0..slot_count)
+        .map(|slot| u8::try_from(slot).expect("bounded mixed slot fits u8"))
+        .collect()
+}
+
+fn inversion_count(order: &[u8]) -> usize {
+    order
+        .iter()
+        .enumerate()
+        .map(|(index, slot)| {
+            order[index + 1..]
+                .iter()
+                .filter(|other| slot > *other)
+                .count()
+        })
+        .sum()
 }
 
 fn validate_label(label: u8) -> Result<(), String> {
