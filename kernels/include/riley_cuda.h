@@ -193,6 +193,11 @@ typedef uint32_t RileyCudaGraphStage;
 #define RILEY_CUDA_GRAPH_STAGE_LAUNCH ((RileyCudaGraphStage)7)
 #define RILEY_CUDA_GRAPH_STAGE_COMPLETION ((RileyCudaGraphStage)8)
 #define RILEY_CUDA_GRAPH_STAGE_CLOSE ((RileyCudaGraphStage)9)
+// Copies ordinary host bytes into a graph-retained pinned source immediately
+// before one fixed-address H2D graph replay. This is intentionally distinct
+// from capture enqueue and CUDA launch: the payload copy is synchronous CPU
+// work and must not claim submission or completion evidence.
+#define RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE ((RileyCudaGraphStage)10)
 
 // Caller-owned companion metadata for future graph entry points. This is a
 // separate fixed-size record rather than a tail extension of RileyCudaErrorInfo
@@ -1176,10 +1181,32 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
     float value,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
-// Ends one prepared fill capture and transfers its context-child, exact-stream
-// and exact-buffer leases to the returned graph. Once CUDA end has been
-// attempted, *capture is null even if recovery is ambiguous. A validation
-// failure before that attempt leaves it intact.
+// Begins a C05-7 capture containing exactly one fixed-address, whole-slab H2D
+// memcpy node. `source` and `destination` must be live allocations in the
+// stream's context, have the same non-zero byte length, and remain permanently
+// leased until the resulting graph or exec is closed. No offsets, ranges, or
+// dynamic pointers are accepted.
+RileyCudaStatus riley_cuda_graph_capture_begin_h2d(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* destination,
+    RileyCudaPinnedHostBuffer* source,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole fixed-address H2D node for a capture created by
+// riley_cuda_graph_capture_begin_h2d. The captured source and destination
+// pointers and exact byte length are immutable; payload staging occurs only
+// through riley_cuda_graph_exec_stage_h2d_source after instantiation.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_h2d(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Ends one prepared fixed-operation capture and transfers its context-child,
+// exact stream, device-destination, and (for H2D) pinned-source leases to the
+// returned graph. Once CUDA end has been attempted, *capture is null even if
+// recovery is ambiguous. A validation failure before that attempt leaves it
+// intact.
 RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture,
     RileyCudaGraph** out_graph,
@@ -1200,6 +1227,18 @@ RileyCudaStatus riley_cuda_graph_exec_launch(
     RileyCudaGraphExec* exec,
     RileyCudaStream* stream,
     RileyCudaGraphLaunch** out_launch,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Stages one exact whole-slab payload into the pinned source retained by an
+// H2D graph exec. This special graph-owner operation is the only permitted
+// mutable access while the pinned allocation's permanent graph lease is held.
+// It performs no CUDA call and is consumed by the next graph-launch attempt;
+// a graph H2D exec cannot replay stale staged bytes.
+RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
+    RileyCudaGraphExec* exec,
+    RileyCudaPinnedHostBuffer* source,
+    const uint8_t* bytes,
+    uint64_t byte_len,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Performs the one completion boundary for an in-flight graph launch. After a

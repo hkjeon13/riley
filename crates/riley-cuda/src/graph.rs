@@ -15,8 +15,8 @@ use std::{cell::RefCell, sync::Arc};
 #[cfg(feature = "cuda")]
 use crate::runtime::{ContextInner, ensure_same_context};
 use crate::{
-    CudaDeviceBuffer, CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage, CudaResult,
-    CudaStream,
+    CudaDeviceBuffer, CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
+    CudaPinnedHostBuffer, CudaResult, CudaStream,
 };
 
 // A native close deferred into a live capture still owns a RileyCudaContext
@@ -184,6 +184,9 @@ pub enum CudaGraphStage {
     Completion,
     /// Closing a capture, graph, or graph executable.
     Close,
+    /// Staging an exact payload into a graph-retained fixed H2D source before
+    /// one replay. This is synchronous host work, not CUDA launch submission.
+    InputStage,
     /// A future ABI stage that this Rust wrapper does not yet understand.
     Unknown(u32),
 }
@@ -422,6 +425,7 @@ const fn decode_graph_stage(value: u32) -> Option<CudaGraphStage> {
         7 => Some(CudaGraphStage::Launch),
         8 => Some(CudaGraphStage::Completion),
         9 => Some(CudaGraphStage::Close),
+        10 => Some(CudaGraphStage::InputStage),
         unknown => Some(CudaGraphStage::Unknown(unknown)),
     }
 }
@@ -1793,6 +1797,607 @@ fn take_owned_graph_fill_resources(
     Ok(OwnedGraphFillResources::new(stream, buffer))
 }
 
+/// A by-value stream, pinned source, and device destination recovered from a
+/// known fixed-address H2D graph release.
+///
+/// It is not itself a graph capability: its three values are ordinary cold
+/// resources again only after native close proves every permanent graph lease
+/// has been released.
+pub struct OwnedGraphH2DResources {
+    stream: CudaStream,
+    source: CudaPinnedHostBuffer,
+    destination: CudaDeviceBuffer,
+}
+
+impl OwnedGraphH2DResources {
+    fn new(
+        stream: CudaStream,
+        source: CudaPinnedHostBuffer,
+        destination: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            source,
+            destination,
+        }
+    }
+
+    /// Returns the exact stream, pinned source, and device destination after a
+    /// known graph release.
+    #[must_use]
+    pub fn into_parts(self) -> (CudaStream, CudaPinnedHostBuffer, CudaDeviceBuffer) {
+        let Self {
+            stream,
+            source,
+            destination,
+        } = self;
+        (stream, source, destination)
+    }
+
+    /// Explicitly destroys the recovered cold resources.
+    ///
+    /// The device destination closes before the retained pinned source and
+    /// stream, mirroring the ordinary caller-owned copy cleanup order.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, source, destination) = self.into_parts();
+        destination.close()?;
+        source.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning a by-value fixed-address H2D graph capture.
+///
+/// Only Rust preflight failures return the untouched three-resource bundle.
+/// Once native capture entry has been attempted, the bundle is intentionally
+/// withheld because CUDA may retain its raw source/destination/stream leases
+/// while resolving a deferred failure.
+#[must_use]
+pub struct OwnedGraphH2DCaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphH2DResources>,
+}
+
+impl OwnedGraphH2DCaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphH2DResources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The original CUDA validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns untouched values only when native capture ownership was never
+    /// entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphH2DResources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphH2DCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphH2DCaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphH2DCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph H2D capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphH2DCaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address whole-slab H2D graph capture.
+///
+/// The retained pinned source and device destination cannot be independently
+/// read, written, closed, or moved while CUDA may reference their addresses.
+/// This thread-local capture owner is deliberately `!Send + !Sync`.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphH2DCapture>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphH2DCapture>();
+/// ```
+pub struct OwnedGraphH2DCapture {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    // Native drops before child resource wrappers. A capture ambiguity can own
+    // all three raw addresses and therefore must remain fail-closed first.
+    stream: Option<CudaStream>,
+    source: Option<CudaPinnedHostBuffer>,
+    destination: Option<CudaDeviceBuffer>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphH2DCapture {
+    /// Captures the sole fixed-address H2D node.
+    ///
+    /// There are no user-supplied pointers, offsets, ranges, or payload bytes:
+    /// begin fixed the whole source/destination slabs, and replay staging is a
+    /// later graph-exec operation.
+    pub fn enqueue_h2d(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphH2DCapture::enqueue_h2d";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph H2D capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph H2D enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed H2D graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_h2d();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers all three moved resources into an owned
+    /// captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedH2DGraph> {
+        const OPERATION: &str = "OwnedGraphH2DCapture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph H2D capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph H2D enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed H2D enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_h2d_resources(
+                &mut self.stream,
+                &mut self.source,
+                &mut self.destination,
+                OPERATION,
+            )?;
+            let (stream, source, destination) = resources.into_parts();
+            Ok(OwnedCapturedH2DGraph {
+                native,
+                stream: Some(stream),
+                source: Some(source),
+                destination: Some(destination),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.source, &mut self.destination);
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns the moved resources only after known native
+    /// recovery releases every graph lease.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphH2DResources> {
+        self.abort_once()?;
+        take_owned_graph_h2d_resources(
+            &mut self.stream,
+            &mut self.source,
+            &mut self.destination,
+            "OwnedGraphH2DCapture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable("OwnedGraphH2DCapture::abort"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphH2DCapture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address H2D CUDA Graph awaiting instantiate or close.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedCapturedH2DGraph>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedCapturedH2DGraph>();
+/// ```
+pub struct OwnedCapturedH2DGraph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    stream: Option<CudaStream>,
+    source: Option<CudaPinnedHostBuffer>,
+    destination: Option<CudaDeviceBuffer>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedH2DGraph {
+    /// Instantiates this graph while retaining its exact source, destination,
+    /// and stream by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphH2DExec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_h2d_resources(
+                &mut self.stream,
+                &mut self.source,
+                &mut self.destination,
+                "OwnedCapturedH2DGraph::instantiate",
+            )?;
+            let (stream, source, destination) = resources.into_parts();
+            Ok(OwnedGraphH2DExec {
+                native,
+                stream: Some(stream),
+                source: Some(source),
+                destination: Some(destination),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.source, &mut self.destination);
+            Err(CudaError::unavailable("OwnedCapturedH2DGraph::instantiate"))
+        }
+    }
+
+    /// Destroys the graph and returns the three resources only after known
+    /// native release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_h2d_resources(
+                &mut self.stream,
+                &mut self.source,
+                &mut self.destination,
+                "OwnedCapturedH2DGraph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.source, &mut self.destination);
+            Err(CudaError::unavailable("OwnedCapturedH2DGraph::close"))
+        }
+    }
+}
+
+/// By-value fixed-address H2D CUDA Graph executable.
+///
+/// It exposes only [`Self::launch_with_source`], which stages one exact whole
+/// payload into the retained pinned allocation before the next replay. There is
+/// intentionally no safe bare launch that could replay stale source bytes.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphH2DExec>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphH2DExec>();
+/// ```
+pub struct OwnedGraphH2DExec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    stream: Option<CudaStream>,
+    source: Option<CudaPinnedHostBuffer>,
+    destination: Option<CudaDeviceBuffer>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphH2DExec {
+    /// Stages one exact whole-slab payload and launches its fixed-address H2D
+    /// graph replay.
+    ///
+    /// The returned completion owner retains an exclusive mutable borrow of
+    /// this exec, so no second stage, relaunch, or close can occur until the
+    /// one CUDA replay reaches its completion boundary.
+    pub fn launch_with_source<'exec>(
+        &'exec mut self,
+        bytes: &[u8],
+    ) -> CudaResult<OwnedGraphH2DLaunch<'exec>> {
+        const OPERATION: &str = "OwnedGraphH2DExec::launch_with_source";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph H2D transition left native state uncertain",
+            ));
+        }
+        let expected_byte_len = self
+            .source
+            .as_ref()
+            .ok_or_else(|| {
+                self.terminal = true;
+                CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph exec lost its pinned H2D source",
+                )
+            })?
+            .byte_len();
+        let actual_byte_len = u64::try_from(bytes.len())
+            .map_err(|_| CudaError::out_of_range(OPERATION, "payload length does not fit u64"))?;
+        if actual_byte_len != expected_byte_len {
+            return Err(CudaError::out_of_range(
+                OPERATION,
+                format!(
+                    "payload has {actual_byte_len} bytes, but this fixed H2D graph requires exactly {expected_byte_len}"
+                ),
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            if self.destination.is_none() {
+                self.terminal = true;
+                return Err(CudaError::invalid_state(
+                    OPERATION,
+                    "the owned graph exec lost its fixed device destination",
+                ));
+            }
+            let source = self.source.as_ref().expect("source checked above");
+            if let Err(error) = self.native.stage_h2d_source(source.native_handle(), bytes) {
+                // Native staging is the only path that marks input fresh. Do
+                // not permit any later launch to observe a previous payload
+                // after a malformed native stage outcome.
+                self.terminal = true;
+                return Err(error);
+            }
+            let native = match self.stream.as_mut() {
+                Some(stream) => self.native.launch(&mut stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph exec lost its capture stream",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphH2DLaunch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns all captured resources only after
+    /// native close proves its three permanent leases were released.
+    ///
+    /// ```compile_fail
+    /// fn cannot_close_an_owned_h2d_exec_while_launch_is_live(
+    ///     mut exec: riley_cuda::OwnedGraphH2DExec,
+    ///     payload: Vec<u8>,
+    /// ) {
+    ///     let launch = exec.launch_with_source(&payload).unwrap();
+    ///     let _ = exec.close();
+    ///     drop(launch);
+    /// }
+    /// ```
+    pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphH2DExec::close",
+                "an earlier graph H2D transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_h2d_resources(
+                &mut self.stream,
+                &mut self.source,
+                &mut self.destination,
+                "OwnedGraphH2DExec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (&mut self.stream, &mut self.source, &mut self.destination);
+            Err(CudaError::unavailable("OwnedGraphH2DExec::close"))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphH2DExec`] replay.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphH2DLaunch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphH2DLaunch<'static>>();
+/// ```
+pub struct OwnedGraphH2DLaunch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphH2DExec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphH2DLaunch<'_> {
+    /// Waits for H2D graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable("OwnedGraphH2DLaunch::finish"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphH2DLaunch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_h2d_resources(
+    stream: &mut Option<CudaStream>,
+    source: &mut Option<CudaPinnedHostBuffer>,
+    destination: &mut Option<CudaDeviceBuffer>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphH2DResources> {
+    let stream = stream.take().ok_or_else(|| {
+        CudaError::invalid_state(operation, "the owned graph owner lost its capture stream")
+    })?;
+    let source = source.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph owner lost its pinned H2D source",
+        )
+    })?;
+    let destination = destination.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph owner lost its fixed device destination",
+        )
+    })?;
+    Ok(OwnedGraphH2DResources::new(stream, source, destination))
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_h2d_capture_preflight(
+    stream: &CudaStream,
+    source: &CudaPinnedHostBuffer,
+    destination: &CudaDeviceBuffer,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, source.context_owner(), operation)?;
+    ensure_same_context(&stream.context, destination.context_owner(), operation)?;
+    source.ensure_idle_for_operation(operation)?;
+    destination.ensure_idle_for_operation(operation)?;
+    if source.byte_len() == 0 || source.byte_len() != destination.byte_len() {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "fixed graph H2D requires equal nonzero whole slabs, but source has {} bytes and destination has {} bytes",
+                source.byte_len(),
+                destination.byte_len()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 fn validate_graph_fill_capture_preflight(
     stream: &CudaStream,
@@ -1917,6 +2522,75 @@ impl CudaStream {
             let _ = (element_count, mode);
             Err(OwnedGraphFillCaptureBeginError::recoverable(
                 CudaError::unavailable("CudaStream::begin_owned_graph_fill_capture"),
+                resources,
+            ))
+        }
+    }
+
+    /// Begins a by-value C05-7 graph capture containing exactly one
+    /// fixed-address whole-slab H2D node.
+    ///
+    /// The moved pinned source and device destination must have equal nonzero
+    /// lengths in this stream's context. Replay payloads are supplied later to
+    /// [`OwnedGraphH2DExec::launch_with_source`]; this entry point does not
+    /// expose offsets, ranges, arbitrary node updates, eager fallback, model
+    /// execution, or C07 registry wiring.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched triple through
+    /// [`OwnedGraphH2DCaptureBeginError::into_resources`]. After native entry,
+    /// errors return no reusable resources because native capture may retain
+    /// the raw source/destination/stream leases fail-closed.
+    pub fn begin_owned_graph_h2d_capture(
+        self,
+        source: CudaPinnedHostBuffer,
+        destination: CudaDeviceBuffer,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphH2DResources::new(self, source, destination);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphH2DResources::new(self, source, destination);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_h2d_capture";
+            if let Err(error) = validate_graph_h2d_capture_preflight(
+                &resources.stream,
+                &resources.source,
+                &resources.destination,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphH2DCaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources.stream.native.begin_graph_h2d_capture(
+                resources.destination.native_handle(),
+                resources.source.native_handle(),
+                mode as u32,
+            ) {
+                Ok(native) => native,
+                Err(error) => return Err(OwnedGraphH2DCaptureBeginError::terminal(error)),
+            };
+            begin_deferred_capture_contexts();
+            let (stream, source, destination) = resources.into_parts();
+            Ok(OwnedGraphH2DCapture {
+                native,
+                stream: Some(stream),
+                source: Some(source),
+                destination: Some(destination),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = mode;
+            Err(OwnedGraphH2DCaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_h2d_capture"),
                 resources,
             ))
         }

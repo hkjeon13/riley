@@ -777,6 +777,21 @@ impl CudaPinnedHostBuffer {
         self.byte_len
     }
 
+    #[cfg(feature = "cuda")]
+    pub(crate) fn context_owner(&self) -> &Arc<ContextInner> {
+        &self.context
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn ensure_idle_for_operation(&self, operation: &'static str) -> CudaResult<()> {
+        self.use_state.ensure_idle(operation, "pinned host buffer")
+    }
+
+    #[cfg(feature = "cuda")]
+    pub(crate) fn native_handle(&self) -> &ffi::PinnedHostBufferHandle {
+        &self.native
+    }
+
     /// Copies ordinary host bytes into pinned storage synchronously.
     ///
     /// # Errors

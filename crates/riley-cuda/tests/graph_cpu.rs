@@ -3,9 +3,11 @@
 use riley_cuda::{
     CapturedGraph, CudaDeviceBuffer, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
     CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphLifecycle, CudaGraphLifecycleState,
-    CudaGraphStage, CudaResult, CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
-    OwnedCapturedGraph, OwnedGraphExec, OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError,
-    OwnedGraphFillResources, OwnedGraphLaunch,
+    CudaGraphStage, CudaPinnedHostBuffer, CudaResult, CudaStream, GraphCapture, GraphExec,
+    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedGraphExec,
+    OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
+    OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch,
+    OwnedGraphH2DResources, OwnedGraphLaunch,
 };
 
 #[test]
@@ -25,6 +27,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED",
         "RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN",
         "RILEY_CUDA_GRAPH_STAGE_CLOSE",
+        "RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE",
     ] {
         assert!(
             header.contains(declaration),
@@ -37,9 +40,12 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
     for symbol in [
         "riley_cuda_graph_capture_begin_fill_f32",
         "riley_cuda_graph_capture_enqueue_fill_f32",
+        "riley_cuda_graph_capture_begin_h2d",
+        "riley_cuda_graph_capture_enqueue_h2d",
         "riley_cuda_graph_capture_end",
         "riley_cuda_graph_instantiate",
         "riley_cuda_graph_exec_launch",
+        "riley_cuda_graph_exec_stage_h2d_source",
         "riley_cuda_graph_launch_complete",
         "riley_cuda_graph_close",
         "riley_cuda_graph_exec_close",
@@ -162,6 +168,10 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         CudaGraphStage::CaptureAbort,
         CudaGraphStage::CaptureAbort
     ));
+    assert!(matches!(
+        CudaGraphStage::InputStage,
+        CudaGraphStage::InputStage
+    ));
     assert_ne!(CudaGraphStage::Unknown(91), CudaGraphStage::Launch);
 
     let mut lifecycle = CudaGraphLifecycle::new();
@@ -246,6 +256,37 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    fn begin_owned_h2d(
+        stream: CudaStream,
+        source: CudaPinnedHostBuffer,
+        destination: CudaDeviceBuffer,
+    ) -> Result<OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError> {
+        stream.begin_owned_graph_h2d_capture(source, destination, CudaGraphCaptureMode::ThreadLocal)
+    }
+
+    fn end_owned_h2d(capture: OwnedGraphH2DCapture) -> CudaResult<OwnedCapturedH2DGraph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_h2d(graph: OwnedCapturedH2DGraph) -> CudaResult<OwnedGraphH2DExec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_h2d<'exec>(
+        exec: &'exec mut OwnedGraphH2DExec,
+        bytes: &[u8],
+    ) -> CudaResult<OwnedGraphH2DLaunch<'exec>> {
+        exec.launch_with_source(bytes)
+    }
+
+    fn finish_owned_h2d(launch: OwnedGraphH2DLaunch<'_>) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_h2d(exec: OwnedGraphH2DExec) -> CudaResult<OwnedGraphH2DResources> {
+        exec.close()
+    }
+
     let _ = (
         begin_fill,
         end_fill,
@@ -259,12 +300,19 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_owned_fill,
         finish_owned_fill,
         close_owned_exec,
+        begin_owned_h2d,
+        end_owned_h2d,
+        instantiate_owned_h2d,
+        launch_owned_h2d,
+        finish_owned_h2d,
+        close_owned_h2d,
     );
 
     let graph_source = include_str!("../src/graph.rs");
     assert!(graph_source.contains("CudaError::unavailable(\"CudaStream::begin_graph_capture\")"));
     assert!(graph_source.contains("\"CudaStream::begin_graph_fill_capture\""));
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_fill_capture\""));
+    assert!(graph_source.contains("\"CudaStream::begin_owned_graph_h2d_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -466,6 +514,188 @@ fn owned_fill_graph_owners_move_cold_resources_and_fail_closed_on_uncertain_repl
 }
 
 #[test]
+fn owned_h2d_graph_owners_require_fresh_exact_payloads_and_recover_three_resources() {
+    let graph = include_str!("../src/graph.rs");
+    let ffi = include_str!("../src/ffi.rs");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+
+    for required in [
+        "pub struct OwnedGraphH2DResources",
+        "pub struct OwnedGraphH2DCaptureBeginError",
+        "pub struct OwnedGraphH2DCapture",
+        "pub struct OwnedCapturedH2DGraph",
+        "pub struct OwnedGraphH2DExec",
+        "pub struct OwnedGraphH2DLaunch<'exec>",
+        "pub fn begin_owned_graph_h2d_capture",
+        "pub fn enqueue_h2d(&mut self)",
+        "pub fn launch_with_source<'exec>",
+        "pub fn into_parts(self) -> (CudaStream, CudaPinnedHostBuffer, CudaDeviceBuffer)",
+        "pub fn close(mut self) -> CudaResult<OwnedGraphH2DResources>",
+        "OwnedGraphH2DCaptureBeginError::recoverable",
+        "OwnedGraphH2DCaptureBeginError::terminal",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-7 owned H2D graph contract is missing: {required}"
+        );
+    }
+
+    for owner in [
+        "pub struct OwnedGraphH2DCapture {",
+        "pub struct OwnedCapturedH2DGraph {",
+        "pub struct OwnedGraphH2DExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let stream = source
+            .find("stream: Option<CudaStream>")
+            .unwrap_or_else(|| panic!("{owner} must retain its stream by value"));
+        let pinned_source = source
+            .find("source: Option<CudaPinnedHostBuffer>")
+            .unwrap_or_else(|| panic!("{owner} must retain its pinned source by value"));
+        let destination = source
+            .find("destination: Option<CudaDeviceBuffer>")
+            .unwrap_or_else(|| panic!("{owner} must retain its destination by value"));
+        assert!(
+            native < stream && stream < pinned_source && pinned_source < destination,
+            "{owner} must drop native graph ownership before every captured resource"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_h2d_capture")
+        .nth(1)
+        .expect("owned H2D graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned H2D graph capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_h2d_capture_preflight",
+        "resources.stream.native.begin_graph_h2d_capture",
+        "C05-7 owned H2D capture preflight",
+    );
+    assert!(owned_begin.contains("OwnedGraphH2DCaptureBeginError::recoverable"));
+    assert!(owned_begin.contains("OwnedGraphH2DCaptureBeginError::terminal"));
+
+    let owned_exec = graph
+        .split("impl OwnedGraphH2DExec")
+        .nth(1)
+        .expect("owned H2D graph exec implementation must remain present")
+        .split("/// Completion owner for one [`OwnedGraphH2DExec`] replay")
+        .next()
+        .expect("owned H2D graph exec must end before completion owner");
+    assert!(owned_exec.contains("pub fn launch_with_source<'exec>"));
+    assert!(
+        !owned_exec.contains("pub fn launch("),
+        "C05-7 must not expose a safe bare graph H2D replay"
+    );
+    assert_precedes(
+        owned_exec,
+        "self.native.stage_h2d_source",
+        "self.native.launch",
+        "C05-7 payload staging",
+    );
+    assert!(owned_exec.contains("actual_byte_len != expected_byte_len"));
+    assert!(owned_exec.contains("self.terminal = true;"));
+
+    for required in [
+        "kH2D = 2",
+        "h2d_source",
+        "h2d_byte_len",
+        "h2d_enqueue_count",
+        "h2d_source_lease_held",
+        "h2d_input_staged",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-7 native ownership state is missing: {required}"
+        );
+    }
+    assert!(native.contains("release_capture_h2d_leases"));
+    assert!(native.contains("release_graph_h2d_leases"));
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_h2d_impl(")
+        .nth(1)
+        .expect("H2D capture admission helper must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("H2D capture admission helper must end before native exports");
+    assert_precedes(
+        begin,
+        "try_acquire_exclusive_use(source->active_uses)",
+        "cudaStreamBeginCapture(stream->stream",
+        "C05-7 H2D source lease admission",
+    );
+    assert_precedes(
+        begin,
+        "try_acquire_exclusive_use(destination->active_uses)",
+        "cudaStreamBeginCapture(stream->stream",
+        "C05-7 H2D destination lease admission",
+    );
+    assert_precedes(
+        begin,
+        "try_acquire_exclusive_use(stream->active_uses)",
+        "cudaStreamBeginCapture(stream->stream",
+        "C05-7 H2D stream lease admission",
+    );
+    assert!(begin.contains("source->byte_len != destination->byte_len"));
+    assert!(begin.contains("source->byte_len == 0"));
+
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_h2d");
+    assert!(enqueue.contains("cudaMemcpyAsync"));
+    assert!(enqueue.contains("cudaMemcpyHostToDevice"));
+    assert!(enqueue.contains("owner->h2d_enqueue_count != 0"));
+    assert!(
+        !enqueue.contains("std::calloc") && !enqueue.contains("std::free"),
+        "the sole captured H2D node must not allocate or free host bookkeeping"
+    );
+
+    let stage = native_export_body(native, "riley_cuda_graph_exec_stage_h2d_source");
+    assert!(stage.contains("RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE"));
+    assert!(stage.contains("byte_len != exec->h2d_byte_len"));
+    assert!(stage.contains("exec->launch_in_flight || exec->h2d_input_staged"));
+    assert!(stage.contains("std::memmove(source->host_data, bytes"));
+    assert!(stage.contains("exec->h2d_input_staged = true;"));
+    assert!(
+        !stage.contains("cudaGraphLaunch") && !stage.contains("cudaMemcpyAsync"),
+        "private H2D staging must not expose a second CUDA submission path"
+    );
+
+    let launch = native_export_body(native, "riley_cuda_graph_exec_launch");
+    assert!(launch.contains("!exec->h2d_input_staged"));
+    assert!(launch.contains("exec->h2d_input_staged = false;"));
+    assert_precedes(
+        launch,
+        "exec->h2d_input_staged = false;",
+        "cudaGraphLaunch(exec->exec, stream->stream)",
+        "C05-7 stale-payload replay gate",
+    );
+
+    assert!(ffi.contains("riley_cuda_graph_capture_begin_h2d"));
+    assert!(ffi.contains("riley_cuda_graph_capture_enqueue_h2d"));
+    assert!(ffi.contains("riley_cuda_graph_exec_stage_h2d_source"));
+    assert!(ffi.contains("graph_exec_input_stage_metadata_is_valid"));
+    for forbidden in ["riley_runtime", "riley_server", "graph_decode", "llama"] {
+        assert!(
+            !graph.contains(forbidden),
+            "C05-7 graph ownership must remain model/runtime independent: {forbidden}"
+        );
+    }
+}
+
+#[test]
 fn native_graph_owners_are_wired_with_c05_5_fill_capture_replay() {
     let header = include_str!("../../../kernels/include/riley_cuda.h");
     let native = include_str!("../../../kernels/src/graph.cu");
@@ -476,9 +706,12 @@ fn native_graph_owners_are_wired_with_c05_5_fill_capture_replay() {
     assert!(header.contains("riley_cuda_graph_capture_abort("));
     assert!(header.contains("riley_cuda_graph_capture_begin_fill_f32("));
     assert!(header.contains("riley_cuda_graph_capture_enqueue_fill_f32("));
+    assert!(header.contains("riley_cuda_graph_capture_begin_h2d("));
+    assert!(header.contains("riley_cuda_graph_capture_enqueue_h2d("));
     assert!(header.contains("riley_cuda_graph_capture_end("));
     assert!(header.contains("riley_cuda_graph_instantiate("));
     assert!(header.contains("riley_cuda_graph_exec_launch("));
+    assert!(header.contains("riley_cuda_graph_exec_stage_h2d_source("));
     assert!(header.contains("riley_cuda_graph_launch_complete("));
     assert!(header.contains("riley_cuda_graph_exec_close("));
     assert!(native.contains("*out_capture = nullptr;"));
@@ -501,9 +734,12 @@ fn native_graph_owners_are_wired_with_c05_5_fill_capture_replay() {
     assert!(abi_layout.contains("graph_capture_abort_symbol"));
     assert!(abi_layout.contains("graph_capture_begin_fill_f32_symbol"));
     assert!(abi_layout.contains("graph_capture_enqueue_fill_f32_symbol"));
+    assert!(abi_layout.contains("graph_capture_begin_h2d_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_h2d_symbol"));
     assert!(abi_layout.contains("graph_capture_end_symbol"));
     assert!(abi_layout.contains("graph_instantiate_symbol"));
     assert!(abi_layout.contains("graph_exec_launch_symbol"));
+    assert!(abi_layout.contains("graph_exec_stage_h2d_source_symbol"));
     assert!(abi_layout.contains("graph_launch_complete_symbol"));
     assert!(abi_layout.contains("graph_close_symbol"));
     assert!(abi_layout.contains("graph_exec_close_symbol"));

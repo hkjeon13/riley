@@ -74,6 +74,18 @@ fn move_into_cold_owner(exec: riley_cuda::OwnedGraphExec) -> riley_cuda::OwnedGr
     exec
 }
 
+fn h2d_payload(byte_len: usize, replay: usize) -> Vec<u8> {
+    (0..byte_len)
+        .map(|index| {
+            let mixed = index
+                .wrapping_mul(29)
+                .wrapping_add(replay.wrapping_mul(71))
+                .wrapping_add(replay.rotate_left(3));
+            (mixed & 0xff) as u8
+        })
+        .collect()
+}
+
 #[test]
 #[ignore = "remote GPU"]
 fn owned_fixed_fill_exec_moves_replays_and_returns_resources() -> Result<(), Box<dyn Error>> {
@@ -128,6 +140,115 @@ fn owned_fixed_fill_exec_moves_replays_and_returns_resources() -> Result<(), Box
     println!(
         "c05-6-owned-fill-replay replays={REPLAYS} elements={ELEMENT_COUNT} final_value={FINAL_VALUE} status=passed"
     );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_h2d_graph_replays_fresh_exact_payloads_and_recovers_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const BYTE_LEN: u64 = 4_096;
+    const REPLAYS: usize = 32;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let capture_stream = context.create_stream()?;
+    let source = context.allocate_pinned_host_buffer(BYTE_LEN)?;
+    let destination = context.allocate_device_buffer(BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let mut capture = capture_stream.begin_owned_graph_h2d_capture(
+        source,
+        destination,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_h2d()?;
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // Capture, instantiate, and the graph lifecycle itself must not allocate
+    // another tracked device or pinned-host buffer. This intentionally does
+    // not claim that CUDA graph launch has no native completion allocation.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let byte_len = usize::try_from(BYTE_LEN)?;
+    let wrong_length_error = match exec.launch_with_source(&h2d_payload(byte_len - 1, 0)) {
+        Ok(_) => panic!("short H2D graph payload unexpectedly launched"),
+        Err(error) => error,
+    };
+    assert_eq!(wrong_length_error.kind(), CudaErrorKind::OutOfRange);
+    // A Rust-only length rejection has not staged or launched anything, so a
+    // later exact whole-slab replay remains admissible.
+    let mut expected = Vec::new();
+    for replay in 0..REPLAYS {
+        let payload = h2d_payload(byte_len, replay);
+        exec.launch_with_source(&payload)?.finish()?;
+        expected = payload;
+    }
+
+    let resources = exec.close()?;
+    let (mut capture_stream, mut source, mut destination) = resources.into_parts();
+    let mut actual = vec![0_u8; byte_len];
+    destination.download_to_slice(0, &mut actual, &mut source, &mut capture_stream)?;
+    assert_eq!(
+        actual, expected,
+        "last staged H2D payload must replay byte-exactly"
+    );
+
+    source.close()?;
+    destination.close()?;
+    capture_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-7-owned-h2d-replay replays={REPLAYS} bytes={BYTE_LEN} status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_h2d_graph_preflight_errors_return_untouched_three_resource_bundles()
+-> Result<(), Box<dyn Error>> {
+    const BYTE_LEN: u64 = 256;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    for (case, source_len, destination_len) in
+        [("zero-sized", 0, 0), ("mismatched", BYTE_LEN, BYTE_LEN + 1)]
+    {
+        let stream = context.create_stream()?;
+        let source = context.allocate_pinned_host_buffer(source_len)?;
+        let destination = context.allocate_device_buffer(destination_len)?;
+        let error = match stream.begin_owned_graph_h2d_capture(
+            source,
+            destination,
+            CudaGraphCaptureMode::ThreadLocal,
+        ) {
+            Ok(_) => panic!("{case} owned H2D graph preflight unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+        let resources = error
+            .into_resources()
+            .expect("Rust H2D preflight must return all untouched moved resources");
+        let (stream, source, destination) = resources.into_parts();
+        destination.close()?;
+        source.close()?;
+        stream.close()?;
+        assert_eq!(
+            context.allocation_stats()?,
+            allocation_baseline,
+            "{case} H2D preflight recovery must restore the exact allocation baseline"
+        );
+    }
+
+    close_context(context)?;
+    println!("c05-7-owned-h2d-preflight-resource-recovery status=passed");
     Ok(())
 }
 

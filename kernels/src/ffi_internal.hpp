@@ -52,6 +52,7 @@ struct RileyCudaGraph;
 struct RileyCudaGraphExec;
 struct RileyCudaGraphLaunch;
 struct RileyCudaDeviceBuffer;
+struct RileyCudaPinnedHostBuffer;
 struct RileyCudaDeferredCloseNode;
 
 // `consumed` records native close ownership independently of status. CUDA may
@@ -158,6 +159,12 @@ struct RileyCudaStream {
 // cudaStreamEndCapture attempt has a fully known recovery result. Keeping the
 // stream's active-use lease in parallel prevents unrelated entry points from
 // dereferencing the stream while CUDA is capturing it.
+enum class RileyCudaGraphCaptureOperation : uint8_t {
+  kNone = 0,
+  kFillF32 = 1,
+  kH2D = 2,
+};
+
 struct RileyCudaGraphCapture {
   RileyCudaGraphCapture(RileyCudaContext* owning_context,
                         RileyCudaStream* captured_stream,
@@ -172,10 +179,15 @@ struct RileyCudaGraphCapture {
         capture_started(false),
         capture_terminated(false),
         prepared_graph(nullptr),
+        operation(RileyCudaGraphCaptureOperation::kNone),
         fill_buffer(nullptr),
         fill_element_count(0),
         fill_enqueue_count(0),
         fill_lease_held(false),
+        h2d_source(nullptr),
+        h2d_byte_len(0),
+        h2d_enqueue_count(0),
+        h2d_source_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -196,10 +208,18 @@ struct RileyCudaGraphCapture {
   // acquired before begin and transfers to the graph/exec after successful
   // end; abort releases it with the capture's other leases.
   RileyCudaGraph* prepared_graph;
+  // The current C05 operation family. `fill_buffer` continues to name the
+  // retained device allocation for ABI continuity; for H2D it is the exact
+  // destination allocation and `h2d_source` retains the fixed pinned source.
+  RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
   uint32_t fill_enqueue_count;
   bool fill_lease_held;
+  RileyCudaPinnedHostBuffer* h2d_source;
+  uint64_t h2d_byte_len;
+  uint32_t h2d_enqueue_count;
+  bool h2d_source_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -254,10 +274,14 @@ struct RileyCudaGraph {
   RileyCudaGraph(RileyCudaContext* owning_context,
                  RileyCudaStream* captured_stream,
                  RileyCudaDeviceBuffer* captured_fill_buffer,
-                 uint64_t capture_identifier) noexcept
+                 uint64_t capture_identifier,
+                 RileyCudaPinnedHostBuffer* captured_h2d_source = nullptr,
+                 uint64_t captured_h2d_byte_len = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
+        h2d_source(captured_h2d_source),
+        h2d_byte_len(captured_h2d_byte_len),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -265,6 +289,8 @@ struct RileyCudaGraph {
   RileyCudaContext* owner;
   RileyCudaStream* stream;
   RileyCudaDeviceBuffer* fill_buffer;
+  RileyCudaPinnedHostBuffer* h2d_source;
+  uint64_t h2d_byte_len;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -279,27 +305,37 @@ struct RileyCudaGraphExec {
                      RileyCudaStream* captured_stream,
                      RileyCudaDeviceBuffer* captured_fill_buffer,
                      uint64_t capture_identifier,
-                     uint64_t executable_identifier) noexcept
+                     uint64_t executable_identifier,
+                     RileyCudaPinnedHostBuffer* captured_h2d_source = nullptr,
+                     uint64_t captured_h2d_byte_len = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
+        h2d_source(captured_h2d_source),
+        h2d_byte_len(captured_h2d_byte_len),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
         exec(nullptr),
         owns_capture_leases(false),
         launch_in_flight(false),
+        h2d_input_staged(false),
         poisoned(false) {}
 
   RileyCudaContext* owner;
   RileyCudaStream* stream;
   RileyCudaDeviceBuffer* fill_buffer;
+  RileyCudaPinnedHostBuffer* h2d_source;
+  uint64_t h2d_byte_len;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;
   cudaGraphExec_t exec;
   bool owns_capture_leases;
   bool launch_in_flight;
+  // H2D execs require a fresh exact payload stage before every replay. A
+  // launch attempt consumes this flag even when CUDA reports a deferred error.
+  bool h2d_input_staged;
   bool poisoned;
 };
 
@@ -509,10 +545,11 @@ static_assert(RILEY_CUDA_GRAPH_STAGE_NONE == 0 &&
                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_END == 3 &&
                   RILEY_CUDA_GRAPH_STAGE_CAPTURE_ABORT == 4 &&
                   RILEY_CUDA_GRAPH_STAGE_INSTANTIATE == 5 &&
-                  RILEY_CUDA_GRAPH_STAGE_UPDATE == 6 &&
-                  RILEY_CUDA_GRAPH_STAGE_LAUNCH == 7 &&
-                  RILEY_CUDA_GRAPH_STAGE_COMPLETION == 8 &&
-                  RILEY_CUDA_GRAPH_STAGE_CLOSE == 9,
+                   RILEY_CUDA_GRAPH_STAGE_UPDATE == 6 &&
+                   RILEY_CUDA_GRAPH_STAGE_LAUNCH == 7 &&
+                   RILEY_CUDA_GRAPH_STAGE_COMPLETION == 8 &&
+                   RILEY_CUDA_GRAPH_STAGE_CLOSE == 9 &&
+                   RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE == 10,
               "RileyCudaGraphStage ABI discriminants changed");
 static_assert(sizeof(RileyCudaGraphErrorInfo) == 56,
               "RileyCudaGraphErrorInfo ABI size changed");

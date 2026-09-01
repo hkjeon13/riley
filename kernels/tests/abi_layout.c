@@ -48,7 +48,8 @@ _Static_assert(RILEY_CUDA_GRAPH_STAGE_NONE == 0 &&
                    RILEY_CUDA_GRAPH_STAGE_UPDATE == 6 &&
                    RILEY_CUDA_GRAPH_STAGE_LAUNCH == 7 &&
                    RILEY_CUDA_GRAPH_STAGE_COMPLETION == 8 &&
-                   RILEY_CUDA_GRAPH_STAGE_CLOSE == 9,
+                   RILEY_CUDA_GRAPH_STAGE_CLOSE == 9 &&
+                   RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE == 10,
                "graph-stage ABI discriminants changed");
 _Static_assert(sizeof(RileyCudaGraphErrorInfo) == 56,
                "graph-error-info ABI size changed");
@@ -545,6 +546,14 @@ static RileyCudaStatus (*const graph_capture_begin_fill_f32_symbol)(
 static RileyCudaStatus (*const graph_capture_enqueue_fill_f32_symbol)(
     RileyCudaGraphCapture*, float, RileyCudaGraphErrorInfo*,
     RileyCudaErrorInfo*) = riley_cuda_graph_capture_enqueue_fill_f32;
+static RileyCudaStatus (*const graph_capture_begin_h2d_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaPinnedHostBuffer*,
+    RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_h2d;
+static RileyCudaStatus (*const graph_capture_enqueue_h2d_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_h2d;
 static RileyCudaStatus (*const graph_capture_end_symbol)(
     RileyCudaGraphCapture**, RileyCudaGraph**, RileyCudaGraphErrorInfo*,
     RileyCudaErrorInfo*) = riley_cuda_graph_capture_end;
@@ -555,6 +564,10 @@ static RileyCudaStatus (*const graph_exec_launch_symbol)(
     RileyCudaGraphExec*, RileyCudaStream*, RileyCudaGraphLaunch**,
     RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_exec_launch;
+static RileyCudaStatus (*const graph_exec_stage_h2d_source_symbol)(
+    RileyCudaGraphExec*, RileyCudaPinnedHostBuffer*, const uint8_t*, uint64_t,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_exec_stage_h2d_source;
 static RileyCudaStatus (*const graph_launch_complete_symbol)(
     RileyCudaGraphLaunch**, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_launch_complete;
@@ -798,9 +811,12 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_abort_symbol,
     (const void*)&graph_capture_begin_fill_f32_symbol,
     (const void*)&graph_capture_enqueue_fill_f32_symbol,
+    (const void*)&graph_capture_begin_h2d_symbol,
+    (const void*)&graph_capture_enqueue_h2d_symbol,
     (const void*)&graph_capture_end_symbol,
     (const void*)&graph_instantiate_symbol,
     (const void*)&graph_exec_launch_symbol,
+    (const void*)&graph_exec_stage_h2d_source_symbol,
     (const void*)&graph_launch_complete_symbol,
     (const void*)&graph_close_symbol,
     (const void*)&graph_exec_close_symbol,

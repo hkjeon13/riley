@@ -35,6 +35,9 @@ constexpr const char* kBeginOperation = "begin CUDA Graph capture";
 constexpr const char* kAbortOperation = "abort CUDA Graph capture";
 constexpr const char* kBeginFillOperation = "begin CUDA Graph fill capture";
 constexpr const char* kEnqueueFillOperation = "enqueue CUDA Graph fill";
+constexpr const char* kBeginH2DOperation = "begin CUDA Graph H2D capture";
+constexpr const char* kEnqueueH2DOperation = "enqueue CUDA Graph H2D";
+constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
 constexpr const char* kEndOperation = "end CUDA Graph capture";
 constexpr const char* kInstantiateOperation = "instantiate CUDA Graph";
 constexpr const char* kLaunchOperation = "launch CUDA Graph exec";
@@ -116,8 +119,13 @@ void record_capture_outcome(RileyCudaGraphErrorInfo* error,
 bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->owner == nullptr ||
       capture->stream == nullptr || capture->capture_domain == nullptr ||
-      capture->prepared_graph != nullptr || capture->fill_buffer != nullptr ||
-      capture->fill_lease_held || capture->unreleased_graph != nullptr ||
+      capture->prepared_graph != nullptr ||
+      capture->operation != RileyCudaGraphCaptureOperation::kNone ||
+      capture->fill_buffer != nullptr || capture->fill_element_count != 0 ||
+      capture->fill_enqueue_count != 0 || capture->fill_lease_held ||
+      capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+      capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
+      capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
     return false;
@@ -151,7 +159,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
     return false;
   }
   if (!capture->fill_lease_held) {
-    return capture->fill_buffer == nullptr;
+    return capture->fill_buffer == nullptr &&
+           capture->operation != RileyCudaGraphCaptureOperation::kFillF32;
   }
   if (capture->fill_buffer == nullptr ||
       !release_exclusive_use(capture->fill_buffer->active_uses)) {
@@ -159,7 +168,41 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
   }
   capture->fill_buffer = nullptr;
   capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
   capture->fill_lease_held = false;
+  if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
+    capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  }
+  return true;
+}
+
+// The H2D source is a captured raw host pointer. It must stay leased alongside
+// the destination device allocation for the entire capture/graph/exec
+// lifetime; otherwise a normal pinned-buffer close could create a graph UAF.
+bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
+  if (capture == nullptr ||
+      capture->operation != RileyCudaGraphCaptureOperation::kH2D ||
+      capture->fill_buffer == nullptr || capture->h2d_source == nullptr ||
+      !capture->fill_lease_held || !capture->h2d_source_lease_held ||
+      capture->h2d_byte_len == 0 ||
+      capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  // Both counters are verified before either deterministic 1->0 transition.
+  if (!release_exclusive_use(capture->h2d_source->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->h2d_source = nullptr;
+  capture->h2d_byte_len = 0;
+  capture->h2d_enqueue_count = 0;
+  capture->h2d_source_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
   return true;
 }
 
@@ -170,6 +213,25 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   RileyCudaGraph* const graph = capture->prepared_graph;
   if (graph->owner != capture->owner || graph->stream != capture->stream ||
       graph->graph != nullptr || graph->owns_capture_leases) {
+    return false;
+  }
+  if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
+    if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0) {
+      return false;
+    }
+  } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
+    if (graph->h2d_source != capture->h2d_source ||
+        graph->h2d_byte_len != capture->h2d_byte_len) {
+      return false;
+    }
+  } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
+    // C05-5's historical cleanup releases the fixed-buffer lease before it
+    // frees this preallocated graph wrapper. That order is valid only for a
+    // fill graph, which has no pinned source pointer to preserve.
+    if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0) {
+      return false;
+    }
+  } else {
     return false;
   }
   graph->~RileyCudaGraph();
@@ -197,6 +259,23 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
   }
+  if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
+    if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+        capture->h2d_source_lease_held) {
+      return false;
+    }
+  } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
+    if (capture->h2d_source == nullptr || !capture->h2d_source_lease_held ||
+        capture->h2d_byte_len == 0 ||
+        graph->h2d_source != capture->h2d_source ||
+        graph->h2d_byte_len != capture->h2d_byte_len ||
+        capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
+      return false;
+    }
+  } else {
+    return false;
+  }
   if (!release_capture_domain_capture(capture->capture_domain) ||
       !clear_thread_graph_capture_owner(capture)) {
     return false;
@@ -205,7 +284,13 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->prepared_graph = nullptr;
   capture->fill_buffer = nullptr;
   capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
   capture->fill_lease_held = false;
+  capture->h2d_source = nullptr;
+  capture->h2d_byte_len = 0;
+  capture->h2d_enqueue_count = 0;
+  capture->h2d_source_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
   return true;
@@ -223,6 +308,27 @@ bool release_graph_leases(RileyCudaContext* owner, RileyCudaStream* stream,
   // Validate every counter first; each release is then a deterministic 1->0
   // transition. Any impossible underflow is retained fail-closed by callers.
   return release_exclusive_use(buffer->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+// H2D graph ownership adds a pinned source lease to C05-5's existing stream
+// and device-buffer set. Verify every resource before releasing any of them;
+// an impossible raw-ABI corruption stays fail-closed rather than exposing a
+// captured pointer whose lifetime is no longer known.
+bool release_graph_h2d_leases(RileyCudaContext* owner, RileyCudaStream* stream,
+                              RileyCudaDeviceBuffer* destination,
+                              RileyCudaPinnedHostBuffer* source) noexcept {
+  if (owner == nullptr || stream == nullptr || destination == nullptr ||
+      source == nullptr || !same_context(owner, stream->owner) ||
+      !same_context(owner, destination->owner) ||
+      !same_context(owner, source->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      destination->active_uses.load(std::memory_order_acquire) != 1 ||
+      source->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(source->active_uses) &&
+         release_exclusive_use(destination->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -408,6 +514,7 @@ RileyCudaStatus capture_begin_impl(
   auto* capture = new (capture_storage) RileyCudaGraphCapture{
       stream->owner, stream, stream->owner->capture_domain,
       native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kFillF32;
   void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
   if (graph_storage == nullptr) {
     capture->~RileyCudaGraphCapture();
@@ -505,6 +612,262 @@ RileyCudaStatus capture_begin_impl(
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                           kBeginFillOperation,
                           "failed to release an unstarted fixed-fill capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
+// C05-7 is deliberately a sibling admission path rather than an extension of
+// the fixed-fill geometry. It captures exactly one whole-allocation H2D node
+// and acquires all three permanent resource leases before cudaStreamBeginCapture
+// can make their raw pointers observable to CUDA.
+RileyCudaStatus capture_begin_h2d_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* destination,
+    RileyCudaPinnedHostBuffer* source, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation, "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || destination == nullptr || source == nullptr ||
+      stream->owner == nullptr || destination->owner == nullptr ||
+      source->owner == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "stream, H2D source, destination, or their owner is null");
+  }
+  if (!same_context(stream->owner, destination->owner) ||
+      !same_context(stream->owner, source->owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "capture stream, H2D source, and destination must share one context owner");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "only thread-local capture mode is admitted");
+  }
+  if (source->byte_len == 0 || source->byte_len != destination->byte_len) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "graph H2D requires equal nonzero whole source and destination slabs");
+  }
+  if (source->host_data == nullptr || destination->device_data == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "graph H2D source or destination has no live allocation");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "a stream command batch blocks fixed-address graph H2D capture");
+  }
+  const RileyCudaStatus idle_status =
+      require_stream_capture_idle(stream, error, kBeginH2DOperation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(source->active_uses)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "graph H2D source has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(destination->active_uses)) {
+    const bool source_released = release_exclusive_use(source->active_uses);
+    if (!source_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginH2DOperation,
+                            "failed to release a rejected graph H2D source lease");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "graph H2D destination has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool destination_released =
+        release_exclusive_use(destination->active_uses);
+    const bool source_released = release_exclusive_use(source->active_uses);
+    if (!destination_released || !source_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginH2DOperation,
+                            "failed to release rejected graph H2D resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginH2DOperation,
+                            "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(destination->active_uses);
+    (void)release_exclusive_use(source->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginH2DOperation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(destination->active_uses);
+    (void)release_exclusive_use(source->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginH2DOperation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(destination->active_uses);
+    (void)release_exclusive_use(source->active_uses);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, kBeginH2DOperation,
+                     "host allocation failed for graph H2D capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kH2D;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(destination->active_uses);
+    (void)release_exclusive_use(source->active_uses);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, kBeginH2DOperation,
+                     "host allocation failed for captured graph H2D owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, destination, capture_id, source, source->byte_len);
+  capture->fill_buffer = destination;
+  capture->fill_lease_held = true;
+  capture->h2d_source = source;
+  capture->h2d_byte_len = source->byte_len;
+  capture->h2d_source_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_h2d_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginH2DOperation,
+                            "failed to release a blocked graph H2D capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_h2d_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginH2DOperation,
+                            "failed to release a rejected graph H2D capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginH2DOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                                        kBeginH2DOperation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result =
+        cudaStreamBeginCapture(stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginH2DOperation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginH2DOperation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released = release_capture_h2d_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                          kBeginH2DOperation,
+                          "failed to release an unstarted graph H2D capture owner");
   }
   record_capture_outcome(out_graph_error,
                          RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
@@ -827,10 +1190,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
     const RileyCudaStatus deferred_close_status =
         drain_capture_deferred_closes(owner, &deferred_close_error);
     if (deferred_close_status == RILEY_CUDA_STATUS_SUCCESS) {
-      const bool fill_released = release_capture_fill_lease(owner);
+      const bool is_h2d =
+          owner->operation == RileyCudaGraphCaptureOperation::kH2D;
       const bool prepared_graph_released =
-          fill_released && destroy_prepared_graph_storage(owner);
-      released = prepared_graph_released && release_capture_owner(owner);
+          is_h2d ? destroy_prepared_graph_storage(owner) : true;
+      const bool operation_released =
+          prepared_graph_released &&
+          (is_h2d ? release_capture_h2d_leases(owner)
+                  : release_capture_fill_lease(owner));
+      const bool cleanup_graph_released =
+          is_h2d ? prepared_graph_released
+                 : operation_released && destroy_prepared_graph_storage(owner);
+      released = cleanup_graph_released && operation_released &&
+                 release_capture_owner(owner);
       if (!released && status == RILEY_CUDA_STATUS_SUCCESS) {
         status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                                 kAbortOperation,
@@ -857,6 +1229,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_fill_f32(
     RileyCudaErrorInfo* error) noexcept {
   return capture_begin_impl(stream, buffer, element_count, mode, out_capture,
                             out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_h2d(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* destination,
+    RileyCudaPinnedHostBuffer* source, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_h2d_impl(stream, destination, source, mode, out_capture,
+                                out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -886,6 +1268,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
                          false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->prepared_graph == nullptr || owner->fill_buffer == nullptr ||
+      owner->operation != RileyCudaGraphCaptureOperation::kFillF32 ||
       !owner->fill_lease_held || owner->capture_terminated ||
       owner->unreleased_graph != nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -951,6 +1334,93 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
   return status;
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_h2d(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueH2DOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueH2DOperation, "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->owner == nullptr || owner->stream == nullptr ||
+      owner->prepared_graph == nullptr || owner->fill_buffer == nullptr ||
+      owner->h2d_source == nullptr ||
+      owner->operation != RileyCudaGraphCaptureOperation::kH2D ||
+      !owner->fill_lease_held || !owner->h2d_source_lease_held ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueH2DOperation,
+                            "capture owner is not a live graph H2D capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueH2DOperation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  if (!owner->capture_started || owner->h2d_byte_len == 0 ||
+      owner->h2d_byte_len != owner->fill_buffer->byte_len ||
+      owner->h2d_byte_len != owner->h2d_source->byte_len ||
+      owner->fill_buffer->device_data == nullptr ||
+      owner->h2d_source->host_data == nullptr || owner->h2d_enqueue_count != 0) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueH2DOperation,
+                            "graph H2D capture has invalid immutable geometry or already enqueued its sole node");
+  }
+  if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueH2DOperation,
+                            "graph H2D capture resource lease is unavailable");
+  }
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                                        kEnqueueH2DOperation, owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    status = runtime_error(
+        cudaMemcpyAsync(owner->fill_buffer->device_data, owner->h2d_source->host_data,
+                        owner->h2d_byte_len, cudaMemcpyHostToDevice,
+                        owner->stream->stream),
+        error, RILEY_CUDA_ERROR_STAGE_LAUNCH, kEnqueueH2DOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      owner->h2d_enqueue_count = 1;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueH2DOperation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -988,7 +1458,22 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       !owner->fill_lease_held || owner->unreleased_graph != nullptr) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
-                            "capture owner is not a live fixed-fill capture");
+                            "capture owner is not a live fixed-operation capture");
+  }
+  const bool is_fill =
+      owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
+  const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+  if ((!is_fill && !is_h2d) ||
+      (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+                   owner->h2d_source_lease_held)) ||
+      (is_h2d && (owner->h2d_source == nullptr ||
+                  !owner->h2d_source_lease_held || owner->h2d_byte_len == 0 ||
+                  owner->h2d_source->host_data == nullptr ||
+                  owner->h2d_source->byte_len != owner->h2d_byte_len ||
+                  owner->fill_buffer->byte_len != owner->h2d_byte_len))) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
+                            "capture owner has invalid fixed-operation geometry");
   }
   if (owner->owner_thread != native_thread_token() ||
       !thread_graph_capture_is_owner(owner)) {
@@ -997,16 +1482,18 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                             "thread-local capture must end on its begin thread");
   }
   if (!owner->capture_started || owner->capture_terminated ||
-      owner->fill_enqueue_count == 0) {
+      (is_fill && owner->fill_enqueue_count == 0) ||
+      (is_h2d && owner->h2d_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
-                            "fixed-fill capture end requires at least one live enqueue");
+                            "capture end requires its admitted operation enqueue contract");
   }
   if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
-      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1) {
+      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      (is_h2d && owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
-                          "fixed-fill capture resource lease was corrupted");
+                          "fixed graph capture resource lease was corrupted");
   }
 
   CurrentContext scope(owner->owner);
@@ -1103,10 +1590,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
         drain_capture_deferred_closes(owner, &deferred_close_error);
     bool released = false;
     if (deferred_close_status == RILEY_CUDA_STATUS_SUCCESS) {
-      const bool fill_released = release_capture_fill_lease(owner);
+      const bool is_h2d =
+          owner->operation == RileyCudaGraphCaptureOperation::kH2D;
       const bool prepared_graph_released =
-          fill_released && destroy_prepared_graph_storage(owner);
-      released = prepared_graph_released && release_capture_owner(owner);
+          is_h2d ? destroy_prepared_graph_storage(owner) : true;
+      const bool operation_released =
+          prepared_graph_released &&
+          (is_h2d ? release_capture_h2d_leases(owner)
+                  : release_capture_fill_lease(owner));
+      const bool cleanup_graph_released =
+          is_h2d ? prepared_graph_released
+                 : operation_released && destroy_prepared_graph_storage(owner);
+      released = cleanup_graph_released && operation_released &&
+                 release_capture_owner(owner);
     } else if (error != nullptr && error->struct_size >= sizeof(*error)) {
       *error = deferred_close_error;
     }
@@ -1158,6 +1654,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   }
   RileyCudaGraph* const owner = *graph;
   const uint64_t capture_id = owner->capture_id;
+  const bool is_h2d = owner->h2d_source != nullptr;
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
@@ -1169,6 +1666,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kInstantiateOperation,
                             "captured graph resource lease is invalid");
+  }
+  if ((is_h2d &&
+       (owner->h2d_byte_len == 0 ||
+        !same_context(owner->owner, owner->h2d_source->owner) ||
+        owner->h2d_source->host_data == nullptr ||
+        owner->h2d_source->byte_len != owner->h2d_byte_len ||
+        owner->fill_buffer->byte_len != owner->h2d_byte_len ||
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
+      (!is_h2d && owner->h2d_byte_len != 0)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kInstantiateOperation,
+                            "captured graph has invalid fixed H2D source state");
   }
   if (owner->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -1192,7 +1702,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
                      "host allocation failed for CUDA Graph exec owner");
   }
   auto* exec = new (storage) RileyCudaGraphExec(
-      owner->owner, owner->stream, owner->fill_buffer, capture_id, exec_id);
+      owner->owner, owner->stream, owner->fill_buffer, capture_id, exec_id,
+      owner->h2d_source, owner->h2d_byte_len);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -1253,6 +1764,62 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   return status;
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
+    RileyCudaGraphExec* exec, RileyCudaPinnedHostBuffer* source,
+    const uint8_t* bytes, uint64_t byte_len,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kStageH2DOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE);
+  if (exec == nullptr || source == nullptr || bytes == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kStageH2DOperation,
+                            "graph H2D exec, retained source, or payload is null");
+  }
+  const uint64_t capture_id = exec->capture_id;
+  const uint64_t exec_id = exec->exec_id;
+  record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE,
+                       capture_id, exec_id, false, false, false, false);
+  if (exec->owner == nullptr || exec->stream == nullptr ||
+      exec->fill_buffer == nullptr || exec->h2d_source == nullptr ||
+      exec->h2d_source != source || exec->graph == nullptr ||
+      exec->exec == nullptr || !exec->owns_capture_leases ||
+      exec->h2d_byte_len == 0 || byte_len != exec->h2d_byte_len ||
+      source->host_data == nullptr || source->byte_len != exec->h2d_byte_len ||
+      exec->fill_buffer->byte_len != exec->h2d_byte_len ||
+      !same_context(exec->owner, exec->stream->owner) ||
+      !same_context(exec->owner, exec->fill_buffer->owner) ||
+      !same_context(exec->owner, source->owner) ||
+      exec->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      exec->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      source->active_uses.load(std::memory_order_acquire) != 1 ||
+      exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
+      exec->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kStageH2DOperation,
+                            "graph H2D exec is busy, poisoned, or lost its exact retained resource lease");
+  }
+  // The graph node retains this exact pinned allocation address. This private
+  // stage is deliberately the sole mutable path while its normal active-use
+  // guard remains held; no CUDA call, node update, or pointer mutation occurs.
+  std::memmove(source->host_data, bytes, static_cast<size_t>(byte_len));
+  exec->h2d_input_staged = true;
+  record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE,
+                       capture_id, exec_id, false, false, false, false);
+  return RILEY_CUDA_STATUS_SUCCESS;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
     RileyCudaGraphExec* exec, RileyCudaStream* stream,
     RileyCudaGraphLaunch** out_launch,
@@ -1284,6 +1851,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   }
   const uint64_t capture_id = exec->capture_id;
   const uint64_t exec_id = exec->exec_id;
+  const bool is_h2d = exec->h2d_source != nullptr;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
@@ -1311,6 +1879,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
                             kLaunchOperation,
                             "graph exec is busy, poisoned, or lost its retained resource lease");
   }
+  if ((is_h2d &&
+       (exec->h2d_byte_len == 0 ||
+        !same_context(exec->owner, exec->h2d_source->owner) ||
+        exec->h2d_source->host_data == nullptr ||
+        exec->h2d_source->byte_len != exec->h2d_byte_len ||
+        exec->fill_buffer->byte_len != exec->h2d_byte_len ||
+        exec->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+        !exec->h2d_input_staged)) ||
+      (!is_h2d && (exec->h2d_byte_len != 0 || exec->h2d_input_staged))) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kLaunchOperation,
+                            "graph H2D exec requires one fresh exact source stage before replay");
+  }
   void* storage = std::calloc(1, sizeof(RileyCudaGraphLaunch));
   if (storage == nullptr) {
     return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
@@ -1325,6 +1907,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
                                         kLaunchOperation);
   bool launch_attempted = false;
   if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    if (is_h2d) {
+      // A launch attempt consumes its stage even if CUDA subsequently reports
+      // a deferred error. Completion never restores this bit: every replay
+      // must explicitly stage a new exact payload.
+      exec->h2d_input_staged = false;
+    }
     launch_attempted = true;
     status = runtime_error(cudaGraphLaunch(exec->exec, stream->stream), error,
                            RILEY_CUDA_ERROR_STAGE_LAUNCH, kLaunchOperation);
@@ -1469,6 +2057,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   }
   RileyCudaGraph* const owner = *graph;
   const uint64_t capture_id = owner->capture_id;
+  const bool is_h2d = owner->h2d_source != nullptr;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -1483,6 +2072,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseGraphOperation,
                             "captured graph has invalid retained resource leases");
+  }
+  if ((is_h2d &&
+       (owner->h2d_byte_len == 0 ||
+        !same_context(owner->owner, owner->h2d_source->owner) ||
+        owner->h2d_source->host_data == nullptr ||
+        owner->h2d_source->byte_len != owner->h2d_byte_len ||
+        owner->fill_buffer->byte_len != owner->h2d_byte_len ||
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
+      (!is_h2d && owner->h2d_byte_len != 0)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseGraphOperation,
+                            "captured graph has invalid fixed H2D source state");
   }
 
   CurrentContext scope(owner->owner);
@@ -1509,7 +2111,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   if (status == RILEY_CUDA_STATUS_SUCCESS && restoration_known) {
     owner->graph = nullptr;
     const bool released =
-        release_graph_leases(owner->owner, owner->stream, owner->fill_buffer);
+        is_h2d ? release_graph_h2d_leases(owner->owner, owner->stream,
+                                           owner->fill_buffer,
+                                           owner->h2d_source)
+               : release_graph_leases(owner->owner, owner->stream,
+                                      owner->fill_buffer);
     if (released) {
       owner->owns_capture_leases = false;
       owner->~RileyCudaGraph();
@@ -1520,7 +2126,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
     }
     status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             kCloseGraphOperation,
-                            "failed to release graph stream, buffer, or context lease");
+                            "failed to release graph stream, device destination, pinned source, or context lease");
   }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, true);
@@ -1554,6 +2160,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   RileyCudaGraphExec* const owner = *exec;
   const uint64_t capture_id = owner->capture_id;
   const uint64_t exec_id = owner->exec_id;
+  const bool is_h2d = owner->h2d_source != nullptr;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -1569,6 +2176,19 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseExecOperation,
                             "graph exec is busy, poisoned, or lost its retained resource lease");
+  }
+  if ((is_h2d &&
+       (owner->h2d_byte_len == 0 ||
+        !same_context(owner->owner, owner->h2d_source->owner) ||
+        owner->h2d_source->host_data == nullptr ||
+        owner->h2d_source->byte_len != owner->h2d_byte_len ||
+        owner->fill_buffer->byte_len != owner->h2d_byte_len ||
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
+      (!is_h2d && (owner->h2d_byte_len != 0 || owner->h2d_input_staged))) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kCloseExecOperation,
+                            "graph exec has invalid fixed H2D source state");
   }
 
   CurrentContext scope(owner->owner);
@@ -1607,7 +2227,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
     owner->exec = nullptr;
     owner->graph = nullptr;
     const bool released =
-        release_graph_leases(owner->owner, owner->stream, owner->fill_buffer);
+        is_h2d ? release_graph_h2d_leases(owner->owner, owner->stream,
+                                           owner->fill_buffer,
+                                           owner->h2d_source)
+               : release_graph_leases(owner->owner, owner->stream,
+                                      owner->fill_buffer);
     if (released) {
       owner->owns_capture_leases = false;
       owner->~RileyCudaGraphExec();
@@ -1618,7 +2242,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
     }
     status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             kCloseExecOperation,
-                            "failed to release graph exec stream, buffer, or context lease");
+                            "failed to release graph exec stream, device destination, pinned source, or context lease");
   }
   owner->poisoned = true;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,

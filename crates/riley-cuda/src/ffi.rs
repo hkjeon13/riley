@@ -1345,6 +1345,20 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_h2d(
+        stream: *mut RawStream,
+        destination: *mut RawDeviceBuffer,
+        source: *mut RawPinnedHostBuffer,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_h2d(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -1361,6 +1375,14 @@ unsafe extern "C" {
         exec: *mut RawGraphExec,
         stream: *mut RawStream,
         out_launch: *mut *mut RawGraphLaunch,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_exec_stage_h2d_source(
+        exec: *mut RawGraphExec,
+        source: *mut RawPinnedHostBuffer,
+        bytes: *const u8,
+        byte_len: u64,
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
@@ -2408,6 +2430,90 @@ impl StreamHandle {
         ))
     }
 
+    pub(super) fn begin_graph_h2d_capture(
+        &mut self,
+        destination: &DeviceBufferHandle,
+        source: &PinnedHostBufferHandle,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph H2D capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the by-value H2D graph owner retains the exact stream,
+        // destination, and pinned source for the full graph lifetime. Native
+        // validates matching context, exact whole-slab geometry, and all three
+        // permanent leases before it can enter CUDA capture.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_h2d(
+                self.as_ptr(),
+                destination.as_ptr(),
+                source.as_ptr(),
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        // A failed begin can still have entered capture after surfacing a
+        // deferred CUDA error. This generic abort understands both C05-6 fill
+        // and C05-7 H2D owners, so it is the only safe cleanup attempt here.
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native H2D-capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph H2D capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -2510,6 +2616,26 @@ impl GraphCaptureHandle {
                 &mut graph_error,
                 &mut error,
             )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_h2d(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph H2D";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public owned H2D capture keeps its exact stream,
+        // destination, and pinned source alive and inaccessible to other safe
+        // operations while this capture is active.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_h2d(pointer.as_ptr(), &mut graph_error, &mut error)
         };
         let graph_failure = decode_graph_failure_info(&graph_error)?;
         if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
@@ -2764,6 +2890,43 @@ pub(super) struct GraphExecHandle {
 }
 
 impl GraphExecHandle {
+    pub(super) fn stage_h2d_source(
+        &mut self,
+        source: &PinnedHostBufferHandle,
+        bytes: &[u8],
+    ) -> CudaResult<()> {
+        const OPERATION: &str = "stage CUDA Graph H2D source";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let byte_len = u64::try_from(bytes.len()).map_err(|_| {
+            CudaError::out_of_range(
+                OPERATION,
+                "payload length does not fit the fixed-width native ABI",
+            )
+        })?;
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: bytes remains immutably borrowed for the synchronous native
+        // memmove; the safe owner retains the exact pinned source by value and
+        // no graph replay can be live through this exclusive exec borrow.
+        let status = unsafe {
+            riley_cuda_graph_exec_stage_h2d_source(
+                pointer.as_ptr(),
+                source.as_ptr(),
+                bytes.as_ptr(),
+                byte_len,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_exec_input_stage_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
     pub(super) fn launch(&mut self, stream: &mut StreamHandle) -> CudaResult<GraphLaunchHandle> {
         const OPERATION: &str = "launch CUDA Graph exec";
         let Some(pointer) = self.pointer else {
@@ -5922,6 +6085,20 @@ fn graph_exec_launch_metadata_is_valid(
         && matches!(decoded.stage(), Some(CudaGraphStage::Launch))
         && decoded.capture_id().is_some()
         && decoded.exec_id().is_some()
+}
+
+fn graph_exec_input_stage_metadata_is_valid(
+    raw: &RawGraphErrorInfo,
+    decoded: &CudaGraphFailureInfo,
+) -> bool {
+    raw.struct_size() == RawGraphErrorInfo::ABI_SIZE
+        && matches!(decoded.stage(), Some(CudaGraphStage::InputStage))
+        && decoded.capture_id().is_some()
+        && decoded.exec_id().is_some()
+        && !decoded.submission_started()
+        && !decoded.completion_known()
+        && !decoded.resource_release_known()
+        && !decoded.poisoned()
 }
 
 fn graph_launch_complete_metadata_is_valid(
