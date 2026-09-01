@@ -1,6 +1,6 @@
 # C07 — Pure-decode CUDA Graph Buckets
 
-**상태:** In progress — C07-20은 C07 partial identity와 independently prepared C06 static identity를 exact metadata match 뒤에만 complete cache key로 조합한다.
+**상태:** In progress — C07-21은 C07-20 complete cache key를 immutable C06 registry selector에 투명하게 위임한다.
 **의미 등급:** `E0`  
 **한 가지 목적:** pure-decode `M={1,2,4,8,16,32}`의 stable-address GPU chain을 capture/replay하여 M2 성능 gate를 판정한다.
 
@@ -291,6 +291,20 @@ complete key를 만들지 않고 original typed reason으로 끝난다.
 boolean, graph owner/handle, buffer/lease/H2D, CUDA stream/capture/instantiate/replay, executor mutation을
 만들거나 허용하지 않는다. complete key는 graph-ready/capture-safe/prepared/runnable graph 또는 performance
 improvement를 뜻하지 않으며, 그 전까지 모든 path는 exact eager를 유지한다.
+
+### C07-21 — checked V1 C06 immutable registry selection (CPU-only)
+
+C07-21은 C07-20의 closed complete-signature result만 받는다. 이미 Ineligible인 C07 candidate는 caller
+request나 registry를 검사하지 않고 같은 typed reason으로 즉시 반환한다. Bound candidate만 caller가 만든
+`GraphDispatchRequest`를 재구성하거나 보정하지 않은 채 exact complete `GraphSignature`와 함께 existing C06
+`select_registered_execution_graph`에 정확히 한 번 전달한다. 따라서 C06가 policy-disabled, stage/sampling
+signature mismatch, preflight, exact registry lookup 및 `require` error ordering을 계속 단독으로 소유한다.
+
+성공값은 original C07-20 binding과 opaque C06 dispatch decision(논리 replay slot 포함)을 함께 보관하지만
+slot을 inspect하거나 resolve하지 않는다. 이 bridge는 registry mutation, request fact repair, metrics, executor,
+graph owner/handle, buffer/lease/H2D, CUDA stream/capture/instantiate/replay 또는 executor mutation을 만들지
+않는다. immutable selection은 graph-ready/capture-safe/prepared/runnable graph 또는 performance improvement를
+뜻하지 않으며, actual execution은 계속 exact eager다.
 
 ## 1. 배경과 가설
 

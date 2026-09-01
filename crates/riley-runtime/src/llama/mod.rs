@@ -20,6 +20,8 @@ mod graph;
 mod graph_decode_binding;
 #[allow(dead_code)] // C07-19 deliberately precedes whole-signature/capture ownership.
 mod graph_decode_c06_identity;
+#[allow(dead_code)] // C07-21 deliberately precedes replay-slot ownership.
+mod graph_decode_c06_registry_dispatch;
 #[allow(dead_code)] // C07-20 deliberately precedes registry/capture ownership.
 mod graph_decode_c06_signature;
 #[cfg(feature = "cuda")]
