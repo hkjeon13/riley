@@ -1,5 +1,7 @@
 #include "ffi_internal.hpp"
 
+#include <cuda_bf16.h>
+
 #include <cstddef>
 #include <climits>
 #include <cstring>
@@ -37,6 +39,10 @@ constexpr const char* kBeginFillOperation = "begin CUDA Graph fill capture";
 constexpr const char* kEnqueueFillOperation = "enqueue CUDA Graph fill";
 constexpr const char* kBeginH2DOperation = "begin CUDA Graph H2D capture";
 constexpr const char* kEnqueueH2DOperation = "enqueue CUDA Graph H2D";
+constexpr const char* kBeginSiluBf16Operation =
+    "begin CUDA Graph BF16 SiLU capture";
+constexpr const char* kEnqueueSiluBf16Operation =
+    "enqueue CUDA Graph BF16 SiLU";
 constexpr const char* kStageH2DOperation = "stage CUDA Graph H2D source";
 constexpr const char* kEndOperation = "end CUDA Graph capture";
 constexpr const char* kInstantiateOperation = "instantiate CUDA Graph";
@@ -46,6 +52,8 @@ constexpr const char* kCloseGraphOperation = "close CUDA Graph";
 constexpr const char* kCloseExecOperation = "close CUDA Graph exec";
 constexpr uint32_t kGraphFillThreads = 256;
 constexpr uint64_t kMaximumGraphFillGridX = static_cast<uint64_t>(INT_MAX);
+constexpr uint32_t kGraphSiluThreads = 256;
+constexpr uint32_t kMaximumGraphSiluBlocks = 65535;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -53,6 +61,23 @@ __global__ void graph_fill_f32(float* output, uint64_t element_count,
                          static_cast<uint64_t>(threadIdx.x);
   if (index < element_count) {
     output[index] = value;
+  }
+}
+
+// This is deliberately capture-local rather than riley_cuda_silu_execute:
+// eager SiLU owns transient ExclusiveUses and synchronizes completion, neither
+// of which is admissible while a graph capture owns permanent input/output
+// leases. Keep the arithmetic and grid-stride topology equal to the eager
+// BF16 primitive so graph parity includes its exact storage-rounding boundary.
+__global__ void graph_silu_bf16(const __nv_bfloat16* input,
+                                 __nv_bfloat16* output,
+                                 uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const float value = __bfloat162float(input[index]);
+    output[index] = __float2bfloat16_rn(value / (1.0F + expf(-value)));
   }
 }
 
@@ -125,6 +150,8 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       capture->fill_enqueue_count != 0 || capture->fill_lease_held ||
       capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
       capture->h2d_enqueue_count != 0 || capture->h2d_source_lease_held ||
+      capture->silu_input != nullptr || capture->silu_element_count != 0 ||
+      capture->silu_enqueue_count != 0 || capture->silu_input_lease_held ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -206,6 +233,37 @@ bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
   return true;
 }
 
+// C05-8 retains two distinct BF16 device allocations. Both are graph-visible
+// raw addresses, so validate every immutable field and both 1->0 transitions
+// before releasing either lease. A malformed raw ABI owner remains fail-closed.
+bool release_capture_silu_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (capture == nullptr ||
+      capture->operation != RileyCudaGraphCaptureOperation::kSiluBf16 ||
+      capture->fill_buffer == nullptr || capture->silu_input == nullptr ||
+      capture->fill_buffer == capture->silu_input ||
+      !capture->fill_lease_held || !capture->silu_input_lease_held ||
+      capture->silu_element_count == 0 ||
+      capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      capture->silu_input->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  if (!release_exclusive_use(capture->silu_input->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->silu_input = nullptr;
+  capture->silu_element_count = 0;
+  capture->silu_enqueue_count = 0;
+  capture->silu_input_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -216,19 +274,32 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
-    if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0) {
+    if (graph->operation != RileyCudaGraphCaptureOperation::kFillF32 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
-    if (graph->h2d_source != capture->h2d_source ||
-        graph->h2d_byte_len != capture->h2d_byte_len) {
+    if (graph->operation != RileyCudaGraphCaptureOperation::kH2D ||
+        graph->h2d_source != capture->h2d_source ||
+        graph->h2d_byte_len != capture->h2d_byte_len ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0) {
+      return false;
+    }
+  } else if (capture->operation == RileyCudaGraphCaptureOperation::kSiluBf16) {
+    if (graph->operation != RileyCudaGraphCaptureOperation::kSiluBf16 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        graph->silu_input != capture->silu_input ||
+        graph->silu_element_count != capture->silu_element_count) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
     // fill graph, which has no pinned source pointer to preserve.
-    if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0) {
+    if (graph->operation != RileyCudaGraphCaptureOperation::kFillF32 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0) {
       return false;
     }
   } else {
@@ -253,7 +324,8 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   }
   RileyCudaGraph* const graph = capture->prepared_graph;
   if (graph->owner != capture->owner || graph->stream != capture->stream ||
-      graph->fill_buffer != capture->fill_buffer || graph->graph == nullptr ||
+      graph->fill_buffer != capture->fill_buffer ||
+      graph->operation != capture->operation || graph->graph == nullptr ||
       graph->owns_capture_leases ||
       capture->stream->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1) {
@@ -262,7 +334,9 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
     if (graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
         capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
-        capture->h2d_source_lease_held) {
+        capture->h2d_source_lease_held || graph->silu_input != nullptr ||
+        graph->silu_element_count != 0 || capture->silu_input != nullptr ||
+        capture->silu_element_count != 0 || capture->silu_input_lease_held) {
       return false;
     }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kH2D) {
@@ -270,7 +344,23 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
         capture->h2d_byte_len == 0 ||
         graph->h2d_source != capture->h2d_source ||
         graph->h2d_byte_len != capture->h2d_byte_len ||
-        capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
+        capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+        graph->silu_input != nullptr || graph->silu_element_count != 0 ||
+        capture->silu_input != nullptr || capture->silu_element_count != 0 ||
+        capture->silu_input_lease_held) {
+      return false;
+    }
+  } else if (capture->operation == RileyCudaGraphCaptureOperation::kSiluBf16) {
+    if (capture->silu_input == nullptr ||
+        capture->silu_input == capture->fill_buffer ||
+        !capture->silu_input_lease_held ||
+        capture->silu_element_count == 0 ||
+        graph->silu_input != capture->silu_input ||
+        graph->silu_element_count != capture->silu_element_count ||
+        capture->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+        graph->h2d_source != nullptr || graph->h2d_byte_len != 0 ||
+        capture->h2d_source != nullptr || capture->h2d_byte_len != 0 ||
+        capture->h2d_source_lease_held) {
       return false;
     }
   } else {
@@ -290,6 +380,10 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->h2d_byte_len = 0;
   capture->h2d_enqueue_count = 0;
   capture->h2d_source_lease_held = false;
+  capture->silu_input = nullptr;
+  capture->silu_element_count = 0;
+  capture->silu_enqueue_count = 0;
+  capture->silu_input_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -329,6 +423,23 @@ bool release_graph_h2d_leases(RileyCudaContext* owner, RileyCudaStream* stream,
   }
   return release_exclusive_use(source->active_uses) &&
          release_exclusive_use(destination->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_silu_bf16_leases(RileyCudaContext* owner,
+                                    RileyCudaStream* stream,
+                                    RileyCudaDeviceBuffer* input,
+                                    RileyCudaDeviceBuffer* output) noexcept {
+  if (owner == nullptr || stream == nullptr || input == nullptr ||
+      output == nullptr || input == output || !same_context(owner, stream->owner) ||
+      !same_context(owner, input->owner) || !same_context(owner, output->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      input->active_uses.load(std::memory_order_acquire) != 1 ||
+      output->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(input->active_uses) &&
+         release_exclusive_use(output->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -529,7 +640,8 @@ RileyCudaStatus capture_begin_impl(
   }
   capture->prepared_graph =
       new (graph_storage) RileyCudaGraph(stream->owner, stream, fill_buffer,
-                                         capture_id);
+                                         capture_id,
+                                         RileyCudaGraphCaptureOperation::kFillF32);
   capture->fill_buffer = fill_buffer;
   capture->fill_element_count = element_count;
   capture->fill_lease_held = true;
@@ -784,7 +896,8 @@ RileyCudaStatus capture_begin_h2d_impl(
                      "host allocation failed for captured graph H2D owner");
   }
   capture->prepared_graph = new (graph_storage) RileyCudaGraph(
-      stream->owner, stream, destination, capture_id, source, source->byte_len);
+      stream->owner, stream, destination, capture_id,
+      RileyCudaGraphCaptureOperation::kH2D, source, source->byte_len);
   capture->fill_buffer = destination;
   capture->fill_lease_held = true;
   capture->h2d_source = source;
@@ -868,6 +981,271 @@ RileyCudaStatus capture_begin_h2d_impl(
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                           kBeginH2DOperation,
                           "failed to release an unstarted graph H2D capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
+// C05-8 is intentionally a separate sibling admission path. The two device
+// pointers and fixed BF16 geometry are prepared before capture begins, and both
+// device leases remain held through graph/exec close. It does not generalize
+// the eager subspan/aliasing SiLU ABI.
+RileyCudaStatus capture_begin_silu_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* output, uint64_t element_count,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation, "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || input == nullptr || output == nullptr ||
+      stream->owner == nullptr || input->owner == nullptr ||
+      output->owner == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "stream, BF16 SiLU input, output, or their owner is null");
+  }
+  if (!same_context(stream->owner, input->owner) ||
+      !same_context(stream->owner, output->owner)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "capture stream, BF16 SiLU input, and output must share one context owner");
+  }
+  if (input == output) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "graph BF16 SiLU requires distinct input and output allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  if (element_count == 0 ||
+      element_count > input->byte_len / sizeof(__nv_bfloat16) ||
+      element_count > output->byte_len / sizeof(__nv_bfloat16)) {
+    return validation_error(error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "fixed BF16 SiLU element count exceeds an input or output allocation");
+  }
+  if (input->device_data == nullptr || output->device_data == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "graph BF16 SiLU input or output has no live device allocation");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "a stream command batch blocks fixed-address BF16 SiLU graph capture");
+  }
+  const RileyCudaStatus idle_status =
+      require_stream_capture_idle(stream, error, kBeginSiluBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(input->active_uses)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "graph BF16 SiLU input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(output->active_uses)) {
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!input_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginSiluBf16Operation,
+                            "failed to release a rejected graph BF16 SiLU input lease");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "graph BF16 SiLU output has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool output_released = release_exclusive_use(output->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!output_released || !input_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginSiluBf16Operation,
+                            "failed to release rejected graph BF16 SiLU resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginSiluBf16Operation,
+                            "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginSiluBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginSiluBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, kBeginSiluBf16Operation,
+                     "host allocation failed for graph BF16 SiLU capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kSiluBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(output->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+                     RILEY_CUDA_ERROR_DOMAIN_INTERNAL,
+                     RILEY_CUDA_ERROR_STAGE_CREATE, kBeginSiluBf16Operation,
+                     "host allocation failed for captured graph BF16 SiLU owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kSiluBf16, nullptr, 0, input,
+      element_count);
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->silu_input = input;
+  capture->silu_element_count = element_count;
+  capture->silu_input_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_silu_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginSiluBf16Operation,
+          "failed to release a blocked graph BF16 SiLU capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released = release_capture_silu_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE, kBeginSiluBf16Operation,
+          "failed to release a rejected graph BF16 SiLU capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kBeginSiluBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                                        kBeginSiluBf16Operation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result =
+        cudaStreamBeginCapture(stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginSiluBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginSiluBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released = release_capture_silu_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                          kBeginSiluBf16Operation,
+                          "failed to release an unstarted graph BF16 SiLU capture owner");
   }
   record_capture_outcome(out_graph_error,
                          RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
@@ -1192,15 +1570,25 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
     if (deferred_close_status == RILEY_CUDA_STATUS_SUCCESS) {
       const bool is_h2d =
           owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+      const bool is_silu_bf16 =
+          owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+      const bool is_fill_or_generic =
+          owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
+          owner->operation == RileyCudaGraphCaptureOperation::kNone;
+      const bool release_graph_first = is_h2d || is_silu_bf16;
       const bool prepared_graph_released =
-          is_h2d ? destroy_prepared_graph_storage(owner) : true;
+          release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
           prepared_graph_released &&
           (is_h2d ? release_capture_h2d_leases(owner)
-                  : release_capture_fill_lease(owner));
+                  : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
+                                 : is_fill_or_generic
+                                       ? release_capture_fill_lease(owner)
+                                       : false);
       const bool cleanup_graph_released =
-          is_h2d ? prepared_graph_released
-                 : operation_released && destroy_prepared_graph_storage(owner);
+          release_graph_first
+              ? prepared_graph_released
+              : operation_released && destroy_prepared_graph_storage(owner);
       released = cleanup_graph_released && operation_released &&
                  release_capture_owner(owner);
       if (!released && status == RILEY_CUDA_STATUS_SUCCESS) {
@@ -1239,6 +1627,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_h2d(
     RileyCudaErrorInfo* error) noexcept {
   return capture_begin_h2d_impl(stream, destination, source, mode, out_capture,
                                 out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_silu_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* output, uint64_t element_count,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_silu_bf16_impl(stream, input, output, element_count,
+                                      mode, out_capture, out_graph_error,
+                                      error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -1421,6 +1820,106 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_h2d(
   return status;
 }
 
+extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_silu_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueSiluBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueSiluBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->owner == nullptr || owner->stream == nullptr ||
+      owner->prepared_graph == nullptr || owner->fill_buffer == nullptr ||
+      owner->silu_input == nullptr ||
+      owner->operation != RileyCudaGraphCaptureOperation::kSiluBf16 ||
+      !owner->fill_lease_held || !owner->silu_input_lease_held ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueSiluBf16Operation,
+                            "capture owner is not a live graph BF16 SiLU capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueSiluBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  if (!owner->capture_started || owner->silu_input == owner->fill_buffer ||
+      owner->silu_element_count == 0 ||
+      owner->silu_element_count >
+          owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+      owner->silu_element_count >
+          owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+      owner->silu_input->device_data == nullptr ||
+      owner->fill_buffer->device_data == nullptr ||
+      owner->silu_enqueue_count != 0 || owner->h2d_source != nullptr ||
+      owner->h2d_byte_len != 0 || owner->h2d_source_lease_held ||
+      owner->fill_element_count != 0 || owner->fill_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kEnqueueSiluBf16Operation,
+        "graph BF16 SiLU capture has invalid immutable geometry or already enqueued its sole node");
+  }
+  if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->silu_input->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
+      owner->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueSiluBf16Operation,
+                            "graph BF16 SiLU capture resource lease is unavailable");
+  }
+  const uint64_t needed_blocks =
+      ((owner->silu_element_count - 1) / kGraphSiluThreads) + 1;
+  const uint32_t grid_x = static_cast<uint32_t>(
+      needed_blocks < kMaximumGraphSiluBlocks ? needed_blocks
+                                               : kMaximumGraphSiluBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                                        kEnqueueSiluBf16Operation, owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    graph_silu_bf16<<<grid_x, kGraphSiluThreads, 0, owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(owner->silu_input->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        owner->silu_element_count);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueSiluBf16Operation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      owner->silu_enqueue_count = 1;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueSiluBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -1463,14 +1962,35 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   const bool is_fill =
       owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
   const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
-  if ((!is_fill && !is_h2d) ||
+  const bool is_silu_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+  if ((!is_fill && !is_h2d && !is_silu_bf16) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
-                   owner->h2d_source_lease_held)) ||
+                   owner->h2d_source_lease_held || owner->silu_input != nullptr ||
+                   owner->silu_element_count != 0 ||
+                   owner->silu_enqueue_count != 0 ||
+                   owner->silu_input_lease_held)) ||
       (is_h2d && (owner->h2d_source == nullptr ||
                   !owner->h2d_source_lease_held || owner->h2d_byte_len == 0 ||
                   owner->h2d_source->host_data == nullptr ||
                   owner->h2d_source->byte_len != owner->h2d_byte_len ||
-                  owner->fill_buffer->byte_len != owner->h2d_byte_len))) {
+                  owner->fill_buffer->byte_len != owner->h2d_byte_len ||
+                  owner->silu_input != nullptr || owner->silu_element_count != 0 ||
+                  owner->silu_enqueue_count != 0 ||
+                  owner->silu_input_lease_held)) ||
+      (is_silu_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->h2d_enqueue_count != 0 || owner->h2d_source_lease_held ||
+        owner->silu_input == nullptr ||
+        owner->silu_input == owner->fill_buffer ||
+        !owner->silu_input_lease_held || owner->silu_element_count == 0 ||
+        owner->silu_input->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->silu_element_count >
+            owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->fill_element_count != 0 || owner->fill_enqueue_count != 0))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -1483,14 +2003,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   }
   if (!owner->capture_started || owner->capture_terminated ||
       (is_fill && owner->fill_enqueue_count == 0) ||
-      (is_h2d && owner->h2d_enqueue_count != 1)) {
+      (is_h2d && owner->h2d_enqueue_count != 1) ||
+      (is_silu_bf16 && owner->silu_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
   }
   if (owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
       owner->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
-      (is_h2d && owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) {
+      (is_h2d && owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1) ||
+      (is_silu_bf16 &&
+       owner->silu_input->active_uses.load(std::memory_order_acquire) != 1)) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
                           "fixed graph capture resource lease was corrupted");
@@ -1592,15 +2115,23 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     if (deferred_close_status == RILEY_CUDA_STATUS_SUCCESS) {
       const bool is_h2d =
           owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+      const bool is_silu_bf16 =
+          owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
+      const bool is_fill =
+          owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
+      const bool release_graph_first = is_h2d || is_silu_bf16;
       const bool prepared_graph_released =
-          is_h2d ? destroy_prepared_graph_storage(owner) : true;
+          release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
           prepared_graph_released &&
           (is_h2d ? release_capture_h2d_leases(owner)
-                  : release_capture_fill_lease(owner));
+                  : is_silu_bf16 ? release_capture_silu_bf16_leases(owner)
+                                 : is_fill ? release_capture_fill_lease(owner)
+                                           : false);
       const bool cleanup_graph_released =
-          is_h2d ? prepared_graph_released
-                 : operation_released && destroy_prepared_graph_storage(owner);
+          release_graph_first
+              ? prepared_graph_released
+              : operation_released && destroy_prepared_graph_storage(owner);
       released = cleanup_graph_released && operation_released &&
                  release_capture_owner(owner);
     } else if (error != nullptr && error->struct_size >= sizeof(*error)) {
@@ -1654,10 +2185,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   }
   RileyCudaGraph* const owner = *graph;
   const uint64_t capture_id = owner->capture_id;
-  const bool is_h2d = owner->h2d_source != nullptr;
+  const bool is_fill =
+      owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
+  const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+  const bool is_silu_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
-      !owner->owns_capture_leases ||
+      !owner->owns_capture_leases || (!is_fill && !is_h2d && !is_silu_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -1667,18 +2202,34 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
                             kInstantiateOperation,
                             "captured graph resource lease is invalid");
   }
-  if ((is_h2d &&
+  if ((is_fill &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+      (is_h2d &&
        (owner->h2d_byte_len == 0 ||
+        owner->h2d_source == nullptr ||
         !same_context(owner->owner, owner->h2d_source->owner) ||
         owner->h2d_source->host_data == nullptr ||
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
-        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
-      (!is_h2d && owner->h2d_byte_len != 0)) {
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+      (is_silu_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input == nullptr || owner->silu_input == owner->fill_buffer ||
+        owner->silu_element_count == 0 ||
+        !same_context(owner->owner, owner->silu_input->owner) ||
+        owner->silu_input->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->silu_element_count >
+            owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kInstantiateOperation,
-                            "captured graph has invalid fixed H2D source state");
+                            "captured graph has invalid fixed-operation resource state");
   }
   if (owner->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -1703,7 +2254,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   }
   auto* exec = new (storage) RileyCudaGraphExec(
       owner->owner, owner->stream, owner->fill_buffer, capture_id, exec_id,
-      owner->h2d_source, owner->h2d_byte_len);
+      owner->operation, owner->h2d_source, owner->h2d_byte_len,
+      owner->silu_input, owner->silu_element_count);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -1792,6 +2344,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
       exec->fill_buffer == nullptr || exec->h2d_source == nullptr ||
+      exec->operation != RileyCudaGraphCaptureOperation::kH2D ||
       exec->h2d_source != source || exec->graph == nullptr ||
       exec->exec == nullptr || !exec->owns_capture_leases ||
       exec->h2d_byte_len == 0 || byte_len != exec->h2d_byte_len ||
@@ -1803,6 +2356,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       exec->stream->active_uses.load(std::memory_order_acquire) != 1 ||
       exec->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       source->active_uses.load(std::memory_order_acquire) != 1 ||
+      exec->silu_input != nullptr || exec->silu_element_count != 0 ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -1851,12 +2405,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   }
   const uint64_t capture_id = exec->capture_id;
   const uint64_t exec_id = exec->exec_id;
-  const bool is_h2d = exec->h2d_source != nullptr;
+  const bool is_fill =
+      exec->operation == RileyCudaGraphCaptureOperation::kFillF32;
+  const bool is_h2d = exec->operation == RileyCudaGraphCaptureOperation::kH2D;
+  const bool is_silu_bf16 =
+      exec->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
       exec->fill_buffer == nullptr || exec->graph == nullptr ||
-      exec->exec == nullptr || !exec->owns_capture_leases) {
+      exec->exec == nullptr || !exec->owns_capture_leases ||
+      (!is_fill && !is_h2d && !is_silu_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -1879,19 +2438,37 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
                             kLaunchOperation,
                             "graph exec is busy, poisoned, or lost its retained resource lease");
   }
-  if ((is_h2d &&
+  if ((is_fill &&
+       (exec->h2d_source != nullptr || exec->h2d_byte_len != 0 ||
+        exec->h2d_input_staged || exec->silu_input != nullptr ||
+        exec->silu_element_count != 0)) ||
+      (is_h2d &&
        (exec->h2d_byte_len == 0 ||
+        exec->h2d_source == nullptr ||
         !same_context(exec->owner, exec->h2d_source->owner) ||
         exec->h2d_source->host_data == nullptr ||
         exec->h2d_source->byte_len != exec->h2d_byte_len ||
         exec->fill_buffer->byte_len != exec->h2d_byte_len ||
         exec->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
-        !exec->h2d_input_staged)) ||
-      (!is_h2d && (exec->h2d_byte_len != 0 || exec->h2d_input_staged))) {
+        !exec->h2d_input_staged || exec->silu_input != nullptr ||
+        exec->silu_element_count != 0)) ||
+      (is_silu_bf16 &&
+       (exec->h2d_source != nullptr || exec->h2d_byte_len != 0 ||
+        exec->h2d_input_staged || exec->silu_input == nullptr ||
+        exec->silu_input == exec->fill_buffer ||
+        exec->silu_element_count == 0 ||
+        !same_context(exec->owner, exec->silu_input->owner) ||
+        exec->silu_input->device_data == nullptr ||
+        exec->fill_buffer->device_data == nullptr ||
+        exec->silu_element_count >
+            exec->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+        exec->silu_element_count >
+            exec->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        exec->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
-                            "graph H2D exec requires one fresh exact source stage before replay");
+                            "graph exec has invalid fixed-operation replay state");
   }
   void* storage = std::calloc(1, sizeof(RileyCudaGraphLaunch));
   if (storage == nullptr) {
@@ -2057,12 +2634,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   }
   RileyCudaGraph* const owner = *graph;
   const uint64_t capture_id = owner->capture_id;
-  const bool is_h2d = owner->h2d_source != nullptr;
+  const bool is_fill =
+      owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
+  const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+  const bool is_silu_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
-      !owner->owns_capture_leases ||
+      !owner->owns_capture_leases || (!is_fill && !is_h2d && !is_silu_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -2073,18 +2654,34 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                             kCloseGraphOperation,
                             "captured graph has invalid retained resource leases");
   }
-  if ((is_h2d &&
+  if ((is_fill &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+      (is_h2d &&
        (owner->h2d_byte_len == 0 ||
+        owner->h2d_source == nullptr ||
         !same_context(owner->owner, owner->h2d_source->owner) ||
         owner->h2d_source->host_data == nullptr ||
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
-        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
-      (!is_h2d && owner->h2d_byte_len != 0)) {
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+      (is_silu_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->silu_input == nullptr || owner->silu_input == owner->fill_buffer ||
+        owner->silu_element_count == 0 ||
+        !same_context(owner->owner, owner->silu_input->owner) ||
+        owner->silu_input->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->silu_element_count >
+            owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseGraphOperation,
-                            "captured graph has invalid fixed H2D source state");
+                            "captured graph has invalid fixed-operation resource state");
   }
 
   CurrentContext scope(owner->owner);
@@ -2114,8 +2711,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         is_h2d ? release_graph_h2d_leases(owner->owner, owner->stream,
                                            owner->fill_buffer,
                                            owner->h2d_source)
-               : release_graph_leases(owner->owner, owner->stream,
-                                      owner->fill_buffer);
+               : is_silu_bf16
+                     ? release_graph_silu_bf16_leases(owner->owner,
+                                                       owner->stream,
+                                                       owner->silu_input,
+                                                       owner->fill_buffer)
+                     : release_graph_leases(owner->owner, owner->stream,
+                                            owner->fill_buffer);
     if (released) {
       owner->owns_capture_leases = false;
       owner->~RileyCudaGraph();
@@ -2126,7 +2728,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
     }
     status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             kCloseGraphOperation,
-                            "failed to release graph stream, device destination, pinned source, or context lease");
+                            "failed to release graph stream, retained buffers, or context lease");
   }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, true);
@@ -2160,12 +2762,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   RileyCudaGraphExec* const owner = *exec;
   const uint64_t capture_id = owner->capture_id;
   const uint64_t exec_id = owner->exec_id;
-  const bool is_h2d = owner->h2d_source != nullptr;
+  const bool is_fill =
+      owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
+  const bool is_h2d = owner->operation == RileyCudaGraphCaptureOperation::kH2D;
+  const bool is_silu_bf16 =
+      owner->operation == RileyCudaGraphCaptureOperation::kSiluBf16;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       owner->exec == nullptr || !owner->owns_capture_leases ||
+      (!is_fill && !is_h2d && !is_silu_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -2177,18 +2784,36 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                             kCloseExecOperation,
                             "graph exec is busy, poisoned, or lost its retained resource lease");
   }
-  if ((is_h2d &&
+  if ((is_fill &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->h2d_input_staged || owner->silu_input != nullptr ||
+        owner->silu_element_count != 0)) ||
+      (is_h2d &&
        (owner->h2d_byte_len == 0 ||
+        owner->h2d_source == nullptr ||
         !same_context(owner->owner, owner->h2d_source->owner) ||
         owner->h2d_source->host_data == nullptr ||
         owner->h2d_source->byte_len != owner->h2d_byte_len ||
         owner->fill_buffer->byte_len != owner->h2d_byte_len ||
-        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1)) ||
-      (!is_h2d && (owner->h2d_byte_len != 0 || owner->h2d_input_staged))) {
+        owner->h2d_source->active_uses.load(std::memory_order_acquire) != 1 ||
+        owner->silu_input != nullptr || owner->silu_element_count != 0)) ||
+      (is_silu_bf16 &&
+       (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
+        owner->h2d_input_staged || owner->silu_input == nullptr ||
+        owner->silu_input == owner->fill_buffer ||
+        owner->silu_element_count == 0 ||
+        !same_context(owner->owner, owner->silu_input->owner) ||
+        owner->silu_input->device_data == nullptr ||
+        owner->fill_buffer->device_data == nullptr ||
+        owner->silu_element_count >
+            owner->silu_input->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_element_count >
+            owner->fill_buffer->byte_len / sizeof(__nv_bfloat16) ||
+        owner->silu_input->active_uses.load(std::memory_order_acquire) != 1))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kCloseExecOperation,
-                            "graph exec has invalid fixed H2D source state");
+                            "graph exec has invalid fixed-operation resource state");
   }
 
   CurrentContext scope(owner->owner);
@@ -2230,8 +2855,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         is_h2d ? release_graph_h2d_leases(owner->owner, owner->stream,
                                            owner->fill_buffer,
                                            owner->h2d_source)
-               : release_graph_leases(owner->owner, owner->stream,
-                                      owner->fill_buffer);
+               : is_silu_bf16
+                     ? release_graph_silu_bf16_leases(owner->owner,
+                                                       owner->stream,
+                                                       owner->silu_input,
+                                                       owner->fill_buffer)
+                     : release_graph_leases(owner->owner, owner->stream,
+                                            owner->fill_buffer);
     if (released) {
       owner->owns_capture_leases = false;
       owner->~RileyCudaGraphExec();
@@ -2242,7 +2872,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
     }
     status = internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
                             kCloseExecOperation,
-                            "failed to release graph exec stream, device destination, pinned source, or context lease");
+                            "failed to release graph exec stream, retained buffers, or context lease");
   }
   owner->poisoned = true;
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,

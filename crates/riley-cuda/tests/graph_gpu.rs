@@ -1,8 +1,8 @@
 use std::error::Error;
 
 use riley_cuda::{
-    CudaContext, CudaDevice, CudaErrorKind, CudaGraphCaptureMode, CudaResult, CudaRuntime,
-    CudaStream,
+    CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaErrorKind,
+    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, SiluParams, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -84,6 +84,185 @@ fn h2d_payload(byte_len: usize, replay: usize) -> Vec<u8> {
             (mixed & 0xff) as u8
         })
         .collect()
+}
+
+fn graph_silu_bf16_fixture_bytes(element_count: usize) -> Vec<u8> {
+    // Keep signed zero, normal finite values, infinities, and a payload-bearing
+    // NaN in the fixed device input. The graph implementation is required to
+    // match eager SiLU's BF16 storage result byte-for-byte, rather than merely
+    // satisfy a tolerance after conversion back to f32.
+    const PATTERN: [u16; 12] = [
+        0x0000, 0x8000, 0x3f80, 0xbf80, 0x4080, 0xc080, 0x3d00, 0xbd00, 0x7f80, 0xff80, 0x7fc1,
+        0xffc1,
+    ];
+    (0..element_count)
+        .flat_map(|index| PATTERN[index % PATTERN.len()].to_ne_bytes())
+        .collect()
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_silu_graph_replays_fixed_input_byte_exact_against_eager() -> Result<(), Box<dyn Error>>
+{
+    const ELEMENT_COUNT: u64 = 4_096;
+    const REPLAYS: usize = 32;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let byte_len = ELEMENT_COUNT
+        .checked_mul(u64::try_from(std::mem::size_of::<u16>())?)
+        .ok_or("BF16 SiLU graph byte length overflow")?;
+    let host_input = graph_silu_bf16_fixture_bytes(usize::try_from(ELEMENT_COUNT)?);
+    assert_eq!(u64::try_from(host_input.len())?, byte_len);
+    let mut staging = context.allocate_pinned_host_buffer(byte_len)?;
+
+    let mut eager_input = context.allocate_device_buffer(byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    let graph_input = {
+        let mut input = context.allocate_device_buffer(byte_len)?;
+        input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        input
+    };
+    let mut eager_output = context.allocate_device_buffer(byte_len)?;
+    let graph_output = context.allocate_device_buffer(byte_len)?;
+
+    {
+        let mut eager = SiluParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, byte_len)?,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, byte_len)?,
+            element_count: ELEMENT_COUNT,
+        };
+        silu(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_silu_bf16_capture(
+        graph_input,
+        graph_output,
+        ELEMENT_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_silu_bf16()?;
+    // The local one-node rejection must leave the first node/capture usable.
+    assert_invalid_state(
+        capture.enqueue_silu_bf16(),
+        "second fixed BF16 SiLU graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // The fixed-address graph transition must not allocate another tracked
+    // device or pinned allocation. This is a lifecycle assertion, not a
+    // performance claim about CUDA driver's internal graph bookkeeping.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_input, mut graph_output) = resources.into_parts();
+    let mut eager_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_bytes = vec![0_u8; usize::try_from(byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(byte_len)?];
+    eager_output.download_to_slice(0, &mut eager_bytes, &mut staging, &mut transfer_stream)?;
+    graph_output.download_to_slice(0, &mut graph_bytes, &mut staging, &mut transfer_stream)?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_bytes, eager_bytes,
+        "fixed graph BF16 SiLU output must match eager SiLU bit-for-bit"
+    );
+    assert_eq!(
+        graph_input_after, host_input,
+        "fixed graph replay must not mutate its retained input allocation"
+    );
+
+    graph_output.close()?;
+    graph_input.close()?;
+    eager_output.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-8-owned-bf16-silu-fixed-address replays={REPLAYS} elements={ELEMENT_COUNT} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_silu_graph_preflight_and_abort_recover_every_resource() -> Result<(), Box<dyn Error>>
+{
+    const ELEMENT_COUNT: u64 = 128;
+    const BYTE_LEN: u64 = ELEMENT_COUNT * 2;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let input = context.allocate_device_buffer(BYTE_LEN)?;
+    let output = context.allocate_device_buffer(BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_silu_bf16_capture(
+        input,
+        output,
+        0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("zero-element owned BF16 SiLU graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("Rust BF16 SiLU preflight must return all untouched resources");
+    let (stream, input, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_silu_bf16_capture(
+            input,
+            output,
+            ELEMENT_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, input, output) = resources.into_parts();
+    let error = match stream.begin_owned_graph_silu_bf16_capture(
+        input,
+        output,
+        ELEMENT_COUNT + 1,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("oversized owned BF16 SiLU graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized BF16 SiLU preflight must preserve the three resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-8-owned-bf16-silu-preflight-abort-recovery status=passed");
+    Ok(())
 }
 
 #[test]

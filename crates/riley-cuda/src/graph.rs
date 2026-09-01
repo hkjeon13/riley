@@ -2427,6 +2427,511 @@ fn validate_graph_fill_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and two fixed device buffers recovered from a known
+/// BF16-SiLU graph lifecycle transition.
+///
+/// This bundle is only resource recovery evidence. It exposes no graph replay,
+/// graph-visible pointer, mutable span, or fresh-input staging capability.
+pub struct OwnedGraphSiluBf16Resources {
+    stream: CudaStream,
+    input: CudaDeviceBuffer,
+    output: CudaDeviceBuffer,
+}
+
+impl OwnedGraphSiluBf16Resources {
+    fn new(stream: CudaStream, input: CudaDeviceBuffer, output: CudaDeviceBuffer) -> Self {
+        Self {
+            stream,
+            input,
+            output,
+        }
+    }
+
+    /// Returns the exact stream, fixed input, and fixed output after known
+    /// native graph-lease release.
+    #[must_use]
+    pub fn into_parts(self) -> (CudaStream, CudaDeviceBuffer, CudaDeviceBuffer) {
+        let Self {
+            stream,
+            input,
+            output,
+        } = self;
+        (stream, input, output)
+    }
+
+    /// Explicitly destroys both recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, input, output) = self.into_parts();
+        output.close()?;
+        input.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning a by-value fixed-address BF16-SiLU graph capture.
+///
+/// Only Rust-side preflight failures return the untouched resource triple.
+/// Once native capture begin is entered, an ambiguous CUDA transition may own
+/// raw addresses and resources remain deliberately fail-closed.
+#[must_use]
+pub struct OwnedGraphSiluBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphSiluBf16Resources>,
+}
+
+impl OwnedGraphSiluBf16CaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphSiluBf16Resources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched stream/input/output triple only when native
+    /// capture ownership was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphSiluBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphSiluBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphSiluBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphSiluBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 SiLU capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphSiluBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address, out-of-place BF16 SiLU CUDA
+/// Graph capture.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphSiluBf16Capture>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphSiluBf16Capture>();
+/// ```
+pub struct OwnedGraphSiluBf16Capture {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    resources: Option<OwnedGraphSiluBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphSiluBf16Capture {
+    /// Captures the one immutable BF16 SiLU node.
+    pub fn enqueue_silu_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphSiluBf16Capture::enqueue_silu_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 SiLU capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 SiLU enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 SiLU graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_silu_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed stream/input/output triple into a
+    /// by-value captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedSiluBf16Graph> {
+        const OPERATION: &str = "OwnedGraphSiluBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 SiLU capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 SiLU enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 SiLU enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_silu_bf16_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedSiluBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_silu_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphSiluBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable("OwnedGraphSiluBf16Capture::abort"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphSiluBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 SiLU CUDA Graph awaiting instantiate or close.
+pub struct OwnedCapturedSiluBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphSiluBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedSiluBf16Graph {
+    /// Instantiates this graph while retaining its fixed stream/input/output
+    /// triple by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphSiluBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_silu_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedSiluBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphSiluBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedSiluBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns its resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_silu_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedSiluBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable("OwnedCapturedSiluBf16Graph::close"))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 SiLU CUDA Graph executable.
+///
+/// It only replays the capture-time input allocation. Fresh input staging,
+/// mutable spans, node updates, and model/executor wiring remain outside this
+/// C05 ownership slice.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphSiluBf16Exec>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphSiluBf16Exec>();
+/// ```
+pub struct OwnedGraphSiluBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphSiluBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphSiluBf16Exec {
+    /// Replays the fixed-address BF16 SiLU graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphSiluBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphSiluBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 SiLU transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 SiLU exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphSiluBf16Launch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns the fixed resource triple only
+    /// after native close proves every graph lease was released.
+    ///
+    /// ```compile_fail
+    /// fn cannot_close_an_owned_silu_exec_while_launch_is_live(
+    ///     mut exec: riley_cuda::OwnedGraphSiluBf16Exec,
+    /// ) {
+    ///     let launch = exec.launch().unwrap();
+    ///     let _ = exec.close();
+    ///     drop(launch);
+    /// }
+    /// ```
+    pub fn close(mut self) -> CudaResult<OwnedGraphSiluBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphSiluBf16Exec::close",
+                "an earlier graph BF16 SiLU transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_silu_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphSiluBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable("OwnedGraphSiluBf16Exec::close"))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphSiluBf16Exec`] replay.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphSiluBf16Launch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphSiluBf16Launch<'static>>();
+/// ```
+pub struct OwnedGraphSiluBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphSiluBf16Exec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphSiluBf16Launch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable("OwnedGraphSiluBf16Launch::finish"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphSiluBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_silu_bf16_resources(
+    resources: &mut Option<OwnedGraphSiluBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphSiluBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 SiLU owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_silu_bf16_capture_preflight(
+    stream: &CudaStream,
+    input: &CudaDeviceBuffer,
+    output: &CudaDeviceBuffer,
+    element_count: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, input.context_owner(), operation)?;
+    ensure_same_context(&stream.context, output.context_owner(), operation)?;
+    input.ensure_idle_for_operation(operation)?;
+    output.ensure_idle_for_operation(operation)?;
+    let required_bytes = element_count
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "element_count overflows the fixed BF16 SiLU capture byte range",
+            )
+        })?;
+    if element_count == 0 || required_bytes > input.byte_len() || required_bytes > output.byte_len()
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "element_count={element_count} requires {required_bytes} BF16 bytes, but input/output capacities are {}/{} bytes",
+                input.byte_len(),
+                output.byte_len()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -2591,6 +3096,76 @@ impl CudaStream {
             let _ = mode;
             Err(OwnedGraphH2DCaptureBeginError::recoverable(
                 CudaError::unavailable("CudaStream::begin_owned_graph_h2d_capture"),
+                resources,
+            ))
+        }
+    }
+
+    /// Begins a by-value C05-8 capture containing exactly one fixed-address,
+    /// out-of-place BF16 SiLU node.
+    ///
+    /// The moved input and output remain inaccessible until graph close. This
+    /// slice deliberately replays capture-time input bytes only: it does not
+    /// expose spans, offsets, in-place aliasing, dtype selection, fresh input
+    /// staging, node updates, executor wiring, or eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched triple through
+    /// [`OwnedGraphSiluBf16CaptureBeginError::into_resources`]. After native
+    /// entry, no resources are returned because CUDA may retain their raw
+    /// addresses while resolving a deferred capture failure.
+    pub fn begin_owned_graph_silu_bf16_capture(
+        self,
+        input: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+        element_count: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphSiluBf16Resources::new(self, input, output);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphSiluBf16Resources::new(self, input, output);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_silu_bf16_capture";
+            if let Err(error) = validate_graph_silu_bf16_capture_preflight(
+                &resources.stream,
+                &resources.input,
+                &resources.output,
+                element_count,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphSiluBf16CaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources.stream.native.begin_graph_silu_bf16_capture(
+                resources.input.native_handle(),
+                resources.output.native_handle(),
+                element_count,
+                mode as u32,
+            ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphSiluBf16CaptureBeginError::terminal(error));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphSiluBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (element_count, mode);
+            Err(OwnedGraphSiluBf16CaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_silu_bf16_capture"),
                 resources,
             ))
         }

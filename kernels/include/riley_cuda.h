@@ -1202,6 +1202,29 @@ RileyCudaStatus riley_cuda_graph_capture_enqueue_h2d(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-8 capture containing exactly one fixed-address, out-of-place
+// BF16 SiLU node. `input` and `output` must be distinct live device
+// allocations in the stream's context; `element_count` describes contiguous
+// elements from allocation offset zero. Both device allocations remain leased
+// until the resulting graph or exec is closed. This intentionally does not
+// accept spans, offsets, dynamic dtype, in-place aliasing, or fresh replay
+// input.
+RileyCudaStatus riley_cuda_graph_capture_begin_silu_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* output,
+    uint64_t element_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole BF16 SiLU node for a capture created by
+// riley_cuda_graph_capture_begin_silu_bf16. The captured input, output, and
+// element count are immutable for the lifetime of the graph.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_silu_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
 // Ends one prepared fixed-operation capture and transfers its context-child,
 // exact stream, device-destination, and (for H2D) pinned-source leases to the
 // returned graph. Once CUDA end has been attempted, *capture is null even if

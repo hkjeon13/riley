@@ -58,10 +58,12 @@ pub use gemm::{
 pub use graph::{
     CapturedGraph, CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphFailureInfo,
     CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, GraphCapture, GraphExec,
-    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedGraphExec,
-    OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
-    OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch,
-    OwnedGraphH2DResources, OwnedGraphLaunch,
+    GraphFillCapture, GraphLaunch, OwnedCapturedGraph, OwnedCapturedH2DGraph,
+    OwnedCapturedSiluBf16Graph, OwnedGraphExec, OwnedGraphFillCapture,
+    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphH2DCapture,
+    OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
+    OwnedGraphLaunch, OwnedGraphSiluBf16Capture, OwnedGraphSiluBf16CaptureBeginError,
+    OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch, OwnedGraphSiluBf16Resources,
 };
 pub use memory::{
     CudaAllocationStats, CudaDeviceBuffer, CudaPendingD2H, CudaPendingH2D, CudaPinnedHostBuffer,

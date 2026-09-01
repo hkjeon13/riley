@@ -554,6 +554,14 @@ static RileyCudaStatus (*const graph_capture_begin_h2d_symbol)(
 static RileyCudaStatus (*const graph_capture_enqueue_h2d_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_h2d;
+static RileyCudaStatus (*const graph_capture_begin_silu_bf16_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, uint64_t,
+    RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_silu_bf16;
+static RileyCudaStatus (*const graph_capture_enqueue_silu_bf16_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_silu_bf16;
 static RileyCudaStatus (*const graph_capture_end_symbol)(
     RileyCudaGraphCapture**, RileyCudaGraph**, RileyCudaGraphErrorInfo*,
     RileyCudaErrorInfo*) = riley_cuda_graph_capture_end;
@@ -813,6 +821,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_fill_f32_symbol,
     (const void*)&graph_capture_begin_h2d_symbol,
     (const void*)&graph_capture_enqueue_h2d_symbol,
+    (const void*)&graph_capture_begin_silu_bf16_symbol,
+    (const void*)&graph_capture_enqueue_silu_bf16_symbol,
     (const void*)&graph_capture_end_symbol,
     (const void*)&graph_instantiate_symbol,
     (const void*)&graph_exec_launch_symbol,
