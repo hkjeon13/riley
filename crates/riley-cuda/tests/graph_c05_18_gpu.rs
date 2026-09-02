@@ -732,3 +732,100 @@ fn owned_ragged_paged_kv_write_graph_preserves_bounds_invalid_raw_row_noop() -> 
     println!("c05-18-ragged-paged-kv-write-bounds-invalid-row status=passed");
     Ok(())
 }
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_ragged_paged_kv_write_graph_preflight_and_abort_recover_every_resource() -> TestResult {
+    let fixture = RaggedFixture::new();
+    let runtime = CudaRuntime::initialize()?;
+    assert!(
+        runtime.device_count() > 0,
+        "remote GPU runner has no CUDA device"
+    );
+    let context = runtime.device(0)?.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let source_bytes = u64::try_from(fixture.key_source.len())?;
+    let pool_bytes = u64::try_from(fixture.key_pool_sentinel.len())?;
+    let offsets_bytes =
+        u64::try_from(fixture.offsets.len())? * u64::try_from(std::mem::size_of::<u32>())?;
+    let block_ids_bytes =
+        u64::try_from(fixture.block_ids.len())? * u64::try_from(std::mem::size_of::<u32>())?;
+    let valid_tokens_bytes =
+        u64::try_from(fixture.valid_tokens.len())? * u64::try_from(std::mem::size_of::<u16>())?;
+    let rows_bytes =
+        u64::try_from(fixture.row_slots.len())? * u64::try_from(std::mem::size_of::<u32>())?;
+
+    let key_source = context.allocate_device_buffer(source_bytes)?;
+    let value_source = context.allocate_device_buffer(source_bytes)?;
+    let key_pool = context.allocate_device_buffer(pool_bytes)?;
+    let short_value_pool = context.allocate_device_buffer(pool_bytes - BF16_BYTES)?;
+    let offsets = context.allocate_device_buffer(offsets_bytes)?;
+    let block_ids = context.allocate_device_buffer(block_ids_bytes)?;
+    let valid_tokens = context.allocate_device_buffer(valid_tokens_bytes)?;
+    let row_slots = context.allocate_device_buffer(rows_bytes)?;
+    let row_positions = context.allocate_device_buffer(rows_bytes)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture(
+        key_source,
+        value_source,
+        key_pool,
+        short_value_pool,
+        offsets,
+        block_ids,
+        valid_tokens,
+        row_slots,
+        row_positions,
+        fixture.host()?,
+        KEY_VALUE_HEAD_COUNT,
+        HEAD_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("C05-18 short value-pool preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("Rust preflight must recover every untouched C05-18 resource");
+    let (
+        stream,
+        key_source,
+        value_source,
+        key_pool,
+        short_value_pool,
+        offsets,
+        block_ids,
+        valid_tokens,
+        row_slots,
+        row_positions,
+    ) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    short_value_pool.close()?;
+    let value_pool = context.allocate_device_buffer(pool_bytes)?;
+
+    let resources = stream
+        .begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture(
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            offsets,
+            block_ids,
+            valid_tokens,
+            row_slots,
+            row_positions,
+            fixture.host()?,
+            KEY_VALUE_HEAD_COUNT,
+            HEAD_SIZE,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    resources.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-18-ragged-paged-kv-write-preflight-abort-recovery status=passed");
+    Ok(())
+}
