@@ -44,6 +44,7 @@ const EXECUTION_SOURCES: &[(&str, &str)] = &[
 
 const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "CudaGraphCaptureOperation::H2D",
+    "CudaGraphCaptureOperation::CanonicalRmsNormBf16",
     "CudaGraphCaptureOperation::SiluBf16",
     "CudaGraphCaptureOperation::GatedMultiplyBf16",
     "CudaGraphCaptureOperation::ResidualAddBf16",
@@ -51,6 +52,7 @@ const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "CudaGraphCaptureCapability::Unsupported",
     "CudaGraphCaptureCapability::Supported",
     "PureDecodeGraphV1CaptureOperation::MetadataH2d",
+    "PureDecodeGraphV1CaptureOperation::Norm",
     "PureDecodeGraphV1CaptureOperation::MlpSiluBf16",
     "PureDecodeGraphV1CaptureOperation::MlpGatedMultiply",
     "PureDecodeGraphV1CaptureOperation::Residual",
@@ -141,6 +143,10 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
         "metadata H2D must be queried through the exact C05 operation"
     );
     assert!(
+        body.contains("CudaGraphCaptureOperation::CanonicalRmsNormBf16.capture_capability()?"),
+        "per-layer norm must be queried through the exact C05 canonical BF16 RMSNorm operation"
+    );
+    assert!(
         body.contains("CudaGraphCaptureOperation::SiluBf16.capture_capability()?"),
         "MLP SiLU must be queried through the exact C05 operation"
     );
@@ -151,6 +157,10 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
     assert!(
         body.contains("CudaGraphCaptureOperation::ResidualAddBf16.capture_capability()?"),
         "residual addition must be queried through the exact C05 operation"
+    );
+    assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::Norm, norm)"),
+        "C05 canonical BF16 RMSNorm evidence must map only to the matching C07 norm operation"
     );
     assert!(
         body.contains(
@@ -164,19 +174,32 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
     );
     assert_eq!(
         body.matches("capture_capability()?").count(),
-        4,
-        "C07-32 must query exactly its four reviewed C05 primitives"
+        5,
+        "C07-33 must query exactly its five reviewed C05 primitives"
     );
+    for unmapped in [
+        "CudaGraphCaptureOperation::FillF32",
+        "CudaGraphCaptureOperation::Bf16Argmax",
+        "CudaGraphCaptureOperation::Bf16RowGather",
+        "CudaGraphCaptureOperation::Bf16RowGatherArgmax",
+        "CudaGraphCaptureOperation::Bf16RowGatherArgmaxD2H",
+    ] {
+        assert!(
+            !body.contains(unmapped),
+            "C07-33 must not broaden exact C05 evidence through {unmapped}"
+        );
+    }
 
     assert!(
-        INVENTORY_SOURCE.contains("MlpSiluBf16")
+        INVENTORY_SOURCE.contains("Norm")
+            && INVENTORY_SOURCE.contains("MlpSiluBf16")
             && INVENTORY_SOURCE.contains("MlpGatedMultiply")
             && INVENTORY_SOURCE.contains("Residual"),
-        "C07 inventory must keep the SiLU, gated-multiply, and residual operations distinct",
+        "C07 inventory must keep the canonical norm, SiLU, gated-multiply, and residual operations distinct",
     );
     assert!(
         LLAMA_MODULE_SOURCE.contains(
-            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-32 maps only exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
+            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-33 maps only exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
         ),
         "C07-29 evidence must remain a private CUDA-gated module",
     );

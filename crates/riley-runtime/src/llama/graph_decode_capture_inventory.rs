@@ -34,7 +34,9 @@ pub(crate) enum PureDecodeGraphV1CaptureOperation {
     MetadataH2d,
     /// Token embedding lookup and validation-status production.
     Embedding,
-    /// Per-layer RMS normalization before projection work.
+    /// Per-layer canonical, out-of-place generic BF16 RMS normalization before
+    /// projection work. This slot does not make SmolLM2/Fixed37 or fused
+    /// residual-RMSNorm variants interchangeable evidence.
     Norm,
     /// Per-layer query, key, value, output, and MLP projection GEMMs.
     LayerProjectionGemm,
