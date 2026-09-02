@@ -46,6 +46,7 @@ const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "CudaGraphCaptureOperation::H2D",
     "CudaGraphCaptureOperation::CanonicalRmsNormBf16",
     "CudaGraphCaptureOperation::IndexedRopeBf16",
+    "CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16",
     "CudaGraphCaptureOperation::SiluBf16",
     "CudaGraphCaptureOperation::GatedMultiplyBf16",
     "CudaGraphCaptureOperation::ResidualAddBf16",
@@ -55,6 +56,7 @@ const REQUIRED_PRODUCTION_TOKENS: &[&str] = &[
     "PureDecodeGraphV1CaptureOperation::MetadataH2d",
     "PureDecodeGraphV1CaptureOperation::Norm",
     "PureDecodeGraphV1CaptureOperation::Rope",
+    "PureDecodeGraphV1CaptureOperation::KvWrite",
     "PureDecodeGraphV1CaptureOperation::MlpSiluBf16",
     "PureDecodeGraphV1CaptureOperation::MlpGatedMultiply",
     "PureDecodeGraphV1CaptureOperation::Residual",
@@ -153,6 +155,12 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
         "decode RoPE must be queried through the exact C05 indexed BF16 RoPE operation"
     );
     assert!(
+        body.contains(
+            "CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16.capture_capability()?"
+        ),
+        "decode K/V write must be queried through the exact C05 ragged paged BF16 operation"
+    );
+    assert!(
         body.contains("CudaGraphCaptureOperation::SiluBf16.capture_capability()?"),
         "MLP SiLU must be queried through the exact C05 operation"
     );
@@ -173,6 +181,10 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
         "C05 indexed BF16 RoPE evidence must map only to the matching C07 RoPE operation"
     );
     assert!(
+        body.contains(".with_capability(PureDecodeGraphV1CaptureOperation::KvWrite, kv_write)"),
+        "C05 ragged paged BF16 K/V-write evidence must map only to the matching C07 K/V-write operation"
+    );
+    assert!(
         body.contains(
             ".with_capability(\n            PureDecodeGraphV1CaptureOperation::MlpGatedMultiply,\n            mlp_gated_multiply,\n        )"
         ),
@@ -184,8 +196,8 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
     );
     assert_eq!(
         body.matches("capture_capability()?").count(),
-        6,
-        "C07-34 must query exactly its six reviewed C05 primitives"
+        7,
+        "C07-35 must query exactly its seven reviewed C05 primitives"
     );
     for unmapped in [
         "CudaGraphCaptureOperation::FillF32",
@@ -203,14 +215,15 @@ fn c05_capture_capability_evidence_stays_exact_private_and_cold() {
     assert!(
         INVENTORY_SOURCE.contains("Norm")
             && INVENTORY_SOURCE.contains("Rope")
+            && INVENTORY_SOURCE.contains("KvWrite")
             && INVENTORY_SOURCE.contains("MlpSiluBf16")
             && INVENTORY_SOURCE.contains("MlpGatedMultiply")
             && INVENTORY_SOURCE.contains("Residual"),
-        "C07 inventory must keep the canonical norm, RoPE, SiLU, gated-multiply, and residual operations distinct",
+        "C07 inventory must keep the canonical norm, RoPE, K/V-write, SiLU, gated-multiply, and residual operations distinct",
     );
     assert!(
         LLAMA_MODULE_SOURCE.contains(
-            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-34 maps six exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
+            "#[cfg(feature = \"cuda\")]\n#[allow(dead_code)] // C07-35 maps seven exact reviewed C05 primitives into that cold inventory.\nmod graph_decode_c05_capture_capability_evidence;"
         ),
         "C07-29 evidence must remain a private CUDA-gated module",
     );
