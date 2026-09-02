@@ -87,6 +87,15 @@ constexpr const char* kEnqueueBf16RowGatherOperation =
     "enqueue CUDA Graph BF16 row gather";
 constexpr uint32_t kGraphBf16RowGatherThreads = 256;
 constexpr uint32_t kMaximumGraphBf16RowGatherBlocks = 65535;
+constexpr const char* kBeginBf16RowGatherArgmaxOperation =
+    "begin CUDA Graph BF16 row-gather argmax capture";
+constexpr const char* kEnqueueBf16RowGatherArgmaxOperation =
+    "enqueue CUDA Graph BF16 row-gather argmax";
+// A failed node launch during a multi-node capture cannot safely be retried:
+// CUDA may have invalidated the capture after accepting a prefix. Keep this
+// terminal marker in the capture-only enqueue state so abort remains the sole
+// admissible transition while the exact fixed-address leases stay held.
+constexpr uint32_t kBf16RowGatherArgmaxEnqueueTerminal = UINT32_MAX;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -428,6 +437,41 @@ bool bf16_row_gather_exec_fields_are_clear(
          exec->bf16_row_gather_column_count == 0;
 }
 
+bool bf16_row_gather_argmax_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         capture->bf16_row_gather_argmax_input == nullptr &&
+         capture->bf16_row_gather_argmax_indices == nullptr &&
+         capture->bf16_row_gather_argmax_gathered_logits == nullptr &&
+         capture->bf16_row_gather_argmax_input_row_count == 0 &&
+         capture->bf16_row_gather_argmax_output_row_count == 0 &&
+         capture->bf16_row_gather_argmax_vocabulary_size == 0 &&
+         capture->bf16_row_gather_argmax_enqueue_count == 0 &&
+         !capture->bf16_row_gather_argmax_input_lease_held &&
+         !capture->bf16_row_gather_argmax_indices_lease_held &&
+         !capture->bf16_row_gather_argmax_gathered_logits_lease_held;
+}
+
+bool bf16_row_gather_argmax_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && graph->bf16_row_gather_argmax_input == nullptr &&
+         graph->bf16_row_gather_argmax_indices == nullptr &&
+         graph->bf16_row_gather_argmax_gathered_logits == nullptr &&
+         graph->bf16_row_gather_argmax_input_row_count == 0 &&
+         graph->bf16_row_gather_argmax_output_row_count == 0 &&
+         graph->bf16_row_gather_argmax_vocabulary_size == 0;
+}
+
+bool bf16_row_gather_argmax_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && exec->bf16_row_gather_argmax_input == nullptr &&
+         exec->bf16_row_gather_argmax_indices == nullptr &&
+         exec->bf16_row_gather_argmax_gathered_logits == nullptr &&
+         exec->bf16_row_gather_argmax_input_row_count == 0 &&
+         exec->bf16_row_gather_argmax_output_row_count == 0 &&
+         exec->bf16_row_gather_argmax_vocabulary_size == 0;
+}
+
 bool bf16_argmax_shape_is_valid(uint64_t row_count, uint64_t vocabulary_size,
                                 uint64_t* out_logit_element_count) noexcept {
   if (out_logit_element_count == nullptr || row_count == 0 ||
@@ -451,6 +495,19 @@ bool bf16_row_gather_shape_is_valid(
   }
   *out_input_element_count = input_row_count * column_count;
   *out_output_element_count = output_row_count * column_count;
+  return true;
+}
+
+bool bf16_row_gather_argmax_shape_is_valid(
+    uint64_t input_row_count, uint64_t output_row_count,
+    uint64_t vocabulary_size, uint64_t* out_input_element_count,
+    uint64_t* out_gathered_element_count) noexcept {
+  if (!bf16_row_gather_shape_is_valid(
+          input_row_count, output_row_count, vocabulary_size,
+          out_input_element_count, out_gathered_element_count) ||
+      vocabulary_size > UINT32_MAX) {
+    return false;
+  }
   return true;
 }
 
@@ -500,6 +557,7 @@ bool residual_add_capture_state_is_valid(
          canonical_rms_norm_capture_fields_are_clear(capture) &&
          bf16_argmax_capture_fields_are_clear(capture) &&
          bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
          same_context(capture->owner, capture->stream->owner) &&
          same_context(capture->owner, capture->fill_buffer->owner) &&
          same_context(capture->owner, capture->residual_add_left->owner) &&
@@ -541,6 +599,7 @@ bool residual_add_graph_state_is_valid(const RileyCudaGraph* graph) noexcept {
          canonical_rms_norm_graph_fields_are_clear(graph) &&
          bf16_argmax_graph_fields_are_clear(graph) &&
          bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
          same_context(graph->owner, graph->stream->owner) &&
          same_context(graph->owner, graph->fill_buffer->owner) &&
          same_context(graph->owner, graph->residual_add_left->owner) &&
@@ -583,6 +642,7 @@ bool residual_add_exec_state_is_valid(
          canonical_rms_norm_exec_fields_are_clear(exec) &&
          bf16_argmax_exec_fields_are_clear(exec) &&
          bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
          same_context(exec->owner, exec->stream->owner) &&
          same_context(exec->owner, exec->fill_buffer->owner) &&
          same_context(exec->owner, exec->residual_add_left->owner) &&
@@ -644,6 +704,7 @@ bool canonical_rms_norm_capture_state_is_valid(
          residual_add_capture_fields_are_clear(capture) &&
          bf16_argmax_capture_fields_are_clear(capture) &&
          bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
          same_context(capture->owner, capture->stream->owner) &&
          same_context(capture->owner, capture->fill_buffer->owner) &&
          same_context(capture->owner,
@@ -694,6 +755,7 @@ bool canonical_rms_norm_graph_state_is_valid(
          residual_add_graph_fields_are_clear(graph) &&
          bf16_argmax_graph_fields_are_clear(graph) &&
          bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
          same_context(graph->owner, graph->stream->owner) &&
          same_context(graph->owner, graph->fill_buffer->owner) &&
          same_context(graph->owner, graph->canonical_rms_norm_input->owner) &&
@@ -742,6 +804,7 @@ bool canonical_rms_norm_exec_state_is_valid(
          residual_add_exec_fields_are_clear(exec) &&
          bf16_argmax_exec_fields_are_clear(exec) &&
          bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
          same_context(exec->owner, exec->stream->owner) &&
          same_context(exec->owner, exec->fill_buffer->owner) &&
          same_context(exec->owner, exec->canonical_rms_norm_input->owner) &&
@@ -796,6 +859,7 @@ bool bf16_argmax_capture_state_is_valid(
          residual_add_capture_fields_are_clear(capture) &&
          canonical_rms_norm_capture_fields_are_clear(capture) &&
          bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
          same_context(capture->owner, capture->stream->owner) &&
          same_context(capture->owner, capture->fill_buffer->owner) &&
          same_context(capture->owner, capture->bf16_argmax_logits->owner) &&
@@ -830,6 +894,7 @@ bool bf16_argmax_graph_state_is_valid(const RileyCudaGraph* graph) noexcept {
          residual_add_graph_fields_are_clear(graph) &&
          canonical_rms_norm_graph_fields_are_clear(graph) &&
          bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
          same_context(graph->owner, graph->stream->owner) &&
          same_context(graph->owner, graph->fill_buffer->owner) &&
          same_context(graph->owner, graph->bf16_argmax_logits->owner) &&
@@ -865,6 +930,7 @@ bool bf16_argmax_exec_state_is_valid(
          residual_add_exec_fields_are_clear(exec) &&
          canonical_rms_norm_exec_fields_are_clear(exec) &&
          bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
          same_context(exec->owner, exec->stream->owner) &&
          same_context(exec->owner, exec->fill_buffer->owner) &&
          same_context(exec->owner, exec->bf16_argmax_logits->owner) &&
@@ -921,6 +987,7 @@ bool bf16_row_gather_capture_state_is_valid(
          residual_add_capture_fields_are_clear(capture) &&
          canonical_rms_norm_capture_fields_are_clear(capture) &&
          bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
          same_context(capture->owner, capture->stream->owner) &&
          same_context(capture->owner, capture->fill_buffer->owner) &&
          same_context(capture->owner, capture->bf16_row_gather_input->owner) &&
@@ -969,6 +1036,7 @@ bool bf16_row_gather_graph_state_is_valid(
          residual_add_graph_fields_are_clear(graph) &&
          canonical_rms_norm_graph_fields_are_clear(graph) &&
          bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
          same_context(graph->owner, graph->stream->owner) &&
          same_context(graph->owner, graph->fill_buffer->owner) &&
          same_context(graph->owner, graph->bf16_row_gather_input->owner) &&
@@ -1016,6 +1084,7 @@ bool bf16_row_gather_exec_state_is_valid(
          residual_add_exec_fields_are_clear(exec) &&
          canonical_rms_norm_exec_fields_are_clear(exec) &&
          bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
          same_context(exec->owner, exec->stream->owner) &&
          same_context(exec->owner, exec->fill_buffer->owner) &&
          same_context(exec->owner, exec->bf16_row_gather_input->owner) &&
@@ -1034,6 +1103,233 @@ bool bf16_row_gather_exec_state_is_valid(
          exec->bf16_row_gather_input->active_uses.load(
              std::memory_order_acquire) == 1 &&
          exec->bf16_row_gather_indices->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+// C05-15 records a dependent fixed-address pair: BF16 row gather writes an
+// intermediate BF16 logits slab, then the exact C05-13 argmax consumes that
+// slab into U32 result records. Keep all four allocation identities and their
+// permanent graph leases explicit; neither stage may alias the other.
+bool bf16_row_gather_argmax_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  uint64_t input_element_count = 0;
+  uint64_t gathered_element_count = 0;
+  return capture != nullptr &&
+         capture->operation ==
+             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax &&
+         capture->owner != nullptr && capture->stream != nullptr &&
+         capture->fill_buffer != nullptr &&
+         capture->bf16_row_gather_argmax_input != nullptr &&
+         capture->bf16_row_gather_argmax_indices != nullptr &&
+         capture->bf16_row_gather_argmax_gathered_logits != nullptr &&
+         capture->fill_buffer != capture->bf16_row_gather_argmax_input &&
+         capture->fill_buffer != capture->bf16_row_gather_argmax_indices &&
+         capture->fill_buffer !=
+             capture->bf16_row_gather_argmax_gathered_logits &&
+         capture->bf16_row_gather_argmax_input !=
+             capture->bf16_row_gather_argmax_indices &&
+         capture->bf16_row_gather_argmax_input !=
+             capture->bf16_row_gather_argmax_gathered_logits &&
+         capture->bf16_row_gather_argmax_indices !=
+             capture->bf16_row_gather_argmax_gathered_logits &&
+         capture->fill_lease_held &&
+         capture->bf16_row_gather_argmax_input_lease_held &&
+         capture->bf16_row_gather_argmax_indices_lease_held &&
+         capture->bf16_row_gather_argmax_gathered_logits_lease_held &&
+         bf16_row_gather_argmax_shape_is_valid(
+             capture->bf16_row_gather_argmax_input_row_count,
+             capture->bf16_row_gather_argmax_output_row_count,
+             capture->bf16_row_gather_argmax_vocabulary_size,
+             &input_element_count, &gathered_element_count) &&
+         capture->fill_element_count == 0 && capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 &&
+         !capture->h2d_source_lease_held && capture->silu_input == nullptr &&
+         capture->silu_element_count == 0 && capture->silu_enqueue_count == 0 &&
+         !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
+         bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_capture_fields_are_clear(capture) &&
+         same_context(capture->owner, capture->stream->owner) &&
+         same_context(capture->owner, capture->fill_buffer->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_input->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_indices->owner) &&
+         same_context(capture->owner,
+                      capture->bf16_row_gather_argmax_gathered_logits->owner) &&
+         capture->fill_buffer->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_input->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_indices->device_data != nullptr &&
+         capture->bf16_row_gather_argmax_gathered_logits->device_data != nullptr &&
+         input_element_count <=
+             capture->bf16_row_gather_argmax_input->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         capture->bf16_row_gather_argmax_output_row_count <=
+             capture->bf16_row_gather_argmax_indices->byte_len /
+                 sizeof(uint32_t) &&
+         gathered_element_count <=
+             capture->bf16_row_gather_argmax_gathered_logits->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         capture->bf16_row_gather_argmax_output_row_count <=
+             capture->fill_buffer->byte_len /
+                 sizeof(RileyCudaBf16ArgmaxResult) &&
+         capture->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         capture->fill_buffer->active_uses.load(std::memory_order_acquire) ==
+             1 &&
+         capture->bf16_row_gather_argmax_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->bf16_row_gather_argmax_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         capture->bf16_row_gather_argmax_gathered_logits->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool bf16_row_gather_argmax_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  uint64_t input_element_count = 0;
+  uint64_t gathered_element_count = 0;
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax &&
+         graph->owner != nullptr && graph->stream != nullptr &&
+         graph->fill_buffer != nullptr &&
+         graph->bf16_row_gather_argmax_input != nullptr &&
+         graph->bf16_row_gather_argmax_indices != nullptr &&
+         graph->bf16_row_gather_argmax_gathered_logits != nullptr &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_input &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_indices &&
+         graph->fill_buffer != graph->bf16_row_gather_argmax_gathered_logits &&
+         graph->bf16_row_gather_argmax_input !=
+             graph->bf16_row_gather_argmax_indices &&
+         graph->bf16_row_gather_argmax_input !=
+             graph->bf16_row_gather_argmax_gathered_logits &&
+         graph->bf16_row_gather_argmax_indices !=
+             graph->bf16_row_gather_argmax_gathered_logits &&
+         bf16_row_gather_argmax_shape_is_valid(
+             graph->bf16_row_gather_argmax_input_row_count,
+             graph->bf16_row_gather_argmax_output_row_count,
+             graph->bf16_row_gather_argmax_vocabulary_size,
+             &input_element_count, &gathered_element_count) &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         same_context(graph->owner, graph->stream->owner) &&
+         same_context(graph->owner, graph->fill_buffer->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_input->owner) &&
+         same_context(graph->owner,
+                      graph->bf16_row_gather_argmax_indices->owner) &&
+         same_context(
+             graph->owner,
+             graph->bf16_row_gather_argmax_gathered_logits->owner) &&
+         graph->fill_buffer->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_input->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_indices->device_data != nullptr &&
+         graph->bf16_row_gather_argmax_gathered_logits->device_data != nullptr &&
+         input_element_count <=
+             graph->bf16_row_gather_argmax_input->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         graph->bf16_row_gather_argmax_output_row_count <=
+             graph->bf16_row_gather_argmax_indices->byte_len /
+                 sizeof(uint32_t) &&
+         gathered_element_count <=
+             graph->bf16_row_gather_argmax_gathered_logits->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         graph->bf16_row_gather_argmax_output_row_count <=
+             graph->fill_buffer->byte_len /
+                 sizeof(RileyCudaBf16ArgmaxResult) &&
+         graph->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         graph->bf16_row_gather_argmax_gathered_logits->active_uses.load(
+             std::memory_order_acquire) == 1;
+}
+
+bool bf16_row_gather_argmax_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  uint64_t input_element_count = 0;
+  uint64_t gathered_element_count = 0;
+  return exec != nullptr &&
+         exec->operation ==
+             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax &&
+         exec->owner != nullptr && exec->stream != nullptr &&
+         exec->fill_buffer != nullptr &&
+         exec->bf16_row_gather_argmax_input != nullptr &&
+         exec->bf16_row_gather_argmax_indices != nullptr &&
+         exec->bf16_row_gather_argmax_gathered_logits != nullptr &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_input &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_indices &&
+         exec->fill_buffer != exec->bf16_row_gather_argmax_gathered_logits &&
+         exec->bf16_row_gather_argmax_input !=
+             exec->bf16_row_gather_argmax_indices &&
+         exec->bf16_row_gather_argmax_input !=
+             exec->bf16_row_gather_argmax_gathered_logits &&
+         exec->bf16_row_gather_argmax_indices !=
+             exec->bf16_row_gather_argmax_gathered_logits &&
+         bf16_row_gather_argmax_shape_is_valid(
+             exec->bf16_row_gather_argmax_input_row_count,
+             exec->bf16_row_gather_argmax_output_row_count,
+             exec->bf16_row_gather_argmax_vocabulary_size,
+             &input_element_count, &gathered_element_count) &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
+         bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_exec_fields_are_clear(exec) &&
+         same_context(exec->owner, exec->stream->owner) &&
+         same_context(exec->owner, exec->fill_buffer->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_input->owner) &&
+         same_context(exec->owner,
+                      exec->bf16_row_gather_argmax_indices->owner) &&
+         same_context(
+             exec->owner,
+             exec->bf16_row_gather_argmax_gathered_logits->owner) &&
+         exec->fill_buffer->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_input->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_indices->device_data != nullptr &&
+         exec->bf16_row_gather_argmax_gathered_logits->device_data != nullptr &&
+         input_element_count <=
+             exec->bf16_row_gather_argmax_input->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         exec->bf16_row_gather_argmax_output_row_count <=
+             exec->bf16_row_gather_argmax_indices->byte_len /
+                 sizeof(uint32_t) &&
+         gathered_element_count <=
+             exec->bf16_row_gather_argmax_gathered_logits->byte_len /
+                 sizeof(__nv_bfloat16) &&
+         exec->bf16_row_gather_argmax_output_row_count <=
+             exec->fill_buffer->byte_len /
+                 sizeof(RileyCudaBf16ArgmaxResult) &&
+         exec->stream->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->fill_buffer->active_uses.load(std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_input->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_indices->active_uses.load(
+             std::memory_order_acquire) == 1 &&
+         exec->bf16_row_gather_argmax_gathered_logits->active_uses.load(
              std::memory_order_acquire) == 1;
 }
 
@@ -1118,6 +1414,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -1160,7 +1457,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       !residual_add_capture_fields_are_clear(capture) ||
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
-      !bf16_row_gather_capture_fields_are_clear(capture)) {
+      !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture)) {
     return false;
   }
   if (!capture->fill_lease_held) {
@@ -1200,6 +1498,7 @@ bool release_capture_h2d_leases(RileyCudaGraphCapture* capture) noexcept {
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->h2d_source->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -1242,6 +1541,7 @@ bool release_capture_silu_bf16_leases(
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->silu_input->active_uses.load(std::memory_order_acquire) != 1) {
     return false;
@@ -1289,6 +1589,7 @@ bool release_capture_gated_multiply_bf16_leases(
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->gated_multiply_activated_gate->active_uses.load(
           std::memory_order_acquire) != 1 ||
@@ -1345,6 +1646,7 @@ bool release_capture_residual_add_bf16_leases(
       !canonical_rms_norm_capture_fields_are_clear(capture) ||
       !bf16_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_capture_fields_are_clear(capture) ||
+      !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       capture->fill_buffer->active_uses.load(std::memory_order_acquire) != 1 ||
       capture->residual_add_left->active_uses.load(std::memory_order_acquire) !=
           1 ||
@@ -1460,6 +1762,46 @@ bool release_capture_bf16_row_gather_leases(
   return true;
 }
 
+// C05-15 retains input, U32 row indices, gathered BF16 logits, and U32
+// argmax results. The terminal enqueue marker is intentionally releasable by
+// abort: it preserves every lease until CUDA capture termination is known,
+// but cannot become a retryable capture state.
+bool release_capture_bf16_row_gather_argmax_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (!bf16_row_gather_argmax_capture_state_is_valid(capture) ||
+      (capture->bf16_row_gather_argmax_enqueue_count != 0 &&
+       capture->bf16_row_gather_argmax_enqueue_count != 1 &&
+       capture->bf16_row_gather_argmax_enqueue_count !=
+           kBf16RowGatherArgmaxEnqueueTerminal)) {
+    return false;
+  }
+  if (!release_exclusive_use(
+          capture->bf16_row_gather_argmax_gathered_logits->active_uses) ||
+      !release_exclusive_use(
+          capture->bf16_row_gather_argmax_indices->active_uses) ||
+      !release_exclusive_use(
+          capture->bf16_row_gather_argmax_input->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  capture->bf16_row_gather_argmax_input = nullptr;
+  capture->bf16_row_gather_argmax_indices = nullptr;
+  capture->bf16_row_gather_argmax_gathered_logits = nullptr;
+  capture->bf16_row_gather_argmax_input_row_count = 0;
+  capture->bf16_row_gather_argmax_output_row_count = 0;
+  capture->bf16_row_gather_argmax_vocabulary_size = 0;
+  capture->bf16_row_gather_argmax_enqueue_count = 0;
+  capture->bf16_row_gather_argmax_input_lease_held = false;
+  capture->bf16_row_gather_argmax_indices_lease_held = false;
+  capture->bf16_row_gather_argmax_gathered_logits_lease_held = false;
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -1488,6 +1830,12 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kBf16RowGather &&
       (!bf16_row_gather_capture_fields_are_clear(capture) ||
        !bf16_row_gather_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax &&
+      (!bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
+       !bf16_row_gather_argmax_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -1585,6 +1933,24 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_column_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax) {
+    if (!bf16_row_gather_argmax_capture_state_is_valid(capture) ||
+        !bf16_row_gather_argmax_graph_state_is_valid(graph) ||
+        graph->bf16_row_gather_argmax_input !=
+            capture->bf16_row_gather_argmax_input ||
+        graph->bf16_row_gather_argmax_indices !=
+            capture->bf16_row_gather_argmax_indices ||
+        graph->bf16_row_gather_argmax_gathered_logits !=
+            capture->bf16_row_gather_argmax_gathered_logits ||
+        graph->bf16_row_gather_argmax_input_row_count !=
+            capture->bf16_row_gather_argmax_input_row_count ||
+        graph->bf16_row_gather_argmax_output_row_count !=
+            capture->bf16_row_gather_argmax_output_row_count ||
+        graph->bf16_row_gather_argmax_vocabulary_size !=
+            capture->bf16_row_gather_argmax_vocabulary_size) {
+      return false;
+    }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
@@ -1645,6 +2011,12 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kBf16RowGather &&
       (!bf16_row_gather_capture_fields_are_clear(capture) ||
        !bf16_row_gather_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax &&
+      (!bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
+       !bf16_row_gather_argmax_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -1804,6 +2176,25 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->bf16_row_gather_column_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax) {
+    if (capture->bf16_row_gather_argmax_enqueue_count != 1 ||
+        !bf16_row_gather_argmax_capture_state_is_valid(capture) ||
+        !bf16_row_gather_argmax_graph_state_is_valid(graph) ||
+        graph->bf16_row_gather_argmax_input !=
+            capture->bf16_row_gather_argmax_input ||
+        graph->bf16_row_gather_argmax_indices !=
+            capture->bf16_row_gather_argmax_indices ||
+        graph->bf16_row_gather_argmax_gathered_logits !=
+            capture->bf16_row_gather_argmax_gathered_logits ||
+        graph->bf16_row_gather_argmax_input_row_count !=
+            capture->bf16_row_gather_argmax_input_row_count ||
+        graph->bf16_row_gather_argmax_output_row_count !=
+            capture->bf16_row_gather_argmax_output_row_count ||
+        graph->bf16_row_gather_argmax_vocabulary_size !=
+            capture->bf16_row_gather_argmax_vocabulary_size) {
+      return false;
+    }
   } else {
     return false;
   }
@@ -1858,6 +2249,16 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->bf16_row_gather_enqueue_count = 0;
   capture->bf16_row_gather_input_lease_held = false;
   capture->bf16_row_gather_indices_lease_held = false;
+  capture->bf16_row_gather_argmax_input = nullptr;
+  capture->bf16_row_gather_argmax_indices = nullptr;
+  capture->bf16_row_gather_argmax_gathered_logits = nullptr;
+  capture->bf16_row_gather_argmax_input_row_count = 0;
+  capture->bf16_row_gather_argmax_output_row_count = 0;
+  capture->bf16_row_gather_argmax_vocabulary_size = 0;
+  capture->bf16_row_gather_argmax_enqueue_count = 0;
+  capture->bf16_row_gather_argmax_input_lease_held = false;
+  capture->bf16_row_gather_argmax_indices_lease_held = false;
+  capture->bf16_row_gather_argmax_gathered_logits_lease_held = false;
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -2019,6 +2420,34 @@ bool release_graph_bf16_row_gather_leases(
   return release_exclusive_use(row_indices->active_uses) &&
          release_exclusive_use(input->active_uses) &&
          release_exclusive_use(output->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_bf16_row_gather_argmax_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input, RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results) noexcept {
+  if (owner == nullptr || stream == nullptr || input == nullptr ||
+      row_indices == nullptr || gathered_logits == nullptr || results == nullptr ||
+      input == row_indices || input == gathered_logits || input == results ||
+      row_indices == gathered_logits || row_indices == results ||
+      gathered_logits == results || !same_context(owner, stream->owner) ||
+      !same_context(owner, input->owner) ||
+      !same_context(owner, row_indices->owner) ||
+      !same_context(owner, gathered_logits->owner) ||
+      !same_context(owner, results->owner) ||
+      stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      input->active_uses.load(std::memory_order_acquire) != 1 ||
+      row_indices->active_uses.load(std::memory_order_acquire) != 1 ||
+      gathered_logits->active_uses.load(std::memory_order_acquire) != 1 ||
+      results->active_uses.load(std::memory_order_acquire) != 1) {
+    return false;
+  }
+  return release_exclusive_use(gathered_logits->active_uses) &&
+         release_exclusive_use(row_indices->active_uses) &&
+         release_exclusive_use(input->active_uses) &&
+         release_exclusive_use(results->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -4325,6 +4754,371 @@ RileyCudaStatus capture_begin_bf16_row_gather_impl(
   return status;
 }
 
+// C05-15 captures exactly a fixed-address row-gather node followed by the
+// deterministic C05-13 BF16 argmax node. The gathered logits slab is an
+// explicit fourth device allocation rather than an implicit temporary, so the
+// dependency and every raw address remain stable through graph replay.
+RileyCudaStatus capture_begin_bf16_row_gather_argmax_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results, uint64_t input_row_count,
+    uint64_t output_row_count, uint64_t vocabulary_size,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginBf16RowGatherArgmaxOperation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || input == nullptr || row_indices == nullptr ||
+      gathered_logits == nullptr || results == nullptr ||
+      stream->owner == nullptr || input->owner == nullptr ||
+      row_indices->owner == nullptr || gathered_logits->owner == nullptr ||
+      results->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "stream, input, row indices, gathered logits, results, or their owner is null");
+  }
+  if (!same_context(stream->owner, input->owner) ||
+      !same_context(stream->owner, row_indices->owner) ||
+      !same_context(stream->owner, gathered_logits->owner) ||
+      !same_context(stream->owner, results->owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "capture stream, input, row indices, gathered logits, and results must share one context owner");
+  }
+  if (input == row_indices || input == gathered_logits || input == results ||
+      row_indices == gathered_logits || row_indices == results ||
+      gathered_logits == results) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax requires four distinct device allocations");
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginBf16RowGatherArgmaxOperation,
+                            "only thread-local capture mode is admitted");
+  }
+  uint64_t input_element_count = 0;
+  uint64_t gathered_element_count = 0;
+  if (!bf16_row_gather_argmax_shape_is_valid(
+          input_row_count, output_row_count, vocabulary_size,
+          &input_element_count, &gathered_element_count) ||
+      input_element_count > input->byte_len / sizeof(__nv_bfloat16) ||
+      output_row_count > row_indices->byte_len / sizeof(uint32_t) ||
+      gathered_element_count >
+          gathered_logits->byte_len / sizeof(__nv_bfloat16) ||
+      output_row_count >
+          results->byte_len / sizeof(RileyCudaBf16ArgmaxResult)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "BF16 row-gather argmax geometry is zero, overflows, or exceeds fixed allocation capacity");
+  }
+  if (input->device_data == nullptr || row_indices->device_data == nullptr ||
+      gathered_logits->device_data == nullptr || results->device_data == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax allocation has no live device storage");
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "a stream command batch blocks fixed-address BF16 row-gather argmax graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginBf16RowGatherArgmaxOperation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  if (!try_acquire_exclusive_use(input->active_uses)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax input has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(row_indices->active_uses)) {
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release a rejected BF16 row-gather argmax input lease");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax indices has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(gathered_logits->active_uses)) {
+    const bool indices_released =
+        release_exclusive_use(row_indices->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!indices_released || !input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release rejected BF16 row-gather argmax input/index leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax gathered logits has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(results->active_uses)) {
+    const bool gathered_released =
+        release_exclusive_use(gathered_logits->active_uses);
+    const bool indices_released =
+        release_exclusive_use(row_indices->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!gathered_released || !indices_released || !input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release rejected BF16 row-gather argmax resource leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "graph BF16 row-gather argmax results has an active asynchronous use");
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    const bool results_released = release_exclusive_use(results->active_uses);
+    const bool gathered_released =
+        release_exclusive_use(gathered_logits->active_uses);
+    const bool indices_released =
+        release_exclusive_use(row_indices->active_uses);
+    const bool input_released = release_exclusive_use(input->active_uses);
+    if (!results_released || !gathered_released || !indices_released ||
+        !input_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release rejected BF16 row-gather argmax resource leases");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "stream has an active asynchronous use or capture");
+  }
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(results->active_uses);
+    (void)release_exclusive_use(gathered_logits->active_uses);
+    (void)release_exclusive_use(row_indices->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginBf16RowGatherArgmaxOperation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(results->active_uses);
+    (void)release_exclusive_use(gathered_logits->active_uses);
+    (void)release_exclusive_use(row_indices->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginBf16RowGatherArgmaxOperation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(results->active_uses);
+    (void)release_exclusive_use(gathered_logits->active_uses);
+    (void)release_exclusive_use(row_indices->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginBf16RowGatherArgmaxOperation,
+        "host allocation failed for BF16 row-gather argmax graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation = RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    (void)release_child(stream->owner);
+    (void)release_exclusive_use(stream->active_uses);
+    (void)release_exclusive_use(results->active_uses);
+    (void)release_exclusive_use(gathered_logits->active_uses);
+    (void)release_exclusive_use(row_indices->active_uses);
+    (void)release_exclusive_use(input->active_uses);
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginBf16RowGatherArgmaxOperation,
+        "host allocation failed for captured BF16 row-gather argmax graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, results, capture_id,
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax, nullptr, 0,
+      nullptr, 0, nullptr, nullptr, 0, nullptr, nullptr, 0, nullptr,
+      nullptr, 0, 0, 0.0F, nullptr, 0, 0, nullptr, nullptr, 0, 0, 0,
+      input, row_indices, gathered_logits, input_row_count, output_row_count,
+      vocabulary_size);
+  capture->fill_buffer = results;
+  capture->fill_lease_held = true;
+  capture->bf16_row_gather_argmax_input = input;
+  capture->bf16_row_gather_argmax_indices = row_indices;
+  capture->bf16_row_gather_argmax_gathered_logits = gathered_logits;
+  capture->bf16_row_gather_argmax_input_row_count = input_row_count;
+  capture->bf16_row_gather_argmax_output_row_count = output_row_count;
+  capture->bf16_row_gather_argmax_vocabulary_size = vocabulary_size;
+  capture->bf16_row_gather_argmax_input_lease_held = true;
+  capture->bf16_row_gather_argmax_indices_lease_held = true;
+  capture->bf16_row_gather_argmax_gathered_logits_lease_held = true;
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_bf16_row_gather_argmax_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release a blocked BF16 row-gather argmax graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_bf16_row_gather_argmax_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_exclusive_use(stream->active_uses);
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginBf16RowGatherArgmaxOperation,
+          "failed to release a rejected BF16 row-gather argmax graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginBf16RowGatherArgmaxOperation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+      kBeginBf16RowGatherArgmaxOperation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                             kBeginBf16RowGatherArgmaxOperation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginBf16RowGatherArgmaxOperation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_bf16_row_gather_argmax_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+        kBeginBf16RowGatherArgmaxOperation,
+        "failed to release an unstarted BF16 row-gather argmax graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -4355,6 +5149,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -4698,13 +5493,17 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
       const bool is_bf16_row_gather =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGather;
+      const bool is_bf16_row_gather_argmax =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
       const bool release_graph_first =
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
-          is_bf16_argmax || is_bf16_row_gather;
+          is_bf16_argmax || is_bf16_row_gather ||
+          is_bf16_row_gather_argmax;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -4724,6 +5523,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                                        ? release_capture_bf16_argmax_leases(owner)
                                  : is_bf16_row_gather
                                        ? release_capture_bf16_row_gather_leases(
+                                             owner)
+                                 : is_bf16_row_gather_argmax
+                                       ? release_capture_bf16_row_gather_argmax_leases(
                                              owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
@@ -4843,6 +5645,22 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather(
   return capture_begin_bf16_row_gather_impl(
       stream, input, row_indices, output, input_row_count, output_row_count,
       column_count, mode, out_capture, out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_bf16_row_gather_argmax(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results, uint64_t input_row_count,
+    uint64_t output_row_count, uint64_t vocabulary_size,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_bf16_row_gather_argmax_impl(
+      stream, input, row_indices, gathered_logits, results, input_row_count,
+      output_row_count, vocabulary_size, mode, out_capture, out_graph_error,
+      error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -5614,6 +6432,123 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16RowGatherArgmaxOperation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueBf16RowGatherArgmaxOperation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !bf16_row_gather_argmax_capture_state_is_valid(owner) ||
+      owner->bf16_row_gather_argmax_enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16RowGatherArgmaxOperation,
+        "capture owner is not a live unqueued BF16 row-gather argmax graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueBf16RowGatherArgmaxOperation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  // State validation proves both products cannot overflow, every dimension is
+  // nonzero, and vocabulary_size fits the argmax U32 token-id contract.
+  const uint64_t gathered_element_count =
+      owner->bf16_row_gather_argmax_output_row_count *
+      owner->bf16_row_gather_argmax_vocabulary_size;
+  const uint64_t requested_gather_blocks =
+      ((gathered_element_count - 1) / kGraphBf16RowGatherThreads) + 1;
+  const uint32_t gather_grid_x = static_cast<uint32_t>(
+      requested_gather_blocks < kMaximumGraphBf16RowGatherBlocks
+          ? requested_gather_blocks
+          : kMaximumGraphBf16RowGatherBlocks);
+  const uint32_t argmax_grid_x = static_cast<uint32_t>(
+      owner->bf16_row_gather_argmax_output_row_count <
+              kMaximumGraphBf16ArgmaxBlocks
+          ? owner->bf16_row_gather_argmax_output_row_count
+          : kMaximumGraphBf16ArgmaxBlocks);
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      kEnqueueBf16RowGatherArgmaxOperation, owner);
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    graph_bf16_row_gather_bf16<<<gather_grid_x, kGraphBf16RowGatherThreads,
+                                  0, owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(
+            owner->bf16_row_gather_argmax_input->device_data),
+        static_cast<const uint32_t*>(
+            owner->bf16_row_gather_argmax_indices->device_data),
+        static_cast<__nv_bfloat16*>(
+            owner->bf16_row_gather_argmax_gathered_logits->device_data),
+        owner->bf16_row_gather_argmax_input_row_count,
+        owner->bf16_row_gather_argmax_vocabulary_size,
+        gathered_element_count);
+    status = runtime_error(cudaGetLastError(), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueBf16RowGatherArgmaxOperation);
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      graph_bf16_argmax_bf16<<<argmax_grid_x, kGraphBf16ArgmaxThreads, 0,
+                                owner->stream->stream>>>(
+          static_cast<const __nv_bfloat16*>(
+              owner->bf16_row_gather_argmax_gathered_logits->device_data),
+          static_cast<RileyCudaBf16ArgmaxResult*>(
+              owner->fill_buffer->device_data),
+          owner->bf16_row_gather_argmax_output_row_count,
+          owner->bf16_row_gather_argmax_vocabulary_size);
+      status = runtime_error(cudaGetLastError(), error,
+                             RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                             kEnqueueBf16RowGatherArgmaxOperation);
+    }
+    if (status == RILEY_CUDA_STATUS_SUCCESS) {
+      // The graph is complete only after both dependent nodes were accepted.
+      owner->bf16_row_gather_argmax_enqueue_count = 1;
+    } else {
+      // A recorded prefix plus a failed later launch can leave CUDA capture
+      // invalidated. Keep every lease and reject enqueue/end/instantiate until
+      // the one abort transition has observed CUDA's terminal capture state.
+      owner->bf16_row_gather_argmax_enqueue_count =
+          kBf16RowGatherArgmaxEnqueueTerminal;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueBf16RowGatherArgmaxOperation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -5669,15 +6604,21 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       owner->operation == RileyCudaGraphCaptureOperation::kBf16Argmax;
   const bool is_bf16_row_gather =
       owner->operation == RileyCudaGraphCaptureOperation::kBf16RowGather;
+  const bool is_bf16_row_gather_argmax =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
-       !is_bf16_argmax && !is_bf16_row_gather) ||
+       !is_bf16_argmax && !is_bf16_row_gather &&
+       !is_bf16_row_gather_argmax) ||
       (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
       (!is_canonical_rms_norm_bf16 &&
        !canonical_rms_norm_capture_fields_are_clear(owner)) ||
       (!is_bf16_argmax && !bf16_argmax_capture_fields_are_clear(owner)) ||
       (!is_bf16_row_gather &&
        !bf16_row_gather_capture_fields_are_clear(owner)) ||
+      (!is_bf16_row_gather_argmax &&
+       !bf16_row_gather_argmax_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
@@ -5755,7 +6696,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        !canonical_rms_norm_capture_state_is_valid(owner)) ||
       (is_bf16_argmax && !bf16_argmax_capture_state_is_valid(owner)) ||
       (is_bf16_row_gather &&
-       !bf16_row_gather_capture_state_is_valid(owner))) {
+       !bf16_row_gather_capture_state_is_valid(owner)) ||
+      (is_bf16_row_gather_argmax &&
+       !bf16_row_gather_argmax_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -5776,7 +6719,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_canonical_rms_norm_bf16 &&
        owner->canonical_rms_norm_enqueue_count != 1) ||
       (is_bf16_argmax && owner->bf16_argmax_enqueue_count != 1) ||
-      (is_bf16_row_gather && owner->bf16_row_gather_enqueue_count != 1)) {
+      (is_bf16_row_gather && owner->bf16_row_gather_enqueue_count != 1) ||
+      (is_bf16_row_gather_argmax &&
+       owner->bf16_row_gather_argmax_enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -5808,6 +6753,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        (owner->bf16_row_gather_input->active_uses.load(
             std::memory_order_acquire) != 1 ||
         owner->bf16_row_gather_indices->active_uses.load(
+            std::memory_order_acquire) != 1)) ||
+      (is_bf16_row_gather_argmax &&
+       (owner->bf16_row_gather_argmax_input->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->bf16_row_gather_argmax_indices->active_uses.load(
+            std::memory_order_acquire) != 1 ||
+        owner->bf16_row_gather_argmax_gathered_logits->active_uses.load(
             std::memory_order_acquire) != 1))) {
     return internal_error(error, RILEY_CUDA_ERROR_STAGE_VALIDATION,
                           kEndOperation,
@@ -5926,12 +6878,16 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       const bool is_bf16_row_gather =
           owner->operation ==
           RileyCudaGraphCaptureOperation::kBf16RowGather;
+      const bool is_bf16_row_gather_argmax =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
           is_h2d || is_silu_bf16 || is_gated_multiply_bf16 ||
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
-          is_bf16_argmax || is_bf16_row_gather;
+          is_bf16_argmax || is_bf16_row_gather ||
+          is_bf16_row_gather_argmax;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -5951,6 +6907,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                                        ? release_capture_bf16_argmax_leases(owner)
                                  : is_bf16_row_gather
                                        ? release_capture_bf16_row_gather_leases(
+                                             owner)
+                                 : is_bf16_row_gather_argmax
+                                       ? release_capture_bf16_row_gather_argmax_leases(
                                              owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
@@ -6027,6 +6986,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->operation == RileyCudaGraphCaptureOperation::kBf16Argmax;
   const bool is_bf16_row_gather =
       owner->operation == RileyCudaGraphCaptureOperation::kBf16RowGather;
+  const bool is_bf16_row_gather_argmax =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -6077,12 +7039,27 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
         "captured graph mixes BF16 row-gather state with another operation");
   }
+  if (is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured BF16 row-gather argmax graph has invalid fixed resource state");
+  }
+  if (!is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured graph mixes BF16 row-gather argmax state with another operation");
+  }
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
       !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
-       !is_bf16_argmax && !is_bf16_row_gather) ||
+       !is_bf16_argmax && !is_bf16_row_gather &&
+       !is_bf16_row_gather_argmax) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -6192,7 +7169,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       owner->bf16_row_gather_input, owner->bf16_row_gather_indices,
       owner->bf16_row_gather_input_row_count,
       owner->bf16_row_gather_output_row_count,
-      owner->bf16_row_gather_column_count);
+      owner->bf16_row_gather_column_count,
+      owner->bf16_row_gather_argmax_input,
+      owner->bf16_row_gather_argmax_indices,
+      owner->bf16_row_gather_argmax_gathered_logits,
+      owner->bf16_row_gather_argmax_input_row_count,
+      owner->bf16_row_gather_argmax_output_row_count,
+      owner->bf16_row_gather_argmax_vocabulary_size);
 
   CurrentContext scope(owner->owner);
   RileyCudaStatus status = scope.enter(error, RILEY_CUDA_ERROR_STAGE_CREATE,
@@ -6301,6 +7284,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       !canonical_rms_norm_exec_fields_are_clear(exec) ||
       !bf16_argmax_exec_fields_are_clear(exec) ||
       !bf16_row_gather_exec_fields_are_clear(exec) ||
+      !bf16_row_gather_argmax_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -6365,6 +7349,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       exec->operation == RileyCudaGraphCaptureOperation::kBf16Argmax;
   const bool is_bf16_row_gather =
       exec->operation == RileyCudaGraphCaptureOperation::kBf16RowGather;
+  const bool is_bf16_row_gather_argmax =
+      exec->operation ==
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -6415,6 +7402,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
         "graph exec mixes BF16 row-gather state with another operation");
   }
+  if (is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_exec_state_is_valid(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "BF16 row-gather argmax graph exec has invalid fixed resource state");
+  }
+  if (!is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_exec_fields_are_clear(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "graph exec mixes BF16 row-gather argmax state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
   if (exec->owner == nullptr || exec->stream == nullptr ||
@@ -6422,7 +7423,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       exec->exec == nullptr || !exec->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
-       !is_bf16_argmax && !is_bf16_row_gather)) {
+       !is_bf16_argmax && !is_bf16_row_gather &&
+       !is_bf16_row_gather_argmax)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -6693,6 +7695,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       owner->operation == RileyCudaGraphCaptureOperation::kBf16Argmax;
   const bool is_bf16_row_gather =
       owner->operation == RileyCudaGraphCaptureOperation::kBf16RowGather;
+  const bool is_bf16_row_gather_argmax =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -6743,6 +7748,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
         "captured graph mixes BF16 row-gather state with another operation");
   }
+  if (is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "BF16 row-gather argmax graph has invalid fixed resource state");
+  }
+  if (!is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "captured graph mixes BF16 row-gather argmax state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -6750,7 +7769,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
-       !is_bf16_argmax && !is_bf16_row_gather) ||
+       !is_bf16_argmax && !is_bf16_row_gather &&
+       !is_bf16_row_gather_argmax) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -6885,6 +7905,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->bf16_row_gather_input,
                                  owner->bf16_row_gather_indices,
                                  owner->fill_buffer)
+                     : is_bf16_row_gather_argmax
+                           ? release_graph_bf16_row_gather_argmax_leases(
+                                 owner->owner, owner->stream,
+                                 owner->bf16_row_gather_argmax_input,
+                                 owner->bf16_row_gather_argmax_indices,
+                                 owner->bf16_row_gather_argmax_gathered_logits,
+                                 owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -6947,6 +7974,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       owner->operation == RileyCudaGraphCaptureOperation::kBf16Argmax;
   const bool is_bf16_row_gather =
       owner->operation == RileyCudaGraphCaptureOperation::kBf16RowGather;
+  const bool is_bf16_row_gather_argmax =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kBf16RowGatherArgmax;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -6997,6 +8027,20 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
         "graph exec mixes BF16 row-gather state with another operation");
   }
+  if (is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_exec_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "BF16 row-gather argmax graph exec has invalid fixed resource state");
+  }
+  if (!is_bf16_row_gather_argmax &&
+      !bf16_row_gather_argmax_exec_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "graph exec mixes BF16 row-gather argmax state with another operation");
+  }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
   if (owner->owner == nullptr || owner->stream == nullptr ||
@@ -7004,7 +8048,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       owner->exec == nullptr || !owner->owns_capture_leases ||
       (!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
-       !is_bf16_argmax && !is_bf16_row_gather) ||
+       !is_bf16_argmax && !is_bf16_row_gather &&
+       !is_bf16_row_gather_argmax) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -7154,6 +8199,13 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->owner, owner->stream,
                                  owner->bf16_row_gather_input,
                                  owner->bf16_row_gather_indices,
+                                 owner->fill_buffer)
+                     : is_bf16_row_gather_argmax
+                           ? release_graph_bf16_row_gather_argmax_leases(
+                                 owner->owner, owner->stream,
+                                 owner->bf16_row_gather_argmax_input,
+                                 owner->bf16_row_gather_argmax_indices,
+                                 owner->bf16_row_gather_argmax_gathered_logits,
                                  owner->fill_buffer)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);

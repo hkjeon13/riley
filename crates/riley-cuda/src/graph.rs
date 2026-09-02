@@ -13,6 +13,8 @@ use std::rc::Rc;
 use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "cuda")]
+use crate::Bf16ArgmaxResult;
+#[cfg(feature = "cuda")]
 use crate::runtime::{ContextInner, ensure_same_context};
 use crate::{
     CudaDeviceBuffer, CudaError, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
@@ -145,6 +147,14 @@ pub enum CudaGraphCaptureOperation {
     /// It does not include H2D/D2H staging, argmax, token/status transfer,
     /// completion handling, C07 executor integration, or a sampling policy.
     Bf16RowGather = 8,
+    /// One fixed-address, two-node BF16 row-gather then deterministic argmax
+    /// device-only graph.
+    ///
+    /// This retains only the fixed input, U32 index, gathered BF16, and U32
+    /// result allocations. It excludes H2D/D2H staging, token/status
+    /// transfer, completion handling, C07 executor integration, and a
+    /// sampling policy beyond the exact deterministic primitive.
+    Bf16RowGatherArgmax = 9,
 }
 
 impl CudaGraphCaptureOperation {
@@ -5600,6 +5610,621 @@ fn validate_graph_bf16_row_gather_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and four fixed device buffers recovered from one known
+/// BF16 row-gather then deterministic-argmax graph lifecycle transition.
+///
+/// This recovery bundle exposes no graph-visible pointer, mutable span, or
+/// host-index reference. The BF16 input, U32 indices, BF16 gathered logits,
+/// and U32 result records remain distinct throughout capture, graph, and exec
+/// ownership. `gathered_logits` is intentionally shared by the two captured
+/// nodes only; it never crosses into two independent graph owners.
+pub struct OwnedGraphBf16RowGatherArgmaxResources {
+    stream: CudaStream,
+    input: CudaDeviceBuffer,
+    row_indices: CudaDeviceBuffer,
+    gathered_logits: CudaDeviceBuffer,
+    results: CudaDeviceBuffer,
+}
+
+impl OwnedGraphBf16RowGatherArgmaxResources {
+    fn new(
+        stream: CudaStream,
+        input: CudaDeviceBuffer,
+        row_indices: CudaDeviceBuffer,
+        gathered_logits: CudaDeviceBuffer,
+        results: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            input,
+            row_indices,
+            gathered_logits,
+            results,
+        }
+    }
+
+    /// Returns the exact stream, input, row indices, gathered logits, and
+    /// argmax results after a known native graph-lease release.
+    #[must_use]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            input,
+            row_indices,
+            gathered_logits,
+            results,
+        } = self;
+        (stream, input, row_indices, gathered_logits, results)
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, input, row_indices, gathered_logits, results) = self.into_parts();
+        results.close()?;
+        gathered_logits.close()?;
+        row_indices.close()?;
+        input.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning an owned fixed-address BF16 row-gather then
+/// deterministic-argmax graph capture.
+///
+/// Only Rust-side preflight errors recover the untouched resource quintet.
+/// Once native begin is attempted, ambiguous CUDA state retains all raw
+/// addresses fail-closed.
+#[must_use]
+pub struct OwnedGraphBf16RowGatherArgmaxCaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphBf16RowGatherArgmaxResources>,
+}
+
+impl OwnedGraphBf16RowGatherArgmaxCaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphBf16RowGatherArgmaxResources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched stream/input/row-indices/gathered/results quintet
+    /// only when native capture ownership was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphBf16RowGatherArgmaxResources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphBf16RowGatherArgmaxCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphBf16RowGatherArgmaxCaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphBf16RowGatherArgmaxCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 row-gather -> argmax capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphBf16RowGatherArgmaxCaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address, two-node BF16 row-gather then
+/// deterministic-argmax CUDA Graph capture.
+pub struct OwnedGraphBf16RowGatherArgmaxCapture {
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphBf16RowGatherArgmaxResources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16RowGatherArgmaxCapture {
+    /// Captures the one immutable BF16 row-gather then deterministic-argmax
+    /// node chain.
+    pub fn enqueue_bf16_row_gather_argmax(&mut self) -> CudaResult<()> {
+        const OPERATION: &str =
+            "OwnedGraphBf16RowGatherArgmaxCapture::enqueue_bf16_row_gather_argmax";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 row-gather -> argmax capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 row-gather -> argmax enqueue failed and this partial capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 row-gather -> argmax graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_bf16_row_gather_argmax();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                // Native may already have recorded the gather node before the
+                // argmax node failed. That partial capture is terminal until
+                // its one-shot abort establishes known lease release.
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed stream/input/row-indices/
+    /// gathered-logits/results quintet into a by-value captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedBf16RowGatherArgmaxGraph> {
+        const OPERATION: &str = "OwnedGraphBf16RowGatherArgmaxCapture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 row-gather -> argmax capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 row-gather -> argmax enqueue failed and this partial capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 row-gather -> argmax enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources =
+                take_owned_graph_bf16_row_gather_argmax_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedBf16RowGatherArgmaxGraph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+        self.abort_once()?;
+        take_owned_graph_bf16_row_gather_argmax_resources(
+            &mut self.resources,
+            "OwnedGraphBf16RowGatherArgmaxCapture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16RowGatherArgmaxCapture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16RowGatherArgmaxCapture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 row-gather then deterministic-argmax CUDA
+/// Graph awaiting instantiate or close.
+pub struct OwnedCapturedBf16RowGatherArgmaxGraph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphBf16RowGatherArgmaxResources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedBf16RowGatherArgmaxGraph {
+    /// Instantiates this graph while retaining its fixed stream/input/
+    /// row-indices/gathered-logits/results quintet by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxExec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_bf16_row_gather_argmax_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16RowGatherArgmaxGraph::instantiate",
+            )?;
+            Ok(OwnedGraphBf16RowGatherArgmaxExec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16RowGatherArgmaxGraph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_row_gather_argmax_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16RowGatherArgmaxGraph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16RowGatherArgmaxGraph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 row-gather then deterministic-argmax CUDA
+/// Graph executable.
+///
+/// It replays only the capture-time BF16 input, U32 index, gathered BF16, and
+/// U32 result allocations. H2D/D2H staging, token/status transfer, host
+/// completion semantics, fresh inputs, spans, offsets, node updates, sampling,
+/// and C07 executor integration stay outside this narrow C05 ownership slice.
+pub struct OwnedGraphBf16RowGatherArgmaxExec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphBf16RowGatherArgmaxResources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16RowGatherArgmaxExec {
+    /// Replays the fixed-address BF16 row-gather then deterministic-argmax
+    /// graph once.
+    pub fn launch<'exec>(
+        &'exec mut self,
+    ) -> CudaResult<OwnedGraphBf16RowGatherArgmaxLaunch<'exec>> {
+        const OPERATION: &str = "OwnedGraphBf16RowGatherArgmaxExec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 row-gather -> argmax transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 row-gather -> argmax exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphBf16RowGatherArgmaxLaunch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its resource quintet only after
+    /// native close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphBf16RowGatherArgmaxExec::close",
+                "an earlier graph BF16 row-gather -> argmax transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_row_gather_argmax_resources(
+                &mut self.resources,
+                "OwnedGraphBf16RowGatherArgmaxExec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16RowGatherArgmaxExec::close",
+            ))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphBf16RowGatherArgmaxExec`] replay.
+pub struct OwnedGraphBf16RowGatherArgmaxLaunch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphBf16RowGatherArgmaxExec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16RowGatherArgmaxLaunch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphBf16RowGatherArgmaxLaunch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16RowGatherArgmaxLaunch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_bf16_row_gather_argmax_resources(
+    resources: &mut Option<OwnedGraphBf16RowGatherArgmaxResources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphBf16RowGatherArgmaxResources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 row-gather -> argmax owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_bf16_row_gather_argmax_capture_preflight(
+    stream: &CudaStream,
+    input: &CudaDeviceBuffer,
+    row_indices: &CudaDeviceBuffer,
+    gathered_logits: &CudaDeviceBuffer,
+    results: &CudaDeviceBuffer,
+    row_indices_host: &[u32],
+    input_row_count: u64,
+    output_row_count: u64,
+    vocabulary_size: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    if input
+        .native_handle()
+        .same_allocation(row_indices.native_handle())
+        || input
+            .native_handle()
+            .same_allocation(gathered_logits.native_handle())
+        || input
+            .native_handle()
+            .same_allocation(results.native_handle())
+        || row_indices
+            .native_handle()
+            .same_allocation(gathered_logits.native_handle())
+        || row_indices
+            .native_handle()
+            .same_allocation(results.native_handle())
+        || gathered_logits
+            .native_handle()
+            .same_allocation(results.native_handle())
+    {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "input, row_indices, gathered_logits, and results must be distinct fixed device allocations",
+        ));
+    }
+    ensure_same_context(&stream.context, input.context_owner(), operation)?;
+    ensure_same_context(&stream.context, row_indices.context_owner(), operation)?;
+    ensure_same_context(&stream.context, gathered_logits.context_owner(), operation)?;
+    ensure_same_context(&stream.context, results.context_owner(), operation)?;
+    input.ensure_idle_for_operation(operation)?;
+    row_indices.ensure_idle_for_operation(operation)?;
+    gathered_logits.ensure_idle_for_operation(operation)?;
+    results.ensure_idle_for_operation(operation)?;
+    if input_row_count == 0 {
+        return Err(CudaError::out_of_range(
+            operation,
+            "input_row_count must be non-zero for a two-node BF16 row-gather -> argmax graph",
+        ));
+    }
+    if output_row_count == 0 {
+        return Err(CudaError::out_of_range(
+            operation,
+            "row_indices_host must contain at least one output row for a two-node BF16 row-gather -> argmax graph",
+        ));
+    }
+    if vocabulary_size == 0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "vocabulary_size must be non-zero",
+        ));
+    }
+    if vocabulary_size > u64::from(u32::MAX) {
+        return Err(CudaError::out_of_range(
+            operation,
+            "vocabulary_size exceeds the U32 token-id contract",
+        ));
+    }
+    // This uses the exact eager safe-mirror validation and deliberately does
+    // not imply that the caller's already-staged device bytes equal the host
+    // mirror. The capture owner never retains the host slice.
+    crate::batch::validate_gather_indices(row_indices_host, input_row_count)?;
+    let input_elements = input_row_count.checked_mul(vocabulary_size).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "input_row_count * vocabulary_size overflows the BF16 row-gather -> argmax input element range",
+        )
+    })?;
+    let gathered_elements = output_row_count
+        .checked_mul(vocabulary_size)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "output_row_count * vocabulary_size overflows the BF16 row-gather -> argmax gathered element range",
+            )
+        })?;
+    let input_bytes = input_elements
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "input_row_count * vocabulary_size overflows the BF16 row-gather -> argmax input byte range",
+            )
+        })?;
+    let row_indices_bytes = output_row_count
+        .checked_mul(std::mem::size_of::<u32>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "output_row_count overflows the BF16 row-gather -> argmax U32 index byte range",
+            )
+        })?;
+    let gathered_bytes = gathered_elements
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "output_row_count * vocabulary_size overflows the BF16 row-gather -> argmax gathered byte range",
+            )
+        })?;
+    let results_bytes = output_row_count
+        .checked_mul(std::mem::size_of::<Bf16ArgmaxResult>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "output_row_count overflows the BF16 row-gather -> argmax result byte range",
+            )
+        })?;
+    if input_bytes > input.byte_len()
+        || row_indices_bytes > row_indices.byte_len()
+        || gathered_bytes > gathered_logits.byte_len()
+        || results_bytes > results.byte_len()
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "input_row_count={input_row_count}, output_row_count={output_row_count}, vocabulary_size={vocabulary_size} require BF16/U32/BF16/result capacities {input_bytes}/{row_indices_bytes}/{gathered_bytes}/{results_bytes} bytes, but input/row_indices/gathered_logits/results capacities are {}/{}/{}/{} bytes",
+                input.byte_len(),
+                row_indices.byte_len(),
+                gathered_logits.byte_len(),
+                results.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -6262,6 +6887,128 @@ impl CudaStream {
         }
     }
 
+    /// Begins a by-value C05-15 capture containing exactly one fixed-address,
+    /// device-only BF16 row-gather then deterministic-argmax node chain.
+    ///
+    /// The moved BF16 input, U32 row-index allocation, BF16 gathered-logits
+    /// allocation, and U32 [`Bf16ArgmaxResult`] allocation remain inaccessible
+    /// until graph close. `row_indices_host` is only a temporary safe-
+    /// validation mirror: it must be unique and in range like eager
+    /// [`crate::row_gather`], is never retained by this owner, and does not
+    /// bind the caller's separately staged device index bytes. Raw malformed
+    /// device indices retain the eager per-row BF16-NaN behavior, and the
+    /// captured argmax then writes the eager non-finite result record. This
+    /// slice excludes H2D/D2H, token/status transfer, host completion
+    /// semantics, C07 executor integration, fresh inputs, spans, offsets,
+    /// node updates, sampling policy, and eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched resource quintet through
+    /// [`OwnedGraphBf16RowGatherArgmaxCaptureBeginError::into_resources`].
+    /// After native entry, no resource is returned because CUDA may retain the
+    /// raw addresses while resolving an ambiguous capture failure.
+    pub fn begin_owned_graph_bf16_row_gather_argmax_capture(
+        self,
+        input: CudaDeviceBuffer,
+        row_indices: CudaDeviceBuffer,
+        gathered_logits: CudaDeviceBuffer,
+        results: CudaDeviceBuffer,
+        row_indices_host: &[u32],
+        input_row_count: u64,
+        vocabulary_size: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphBf16RowGatherArgmaxCapture, OwnedGraphBf16RowGatherArgmaxCaptureBeginError>
+    {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphBf16RowGatherArgmaxResources::new(
+            self,
+            input,
+            row_indices,
+            gathered_logits,
+            results,
+        );
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphBf16RowGatherArgmaxResources::new(
+            self,
+            input,
+            row_indices,
+            gathered_logits,
+            results,
+        );
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_bf16_row_gather_argmax_capture";
+            let output_row_count = match u64::try_from(row_indices_host.len()) {
+                Ok(value) => value,
+                Err(_) => {
+                    return Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::recoverable(
+                        CudaError::out_of_range(
+                            OPERATION,
+                            "row_indices_host length exceeds the U64 row-count range",
+                        ),
+                        resources,
+                    ));
+                }
+            };
+            if let Err(error) = validate_graph_bf16_row_gather_argmax_capture_preflight(
+                &resources.stream,
+                &resources.input,
+                &resources.row_indices,
+                &resources.gathered_logits,
+                &resources.results,
+                row_indices_host,
+                input_row_count,
+                output_row_count,
+                vocabulary_size,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_bf16_row_gather_argmax_capture(
+                    resources.input.native_handle(),
+                    resources.row_indices.native_handle(),
+                    resources.gathered_logits.native_handle(),
+                    resources.results.native_handle(),
+                    input_row_count,
+                    output_row_count,
+                    vocabulary_size,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::terminal(
+                        error,
+                    ));
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphBf16RowGatherArgmaxCapture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (row_indices_host, input_row_count, vocabulary_size, mode);
+            Err(OwnedGraphBf16RowGatherArgmaxCaptureBeginError::recoverable(
+                CudaError::unavailable(
+                    "CudaStream::begin_owned_graph_bf16_row_gather_argmax_capture",
+                ),
+                resources,
+            ))
+        }
+    }
+
     /// Begins the sole C05-5 capture-admitted operation set: one or more
     /// fixed-shape f32 fills of a caller-preallocated device buffer.
     ///
@@ -6668,6 +7415,256 @@ mod tests {
         graph_row_indices.close()?;
         graph_input.close()?;
         eager_output.close()?;
+        eager_row_indices.close()?;
+        eager_input.close()?;
+        staging.close()?;
+        graph_stream.close()?;
+        eager_stream.close()?;
+        transfer_stream.close()?;
+        assert_eq!(context.allocation_stats()?, allocation_baseline);
+        context.synchronize()?;
+        context.close()?;
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "remote GPU"]
+    fn raw_bf16_row_gather_argmax_oob_device_index_matches_eager_nan_result_bytes()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // This deliberately stays below the safe composite-owner boundary.
+        // A safe capture rejects the OOB host mirror before native entry, but
+        // the raw C contract says the gathered row becomes BF16 NaNs and the
+        // following argmax node emits INVALID_TOKEN_ID/NON_FINITE.
+        const INPUT_ROW_COUNT: u64 = 4;
+        const OUTPUT_ROW_COUNT: u64 = 3;
+        const VOCABULARY_SIZE: u64 = 5;
+        const BF16_BYTES: u64 = 2;
+        const U32_BYTES: u64 = 4;
+
+        let runtime = crate::CudaRuntime::initialize()?;
+        assert!(
+            runtime.device_count() > 0,
+            "remote GPU runner has no CUDA device"
+        );
+        let context = runtime.device(0)?.create_context()?;
+        let allocation_baseline = context.allocation_stats()?;
+        assert!(allocation_baseline.is_zero());
+
+        let mut eager_stream = context.create_stream()?;
+        let mut graph_stream = context.create_stream()?;
+        let mut transfer_stream = context.create_stream()?;
+        let input_byte_len = INPUT_ROW_COUNT
+            .checked_mul(VOCABULARY_SIZE)
+            .and_then(|element_count| element_count.checked_mul(BF16_BYTES))
+            .ok_or("raw BF16 row-gather -> argmax input byte length overflow")?;
+        let row_indices_byte_len = OUTPUT_ROW_COUNT
+            .checked_mul(U32_BYTES)
+            .ok_or("raw BF16 row-gather -> argmax index byte length overflow")?;
+        let gathered_byte_len = OUTPUT_ROW_COUNT
+            .checked_mul(VOCABULARY_SIZE)
+            .and_then(|element_count| element_count.checked_mul(BF16_BYTES))
+            .ok_or("raw BF16 row-gather -> argmax gathered byte length overflow")?;
+        let results_byte_len = OUTPUT_ROW_COUNT
+            .checked_mul(std::mem::size_of::<crate::Bf16ArgmaxResult>() as u64)
+            .ok_or("raw BF16 row-gather -> argmax result byte length overflow")?;
+        let host_input_bits = [
+            0x3f80_u16, 0x4000, 0x4040, 0x4080, 0x40a0, // row 0: token 4
+            0xbf80, 0xc000, 0xc040, 0xc080, 0xc0a0, // row 1: token 0
+            0x0000, 0x3f80, 0x4000, 0x4040, 0x4080, // row 2: token 4
+            0x3f00, 0x3f80, 0x4000, 0x4040, 0x4080, // row 3: token 4
+        ];
+        let host_input: Vec<u8> = host_input_bits
+            .iter()
+            .flat_map(|&bits| bits.to_ne_bytes())
+            .collect();
+        // The middle row is deliberately OOB in device memory. No safe host
+        // mirror reaches either raw eager or raw graph call below.
+        let host_row_indices = [2_u32, INPUT_ROW_COUNT as u32, 0];
+        let host_row_index_bytes: Vec<u8> = host_row_indices
+            .iter()
+            .flat_map(|&index| index.to_ne_bytes())
+            .collect();
+        assert_eq!(u64::try_from(host_input.len())?, input_byte_len);
+        assert_eq!(
+            u64::try_from(host_row_index_bytes.len())?,
+            row_indices_byte_len
+        );
+        let gathered_sentinel = vec![0xa5; usize::try_from(gathered_byte_len)?];
+        let results_sentinel = vec![0xa5; usize::try_from(results_byte_len)?];
+        let mut staging = context.allocate_pinned_host_buffer(input_byte_len)?;
+
+        let mut eager_input = context.allocate_device_buffer(input_byte_len)?;
+        eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        let mut eager_row_indices = context.allocate_device_buffer(row_indices_byte_len)?;
+        eager_row_indices.upload_from_slice(
+            0,
+            &host_row_index_bytes,
+            &mut staging,
+            &mut eager_stream,
+        )?;
+        let mut eager_gathered = context.allocate_device_buffer(gathered_byte_len)?;
+        eager_gathered.upload_from_slice(0, &gathered_sentinel, &mut staging, &mut eager_stream)?;
+        let mut eager_results = context.allocate_device_buffer(results_byte_len)?;
+        eager_results.upload_from_slice(0, &results_sentinel, &mut staging, &mut eager_stream)?;
+
+        let graph_input = {
+            let mut buffer = context.allocate_device_buffer(input_byte_len)?;
+            buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+            buffer
+        };
+        let graph_row_indices = {
+            let mut buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+            buffer.upload_from_slice(0, &host_row_index_bytes, &mut staging, &mut eager_stream)?;
+            buffer
+        };
+        let mut graph_gathered = {
+            let mut buffer = context.allocate_device_buffer(gathered_byte_len)?;
+            buffer.upload_from_slice(0, &gathered_sentinel, &mut staging, &mut eager_stream)?;
+            buffer
+        };
+        let mut graph_results = {
+            let mut buffer = context.allocate_device_buffer(results_byte_len)?;
+            buffer.upload_from_slice(0, &results_sentinel, &mut staging, &mut eager_stream)?;
+            buffer
+        };
+
+        // These private FFI calls intentionally bypass `RowGatherParams` and
+        // `Bf16ArgmaxParams` host-safe descriptors to exercise raw C OOB
+        // device-index semantics for the complete two-kernel eager chain.
+        crate::ffi::row_gather_execute(
+            eager_input
+                .native_handle()
+                .span(crate::ffi::DTYPE_BF16, 0, input_byte_len),
+            eager_row_indices
+                .native_handle()
+                .span(crate::ffi::DTYPE_U32, 0, row_indices_byte_len),
+            eager_gathered
+                .native_handle()
+                .span(crate::ffi::DTYPE_BF16, 0, gathered_byte_len),
+            INPUT_ROW_COUNT,
+            OUTPUT_ROW_COUNT,
+            VOCABULARY_SIZE,
+            &mut eager_stream.native,
+        )?;
+        crate::ffi::bf16_argmax_execute(
+            eager_gathered
+                .native_handle()
+                .span(crate::ffi::DTYPE_BF16, 0, gathered_byte_len),
+            eager_results
+                .native_handle()
+                .span(crate::ffi::DTYPE_U32, 0, results_byte_len),
+            OUTPUT_ROW_COUNT,
+            VOCABULARY_SIZE,
+            &mut eager_stream.native,
+        )?;
+
+        let allocation_with_resources = context.allocation_stats()?;
+        let mut capture = graph_stream
+            .native
+            .begin_graph_bf16_row_gather_argmax_capture(
+                graph_input.native_handle(),
+                graph_row_indices.native_handle(),
+                graph_gathered.native_handle(),
+                graph_results.native_handle(),
+                INPUT_ROW_COUNT,
+                OUTPUT_ROW_COUNT,
+                VOCABULARY_SIZE,
+                CudaGraphCaptureMode::ThreadLocal as u32,
+            )?;
+        capture.enqueue_bf16_row_gather_argmax()?;
+        let transition = capture.end();
+        let mut graph = transition.result?;
+        let mut exec = graph.instantiate()?;
+        let mut launch = exec.launch(&mut graph_stream.native)?;
+        launch.complete()?;
+        exec.close()?;
+        assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+        let mut eager_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+        let mut graph_gathered_bytes = vec![0_u8; usize::try_from(gathered_byte_len)?];
+        let mut eager_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+        let mut graph_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+        eager_gathered.download_to_slice(
+            0,
+            &mut eager_gathered_bytes,
+            &mut staging,
+            &mut transfer_stream,
+        )?;
+        graph_gathered.download_to_slice(
+            0,
+            &mut graph_gathered_bytes,
+            &mut staging,
+            &mut transfer_stream,
+        )?;
+        eager_results.download_to_slice(
+            0,
+            &mut eager_result_bytes,
+            &mut staging,
+            &mut transfer_stream,
+        )?;
+        graph_results.download_to_slice(
+            0,
+            &mut graph_result_bytes,
+            &mut staging,
+            &mut transfer_stream,
+        )?;
+        assert_eq!(
+            graph_gathered_bytes, eager_gathered_bytes,
+            "raw graph gathered BF16 bytes must match the raw eager chain byte-for-byte"
+        );
+        assert_eq!(
+            graph_result_bytes, eager_result_bytes,
+            "raw graph token/status bytes must match the raw eager chain byte-for-byte"
+        );
+
+        let invalid_row_byte_len = usize::try_from(VOCABULARY_SIZE * BF16_BYTES)?;
+        let invalid_row_start = invalid_row_byte_len;
+        let invalid_row_end = invalid_row_start + invalid_row_byte_len;
+        let invalid_row = &graph_gathered_bytes[invalid_row_start..invalid_row_end];
+        assert!(
+            invalid_row
+                .chunks_exact(usize::try_from(BF16_BYTES)?)
+                .all(|bytes| {
+                    let bits = u16::from_ne_bytes([bytes[0], bytes[1]]);
+                    (bits & 0x7f80) == 0x7f80 && (bits & 0x007f) != 0
+                }),
+            "every BF16 element selected by the OOB device index must be NaN"
+        );
+        assert_eq!(
+            invalid_row,
+            &eager_gathered_bytes[invalid_row_start..invalid_row_end],
+            "raw graph OOB BF16 NaN row must preserve raw eager bytes exactly"
+        );
+
+        let invalid_result_start = std::mem::size_of::<crate::Bf16ArgmaxResult>();
+        let invalid_result_end =
+            invalid_result_start + std::mem::size_of::<crate::Bf16ArgmaxResult>();
+        let invalid_result = &graph_result_bytes[invalid_result_start..invalid_result_end];
+        let invalid_token_id = u32::from_ne_bytes(
+            invalid_result[..std::mem::size_of::<u32>()]
+                .try_into()
+                .expect("one result token field must occupy four bytes"),
+        );
+        let invalid_status = u32::from_ne_bytes(
+            invalid_result[std::mem::size_of::<u32>()..]
+                .try_into()
+                .expect("one result status field must occupy four bytes"),
+        );
+        assert_eq!(invalid_token_id, crate::BF16_ARGMAX_INVALID_TOKEN_ID);
+        assert_eq!(invalid_status, crate::BF16_ARGMAX_STATUS_NON_FINITE);
+        assert_eq!(
+            invalid_result,
+            &eager_result_bytes[invalid_result_start..invalid_result_end],
+            "raw graph OOB argmax record must preserve raw eager bytes exactly"
+        );
+
+        graph_results.close()?;
+        graph_gathered.close()?;
+        graph_row_indices.close()?;
+        graph_input.close()?;
+        eager_results.close()?;
+        eager_gathered.close()?;
         eager_row_indices.close()?;
         eager_input.close()?;
         staging.close()?;

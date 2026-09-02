@@ -201,6 +201,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)7)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER \
   ((RileyCudaGraphCaptureOperationKind)8)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX \
+  ((RileyCudaGraphCaptureOperationKind)9)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1389,6 +1391,41 @@ RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather(
 // riley_cuda_graph_capture_begin_bf16_row_gather. The three captured
 // allocations and exact geometry remain immutable for the graph lifetime.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-15 capture containing exactly two fixed-address nodes in the
+// recorded order: BF16 row gather followed by deterministic BF16 argmax.
+// `input` is contiguous BF16 `[input_row_count, vocabulary_size]`,
+// `row_indices` is contiguous U32 `[output_row_count]`, `gathered_logits` is
+// contiguous BF16 `[output_row_count, vocabulary_size]`, and `results` is
+// `output_row_count` RileyCudaBf16ArgmaxResult records. All four live device
+// allocations must be pairwise distinct, share the stream context, and remain
+// fixed for the graph lifetime. Every dimension must be nonzero and
+// vocabulary_size must be in 1..=UINT32_MAX. Raw device indices outside
+// input_row_count retain riley_cuda_row_gather_execute's BF16 NaN behavior;
+// deterministic argmax then retains its non-finite-row status. This narrow
+// contract accepts no host mirror, spans, offsets, H2D/D2H, fresh inputs,
+// node updates, sampling, executor wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather_argmax(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* gathered_logits,
+    RileyCudaDeviceBuffer* results,
+    uint64_t input_row_count,
+    uint64_t output_row_count,
+    uint64_t vocabulary_size,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the exact row-gather then argmax node pair for a capture created
+// by riley_cuda_graph_capture_begin_bf16_row_gather_argmax. The captured
+// allocations and geometry remain immutable for the graph lifetime. The pair
+// is considered enqueued only after both CUDA node launches have succeeded;
+// a second-node launch failure leaves the capture terminal and abort-only.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather_argmax(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
