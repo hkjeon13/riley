@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-19까지 C07 pure-decode의 indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. 다음 C05-20은 eager embedding의 검증 결과까지 포함한 BF16 gather chain을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
+**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -411,7 +411,7 @@ eager와 byte-exact함을 확인했으며, valid host witness 아래 raw device 
 0으로 회복했다. 이는 one-node grouped attention lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode
 graph 또는 end-to-end 성능 향상을 입증하지 않는다.
 
-### C05-20 — fixed-address BF16 embedding validation-status D2H capture (CUDA; planned)
+### C05-20 — fixed-address BF16 embedding validation-status D2H capture (CUDA; completed)
 
 C05-20은 C07 decode 입력의 embedding gather를 독립 five-node CUDA Graph로 좁힌다. 기존 eager
 `embedding`은 stack-backed report 때문에 `reset -> validate token IDs -> gather -> finalize report -> D2H -> synchronize`
@@ -450,6 +450,16 @@ host-side prevalidation 없이 OOB ID를 넣어 earliest-error report와 output 
 short scratch/report/output, alias/context/busy preflight rejection 뒤 untouched-resource recovery, finish 전 report-read rejection,
 abort/explicit close 뒤 allocation statistics 0도 확인한다. 이 결과는 validation-aware embedding primitive lifecycle/parity의
 근거일 뿐 full decode graph 또는 end-to-end 성능 향상 근거가 아니다.
+
+**완료 검증 (2026-09-02):** 원격 RTX 4090/CUDA 12.8에서 C ABI link, CUDA feature library(53 passed, 3 ignored),
+CPU graph source-contract 30개, C05-20 전용 GPU 회귀 3개, 기존 eager embedding OOB GPU 회귀 1개,
+C05-18/19 전용 GPU 회귀 3/4개 및 기존 ignored graph GPU suite 40개를 통과했다. normal/signed-zero/비정규 NaN
+payload를 포함한 BF16 fixture는 eager output bytes와 동일했고, input table/token bytes를 바꾸지 않은 채 64회 replay마다
+canonical `NONE` status와 second-enqueue rejection을 확인했다. raw device token `[1,9,7,2]`은 eager와 같은 earliest
+OOB `(position=1, id=9)` status 및 whole-output no-write sentinel을 보존했다. short output/device scratch/pinned report
+preflight와 begin 뒤 abort는 resource bundle 및 allocation statistics 0으로 회복했다. 이는 validation-aware embedding
+primitive lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을
+입증하지 않는다.
 
 ## 2. 범위
 
