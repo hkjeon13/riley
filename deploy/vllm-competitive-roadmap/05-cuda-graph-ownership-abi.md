@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-4의 실제 thread-local capture owner와 abort/recovery 위에 C05-5의 제한된 fill capture·end·instantiate·replay를 추가한다.
+**상태:** In progress — C05-13까지 fixed-address native vertical slice의 GPU lifecycle/parity를 닫았다. 다음 C05-14는 decode output 경계에 필요한 BF16 row-gather node만 별도 검증한다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -126,6 +126,36 @@ GPU regression은 fill node 3개를 capture한 뒤 instantiate하고 1,000회 `l
 마지막 fill 값의 bit-exact D2H 결과와 모든 explicit close 뒤 allocation statistics 0을 확인한다. 이 1,000회는
 correctness/lifetime regression이지 성능 향상 주장이 아니다. fixed H2D/D2H capture chain, cuBLASLt capture,
 node update, fault injection과 latency microbenchmark는 후속 slice로 남긴다.
+
+### C05-14 — fixed-address BF16 row-gather capture (CUDA; planned)
+
+C05-13의 deterministic BF16 argmax는 decode 출력의 마지막 selection kernel만 닫았으며, 실제
+eager output path는 먼저 dense logits에서 output-row permutation을 gather한다. C05-14는 그 선행
+primitive를 독립 one-node graph로 검증한다. 이것은 C07 executor나 GPU-greedy capability를
+승격하는 작업이 아니다.
+
+capture begin은 같은 context의 세 **서로 다른** 고정 device allocation과 immutable geometry를 받는다.
+입력은 BF16 `[input_row_count, column_count]`, index는 U32 `[output_row_count]`, 출력은 BF16
+`[output_row_count, column_count]`다. `input_row_count`, `output_row_count`, `column_count`는 모두
+nonzero이며 모든 element/byte product와 allocation capacity를 CUDA capture 전에 checked arithmetic으로
+검증한다. safe begin은 eager `row_gather`와 같은 temporary `row_indices_host` mirror를 받아
+길이·in-range·unique validation을 native entry 전에 끝내지만 그 host slice를 graph lifetime에 보관하지
+않는다. index H2D staging은 capture 밖의 기존 owner가 계속 소유한다. graph node는 이미 고정 주소에 있는
+device index bytes만 읽으며, raw C caller의 malformed device index에 대한 eager row-gather의 sentinel/NaN behavior도
+바꾸지 않는다. safe API는 duplicate 또는 out-of-range host mirror를 admit하지 않는다.
+
+safe owner는 stream/input/index/output을 capture → graph → exec → launch completion → close까지
+by-value로 유지한다. native capture/graph/exec은 같은 exclusive-use lease를 보유하고, enqueue는
+정확히 한 번의 BF16 row-gather kernel만 allocation·synchronize·node update 없이 기록한다. fresh
+inputs, spans, offsets, aliasing, H2D/D2H, argmax, host result handling, sampling, C07 evidence,
+dispatcher/executor wiring은 모두 범위 밖이다. 따라서 기존 C05-13 `Supported` 또는 이 slice의
+`Supported` 어느 쪽도 단독으로 C07 `GpuGreedy`/`CompletionBoundary`를 지원한다고 해석할 수 없다.
+
+GPU acceptance는 eager와 graph의 exact BF16 output bytes를 valid unique permutation에서 비교하고, 최소
+64회 sequential replay, second-enqueue rejection, duplicate/out-of-range host-mirror preflight rejection,
+preflight failure 후 untouched-resource recovery, abort recovery, explicit close 뒤 allocation 0을 확인한다.
+C05-14 parity가 닫힌 뒤에만 별도 계획 slice가 fixed row-gather → argmax → transfer/completion chain의
+capture-safe composition과 C07 evidence model을 정의할 수 있다.
 
 ## 2. 범위
 
