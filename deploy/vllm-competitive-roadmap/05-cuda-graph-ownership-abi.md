@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-15까지 decode output 경계의 fixed-address BF16 row-gather → argmax two-node graph GPU lifecycle/parity를 닫았다. 다음 C05-16은 그 결과 record의 fixed D2H까지 같은 capture dependency로 좁혀 검증한다.
+**상태:** In progress — C05-16까지 decode output 경계의 fixed-address BF16 row-gather → argmax → exact result D2H three-node graph GPU lifecycle/parity를 닫았다. 이 raw result receipt는 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -210,7 +210,7 @@ unique permutation의 64회 replay는 gathered BF16/result-record 모두 eager�
 abort recovery, raw device-index OOB의 gathered NaN과 `INVALID_TOKEN_ID`/non-finite result-record bytes도
 별도 GPU test로 닫았다. 이 결과는 device-only two-node graph의 근거일 뿐 C07 승격 근거는 아니다.
 
-### C05-16 — fixed-address BF16 row-gather → argmax → result D2H capture (CUDA; planned)
+### C05-16 — fixed-address BF16 row-gather → argmax → result D2H capture (CUDA; completed)
 
 C05-16은 C05-15의 동일한 output boundary를 한 capture 안에서 **세** fixed-address node로 좁힌다:
 BF16 row-gather, gathered logits의 deterministic BF16 argmax, 그리고 `RileyCudaBf16ArgmaxResult`의 exact
@@ -255,6 +255,12 @@ duplicate/out-of-range host-mirror preflight rejection, finish 전 pinned CPU ac
 abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw OOB device index의 gathered
 NaN 및 `INVALID_TOKEN_ID`/non-finite record D2H bytes parity를 확인하고, source/fault contract는 둘째 또는 셋째
 node failure가 abort-only terminal state가 됨을 고정한다.
+
+원격 RTX 4090/CUDA 12.8에서 native ABI link, CUDA feature library, source-contract, 그리고 전체 ignored graph GPU
+suite 37개를 통과했다. 정상 valid-permutation은 64회 replay에서 eager와 gathered BF16 및 raw D2H
+result-record bytes가 정확히 일치했고, exact pinned-size preflight/abort recovery와 raw device-index OOB의
+NaN·non-finite result bytes도 별도 GPU regression으로 닫았다. 이 결과는 세-node raw result lifecycle/parity의
+근거일 뿐 host token/status validation, scheduler commit, C07 inventory 승격 또는 성능 향상 주장은 아니다.
 
 ## 2. 범위
 
