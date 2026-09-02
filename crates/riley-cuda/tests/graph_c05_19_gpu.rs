@@ -449,6 +449,208 @@ fn owned_grouped_ragged_attention_graph_replays_byte_exact_against_eager() -> Te
 
 #[test]
 #[ignore = "remote GPU"]
+fn owned_grouped_ragged_attention_graph_generic_group_one_matches_eager() -> TestResult {
+    // A group size of one deliberately bypasses the shared-KV CTA branch and
+    // covers the graph's generic grouped-head launch topology.
+    const GENERIC_QUERY_HEAD_COUNT: u64 = 2;
+    const GENERIC_KEY_VALUE_HEAD_COUNT: u64 = 2;
+    assert_eq!(GENERIC_QUERY_HEAD_COUNT / GENERIC_KEY_VALUE_HEAD_COUNT, 1);
+    let fixture = GroupedAttentionFixture::new();
+    let query = finite_bf16_pattern(ACTIVE_ROW_COUNT * GENERIC_QUERY_HEAD_COUNT * HEAD_SIZE, 11);
+    let key_pool = finite_bf16_pattern(
+        PHYSICAL_BLOCK_COUNT * GENERIC_KEY_VALUE_HEAD_COUNT * BLOCK_SIZE * HEAD_SIZE,
+        23,
+    );
+    let value_pool = finite_bf16_pattern(
+        PHYSICAL_BLOCK_COUNT * GENERIC_KEY_VALUE_HEAD_COUNT * BLOCK_SIZE * HEAD_SIZE,
+        41,
+    );
+    let output_sentinel =
+        vec![
+            0x5a;
+            usize::try_from(OUTPUT_ROW_COUNT * GENERIC_QUERY_HEAD_COUNT * HEAD_SIZE * BF16_BYTES,)?
+        ];
+    let offsets_bytes = u32_words_to_ne_bytes(&fixture.offsets);
+    let block_ids_bytes = u32_words_to_ne_bytes(&fixture.block_ids);
+    let valid_tokens_bytes = u16_words_to_ne_bytes(&fixture.valid_tokens);
+    let row_slots_bytes = u32_words_to_ne_bytes(&fixture.row_slots);
+    let row_positions_bytes = u32_words_to_ne_bytes(&fixture.row_positions);
+
+    let runtime = CudaRuntime::initialize()?;
+    assert!(
+        runtime.device_count() > 0,
+        "remote GPU runner has no CUDA device"
+    );
+    let context = runtime.device(0)?.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let mut staging = context.allocate_pinned_host_buffer(u64::try_from(
+        query
+            .len()
+            .max(key_pool.len())
+            .max(value_pool.len())
+            .max(output_sentinel.len()),
+    )?)?;
+
+    let eager_query = upload(&context, &mut eager_stream, &mut staging, &query)?;
+    let eager_key_pool = upload(&context, &mut eager_stream, &mut staging, &key_pool)?;
+    let eager_value_pool = upload(&context, &mut eager_stream, &mut staging, &value_pool)?;
+    let eager_offsets = upload(&context, &mut eager_stream, &mut staging, &offsets_bytes)?;
+    let eager_block_ids = upload(&context, &mut eager_stream, &mut staging, &block_ids_bytes)?;
+    let eager_valid_tokens = upload(
+        &context,
+        &mut eager_stream,
+        &mut staging,
+        &valid_tokens_bytes,
+    )?;
+    let eager_row_slots = upload(&context, &mut eager_stream, &mut staging, &row_slots_bytes)?;
+    let eager_row_positions = upload(
+        &context,
+        &mut eager_stream,
+        &mut staging,
+        &row_positions_bytes,
+    )?;
+    let mut eager_output = upload(&context, &mut eager_stream, &mut staging, &output_sentinel)?;
+    let graph_query = upload(&context, &mut eager_stream, &mut staging, &query)?;
+    let graph_key_pool = upload(&context, &mut eager_stream, &mut staging, &key_pool)?;
+    let graph_value_pool = upload(&context, &mut eager_stream, &mut staging, &value_pool)?;
+    let graph_offsets = upload(&context, &mut eager_stream, &mut staging, &offsets_bytes)?;
+    let graph_block_ids = upload(&context, &mut eager_stream, &mut staging, &block_ids_bytes)?;
+    let graph_valid_tokens = upload(
+        &context,
+        &mut eager_stream,
+        &mut staging,
+        &valid_tokens_bytes,
+    )?;
+    let graph_row_slots = upload(&context, &mut eager_stream, &mut staging, &row_slots_bytes)?;
+    let graph_row_positions = upload(
+        &context,
+        &mut eager_stream,
+        &mut staging,
+        &row_positions_bytes,
+    )?;
+    let graph_output = upload(&context, &mut eager_stream, &mut staging, &output_sentinel)?;
+
+    let eager_output_len = eager_output.byte_len();
+    grouped_ragged_paged_attention(
+        &mut RaggedPagedAttentionParams {
+            query: CudaBufferSpan::new(&eager_query, CudaDType::BF16, 0, eager_query.byte_len())?,
+            key_pool: CudaBufferSpan::new(
+                &eager_key_pool,
+                CudaDType::BF16,
+                0,
+                eager_key_pool.byte_len(),
+            )?,
+            value_pool: CudaBufferSpan::new(
+                &eager_value_pool,
+                CudaDType::BF16,
+                0,
+                eager_value_pool.byte_len(),
+            )?,
+            output: CudaBufferSpanMut::new(
+                &mut eager_output,
+                CudaDType::BF16,
+                0,
+                eager_output_len,
+            )?,
+            batch: bind_batch(
+                fixture.host()?,
+                &eager_offsets,
+                &eager_block_ids,
+                &eager_valid_tokens,
+                &eager_row_slots,
+                &eager_row_positions,
+            )?,
+            query_head_count: GENERIC_QUERY_HEAD_COUNT,
+            key_value_head_count: GENERIC_KEY_VALUE_HEAD_COUNT,
+            head_size: HEAD_SIZE,
+            output_row_count: OUTPUT_ROW_COUNT,
+            scale: SCALE,
+        },
+        &mut eager_stream,
+    )?;
+    eager_stream.synchronize()?;
+
+    let mut capture = capture_stream
+        .begin_owned_graph_grouped_ragged_paged_attention_bf16_capture(
+            graph_query,
+            graph_key_pool,
+            graph_value_pool,
+            graph_output,
+            graph_offsets,
+            graph_block_ids,
+            graph_valid_tokens,
+            graph_row_slots,
+            graph_row_positions,
+            fixture.host()?,
+            GENERIC_QUERY_HEAD_COUNT,
+            GENERIC_KEY_VALUE_HEAD_COUNT,
+            OUTPUT_ROW_COUNT,
+            SCALE,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?;
+    capture.enqueue_grouped_ragged_paged_attention_bf16()?;
+    let mut exec = capture.end()?.instantiate()?;
+    exec.launch()?.finish()?;
+    let resources = exec.close()?;
+    let (
+        capture_stream,
+        graph_query,
+        graph_key_pool,
+        graph_value_pool,
+        mut graph_output,
+        graph_offsets,
+        graph_block_ids,
+        graph_valid_tokens,
+        graph_row_slots,
+        graph_row_positions,
+    ) = resources.into_parts();
+    let graph_output_bytes = download(&mut graph_output, &mut staging, &mut transfer_stream)?;
+    assert_eq!(
+        graph_output_bytes,
+        download(&mut eager_output, &mut staging, &mut transfer_stream)?,
+        "generic group-one graph output must exactly match eager grouped attention",
+    );
+    let active_bytes =
+        usize::try_from(ACTIVE_ROW_COUNT * GENERIC_QUERY_HEAD_COUNT * HEAD_SIZE * BF16_BYTES)?;
+    assert!(
+        graph_output_bytes[active_bytes..]
+            .iter()
+            .all(|byte| *byte == 0)
+    );
+
+    graph_row_positions.close()?;
+    graph_row_slots.close()?;
+    graph_valid_tokens.close()?;
+    graph_block_ids.close()?;
+    graph_offsets.close()?;
+    graph_output.close()?;
+    graph_value_pool.close()?;
+    graph_key_pool.close()?;
+    graph_query.close()?;
+    eager_output.close()?;
+    eager_row_positions.close()?;
+    eager_row_slots.close()?;
+    eager_valid_tokens.close()?;
+    eager_block_ids.close()?;
+    eager_offsets.close()?;
+    eager_value_pool.close()?;
+    eager_key_pool.close()?;
+    eager_query.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-19-grouped-ragged-attention-generic-group-one status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
 fn owned_grouped_ragged_attention_graph_preserves_bounds_invalid_raw_row_nan() -> TestResult {
     let fixture = GroupedAttentionFixture::new();
     // Host admission remains valid; one fixed device row slot becomes invalid
