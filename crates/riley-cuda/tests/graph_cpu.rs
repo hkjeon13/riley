@@ -2688,9 +2688,9 @@ fn owned_bf16_row_gather_argmax_d2h_graph_has_completion_scoped_pinned_result_co
         .split("pub fn begin_owned_graph_bf16_row_gather_argmax_d2h_capture")
         .nth(1)
         .expect("owned C05-16 graph capture entry point must remain present")
-        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .split("/// Begins one C05-17 fixed-address BF16 indexed-RoPE graph capture.")
         .next()
-        .expect("owned C05-16 capture must precede borrowed fill capture");
+        .expect("owned C05-16 capture must precede the C05-17 capture");
     assert_precedes(
         owned_begin,
         "validate_graph_bf16_row_gather_argmax_d2h_capture_preflight",
@@ -3175,9 +3175,9 @@ fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
         .split("pub fn begin_owned_graph_indexed_rope_bf16_capture")
         .nth(1)
         .expect("owned C05-17 graph capture entry point must remain present")
-        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .split("/// Begins one C05-18 fixed-address BF16 ragged paged-K/V cache-write graph")
         .next()
-        .expect("owned C05-17 capture must precede borrowed fill capture");
+        .expect("owned C05-17 capture must precede the C05-18 capture");
     assert_precedes(
         owned_begin,
         "validate_graph_indexed_rope_bf16_capture_preflight",
@@ -3386,9 +3386,9 @@ fn owned_ragged_paged_kv_cache_write_bf16_graph_has_fixed_nine_buffer_lifecycle(
         .split("pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture")
         .nth(1)
         .expect("owned C05-18 graph capture entry point must remain present")
-        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .split("/// Begins one C05-19 fixed-address BF16 grouped ragged paged-attention")
         .next()
-        .expect("owned C05-18 capture must precede borrowed fill capture");
+        .expect("owned C05-18 capture must precede the C05-19 capture");
     assert_precedes(
         owned_begin,
         "validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight",
@@ -3456,6 +3456,227 @@ fn owned_ragged_paged_kv_cache_write_bf16_graph_has_fixed_nine_buffer_lifecycle(
         assert!(
             !owned_exec.contains(forbidden),
             "C05-18 must not expose mutable replay or C07 execution capability: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_grouped_ragged_paged_attention_bf16_graph_has_fixed_nine_buffer_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16",
+        "riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16",
+        "riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16",
+        "RileyCudaDeviceBuffer* query",
+        "RileyCudaDeviceBuffer* output",
+        "uint64_t output_row_count",
+        "float scale",
+    ] {
+        assert!(header.contains(required), "missing C05-19 ABI: {required}");
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16",
+        "riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16",
+        "begin_graph_grouped_ragged_paged_attention_bf16_capture",
+        "enqueue_grouped_ragged_paged_attention_bf16",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-19 Rust FFI boundary: {required}"
+        );
+    }
+    assert!(
+        abi_link.contains("CudaGraphCaptureOperation::GroupedRaggedPagedAttentionBf16"),
+        "C05-19 capability must remain ABI-linked without device initialization"
+    );
+    assert!(graph.contains("GroupedRaggedPagedAttentionBf16 = 13"));
+
+    for required in [
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Resources",
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16CaptureBeginError",
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Capture",
+        "pub struct OwnedCapturedGroupedRaggedPagedAttentionBf16Graph",
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Exec",
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Launch<'exec>",
+        "pub fn begin_owned_graph_grouped_ragged_paged_attention_bf16_capture",
+        "pub fn enqueue_grouped_ragged_paged_attention_bf16(&mut self)",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-19 safe owner contract is missing: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_grouped_ragged_paged_attention_bf16_capture_preflight(")
+        .nth(1)
+        .expect("C05-19 grouped ragged paged-attention preflight must remain present")
+        .split("fn take_owned_graph_grouped_ragged_paged_attention_bf16_resources")
+        .next()
+        .expect("C05-19 preflight must precede its resource recovery helper");
+    for required in [
+        "PackedBatchHostV1<'_>",
+        "batch_host.format_version()",
+        "batch_host.block_size()",
+        "ATTENTION_HEAD_SIZE: u64 = 64",
+        "sequence_count == 0",
+        "block_count == 0",
+        "active_row_count == 0",
+        "physical_block_count == 0",
+        "query_head_count == 0",
+        "key_value_head_count == 0",
+        "query_head_count % key_value_head_count",
+        "output_row_count < active_row_count",
+        "!scale.is_finite() || scale <= 0.0",
+        "let buffers = [",
+        "same_allocation",
+        "ensure_same_context",
+        "ensure_idle_for_operation",
+        "query_bytes",
+        "pool_bytes",
+        "output_bytes",
+        "offsets_bytes",
+        "valid_tokens_bytes",
+        "row_sequence_slots_bytes",
+        "row_positions_bytes",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-19 preflight must retain fixed-address D64 GQA validation: {required}"
+        );
+    }
+    for forbidden in [
+        "batch_host.sequence_block_offsets()",
+        "batch_host.block_ids()",
+        "batch_host.valid_tokens()",
+        "batch_host.row_sequence_slots()",
+        "batch_host.row_positions()",
+    ] {
+        assert!(
+            !preflight.contains(forbidden),
+            "C05-19 host witness must not bind graph metadata identity: {forbidden}"
+        );
+    }
+
+    let resources = graph
+        .split("impl OwnedGraphGroupedRaggedPagedAttentionBf16Resources")
+        .nth(1)
+        .expect("C05-19 resource bundle must remain present")
+        .split("/// Error from beginning an owned fixed-address BF16 grouped ragged")
+        .next()
+        .expect("C05-19 resource bundle must end before its begin error");
+    for required in [
+        "query",
+        "key_pool",
+        "value_pool",
+        "output",
+        "sequence_block_offsets",
+        "block_ids",
+        "valid_tokens",
+        "row_sequence_slots",
+        "row_positions",
+    ] {
+        assert!(
+            resources.contains(required),
+            "C05-19 fixed resource bundle is missing: {required}"
+        );
+    }
+    assert!(
+        !resources.contains("PackedBatchHostV1"),
+        "the temporary packed host witness must not be retained by C05-19 resources"
+    );
+    for (earlier, later) in [
+        ("row_positions.close()?", "row_sequence_slots.close()?"),
+        ("row_sequence_slots.close()?", "valid_tokens.close()?"),
+        ("valid_tokens.close()?", "block_ids.close()?"),
+        ("block_ids.close()?", "sequence_block_offsets.close()?"),
+        ("sequence_block_offsets.close()?", "output.close()?"),
+        ("output.close()?", "value_pool.close()?"),
+        ("value_pool.close()?", "key_pool.close()?"),
+        ("key_pool.close()?", "query.close()?"),
+        ("query.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-19 resource close order");
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_grouped_ragged_paged_attention_bf16_capture")
+        .nth(1)
+        .expect("owned C05-19 graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("C05-19 owned capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_grouped_ragged_paged_attention_bf16_capture_preflight",
+        "begin_graph_grouped_ragged_paged_attention_bf16_capture",
+        "C05-19 Rust preflight",
+    );
+    for required in [
+        "batch_host.sequence_count()",
+        "batch_host.block_count()",
+        "batch_host.active_row_count()",
+        "batch_host.physical_block_count()",
+    ] {
+        assert!(
+            owned_begin.contains(required),
+            "C05-19 must derive native dimensions from the temporary host witness: {required}"
+        );
+    }
+    assert!(
+        !owned_begin.contains("head_size: u64"),
+        "C05-19 must expose exactly the fixed D64 graph ABI rather than a caller-selected head size"
+    );
+
+    for owner in [
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Capture {",
+        "pub struct OwnedCapturedGroupedRaggedPagedAttentionBf16Graph {",
+        "pub struct OwnedGraphGroupedRaggedPagedAttentionBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphGroupedRaggedPagedAttentionBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before fixed resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphGroupedRaggedPagedAttentionBf16Exec")
+        .nth(1)
+        .expect("C05-19 owned exec must remain present")
+        .split("/// Completion owner for one grouped ragged paged-attention graph executable")
+        .next()
+        .expect("C05-19 owned exec must end before its completion owner");
+    for forbidden in [
+        "launch_with_input",
+        "launch_with_source",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "GpuGreedy",
+        "CompletionBoundary",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !owned_exec.contains(forbidden),
+            "C05-19 must not expose mutable replay or C07 execution capability: {forbidden}"
         );
     }
 }

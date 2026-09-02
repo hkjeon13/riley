@@ -105,6 +105,10 @@ constexpr const char* kBeginRaggedPagedKvCacheWriteBf16Operation =
     "begin CUDA Graph BF16 ragged paged-KV write capture";
 constexpr const char* kEnqueueRaggedPagedKvCacheWriteBf16Operation =
     "enqueue CUDA Graph BF16 ragged paged-KV write";
+constexpr const char* kBeginGroupedRaggedPagedAttentionBf16Operation =
+    "begin CUDA Graph grouped BF16 ragged paged-attention capture";
+constexpr const char* kEnqueueGroupedRaggedPagedAttentionBf16Operation =
+    "enqueue CUDA Graph grouped BF16 ragged paged attention";
 // A failed node launch during a multi-node capture cannot safely be retried:
 // CUDA may have invalidated the capture after accepting a prefix. Keep this
 // terminal marker in the capture-only enqueue state so abort remains the sole
@@ -113,6 +117,19 @@ constexpr uint32_t kBf16RowGatherArgmaxEnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kBf16RowGatherArgmaxD2HEnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kIndexedRopeBf16EnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kRaggedPagedKvCacheWriteBf16EnqueueTerminal = UINT32_MAX;
+constexpr uint32_t kGroupedRaggedPagedAttentionBf16EnqueueTerminal =
+    UINT32_MAX;
+constexpr uint32_t kGraphRaggedAttentionWarpSize = 32;
+constexpr uint32_t kGraphRaggedAttentionFullWarpMask = 0xffffffffU;
+constexpr uint32_t kGraphRaggedAttentionMaximumWarpsPerBlock = 16;
+constexpr uint32_t kGraphRaggedAttentionThreads =
+    kGraphRaggedAttentionWarpSize *
+    kGraphRaggedAttentionMaximumWarpsPerBlock;
+constexpr uint64_t kGraphRaggedAttentionHeadSize = 64;
+constexpr uint32_t kGraphRaggedAttentionSharedTileTokens =
+    RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+constexpr uint64_t kGraphMaximumGridX = 2147483647;
+constexpr uint64_t kGraphMaximumGridYOrZ = 65535;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -483,6 +500,292 @@ __global__ void graph_ragged_paged_kv_cache_write_bf16(
   }
 }
 
+// C05-19 keeps this capture-local copy of the eager grouped attention
+// arithmetic instead of calling the eager entry point: eager ownership uses
+// transient ExclusiveUses and synchronous completion, whereas graph replay
+// permanently owns all nine fixed addresses. Keep the per-warp reductions,
+// staged BF16 score boundary, online-softmax token order, and raw metadata
+// recovery exactly aligned with batch_primitives.cu.
+__device__ __forceinline__ float graph_ragged_attention_warp_sum(float value) {
+#pragma unroll
+  for (uint32_t offset = kGraphRaggedAttentionWarpSize / 2; offset != 0;
+       offset /= 2) {
+    value += __shfl_down_sync(kGraphRaggedAttentionFullWarpMask, value,
+                              offset);
+  }
+  return value;
+}
+
+__device__ __forceinline__ float graph_ragged_attention_staged_score(
+    float dot_product, float scale) {
+  const __nv_bfloat16 staged_dot = __float2bfloat16_rn(dot_product);
+  return __bfloat162float(
+      __float2bfloat16_rn(__bfloat162float(staged_dot) * scale));
+}
+
+__device__ __forceinline__ void graph_ragged_attention_update_online_state(
+    float score, float* maximum, float* denominator, float* alpha,
+    float* beta) {
+  if (isnan(score) || isnan(*maximum)) {
+    *maximum = CUDART_NAN_F;
+    *denominator = CUDART_NAN_F;
+    *alpha = CUDART_NAN_F;
+    *beta = CUDART_NAN_F;
+    return;
+  }
+  const bool score_is_positive_infinity = isinf(score) && score > 0.0F;
+  const bool maximum_is_positive_infinity =
+      isinf(*maximum) && *maximum > 0.0F;
+  if (score_is_positive_infinity) {
+    if (maximum_is_positive_infinity) {
+      *alpha = 1.0F;
+      *beta = 1.0F;
+      *denominator += 1.0F;
+    } else {
+      *maximum = CUDART_INF_F;
+      *denominator = 1.0F;
+      *alpha = 0.0F;
+      *beta = 1.0F;
+    }
+    return;
+  }
+  if (maximum_is_positive_infinity || (isinf(score) && score < 0.0F)) {
+    *alpha = 1.0F;
+    *beta = 0.0F;
+    return;
+  }
+  const float next_maximum = fmaxf(*maximum, score);
+  *alpha = *denominator == 0.0F ? 0.0F : expf(*maximum - next_maximum);
+  *beta = expf(score - next_maximum);
+  *denominator = fmaf(*alpha, *denominator, *beta);
+  *maximum = next_maximum;
+}
+
+__device__ __forceinline__ float graph_ragged_attention_update_numerator(
+    float numerator, float value, float alpha, float beta) {
+  if (beta == 0.0F) {
+    return alpha * numerator;
+  }
+  if (alpha == 0.0F) {
+    return beta * value;
+  }
+  return fmaf(beta, value, alpha * numerator);
+}
+
+__global__ __launch_bounds__(kGraphRaggedAttentionThreads)
+void graph_grouped_ragged_paged_attention_bf16(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
+    GraphRaggedPagedKvDeviceBatch batch, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  const uint32_t lane = threadIdx.x % kGraphRaggedAttentionWarpSize;
+  const uint32_t warp = threadIdx.x / kGraphRaggedAttentionWarpSize;
+  const uint64_t row = blockIdx.x;
+  const uint64_t warps_per_block =
+      blockDim.x / kGraphRaggedAttentionWarpSize;
+  const uint64_t query_head =
+      static_cast<uint64_t>(blockIdx.y) * warps_per_block + warp;
+  if (query_head >= query_head_count) {
+    return;
+  }
+  const uint64_t output_base =
+      (row * query_head_count + query_head) * kGraphRaggedAttentionHeadSize;
+  if (row >= batch.active_row_count) {
+    const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
+    output[output_base + lane] = zero;
+    output[output_base + lane + kGraphRaggedAttentionWarpSize] = zero;
+    return;
+  }
+  const uint64_t group_size = query_head_count / key_value_head_count;
+  const uint64_t key_value_head = query_head / group_size;
+  const uint64_t query_base =
+      (row * query_head_count + query_head) * kGraphRaggedAttentionHeadSize;
+  const float query_low = __bfloat162float(query[query_base + lane]);
+  const float query_high = __bfloat162float(
+      query[query_base + lane + kGraphRaggedAttentionWarpSize]);
+  const uint64_t logical_token_count =
+      static_cast<uint64_t>(batch.row_positions[row]) + 1;
+  float maximum = -CUDART_INF_F;
+  float denominator = 0.0F;
+  float numerator_low = 0.0F;
+  float numerator_high = 0.0F;
+  bool valid = true;
+  for (uint64_t logical_token = 0; logical_token < logical_token_count;
+       ++logical_token) {
+    uint64_t cache_base = 0;
+    if (!graph_resolve_ragged_paged_kv_cache_base(
+            batch, row, logical_token, key_value_head, key_value_head_count,
+            kGraphRaggedAttentionHeadSize, &cache_base)) {
+      valid = false;
+      break;
+    }
+    const float key_low = __bfloat162float(key_pool[cache_base + lane]);
+    const float key_high = __bfloat162float(
+        key_pool[cache_base + lane + kGraphRaggedAttentionWarpSize]);
+    float score = fmaf(query_low, key_low, query_high * key_high);
+    score = graph_ragged_attention_warp_sum(score);
+    score = graph_ragged_attention_staged_score(
+        __shfl_sync(kGraphRaggedAttentionFullWarpMask, score, 0), scale);
+    float alpha = 0.0F;
+    float beta = 0.0F;
+    if (lane == 0) {
+      graph_ragged_attention_update_online_state(score, &maximum,
+                                                 &denominator, &alpha, &beta);
+    }
+    alpha = __shfl_sync(kGraphRaggedAttentionFullWarpMask, alpha, 0);
+    beta = __shfl_sync(kGraphRaggedAttentionFullWarpMask, beta, 0);
+    numerator_low = graph_ragged_attention_update_numerator(
+        numerator_low, __bfloat162float(value_pool[cache_base + lane]), alpha,
+        beta);
+    numerator_high = graph_ragged_attention_update_numerator(
+        numerator_high,
+        __bfloat162float(value_pool[cache_base + lane +
+                                    kGraphRaggedAttentionWarpSize]),
+        alpha, beta);
+  }
+  denominator =
+      __shfl_sync(kGraphRaggedAttentionFullWarpMask, denominator, 0);
+  const float inverse_denominator =
+      !valid ? CUDART_NAN_F
+             : (isnan(denominator)
+                    ? CUDART_NAN_F
+                    : (denominator > 0.0F ? 1.0F / denominator : 0.0F));
+  output[output_base + lane] =
+      __float2bfloat16_rn(numerator_low * inverse_denominator);
+  output[output_base + lane + kGraphRaggedAttentionWarpSize] =
+      __float2bfloat16_rn(numerator_high * inverse_denominator);
+}
+
+__global__ __launch_bounds__(kGraphRaggedAttentionThreads)
+void graph_grouped_ragged_paged_attention_gqa_shared_kv_bf16(
+    const __nv_bfloat16* query, const __nv_bfloat16* key_pool,
+    const __nv_bfloat16* value_pool, __nv_bfloat16* output,
+    GraphRaggedPagedKvDeviceBatch batch, uint64_t query_head_count,
+    uint64_t key_value_head_count, float scale) {
+  const uint32_t lane = threadIdx.x % kGraphRaggedAttentionWarpSize;
+  const uint32_t warp = threadIdx.x / kGraphRaggedAttentionWarpSize;
+  const uint64_t row = blockIdx.x;
+  const uint64_t warps_per_block =
+      blockDim.x / kGraphRaggedAttentionWarpSize;
+  const uint64_t key_value_head = blockIdx.y;
+  const uint64_t query_head = key_value_head * warps_per_block + warp;
+  const uint64_t output_base =
+      (row * query_head_count + query_head) * kGraphRaggedAttentionHeadSize;
+  if (row >= batch.active_row_count) {
+    const __nv_bfloat16 zero = __float2bfloat16_rn(0.0F);
+    output[output_base + lane] = zero;
+    output[output_base + lane + kGraphRaggedAttentionWarpSize] = zero;
+    return;
+  }
+  const uint64_t query_base =
+      (row * query_head_count + query_head) * kGraphRaggedAttentionHeadSize;
+  const float query_low = __bfloat162float(query[query_base + lane]);
+  const float query_high = __bfloat162float(
+      query[query_base + lane + kGraphRaggedAttentionWarpSize]);
+  const uint64_t logical_token_count =
+      static_cast<uint64_t>(batch.row_positions[row]) + 1;
+  __shared__ __nv_bfloat16
+      shared_keys[kGraphRaggedAttentionSharedTileTokens]
+                 [kGraphRaggedAttentionHeadSize];
+  __shared__ __nv_bfloat16
+      shared_values[kGraphRaggedAttentionSharedTileTokens]
+                   [kGraphRaggedAttentionHeadSize];
+  float maximum = -CUDART_INF_F;
+  float denominator = 0.0F;
+  float numerator_low = 0.0F;
+  float numerator_high = 0.0F;
+  bool valid = true;
+  for (uint64_t tile_start = 0; tile_start < logical_token_count;
+       tile_start += kGraphRaggedAttentionSharedTileTokens) {
+    if (tile_start != 0) {
+      __syncthreads();
+    }
+    const uint64_t remaining = logical_token_count - tile_start;
+    const uint32_t tile_count = static_cast<uint32_t>(
+        remaining < kGraphRaggedAttentionSharedTileTokens
+            ? remaining
+            : kGraphRaggedAttentionSharedTileTokens);
+    bool tile_valid = true;
+    for (uint32_t tile_offset = warp; tile_offset < tile_count;
+         tile_offset += static_cast<uint32_t>(warps_per_block)) {
+      uint32_t cache_base_low = 0;
+      uint32_t cache_base_high = 0;
+      int token_valid = 0;
+      if (lane == 0) {
+        uint64_t cache_base = 0;
+        token_valid = graph_resolve_ragged_paged_kv_cache_base(
+                          batch, row, tile_start + tile_offset,
+                          key_value_head, key_value_head_count,
+                          kGraphRaggedAttentionHeadSize, &cache_base)
+                          ? 1
+                          : 0;
+        cache_base_low = static_cast<uint32_t>(cache_base);
+        cache_base_high = static_cast<uint32_t>(cache_base >> 32);
+      }
+      token_valid =
+          __shfl_sync(kGraphRaggedAttentionFullWarpMask, token_valid, 0);
+      cache_base_low =
+          __shfl_sync(kGraphRaggedAttentionFullWarpMask, cache_base_low, 0);
+      cache_base_high =
+          __shfl_sync(kGraphRaggedAttentionFullWarpMask, cache_base_high, 0);
+      if (token_valid == 0) {
+        tile_valid = false;
+        continue;
+      }
+      const uint64_t cache_base =
+          (static_cast<uint64_t>(cache_base_high) << 32) | cache_base_low;
+      shared_keys[tile_offset][lane] = key_pool[cache_base + lane];
+      shared_keys[tile_offset][lane + kGraphRaggedAttentionWarpSize] =
+          key_pool[cache_base + lane + kGraphRaggedAttentionWarpSize];
+      shared_values[tile_offset][lane] = value_pool[cache_base + lane];
+      shared_values[tile_offset][lane + kGraphRaggedAttentionWarpSize] =
+          value_pool[cache_base + lane + kGraphRaggedAttentionWarpSize];
+    }
+    if (__syncthreads_or(tile_valid ? 0 : 1) != 0) {
+      valid = false;
+      break;
+    }
+    for (uint32_t tile_offset = 0; tile_offset < tile_count; ++tile_offset) {
+      const float key_low =
+          __bfloat162float(shared_keys[tile_offset][lane]);
+      const float key_high = __bfloat162float(
+          shared_keys[tile_offset][lane + kGraphRaggedAttentionWarpSize]);
+      float score = fmaf(query_low, key_low, query_high * key_high);
+      score = graph_ragged_attention_warp_sum(score);
+      score = graph_ragged_attention_staged_score(
+          __shfl_sync(kGraphRaggedAttentionFullWarpMask, score, 0), scale);
+      float alpha = 0.0F;
+      float beta = 0.0F;
+      if (lane == 0) {
+        graph_ragged_attention_update_online_state(score, &maximum,
+                                                   &denominator, &alpha, &beta);
+      }
+      alpha = __shfl_sync(kGraphRaggedAttentionFullWarpMask, alpha, 0);
+      beta = __shfl_sync(kGraphRaggedAttentionFullWarpMask, beta, 0);
+      numerator_low = graph_ragged_attention_update_numerator(
+          numerator_low,
+          __bfloat162float(shared_values[tile_offset][lane]), alpha, beta);
+      numerator_high = graph_ragged_attention_update_numerator(
+          numerator_high,
+          __bfloat162float(shared_values[tile_offset]
+                                         [lane +
+                                          kGraphRaggedAttentionWarpSize]),
+          alpha, beta);
+    }
+  }
+  denominator =
+      __shfl_sync(kGraphRaggedAttentionFullWarpMask, denominator, 0);
+  const float inverse_denominator =
+      !valid ? CUDART_NAN_F
+             : (isnan(denominator)
+                    ? CUDART_NAN_F
+                    : (denominator > 0.0F ? 1.0F / denominator : 0.0F));
+  output[output_base + lane] =
+      __float2bfloat16_rn(numerator_low * inverse_denominator);
+  output[output_base + lane + kGraphRaggedAttentionWarpSize] =
+      __float2bfloat16_rn(numerator_high * inverse_denominator);
+}
+
 bool residual_add_capture_fields_are_clear(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr && capture->residual_add_left == nullptr &&
@@ -720,7 +1023,9 @@ bool ragged_paged_kv_cache_write_bf16_state_is_clear(
          state.row_positions == nullptr && state.sequence_count == 0 &&
          state.block_count == 0 && state.active_row_count == 0 &&
          state.physical_block_count == 0 && state.key_value_head_count == 0 &&
-         state.head_size == 0 && state.enqueue_count == 0 &&
+         state.head_size == 0 && state.query_head_count == 0 &&
+         state.output_row_count == 0 && state.attention_scale == 0.0F &&
+         !state.grouped_attention && state.enqueue_count == 0 &&
          !state.key_source_lease_held && !state.value_source_lease_held &&
          !state.value_pool_lease_held &&
          !state.sequence_block_offsets_lease_held &&
@@ -872,6 +1177,59 @@ bool ragged_paged_kv_cache_write_bf16_shape_is_valid(
   *out_source_element_count = source_rows * head_size;
   *out_pool_element_count = pool_tokens * head_size;
   return *out_source_element_count != 0 && *out_pool_element_count != 0;
+}
+
+bool grouped_ragged_paged_attention_bf16_shape_is_valid(
+    uint64_t sequence_count, uint64_t block_count,
+    uint64_t active_row_count, uint64_t physical_block_count,
+    uint64_t query_head_count, uint64_t key_value_head_count,
+    uint64_t output_row_count, float scale,
+    uint64_t* out_query_element_count, uint64_t* out_pool_element_count,
+    uint64_t* out_output_element_count) noexcept {
+  if (out_query_element_count == nullptr || out_pool_element_count == nullptr ||
+      out_output_element_count == nullptr || sequence_count == 0 ||
+      block_count == 0 || active_row_count == 0 ||
+      physical_block_count == 0 || query_head_count == 0 ||
+      key_value_head_count == 0 || output_row_count < active_row_count ||
+      sequence_count > UINT32_MAX || block_count > UINT32_MAX ||
+      active_row_count > UINT32_MAX || physical_block_count > UINT32_MAX ||
+      block_count > physical_block_count ||
+      query_head_count > kGraphMaximumGridYOrZ ||
+      output_row_count > kGraphMaximumGridX ||
+      query_head_count % key_value_head_count != 0 ||
+      !std::isfinite(scale) || scale <= 0.0F) {
+    return false;
+  }
+  if (active_row_count > UINT64_MAX / query_head_count) {
+    return false;
+  }
+  const uint64_t query_rows = active_row_count * query_head_count;
+  if (query_rows > UINT64_MAX / kGraphRaggedAttentionHeadSize ||
+      output_row_count > UINT64_MAX / query_head_count) {
+    return false;
+  }
+  const uint64_t output_rows = output_row_count * query_head_count;
+  if (output_rows > UINT64_MAX / kGraphRaggedAttentionHeadSize ||
+      physical_block_count > UINT64_MAX / key_value_head_count) {
+    return false;
+  }
+  const uint64_t pool_heads = physical_block_count * key_value_head_count;
+  if (pool_heads > UINT64_MAX / RILEY_CUDA_PAGED_KV_BLOCK_SIZE) {
+    return false;
+  }
+  const uint64_t pool_tokens =
+      pool_heads * RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+  if (pool_tokens > UINT64_MAX / kGraphRaggedAttentionHeadSize) {
+    return false;
+  }
+  *out_query_element_count =
+      query_rows * kGraphRaggedAttentionHeadSize;
+  *out_pool_element_count =
+      pool_tokens * kGraphRaggedAttentionHeadSize;
+  *out_output_element_count =
+      output_rows * kGraphRaggedAttentionHeadSize;
+  return *out_query_element_count != 0 && *out_pool_element_count != 0 &&
+         *out_output_element_count != 0;
 }
 
 bool canonical_rms_norm_element_count(uint64_t row_count, uint64_t hidden_size,
@@ -2241,7 +2599,11 @@ bool ragged_paged_kv_cache_write_bf16_state_geometry_matches(
          left.active_row_count == right.active_row_count &&
          left.physical_block_count == right.physical_block_count &&
          left.key_value_head_count == right.key_value_head_count &&
-         left.head_size == right.head_size;
+         left.head_size == right.head_size &&
+         left.query_head_count == right.query_head_count &&
+         left.output_row_count == right.output_row_count &&
+         left.attention_scale == right.attention_scale &&
+         left.grouped_attention == right.grouped_attention;
 }
 
 bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
@@ -2251,12 +2613,29 @@ bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
     bool leases_held) noexcept {
   uint64_t source_element_count = 0;
   uint64_t pool_element_count = 0;
+  uint64_t output_element_count = 0;
+  const bool is_attention = state.grouped_attention;
+  const bool shape_is_valid =
+      is_attention
+          ? grouped_ragged_paged_attention_bf16_shape_is_valid(
+                state.sequence_count, state.block_count,
+                state.active_row_count, state.physical_block_count,
+                state.query_head_count, state.key_value_head_count,
+                state.output_row_count, state.attention_scale,
+                &source_element_count, &pool_element_count,
+                &output_element_count)
+          : ragged_paged_kv_cache_write_bf16_shape_is_valid(
+                state.sequence_count, state.block_count,
+                state.active_row_count, state.physical_block_count,
+                state.key_value_head_count, state.head_size,
+                &source_element_count, &pool_element_count);
   if (owner == nullptr || stream == nullptr || fill_buffer == nullptr ||
       state.key_pool != fill_buffer ||
-      !ragged_paged_kv_cache_write_bf16_shape_is_valid(
-          state.sequence_count, state.block_count, state.active_row_count,
-          state.physical_block_count, state.key_value_head_count,
-          state.head_size, &source_element_count, &pool_element_count) ||
+      (!is_attention &&
+       (state.query_head_count != 0 || state.output_row_count != 0 ||
+        state.attention_scale != 0.0F)) ||
+      (is_attention && state.head_size != kGraphRaggedAttentionHeadSize) ||
+      !shape_is_valid ||
       !ragged_paged_kv_cache_write_bf16_state_has_expected_leases(
           state, leases_held)) {
     return false;
@@ -2288,9 +2667,15 @@ bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
   if (stream->active_uses.load(std::memory_order_acquire) != 1 ||
       source_element_count >
           state.key_source->byte_len / sizeof(__nv_bfloat16) ||
-      source_element_count >
-          state.value_source->byte_len / sizeof(__nv_bfloat16) ||
-      pool_element_count > state.key_pool->byte_len / sizeof(__nv_bfloat16) ||
+      (is_attention
+           ? (pool_element_count >
+                  state.value_source->byte_len / sizeof(__nv_bfloat16) ||
+              output_element_count >
+                  state.key_pool->byte_len / sizeof(__nv_bfloat16))
+           : (source_element_count >
+                  state.value_source->byte_len / sizeof(__nv_bfloat16) ||
+              pool_element_count >
+                  state.key_pool->byte_len / sizeof(__nv_bfloat16))) ||
       pool_element_count >
           state.value_pool->byte_len / sizeof(__nv_bfloat16) ||
       state.sequence_count + 1 >
@@ -2305,11 +2690,30 @@ bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
   return true;
 }
 
+bool is_ragged_paged_fixed_address_operation(
+    RileyCudaGraphCaptureOperation operation) noexcept {
+  return operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 ||
+         operation == RileyCudaGraphCaptureOperation::
+                          kGroupedRaggedPagedAttentionBf16;
+}
+
+bool ragged_paged_state_operation_matches(
+    RileyCudaGraphCaptureOperation operation,
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state) noexcept {
+  return (operation ==
+              RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+          !state.grouped_attention) ||
+         (operation == RileyCudaGraphCaptureOperation::
+                           kGroupedRaggedPagedAttentionBf16 &&
+          state.grouped_attention);
+}
+
 bool ragged_paged_kv_cache_write_bf16_capture_state_is_valid(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr &&
-         capture->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         ragged_paged_state_operation_matches(
+             capture->operation, capture->ragged_paged_kv_write_bf16) &&
          capture->fill_lease_held && capture->fill_element_count == 0 &&
          capture->fill_enqueue_count == 0 &&
          capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
@@ -2337,8 +2741,8 @@ bool ragged_paged_kv_cache_write_bf16_capture_state_is_valid(
 bool ragged_paged_kv_cache_write_bf16_graph_state_is_valid(
     const RileyCudaGraph* graph) noexcept {
   return graph != nullptr &&
-         graph->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         ragged_paged_state_operation_matches(
+             graph->operation, graph->ragged_paged_kv_write_bf16) &&
          graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
          graph->silu_input == nullptr && graph->silu_element_count == 0 &&
          graph->gated_multiply_activated_gate == nullptr &&
@@ -2362,8 +2766,8 @@ bool ragged_paged_kv_cache_write_bf16_graph_state_is_valid(
 bool ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(
     const RileyCudaGraph* graph) noexcept {
   return graph != nullptr &&
-         graph->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         ragged_paged_state_operation_matches(
+             graph->operation, graph->ragged_paged_kv_write_bf16) &&
          graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
          graph->silu_input == nullptr && graph->silu_element_count == 0 &&
          graph->gated_multiply_activated_gate == nullptr &&
@@ -2384,8 +2788,8 @@ bool ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(
 bool ragged_paged_kv_cache_write_bf16_exec_state_is_valid(
     const RileyCudaGraphExec* exec) noexcept {
   return exec != nullptr &&
-         exec->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         ragged_paged_state_operation_matches(
+             exec->operation, exec->ragged_paged_kv_write_bf16) &&
          exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
          !exec->h2d_input_staged && exec->silu_input == nullptr &&
          exec->silu_element_count == 0 &&
@@ -3054,8 +3458,7 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
-  if (capture->operation !=
-          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+  if (!is_ragged_paged_fixed_address_operation(capture->operation) &&
       (!ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
        !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph))) {
     return false;
@@ -3216,8 +3619,7 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
-  } else if (capture->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+  } else if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     if (!ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
         !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(graph) ||
         !ragged_paged_kv_cache_write_bf16_state_geometry_matches(
@@ -3304,8 +3706,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
-  if (capture->operation !=
-          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+  if (!is_ragged_paged_fixed_address_operation(capture->operation) &&
       (!ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
        !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph))) {
     return false;
@@ -3531,8 +3932,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
-  } else if (capture->operation ==
-             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+  } else if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     if (capture->ragged_paged_kv_write_bf16.enqueue_count != 1 ||
         !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
         !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(graph) ||
@@ -3549,8 +3949,7 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
     return false;
   }
   graph->owns_capture_leases = true;
-  if (capture->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+  if (is_ragged_paged_fixed_address_operation(capture->operation)) {
     graph->ragged_paged_kv_write_bf16 =
         capture->ragged_paged_kv_write_bf16;
     capture->ragged_paged_kv_write_bf16 =
@@ -7760,6 +8159,387 @@ RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
   return status;
 }
 
+// C05-19 captures the eager grouped D64 paged-attention dispatch without
+// retaining the Rust-side PackedBatch host witness. The immutable native
+// ledger intentionally uses C05-18's nine-buffer ownership slots: query is
+// key_source, K pool is value_source, output is the legacy key_pool/fill slot,
+// and V pool remains value_pool. That keeps one permanent lease per fixed
+// graph address through capture, graph, and exec ownership.
+RileyCudaStatus capture_begin_grouped_ragged_paged_attention_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool, RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids, RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions, uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t output_row_count, float scale,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation, "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || stream->owner == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "stream or its owner is null");
+  }
+  RileyCudaDeviceBuffer* const buffers[] = {
+      query, key_pool, value_pool, output, sequence_block_offsets, block_ids,
+      valid_tokens, row_sequence_slots, row_positions,
+  };
+  constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index] == nullptr || buffers[index]->owner == nullptr) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "one of the nine fixed grouped ragged-attention allocations or its owner is null");
+    }
+    if (!same_context(stream->owner, buffers[index]->owner)) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "capture stream and grouped ragged-attention allocations must share one context owner");
+    }
+    for (size_t other = index + 1; other < kBufferCount; ++other) {
+      if (buffers[index] == buffers[other]) {
+        return validation_error(
+            error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+            kBeginGroupedRaggedPagedAttentionBf16Operation,
+            "graph grouped ragged attention requires nine distinct device allocations");
+      }
+    }
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "only thread-local capture mode is admitted");
+  }
+  uint64_t query_element_count = 0;
+  uint64_t pool_element_count = 0;
+  uint64_t output_element_count = 0;
+  if (!grouped_ragged_paged_attention_bf16_shape_is_valid(
+          sequence_count, block_count, active_row_count, physical_block_count,
+          query_head_count, key_value_head_count, output_row_count, scale,
+          &query_element_count, &pool_element_count, &output_element_count) ||
+      query_element_count > query->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count > key_pool->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count > value_pool->byte_len / sizeof(__nv_bfloat16) ||
+      output_element_count > output->byte_len / sizeof(__nv_bfloat16) ||
+      sequence_count + 1 >
+          sequence_block_offsets->byte_len / sizeof(uint32_t) ||
+      block_count > block_ids->byte_len / sizeof(uint32_t) ||
+      block_count > valid_tokens->byte_len / sizeof(uint16_t) ||
+      active_row_count > row_sequence_slots->byte_len / sizeof(uint32_t) ||
+      active_row_count > row_positions->byte_len / sizeof(uint32_t)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "grouped ragged-attention geometry is zero, invalid, overflows, or exceeds fixed capacity");
+  }
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index]->device_data == nullptr) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "a graph grouped ragged-attention allocation has no live device storage");
+    }
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "a stream command batch blocks fixed-address grouped ragged-attention graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginGroupedRaggedPagedAttentionBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  bool resource_leases_held[kBufferCount] = {};
+  bool stream_lease_held = false;
+  const auto release_initial_leases = [&]() noexcept {
+    bool released = true;
+    if (stream_lease_held) {
+      released = release_exclusive_use(stream->active_uses) && released;
+      stream_lease_held = false;
+    }
+    for (size_t index = kBufferCount; index != 0; --index) {
+      const size_t resource_index = index - 1;
+      if (resource_leases_held[resource_index]) {
+        released = release_exclusive_use(
+                       buffers[resource_index]->active_uses) &&
+                   released;
+        resource_leases_held[resource_index] = false;
+      }
+    }
+    return released;
+  };
+  const auto reject_busy = [&](const char* message) noexcept {
+    if (!release_initial_leases()) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "failed to release rejected grouped ragged-attention graph resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginGroupedRaggedPagedAttentionBf16Operation,
+                            message);
+  };
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
+      return reject_busy(
+          "a fixed grouped ragged-attention graph allocation has an active asynchronous use");
+    }
+    resource_leases_held[index] = true;
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return reject_busy("stream has an active asynchronous use or capture");
+  }
+  stream_lease_held = true;
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginGroupedRaggedPagedAttentionBf16Operation,
+                            "failed to release exhausted graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginGroupedRaggedPagedAttentionBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginGroupedRaggedPagedAttentionBf16Operation,
+                            "failed to release rejected graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginGroupedRaggedPagedAttentionBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "failed to release graph capture allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "host allocation failed for grouped ragged-attention graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation =
+      RileyCudaGraphCaptureOperation::kGroupedRaggedPagedAttentionBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "failed to release captured graph allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "host allocation failed for captured grouped ragged-attention graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, output, capture_id,
+      RileyCudaGraphCaptureOperation::kGroupedRaggedPagedAttentionBf16);
+  RileyCudaGraph* const graph = capture->prepared_graph;
+  RileyCudaRaggedPagedKvCacheWriteBf16State graph_state{};
+  graph_state.key_source = query;
+  graph_state.value_source = key_pool;
+  graph_state.key_pool = output;
+  graph_state.value_pool = value_pool;
+  graph_state.sequence_block_offsets = sequence_block_offsets;
+  graph_state.block_ids = block_ids;
+  graph_state.valid_tokens = valid_tokens;
+  graph_state.row_sequence_slots = row_sequence_slots;
+  graph_state.row_positions = row_positions;
+  graph_state.sequence_count = sequence_count;
+  graph_state.block_count = block_count;
+  graph_state.active_row_count = active_row_count;
+  graph_state.physical_block_count = physical_block_count;
+  graph_state.key_value_head_count = key_value_head_count;
+  graph_state.head_size = kGraphRaggedAttentionHeadSize;
+  graph_state.query_head_count = query_head_count;
+  graph_state.output_row_count = output_row_count;
+  graph_state.attention_scale = scale;
+  graph_state.grouped_attention = true;
+  graph->ragged_paged_kv_write_bf16 = graph_state;
+  capture->fill_buffer = output;
+  capture->fill_lease_held = true;
+  capture->ragged_paged_kv_write_bf16 = graph_state;
+  capture->ragged_paged_kv_write_bf16.key_source_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.value_source_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.value_pool_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.sequence_block_offsets_lease_held =
+      true;
+  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = true;
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    resource_leases_held[index] = false;
+  }
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "failed to release a blocked grouped ragged-attention graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation,
+          "failed to release a rejected grouped ragged-attention graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+      kBeginGroupedRaggedPagedAttentionBf16Operation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(
+          begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+          kBeginGroupedRaggedPagedAttentionBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginGroupedRaggedPagedAttentionBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+        kBeginGroupedRaggedPagedAttentionBf16Operation,
+        "failed to release an unstarted grouped ragged-attention graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -7794,6 +8574,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -8146,8 +8927,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_ragged_paged_kv_write_bf16 =
-          owner->operation ==
-          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+          is_ragged_paged_fixed_address_operation(owner->operation);
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
@@ -8379,6 +9159,29 @@ riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
       row_positions, sequence_count, block_count, active_row_count,
       physical_block_count, key_value_head_count, head_size, mode, out_capture,
       out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool, RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids, RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions, uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t query_head_count,
+    uint64_t key_value_head_count, uint64_t output_row_count, float scale,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_grouped_ragged_paged_attention_bf16_impl(
+      stream, query, key_pool, value_pool, output, sequence_block_offsets,
+      block_ids, valid_tokens, row_sequence_slots, row_positions,
+      sequence_count, block_count, active_row_count, physical_block_count,
+      query_head_count, key_value_head_count, output_row_count, scale, mode,
+      out_capture, out_graph_error, error);
 }
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_fill_f32(
@@ -9634,6 +10437,163 @@ riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueGroupedRaggedPagedAttentionBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueGroupedRaggedPagedAttentionBf16Operation,
+        "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->operation != RileyCudaGraphCaptureOperation::
+                              kGroupedRaggedPagedAttentionBf16 ||
+      owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(owner) ||
+      !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(
+          owner->prepared_graph) ||
+      !ragged_paged_kv_cache_write_bf16_state_geometry_matches(
+          owner->ragged_paged_kv_write_bf16,
+          owner->prepared_graph->ragged_paged_kv_write_bf16) ||
+      owner->ragged_paged_kv_write_bf16.enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueGroupedRaggedPagedAttentionBf16Operation,
+        "capture owner is not a live unqueued grouped ragged-attention graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueGroupedRaggedPagedAttentionBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  const RileyCudaRaggedPagedKvCacheWriteBf16State& state =
+      owner->ragged_paged_kv_write_bf16;
+  uint64_t query_element_count = 0;
+  uint64_t pool_element_count = 0;
+  uint64_t output_element_count = 0;
+  if (!state.grouped_attention ||
+      !grouped_ragged_paged_attention_bf16_shape_is_valid(
+          state.sequence_count, state.block_count, state.active_row_count,
+          state.physical_block_count, state.query_head_count,
+          state.key_value_head_count, state.output_row_count,
+          state.attention_scale, &query_element_count, &pool_element_count,
+          &output_element_count)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueGroupedRaggedPagedAttentionBf16Operation,
+        "grouped ragged-attention capture owner has invalid immutable geometry");
+  }
+  (void)query_element_count;
+  (void)pool_element_count;
+  (void)output_element_count;
+  const GraphRaggedPagedKvDeviceBatch batch{
+      static_cast<const uint32_t*>(state.sequence_block_offsets->device_data),
+      static_cast<const uint32_t*>(state.block_ids->device_data),
+      static_cast<const uint16_t*>(state.valid_tokens->device_data),
+      static_cast<const uint32_t*>(state.row_sequence_slots->device_data),
+      static_cast<const uint32_t*>(state.row_positions->device_data),
+      state.sequence_count,
+      state.block_count,
+      state.active_row_count,
+      state.physical_block_count,
+  };
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      kEnqueueGroupedRaggedPagedAttentionBf16Operation, owner);
+  bool node_submission_started = false;
+  bool node_accepted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    node_submission_started = true;
+    const uint64_t query_head_group_size =
+        state.query_head_count / state.key_value_head_count;
+    if (query_head_group_size > 1 &&
+        query_head_group_size <= kGraphRaggedAttentionMaximumWarpsPerBlock) {
+      const dim3 grid(static_cast<uint32_t>(state.output_row_count),
+                      static_cast<uint32_t>(state.key_value_head_count), 1);
+      graph_grouped_ragged_paged_attention_gqa_shared_kv_bf16<<<
+          grid,
+          static_cast<uint32_t>(query_head_group_size *
+                                kGraphRaggedAttentionWarpSize),
+          0, owner->stream->stream>>>(
+          static_cast<const __nv_bfloat16*>(state.key_source->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_source->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_pool->device_data),
+          static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data), batch,
+          state.query_head_count, state.key_value_head_count,
+          state.attention_scale);
+    } else {
+      const uint32_t query_head_warps = static_cast<uint32_t>(
+          state.query_head_count < kGraphRaggedAttentionMaximumWarpsPerBlock
+              ? state.query_head_count
+              : kGraphRaggedAttentionMaximumWarpsPerBlock);
+      const uint32_t query_head_tiles = static_cast<uint32_t>(
+          (state.query_head_count + query_head_warps - 1) /
+          query_head_warps);
+      const dim3 grid(static_cast<uint32_t>(state.output_row_count),
+                      query_head_tiles, 1);
+      graph_grouped_ragged_paged_attention_bf16<<<
+          grid, query_head_warps * kGraphRaggedAttentionWarpSize, 0,
+          owner->stream->stream>>>(
+          static_cast<const __nv_bfloat16*>(state.key_source->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_source->device_data),
+          static_cast<const __nv_bfloat16*>(state.value_pool->device_data),
+          static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data), batch,
+          state.query_head_count, state.key_value_head_count,
+          state.attention_scale);
+    }
+    status = runtime_error(cudaGetLastError(), error,
+                           RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueGroupedRaggedPagedAttentionBf16Operation);
+    node_accepted = status == RILEY_CUDA_STATUS_SUCCESS;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueGroupedRaggedPagedAttentionBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  if (node_submission_started &&
+      (!node_accepted || status != RILEY_CUDA_STATUS_SUCCESS ||
+       !restoration_known)) {
+    owner->ragged_paged_kv_write_bf16.enqueue_count =
+        kGroupedRaggedPagedAttentionBf16EnqueueTerminal;
+  } else if (node_accepted && status == RILEY_CUDA_STATUS_SUCCESS &&
+             restoration_known) {
+    owner->ragged_paged_kv_write_bf16.enqueue_count = 1;
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -9698,8 +10658,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+      is_ragged_paged_fixed_address_operation(owner->operation);
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
@@ -10017,8 +10976,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
       const bool is_ragged_paged_kv_write_bf16 =
-          owner->operation ==
-          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+          is_ragged_paged_fixed_address_operation(owner->operation);
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
@@ -10143,8 +11101,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+      is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -10585,8 +11542,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
   const bool is_indexed_rope_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
-      exec->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+      is_ragged_paged_fixed_address_operation(exec->operation);
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -11051,8 +12007,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+      is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -11401,8 +12356,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
   const bool is_ragged_paged_kv_write_bf16 =
-      owner->operation ==
-      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+      is_ragged_paged_fixed_address_operation(owner->operation);
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,

@@ -173,6 +173,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kBf16RowGatherArgmaxD2H = 10,
   kIndexedRopeBf16 = 11,
   kRaggedPagedKvCacheWriteBf16 = 12,
+  kGroupedRaggedPagedAttentionBf16 = 13,
 };
 
 // C05-18's raw device metadata has no host-side lifetime. The primary key
@@ -195,6 +196,10 @@ struct RileyCudaRaggedPagedKvCacheWriteBf16State {
         physical_block_count(0),
         key_value_head_count(0),
         head_size(0),
+        query_head_count(0),
+        output_row_count(0),
+        attention_scale(0.0F),
+        grouped_attention(false),
         enqueue_count(0),
         key_source_lease_held(false),
         value_source_lease_held(false),
@@ -220,6 +225,14 @@ struct RileyCudaRaggedPagedKvCacheWriteBf16State {
   uint64_t physical_block_count;
   uint64_t key_value_head_count;
   uint64_t head_size;
+  // C05-19 deliberately reuses the nine-allocation C05-18 ownership ledger:
+  // key_source=query, value_source=key_pool, key_pool=output (the legacy
+  // fill-buffer lease), and value_pool=value_pool. These fields disambiguate
+  // the grouped D64 attention geometry without adding a second lifecycle.
+  uint64_t query_head_count;
+  uint64_t output_row_count;
+  float attention_scale;
+  bool grouped_attention;
   uint32_t enqueue_count;
   bool key_source_lease_held;
   bool value_source_lease_held;

@@ -209,6 +209,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)11)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16 \
   ((RileyCudaGraphCaptureOperationKind)12)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)13)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1557,6 +1559,48 @@ riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
 // abort-only.
 RileyCudaStatus
 riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-19 capture containing exactly one fixed-address grouped BF16
+// ragged paged-attention node. Query is `[T,QH,64]`, K/V pools are
+// `[P,KVH,16,64]`, and output is `[M,QH,64]` with `M >= T`; output tail rows
+// are zeroed exactly as eager grouped attention. The five metadata allocations
+// are the raw U32/U16 PackedBatchV1 arrays. All nine allocations must be
+// pairwise distinct in the stream context; no host metadata is retained or
+// staged. Bounds-invalid raw metadata keeps eager attention's NaN-row
+// semantics rather than being silently skipped.
+RileyCudaStatus
+riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* query,
+    RileyCudaDeviceBuffer* key_pool,
+    RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* output,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids,
+    RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions,
+    uint64_t sequence_count,
+    uint64_t block_count,
+    uint64_t active_row_count,
+    uint64_t physical_block_count,
+    uint64_t query_head_count,
+    uint64_t key_value_head_count,
+    uint64_t output_row_count,
+    float scale,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the one fixed-address grouped D64 ragged paged-attention node for
+// a capture created by riley_cuda_graph_capture_begin_grouped_ragged_paged_attention_bf16.
+// The graph preserves eager grouped dispatch: shared-KV CTA when eligible and
+// the generic grouped-head fallback otherwise. A failed node launch is
+// terminal and abort-only.
+RileyCudaStatus
+riley_cuda_graph_capture_enqueue_grouped_ragged_paged_attention_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
