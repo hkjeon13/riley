@@ -128,6 +128,10 @@ typedef struct RileyCudaAllocationStats {
 #define RILEY_CUDA_TEST_MEMORY_FAULT_PINNED_CLOSE_AMBIGUOUS 4u
 #define RILEY_CUDA_TEST_MEMORY_FAULT_COPY_DEFERRED_SUBMISSION_ERROR 5u
 #define RILEY_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS 6u
+// C05-22 only: after the capture has accepted its canonical RMSNorm node,
+// force the dependent cuBLASLt GEMM submission to report NotSupported. This
+// exercises terminal capture cleanup without changing ordinary archives.
+#define RILEY_CUDA_TEST_MEMORY_FAULT_C05_22_GEMM_SUBMISSION_NOT_SUPPORTED 7u
 
 typedef struct RileyCudaTestMemoryFaultStats {
   uint32_t struct_size;
@@ -215,6 +219,10 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)14)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16 \
   ((RileyCudaGraphCaptureOperationKind)15)
+// C05-22 captures the intentionally narrow two canonical BF16 logical
+// operations: generic RMSNorm followed by a cold-prepared cuBLASLt GEMM.
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_GEMM_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)16)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1539,6 +1547,41 @@ RileyCudaStatus riley_cuda_graph_capture_begin_canonical_gemm_bf16(
 // riley_cuda_graph_capture_begin_canonical_gemm_bf16. A failed submission is
 // terminal and abort-only; ordinary graph end and close APIs perform recovery.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-22 graph with exactly two fixed-address logical operations in
+// this order: generic canonical BF16 RMSNorm then cold-prepared canonical
+// BF16 cuBLASLt GEMM. `rms_norm_output` is the one intentional data dependency: it is the
+// GEMM's exact input allocation. All other allocations must be distinct,
+// whole allocations in the stream/plan context. RMSNorm is the generic BF16
+// reduction with positive finite epsilon; GEMM is row-major BF16
+// Y[M,N] = X[M,K] * W[N,K]^T, F32 accumulate, deterministic no-split,
+// alpha=1/beta=0, no epilogue. `row_count` and `hidden_size` must exactly
+// match the GEMM M and K dimensions. RMSNorm input/weight/intermediate and
+// the prepared GEMM input/weight/output/workspace byte contracts are exact;
+// a zero-workspace plan still requires a distinct zero-byte workspace handle.
+// No spans, offsets, dynamic addresses, command batches, node updates,
+// profile-specific RMSNorm, fusion, executor wiring, or C07 evidence is
+// admitted. Every resource remains leased through capture, graph, and exec
+// close.
+RileyCudaStatus riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16(
+    RileyCudaStream* stream, RileyCudaGemmPlan* gemm_plan,
+    RileyCudaDeviceBuffer* rms_norm_input,
+    RileyCudaDeviceBuffer* rms_norm_weight,
+    RileyCudaDeviceBuffer* rms_norm_output,
+    RileyCudaDeviceBuffer* gemm_weight,
+    RileyCudaDeviceBuffer* gemm_output,
+    RileyCudaDeviceBuffer* gemm_workspace,
+    uint64_t row_count, uint64_t hidden_size, float epsilon,
+    RileyCudaGraphCaptureMode mode, RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues both immutable nodes for a capture created by
+// riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16. It is exactly
+// once; either node submission failure makes the capture terminal and
+// abort-only.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

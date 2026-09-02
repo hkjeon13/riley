@@ -41,6 +41,9 @@ pub enum CudaMemoryFault {
     PinnedCloseAmbiguous = 4,
     CopyDeferredSubmissionError = 5,
     CopyCompletionRestoreAmbiguous = 6,
+    /// C05-22 only: fail the dependent cuBLASLt capture submission after its
+    /// RMSNorm node was accepted. The capture remains abort-only.
+    C05_22GemmSubmissionNotSupported = 7,
 }
 
 #[cfg(feature = "cuda-test-fault-injection")]
@@ -53,6 +56,7 @@ impl CudaMemoryFault {
             4 => Some(Self::PinnedCloseAmbiguous),
             5 => Some(Self::CopyDeferredSubmissionError),
             6 => Some(Self::CopyCompletionRestoreAmbiguous),
+            7 => Some(Self::C05_22GemmSubmissionNotSupported),
             _ => None,
         }
     }

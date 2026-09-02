@@ -3,22 +3,26 @@
 use riley_cuda::{
     CapturedGraph, CudaDeviceBuffer, CudaErrorDomain, CudaErrorKind, CudaErrorStage,
     CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
-    CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer, CudaResult,
-    CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
-    OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16RowGatherArgmaxGraph,
+    CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer,
+    CudaPreparedGemm, CudaResult, CudaStream, GraphCapture, GraphExec, GraphFillCapture,
+    GraphLaunch, OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16RowGatherArgmaxGraph,
     OwnedCapturedBf16RowGatherGraph, OwnedCapturedCanonicalRmsNormBf16Graph,
-    OwnedCapturedGatedMultiplyBf16Graph, OwnedCapturedGraph, OwnedCapturedH2DGraph,
-    OwnedCapturedResidualAddBf16Graph, OwnedCapturedSiluBf16Graph, OwnedGraphBf16ArgmaxCapture,
-    OwnedGraphBf16ArgmaxCaptureBeginError, OwnedGraphBf16ArgmaxExec, OwnedGraphBf16ArgmaxLaunch,
-    OwnedGraphBf16ArgmaxResources, OwnedGraphBf16RowGatherArgmaxCapture,
-    OwnedGraphBf16RowGatherArgmaxCaptureBeginError, OwnedGraphBf16RowGatherArgmaxExec,
-    OwnedGraphBf16RowGatherArgmaxLaunch, OwnedGraphBf16RowGatherArgmaxResources,
-    OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError,
-    OwnedGraphBf16RowGatherExec, OwnedGraphBf16RowGatherLaunch, OwnedGraphBf16RowGatherResources,
+    OwnedCapturedCanonicalRmsNormGemmBf16Graph, OwnedCapturedGatedMultiplyBf16Graph,
+    OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedCapturedResidualAddBf16Graph,
+    OwnedCapturedSiluBf16Graph, OwnedGraphBf16ArgmaxCapture, OwnedGraphBf16ArgmaxCaptureBeginError,
+    OwnedGraphBf16ArgmaxExec, OwnedGraphBf16ArgmaxLaunch, OwnedGraphBf16ArgmaxResources,
+    OwnedGraphBf16RowGatherArgmaxCapture, OwnedGraphBf16RowGatherArgmaxCaptureBeginError,
+    OwnedGraphBf16RowGatherArgmaxExec, OwnedGraphBf16RowGatherArgmaxLaunch,
+    OwnedGraphBf16RowGatherArgmaxResources, OwnedGraphBf16RowGatherCapture,
+    OwnedGraphBf16RowGatherCaptureBeginError, OwnedGraphBf16RowGatherExec,
+    OwnedGraphBf16RowGatherLaunch, OwnedGraphBf16RowGatherResources,
     OwnedGraphCanonicalRmsNormBf16Capture, OwnedGraphCanonicalRmsNormBf16CaptureBeginError,
     OwnedGraphCanonicalRmsNormBf16Exec, OwnedGraphCanonicalRmsNormBf16Launch,
-    OwnedGraphCanonicalRmsNormBf16Resources, OwnedGraphExec, OwnedGraphFillCapture,
-    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphGatedMultiplyBf16Capture,
+    OwnedGraphCanonicalRmsNormBf16Resources, OwnedGraphCanonicalRmsNormGemmBf16Capture,
+    OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError, OwnedGraphCanonicalRmsNormGemmBf16Exec,
+    OwnedGraphCanonicalRmsNormGemmBf16Launch, OwnedGraphCanonicalRmsNormGemmBf16Resources,
+    OwnedGraphExec, OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError,
+    OwnedGraphFillResources, OwnedGraphGatedMultiplyBf16Capture,
     OwnedGraphGatedMultiplyBf16CaptureBeginError, OwnedGraphGatedMultiplyBf16Exec,
     OwnedGraphGatedMultiplyBf16Launch, OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture,
     OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
@@ -252,6 +256,10 @@ fn graph_public_values_fix_the_cpu_only_contract() {
     assert_eq!(CudaGraphCaptureOperation::Bf16Argmax as u32, 7);
     assert_eq!(CudaGraphCaptureOperation::Bf16RowGather as u32, 8);
     assert_eq!(CudaGraphCaptureOperation::Bf16RowGatherArgmax as u32, 9);
+    assert_eq!(
+        CudaGraphCaptureOperation::CanonicalRmsNormGemmBf16 as u32,
+        16
+    );
     assert_eq!(CudaGraphCaptureCapability::Unknown as u32, 0);
     assert_eq!(CudaGraphCaptureCapability::Unsupported as u32, 1);
     assert_eq!(CudaGraphCaptureCapability::Supported as u32, 2);
@@ -276,6 +284,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         CudaGraphCaptureOperation::Bf16Argmax,
         CudaGraphCaptureOperation::Bf16RowGather,
         CudaGraphCaptureOperation::Bf16RowGatherArgmax,
+        CudaGraphCaptureOperation::CanonicalRmsNormGemmBf16,
     ] {
         assert_eq!(
             operation.capture_capability().unwrap_err().kind(),
@@ -588,6 +597,65 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn begin_owned_canonical_rms_norm_gemm_bf16(
+        stream: CudaStream,
+        plan: CudaPreparedGemm,
+        rms_norm_input: CudaDeviceBuffer,
+        rms_norm_weight: CudaDeviceBuffer,
+        rms_norm_output: CudaDeviceBuffer,
+        gemm_weight: CudaDeviceBuffer,
+        gemm_output: CudaDeviceBuffer,
+        gemm_workspace: CudaDeviceBuffer,
+    ) -> Result<
+        OwnedGraphCanonicalRmsNormGemmBf16Capture,
+        OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError,
+    > {
+        stream.begin_owned_graph_canonical_rms_norm_gemm_bf16_capture(
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+            1,
+            576,
+            1.0e-5,
+            CudaGraphCaptureMode::ThreadLocal,
+        )
+    }
+
+    fn end_owned_canonical_rms_norm_gemm_bf16(
+        capture: OwnedGraphCanonicalRmsNormGemmBf16Capture,
+    ) -> CudaResult<OwnedCapturedCanonicalRmsNormGemmBf16Graph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_canonical_rms_norm_gemm_bf16(
+        graph: OwnedCapturedCanonicalRmsNormGemmBf16Graph,
+    ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Exec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_canonical_rms_norm_gemm_bf16(
+        exec: &mut OwnedGraphCanonicalRmsNormGemmBf16Exec,
+    ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'_>> {
+        exec.launch()
+    }
+
+    fn finish_owned_canonical_rms_norm_gemm_bf16(
+        launch: OwnedGraphCanonicalRmsNormGemmBf16Launch<'_>,
+    ) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_canonical_rms_norm_gemm_bf16(
+        exec: OwnedGraphCanonicalRmsNormGemmBf16Exec,
+    ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+        exec.close()
+    }
+
     fn begin_owned_bf16_argmax(
         stream: CudaStream,
         logits: CudaDeviceBuffer,
@@ -774,6 +842,12 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_owned_canonical_rms_norm_bf16,
         finish_owned_canonical_rms_norm_bf16,
         close_owned_canonical_rms_norm_bf16,
+        begin_owned_canonical_rms_norm_gemm_bf16,
+        end_owned_canonical_rms_norm_gemm_bf16,
+        instantiate_owned_canonical_rms_norm_gemm_bf16,
+        launch_owned_canonical_rms_norm_gemm_bf16,
+        finish_owned_canonical_rms_norm_gemm_bf16,
+        close_owned_canonical_rms_norm_gemm_bf16,
         begin_owned_bf16_argmax,
         end_owned_bf16_argmax,
         instantiate_owned_bf16_argmax,
@@ -804,6 +878,10 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_residual_add_bf16_capture\""));
     assert!(
         graph_source.contains("\"CudaStream::begin_owned_graph_canonical_rms_norm_bf16_capture\"")
+    );
+    assert!(
+        graph_source
+            .contains("\"CudaStream::begin_owned_graph_canonical_rms_norm_gemm_bf16_capture\"")
     );
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_bf16_argmax_capture\""));
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_bf16_row_gather_capture\""));
@@ -4002,6 +4080,250 @@ fn owned_canonical_gemm_graph_has_by_value_plan_and_four_buffer_lifecycle() {
         assert!(
             source.contains("PhantomData<Rc<()>>"),
             "{owner} must remain !Send + !Sync"
+        );
+    }
+}
+
+#[test]
+fn owned_canonical_rms_norm_gemm_graph_has_one_intermediate_and_six_buffer_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let gemm = include_str!("../src/gemm.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_GEMM_BF16",
+        "riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16",
+        "riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16",
+        "RileyCudaGemmPlan* gemm_plan",
+        "RileyCudaDeviceBuffer* rms_norm_input",
+        "RileyCudaDeviceBuffer* rms_norm_weight",
+        "RileyCudaDeviceBuffer* rms_norm_output",
+        "RileyCudaDeviceBuffer* gemm_weight",
+        "RileyCudaDeviceBuffer* gemm_output",
+        "RileyCudaDeviceBuffer* gemm_workspace",
+    ] {
+        assert!(header.contains(required), "missing C05-22 ABI: {required}");
+    }
+    for required in [
+        "kCanonicalRmsNormGemmBf16 = 16",
+        "struct RileyCudaCanonicalRmsNormGemmBf16GraphState",
+        "rms_norm_input_lease_held",
+        "rms_norm_weight_lease_held",
+        "RileyCudaCanonicalGemmBf16GraphState gemm",
+        "canonical_gemm_bf16_graph_state_matches_input_shape",
+    ] {
+        assert!(
+            internal.contains(required),
+            "missing C05-22 native composite state contract: {required}"
+        );
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16",
+        "riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16",
+        "begin_graph_canonical_rms_norm_gemm_bf16_capture",
+        "enqueue_canonical_rms_norm_gemm_bf16",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-22 Rust FFI: {required}"
+        );
+    }
+    assert!(abi_layout.contains("graph_capture_begin_canonical_rms_norm_gemm_bf16_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_canonical_rms_norm_gemm_bf16_symbol"));
+    assert!(
+        abi_link.contains("CudaGraphCaptureOperation::CanonicalRmsNormGemmBf16"),
+        "C05-22 capability must remain ABI-linked without device initialization"
+    );
+    assert!(graph.contains("CanonicalRmsNormGemmBf16 = 16"));
+
+    for required in [
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Resources",
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError",
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Capture",
+        "pub struct OwnedCapturedCanonicalRmsNormGemmBf16Graph",
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Exec",
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec>",
+        "pub fn begin_owned_graph_canonical_rms_norm_gemm_bf16_capture",
+        "pub fn enqueue_canonical_rms_norm_gemm_bf16(&mut self)",
+        "pub fn finish(mut self) -> CudaResult<()>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-22 safe owner contract is missing: {required}"
+        );
+    }
+    for required in [
+        "fn validate_graph_canonical_rms_norm_gemm_bf16_capture_preflight",
+        "fn begin_canonical_rms_norm_gemm_graph_capture_native",
+        "row_count != config.m() || hidden_size != config.k()",
+        "must be distinct fixed device allocations",
+        "rms_norm_output wrapper is admitted as GEMM input",
+        "same_allocation",
+        "CudaGemmReductionPolicy::StrictNoSplitV1",
+        "canonical_gemm_bf16_graph_state_matches_input_shape",
+    ] {
+        assert!(
+            graph.contains(required) || gemm.contains(required) || internal.contains(required),
+            "C05-22 Rust/GEMM preflight contract is missing: {required}"
+        );
+    }
+
+    let resources = graph
+        .split("impl OwnedGraphCanonicalRmsNormGemmBf16Resources")
+        .nth(1)
+        .expect("C05-22 resource bundle must remain present")
+        .split("/// Error from beginning one by-value C05-22")
+        .next()
+        .expect("C05-22 resource bundle must end before its begin error");
+    for required in [
+        "plan",
+        "rms_norm_input",
+        "rms_norm_weight",
+        "rms_norm_output",
+        "gemm_weight",
+        "gemm_output",
+        "gemm_workspace",
+    ] {
+        assert!(
+            resources.contains(required),
+            "C05-22 fixed resource bundle is missing: {required}"
+        );
+    }
+    for (earlier, later) in [
+        ("plan.close()?", "gemm_workspace.close()?"),
+        ("gemm_workspace.close()?", "gemm_output.close()?"),
+        ("gemm_output.close()?", "gemm_weight.close()?"),
+        ("gemm_weight.close()?", "rms_norm_output.close()?"),
+        ("rms_norm_output.close()?", "rms_norm_weight.close()?"),
+        ("rms_norm_weight.close()?", "rms_norm_input.close()?"),
+        ("rms_norm_input.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-22 resource close order");
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_canonical_rms_norm_gemm_bf16_capture")
+        .nth(1)
+        .expect("C05-22 owned capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("C05-22 owned capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_canonical_rms_norm_gemm_bf16_capture_preflight",
+        "begin_canonical_rms_norm_gemm_graph_capture_native",
+        "C05-22 Rust preflight",
+    );
+    for forbidden in [
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "launch_with_input",
+        "node_update",
+    ] {
+        assert!(
+            !owned_begin.contains(forbidden),
+            "C05-22 public graph begin must not admit dynamic {forbidden}"
+        );
+    }
+
+    for owner in [
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Capture {",
+        "pub struct OwnedCapturedCanonicalRmsNormGemmBf16Graph {",
+        "pub struct OwnedGraphCanonicalRmsNormGemmBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before plan and fixed allocations"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_canonical_rms_norm_gemm_bf16_impl(")
+        .nth(1)
+        .expect("C05-22 native capture admission helper must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("C05-22 native capture helper must end before C exports");
+    for required in [
+        "RileyCudaDeviceBuffer* const buffers[]",
+        "if (buffers[index] == buffers[other])",
+        "canonical_gemm_bf16_graph_state_matches_input_shape",
+        "try_acquire_exclusive_use(buffers[index]->active_uses)",
+        "RileyCudaGraphCaptureOperation::kCanonicalRmsNormGemmBf16",
+    ] {
+        assert!(
+            begin.contains(required),
+            "C05-22 native capture admission is missing: {required}"
+        );
+    }
+    assert_precedes(
+        begin,
+        "try_acquire_exclusive_use(buffers[index]->active_uses)",
+        "cudaStreamBeginCapture(",
+        "C05-22 leases must precede CUDA capture entry",
+    );
+
+    let enqueue = native_export_body(
+        native,
+        "riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16",
+    );
+    assert_precedes(
+        enqueue,
+        "graph_canonical_rms_norm_bf16<<<",
+        "enqueue_canonical_gemm_bf16_graph_matmul",
+        "C05-22 must capture RMSNorm before its dependent GEMM",
+    );
+    for required in [
+        "node_chain_accepted",
+        "kCanonicalRmsNormGemmBf16EnqueueTerminal",
+        "state.gemm.input->device_data",
+    ] {
+        assert!(
+            enqueue.contains(required),
+            "C05-22 capture enqueue must retain its composite contract: {required}"
+        );
+    }
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "riley_cuda_rms_norm_execute",
+        "riley_cuda_gemm_plan_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-22 capture enqueue must remain allocation-free and capture-safe: {forbidden}"
+        );
+    }
+    for required in [
+        "release_capture_canonical_rms_norm_gemm_bf16_leases",
+        "release_graph_canonical_rms_norm_gemm_bf16_leases",
+        "canonical_rms_norm_gemm_bf16_capture_state_is_valid",
+        "canonical_rms_norm_gemm_bf16_graph_state_is_valid",
+        "canonical_rms_norm_gemm_bf16_exec_state_is_valid",
+    ] {
+        assert!(
+            native.contains(required),
+            "C05-22 lifecycle dispatch is missing: {required}"
         );
     }
 }

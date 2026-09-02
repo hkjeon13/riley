@@ -1265,6 +1265,27 @@ bool canonical_gemm_bf16_graph_state_is_valid(
   return true;
 }
 
+bool canonical_gemm_bf16_graph_state_matches_input_shape(
+    const RileyCudaCanonicalGemmBf16GraphState& state,
+    uint64_t row_count, uint64_t hidden_size) noexcept {
+  if (!canonical_gemm_bf16_state_metadata_is_valid(state.plan, state) ||
+      row_count == 0 || hidden_size == 0 ||
+      state.plan->config.m != row_count ||
+      state.plan->config.k != hidden_size) {
+    return false;
+  }
+  uint64_t element_count = 0;
+  if (row_count > std::numeric_limits<uint64_t>::max() / hidden_size) {
+    return false;
+  }
+  element_count = row_count * hidden_size;
+  if (element_count >
+      std::numeric_limits<uint64_t>::max() / sizeof(__nv_bfloat16)) {
+    return false;
+  }
+  return state.input_byte_len == element_count * sizeof(__nv_bfloat16);
+}
+
 RileyCudaStatus enqueue_canonical_gemm_bf16_graph_matmul(
     const RileyCudaContext* owner, const RileyCudaStream* stream,
     const RileyCudaDeviceBuffer* output,

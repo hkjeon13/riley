@@ -54,7 +54,8 @@ _Static_assert(RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN == 0 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16 == 12 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GROUPED_RAGGED_PAGED_ATTENTION_BF16 == 13 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_EMBEDDING_STATUS_D2H == 14 &&
-                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16 == 15,
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_GEMM_BF16 == 15 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_GEMM_BF16 == 16,
                "graph-capture-operation-kind ABI discriminants changed");
 _Static_assert(sizeof(RileyCudaGraphStage) == 4,
                "graph-stage ABI width changed");
@@ -665,6 +666,18 @@ static RileyCudaStatus (*const graph_capture_begin_canonical_gemm_bf16_symbol)(
 static RileyCudaStatus (*const graph_capture_enqueue_canonical_gemm_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_canonical_gemm_bf16;
+static RileyCudaStatus (*const
+                            graph_capture_begin_canonical_rms_norm_gemm_bf16_symbol)(
+    RileyCudaStream*, RileyCudaGemmPlan*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, uint64_t, uint64_t,
+    float, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16;
+static RileyCudaStatus (*const
+                            graph_capture_enqueue_canonical_rms_norm_gemm_bf16_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16;
 static RileyCudaStatus (*const graph_capture_begin_indexed_rope_bf16_symbol)(
     RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
     RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
@@ -991,6 +1004,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_bf16_embedding_status_d2h_symbol,
     (const void*)&graph_capture_begin_canonical_gemm_bf16_symbol,
     (const void*)&graph_capture_enqueue_canonical_gemm_bf16_symbol,
+    (const void*)&graph_capture_begin_canonical_rms_norm_gemm_bf16_symbol,
+    (const void*)&graph_capture_enqueue_canonical_rms_norm_gemm_bf16_symbol,
     (const void*)&graph_capture_begin_indexed_rope_bf16_symbol,
     (const void*)&graph_capture_enqueue_indexed_rope_bf16_symbol,
     (const void*)&graph_capture_begin_ragged_paged_kv_cache_write_bf16_symbol,

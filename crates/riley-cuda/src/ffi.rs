@@ -1620,6 +1620,28 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16(
+        stream: *mut RawStream,
+        plan: *mut RawGemmPlan,
+        rms_norm_input: *mut RawDeviceBuffer,
+        rms_norm_weight: *mut RawDeviceBuffer,
+        rms_norm_output: *mut RawDeviceBuffer,
+        gemm_weight: *mut RawDeviceBuffer,
+        gemm_output: *mut RawDeviceBuffer,
+        gemm_workspace: *mut RawDeviceBuffer,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -4042,6 +4064,104 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_canonical_rms_norm_gemm_bf16_capture(
+        &mut self,
+        plan: &GemmPlanHandle,
+        rms_norm_input: &DeviceBufferHandle,
+        rms_norm_weight: &DeviceBufferHandle,
+        rms_norm_output: &DeviceBufferHandle,
+        gemm_weight: &DeviceBufferHandle,
+        gemm_output: &DeviceBufferHandle,
+        gemm_workspace: &DeviceBufferHandle,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph canonical BF16 RMSNorm -> cuBLASLt GEMM capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the safe by-value owner retains the cold plan and the six
+        // exact allocations. `rms_norm_output` is the retained fixed address
+        // consumed by the captured cuBLASLt node; no spans or dynamic values
+        // cross this ABI.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16(
+                self.as_ptr(),
+                plan.as_ptr(),
+                rms_norm_input.as_ptr(),
+                rms_norm_weight.as_ptr(),
+                rms_norm_output.as_ptr(),
+                gemm_weight.as_ptr(),
+                gemm_output.as_ptr(),
+                gemm_workspace.as_ptr(),
+                row_count,
+                hidden_size,
+                epsilon,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native canonical RMSNorm -> cuBLASLt GEMM capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native canonical RMSNorm -> cuBLASLt GEMM capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -4472,6 +4592,30 @@ impl GraphCaptureHandle {
         // graph release. Native records one capture-only cublasLtMatmul.
         let status = unsafe {
             riley_cuda_graph_capture_enqueue_canonical_gemm_bf16(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_canonical_rms_norm_gemm_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph canonical BF16 RMSNorm -> cuBLASLt GEMM";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the by-value graph owner retains the cold plan and all six
+        // immutable addresses. Native records exactly RMSNorm followed by the
+        // dependent capture-only cuBLASLt matmul.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16(
                 pointer.as_ptr(),
                 &mut graph_error,
                 &mut error,
@@ -8322,5 +8466,35 @@ mod tests {
             graph_capture_capability(u32::MAX),
             Ok(CudaGraphCaptureCapability::Unknown)
         );
+    }
+
+    #[test]
+    fn c05_22_capture_symbols_have_the_reviewed_rust_abi() {
+        let begin: unsafe extern "C" fn(
+            *mut RawStream,
+            *mut RawGemmPlan,
+            *mut RawDeviceBuffer,
+            *mut RawDeviceBuffer,
+            *mut RawDeviceBuffer,
+            *mut RawDeviceBuffer,
+            *mut RawDeviceBuffer,
+            *mut RawDeviceBuffer,
+            u64,
+            u64,
+            f32,
+            u32,
+            *mut *mut RawGraphCapture,
+            *mut RawGraphErrorInfo,
+            *mut ErrorInfo,
+        ) -> i32 = riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16;
+        let enqueue: unsafe extern "C" fn(
+            *mut RawGraphCapture,
+            *mut RawGraphErrorInfo,
+            *mut ErrorInfo,
+        ) -> i32 = riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16;
+
+        // Typed references force the test binary to resolve both native
+        // symbols without initializing a device or entering graph capture.
+        let _ = (begin, enqueue);
     }
 }

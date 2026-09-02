@@ -198,6 +198,14 @@ pub enum CudaGraphCaptureOperation {
     /// spans, offsets, alternate reduction/epilogue, executor wiring, or C07
     /// projection/LM-head capability evidence.
     CanonicalGemmBf16 = 15,
+    /// One fixed-address canonical BF16 RMSNorm -> cuBLASLt GEMM graph.
+    ///
+    /// The RMSNorm output is the one intentional fixed-allocation dependency
+    /// consumed as GEMM input. It retains a cold strict-no-split BF16/F32
+    /// plan and every other whole allocation by value; it does not imply a
+    /// general graph composer, spans, offsets, node updates, C07 executor
+    /// wiring, projection/LM-head evidence, or full decode authority.
+    CanonicalRmsNormGemmBf16 = 16,
 }
 
 impl CudaGraphCaptureOperation {
@@ -10148,6 +10156,666 @@ fn take_owned_graph_canonical_gemm_bf16_resources(
     })
 }
 
+/// By-value resource bundle for one C05-22 canonical RMSNorm -> GEMM graph.
+///
+/// `rms_norm_output` is the one deliberate fixed-address dependency: native
+/// records it as the canonical GEMM input without a second Rust wrapper or
+/// lease. The cold strict-no-split plan and the other five allocations remain
+/// inaccessible until a terminal native graph transition proves release.
+pub struct OwnedGraphCanonicalRmsNormGemmBf16Resources {
+    stream: CudaStream,
+    plan: CudaPreparedGemm,
+    rms_norm_input: CudaDeviceBuffer,
+    rms_norm_weight: CudaDeviceBuffer,
+    rms_norm_output: CudaDeviceBuffer,
+    gemm_weight: CudaDeviceBuffer,
+    gemm_output: CudaDeviceBuffer,
+    gemm_workspace: CudaDeviceBuffer,
+}
+
+impl OwnedGraphCanonicalRmsNormGemmBf16Resources {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        stream: CudaStream,
+        plan: CudaPreparedGemm,
+        rms_norm_input: CudaDeviceBuffer,
+        rms_norm_weight: CudaDeviceBuffer,
+        rms_norm_output: CudaDeviceBuffer,
+        gemm_weight: CudaDeviceBuffer,
+        gemm_output: CudaDeviceBuffer,
+        gemm_workspace: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        }
+    }
+
+    /// Returns the one stream, cold plan, and six exact allocations after a
+    /// known native graph-lease release. `rms_norm_output` remains the one
+    /// buffer that served both nodes; callers never receive a duplicate alias.
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaPreparedGemm,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        } = self;
+        (
+            stream,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        )
+    }
+
+    /// Explicitly closes the recovered plan and buffers in reverse graph-use
+    /// order, then releases the retained stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (
+            stream,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        ) = self.into_parts();
+        plan.close()?;
+        gemm_workspace.close()?;
+        gemm_output.close()?;
+        gemm_weight.close()?;
+        rms_norm_output.close()?;
+        rms_norm_weight.close()?;
+        rms_norm_input.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning one by-value C05-22 canonical RMSNorm -> GEMM graph
+/// capture.
+///
+/// Rust-only preflight errors recover the untouched bundle. Once native begin
+/// has been attempted, CUDA may have retained the cold plan and every address,
+/// so the safe wrapper fails closed without exposing a possibly-live resource.
+#[must_use]
+pub struct OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>,
+}
+
+impl OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError {
+    fn recoverable(
+        error: CudaError,
+        resources: OwnedGraphCanonicalRmsNormGemmBf16Resources,
+    ) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The rejected preflight or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns moved resources only when native capture was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph canonical BF16 RMSNorm -> cuBLASLt GEMM capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active C05-22 two-node capture.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Capture>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Capture>();
+/// ```
+pub struct OwnedGraphCanonicalRmsNormGemmBf16Capture {
+    // Native drops before child wrappers: an ambiguous capture retains the
+    // plan and every allocation address, so none may drop independently.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalRmsNormGemmBf16Capture {
+    /// Records exactly canonical BF16 RMSNorm followed by the dependent,
+    /// capture-only strict-plan cuBLASLt matmul. Dynamic spans, node updates,
+    /// fresh inputs, batches, and eager synchronization are not admitted.
+    pub fn enqueue_canonical_rms_norm_gemm_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str =
+            "OwnedGraphCanonicalRmsNormGemmBf16Capture::enqueue_canonical_rms_norm_gemm_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned canonical RMSNorm -> GEMM graph capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior canonical RMSNorm -> GEMM graph enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed canonical RMSNorm -> GEMM graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_canonical_rms_norm_gemm_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                // RMSNorm may already be recorded when GEMM admission fails;
+                // only one-shot abort can establish native lease release.
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends the exact two-node capture and transfers its full bundle into a
+    /// by-value graph owner.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedCanonicalRmsNormGemmBf16Graph> {
+        const OPERATION: &str = "OwnedGraphCanonicalRmsNormGemmBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned canonical RMSNorm -> GEMM graph capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior canonical RMSNorm -> GEMM graph enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed canonical RMSNorm -> GEMM enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+                &mut self.resources,
+                OPERATION,
+            )?;
+            Ok(OwnedCapturedCanonicalRmsNormGemmBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts the capture and returns resources only after native recovery
+    /// proves that all permanent graph leases were released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphCanonicalRmsNormGemmBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalRmsNormGemmBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphCanonicalRmsNormGemmBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value captured C05-22 graph awaiting instantiate or close.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedCapturedCanonicalRmsNormGemmBf16Graph>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedCapturedCanonicalRmsNormGemmBf16Graph>();
+/// ```
+pub struct OwnedCapturedCanonicalRmsNormGemmBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedCanonicalRmsNormGemmBf16Graph {
+    /// Instantiates while retaining the one cold plan and exact allocations.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedCanonicalRmsNormGemmBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphCanonicalRmsNormGemmBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedCanonicalRmsNormGemmBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Closes the captured graph and returns resources after known release.
+    pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedCanonicalRmsNormGemmBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedCanonicalRmsNormGemmBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value executable for one fixed canonical RMSNorm -> GEMM graph.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Exec>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Exec>();
+/// ```
+pub struct OwnedGraphCanonicalRmsNormGemmBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalRmsNormGemmBf16Exec {
+    /// Launches the fixed two-node graph once on its retained stream.
+    pub fn launch<'exec>(
+        &'exec mut self,
+    ) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphCanonicalRmsNormGemmBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier canonical RMSNorm -> GEMM graph transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned canonical RMSNorm -> GEMM graph exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphCanonicalRmsNormGemmBf16Launch {
+                    native,
+                    exec: Some(self),
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its bundle after known native
+    /// release of every plan/allocation graph lease.
+    pub fn close(mut self) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphCanonicalRmsNormGemmBf16Exec::close",
+                "an earlier canonical RMSNorm -> GEMM graph transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphCanonicalRmsNormGemmBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalRmsNormGemmBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// In-flight completion owner for one C05-22 graph replay.
+///
+/// ```compile_fail
+/// fn assert_send<T: Send>() {}
+/// assert_send::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Launch<'static>>();
+/// ```
+///
+/// ```compile_fail
+/// fn assert_sync<T: Sync>() {}
+/// assert_sync::<riley_cuda::OwnedGraphCanonicalRmsNormGemmBf16Launch<'static>>();
+/// ```
+pub struct OwnedGraphCanonicalRmsNormGemmBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: Option<&'exec mut OwnedGraphCanonicalRmsNormGemmBf16Exec>,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphCanonicalRmsNormGemmBf16Launch<'_> {
+    /// Waits for known completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let Some(exec) = self.exec.as_deref_mut() else {
+            return if self.active {
+                Err(CudaError::invalid_state(
+                    "OwnedGraphCanonicalRmsNormGemmBf16Launch::finish",
+                    "the graph launch completion owner lost its executable borrow",
+                ))
+            } else {
+                Ok(())
+            };
+        };
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphCanonicalRmsNormGemmBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphCanonicalRmsNormGemmBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_canonical_rms_norm_gemm_bf16_resources(
+    resources: &mut Option<OwnedGraphCanonicalRmsNormGemmBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphCanonicalRmsNormGemmBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned canonical RMSNorm -> GEMM graph owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+#[allow(clippy::too_many_arguments)]
+fn validate_graph_canonical_rms_norm_gemm_bf16_capture_preflight(
+    plan: &CudaPreparedGemm,
+    stream: &CudaStream,
+    rms_norm_input: &CudaDeviceBuffer,
+    rms_norm_weight: &CudaDeviceBuffer,
+    rms_norm_output: &CudaDeviceBuffer,
+    gemm_weight: &CudaDeviceBuffer,
+    gemm_output: &CudaDeviceBuffer,
+    gemm_workspace: &CudaDeviceBuffer,
+    row_count: u64,
+    hidden_size: u64,
+    epsilon: f32,
+    operation: &'static str,
+) -> CudaResult<()> {
+    let config = plan.config();
+    if row_count != config.m() || hidden_size != config.k() {
+        return Err(CudaError::invalid_argument(
+            operation,
+            format!(
+                "canonical RMSNorm geometry ({row_count}, {hidden_size}) must exactly equal the retained GEMM (M, K) = ({}, {})",
+                config.m(),
+                config.k(),
+            ),
+        ));
+    }
+    if !epsilon.is_finite() || epsilon <= 0.0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "epsilon must be finite and greater than zero",
+        ));
+    }
+    let rms_norm_matrix_bytes = row_count
+        .checked_mul(hidden_size)
+        .and_then(|element_count| element_count.checked_mul(std::mem::size_of::<u16>() as u64))
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "row_count * hidden_size overflows the canonical BF16 RMSNorm byte range",
+            )
+        })?;
+    let rms_norm_weight_bytes = hidden_size
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "hidden_size overflows the canonical BF16 RMSNorm weight byte range",
+            )
+        })?;
+    if row_count == 0
+        || hidden_size == 0
+        || rms_norm_input.byte_len() != rms_norm_matrix_bytes
+        || rms_norm_weight.byte_len() != rms_norm_weight_bytes
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "canonical RMSNorm input/weight allocations must be exactly {rms_norm_matrix_bytes}/{rms_norm_weight_bytes} BF16 bytes, got {}/{}",
+                rms_norm_input.byte_len(),
+                rms_norm_weight.byte_len(),
+            ),
+        ));
+    }
+    // The plan validates the cold strict-no-split cuBLASLt metadata and exact
+    // GEMM intermediate/weight/output/workspace capacities. Passing the one
+    // `rms_norm_output` wrapper as GEMM input prevents a duplicate lease.
+    plan.validate_canonical_graph_capture(
+        stream,
+        rms_norm_output,
+        gemm_weight,
+        gemm_output,
+        gemm_workspace,
+        operation,
+    )?;
+    ensure_same_context(&stream.context, rms_norm_input.context_owner(), operation)?;
+    ensure_same_context(&stream.context, rms_norm_weight.context_owner(), operation)?;
+    rms_norm_input.ensure_idle_for_operation(operation)?;
+    rms_norm_weight.ensure_idle_for_operation(operation)?;
+
+    let buffers = [
+        ("rms_norm_input", rms_norm_input),
+        ("rms_norm_weight", rms_norm_weight),
+        ("rms_norm_output", rms_norm_output),
+        ("gemm_weight", gemm_weight),
+        ("gemm_output", gemm_output),
+        ("gemm_workspace", gemm_workspace),
+    ];
+    for (index, (left_name, left)) in buffers.iter().enumerate() {
+        for (right_name, right) in buffers.iter().skip(index + 1) {
+            if left.native_handle().same_allocation(right.native_handle()) {
+                return Err(CudaError::invalid_argument(
+                    operation,
+                    format!(
+                        "{left_name} and {right_name} must be distinct fixed device allocations; only the one rms_norm_output wrapper is admitted as GEMM input"
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[cfg(feature = "cuda")]
 fn validate_graph_bf16_embedding_status_d2h_capture_preflight(
     stream: &CudaStream,
@@ -11778,6 +12446,134 @@ impl CudaStream {
         }
     }
 
+    /// Begins one C05-22 fixed-address canonical BF16 RMSNorm -> cuBLASLt
+    /// GEMM graph capture.
+    ///
+    /// The caller moves one cold-prepared strict-no-split BF16/F32 GEMM plan,
+    /// canonical RMSNorm input/weight, the one intermediate allocation, GEMM
+    /// weight/final output/workspace, and this stream into the owner. The
+    /// intermediate is supplied exactly once: it is the RMSNorm output and
+    /// the captured GEMM input. No fresh replay input, spans, offsets, node
+    /// updates, command batch, C07 executor wiring, or eager fallback is
+    /// exposed by this narrow two-node slice.
+    ///
+    /// # Errors
+    ///
+    /// Pure Rust preflight validates exact geometry (`row_count == M`,
+    /// `hidden_size == K`), every allocation capacity/context/alias, epsilon,
+    /// and the cold strict plan before native entry; such failures recover the
+    /// untouched bundle. A native-entry error fails closed because CUDA may
+    /// retain all raw addresses during recovery.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_owned_graph_canonical_rms_norm_gemm_bf16_capture(
+        self,
+        plan: CudaPreparedGemm,
+        rms_norm_input: CudaDeviceBuffer,
+        rms_norm_weight: CudaDeviceBuffer,
+        rms_norm_output: CudaDeviceBuffer,
+        gemm_weight: CudaDeviceBuffer,
+        gemm_output: CudaDeviceBuffer,
+        gemm_workspace: CudaDeviceBuffer,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<
+        OwnedGraphCanonicalRmsNormGemmBf16Capture,
+        OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError,
+    > {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphCanonicalRmsNormGemmBf16Resources::new(
+            self,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        );
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphCanonicalRmsNormGemmBf16Resources::new(
+            self,
+            plan,
+            rms_norm_input,
+            rms_norm_weight,
+            rms_norm_output,
+            gemm_weight,
+            gemm_output,
+            gemm_workspace,
+        );
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str =
+                "CudaStream::begin_owned_graph_canonical_rms_norm_gemm_bf16_capture";
+            if let Err(error) = validate_graph_canonical_rms_norm_gemm_bf16_capture_preflight(
+                &resources.plan,
+                &resources.stream,
+                &resources.rms_norm_input,
+                &resources.rms_norm_weight,
+                &resources.rms_norm_output,
+                &resources.gemm_weight,
+                &resources.gemm_output,
+                &resources.gemm_workspace,
+                row_count,
+                hidden_size,
+                epsilon,
+                OPERATION,
+            ) {
+                return Err(
+                    OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError::recoverable(
+                        error, resources,
+                    ),
+                );
+            }
+            let native = match resources
+                .plan
+                .begin_canonical_rms_norm_gemm_graph_capture_native(
+                    &mut resources.stream,
+                    &resources.rms_norm_input,
+                    &resources.rms_norm_weight,
+                    &resources.rms_norm_output,
+                    &resources.gemm_weight,
+                    &resources.gemm_output,
+                    &resources.gemm_workspace,
+                    row_count,
+                    hidden_size,
+                    epsilon,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(
+                        OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError::terminal(error),
+                    );
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphCanonicalRmsNormGemmBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (row_count, hidden_size, epsilon, mode);
+            Err(
+                OwnedGraphCanonicalRmsNormGemmBf16CaptureBeginError::recoverable(
+                    CudaError::unavailable(
+                        "CudaStream::begin_owned_graph_canonical_rms_norm_gemm_bf16_capture",
+                    ),
+                    resources,
+                ),
+            )
+        }
+    }
+
     /// Begins the sole C05-5 capture-admitted operation set: one or more
     /// fixed-shape f32 fills of a caller-preallocated device buffer.
     ///
@@ -12015,6 +12811,110 @@ mod tests {
         .unwrap_err();
         assert_eq!(short_prefix.kind(), CudaErrorKind::Internal);
         assert_eq!(short_prefix.stage(), CudaErrorStage::Validation);
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "remote GPU"]
+    fn raw_c05_22_alias_preflight_rejects_every_pair_before_capture_and_preserves_resources()
+    -> Result<(), Box<dyn std::error::Error>> {
+        // The safe by-value entry point cannot manufacture two owners for one
+        // device allocation. Exercise every pair in the raw ABI gate with
+        // borrowed native handles, without exposing an aliasing API to callers.
+        const M: u64 = 1;
+        const N: u64 = 576;
+        const K: u64 = 576;
+        const EPSILON: f32 = 1.0e-5;
+
+        let runtime = crate::CudaRuntime::initialize()?;
+        assert!(
+            runtime.device_count() > 0,
+            "remote GPU runner has no CUDA device"
+        );
+        let context = runtime.device(0)?.create_context()?;
+        let allocation_baseline = context.allocation_stats()?;
+        assert!(allocation_baseline.is_zero());
+
+        let config = crate::CudaGemmConfig::new(M, N, K, 8 * 1024 * 1024)?;
+        let plan = context.prepare_gemm(config)?;
+        let workspace_bytes = plan.algorithm_metadata().workspace_bytes();
+        let mut stream = context.create_stream()?;
+        let rms_norm_input = context.allocate_device_buffer(config.input_bytes())?;
+        let rms_norm_weight = context.allocate_device_buffer(K * 2)?;
+        let rms_norm_output = context.allocate_device_buffer(config.input_bytes())?;
+        let gemm_weight = context.allocate_device_buffer(config.weight_bytes())?;
+        let gemm_output = context.allocate_device_buffer(config.output_bytes())?;
+        let workspace = context.allocate_device_buffer(workspace_bytes)?;
+        let allocation_with_resources = context.allocation_stats()?;
+
+        let fixed_buffers = [
+            &rms_norm_input,
+            &rms_norm_weight,
+            &rms_norm_output,
+            &gemm_weight,
+            &gemm_output,
+            &workspace,
+        ];
+        let role_names = [
+            "rms_norm_input",
+            "rms_norm_weight",
+            "rms_norm_output",
+            "gemm_weight",
+            "gemm_output",
+            "gemm_workspace",
+        ];
+        for left in 0..fixed_buffers.len() {
+            for right in (left + 1)..fixed_buffers.len() {
+                let mut roles = fixed_buffers;
+                roles[right] = roles[left];
+                let error = match plan.begin_canonical_rms_norm_gemm_graph_capture_native(
+                    &mut stream,
+                    roles[0],
+                    roles[1],
+                    roles[2],
+                    roles[3],
+                    roles[4],
+                    roles[5],
+                    M,
+                    K,
+                    EPSILON,
+                    CudaGraphCaptureMode::ThreadLocal as u32,
+                ) {
+                    Ok(_) => panic!(
+                        "raw C05-22 duplicate allocation {} / {} unexpectedly captured",
+                        role_names[left], role_names[right]
+                    ),
+                    Err(error) => error,
+                };
+                assert_eq!(
+                    error.kind(),
+                    CudaErrorKind::InvalidArgument,
+                    "raw C05-22 alias {} / {} must reject before capture",
+                    role_names[left],
+                    role_names[right]
+                );
+                assert_eq!(
+                    context.allocation_stats()?,
+                    allocation_with_resources,
+                    "raw C05-22 alias {} / {} must not alter allocation accounting",
+                    role_names[left],
+                    role_names[right]
+                );
+            }
+        }
+
+        plan.close()?;
+        workspace.close()?;
+        gemm_output.close()?;
+        gemm_weight.close()?;
+        rms_norm_output.close()?;
+        rms_norm_weight.close()?;
+        rms_norm_input.close()?;
+        stream.close()?;
+        assert_eq!(context.allocation_stats()?, allocation_baseline);
+        context.synchronize()?;
+        context.close()?;
+        Ok(())
     }
 
     #[cfg(feature = "cuda")]

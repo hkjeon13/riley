@@ -29,6 +29,7 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         CudaGraphCaptureOperation::GroupedRaggedPagedAttentionBf16,
         CudaGraphCaptureOperation::Bf16EmbeddingStatusD2H,
         CudaGraphCaptureOperation::CanonicalGemmBf16,
+        CudaGraphCaptureOperation::CanonicalRmsNormGemmBf16,
     ] {
         assert_eq!(
             operation
@@ -38,4 +39,11 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         );
     }
     Ok(())
+}
+
+#[test]
+fn c05_22_ffi_surface_declares_both_native_capture_symbols() {
+    let ffi_source = include_str!("../src/ffi.rs");
+    assert!(ffi_source.contains("riley_cuda_graph_capture_begin_canonical_rms_norm_gemm_bf16"));
+    assert!(ffi_source.contains("riley_cuda_graph_capture_enqueue_canonical_rms_norm_gemm_bf16"));
 }

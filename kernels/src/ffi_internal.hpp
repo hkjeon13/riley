@@ -183,6 +183,10 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   // plan and allocation addresses. The output remains in fill_buffer; the
   // rest of its fixed-address ledger lives in canonical_gemm_bf16 below.
   kCanonicalGemmBf16 = 15,
+  // C05-22 owns one generic canonical BF16 RMSNorm whose exact output is the
+  // input of one canonical cuBLASLt BF16 GEMM. The intermediate is the sole
+  // intentional alias; all other fixed allocations remain distinct.
+  kCanonicalRmsNormGemmBf16 = 16,
 };
 
 // C05-18's raw device metadata has no host-side lifetime. The primary key
@@ -286,6 +290,30 @@ struct RileyCudaCanonicalGemmBf16GraphState {
   bool input_lease_held;
   bool weight_lease_held;
   bool workspace_lease_held;
+};
+
+// C05-22 combines generic canonical RMSNorm with a canonical cuBLASLt GEMM.
+// `gemm.input` is the RMSNorm output and owns that intermediate's single
+// lease; this state deliberately has no duplicate intermediate lease bit.
+struct RileyCudaCanonicalRmsNormGemmBf16GraphState {
+  RileyCudaCanonicalRmsNormGemmBf16GraphState() noexcept
+      : rms_norm_input(nullptr),
+        rms_norm_weight(nullptr),
+        row_count(0),
+        hidden_size(0),
+        epsilon(0.0F),
+        rms_norm_input_lease_held(false),
+        rms_norm_weight_lease_held(false),
+        gemm() {}
+
+  RileyCudaDeviceBuffer* rms_norm_input;
+  RileyCudaDeviceBuffer* rms_norm_weight;
+  uint64_t row_count;
+  uint64_t hidden_size;
+  float epsilon;
+  bool rms_norm_input_lease_held;
+  bool rms_norm_weight_lease_held;
+  RileyCudaCanonicalGemmBf16GraphState gemm;
 };
 
 struct RileyCudaGraphCapture {
@@ -503,6 +531,7 @@ struct RileyCudaGraphCapture {
   bool indexed_rope_bf16_sin_lease_held;
   bool indexed_rope_bf16_positions_lease_held;
   RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
+  RileyCudaCanonicalRmsNormGemmBf16GraphState canonical_rms_norm_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
@@ -728,6 +757,7 @@ struct RileyCudaGraph {
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
   RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
+  RileyCudaCanonicalRmsNormGemmBf16GraphState canonical_rms_norm_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   cudaGraph_t graph;
@@ -919,6 +949,7 @@ struct RileyCudaGraphExec {
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
   RileyCudaCanonicalGemmBf16GraphState canonical_gemm_bf16;
+  RileyCudaCanonicalRmsNormGemmBf16GraphState canonical_rms_norm_gemm_bf16;
   RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   uint64_t exec_id;
@@ -993,6 +1024,14 @@ struct RileyCudaCopy {
 
 namespace riley_cuda_internal {
 
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+// Defined in memory.cu beside the process-local test injector. This is an
+// internal-only one-shot probe for the C05-22 second-node failure path; it is
+// absent from normal native archives and never participates in production
+// graph capture.
+bool consume_c05_22_gemm_capture_fault(RileyCudaContext* context) noexcept;
+#endif
+
 // These helpers retain RileyCudaGemmPlan's private cuBLASLt representation in
 // gemm.cu. graph.cu owns only the permanent graph lease and calls the narrow
 // capture-only matmul path after it has already entered the plan's context.
@@ -1012,6 +1051,12 @@ bool canonical_gemm_bf16_graph_state_is_valid(
     const RileyCudaDeviceBuffer* output,
     const RileyCudaCanonicalGemmBf16GraphState& state,
     bool leases_held) noexcept;
+// The shape check remains in gemm.cu because RileyCudaGemmPlan is opaque to
+// graph.cu. It proves the canonical RMSNorm [row_count, hidden_size] result is
+// exactly the GEMM [M, K] input, not merely a byte-length coincidence.
+bool canonical_gemm_bf16_graph_state_matches_input_shape(
+    const RileyCudaCanonicalGemmBf16GraphState& state,
+    uint64_t row_count, uint64_t hidden_size) noexcept;
 RileyCudaStatus enqueue_canonical_gemm_bf16_graph_matmul(
     const RileyCudaContext* owner, const RileyCudaStream* stream,
     const RileyCudaDeviceBuffer* output,

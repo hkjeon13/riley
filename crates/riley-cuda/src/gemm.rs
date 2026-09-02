@@ -663,6 +663,43 @@ impl CudaPreparedGemm {
         )
     }
 
+    /// Enters native C05-22 capture after the graph layer proves that the
+    /// fixed canonical RMSNorm output is the exact GEMM input allocation.
+    /// The native boundary repeats every immutable allocation, shape, and
+    /// strict-plan check because raw callers can bypass the Rust owner.
+    #[cfg(feature = "cuda")]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn begin_canonical_rms_norm_gemm_graph_capture_native(
+        &self,
+        stream: &mut CudaStream,
+        rms_norm_input: &CudaDeviceBuffer,
+        rms_norm_weight: &CudaDeviceBuffer,
+        rms_norm_output: &CudaDeviceBuffer,
+        gemm_weight: &CudaDeviceBuffer,
+        gemm_output: &CudaDeviceBuffer,
+        gemm_workspace: &CudaDeviceBuffer,
+        row_count: u64,
+        hidden_size: u64,
+        epsilon: f32,
+        mode: u32,
+    ) -> CudaResult<ffi::GraphCaptureHandle> {
+        stream
+            .native
+            .begin_graph_canonical_rms_norm_gemm_bf16_capture(
+                &self.native,
+                rms_norm_input.native_handle(),
+                rms_norm_weight.native_handle(),
+                rms_norm_output.native_handle(),
+                gemm_weight.native_handle(),
+                gemm_output.native_handle(),
+                gemm_workspace.native_handle(),
+                row_count,
+                hidden_size,
+                epsilon,
+                mode,
+            )
+    }
+
     /// Executes the prepared GEMM and synchronizes the same explicit stream.
     ///
     /// The successful repeated path performs no host or device allocation.

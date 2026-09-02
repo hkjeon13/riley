@@ -638,6 +638,18 @@ RileyCudaDeferredCloseResult deferred_pinned_host_buffer_close(
 
 }  // namespace
 
+#if defined(RILEY_CUDA_ENABLE_TEST_FAULT_INJECTION)
+namespace riley_cuda_internal {
+
+bool consume_c05_22_gemm_capture_fault(RileyCudaContext* context) noexcept {
+  return consume_fault(
+      context,
+      RILEY_CUDA_TEST_MEMORY_FAULT_C05_22_GEMM_SUBMISSION_NOT_SUPPORTED);
+}
+
+}  // namespace riley_cuda_internal
+#endif
+
 extern "C" RileyCudaStatus riley_cuda_device_buffer_create(
     RileyCudaContext* context, uint64_t byte_len,
     RileyCudaDeviceBuffer** out_buffer,
@@ -1254,7 +1266,7 @@ extern "C" RileyCudaStatus riley_cuda_test_memory_fault_arm(
   if (fault <
           RILEY_CUDA_TEST_MEMORY_FAULT_DEVICE_CREATE_ROLLBACK_AMBIGUOUS ||
       fault >
-          RILEY_CUDA_TEST_MEMORY_FAULT_COPY_COMPLETION_RESTORE_AMBIGUOUS) {
+          RILEY_CUDA_TEST_MEMORY_FAULT_C05_22_GEMM_SUBMISSION_NOT_SUPPORTED) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             "arm CUDA memory fault injector",

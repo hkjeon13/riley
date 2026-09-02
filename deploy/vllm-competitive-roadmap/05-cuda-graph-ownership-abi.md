@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-21 canonical cuBLASLt GEMM graph는 원격 RTX 4090/CUDA 12.8에서 fixed-address capture/lifecycle/byte-parity acceptance를 통과했다. 다음 C05-22는 RMSNorm→GEMM 두-node dependency chain을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
+**상태:** Completed — C05-22까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention, canonical RMSNorm 및 canonical cuBLASLt GEMM dependency를 각각 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-22 RMSNorm→GEMM two-logical-operation chain은 원격 RTX 4090/CUDA 12.8에서 capture/lifecycle/byte-parity acceptance를 통과했다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -512,7 +512,7 @@ wrong-exact-size preflight 및 begin 뒤 abort도 untouched resource bundle과 a
 canonical GEMM lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을
 입증하지 않는다.
 
-### C05-22 — fixed-address canonical BF16 RMSNorm → cuBLASLt GEMM graph (CUDA; planned)
+### C05-22 — fixed-address canonical BF16 RMSNorm → cuBLASLt GEMM graph (CUDA; completed)
 
 C05-22는 C05-21 GPU acceptance와 기존 canonical BF16 RMSNorm graph parity를 전제로, 하나의 fixed-address
 RMSNorm output allocation을 canonical strict-no-split cuBLASLt GEMM input으로 의도적으로 공유하는 two logical
@@ -531,6 +531,21 @@ mismatch, foreign-context/forbidden-alias preflight recovery, abort/explicit clo
 `not-supported`로 닫고 eager fallback으로 graph support를 주장하지 않는다. 현 C07 decode는 borrowed weight span과
 shared workspace/command-batch completion을 사용하므로 C05-22도 `LayerProjectionGemm`, `LmHead`, `FinalNorm`을
 `Supported`로 올리는 근거가 되지 않는다.
+
+**구현/완료 검증 (2026-09-02):** additive operation kind `16`, begin/enqueue C ABI, dedicated composite native
+state, 그리고 stream·cold strict-no-split plan·여섯 whole allocation을 by-value로 보유하는 Rust owner를 구현했다.
+RMSNorm output은 GEMM input으로 한 번만 lease하며, native admission은 six-way non-alias/exact-byte/context/idle
+checks와 `row_count == plan.M`, `hidden_size == plan.K` semantic geometry를 capture 전에 검증한다. enqueue는 같은
+captured stream에서 generic canonical BF16 RMSNorm kernel 뒤 capture-only `cublasLtMatmul`을 기록하며, abort/end/
+instantiate/launch/close 전체 lifecycle은 composite lease를 transfer 또는 known release한다. RTX 4090/CUDA 12.8에서
+C11 ABI syntax, CUDA feature library/ABI link, 32개 CPU graph source-contract, private raw forbidden-alias GPU test,
+일반 `graph_c05_22_gpu` 3개 및 C05-18/19/20/21·기존 graph GPU regressions를 통과했다. cold `M=1,N=576,K=576`
+fixture는 eager two-step과 intermediate 및 final BF16 bytes가 정확히 일치했고, input/RMSNorm weight/GEMM weight
+불변, 64회 replay, second-enqueue rejection, short/long exact-size·semantic-shape·foreign-context preflight recovery,
+abort/explicit close 뒤 allocation baseline 회복을 확인했다. 별도 test-only fault-injection build는 RMSNorm 제출 뒤
+두 번째 cuBLASLt GEMM submission을 `NotSupported`로 강제해 native cuBLASLt domain/launch stage를 보존하고,
+terminal capture의 retry 거부 및 abort 뒤 여섯 resource 회복도 확인했다. 이 결과는 lifecycle/parity 근거일 뿐 C07
+executor integration, full decode graph 또는 end-to-end 성능 향상을 입증하지 않는다.
 
 ## 2. 범위
 
