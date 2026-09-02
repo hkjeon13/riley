@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
+**상태:** In progress — C05-20까지 C07 pure-decode에 필요한 BF16 embedding validation/status D2H, indexed BF16 RoPE, multi-row paged `KvWrite`, grouped D64 paged attention 한 primitive씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. 다음 C05-21은 projection/LM-head의 미검증 클래스인 canonical cuBLASLt GEMM 한 plan의 capture feasibility와 lifecycle을 별도 fixed-address graph로 좁힌다. C05-16의 raw result receipt와 이 primitive 결과는 계속 C07 `GpuGreedy`/`CompletionBoundary`, executor integration, full decode graph 또는 성능 향상 근거를 뜻하지 않는다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -460,6 +460,40 @@ OOB `(position=1, id=9)` status 및 whole-output no-write sentinel을 보존했�
 preflight와 begin 뒤 abort는 resource bundle 및 allocation statistics 0으로 회복했다. 이는 validation-aware embedding
 primitive lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을
 입증하지 않는다.
+
+### C05-21 — fixed-address canonical cuBLASLt GEMM graph feasibility (CUDA; planned)
+
+C05-21은 projection/LM-head에 필요한 cuBLASLt GEMM class를 전체 executor에 연결하지 않고, cold-prepared
+`RileyCudaGemmPlan` 하나와 정확히 같은 BF16 input, BF16 weight, BF16 output, U8 workspace allocation만 쓰는
+one-node CUDA Graph로 좁힌다. 대상은 exact `M,N,K`, `CUBLAS_COMPUTE_32F`, deterministic algorithm metadata,
+row-major no-epilogue 및 host-pointer `alpha=1`, `beta=0`을 가진 canonical plan 하나다. generic GEMM shapes,
+anchored child plan fan-out, output aliasing, alternate epilogue/reduction, `Fixed37`, weight subspan, C07
+`LayerProjectionGemm`/`LmHead` owner integration, full decode graph 및 성능 승격은 이 slice에 포함하지 않는다.
+
+현재 eager `riley_cuda_gemm_plan_execute`는 `cublasLtMatmul` 뒤 command batch 밖에서 같은 stream을 synchronize하고
+plan/buffer use를 release한다. capture path는 그 completion policy를 재사용할 수 없다. begin은 prepared plan,
+stream 및 네 exact allocation의 same-context/nonalias/idle/exact-byte preflight를 CUDA capture 전에 끝내고, plan의
+cuBLASLt handle/operation/layout/algorithm과 네 allocation lease를 capture -> graph -> exec -> launch completion ->
+close까지 보존해야 한다. enqueue는 allocation, heuristic query, descriptor creation, command batch, stream synchronize,
+host callback 또는 node update 없이 fixed `cublasLtMatmul` 한 번만 기록한다. workspace는 cuBLASLt가 scratch로
+변경할 수 있으므로 input/weight 불변 assertion의 대상이 아니다.
+
+이 작업의 첫 acceptance는 API 확대가 아니라 실제 capture feasibility다. RTX 4090/CUDA 12.8에서 canonical plan의
+`cublasLtMatmul` capture, end, instantiate, launch, completion이 성공하고 eager와 output byte-exact parity를 내는지를
+먼저 확인한다. library 또는 driver가 해당 deterministic plan의 capture를 거부하면 그 status/domain을 보존하고 C05-21을
+`not-supported`로 닫으며, capture를 우회하는 eager call이나 일반 kernel 대체로 graph 지원을 주장하지 않는다.
+
+feasibility가 통과한 경우 safe owner는 begin 뒤 plan이나 input/weight/output/workspace를 drop·close·재사용하지 못하게
+하고, re-enqueue를 거부한다. plan/config mismatch, short or offset span, alias/context/busy preflight failure는 CUDA
+호출 전 untouched-resource recovery를 보장해야 한다. launch/completion ambiguity는 native graph와 plan/allocation
+lease를 fail-closed retain하며, abort 또는 known-successful explicit close 뒤에만 모두 회수한다.
+
+GPU acceptance criteria는 canonical deterministic fixture의 eager/graph output byte parity, input/weight bytes 불변,
+64회 sequential replay, second-enqueue rejection, plan and four-buffer close ordering, abort recovery 및 allocation
+statistics 0이다. C05-20 embedding graph와 달리 현재 C07 executor는 borrowed weight span, packed token subspan,
+shared command-batch completion을 사용하므로 이 feasibility 결과만으로 C07 `Embedding`, `LayerProjectionGemm` 또는
+`LmHead` capability를 `Supported`로 올리지 않는다. 이 결과는 one canonical GEMM lifecycle/parity의 근거일 뿐 full
+decode graph 또는 end-to-end 성능 향상 근거가 아니다.
 
 ## 2. 범위
 
