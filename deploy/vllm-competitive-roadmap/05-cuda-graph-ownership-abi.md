@@ -515,14 +515,19 @@ canonical GEMM lifecycle/parity의 실제 근거일 뿐 C07 executor integration
 ### C05-22 — fixed-address canonical BF16 RMSNorm → cuBLASLt GEMM graph (CUDA; planned)
 
 C05-22는 C05-21 GPU acceptance와 기존 canonical BF16 RMSNorm graph parity를 전제로, 하나의 fixed-address
-RMSNorm output allocation을 canonical strict-no-split cuBLASLt GEMM input으로 의도적으로 공유하는 two-node graph만
-다룬다. RMSNorm의 input/weight, GEMM weight/output/workspace 및 plan은 모두 distinct whole allocation이어야 하며,
+RMSNorm output allocation을 canonical strict-no-split cuBLASLt GEMM input으로 의도적으로 공유하는 two logical
+operations만 다룬다. cuBLASLt가 내부적으로 만드는 graph node 수는 계약 대상이 아니다. RMSNorm input/weight,
+intermediate, GEMM weight/output/workspace 및 plan은 각각 exact whole-allocation contract를 만족해야 한다. 여섯
+allocation handle은 zero-byte workspace까지 서로 distinct해야 하며, RMSNorm `row_count == plan.M` 및
+`hidden_size == plan.K`를 요구한다. 단순 byte-length 일치는 이 semantic geometry 검증을 대체하지 못한다.
 그 한 intermediate dependency 외 alias, span/offset, dynamic shape, H2D/D2H, command batch, node update, C07 executor
 wiring, full decode graph와 성능 승격은 포함하지 않는다.
 
 GPU acceptance는 eager two-step과 intermediate/final BF16 byte parity, source input 및 두 weight bytes 불변, 64회
-replay, second-enqueue rejection, short-buffer/foreign-context/forbidden-alias preflight recovery, abort/explicit close 뒤
-allocation statistics 0이다. capture가 해당 cuBLASLt plan을 거부하면 native status/domain을 보존해
+replay, second-enqueue rejection, 여섯 allocation 각각의 exact-byte contract 및 `row_count`/`hidden_size` semantic
+mismatch, foreign-context/forbidden-alias preflight recovery, abort/explicit close 뒤 allocation statistics 0이다.
+실패 preflight는 기존 capture/lease/resource accounting을 건드리지 않아야 한다. capture가 해당 cuBLASLt plan을
+거부하면 native status/domain을 보존해
 `not-supported`로 닫고 eager fallback으로 graph support를 주장하지 않는다. 현 C07 decode는 borrowed weight span과
 shared workspace/command-batch completion을 사용하므로 C05-22도 `LayerProjectionGemm`, `LmHead`, `FinalNorm`을
 `Supported`로 올리는 근거가 되지 않는다.
