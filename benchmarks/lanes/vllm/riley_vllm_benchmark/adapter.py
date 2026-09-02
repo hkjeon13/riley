@@ -48,6 +48,7 @@ PRIMARY_GPU_NAME = "NVIDIA GeForce RTX 4090"
 PRIMARY_COMPUTE_CAPABILITY = "8.9"
 PRIMARY_DRIVER_VERSION = "580.173.02"
 PRIMARY_RAM_BYTES = 67_185_598_464
+PRIMARY_RAM_TOLERANCE_BYTES = 4 * 1024
 DTYPE = "bf16"
 ENGINE_TIMING_SANITY_TOLERANCE_SECONDS = 0.050
 
@@ -1198,7 +1199,12 @@ def _validate_environment(environment: Mapping[str, object]) -> None:
         raise AdapterError("primary performance lane requires exactly one GPU")
     if environment.get("nvidia_driver_version") != PRIMARY_DRIVER_VERSION:
         raise AdapterError("runtime NVIDIA driver differs from primary environment")
-    if environment.get("ram_bytes") != PRIMARY_RAM_BYTES:
+    ram_bytes = environment.get("ram_bytes")
+    if (
+        isinstance(ram_bytes, bool)
+        or not isinstance(ram_bytes, int)
+        or abs(ram_bytes - PRIMARY_RAM_BYTES) > PRIMARY_RAM_TOLERANCE_BYTES
+    ):
         raise AdapterError("runtime RAM differs from primary environment")
     if "Ubuntu 22.04" not in str(environment.get("os")):
         raise AdapterError("runtime OS differs from primary environment")

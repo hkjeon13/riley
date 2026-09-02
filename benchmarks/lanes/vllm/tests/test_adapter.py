@@ -36,6 +36,7 @@ from riley_vllm_benchmark.adapter import (  # noqa: E402
     _engine_timing_durations,
     _validate_engine_timing_sanity,
     prompt_token_ids_sha256,
+    _validate_environment,
     run_benchmark,
     verify_snapshot_artifacts,
 )
@@ -358,6 +359,19 @@ def make_backend(
 class AdapterTests(unittest.TestCase):
     def setUp(self) -> None:
         FakeSamplingParams.created.clear()
+
+    def test_environment_allows_exactly_one_page_of_ram_variation(self) -> None:
+        environment = primary_environment()
+        environment["ram_bytes"] = PRIMARY_RAM_BYTES - 4 * 1024
+        _validate_environment(environment)
+
+        environment["ram_bytes"] = PRIMARY_RAM_BYTES - 2 * 4 * 1024
+        with self.assertRaisesRegex(AdapterError, "runtime RAM"):
+            _validate_environment(environment)
+
+        environment["ram_bytes"] = True
+        with self.assertRaisesRegex(AdapterError, "runtime RAM"):
+            _validate_environment(environment)
 
     def _run(
         self, root: Path, *, warm_state: str
