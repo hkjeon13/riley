@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-17까지 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 포함한 fixed-address CUDA Graph lifecycle/parity를 닫았다. 다음 C05-18은 C07의 multi-row paged `KvWrite`와 정확히 맞는 ragged BF16 K/V scatter 한 kernel을 독립 fixed-address graph로 좁힌다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17/18도 full decode graph 또는 성능 향상 근거는 아니다.
+**상태:** In progress — C05-18까지 C07 pure-decode의 indexed BF16 RoPE와 multi-row paged `KvWrite` 한 kernel씩을 independent fixed-address CUDA Graph lifecycle/parity로 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17/18도 full decode graph 또는 성능 향상 근거는 아니다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -308,7 +308,7 @@ byte-exact하고, input/cos/sin/device-position bytes가 그대로인 채 64회 
 allocation statistics 0을 확인했다. 이는 one-node RoPE lifecycle/parity의 실제 근거일 뿐 full decode,
 C07 executor integration 또는 end-to-end 성능 향상을 입증하지 않는다.
 
-### C05-18 — fixed-address BF16 ragged paged-KV write capture (CUDA; planned)
+### C05-18 — fixed-address BF16 ragged paged-KV write capture (CUDA; completed)
 
 C05-18은 C07 V1 pure-decode의 multi-row paged K/V write primitive만 one-node CUDA Graph로 좁힌다. 이것은
 기존 eager `ragged_paged_kv_cache_write`의 BF16 source-to-pool bit preservation과 packed device metadata의
@@ -349,6 +349,16 @@ foreign context·nine-way alias·geometry/capacity·busy·host-mirror preflight 
 recovery, abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw device metadata의
 bounds-invalid row가 eager와 같이 그 row의 key/value pool write만 no-op으로 남기는지를 확인한다. 이 결과는 one-node
 `KvWrite` lifecycle/parity의 근거일 뿐 full decode graph 또는 성능 향상 근거는 아니다.
+
+**완료 검증 (2026-09-02):** 원격 RTX 4090/CUDA 12.8에서 native ABI link, CUDA feature library(53 passed, 3 ignored),
+CPU graph source-contract 28개, 기존 ignored graph GPU suite 40개, 그리고 C05-18 전용 GPU 회귀 3개를 통과했다.
+정상 fixture는 두 sequence, page-16 boundary, shuffled physical block ID에서 eager와 key/value pool BF16 bytes가
+정확히 일치했고, source와 다섯 device-metadata allocation이 그대로인 채 64회 sequential replay하며 second enqueue를
+거부했다. 별도 raw test는 host admission witness는 유효하게 둔 채 device row slot만 sequence-count 밖으로 바꾸어,
+그 행의 K/V pool write가 eager와 같은 bounds-invalid no-op임을 확인했다. short pool preflight 실패는 모든 untouched
+resource를 되돌렸고 begin 뒤 abort도 bundle close 및 allocation statistics 0으로 회복했다. 이는 one-node `KvWrite`
+lifecycle/parity의 실제 근거일 뿐 C07 executor integration, full decode graph 또는 end-to-end 성능 향상을 입증하지
+않는다.
 
 ## 2. 범위
 
