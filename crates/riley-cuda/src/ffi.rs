@@ -1527,6 +1527,33 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
+        stream: *mut RawStream,
+        key_source: *mut RawDeviceBuffer,
+        value_source: *mut RawDeviceBuffer,
+        key_pool: *mut RawDeviceBuffer,
+        value_pool: *mut RawDeviceBuffer,
+        sequence_block_offsets: *mut RawDeviceBuffer,
+        block_ids: *mut RawDeviceBuffer,
+        valid_tokens: *mut RawDeviceBuffer,
+        row_sequence_slots: *mut RawDeviceBuffer,
+        row_positions: *mut RawDeviceBuffer,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        key_value_head_count: u64,
+        head_size: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -3541,6 +3568,114 @@ impl StreamHandle {
         ))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn begin_graph_ragged_paged_kv_cache_write_bf16_capture(
+        &mut self,
+        key_source: &DeviceBufferHandle,
+        value_source: &DeviceBufferHandle,
+        key_pool: &DeviceBufferHandle,
+        value_pool: &DeviceBufferHandle,
+        sequence_block_offsets: &DeviceBufferHandle,
+        block_ids: &DeviceBufferHandle,
+        valid_tokens: &DeviceBufferHandle,
+        row_sequence_slots: &DeviceBufferHandle,
+        row_positions: &DeviceBufferHandle,
+        sequence_count: u64,
+        block_count: u64,
+        active_row_count: u64,
+        physical_block_count: u64,
+        key_value_head_count: u64,
+        head_size: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph BF16 ragged paged-K/V cache-write capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner retains this stream and all nine
+        // fixed device allocations through the complete capture/graph/exec
+        // lifecycle. Host packed-batch validation was completed before this
+        // call and no host mirror is passed to or retained by native state.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
+                self.as_ptr(),
+                key_source.as_ptr(),
+                value_source.as_ptr(),
+                key_pool.as_ptr(),
+                value_pool.as_ptr(),
+                sequence_block_offsets.as_ptr(),
+                block_ids.as_ptr(),
+                valid_tokens.as_ptr(),
+                row_sequence_slots.as_ptr(),
+                row_positions.as_ptr(),
+                sequence_count,
+                block_count,
+                active_row_count,
+                physical_block_count,
+                key_value_head_count,
+                head_size,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native BF16 ragged paged-K/V cache-write capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph BF16 ragged paged-K/V cache-write capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -3875,6 +4010,30 @@ impl GraphCaptureHandle {
         // other safe operations while this capture is active.
         let status = unsafe {
             riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_ragged_paged_kv_cache_write_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph BF16 ragged paged-K/V cache-write";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner keeps the captured stream and all
+        // nine fixed, distinct device allocations alive and inaccessible to
+        // other safe operations while this capture is active.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
                 pointer.as_ptr(),
                 &mut graph_error,
                 &mut error,

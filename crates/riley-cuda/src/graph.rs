@@ -14,6 +14,7 @@ use std::{cell::RefCell, sync::Arc};
 
 #[cfg(feature = "cuda")]
 use crate::Bf16ArgmaxResult;
+use crate::batch::PackedBatchHostV1;
 #[cfg(feature = "cuda")]
 use crate::runtime::{ContextInner, ensure_same_context};
 use crate::{
@@ -169,6 +170,13 @@ pub enum CudaGraphCaptureOperation {
     /// final normalization, C07 executor integration, or full decode
     /// execution authority.
     IndexedRopeBf16 = 11,
+    /// One fixed-address BF16 ragged paged-K/V cache-write kernel.
+    ///
+    /// This retains only fixed key/value source and pool allocations plus the
+    /// five packed device-metadata allocations. It does not include metadata
+    /// H2D, projections, attention reads, scheduler commit, C07 executor
+    /// integration, or full decode execution authority.
+    RaggedPagedKvCacheWriteBf16 = 12,
 }
 
 impl CudaGraphCaptureOperation {
@@ -7573,6 +7581,701 @@ fn validate_graph_indexed_rope_bf16_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and nine distinct fixed device buffers recovered from a
+/// known BF16 ragged paged-K/V cache-write graph lifecycle transition.
+///
+/// The packed host batch is admission evidence only and is never retained.
+/// The key/value sources and pools plus every packed device-metadata
+/// allocation stay fixed and inaccessible while capture, graph, or exec may
+/// retain their addresses.
+pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Resources {
+    stream: CudaStream,
+    key_source: CudaDeviceBuffer,
+    value_source: CudaDeviceBuffer,
+    key_pool: CudaDeviceBuffer,
+    value_pool: CudaDeviceBuffer,
+    sequence_block_offsets: CudaDeviceBuffer,
+    block_ids: CudaDeviceBuffer,
+    valid_tokens: CudaDeviceBuffer,
+    row_sequence_slots: CudaDeviceBuffer,
+    row_positions: CudaDeviceBuffer,
+}
+
+impl OwnedGraphRaggedPagedKvCacheWriteBf16Resources {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        stream: CudaStream,
+        key_source: CudaDeviceBuffer,
+        value_source: CudaDeviceBuffer,
+        key_pool: CudaDeviceBuffer,
+        value_pool: CudaDeviceBuffer,
+        sequence_block_offsets: CudaDeviceBuffer,
+        block_ids: CudaDeviceBuffer,
+        valid_tokens: CudaDeviceBuffer,
+        row_sequence_slots: CudaDeviceBuffer,
+        row_positions: CudaDeviceBuffer,
+    ) -> Self {
+        Self {
+            stream,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        }
+    }
+
+    /// Returns the exact fixed stream and device buffers after known native
+    /// graph-lease release.
+    #[must_use]
+    #[allow(clippy::type_complexity)]
+    pub fn into_parts(
+        self,
+    ) -> (
+        CudaStream,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+        CudaDeviceBuffer,
+    ) {
+        let Self {
+            stream,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        } = self;
+        (
+            stream,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        )
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (
+            stream,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        ) = self.into_parts();
+        row_positions.close()?;
+        row_sequence_slots.close()?;
+        valid_tokens.close()?;
+        block_ids.close()?;
+        sequence_block_offsets.close()?;
+        value_pool.close()?;
+        key_pool.close()?;
+        value_source.close()?;
+        key_source.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning an owned fixed-address BF16 ragged paged-K/V
+/// cache-write graph capture.
+///
+/// Only Rust-side preflight failures recover the untouched resource bundle.
+/// Once native begin is attempted, ambiguous CUDA state retains every raw
+/// address fail-closed.
+#[must_use]
+pub struct OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>,
+}
+
+impl OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError {
+    fn recoverable(
+        error: CudaError,
+        resources: OwnedGraphRaggedPagedKvCacheWriteBf16Resources,
+    ) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns moved resources only when native capture ownership was never
+    /// entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph BF16 ragged paged-K/V cache-write capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address BF16 ragged paged-K/V
+/// cache-write CUDA Graph capture.
+pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
+    /// Captures the one immutable BF16 ragged paged-K/V cache-write node.
+    pub fn enqueue_ragged_paged_kv_cache_write_bf16(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::enqueue_ragged_paged_kv_cache_write_bf16";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 ragged paged-K/V cache-write capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 ragged paged-K/V cache-write enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed BF16 ragged paged-K/V cache-write graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_ragged_paged_kv_cache_write_bf16();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed resource bundle into a by-value
+    /// captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedRaggedPagedKvCacheWriteBf16Graph> {
+        const OPERATION: &str = "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph BF16 ragged paged-K/V cache-write capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph BF16 ragged paged-K/V cache-write enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed BF16 ragged paged-K/V cache-write enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+                &mut self.resources,
+                OPERATION,
+            )?;
+            Ok(OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+        self.abort_once()?;
+        take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+            &mut self.resources,
+            "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(
+                "OwnedGraphRaggedPagedKvCacheWriteBf16Capture::abort",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address BF16 ragged paged-K/V cache-write CUDA Graph
+/// awaiting instantiate or close.
+pub struct OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {
+    /// Instantiates the graph while retaining its fixed resource bundle by
+    /// value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Exec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedRaggedPagedKvCacheWriteBf16Graph::instantiate",
+            )?;
+            Ok(OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedRaggedPagedKvCacheWriteBf16Graph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+                &mut self.resources,
+                "OwnedCapturedRaggedPagedKvCacheWriteBf16Graph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedRaggedPagedKvCacheWriteBf16Graph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address BF16 ragged paged-K/V cache-write CUDA Graph
+/// executable.
+///
+/// It replays only capture-time device allocations. Metadata H2D, projection,
+/// attention reads, scheduler commit, C07 executor wiring, node updates,
+/// fresh inputs, sampling, and eager fallback stay outside this narrow C05
+/// ownership slice.
+pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphRaggedPagedKvCacheWriteBf16Exec {
+    /// Replays the fixed-address BF16 ragged paged-K/V cache-write graph once.
+    pub fn launch<'exec>(
+        &'exec mut self,
+    ) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec>> {
+        const OPERATION: &str = "OwnedGraphRaggedPagedKvCacheWriteBf16Exec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph BF16 ragged paged-K/V cache-write transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph BF16 ragged paged-K/V cache-write exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphRaggedPagedKvCacheWriteBf16Launch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its resource bundle only after
+    /// native close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphRaggedPagedKvCacheWriteBf16Exec::close",
+                "an earlier graph BF16 ragged paged-K/V cache-write transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+                &mut self.resources,
+                "OwnedGraphRaggedPagedKvCacheWriteBf16Exec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedGraphRaggedPagedKvCacheWriteBf16Exec::close",
+            ))
+        }
+    }
+}
+
+/// Completion owner for one ragged paged-K/V cache-write graph executable
+/// replay.
+pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphRaggedPagedKvCacheWriteBf16Exec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable(
+                "OwnedGraphRaggedPagedKvCacheWriteBf16Launch::finish",
+            ))
+        }
+    }
+}
+
+impl Drop for OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_ragged_paged_kv_cache_write_bf16_resources(
+    resources: &mut Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphRaggedPagedKvCacheWriteBf16Resources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph BF16 ragged paged-K/V cache-write owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight(
+    stream: &CudaStream,
+    key_source: &CudaDeviceBuffer,
+    value_source: &CudaDeviceBuffer,
+    key_pool: &CudaDeviceBuffer,
+    value_pool: &CudaDeviceBuffer,
+    sequence_block_offsets: &CudaDeviceBuffer,
+    block_ids: &CudaDeviceBuffer,
+    valid_tokens: &CudaDeviceBuffer,
+    row_sequence_slots: &CudaDeviceBuffer,
+    row_positions: &CudaDeviceBuffer,
+    batch_host: PackedBatchHostV1<'_>,
+    key_value_head_count: u64,
+    head_size: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    // `CudaDeviceBuffer` is intentionally byte-addressed. The safe ABI dtype
+    // contract is therefore the fixed parameter position plus these exact
+    // BF16/U32/U16 element widths and checked shape capacities; there is no
+    // mutable runtime dtype tag that a graph owner could safely trust.
+    const BF16_BYTES: u64 = std::mem::size_of::<u16>() as u64;
+    const U32_BYTES: u64 = std::mem::size_of::<u32>() as u64;
+    const U16_BYTES: u64 = std::mem::size_of::<u16>() as u64;
+
+    // `PackedBatchHostV1` can only be constructed after it validates the v1
+    // CSR, canonical valid-token counts, physical-ID uniqueness/range, and
+    // row address invariants. It is deliberately an admission witness only:
+    // no host slice is copied into the fixed-address graph owner.
+    if batch_host.format_version() != crate::batch::PACKED_BATCH_VERSION {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "the ragged paged-K/V graph requires packed batch format version 1",
+        ));
+    }
+    if batch_host.block_size() != crate::batch::PACKED_BATCH_BLOCK_SIZE {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "the ragged paged-K/V graph requires fixed packed block size 16",
+        ));
+    }
+
+    let buffers = [
+        ("key_source", key_source),
+        ("value_source", value_source),
+        ("key_pool", key_pool),
+        ("value_pool", value_pool),
+        ("sequence_block_offsets", sequence_block_offsets),
+        ("block_ids", block_ids),
+        ("valid_tokens", valid_tokens),
+        ("row_sequence_slots", row_sequence_slots),
+        ("row_positions", row_positions),
+    ];
+    for (index, (left_name, left)) in buffers.iter().enumerate() {
+        for (right_name, right) in buffers.iter().skip(index + 1) {
+            if left.native_handle().same_allocation(right.native_handle()) {
+                return Err(CudaError::invalid_argument(
+                    operation,
+                    format!(
+                        "{left_name} and {right_name} must be distinct fixed device allocations",
+                    ),
+                ));
+            }
+        }
+    }
+    for (_, buffer) in &buffers {
+        ensure_same_context(&stream.context, buffer.context_owner(), operation)?;
+        buffer.ensure_idle_for_operation(operation)?;
+    }
+
+    let sequence_count = batch_host.sequence_count();
+    let block_count = batch_host.block_count();
+    let active_row_count = batch_host.active_row_count();
+    let physical_block_count = batch_host.physical_block_count();
+    if sequence_count == 0
+        || block_count == 0
+        || active_row_count == 0
+        || physical_block_count == 0
+        || key_value_head_count == 0
+        || head_size == 0
+    {
+        return Err(CudaError::out_of_range(
+            operation,
+            "sequence_count, block_count, active_row_count, physical_block_count, key_value_head_count, and head_size must all be non-zero for a one-node BF16 ragged paged-K/V cache-write graph",
+        ));
+    }
+
+    let checked_bytes = |name: &'static str, dimensions: &[u64], element_bytes: u64| {
+        dimensions
+            .iter()
+            .try_fold(element_bytes, |bytes, dimension| {
+                bytes.checked_mul(*dimension).ok_or_else(|| {
+                    CudaError::out_of_range(
+                        operation,
+                        format!("{name} byte capacity overflows the U64 CUDA ABI range"),
+                    )
+                })
+            })
+    };
+    let source_bytes = checked_bytes(
+        "BF16 key/value source",
+        &[active_row_count, key_value_head_count, head_size],
+        BF16_BYTES,
+    )?;
+    let pool_bytes = checked_bytes(
+        "BF16 key/value pool",
+        &[
+            physical_block_count,
+            key_value_head_count,
+            batch_host.block_size(),
+            head_size,
+        ],
+        BF16_BYTES,
+    )?;
+    let offset_count = sequence_count.checked_add(1).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "sequence_count + 1 overflows the packed U32 CSR offset count",
+        )
+    })?;
+    let offsets_bytes = checked_bytes("U32 sequence_block_offsets", &[offset_count], U32_BYTES)?;
+    let block_ids_bytes = checked_bytes("U32 block_ids", &[block_count], U32_BYTES)?;
+    let valid_tokens_bytes = checked_bytes("U16 valid_tokens", &[block_count], U16_BYTES)?;
+    let row_sequence_slots_bytes =
+        checked_bytes("U32 row_sequence_slots", &[active_row_count], U32_BYTES)?;
+    let row_positions_bytes = checked_bytes("U32 row_positions", &[active_row_count], U32_BYTES)?;
+    for (name, actual, required) in [
+        ("BF16 key_source", key_source.byte_len(), source_bytes),
+        ("BF16 value_source", value_source.byte_len(), source_bytes),
+        ("BF16 key_pool", key_pool.byte_len(), pool_bytes),
+        ("BF16 value_pool", value_pool.byte_len(), pool_bytes),
+        (
+            "U32 sequence_block_offsets",
+            sequence_block_offsets.byte_len(),
+            offsets_bytes,
+        ),
+        ("U32 block_ids", block_ids.byte_len(), block_ids_bytes),
+        (
+            "U16 valid_tokens",
+            valid_tokens.byte_len(),
+            valid_tokens_bytes,
+        ),
+        (
+            "U32 row_sequence_slots",
+            row_sequence_slots.byte_len(),
+            row_sequence_slots_bytes,
+        ),
+        (
+            "U32 row_positions",
+            row_positions.byte_len(),
+            row_positions_bytes,
+        ),
+    ] {
+        if actual < required {
+            return Err(CudaError::out_of_range(
+                operation,
+                format!(
+                    "{name} requires at least {required} bytes for its fixed ABI dtype/shape, but allocation capacity is {actual} bytes",
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -8598,6 +9301,146 @@ impl CudaStream {
                 CudaError::unavailable("CudaStream::begin_owned_graph_indexed_rope_bf16_capture"),
                 resources,
             ))
+        }
+    }
+
+    /// Begins one C05-18 fixed-address BF16 ragged paged-K/V cache-write graph
+    /// capture.
+    ///
+    /// `batch_host` is a temporary validated admission witness only. Its
+    /// packed CSR, canonical valid-token, physical-ID, and logical-row checks
+    /// have completed before this call; no host slice is retained and no
+    /// device-metadata byte identity is claimed after capture begins. The
+    /// graph contains exactly one K/V scatter node and deliberately excludes
+    /// metadata H2D, projection, attention read, scheduler commit, C07
+    /// executor wiring, sampling, node updates, and eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust-side preflight failures return the untouched stream plus nine
+    /// allocation resource bundle. Native-entry errors retain every raw
+    /// address fail-closed.
+    #[allow(clippy::too_many_arguments)]
+    pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture(
+        self,
+        key_source: CudaDeviceBuffer,
+        value_source: CudaDeviceBuffer,
+        key_pool: CudaDeviceBuffer,
+        value_pool: CudaDeviceBuffer,
+        sequence_block_offsets: CudaDeviceBuffer,
+        block_ids: CudaDeviceBuffer,
+        valid_tokens: CudaDeviceBuffer,
+        row_sequence_slots: CudaDeviceBuffer,
+        row_positions: CudaDeviceBuffer,
+        batch_host: PackedBatchHostV1<'_>,
+        key_value_head_count: u64,
+        head_size: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<
+        OwnedGraphRaggedPagedKvCacheWriteBf16Capture,
+        OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError,
+    > {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphRaggedPagedKvCacheWriteBf16Resources::new(
+            self,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        );
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphRaggedPagedKvCacheWriteBf16Resources::new(
+            self,
+            key_source,
+            value_source,
+            key_pool,
+            value_pool,
+            sequence_block_offsets,
+            block_ids,
+            valid_tokens,
+            row_sequence_slots,
+            row_positions,
+        );
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str =
+                "CudaStream::begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture";
+            if let Err(error) = validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight(
+                &resources.stream,
+                &resources.key_source,
+                &resources.value_source,
+                &resources.key_pool,
+                &resources.value_pool,
+                &resources.sequence_block_offsets,
+                &resources.block_ids,
+                &resources.valid_tokens,
+                &resources.row_sequence_slots,
+                &resources.row_positions,
+                batch_host,
+                key_value_head_count,
+                head_size,
+                OPERATION,
+            ) {
+                return Err(
+                    OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError::recoverable(
+                        error, resources,
+                    ),
+                );
+            }
+            let native = match resources
+                .stream
+                .native
+                .begin_graph_ragged_paged_kv_cache_write_bf16_capture(
+                    resources.key_source.native_handle(),
+                    resources.value_source.native_handle(),
+                    resources.key_pool.native_handle(),
+                    resources.value_pool.native_handle(),
+                    resources.sequence_block_offsets.native_handle(),
+                    resources.block_ids.native_handle(),
+                    resources.valid_tokens.native_handle(),
+                    resources.row_sequence_slots.native_handle(),
+                    resources.row_positions.native_handle(),
+                    batch_host.sequence_count(),
+                    batch_host.block_count(),
+                    batch_host.active_row_count(),
+                    batch_host.physical_block_count(),
+                    key_value_head_count,
+                    head_size,
+                    mode as u32,
+                ) {
+                Ok(native) => native,
+                Err(error) => {
+                    return Err(
+                        OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError::terminal(error),
+                    );
+                }
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphRaggedPagedKvCacheWriteBf16Capture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (batch_host, key_value_head_count, head_size, mode);
+            Err(
+                OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError::recoverable(
+                    CudaError::unavailable(
+                        "CudaStream::begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture",
+                    ),
+                    resources,
+                ),
+            )
         }
     }
 

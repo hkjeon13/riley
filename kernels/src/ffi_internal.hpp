@@ -172,6 +172,63 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kBf16RowGatherArgmax = 9,
   kBf16RowGatherArgmaxD2H = 10,
   kIndexedRopeBf16 = 11,
+  kRaggedPagedKvCacheWriteBf16 = 12,
+};
+
+// C05-18's raw device metadata has no host-side lifetime. The primary key
+// pool stays in the legacy fill_buffer slot so its lease follows the existing
+// graph lifecycle; these eight booleans cover the remaining fixed allocations.
+struct RileyCudaRaggedPagedKvCacheWriteBf16State {
+  RileyCudaRaggedPagedKvCacheWriteBf16State() noexcept
+      : key_source(nullptr),
+        value_source(nullptr),
+        key_pool(nullptr),
+        value_pool(nullptr),
+        sequence_block_offsets(nullptr),
+        block_ids(nullptr),
+        valid_tokens(nullptr),
+        row_sequence_slots(nullptr),
+        row_positions(nullptr),
+        sequence_count(0),
+        block_count(0),
+        active_row_count(0),
+        physical_block_count(0),
+        key_value_head_count(0),
+        head_size(0),
+        enqueue_count(0),
+        key_source_lease_held(false),
+        value_source_lease_held(false),
+        value_pool_lease_held(false),
+        sequence_block_offsets_lease_held(false),
+        block_ids_lease_held(false),
+        valid_tokens_lease_held(false),
+        row_sequence_slots_lease_held(false),
+        row_positions_lease_held(false) {}
+
+  RileyCudaDeviceBuffer* key_source;
+  RileyCudaDeviceBuffer* value_source;
+  RileyCudaDeviceBuffer* key_pool;
+  RileyCudaDeviceBuffer* value_pool;
+  RileyCudaDeviceBuffer* sequence_block_offsets;
+  RileyCudaDeviceBuffer* block_ids;
+  RileyCudaDeviceBuffer* valid_tokens;
+  RileyCudaDeviceBuffer* row_sequence_slots;
+  RileyCudaDeviceBuffer* row_positions;
+  uint64_t sequence_count;
+  uint64_t block_count;
+  uint64_t active_row_count;
+  uint64_t physical_block_count;
+  uint64_t key_value_head_count;
+  uint64_t head_size;
+  uint32_t enqueue_count;
+  bool key_source_lease_held;
+  bool value_source_lease_held;
+  bool value_pool_lease_held;
+  bool sequence_block_offsets_lease_held;
+  bool block_ids_lease_held;
+  bool valid_tokens_lease_held;
+  bool row_sequence_slots_lease_held;
+  bool row_positions_lease_held;
 };
 
 struct RileyCudaGraphCapture {
@@ -388,6 +445,7 @@ struct RileyCudaGraphCapture {
   bool indexed_rope_bf16_cos_lease_held;
   bool indexed_rope_bf16_sin_lease_held;
   bool indexed_rope_bf16_positions_lease_held;
+  RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -611,6 +669,7 @@ struct RileyCudaGraph {
   uint64_t indexed_rope_bf16_head_size;
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
+  RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -800,6 +859,7 @@ struct RileyCudaGraphExec {
   uint64_t indexed_rope_bf16_head_size;
   uint64_t indexed_rope_bf16_rotary_dimension;
   uint64_t indexed_rope_bf16_table_position_count;
+  RileyCudaRaggedPagedKvCacheWriteBf16State ragged_paged_kv_write_bf16;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;

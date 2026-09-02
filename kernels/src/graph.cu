@@ -101,6 +101,10 @@ constexpr const char* kBeginIndexedRopeBf16Operation =
     "begin CUDA Graph BF16 indexed-RoPE capture";
 constexpr const char* kEnqueueIndexedRopeBf16Operation =
     "enqueue CUDA Graph BF16 indexed-RoPE";
+constexpr const char* kBeginRaggedPagedKvCacheWriteBf16Operation =
+    "begin CUDA Graph BF16 ragged paged-KV write capture";
+constexpr const char* kEnqueueRaggedPagedKvCacheWriteBf16Operation =
+    "enqueue CUDA Graph BF16 ragged paged-KV write";
 // A failed node launch during a multi-node capture cannot safely be retried:
 // CUDA may have invalidated the capture after accepting a prefix. Keep this
 // terminal marker in the capture-only enqueue state so abort remains the sole
@@ -108,6 +112,7 @@ constexpr const char* kEnqueueIndexedRopeBf16Operation =
 constexpr uint32_t kBf16RowGatherArgmaxEnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kBf16RowGatherArgmaxD2HEnqueueTerminal = UINT32_MAX;
 constexpr uint32_t kIndexedRopeBf16EnqueueTerminal = UINT32_MAX;
+constexpr uint32_t kRaggedPagedKvCacheWriteBf16EnqueueTerminal = UINT32_MAX;
 
 __global__ void graph_fill_f32(float* output, uint64_t element_count,
                                float value) {
@@ -399,6 +404,85 @@ __global__ void graph_indexed_rope_bf16(
   }
 }
 
+// This capture-local copy mirrors ragged_paged_kv_cache_write_kernel. Eager
+// execution owns transient ExclusiveUses and synchronizes completion, while a
+// graph keeps all nine raw device allocations leased for its lifetime. Raw
+// metadata must remain device-resident: bounds-invalid rows are ignored just
+// as in eager execution, and duplicate valid destinations remain unspecified.
+struct GraphRaggedPagedKvDeviceBatch {
+  const uint32_t* sequence_block_offsets;
+  const uint32_t* block_ids;
+  const uint16_t* valid_tokens;
+  const uint32_t* row_sequence_slots;
+  const uint32_t* row_positions;
+  uint64_t sequence_count;
+  uint64_t block_count;
+  uint64_t active_row_count;
+  uint64_t physical_block_count;
+};
+
+__device__ __forceinline__ bool graph_resolve_ragged_paged_kv_cache_base(
+    const GraphRaggedPagedKvDeviceBatch& batch, uint64_t row,
+    uint64_t logical_position, uint64_t key_value_head,
+    uint64_t key_value_head_count, uint64_t head_size, uint64_t* output) {
+  if (output == nullptr || row >= batch.active_row_count) {
+    return false;
+  }
+  const uint64_t sequence = batch.row_sequence_slots[row];
+  if (sequence >= batch.sequence_count) {
+    return false;
+  }
+  const uint64_t block_begin = batch.sequence_block_offsets[sequence];
+  const uint64_t block_end = batch.sequence_block_offsets[sequence + 1];
+  if (block_begin > block_end || block_end > batch.block_count) {
+    return false;
+  }
+  const uint64_t logical_block =
+      logical_position / RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+  if (logical_block >= block_end - block_begin) {
+    return false;
+  }
+  const uint64_t block_index = block_begin + logical_block;
+  const uint64_t token_in_block =
+      logical_position % RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+  const uint64_t physical_block = batch.block_ids[block_index];
+  const uint64_t valid = batch.valid_tokens[block_index];
+  if (physical_block >= batch.physical_block_count || valid == 0 ||
+      valid > RILEY_CUDA_PAGED_KV_BLOCK_SIZE || token_in_block >= valid) {
+    return false;
+  }
+  *output =
+      ((physical_block * key_value_head_count + key_value_head) *
+           RILEY_CUDA_PAGED_KV_BLOCK_SIZE +
+       token_in_block) *
+      head_size;
+  return true;
+}
+
+__global__ void graph_ragged_paged_kv_cache_write_bf16(
+    const __nv_bfloat16* key_source, const __nv_bfloat16* value_source,
+    __nv_bfloat16* key_pool, __nv_bfloat16* value_pool,
+    GraphRaggedPagedKvDeviceBatch batch, uint64_t key_value_head_count,
+    uint64_t head_size, uint64_t element_count) {
+  const uint64_t first = static_cast<uint64_t>(blockIdx.x) * blockDim.x +
+                         static_cast<uint64_t>(threadIdx.x);
+  const uint64_t stride = static_cast<uint64_t>(gridDim.x) * blockDim.x;
+  for (uint64_t index = first; index < element_count; index += stride) {
+    const uint64_t depth = index % head_size;
+    const uint64_t packed_row = index / head_size;
+    const uint64_t key_value_head = packed_row % key_value_head_count;
+    const uint64_t row = packed_row / key_value_head_count;
+    const uint64_t logical_position = batch.row_positions[row];
+    uint64_t cache_base = 0;
+    if (graph_resolve_ragged_paged_kv_cache_base(
+            batch, row, logical_position, key_value_head,
+            key_value_head_count, head_size, &cache_base)) {
+      key_pool[cache_base + depth] = key_source[index];
+      value_pool[cache_base + depth] = value_source[index];
+    }
+  }
+}
+
 bool residual_add_capture_fields_are_clear(
     const RileyCudaGraphCapture* capture) noexcept {
   return capture != nullptr && capture->residual_add_left == nullptr &&
@@ -627,6 +711,43 @@ bool indexed_rope_bf16_exec_fields_are_clear(
          exec->indexed_rope_bf16_table_position_count == 0;
 }
 
+bool ragged_paged_kv_cache_write_bf16_state_is_clear(
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state) noexcept {
+  return state.key_source == nullptr && state.value_source == nullptr &&
+         state.key_pool == nullptr && state.value_pool == nullptr &&
+         state.sequence_block_offsets == nullptr && state.block_ids == nullptr &&
+         state.valid_tokens == nullptr && state.row_sequence_slots == nullptr &&
+         state.row_positions == nullptr && state.sequence_count == 0 &&
+         state.block_count == 0 && state.active_row_count == 0 &&
+         state.physical_block_count == 0 && state.key_value_head_count == 0 &&
+         state.head_size == 0 && state.enqueue_count == 0 &&
+         !state.key_source_lease_held && !state.value_source_lease_held &&
+         !state.value_pool_lease_held &&
+         !state.sequence_block_offsets_lease_held &&
+         !state.block_ids_lease_held && !state.valid_tokens_lease_held &&
+         !state.row_sequence_slots_lease_held &&
+         !state.row_positions_lease_held;
+}
+
+bool ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         ragged_paged_kv_cache_write_bf16_state_is_clear(
+             capture->ragged_paged_kv_write_bf16);
+}
+
+bool ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr && ragged_paged_kv_cache_write_bf16_state_is_clear(
+                                 graph->ragged_paged_kv_write_bf16);
+}
+
+bool ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr && ragged_paged_kv_cache_write_bf16_state_is_clear(
+                                exec->ragged_paged_kv_write_bf16);
+}
+
 bool bf16_argmax_shape_is_valid(uint64_t row_count, uint64_t vocabulary_size,
                                 uint64_t* out_logit_element_count) noexcept {
   if (out_logit_element_count == nullptr || row_count == 0 ||
@@ -713,6 +834,44 @@ bool indexed_rope_bf16_shape_is_valid(
   *out_work_item_count = head_rows * units_per_head;
   return *out_tensor_element_count != 0 && *out_table_element_count != 0 &&
          *out_work_item_count != 0;
+}
+
+bool ragged_paged_kv_cache_write_bf16_shape_is_valid(
+    uint64_t sequence_count, uint64_t block_count,
+    uint64_t active_row_count, uint64_t physical_block_count,
+    uint64_t key_value_head_count, uint64_t head_size,
+    uint64_t* out_source_element_count,
+    uint64_t* out_pool_element_count) noexcept {
+  if (out_source_element_count == nullptr || out_pool_element_count == nullptr ||
+      sequence_count == 0 || block_count == 0 || active_row_count == 0 ||
+      physical_block_count == 0 || key_value_head_count == 0 ||
+      head_size == 0 || sequence_count > UINT32_MAX ||
+      block_count > UINT32_MAX || active_row_count > UINT32_MAX ||
+      physical_block_count > UINT32_MAX || block_count > physical_block_count) {
+    return false;
+  }
+  if (active_row_count > UINT64_MAX / key_value_head_count) {
+    return false;
+  }
+  const uint64_t source_rows = active_row_count * key_value_head_count;
+  if (source_rows > UINT64_MAX / head_size) {
+    return false;
+  }
+  if (physical_block_count > UINT64_MAX / key_value_head_count) {
+    return false;
+  }
+  const uint64_t pool_heads = physical_block_count * key_value_head_count;
+  if (pool_heads > UINT64_MAX / RILEY_CUDA_PAGED_KV_BLOCK_SIZE) {
+    return false;
+  }
+  const uint64_t pool_tokens =
+      pool_heads * RILEY_CUDA_PAGED_KV_BLOCK_SIZE;
+  if (pool_tokens > UINT64_MAX / head_size) {
+    return false;
+  }
+  *out_source_element_count = source_rows * head_size;
+  *out_pool_element_count = pool_tokens * head_size;
+  return *out_source_element_count != 0 && *out_pool_element_count != 0;
 }
 
 bool canonical_rms_norm_element_count(uint64_t row_count, uint64_t hidden_size,
@@ -2054,6 +2213,197 @@ bool indexed_rope_bf16_exec_state_is_valid(
              std::memory_order_acquire) == 1;
 }
 
+bool ragged_paged_kv_cache_write_bf16_state_has_expected_leases(
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state,
+    bool held) noexcept {
+  return state.key_source_lease_held == held &&
+         state.value_source_lease_held == held &&
+         state.value_pool_lease_held == held &&
+         state.sequence_block_offsets_lease_held == held &&
+         state.block_ids_lease_held == held &&
+         state.valid_tokens_lease_held == held &&
+         state.row_sequence_slots_lease_held == held &&
+         state.row_positions_lease_held == held;
+}
+
+bool ragged_paged_kv_cache_write_bf16_state_geometry_matches(
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& left,
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& right) noexcept {
+  return left.key_source == right.key_source &&
+         left.value_source == right.value_source &&
+         left.key_pool == right.key_pool && left.value_pool == right.value_pool &&
+         left.sequence_block_offsets == right.sequence_block_offsets &&
+         left.block_ids == right.block_ids && left.valid_tokens == right.valid_tokens &&
+         left.row_sequence_slots == right.row_sequence_slots &&
+         left.row_positions == right.row_positions &&
+         left.sequence_count == right.sequence_count &&
+         left.block_count == right.block_count &&
+         left.active_row_count == right.active_row_count &&
+         left.physical_block_count == right.physical_block_count &&
+         left.key_value_head_count == right.key_value_head_count &&
+         left.head_size == right.head_size;
+}
+
+bool ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* fill_buffer,
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state,
+    bool leases_held) noexcept {
+  uint64_t source_element_count = 0;
+  uint64_t pool_element_count = 0;
+  if (owner == nullptr || stream == nullptr || fill_buffer == nullptr ||
+      state.key_pool != fill_buffer ||
+      !ragged_paged_kv_cache_write_bf16_shape_is_valid(
+          state.sequence_count, state.block_count, state.active_row_count,
+          state.physical_block_count, state.key_value_head_count,
+          state.head_size, &source_element_count, &pool_element_count) ||
+      !ragged_paged_kv_cache_write_bf16_state_has_expected_leases(
+          state, leases_held)) {
+    return false;
+  }
+  RileyCudaDeviceBuffer* const buffers[] = {
+      state.key_source,           state.value_source,
+      state.key_pool,             state.value_pool,
+      state.sequence_block_offsets, state.block_ids,
+      state.valid_tokens,         state.row_sequence_slots,
+      state.row_positions,
+  };
+  constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
+  if (!same_context(owner, stream->owner)) {
+    return false;
+  }
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index] == nullptr || buffers[index]->owner == nullptr ||
+        buffers[index]->device_data == nullptr ||
+        !same_context(owner, buffers[index]->owner) ||
+        buffers[index]->active_uses.load(std::memory_order_acquire) != 1) {
+      return false;
+    }
+    for (size_t other = index + 1; other < kBufferCount; ++other) {
+      if (buffers[index] == buffers[other]) {
+        return false;
+      }
+    }
+  }
+  if (stream->active_uses.load(std::memory_order_acquire) != 1 ||
+      source_element_count >
+          state.key_source->byte_len / sizeof(__nv_bfloat16) ||
+      source_element_count >
+          state.value_source->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count > state.key_pool->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count >
+          state.value_pool->byte_len / sizeof(__nv_bfloat16) ||
+      state.sequence_count + 1 >
+          state.sequence_block_offsets->byte_len / sizeof(uint32_t) ||
+      state.block_count > state.block_ids->byte_len / sizeof(uint32_t) ||
+      state.block_count > state.valid_tokens->byte_len / sizeof(uint16_t) ||
+      state.active_row_count >
+          state.row_sequence_slots->byte_len / sizeof(uint32_t) ||
+      state.active_row_count > state.row_positions->byte_len / sizeof(uint32_t)) {
+    return false;
+  }
+  return true;
+}
+
+bool ragged_paged_kv_cache_write_bf16_capture_state_is_valid(
+    const RileyCudaGraphCapture* capture) noexcept {
+  return capture != nullptr &&
+         capture->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         capture->fill_lease_held && capture->fill_element_count == 0 &&
+         capture->fill_enqueue_count == 0 &&
+         capture->h2d_source == nullptr && capture->h2d_byte_len == 0 &&
+         capture->h2d_enqueue_count == 0 && !capture->h2d_source_lease_held &&
+         capture->silu_input == nullptr && capture->silu_element_count == 0 &&
+         capture->silu_enqueue_count == 0 && !capture->silu_input_lease_held &&
+         capture->gated_multiply_activated_gate == nullptr &&
+         capture->gated_multiply_up == nullptr &&
+         capture->gated_multiply_element_count == 0 &&
+         capture->gated_multiply_enqueue_count == 0 &&
+         !capture->gated_multiply_activated_gate_lease_held &&
+         !capture->gated_multiply_up_lease_held &&
+         residual_add_capture_fields_are_clear(capture) &&
+         canonical_rms_norm_capture_fields_are_clear(capture) &&
+         bf16_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_capture_fields_are_clear(capture) &&
+         bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) &&
+         indexed_rope_bf16_capture_fields_are_clear(capture) &&
+         ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+             capture->owner, capture->stream, capture->fill_buffer,
+             capture->ragged_paged_kv_write_bf16, true);
+}
+
+bool ragged_paged_kv_cache_write_bf16_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph) &&
+         indexed_rope_bf16_graph_fields_are_clear(graph) &&
+         ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+             graph->owner, graph->stream, graph->fill_buffer,
+             graph->ragged_paged_kv_write_bf16, true);
+}
+
+// The preallocated graph wrapper exists while the capture owns every lease.
+// It mirrors the immutable pointers and geometry but deliberately carries no
+// extra lease bits until successful capture end transfers ownership.
+bool ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(
+    const RileyCudaGraph* graph) noexcept {
+  return graph != nullptr &&
+         graph->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         graph->h2d_source == nullptr && graph->h2d_byte_len == 0 &&
+         graph->silu_input == nullptr && graph->silu_element_count == 0 &&
+         graph->gated_multiply_activated_gate == nullptr &&
+         graph->gated_multiply_up == nullptr &&
+         graph->gated_multiply_element_count == 0 &&
+         residual_add_graph_fields_are_clear(graph) &&
+         canonical_rms_norm_graph_fields_are_clear(graph) &&
+         bf16_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_graph_fields_are_clear(graph) &&
+         bf16_row_gather_argmax_d2h_graph_fields_are_clear(graph) &&
+         indexed_rope_bf16_graph_fields_are_clear(graph) &&
+         ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+             graph->owner, graph->stream, graph->fill_buffer,
+             graph->ragged_paged_kv_write_bf16, false);
+}
+
+bool ragged_paged_kv_cache_write_bf16_exec_state_is_valid(
+    const RileyCudaGraphExec* exec) noexcept {
+  return exec != nullptr &&
+         exec->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+         exec->h2d_source == nullptr && exec->h2d_byte_len == 0 &&
+         !exec->h2d_input_staged && exec->silu_input == nullptr &&
+         exec->silu_element_count == 0 &&
+         exec->gated_multiply_activated_gate == nullptr &&
+         exec->gated_multiply_up == nullptr &&
+         exec->gated_multiply_element_count == 0 &&
+         residual_add_exec_fields_are_clear(exec) &&
+         canonical_rms_norm_exec_fields_are_clear(exec) &&
+         bf16_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_exec_fields_are_clear(exec) &&
+         bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) &&
+         indexed_rope_bf16_exec_fields_are_clear(exec) &&
+         ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+             exec->owner, exec->stream, exec->fill_buffer,
+             exec->ragged_paged_kv_write_bf16, true);
+}
+
 bool graph_error_is_compatible(const RileyCudaGraphErrorInfo* error) noexcept {
   return error == nullptr || error->struct_size >= sizeof(*error);
 }
@@ -2138,6 +2488,7 @@ bool release_capture_owner(RileyCudaGraphCapture* capture) noexcept {
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
       !indexed_rope_bf16_capture_fields_are_clear(capture) ||
+      !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
       capture->unreleased_graph != nullptr ||
       capture->deferred_close_head != nullptr ||
       capture->deferred_close_tail != nullptr) {
@@ -2183,7 +2534,8 @@ bool release_capture_fill_lease(RileyCudaGraphCapture* capture) noexcept {
       !bf16_row_gather_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_capture_fields_are_clear(capture) ||
       !bf16_row_gather_argmax_d2h_capture_fields_are_clear(capture) ||
-      !indexed_rope_bf16_capture_fields_are_clear(capture)) {
+      !indexed_rope_bf16_capture_fields_are_clear(capture) ||
+      !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture)) {
     return false;
   }
   if (!capture->fill_lease_held) {
@@ -2618,6 +2970,43 @@ bool release_capture_indexed_rope_bf16_leases(
   return true;
 }
 
+// C05-18 permanently leases its two sources, two pools, and five raw metadata
+// allocations from begin until capture abort or graph/exec close. key_pool is
+// deliberately the legacy fill_buffer lease; do not add a second key-pool
+// counter to the operation state.
+bool release_capture_ragged_paged_kv_cache_write_bf16_leases(
+    RileyCudaGraphCapture* capture) noexcept {
+  if (!ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture)) {
+    return false;
+  }
+  const uint32_t enqueue_count =
+      capture->ragged_paged_kv_write_bf16.enqueue_count;
+  if (enqueue_count != 0 && enqueue_count != 1 &&
+      enqueue_count != kRaggedPagedKvCacheWriteBf16EnqueueTerminal) {
+    return false;
+  }
+  RileyCudaRaggedPagedKvCacheWriteBf16State& state =
+      capture->ragged_paged_kv_write_bf16;
+  if (!release_exclusive_use(state.row_positions->active_uses) ||
+      !release_exclusive_use(state.row_sequence_slots->active_uses) ||
+      !release_exclusive_use(state.valid_tokens->active_uses) ||
+      !release_exclusive_use(state.block_ids->active_uses) ||
+      !release_exclusive_use(state.sequence_block_offsets->active_uses) ||
+      !release_exclusive_use(state.value_pool->active_uses) ||
+      !release_exclusive_use(state.value_source->active_uses) ||
+      !release_exclusive_use(state.key_source->active_uses) ||
+      !release_exclusive_use(capture->fill_buffer->active_uses)) {
+    return false;
+  }
+  capture->fill_buffer = nullptr;
+  capture->fill_element_count = 0;
+  capture->fill_enqueue_count = 0;
+  capture->fill_lease_held = false;
+  state = RileyCudaRaggedPagedKvCacheWriteBf16State{};
+  capture->operation = RileyCudaGraphCaptureOperation::kNone;
+  return true;
+}
+
 bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture == nullptr || capture->prepared_graph == nullptr) {
     return capture != nullptr;
@@ -2663,6 +3052,12 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
       (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+      (!ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
+       !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -2821,6 +3216,15 @@ bool destroy_prepared_graph_storage(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+    if (!ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
+        !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(graph) ||
+        !ragged_paged_kv_cache_write_bf16_state_geometry_matches(
+            capture->ragged_paged_kv_write_bf16,
+            graph->ragged_paged_kv_write_bf16)) {
+      return false;
+    }
   } else if (capture->operation == RileyCudaGraphCaptureOperation::kNone) {
     // C05-5's historical cleanup releases the fixed-buffer lease before it
     // frees this preallocated graph wrapper. That order is valid only for a
@@ -2898,6 +3302,12 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   if (capture->operation != RileyCudaGraphCaptureOperation::kIndexedRopeBf16 &&
       (!indexed_rope_bf16_capture_fields_are_clear(capture) ||
        !indexed_rope_bf16_graph_fields_are_clear(graph))) {
+    return false;
+  }
+  if (capture->operation !=
+          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16 &&
+      (!ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(capture) ||
+       !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(graph))) {
     return false;
   }
   if (capture->operation == RileyCudaGraphCaptureOperation::kFillF32) {
@@ -3121,6 +3531,16 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
             capture->indexed_rope_bf16_table_position_count) {
       return false;
     }
+  } else if (capture->operation ==
+             RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+    if (capture->ragged_paged_kv_write_bf16.enqueue_count != 1 ||
+        !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(capture) ||
+        !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(graph) ||
+        !ragged_paged_kv_cache_write_bf16_state_geometry_matches(
+            capture->ragged_paged_kv_write_bf16,
+            graph->ragged_paged_kv_write_bf16)) {
+      return false;
+    }
   } else {
     return false;
   }
@@ -3129,6 +3549,13 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
     return false;
   }
   graph->owns_capture_leases = true;
+  if (capture->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16) {
+    graph->ragged_paged_kv_write_bf16 =
+        capture->ragged_paged_kv_write_bf16;
+    capture->ragged_paged_kv_write_bf16 =
+        RileyCudaRaggedPagedKvCacheWriteBf16State{};
+  }
   capture->prepared_graph = nullptr;
   capture->fill_buffer = nullptr;
   capture->fill_element_count = 0;
@@ -3212,6 +3639,8 @@ bool transfer_capture_owner_to_graph(RileyCudaGraphCapture* capture) noexcept {
   capture->indexed_rope_bf16_cos_lease_held = false;
   capture->indexed_rope_bf16_sin_lease_held = false;
   capture->indexed_rope_bf16_positions_lease_held = false;
+  capture->ragged_paged_kv_write_bf16 =
+      RileyCudaRaggedPagedKvCacheWriteBf16State{};
   capture->operation = RileyCudaGraphCaptureOperation::kNone;
   capture->~RileyCudaGraphCapture();
   std::free(capture);
@@ -3465,6 +3894,26 @@ bool release_graph_indexed_rope_bf16_leases(
          release_exclusive_use(cos->active_uses) &&
          release_exclusive_use(input->active_uses) &&
          release_exclusive_use(output->active_uses) &&
+         release_exclusive_use(stream->active_uses) && release_child(owner);
+}
+
+bool release_graph_ragged_paged_kv_cache_write_bf16_leases(
+    RileyCudaContext* owner, RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* key_pool,
+    const RileyCudaRaggedPagedKvCacheWriteBf16State& state) noexcept {
+  if (!ragged_paged_kv_cache_write_bf16_state_is_valid_common(
+          owner, stream, key_pool, state, true)) {
+    return false;
+  }
+  return release_exclusive_use(state.row_positions->active_uses) &&
+         release_exclusive_use(state.row_sequence_slots->active_uses) &&
+         release_exclusive_use(state.valid_tokens->active_uses) &&
+         release_exclusive_use(state.block_ids->active_uses) &&
+         release_exclusive_use(state.sequence_block_offsets->active_uses) &&
+         release_exclusive_use(state.value_pool->active_uses) &&
+         release_exclusive_use(state.value_source->active_uses) &&
+         release_exclusive_use(state.key_source->active_uses) &&
+         release_exclusive_use(key_pool->active_uses) &&
          release_exclusive_use(stream->active_uses) && release_child(owner);
 }
 
@@ -6940,6 +7389,377 @@ RileyCudaStatus capture_begin_indexed_rope_bf16_impl(
   return status;
 }
 
+// C05-18 captures exactly the existing eager ragged paged-KV write kernel.
+// The safe Rust boundary uses a temporary PackedBatchHostV1 witness, but this
+// native owner retains only fixed device allocations and immutable geometry;
+// it never stages or retains host metadata.
+RileyCudaStatus capture_begin_ragged_paged_kv_cache_write_bf16_impl(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* key_source,
+    RileyCudaDeviceBuffer* value_source, RileyCudaDeviceBuffer* key_pool,
+    RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids, RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions, uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t key_value_head_count,
+    uint64_t head_size, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (out_capture != nullptr) {
+    *out_capture = nullptr;
+  }
+  if (out_capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "out_capture is null");
+  }
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN);
+  if (stream == nullptr || stream->owner == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "stream or its owner is null");
+  }
+  RileyCudaDeviceBuffer* const buffers[] = {
+      key_source,           value_source,          key_pool,
+      value_pool,           sequence_block_offsets, block_ids,
+      valid_tokens,         row_sequence_slots,    row_positions,
+  };
+  constexpr size_t kBufferCount = sizeof(buffers) / sizeof(buffers[0]);
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index] == nullptr || buffers[index]->owner == nullptr) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "one of the nine fixed ragged paged-KV allocations or its owner is null");
+    }
+    if (!same_context(stream->owner, buffers[index]->owner)) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "capture stream and ragged paged-KV allocations must share one context owner");
+    }
+    for (size_t other = index + 1; other < kBufferCount; ++other) {
+      if (buffers[index] == buffers[other]) {
+        return validation_error(
+            error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+            kBeginRaggedPagedKvCacheWriteBf16Operation,
+            "graph BF16 ragged paged-KV write requires nine distinct device allocations");
+      }
+    }
+  }
+  if (mode != RILEY_CUDA_GRAPH_CAPTURE_MODE_THREAD_LOCAL) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "only thread-local capture mode is admitted");
+  }
+  uint64_t source_element_count = 0;
+  uint64_t pool_element_count = 0;
+  if (!ragged_paged_kv_cache_write_bf16_shape_is_valid(
+          sequence_count, block_count, active_row_count, physical_block_count,
+          key_value_head_count, head_size, &source_element_count,
+          &pool_element_count) ||
+      source_element_count > key_source->byte_len / sizeof(__nv_bfloat16) ||
+      source_element_count > value_source->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count > key_pool->byte_len / sizeof(__nv_bfloat16) ||
+      pool_element_count > value_pool->byte_len / sizeof(__nv_bfloat16) ||
+      sequence_count + 1 >
+          sequence_block_offsets->byte_len / sizeof(uint32_t) ||
+      block_count > block_ids->byte_len / sizeof(uint32_t) ||
+      block_count > valid_tokens->byte_len / sizeof(uint16_t) ||
+      active_row_count > row_sequence_slots->byte_len / sizeof(uint32_t) ||
+      active_row_count > row_positions->byte_len / sizeof(uint32_t)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_RANGE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "ragged paged-KV geometry is zero, invalid, overflows, or exceeds fixed capacity");
+  }
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (buffers[index]->device_data == nullptr) {
+      return validation_error(
+          error, RILEY_CUDA_STATUS_INVALID_STATE,
+          RILEY_CUDA_ERROR_STAGE_VALIDATION,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "a graph BF16 ragged paged-KV allocation has no live device storage");
+    }
+  }
+  if (stream->owner->restoration_failed.load(std::memory_order_acquire)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "a prior CUDA context-stack restoration failed");
+  }
+  if (thread_has_active_graph_capture()) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+  if (thread_has_active_command_batch() || command_batch_is_active(stream)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "a stream command batch blocks fixed-address BF16 ragged paged-KV graph capture");
+  }
+  const RileyCudaStatus idle_status = require_stream_capture_idle(
+      stream, error, kBeginRaggedPagedKvCacheWriteBf16Operation);
+  if (idle_status != RILEY_CUDA_STATUS_SUCCESS) {
+    return idle_status;
+  }
+
+  bool resource_leases_held[kBufferCount] = {};
+  bool stream_lease_held = false;
+  const auto release_initial_leases = [&]() noexcept {
+    bool released = true;
+    if (stream_lease_held) {
+      released = release_exclusive_use(stream->active_uses) && released;
+      stream_lease_held = false;
+    }
+    for (size_t index = kBufferCount; index != 0; --index) {
+      const size_t resource_index = index - 1;
+      if (resource_leases_held[resource_index]) {
+        released = release_exclusive_use(
+                       buffers[resource_index]->active_uses) &&
+                   released;
+        resource_leases_held[resource_index] = false;
+      }
+    }
+    return released;
+  };
+  const auto reject_busy = [&](const char* message) noexcept {
+    if (!release_initial_leases()) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "failed to release rejected BF16 ragged paged-KV graph resource leases");
+    }
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            message);
+  };
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    if (!try_acquire_exclusive_use(buffers[index]->active_uses)) {
+      return reject_busy(
+          "a fixed ragged paged-KV graph allocation has an active asynchronous use");
+    }
+    resource_leases_held[index] = true;
+  }
+  if (!try_acquire_exclusive_use(stream->active_uses)) {
+    return reject_busy("stream has an active asynchronous use or capture");
+  }
+  stream_lease_held = true;
+
+  const uint64_t capture_id = next_graph_capture_id();
+  if (capture_id == 0) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "failed to release exhausted graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginRaggedPagedKvCacheWriteBf16Operation,
+                          "CUDA Graph capture ID space is exhausted");
+  }
+  if (!retain_child(stream->owner)) {
+    if (!release_initial_leases()) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "failed to release rejected graph capture resource leases");
+    }
+    return internal_error(error, RILEY_CUDA_ERROR_STAGE_CREATE,
+                          kBeginRaggedPagedKvCacheWriteBf16Operation,
+                          "context child-resource counter overflow");
+  }
+  void* capture_storage = std::calloc(1, sizeof(RileyCudaGraphCapture));
+  if (capture_storage == nullptr) {
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "failed to release graph capture allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "host allocation failed for BF16 ragged paged-KV graph capture owner");
+  }
+  auto* capture = new (capture_storage) RileyCudaGraphCapture{
+      stream->owner, stream, stream->owner->capture_domain,
+      native_thread_token(), capture_id};
+  capture->operation =
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
+  void* graph_storage = std::calloc(1, sizeof(RileyCudaGraph));
+  if (graph_storage == nullptr) {
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool leases_released = release_initial_leases();
+    if (!child_released || !leases_released) {
+      return internal_error(error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+                            kBeginRaggedPagedKvCacheWriteBf16Operation,
+                            "failed to release captured graph allocation rollback leases");
+    }
+    return set_error(
+        error, RILEY_CUDA_STATUS_OUT_OF_MEMORY, 0,
+        RILEY_CUDA_ERROR_DOMAIN_INTERNAL, RILEY_CUDA_ERROR_STAGE_CREATE,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "host allocation failed for captured BF16 ragged paged-KV graph owner");
+  }
+  capture->prepared_graph = new (graph_storage) RileyCudaGraph(
+      stream->owner, stream, key_pool, capture_id,
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16);
+  RileyCudaGraph* const graph = capture->prepared_graph;
+  RileyCudaRaggedPagedKvCacheWriteBf16State graph_state{};
+  graph_state.key_source = key_source;
+  graph_state.value_source = value_source;
+  graph_state.key_pool = key_pool;
+  graph_state.value_pool = value_pool;
+  graph_state.sequence_block_offsets = sequence_block_offsets;
+  graph_state.block_ids = block_ids;
+  graph_state.valid_tokens = valid_tokens;
+  graph_state.row_sequence_slots = row_sequence_slots;
+  graph_state.row_positions = row_positions;
+  graph_state.sequence_count = sequence_count;
+  graph_state.block_count = block_count;
+  graph_state.active_row_count = active_row_count;
+  graph_state.physical_block_count = physical_block_count;
+  graph_state.key_value_head_count = key_value_head_count;
+  graph_state.head_size = head_size;
+  graph->ragged_paged_kv_write_bf16 = graph_state;
+  capture->fill_buffer = key_pool;
+  capture->fill_lease_held = true;
+  capture->ragged_paged_kv_write_bf16 = graph_state;
+  capture->ragged_paged_kv_write_bf16.key_source_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.value_source_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.value_pool_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.sequence_block_offsets_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.block_ids_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.valid_tokens_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.row_sequence_slots_lease_held = true;
+  capture->ragged_paged_kv_write_bf16.row_positions_lease_held = true;
+  for (size_t index = 0; index < kBufferCount; ++index) {
+    resource_leases_held[index] = false;
+  }
+
+  if (!try_begin_capture_domain(capture->capture_domain)) {
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!graph_released || !leases_released || !child_released ||
+        !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "failed to release a blocked BF16 ragged paged-KV graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "the CUDA primary context has a pending copy, fill, or broad control operation");
+  }
+  if (!try_publish_thread_graph_capture(capture)) {
+    const bool domain_released =
+        release_capture_domain_capture(capture->capture_domain);
+    const bool graph_released = destroy_prepared_graph_storage(capture);
+    const bool leases_released =
+        release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+    const bool child_released = release_child(stream->owner);
+    const bool stream_released = release_initial_leases();
+    capture->~RileyCudaGraphCapture();
+    std::free(capture);
+    if (!domain_released || !graph_released || !leases_released ||
+        !child_released || !stream_released) {
+      return internal_error(
+          error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+          kBeginRaggedPagedKvCacheWriteBf16Operation,
+          "failed to release a rejected BF16 ragged paged-KV graph capture owner");
+    }
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "this host thread already owns a thread-local CUDA Graph capture");
+  }
+
+  CurrentContext scope(stream->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+      kBeginRaggedPagedKvCacheWriteBf16Operation, capture);
+  bool capture_may_be_active = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    const cudaError_t begin_result = cudaStreamBeginCapture(
+        stream->stream, cudaStreamCaptureModeThreadLocal);
+    if (begin_result == cudaSuccess) {
+      capture->capture_started = true;
+      capture_may_be_active = true;
+    } else {
+      status = runtime_error(
+          begin_result, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+          kBeginRaggedPagedKvCacheWriteBf16Operation);
+      capture_may_be_active = capture_may_be_active_after_failed_begin(stream);
+      capture->capture_started = capture_may_be_active;
+    }
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_PREPARE,
+                       kBeginRaggedPagedKvCacheWriteBf16Operation);
+  const bool restoration_known =
+      !stream->owner->restoration_failed.load(std::memory_order_acquire);
+  if (capture_may_be_active) {
+    *out_capture = capture;
+    record_capture_outcome(out_graph_error,
+                           RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, capture_id,
+                           false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                      !restoration_known);
+    return status;
+  }
+
+  const bool graph_released = destroy_prepared_graph_storage(capture);
+  const bool leases_released =
+      release_capture_ragged_paged_kv_cache_write_bf16_leases(capture);
+  const bool capture_released =
+      graph_released && leases_released && release_capture_owner(capture);
+  if (!capture_released) {
+    return internal_error(
+        error, RILEY_CUDA_ERROR_STAGE_CLOSE,
+        kBeginRaggedPagedKvCacheWriteBf16Operation,
+        "failed to release an unstarted BF16 ragged paged-KV graph capture owner");
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN, 0, true,
+                         !restoration_known);
+  return status;
+}
+
 }  // namespace
 
 extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
@@ -6973,6 +7793,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_query_capability(
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H:
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16:
+    case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16:
       *out_capability = RILEY_CUDA_GRAPH_CAPTURE_CAPABILITY_SUPPORTED;
       break;
     case RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN:
@@ -7324,6 +8145,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+      const bool is_ragged_paged_kv_write_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
       const bool is_fill_or_generic =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32 ||
           owner->operation == RileyCudaGraphCaptureOperation::kNone;
@@ -7332,7 +8156,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
           is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
-          is_indexed_rope_bf16;
+          is_indexed_rope_bf16 || is_ragged_paged_kv_write_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -7361,6 +8185,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_abort(
                                              owner)
                                  : is_indexed_rope_bf16
                                        ? release_capture_indexed_rope_bf16_leases(
+                                             owner)
+                                 : is_ragged_paged_kv_write_bf16
+                                       ? release_capture_ragged_paged_kv_cache_write_bf16_leases(
                                              owner)
                                  : is_fill_or_generic
                                        ? release_capture_fill_lease(owner)
@@ -7528,6 +8355,29 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
       stream, input, cos, sin, positions, output, positions_mirror,
       positions_mirror_len, active_row_count, head_count, head_size,
       rotary_dimension, table_position_count, mode, out_capture,
+      out_graph_error, error);
+}
+
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
+    RileyCudaStream* stream, RileyCudaDeviceBuffer* key_source,
+    RileyCudaDeviceBuffer* value_source, RileyCudaDeviceBuffer* key_pool,
+    RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids, RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions, uint64_t sequence_count,
+    uint64_t block_count, uint64_t active_row_count,
+    uint64_t physical_block_count, uint64_t key_value_head_count,
+    uint64_t head_size, RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  return capture_begin_ragged_paged_kv_cache_write_bf16_impl(
+      stream, key_source, value_source, key_pool, value_pool,
+      sequence_block_offsets, block_ids, valid_tokens, row_sequence_slots,
+      row_positions, sequence_count, block_count, active_row_count,
+      physical_block_count, key_value_head_count, head_size, mode, out_capture,
       out_graph_error, error);
 }
 
@@ -8661,6 +9511,129 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
   return status;
 }
 
+extern "C" RileyCudaStatus
+riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) noexcept {
+  using riley_cuda_internal::clear_error;
+
+  clear_error(error);
+  if (!graph_error_is_compatible(out_graph_error) ||
+      !graph_error_reserved_is_zero(out_graph_error)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueRaggedPagedKvCacheWriteBf16Operation,
+        "out_graph_error has an incompatible struct_size or nonzero reserved fields");
+  }
+  clear_graph_error(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE);
+  if (capture == nullptr) {
+    return validation_error(error, RILEY_CUDA_STATUS_INVALID_ARGUMENT,
+                            RILEY_CUDA_ERROR_STAGE_VALIDATION,
+                            kEnqueueRaggedPagedKvCacheWriteBf16Operation,
+                            "capture owner is null");
+  }
+  RileyCudaGraphCapture* const owner = capture;
+  const uint64_t capture_id = owner->capture_id;
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, false);
+  if (owner->prepared_graph == nullptr || !owner->capture_started ||
+      owner->capture_terminated || owner->unreleased_graph != nullptr ||
+      !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(owner) ||
+      !ragged_paged_kv_cache_write_bf16_prepared_graph_state_is_valid(
+          owner->prepared_graph) ||
+      !ragged_paged_kv_cache_write_bf16_state_geometry_matches(
+          owner->ragged_paged_kv_write_bf16,
+          owner->prepared_graph->ragged_paged_kv_write_bf16) ||
+      owner->ragged_paged_kv_write_bf16.enqueue_count != 0) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueRaggedPagedKvCacheWriteBf16Operation,
+        "capture owner is not a live unqueued BF16 ragged paged-KV graph capture");
+  }
+  if (owner->owner_thread != native_thread_token() ||
+      !thread_graph_capture_is_owner(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueRaggedPagedKvCacheWriteBf16Operation,
+        "thread-local capture must enqueue on its begin thread");
+  }
+  const RileyCudaRaggedPagedKvCacheWriteBf16State& state =
+      owner->ragged_paged_kv_write_bf16;
+  uint64_t source_element_count = 0;
+  uint64_t pool_element_count = 0;
+  if (!ragged_paged_kv_cache_write_bf16_shape_is_valid(
+          state.sequence_count, state.block_count, state.active_row_count,
+          state.physical_block_count, state.key_value_head_count,
+          state.head_size, &source_element_count, &pool_element_count)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION,
+        kEnqueueRaggedPagedKvCacheWriteBf16Operation,
+        "BF16 ragged paged-KV capture owner has invalid immutable geometry");
+  }
+  (void)pool_element_count;
+  const uint64_t requested_blocks =
+      ((source_element_count - 1) / kGraphBf16RowGatherThreads) + 1;
+  const uint32_t grid_x = static_cast<uint32_t>(
+      requested_blocks < kMaximumGraphBf16RowGatherBlocks
+          ? requested_blocks
+          : kMaximumGraphBf16RowGatherBlocks);
+  const GraphRaggedPagedKvDeviceBatch batch{
+      static_cast<const uint32_t*>(state.sequence_block_offsets->device_data),
+      static_cast<const uint32_t*>(state.block_ids->device_data),
+      static_cast<const uint16_t*>(state.valid_tokens->device_data),
+      static_cast<const uint32_t*>(state.row_sequence_slots->device_data),
+      static_cast<const uint32_t*>(state.row_positions->device_data),
+      state.sequence_count,
+      state.block_count,
+      state.active_row_count,
+      state.physical_block_count,
+  };
+
+  CurrentContext scope(owner->owner);
+  RileyCudaStatus status = scope.enter(
+      error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+      kEnqueueRaggedPagedKvCacheWriteBf16Operation, owner);
+  bool node_submission_started = false;
+  bool node_accepted = false;
+  if (status == RILEY_CUDA_STATUS_SUCCESS) {
+    node_submission_started = true;
+    graph_ragged_paged_kv_cache_write_bf16<<<
+        grid_x, kGraphBf16RowGatherThreads, 0, owner->stream->stream>>>(
+        static_cast<const __nv_bfloat16*>(state.key_source->device_data),
+        static_cast<const __nv_bfloat16*>(state.value_source->device_data),
+        static_cast<__nv_bfloat16*>(owner->fill_buffer->device_data),
+        static_cast<__nv_bfloat16*>(state.value_pool->device_data), batch,
+        state.key_value_head_count, state.head_size, source_element_count);
+    status = runtime_error(cudaGetLastError(), error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                           kEnqueueRaggedPagedKvCacheWriteBf16Operation);
+    node_accepted = status == RILEY_CUDA_STATUS_SUCCESS;
+  }
+  status = scope.leave(status, error, RILEY_CUDA_ERROR_STAGE_LAUNCH,
+                       kEnqueueRaggedPagedKvCacheWriteBf16Operation);
+  const bool restoration_known =
+      !owner->owner->restoration_failed.load(std::memory_order_acquire);
+  if (node_submission_started &&
+      (!node_accepted || status != RILEY_CUDA_STATUS_SUCCESS ||
+       !restoration_known)) {
+    owner->ragged_paged_kv_write_bf16.enqueue_count =
+        kRaggedPagedKvCacheWriteBf16EnqueueTerminal;
+  } else if (node_accepted && status == RILEY_CUDA_STATUS_SUCCESS &&
+             restoration_known) {
+    owner->ragged_paged_kv_write_bf16.enqueue_count = 1;
+  }
+  record_capture_outcome(out_graph_error,
+                         RILEY_CUDA_GRAPH_STAGE_CAPTURE_ENQUEUE, capture_id,
+                         false, status != RILEY_CUDA_STATUS_SUCCESS ||
+                                    !restoration_known);
+  return status;
+}
+
 extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
     RileyCudaGraphCapture** capture, RileyCudaGraph** out_graph,
     RileyCudaGraphErrorInfo* out_graph_error,
@@ -8724,11 +9697,14 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_ragged_paged_kv_write_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
   if ((!is_fill && !is_h2d && !is_silu_bf16 && !is_gated_multiply_bf16 &&
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16) ||
+       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
       (!is_residual_add_bf16 && !residual_add_capture_fields_are_clear(owner)) ||
       (!is_canonical_rms_norm_bf16 &&
        !canonical_rms_norm_capture_fields_are_clear(owner)) ||
@@ -8741,6 +9717,8 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
        !bf16_row_gather_argmax_d2h_capture_fields_are_clear(owner)) ||
       (!is_indexed_rope_bf16 &&
        !indexed_rope_bf16_capture_fields_are_clear(owner)) ||
+      (!is_ragged_paged_kv_write_bf16 &&
+       !ragged_paged_kv_cache_write_bf16_capture_fields_are_clear(owner)) ||
       (is_fill && (owner->h2d_source != nullptr || owner->h2d_byte_len != 0 ||
                    owner->h2d_source_lease_held || owner->silu_input != nullptr ||
                    owner->silu_element_count != 0 ||
@@ -8824,7 +9802,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_bf16_row_gather_argmax_d2h &&
        !bf16_row_gather_argmax_d2h_capture_state_is_valid(owner)) ||
       (is_indexed_rope_bf16 &&
-       !indexed_rope_bf16_capture_state_is_valid(owner))) {
+       !indexed_rope_bf16_capture_state_is_valid(owner)) ||
+      (is_ragged_paged_kv_write_bf16 &&
+       !ragged_paged_kv_cache_write_bf16_capture_state_is_valid(owner))) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture owner has invalid fixed-operation geometry");
@@ -8851,7 +9831,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
       (is_bf16_row_gather_argmax_d2h &&
        owner->bf16_row_gather_argmax_d2h_enqueue_count != 1) ||
       (is_indexed_rope_bf16 &&
-       owner->indexed_rope_bf16_enqueue_count != 1)) {
+       owner->indexed_rope_bf16_enqueue_count != 1) ||
+      (is_ragged_paged_kv_write_bf16 &&
+       owner->ragged_paged_kv_write_bf16.enqueue_count != 1)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION, kEndOperation,
                             "capture end requires its admitted operation enqueue contract");
@@ -9034,6 +10016,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
       const bool is_indexed_rope_bf16 =
           owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+      const bool is_ragged_paged_kv_write_bf16 =
+          owner->operation ==
+          RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
       const bool is_fill =
           owner->operation == RileyCudaGraphCaptureOperation::kFillF32;
       const bool release_graph_first =
@@ -9041,7 +10026,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
           is_residual_add_bf16 || is_canonical_rms_norm_bf16 ||
           is_bf16_argmax || is_bf16_row_gather ||
           is_bf16_row_gather_argmax || is_bf16_row_gather_argmax_d2h ||
-          is_indexed_rope_bf16;
+          is_indexed_rope_bf16 || is_ragged_paged_kv_write_bf16;
       const bool prepared_graph_released =
           release_graph_first ? destroy_prepared_graph_storage(owner) : true;
       const bool operation_released =
@@ -9070,6 +10055,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_capture_end(
                                              owner)
                                  : is_indexed_rope_bf16
                                        ? release_capture_indexed_rope_bf16_leases(
+                                             owner)
+                                 : is_ragged_paged_kv_write_bf16
+                                       ? release_capture_ragged_paged_kv_cache_write_bf16_leases(
                                              owner)
                                  : is_fill ? release_capture_fill_lease(owner)
                                            : false);
@@ -9154,6 +10142,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_ragged_paged_kv_write_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -9243,7 +10234,21 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
-        "captured graph mixes BF16 indexed-RoPE state with another operation");
+                            "captured graph mixes BF16 indexed-RoPE state with another operation");
+  }
+  if (is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured BF16 ragged paged-KV graph has invalid fixed resource state");
+  }
+  if (!is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kInstantiateOperation,
+        "captured graph mixes BF16 ragged paged-KV state with another operation");
   }
   if (owner->owner == nullptr || owner->stream == nullptr ||
       owner->fill_buffer == nullptr || owner->graph == nullptr ||
@@ -9252,7 +10257,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16) ||
+       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -9423,6 +10428,12 @@ extern "C" RileyCudaStatus riley_cuda_graph_instantiate(
     exec->graph = owner->graph;
     exec->exec = native_exec;
     exec->owns_capture_leases = true;
+    if (is_ragged_paged_kv_write_bf16) {
+      exec->ragged_paged_kv_write_bf16 =
+          owner->ragged_paged_kv_write_bf16;
+      owner->ragged_paged_kv_write_bf16 =
+          RileyCudaRaggedPagedKvCacheWriteBf16State{};
+    }
     owner->graph = nullptr;
     owner->owns_capture_leases = false;
     owner->~RileyCudaGraph();
@@ -9500,6 +10511,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_stage_h2d_source(
       !bf16_row_gather_argmax_exec_fields_are_clear(exec) ||
       !bf16_row_gather_argmax_d2h_exec_fields_are_clear(exec) ||
       !indexed_rope_bf16_exec_fields_are_clear(exec) ||
+      !ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(exec) ||
       exec->launch_in_flight || exec->h2d_input_staged || exec->poisoned ||
       exec->owner->restoration_failed.load(std::memory_order_acquire)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
@@ -9572,6 +10584,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
   const bool is_indexed_rope_bf16 =
       exec->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_ragged_paged_kv_write_bf16 =
+      exec->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(exec)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -9661,7 +10676,21 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
-        "graph exec mixes BF16 indexed-RoPE state with another operation");
+                            "graph exec mixes BF16 indexed-RoPE state with another operation");
+  }
+  if (is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_exec_state_is_valid(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "BF16 ragged paged-KV graph exec has invalid fixed resource state");
+  }
+  if (!is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(exec)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kLaunchOperation,
+        "graph exec mixes BF16 ragged paged-KV state with another operation");
   }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_LAUNCH,
                        capture_id, exec_id, false, false, false, false);
@@ -9672,7 +10701,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_launch(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16)) {
+       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
                             kLaunchOperation,
@@ -10021,6 +11050,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_ragged_paged_kv_write_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
   if (is_residual_add_bf16 && !residual_add_graph_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -10110,7 +11142,21 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
-        "captured graph mixes BF16 indexed-RoPE state with another operation");
+                            "captured graph mixes BF16 indexed-RoPE state with another operation");
+  }
+  if (is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_graph_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "BF16 ragged paged-KV graph has invalid fixed resource state");
+  }
+  if (!is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_graph_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseGraphOperation,
+        "captured graph mixes BF16 ragged paged-KV state with another operation");
   }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, 0, false, false, false, false);
@@ -10121,7 +11167,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16) ||
+       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -10279,6 +11325,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_close(
                                  owner->indexed_rope_bf16_sin,
                                  owner->indexed_rope_bf16_positions,
                                  owner->fill_buffer)
+                     : is_ragged_paged_kv_write_bf16
+                           ? release_graph_ragged_paged_kv_cache_write_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->fill_buffer,
+                                 owner->ragged_paged_kv_write_bf16)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {
@@ -10349,6 +11400,9 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
       RileyCudaGraphCaptureOperation::kBf16RowGatherArgmaxD2H;
   const bool is_indexed_rope_bf16 =
       owner->operation == RileyCudaGraphCaptureOperation::kIndexedRopeBf16;
+  const bool is_ragged_paged_kv_write_bf16 =
+      owner->operation ==
+      RileyCudaGraphCaptureOperation::kRaggedPagedKvCacheWriteBf16;
   if (is_residual_add_bf16 && !residual_add_exec_state_is_valid(owner)) {
     return validation_error(error, RILEY_CUDA_STATUS_INVALID_STATE,
                             RILEY_CUDA_ERROR_STAGE_VALIDATION,
@@ -10438,7 +11492,21 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
     return validation_error(
         error, RILEY_CUDA_STATUS_INVALID_STATE,
         RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
-        "graph exec mixes BF16 indexed-RoPE state with another operation");
+                            "graph exec mixes BF16 indexed-RoPE state with another operation");
+  }
+  if (is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_exec_state_is_valid(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "BF16 ragged paged-KV graph exec has invalid fixed resource state");
+  }
+  if (!is_ragged_paged_kv_write_bf16 &&
+      !ragged_paged_kv_cache_write_bf16_exec_fields_are_clear(owner)) {
+    return validation_error(
+        error, RILEY_CUDA_STATUS_INVALID_STATE,
+        RILEY_CUDA_ERROR_STAGE_VALIDATION, kCloseExecOperation,
+        "graph exec mixes BF16 ragged paged-KV state with another operation");
   }
   record_graph_outcome(out_graph_error, RILEY_CUDA_GRAPH_STAGE_CLOSE,
                        capture_id, exec_id, false, false, false, false);
@@ -10449,7 +11517,7 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
        !is_residual_add_bf16 && !is_canonical_rms_norm_bf16 &&
        !is_bf16_argmax && !is_bf16_row_gather &&
        !is_bf16_row_gather_argmax && !is_bf16_row_gather_argmax_d2h &&
-       !is_indexed_rope_bf16) ||
+       !is_indexed_rope_bf16 && !is_ragged_paged_kv_write_bf16) ||
       !same_context(owner->owner, owner->stream->owner) ||
       !same_context(owner->owner, owner->fill_buffer->owner) ||
       owner->stream->active_uses.load(std::memory_order_acquire) != 1 ||
@@ -10623,6 +11691,11 @@ extern "C" RileyCudaStatus riley_cuda_graph_exec_close(
                                  owner->indexed_rope_bf16_sin,
                                  owner->indexed_rope_bf16_positions,
                                  owner->fill_buffer)
+                     : is_ragged_paged_kv_write_bf16
+                           ? release_graph_ragged_paged_kv_cache_write_bf16_leases(
+                                 owner->owner, owner->stream,
+                                 owner->fill_buffer,
+                                 owner->ragged_paged_kv_write_bf16)
                      : release_graph_leases(owner->owner, owner->stream,
                                             owner->fill_buffer);
     if (released) {

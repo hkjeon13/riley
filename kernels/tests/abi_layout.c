@@ -50,7 +50,8 @@ _Static_assert(RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN == 0 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER == 8 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX == 9 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER_ARGMAX_D2H == 10 &&
-                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16 == 11,
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16 == 11 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16 == 12,
                "graph-capture-operation-kind ABI discriminants changed");
 _Static_assert(sizeof(RileyCudaGraphStage) == 4,
                "graph-stage ABI width changed");
@@ -651,6 +652,19 @@ static RileyCudaStatus (*const graph_capture_begin_indexed_rope_bf16_symbol)(
 static RileyCudaStatus (*const graph_capture_enqueue_indexed_rope_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_indexed_rope_bf16;
+static RileyCudaStatus (*const
+                            graph_capture_begin_ragged_paged_kv_cache_write_bf16_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*,
+    RileyCudaDeviceBuffer*, uint64_t, uint64_t, uint64_t, uint64_t, uint64_t,
+    uint64_t, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16;
+static RileyCudaStatus (*const
+                            graph_capture_enqueue_ragged_paged_kv_cache_write_bf16_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16;
 static RileyCudaStatus (*const graph_capture_end_symbol)(
     RileyCudaGraphCapture**, RileyCudaGraph**, RileyCudaGraphErrorInfo*,
     RileyCudaErrorInfo*) = riley_cuda_graph_capture_end;
@@ -934,6 +948,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_bf16_row_gather_argmax_d2h_symbol,
     (const void*)&graph_capture_begin_indexed_rope_bf16_symbol,
     (const void*)&graph_capture_enqueue_indexed_rope_bf16_symbol,
+    (const void*)&graph_capture_begin_ragged_paged_kv_cache_write_bf16_symbol,
+    (const void*)&graph_capture_enqueue_ragged_paged_kv_cache_write_bf16_symbol,
     (const void*)&graph_capture_end_symbol,
     (const void*)&graph_instantiate_symbol,
     (const void*)&graph_exec_launch_symbol,

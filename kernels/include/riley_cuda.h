@@ -207,6 +207,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)10)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_INDEXED_ROPE_BF16 \
   ((RileyCudaGraphCaptureOperationKind)11)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16 \
+  ((RileyCudaGraphCaptureOperationKind)12)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1512,6 +1514,49 @@ RileyCudaStatus riley_cuda_graph_capture_begin_indexed_rope_bf16(
 // and exact geometry remain immutable for the graph lifetime. A failed CUDA
 // node launch leaves the capture terminal and abort-only.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_indexed_rope_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-18 capture containing exactly one fixed-address BF16 ragged
+// paged-KV cache-write node. The two dense sources are BF16
+// `[active_row_count,key_value_head_count,head_size]`; the two pools are BF16
+// `[physical_block_count,key_value_head_count,16,head_size]`; and the five
+// metadata allocations are the raw U32/U16 PackedBatchV1 device arrays. Every
+// dimension is nonzero, the batch counts must fit their U32 metadata, logical
+// block_count must not exceed physical_block_count, and all nine allocations
+// must be pairwise distinct in the stream's context. This narrow graph stores
+// no host metadata and performs no H2D staging. Its device kernel preserves
+// eager write behavior: a bounds-invalid raw metadata row is a no-op, while
+// duplicate valid raw addresses retain the eager kernel's unspecified race.
+RileyCudaStatus
+riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* key_source,
+    RileyCudaDeviceBuffer* value_source,
+    RileyCudaDeviceBuffer* key_pool,
+    RileyCudaDeviceBuffer* value_pool,
+    RileyCudaDeviceBuffer* sequence_block_offsets,
+    RileyCudaDeviceBuffer* block_ids,
+    RileyCudaDeviceBuffer* valid_tokens,
+    RileyCudaDeviceBuffer* row_sequence_slots,
+    RileyCudaDeviceBuffer* row_positions,
+    uint64_t sequence_count,
+    uint64_t block_count,
+    uint64_t active_row_count,
+    uint64_t physical_block_count,
+    uint64_t key_value_head_count,
+    uint64_t head_size,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole fixed-address BF16 ragged paged-KV write node for a
+// capture created by riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16.
+// All source, pool, metadata, and geometry addresses remain immutable for the
+// graph lifetime. A failed CUDA node launch leaves the capture terminal and
+// abort-only.
+RileyCudaStatus
+riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

@@ -3116,9 +3116,9 @@ fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
         .split("fn validate_graph_indexed_rope_bf16_capture_preflight(")
         .nth(1)
         .expect("C05-17 indexed-RoPE preflight must remain present")
-        .split("impl CudaStream")
+        .split("/// A by-value stream and nine distinct fixed device buffers")
         .next()
-        .expect("C05-17 preflight must precede stream entry points");
+        .expect("C05-17 preflight must end before C05-18 resources");
     for required in [
         "positions_host",
         "active_row_count == 0",
@@ -3237,6 +3237,225 @@ fn owned_indexed_rope_bf16_graph_has_fixed_five_buffer_lifecycle() {
         assert!(
             !owned_exec.contains(forbidden),
             "C05-17 must not expose mutable replay or C07 execution capability: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_ragged_paged_kv_cache_write_bf16_graph_has_fixed_nine_buffer_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RAGGED_PAGED_KV_CACHE_WRITE_BF16",
+        "riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16",
+        "riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16",
+        "RileyCudaDeviceBuffer* sequence_block_offsets",
+        "RileyCudaDeviceBuffer* valid_tokens",
+        "uint64_t physical_block_count",
+        "uint64_t key_value_head_count",
+    ] {
+        assert!(header.contains(required), "missing C05-18 ABI: {required}");
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_ragged_paged_kv_cache_write_bf16",
+        "riley_cuda_graph_capture_enqueue_ragged_paged_kv_cache_write_bf16",
+        "begin_graph_ragged_paged_kv_cache_write_bf16_capture",
+        "enqueue_ragged_paged_kv_cache_write_bf16",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-18 Rust FFI boundary: {required}"
+        );
+    }
+    assert!(
+        abi_link.contains("CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16"),
+        "C05-18 capability must remain ABI-linked without device initialization"
+    );
+    assert!(graph.contains("RaggedPagedKvCacheWriteBf16 = 12"));
+
+    for required in [
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Resources",
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16CaptureBeginError",
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Capture",
+        "pub struct OwnedCapturedRaggedPagedKvCacheWriteBf16Graph",
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Exec",
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Launch<'exec>",
+        "pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture",
+        "pub fn enqueue_ragged_paged_kv_cache_write_bf16(&mut self)",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-18 safe owner contract is missing: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight(")
+        .nth(1)
+        .expect("C05-18 ragged paged-K/V preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-18 preflight must precede stream entry points");
+    for required in [
+        "PackedBatchHostV1<'_>",
+        "batch_host.format_version()",
+        "batch_host.block_size()",
+        "sequence_count == 0",
+        "block_count == 0",
+        "active_row_count == 0",
+        "physical_block_count == 0",
+        "key_value_head_count == 0",
+        "head_size == 0",
+        "let buffers = [",
+        "same_allocation",
+        "ensure_same_context",
+        "ensure_idle_for_operation",
+        "BF16_BYTES",
+        "U32_BYTES",
+        "U16_BYTES",
+        "source_bytes",
+        "pool_bytes",
+        "offsets_bytes",
+        "valid_tokens_bytes",
+        "row_sequence_slots_bytes",
+        "row_positions_bytes",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-18 preflight must retain fixed-address validation: {required}"
+        );
+    }
+    for forbidden in [
+        "batch_host.sequence_block_offsets()",
+        "batch_host.block_ids()",
+        "batch_host.valid_tokens()",
+        "batch_host.row_sequence_slots()",
+        "batch_host.row_positions()",
+    ] {
+        assert!(
+            !preflight.contains(forbidden),
+            "C05-18 host witness must not bind graph metadata identity: {forbidden}"
+        );
+    }
+
+    let resources = graph
+        .split("impl OwnedGraphRaggedPagedKvCacheWriteBf16Resources")
+        .nth(1)
+        .expect("C05-18 resource bundle must remain present")
+        .split("/// Error from beginning an owned fixed-address BF16 ragged paged-K/V")
+        .next()
+        .expect("C05-18 resource bundle must end before its begin error");
+    for required in [
+        "key_source",
+        "value_source",
+        "key_pool",
+        "value_pool",
+        "sequence_block_offsets",
+        "block_ids",
+        "valid_tokens",
+        "row_sequence_slots",
+        "row_positions",
+    ] {
+        assert!(
+            resources.contains(required),
+            "C05-18 fixed resource bundle is missing: {required}"
+        );
+    }
+    assert!(
+        !resources.contains("PackedBatchHostV1"),
+        "the temporary packed host witness must not be retained by C05-18 resources"
+    );
+    for (earlier, later) in [
+        ("row_positions.close()?", "row_sequence_slots.close()?"),
+        ("row_sequence_slots.close()?", "valid_tokens.close()?"),
+        ("valid_tokens.close()?", "block_ids.close()?"),
+        ("block_ids.close()?", "sequence_block_offsets.close()?"),
+        ("sequence_block_offsets.close()?", "value_pool.close()?"),
+        ("value_pool.close()?", "key_pool.close()?"),
+        ("key_pool.close()?", "value_source.close()?"),
+        ("value_source.close()?", "key_source.close()?"),
+        ("key_source.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-18 resource close order");
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_ragged_paged_kv_cache_write_bf16_capture")
+        .nth(1)
+        .expect("owned C05-18 graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned C05-18 capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_ragged_paged_kv_cache_write_bf16_capture_preflight",
+        "begin_graph_ragged_paged_kv_cache_write_bf16_capture",
+        "C05-18 Rust preflight",
+    );
+    for required in [
+        "batch_host.sequence_count()",
+        "batch_host.block_count()",
+        "batch_host.active_row_count()",
+        "batch_host.physical_block_count()",
+    ] {
+        assert!(
+            owned_begin.contains(required),
+            "C05-18 must derive native dimensions from the temporary host witness: {required}"
+        );
+    }
+    assert!(
+        !owned_begin.contains("sequence_count: u64"),
+        "C05-18 must not accept a separately supplied sequence count"
+    );
+
+    for owner in [
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Capture {",
+        "pub struct OwnedCapturedRaggedPagedKvCacheWriteBf16Graph {",
+        "pub struct OwnedGraphRaggedPagedKvCacheWriteBf16Exec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphRaggedPagedKvCacheWriteBf16Resources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before fixed resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphRaggedPagedKvCacheWriteBf16Exec")
+        .nth(1)
+        .expect("C05-18 owned exec must remain present")
+        .split("/// Completion owner for one ragged paged-K/V cache-write graph executable")
+        .next()
+        .expect("C05-18 owned exec must end before its completion owner");
+    for forbidden in [
+        "launch_with_input",
+        "launch_with_source",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "GpuGreedy",
+        "CompletionBoundary",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !owned_exec.contains(forbidden),
+            "C05-18 must not expose mutable replay or C07 execution capability: {forbidden}"
         );
     }
 }
