@@ -3681,6 +3681,194 @@ fn owned_grouped_ragged_paged_attention_bf16_graph_has_fixed_nine_buffer_lifecyc
     }
 }
 
+#[test]
+fn owned_bf16_embedding_status_d2h_graph_has_fixed_validation_receipt_lifecycle() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_link = include_str!("abi_link.rs");
+
+    for required in [
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_EMBEDDING_STATUS_D2H",
+        "riley_cuda_graph_capture_begin_bf16_embedding_status_d2h",
+        "riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h",
+        "riley_cuda_graph_exec_read_bf16_embedding_status_d2h_report",
+        "RileyCudaDeviceBuffer* table",
+        "RileyCudaDeviceBuffer* token_ids",
+        "RileyCudaDeviceBuffer* output",
+        "RileyCudaDeviceBuffer* device_error_scratch",
+        "RileyCudaPinnedHostBuffer* pinned_report",
+        "uint64_t token_count",
+        "uint64_t vocabulary_size",
+        "uint64_t hidden_size",
+    ] {
+        assert!(header.contains(required), "missing C05-20 ABI: {required}");
+    }
+    for required in [
+        "riley_cuda_graph_capture_begin_bf16_embedding_status_d2h",
+        "riley_cuda_graph_capture_enqueue_bf16_embedding_status_d2h",
+        "riley_cuda_graph_exec_read_bf16_embedding_status_d2h_report",
+        "begin_graph_bf16_embedding_status_d2h_capture",
+        "enqueue_bf16_embedding_status_d2h",
+        "read_bf16_embedding_status_d2h_report",
+    ] {
+        assert!(
+            ffi.contains(required),
+            "missing C05-20 Rust FFI boundary: {required}"
+        );
+    }
+    assert!(
+        abi_link.contains("CudaGraphCaptureOperation::Bf16EmbeddingStatusD2H"),
+        "C05-20 capability must remain ABI-linked without device initialization"
+    );
+    assert!(graph.contains("Bf16EmbeddingStatusD2H = 14"));
+
+    for required in [
+        "pub enum Bf16EmbeddingStatusD2HStatus",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HResources",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HCaptureBeginError",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HCapture",
+        "pub struct OwnedCapturedBf16EmbeddingStatusD2HGraph",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HExec",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HLaunch<'exec>",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HCompletion<'exec>",
+        "pub fn begin_owned_graph_bf16_embedding_status_d2h_capture",
+        "pub fn enqueue_bf16_embedding_status_d2h(&mut self)",
+        "pub fn read_status(&mut self) -> CudaResult<Bf16EmbeddingStatusD2HStatus>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-20 safe owner contract is missing: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_bf16_embedding_status_d2h_capture_preflight(")
+        .nth(1)
+        .expect("C05-20 embedding-status preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-20 embedding-status preflight must end before CudaStream methods");
+    for required in [
+        "token_count == 0",
+        "vocabulary_size == 0",
+        "hidden_size == 0",
+        "table_elements",
+        "output_elements",
+        "table_bytes",
+        "token_bytes",
+        "output_bytes",
+        "let buffers = [",
+        "same_allocation",
+        "ensure_same_context",
+        "ensure_idle_for_operation",
+        "device_error_scratch.byte_len() != BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES",
+        "pinned_report.byte_len() != BF16_EMBEDDING_STATUS_D2H_REPORT_BYTES",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-20 preflight must retain fixed BF16 validation/status admission: {required}"
+        );
+    }
+    assert!(
+        !preflight.contains("token_ids_host"),
+        "C05-20 must validate raw fixed device IDs instead of binding a host token mirror"
+    );
+
+    let resources = graph
+        .split("impl OwnedGraphBf16EmbeddingStatusD2HResources")
+        .nth(1)
+        .expect("C05-20 resource bundle must remain present")
+        .split("/// Error from beginning one by-value fixed-address C05-20 graph capture")
+        .next()
+        .expect("C05-20 resource bundle must end before its begin error");
+    for required in [
+        "table",
+        "token_ids",
+        "output",
+        "device_error_scratch",
+        "pinned_report",
+    ] {
+        assert!(
+            resources.contains(required),
+            "C05-20 fixed resource bundle is missing: {required}"
+        );
+    }
+    for (earlier, later) in [
+        ("pinned_report.close()?", "device_error_scratch.close()?"),
+        ("device_error_scratch.close()?", "output.close()?"),
+        ("output.close()?", "token_ids.close()?"),
+        ("token_ids.close()?", "table.close()?"),
+        ("table.close()?", "stream.close()"),
+    ] {
+        assert_precedes(resources, earlier, later, "C05-20 resource close order");
+    }
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_bf16_embedding_status_d2h_capture")
+        .nth(1)
+        .expect("owned C05-20 graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("C05-20 owned capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_bf16_embedding_status_d2h_capture_preflight",
+        "begin_graph_bf16_embedding_status_d2h_capture",
+        "C05-20 Rust preflight",
+    );
+    assert!(
+        !owned_begin.contains("token_ids_host"),
+        "C05-20 public begin must not accept a host token-ID mirror"
+    );
+
+    for owner in [
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HCapture {",
+        "pub struct OwnedCapturedBf16EmbeddingStatusD2HGraph {",
+        "pub struct OwnedGraphBf16EmbeddingStatusD2HExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphBf16EmbeddingStatusD2HResources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before fixed resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let completion = graph
+        .split("impl OwnedGraphBf16EmbeddingStatusD2HCompletion")
+        .nth(1)
+        .expect("C05-20 completion receipt must remain present")
+        .split("fn take_owned_graph_bf16_embedding_status_d2h_resources")
+        .next()
+        .expect("C05-20 completion receipt must precede resource recovery helper");
+    for required in [
+        "BF16_EMBEDDING_STATUS_D2H_REPORT_NONE",
+        "BF16_EMBEDDING_STATUS_D2H_REPORT_TOKEN_OUT_OF_RANGE",
+        "Bf16EmbeddingStatusD2HStatus::Success",
+        "Bf16EmbeddingStatusD2HStatus::TokenOutOfRange",
+        "self.exec.terminal = true",
+        "read_bf16_embedding_status_d2h_report",
+    ] {
+        assert!(
+            completion.contains(required),
+            "C05-20 receipt must preserve typed status/fail-closed boundary: {required}"
+        );
+    }
+}
+
 fn native_export_body<'a>(source: &'a str, symbol: &str) -> &'a str {
     source
         .split(symbol)

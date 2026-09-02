@@ -27,6 +27,7 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         CudaGraphCaptureOperation::IndexedRopeBf16,
         CudaGraphCaptureOperation::RaggedPagedKvCacheWriteBf16,
         CudaGraphCaptureOperation::GroupedRaggedPagedAttentionBf16,
+        CudaGraphCaptureOperation::Bf16EmbeddingStatusD2H,
     ] {
         assert_eq!(
             operation
