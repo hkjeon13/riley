@@ -4,8 +4,8 @@ use riley_cuda::{
     BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
     Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
     CudaErrorKind, CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
-    ResidualAddParams, RmsNormParams, SiluParams, deterministic_bf16_argmax, gated_multiply,
-    residual_add, rms_norm, silu,
+    ResidualAddParams, RmsNormParams, RowGatherParams, SiluParams, deterministic_bf16_argmax,
+    gated_multiply, residual_add, rms_norm, row_gather, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -205,6 +205,29 @@ fn graph_bf16_argmax_edge_expected_result_bytes() -> Vec<u8> {
     .iter()
     .flat_map(|&word| word.to_ne_bytes())
     .collect()
+}
+
+fn graph_bf16_row_gather_fixture_bytes(input_row_count: usize, column_count: usize) -> Vec<u8> {
+    // Gathering is a byte-preserving BF16 copy. Keep unusual BF16 payloads in
+    // every row so a replay that merely has the right numerical values but
+    // corrupts storage bits cannot pass this parity test.
+    const PATTERN: [u16; 16] = [
+        0x0000, 0x8000, 0x3f80, 0xbf80, 0x4000, 0xc000, 0x3d00, 0xbd00, 0x7f80, 0xff80, 0x7fc1,
+        0xffc1, 0x7f81, 0xff81, 0x3f40, 0xbf40,
+    ];
+    (0..input_row_count)
+        .flat_map(|row| {
+            (0..column_count).map(move |column| {
+                PATTERN[(row.wrapping_mul(11).wrapping_add(column.wrapping_mul(7))) % PATTERN.len()]
+                    .to_ne_bytes()
+            })
+        })
+        .flatten()
+        .collect()
+}
+
+fn u32_words_to_ne_bytes(words: &[u32]) -> Vec<u8> {
+    words.iter().flat_map(|word| word.to_ne_bytes()).collect()
 }
 
 #[test]
@@ -1249,6 +1272,342 @@ fn owned_bf16_argmax_graph_preflight_and_abort_recover_every_resource() -> Resul
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-13-owned-bf16-argmax-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_row_gather_graph_replays_unique_permutation_byte_exact_against_eager()
+-> Result<(), Box<dyn Error>> {
+    const INPUT_ROW_COUNT: u64 = 13;
+    const COLUMN_COUNT: u64 = 257;
+    const REPLAYS: usize = 64;
+
+    let eager_row_indices = vec![12_u32, 0, 7, 3, 10, 1, 5];
+    let graph_row_indices_host = eager_row_indices.clone();
+    let output_row_count = u64::try_from(graph_row_indices_host.len())?;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let bf16_byte_width = u64::try_from(std::mem::size_of::<u16>())?;
+    let u32_byte_width = u64::try_from(std::mem::size_of::<u32>())?;
+    let input_byte_len = INPUT_ROW_COUNT
+        .checked_mul(COLUMN_COUNT)
+        .and_then(|element_count| element_count.checked_mul(bf16_byte_width))
+        .ok_or("BF16 row-gather graph input byte length overflow")?;
+    let row_indices_byte_len = output_row_count
+        .checked_mul(u32_byte_width)
+        .ok_or("BF16 row-gather graph row-index byte length overflow")?;
+    let output_byte_len = output_row_count
+        .checked_mul(COLUMN_COUNT)
+        .and_then(|element_count| element_count.checked_mul(bf16_byte_width))
+        .ok_or("BF16 row-gather graph output byte length overflow")?;
+    let host_input = graph_bf16_row_gather_fixture_bytes(
+        usize::try_from(INPUT_ROW_COUNT)?,
+        usize::try_from(COLUMN_COUNT)?,
+    );
+    let host_row_indices = u32_words_to_ne_bytes(&eager_row_indices);
+    assert_eq!(u64::try_from(host_input.len())?, input_byte_len);
+    assert_eq!(u64::try_from(host_row_indices.len())?, row_indices_byte_len);
+    let sentinel_output = vec![0xa5; usize::try_from(output_byte_len)?];
+    let mut staging = context.allocate_pinned_host_buffer(input_byte_len)?;
+
+    let mut eager_input = context.allocate_device_buffer(input_byte_len)?;
+    eager_input.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+    let mut eager_row_indices_buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+    eager_row_indices_buffer.upload_from_slice(
+        0,
+        &host_row_indices,
+        &mut staging,
+        &mut eager_stream,
+    )?;
+    let mut eager_output = context.allocate_device_buffer(output_byte_len)?;
+    eager_output.upload_from_slice(0, &sentinel_output, &mut staging, &mut eager_stream)?;
+
+    let graph_input = {
+        let mut buffer = context.allocate_device_buffer(input_byte_len)?;
+        buffer.upload_from_slice(0, &host_input, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_row_indices = {
+        let mut buffer = context.allocate_device_buffer(row_indices_byte_len)?;
+        buffer.upload_from_slice(0, &host_row_indices, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_output = {
+        let mut buffer = context.allocate_device_buffer(output_byte_len)?;
+        buffer.upload_from_slice(0, &sentinel_output, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+
+    {
+        let mut eager = RowGatherParams {
+            input: CudaBufferSpan::new(&eager_input, CudaDType::BF16, 0, input_byte_len)?,
+            row_indices: CudaBufferSpan::new(
+                &eager_row_indices_buffer,
+                CudaDType::U32,
+                0,
+                row_indices_byte_len,
+            )?,
+            row_indices_host: &eager_row_indices,
+            output: CudaBufferSpanMut::new(&mut eager_output, CudaDType::BF16, 0, output_byte_len)?,
+            input_row_count: INPUT_ROW_COUNT,
+            column_count: COLUMN_COUNT,
+        };
+        row_gather(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_bf16_row_gather_capture(
+        graph_input,
+        graph_row_indices,
+        graph_output,
+        &graph_row_indices_host,
+        INPUT_ROW_COUNT,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    // The graph owner validates the host mirror at admission and must not
+    // retain it through capture, graph, executable, or replay ownership.
+    drop(graph_row_indices_host);
+    capture.enqueue_bf16_row_gather()?;
+    assert_invalid_state(
+        capture.enqueue_bf16_row_gather(),
+        "second fixed BF16 row-gather graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // This asserts owned lifecycle accounting, not a CUDA Graph performance
+    // claim about driver internals.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_input, mut graph_row_indices, mut graph_output) =
+        resources.into_parts();
+    let mut eager_output_bytes = vec![0_u8; usize::try_from(output_byte_len)?];
+    let mut graph_output_bytes = vec![0_u8; usize::try_from(output_byte_len)?];
+    let mut graph_input_after = vec![0_u8; usize::try_from(input_byte_len)?];
+    let mut graph_row_indices_after = vec![0_u8; usize::try_from(row_indices_byte_len)?];
+    eager_output.download_to_slice(
+        0,
+        &mut eager_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_output.download_to_slice(
+        0,
+        &mut graph_output_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_input.download_to_slice(
+        0,
+        &mut graph_input_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_row_indices.download_to_slice(
+        0,
+        &mut graph_row_indices_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        graph_output_bytes, eager_output_bytes,
+        "fixed graph BF16 row-gather output must match eager output byte-for-byte"
+    );
+    assert_eq!(
+        graph_input_after, host_input,
+        "fixed graph replay must not mutate its retained BF16 input allocation"
+    );
+    assert_eq!(
+        graph_row_indices_after, host_row_indices,
+        "fixed graph replay must not mutate its retained U32 row-index allocation"
+    );
+
+    graph_output.close()?;
+    graph_row_indices.close()?;
+    graph_input.close()?;
+    eager_output.close()?;
+    eager_row_indices_buffer.close()?;
+    eager_input.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-14-owned-bf16-row-gather-fixed-address replays={REPLAYS} input_rows={INPUT_ROW_COUNT} output_rows={output_row_count} columns={COLUMN_COUNT} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_row_gather_graph_preflight_and_abort_recover_every_resource()
+-> Result<(), Box<dyn Error>> {
+    const INPUT_ROW_COUNT: u64 = 8;
+    const COLUMN_COUNT: u64 = 32;
+    const OUTPUT_ROW_COUNT: u64 = 4;
+    const INPUT_BYTE_LEN: u64 = INPUT_ROW_COUNT * COLUMN_COUNT * 2;
+    const ROW_INDICES_BYTE_LEN: u64 = OUTPUT_ROW_COUNT * 4;
+    const OUTPUT_BYTE_LEN: u64 = OUTPUT_ROW_COUNT * COLUMN_COUNT * 2;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let input = context.allocate_device_buffer(INPUT_BYTE_LEN)?;
+    let row_indices = context.allocate_device_buffer(ROW_INDICES_BYTE_LEN)?;
+    let output = context.allocate_device_buffer(OUTPUT_BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let empty_host_mirror: [u32; 0] = [];
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &empty_host_mirror,
+        INPUT_ROW_COUNT,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("empty row-index mirror graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("empty row-index mirror preflight must return all untouched resources");
+    let (stream, input, row_indices, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let valid_host_mirror = [0_u32, 1, 2, 3];
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &valid_host_mirror,
+        0,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("zero-input-row BF16 row-gather graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("zero-input-row preflight must return all untouched resources");
+    let (stream, input, row_indices, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &valid_host_mirror,
+        INPUT_ROW_COUNT,
+        0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("zero-column BF16 row-gather graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("zero-column preflight must return all untouched resources");
+    let (stream, input, row_indices, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let duplicate_host_mirror = [0_u32, 1, 1, 3];
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &duplicate_host_mirror,
+        INPUT_ROW_COUNT,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("duplicate row-index mirror graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::InvalidArgument);
+    let resources = error
+        .into_resources()
+        .expect("duplicate row-index mirror preflight must return all untouched resources");
+    let (stream, input, row_indices, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let out_of_range_host_mirror = [0_u32, 1, 2, INPUT_ROW_COUNT as u32];
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &out_of_range_host_mirror,
+        INPUT_ROW_COUNT,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("out-of-range row-index mirror graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("out-of-range row-index mirror preflight must return all untouched resources");
+    let (stream, input, row_indices, output) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_bf16_row_gather_capture(
+            input,
+            row_indices,
+            output,
+            &valid_host_mirror,
+            INPUT_ROW_COUNT,
+            COLUMN_COUNT,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, input, row_indices, output) = resources.into_parts();
+    let oversized_host_mirror = [0_u32, 1, 2, 3, 4];
+    let error = match stream.begin_owned_graph_bf16_row_gather_capture(
+        input,
+        row_indices,
+        output,
+        &oversized_host_mirror,
+        INPUT_ROW_COUNT,
+        COLUMN_COUNT,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("oversized BF16 row-gather graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized BF16 row-gather preflight must preserve all four resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-14-owned-bf16-row-gather-preflight-abort-recovery status=passed");
     Ok(())
 }
 

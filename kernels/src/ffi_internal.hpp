@@ -168,6 +168,7 @@ enum class RileyCudaGraphCaptureOperation : uint8_t {
   kResidualAddBf16 = 5,
   kCanonicalRmsNormBf16 = 6,
   kBf16Argmax = 7,
+  kBf16RowGather = 8,
 };
 
 struct RileyCudaGraphCapture {
@@ -222,6 +223,14 @@ struct RileyCudaGraphCapture {
         bf16_argmax_vocabulary_size(0),
         bf16_argmax_enqueue_count(0),
         bf16_argmax_logits_lease_held(false),
+        bf16_row_gather_input(nullptr),
+        bf16_row_gather_indices(nullptr),
+        bf16_row_gather_input_row_count(0),
+        bf16_row_gather_output_row_count(0),
+        bf16_row_gather_column_count(0),
+        bf16_row_gather_enqueue_count(0),
+        bf16_row_gather_input_lease_held(false),
+        bf16_row_gather_indices_lease_held(false),
         deferred_close_head(nullptr),
         deferred_close_tail(nullptr),
         unreleased_graph(nullptr) {}
@@ -248,7 +257,8 @@ struct RileyCudaGraphCapture {
   // source, while the BF16 primitives retain their fixed device inputs. Gated
   // multiply keeps both its activated-gate and up inputs; residual add keeps
   // its left and right inputs; canonical RMSNorm keeps its input and weight;
-  // deterministic BF16 argmax keeps its logits while fill_buffer is results.
+  // deterministic BF16 argmax keeps its logits while fill_buffer is results;
+  // BF16 row gather keeps input and U32 indices while fill_buffer is output.
   RileyCudaGraphCaptureOperation operation;
   RileyCudaDeviceBuffer* fill_buffer;
   uint64_t fill_element_count;
@@ -287,6 +297,14 @@ struct RileyCudaGraphCapture {
   uint64_t bf16_argmax_vocabulary_size;
   uint32_t bf16_argmax_enqueue_count;
   bool bf16_argmax_logits_lease_held;
+  RileyCudaDeviceBuffer* bf16_row_gather_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_indices;
+  uint64_t bf16_row_gather_input_row_count;
+  uint64_t bf16_row_gather_output_row_count;
+  uint64_t bf16_row_gather_column_count;
+  uint32_t bf16_row_gather_enqueue_count;
+  bool bf16_row_gather_input_lease_held;
+  bool bf16_row_gather_indices_lease_held;
   // Capture-thread-only FIFO. A successful callback can free its node, so the
   // drain saves `next` before invoking it and never touches that node again.
   RileyCudaDeferredCloseNode* deferred_close_head;
@@ -360,7 +378,12 @@ struct RileyCudaGraph {
                  float captured_canonical_rms_norm_epsilon = 0.0F,
                  RileyCudaDeviceBuffer* captured_bf16_argmax_logits = nullptr,
                  uint64_t captured_bf16_argmax_row_count = 0,
-                 uint64_t captured_bf16_argmax_vocabulary_size = 0) noexcept
+                 uint64_t captured_bf16_argmax_vocabulary_size = 0,
+                 RileyCudaDeviceBuffer* captured_bf16_row_gather_input = nullptr,
+                 RileyCudaDeviceBuffer* captured_bf16_row_gather_indices = nullptr,
+                 uint64_t captured_bf16_row_gather_input_row_count = 0,
+                 uint64_t captured_bf16_row_gather_output_row_count = 0,
+                 uint64_t captured_bf16_row_gather_column_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -383,6 +406,13 @@ struct RileyCudaGraph {
         bf16_argmax_logits(captured_bf16_argmax_logits),
         bf16_argmax_row_count(captured_bf16_argmax_row_count),
         bf16_argmax_vocabulary_size(captured_bf16_argmax_vocabulary_size),
+        bf16_row_gather_input(captured_bf16_row_gather_input),
+        bf16_row_gather_indices(captured_bf16_row_gather_indices),
+        bf16_row_gather_input_row_count(
+            captured_bf16_row_gather_input_row_count),
+        bf16_row_gather_output_row_count(
+            captured_bf16_row_gather_output_row_count),
+        bf16_row_gather_column_count(captured_bf16_row_gather_column_count),
         capture_id(capture_identifier),
         graph(nullptr),
         owns_capture_leases(false) {}
@@ -409,6 +439,11 @@ struct RileyCudaGraph {
   RileyCudaDeviceBuffer* bf16_argmax_logits;
   uint64_t bf16_argmax_row_count;
   uint64_t bf16_argmax_vocabulary_size;
+  RileyCudaDeviceBuffer* bf16_row_gather_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_indices;
+  uint64_t bf16_row_gather_input_row_count;
+  uint64_t bf16_row_gather_output_row_count;
+  uint64_t bf16_row_gather_column_count;
   uint64_t capture_id;
   cudaGraph_t graph;
   bool owns_capture_leases;
@@ -442,7 +477,12 @@ struct RileyCudaGraphExec {
                      float captured_canonical_rms_norm_epsilon = 0.0F,
                      RileyCudaDeviceBuffer* captured_bf16_argmax_logits = nullptr,
                      uint64_t captured_bf16_argmax_row_count = 0,
-                     uint64_t captured_bf16_argmax_vocabulary_size = 0) noexcept
+                     uint64_t captured_bf16_argmax_vocabulary_size = 0,
+                     RileyCudaDeviceBuffer* captured_bf16_row_gather_input = nullptr,
+                     RileyCudaDeviceBuffer* captured_bf16_row_gather_indices = nullptr,
+                     uint64_t captured_bf16_row_gather_input_row_count = 0,
+                     uint64_t captured_bf16_row_gather_output_row_count = 0,
+                     uint64_t captured_bf16_row_gather_column_count = 0) noexcept
       : owner(owning_context),
         stream(captured_stream),
         fill_buffer(captured_fill_buffer),
@@ -465,6 +505,13 @@ struct RileyCudaGraphExec {
         bf16_argmax_logits(captured_bf16_argmax_logits),
         bf16_argmax_row_count(captured_bf16_argmax_row_count),
         bf16_argmax_vocabulary_size(captured_bf16_argmax_vocabulary_size),
+        bf16_row_gather_input(captured_bf16_row_gather_input),
+        bf16_row_gather_indices(captured_bf16_row_gather_indices),
+        bf16_row_gather_input_row_count(
+            captured_bf16_row_gather_input_row_count),
+        bf16_row_gather_output_row_count(
+            captured_bf16_row_gather_output_row_count),
+        bf16_row_gather_column_count(captured_bf16_row_gather_column_count),
         capture_id(capture_identifier),
         exec_id(executable_identifier),
         graph(nullptr),
@@ -496,6 +543,11 @@ struct RileyCudaGraphExec {
   RileyCudaDeviceBuffer* bf16_argmax_logits;
   uint64_t bf16_argmax_row_count;
   uint64_t bf16_argmax_vocabulary_size;
+  RileyCudaDeviceBuffer* bf16_row_gather_input;
+  RileyCudaDeviceBuffer* bf16_row_gather_indices;
+  uint64_t bf16_row_gather_input_row_count;
+  uint64_t bf16_row_gather_output_row_count;
+  uint64_t bf16_row_gather_column_count;
   uint64_t capture_id;
   uint64_t exec_id;
   cudaGraph_t graph;

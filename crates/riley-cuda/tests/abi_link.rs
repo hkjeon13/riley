@@ -21,6 +21,7 @@ fn native_symbols_link_without_device_initialization() -> riley_core::Result<()>
         CudaGraphCaptureOperation::ResidualAddBf16,
         CudaGraphCaptureOperation::CanonicalRmsNormBf16,
         CudaGraphCaptureOperation::Bf16Argmax,
+        CudaGraphCaptureOperation::Bf16RowGather,
     ] {
         assert_eq!(
             operation

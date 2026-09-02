@@ -5,19 +5,21 @@ use riley_cuda::{
     CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
     CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer, CudaResult,
     CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
-    OwnedCapturedBf16ArgmaxGraph, OwnedCapturedCanonicalRmsNormBf16Graph,
-    OwnedCapturedGatedMultiplyBf16Graph, OwnedCapturedGraph, OwnedCapturedH2DGraph,
-    OwnedCapturedResidualAddBf16Graph, OwnedCapturedSiluBf16Graph, OwnedGraphBf16ArgmaxCapture,
-    OwnedGraphBf16ArgmaxCaptureBeginError, OwnedGraphBf16ArgmaxExec, OwnedGraphBf16ArgmaxLaunch,
-    OwnedGraphBf16ArgmaxResources, OwnedGraphCanonicalRmsNormBf16Capture,
-    OwnedGraphCanonicalRmsNormBf16CaptureBeginError, OwnedGraphCanonicalRmsNormBf16Exec,
-    OwnedGraphCanonicalRmsNormBf16Launch, OwnedGraphCanonicalRmsNormBf16Resources, OwnedGraphExec,
-    OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
-    OwnedGraphGatedMultiplyBf16Capture, OwnedGraphGatedMultiplyBf16CaptureBeginError,
-    OwnedGraphGatedMultiplyBf16Exec, OwnedGraphGatedMultiplyBf16Launch,
-    OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture, OwnedGraphH2DCaptureBeginError,
-    OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources, OwnedGraphLaunch,
-    OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError,
+    OwnedCapturedBf16ArgmaxGraph, OwnedCapturedBf16RowGatherGraph,
+    OwnedCapturedCanonicalRmsNormBf16Graph, OwnedCapturedGatedMultiplyBf16Graph,
+    OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedCapturedResidualAddBf16Graph,
+    OwnedCapturedSiluBf16Graph, OwnedGraphBf16ArgmaxCapture, OwnedGraphBf16ArgmaxCaptureBeginError,
+    OwnedGraphBf16ArgmaxExec, OwnedGraphBf16ArgmaxLaunch, OwnedGraphBf16ArgmaxResources,
+    OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError,
+    OwnedGraphBf16RowGatherExec, OwnedGraphBf16RowGatherLaunch, OwnedGraphBf16RowGatherResources,
+    OwnedGraphCanonicalRmsNormBf16Capture, OwnedGraphCanonicalRmsNormBf16CaptureBeginError,
+    OwnedGraphCanonicalRmsNormBf16Exec, OwnedGraphCanonicalRmsNormBf16Launch,
+    OwnedGraphCanonicalRmsNormBf16Resources, OwnedGraphExec, OwnedGraphFillCapture,
+    OwnedGraphFillCaptureBeginError, OwnedGraphFillResources, OwnedGraphGatedMultiplyBf16Capture,
+    OwnedGraphGatedMultiplyBf16CaptureBeginError, OwnedGraphGatedMultiplyBf16Exec,
+    OwnedGraphGatedMultiplyBf16Launch, OwnedGraphGatedMultiplyBf16Resources, OwnedGraphH2DCapture,
+    OwnedGraphH2DCaptureBeginError, OwnedGraphH2DExec, OwnedGraphH2DLaunch, OwnedGraphH2DResources,
+    OwnedGraphLaunch, OwnedGraphResidualAddBf16Capture, OwnedGraphResidualAddBf16CaptureBeginError,
     OwnedGraphResidualAddBf16Exec, OwnedGraphResidualAddBf16Launch,
     OwnedGraphResidualAddBf16Resources, OwnedGraphSiluBf16Capture,
     OwnedGraphSiluBf16CaptureBeginError, OwnedGraphSiluBf16Exec, OwnedGraphSiluBf16Launch,
@@ -44,6 +46,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER",
         "RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN",
         "RILEY_CUDA_GRAPH_STAGE_CLOSE",
         "RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE",
@@ -73,6 +76,8 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16",
         "riley_cuda_graph_capture_begin_bf16_argmax",
         "riley_cuda_graph_capture_enqueue_bf16_argmax",
+        "riley_cuda_graph_capture_begin_bf16_row_gather",
+        "riley_cuda_graph_capture_enqueue_bf16_row_gather",
         "riley_cuda_graph_capture_end",
         "riley_cuda_graph_instantiate",
         "riley_cuda_graph_exec_launch",
@@ -125,6 +130,9 @@ fn capture_capability_query_is_pure_and_fail_closed() {
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER",
     ] {
         assert!(
             query.contains(operation),
@@ -239,6 +247,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
     assert_eq!(CudaGraphCaptureOperation::ResidualAddBf16 as u32, 5);
     assert_eq!(CudaGraphCaptureOperation::CanonicalRmsNormBf16 as u32, 6);
     assert_eq!(CudaGraphCaptureOperation::Bf16Argmax as u32, 7);
+    assert_eq!(CudaGraphCaptureOperation::Bf16RowGather as u32, 8);
     assert_eq!(CudaGraphCaptureCapability::Unknown as u32, 0);
     assert_eq!(CudaGraphCaptureCapability::Unsupported as u32, 1);
     assert_eq!(CudaGraphCaptureCapability::Supported as u32, 2);
@@ -261,6 +270,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         CudaGraphCaptureOperation::ResidualAddBf16,
         CudaGraphCaptureOperation::CanonicalRmsNormBf16,
         CudaGraphCaptureOperation::Bf16Argmax,
+        CudaGraphCaptureOperation::Bf16RowGather,
     ] {
         assert_eq!(
             operation.capture_capability().unwrap_err().kind(),
@@ -615,6 +625,54 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    fn begin_owned_bf16_row_gather(
+        stream: CudaStream,
+        input: CudaDeviceBuffer,
+        row_indices: CudaDeviceBuffer,
+        output: CudaDeviceBuffer,
+    ) -> Result<OwnedGraphBf16RowGatherCapture, OwnedGraphBf16RowGatherCaptureBeginError> {
+        // The safe capture owner must validate this temporary host mirror at
+        // admission, rather than retaining a borrow into its replay lifetime.
+        let row_indices_host = [3_u32, 1, 0, 2];
+        stream.begin_owned_graph_bf16_row_gather_capture(
+            input,
+            row_indices,
+            output,
+            &row_indices_host,
+            4,
+            16,
+            CudaGraphCaptureMode::ThreadLocal,
+        )
+    }
+
+    fn end_owned_bf16_row_gather(
+        capture: OwnedGraphBf16RowGatherCapture,
+    ) -> CudaResult<OwnedCapturedBf16RowGatherGraph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_bf16_row_gather(
+        graph: OwnedCapturedBf16RowGatherGraph,
+    ) -> CudaResult<OwnedGraphBf16RowGatherExec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_bf16_row_gather(
+        exec: &mut OwnedGraphBf16RowGatherExec,
+    ) -> CudaResult<OwnedGraphBf16RowGatherLaunch<'_>> {
+        exec.launch()
+    }
+
+    fn finish_owned_bf16_row_gather(launch: OwnedGraphBf16RowGatherLaunch<'_>) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_bf16_row_gather(
+        exec: OwnedGraphBf16RowGatherExec,
+    ) -> CudaResult<OwnedGraphBf16RowGatherResources> {
+        exec.close()
+    }
+
     let _ = (
         begin_fill,
         end_fill,
@@ -664,6 +722,12 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_owned_bf16_argmax,
         finish_owned_bf16_argmax,
         close_owned_bf16_argmax,
+        begin_owned_bf16_row_gather,
+        end_owned_bf16_row_gather,
+        instantiate_owned_bf16_row_gather,
+        launch_owned_bf16_row_gather,
+        finish_owned_bf16_row_gather,
+        close_owned_bf16_row_gather,
     );
 
     let graph_source = include_str!("../src/graph.rs");
@@ -678,6 +742,7 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         graph_source.contains("\"CudaStream::begin_owned_graph_canonical_rms_norm_bf16_capture\"")
     );
     assert!(graph_source.contains("\"CudaStream::begin_owned_graph_bf16_argmax_capture\""));
+    assert!(graph_source.contains("\"CudaStream::begin_owned_graph_bf16_row_gather_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -1943,6 +2008,238 @@ fn owned_bf16_argmax_graph_uses_fixed_two_buffer_lifecycle_without_c07_mapping()
         assert!(
             !graph.contains(forbidden),
             "C05-13 graph ownership must remain model/runtime independent: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_bf16_row_gather_graph_uses_fixed_three_buffer_lifecycle_without_c07_mapping() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+
+    for required in [
+        "riley_cuda_graph_capture_begin_bf16_row_gather",
+        "riley_cuda_graph_capture_enqueue_bf16_row_gather",
+    ] {
+        assert!(header.contains(required), "missing C05-14 ABI: {required}");
+        assert!(
+            ffi.contains(required),
+            "missing C05-14 Rust FFI: {required}"
+        );
+    }
+    assert!(abi_layout.contains("graph_capture_begin_bf16_row_gather_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_bf16_row_gather_symbol"));
+
+    for required in [
+        "kBf16RowGather = 8",
+        "bf16_row_gather_input",
+        "bf16_row_gather_indices",
+        "bf16_row_gather_input_row_count",
+        "bf16_row_gather_output_row_count",
+        "bf16_row_gather_column_count",
+        "bf16_row_gather_enqueue_count",
+        "bf16_row_gather_input_lease_held",
+        "bf16_row_gather_indices_lease_held",
+        "RileyCudaGraphCaptureOperation operation",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-14 native graph ownership state is missing: {required}"
+        );
+    }
+    assert!(native.contains("release_capture_bf16_row_gather_leases"));
+    assert!(native.contains("release_graph_bf16_row_gather_leases"));
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_bf16_row_gather_impl(")
+        .nth(1)
+        .expect("fixed BF16 row-gather capture admission helper must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("fixed BF16 row-gather admission helper must end before C exports");
+    for lease in [
+        "try_acquire_exclusive_use(input->active_uses)",
+        "try_acquire_exclusive_use(row_indices->active_uses)",
+        "try_acquire_exclusive_use(output->active_uses)",
+        "try_acquire_exclusive_use(stream->active_uses)",
+    ] {
+        assert_precedes(
+            begin,
+            lease,
+            "cudaStreamBeginCapture(",
+            "C05-14 fixed BF16 row-gather capture lease admission",
+        );
+    }
+    for required in [
+        "input == row_indices || input == output || row_indices == output",
+        "bf16_row_gather_shape_is_valid(",
+        "RileyCudaGraphCaptureOperation::kBf16RowGather",
+    ] {
+        assert!(
+            begin.contains(required),
+            "C05-14 capture admission must preserve fixed BF16 row-gather bounds: {required}"
+        );
+    }
+
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_bf16_row_gather");
+    assert!(enqueue.contains("graph_bf16_row_gather_bf16<<<"));
+    assert!(enqueue.contains("cudaGetLastError"));
+    assert!(enqueue.contains("owner->bf16_row_gather_enqueue_count != 0"));
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "riley_cuda_row_gather_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-14 capture enqueue must stay allocation-free and capture-safe: {forbidden}"
+        );
+    }
+
+    for required in [
+        "pub struct OwnedGraphBf16RowGatherResources",
+        "pub struct OwnedGraphBf16RowGatherCaptureBeginError",
+        "pub struct OwnedGraphBf16RowGatherCapture",
+        "pub struct OwnedCapturedBf16RowGatherGraph",
+        "pub struct OwnedGraphBf16RowGatherExec",
+        "pub struct OwnedGraphBf16RowGatherLaunch<'exec>",
+        "pub fn begin_owned_graph_bf16_row_gather_capture",
+        "pub fn enqueue_bf16_row_gather(&mut self)",
+        "pub fn launch<'exec>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-14 safe owner contract is missing: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_bf16_row_gather_capture_preflight(")
+        .nth(1)
+        .expect("C05-14 BF16 row-gather preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-14 BF16 row-gather preflight must precede stream entry points");
+    for required in [
+        "row_indices_host",
+        "output_row_count == 0",
+        "input_row_count == 0",
+        "column_count == 0",
+        "checked_mul",
+        "size_of::<u16>()",
+        "size_of::<u32>()",
+        "crate::batch::validate_gather_indices(row_indices_host, input_row_count)",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-14 preflight must retain host-mirror fixed-address validation: {required}"
+        );
+    }
+
+    let resources = graph
+        .split("impl OwnedGraphBf16RowGatherResources")
+        .nth(1)
+        .expect("C05-14 resource bundle must remain present")
+        .split("/// Error from beginning an owned fixed-address BF16 row-gather graph")
+        .next()
+        .expect("C05-14 resource bundle must end before its begin error");
+    assert_precedes(
+        resources,
+        "output.close()?",
+        "row_indices.close()?",
+        "C05-14 resource close order",
+    );
+    assert_precedes(
+        resources,
+        "row_indices.close()?",
+        "input.close()?",
+        "C05-14 resource close order",
+    );
+    assert_precedes(
+        resources,
+        "input.close()?",
+        "stream.close()",
+        "C05-14 resource close order",
+    );
+    assert!(
+        !resources.contains("row_indices_host"),
+        "the temporary host row-index mirror must not be retained by owned graph resources"
+    );
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_bf16_row_gather_capture")
+        .nth(1)
+        .expect("owned BF16 row-gather graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned BF16 row-gather graph capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_bf16_row_gather_capture_preflight",
+        "begin_graph_bf16_row_gather_capture",
+        "C05-14 BF16 row-gather Rust preflight",
+    );
+    assert!(owned_begin.contains("OwnedGraphBf16RowGatherCaptureBeginError::recoverable"));
+    assert!(owned_begin.contains("OwnedGraphBf16RowGatherCaptureBeginError::terminal"));
+
+    for owner in [
+        "pub struct OwnedGraphBf16RowGatherCapture {",
+        "pub struct OwnedCapturedBf16RowGatherGraph {",
+        "pub struct OwnedGraphBf16RowGatherExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphBf16RowGatherResources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before its captured resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphBf16RowGatherExec")
+        .nth(1)
+        .expect("owned BF16 row-gather exec must remain present")
+        .split("/// Completion owner for one [`OwnedGraphBf16RowGatherExec`] replay")
+        .next()
+        .expect("owned BF16 row-gather exec must end before its completion owner");
+    assert!(owned_exec.contains("pub fn launch<'exec>"));
+    for forbidden in [
+        "launch_with_input",
+        "launch_with_source",
+        "CudaBufferSpan",
+        "CudaBufferSpanMut",
+        "GpuGreedy",
+        "CompletionBoundary",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !owned_exec.contains(forbidden),
+            "C05-14 must not expose C07 or mutable replay capability: {forbidden}"
+        );
+    }
+
+    for forbidden in ["riley_runtime", "riley_server", "graph_decode", "llama"] {
+        assert!(
+            !graph.contains(forbidden),
+            "C05-14 graph ownership must remain model/runtime independent: {forbidden}"
         );
     }
 }

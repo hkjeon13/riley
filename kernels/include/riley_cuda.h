@@ -199,6 +199,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)6)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX \
   ((RileyCudaGraphCaptureOperationKind)7)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ROW_GATHER \
+  ((RileyCudaGraphCaptureOperationKind)8)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1358,6 +1360,35 @@ RileyCudaStatus riley_cuda_graph_capture_begin_bf16_argmax(
 // riley_cuda_graph_capture_begin_bf16_argmax. The captured logits, result
 // records, and exact shape remain immutable for the graph lifetime.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_argmax(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-14 capture containing exactly one fixed-address, out-of-place
+// BF16 row-gather node. `input` is contiguous BF16 `[input_row_count,
+// column_count]`, `row_indices` is contiguous U32 `[output_row_count]`, and
+// `output` is contiguous BF16 `[output_row_count, column_count]`. All three
+// live allocations must be distinct, share the stream context, and remain
+// fixed for the graph lifetime. Every dimension must be nonzero. Raw device
+// indices outside input_row_count retain riley_cuda_row_gather_execute's
+// per-element BF16 NaN output behavior. This narrow contract accepts no host
+// mirror, spans, offsets, H2D/D2H, fresh inputs, node updates, argmax,
+// sampling, executor wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_bf16_row_gather(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* input,
+    RileyCudaDeviceBuffer* row_indices,
+    RileyCudaDeviceBuffer* output,
+    uint64_t input_row_count,
+    uint64_t output_row_count,
+    uint64_t column_count,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole BF16 row-gather node for a capture created by
+// riley_cuda_graph_capture_begin_bf16_row_gather. The three captured
+// allocations and exact geometry remain immutable for the graph lifetime.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_row_gather(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

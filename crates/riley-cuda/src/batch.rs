@@ -1090,7 +1090,11 @@ fn validate_indexed_positions(positions: &[u32], table_position_count: u64) -> C
     Ok(())
 }
 
-fn validate_gather_indices(indices: &[u32], input_row_count: u64) -> CudaResult<()> {
+/// Validates the host mirror shared by eager and fixed-address graph row gather.
+///
+/// The mirror is intentionally validated without allocating or retaining it:
+/// callers still own the device-index bytes and their staging policy.
+pub(crate) fn validate_gather_indices(indices: &[u32], input_row_count: u64) -> CudaResult<()> {
     const OPERATION: &str = "row_gather";
     for (row, &index) in indices.iter().enumerate() {
         if u64::from(index) >= input_row_count {
