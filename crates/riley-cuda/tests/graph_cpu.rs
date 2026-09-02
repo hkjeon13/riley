@@ -5,9 +5,11 @@ use riley_cuda::{
     CudaGraphCaptureCapability, CudaGraphCaptureMode, CudaGraphCaptureOperation,
     CudaGraphLifecycle, CudaGraphLifecycleState, CudaGraphStage, CudaPinnedHostBuffer, CudaResult,
     CudaStream, GraphCapture, GraphExec, GraphFillCapture, GraphLaunch,
-    OwnedCapturedCanonicalRmsNormBf16Graph, OwnedCapturedGatedMultiplyBf16Graph,
-    OwnedCapturedGraph, OwnedCapturedH2DGraph, OwnedCapturedResidualAddBf16Graph,
-    OwnedCapturedSiluBf16Graph, OwnedGraphCanonicalRmsNormBf16Capture,
+    OwnedCapturedBf16ArgmaxGraph, OwnedCapturedCanonicalRmsNormBf16Graph,
+    OwnedCapturedGatedMultiplyBf16Graph, OwnedCapturedGraph, OwnedCapturedH2DGraph,
+    OwnedCapturedResidualAddBf16Graph, OwnedCapturedSiluBf16Graph, OwnedGraphBf16ArgmaxCapture,
+    OwnedGraphBf16ArgmaxCaptureBeginError, OwnedGraphBf16ArgmaxExec, OwnedGraphBf16ArgmaxLaunch,
+    OwnedGraphBf16ArgmaxResources, OwnedGraphCanonicalRmsNormBf16Capture,
     OwnedGraphCanonicalRmsNormBf16CaptureBeginError, OwnedGraphCanonicalRmsNormBf16Exec,
     OwnedGraphCanonicalRmsNormBf16Launch, OwnedGraphCanonicalRmsNormBf16Resources, OwnedGraphExec,
     OwnedGraphFillCapture, OwnedGraphFillCaptureBeginError, OwnedGraphFillResources,
@@ -41,6 +43,7 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16",
         "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16",
+        "RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX",
         "RILEY_CUDA_GRAPH_STAGE_CAPTURE_BEGIN",
         "RILEY_CUDA_GRAPH_STAGE_CLOSE",
         "RILEY_CUDA_GRAPH_STAGE_INPUT_STAGE",
@@ -68,6 +71,8 @@ fn graph_contract_is_additive_and_declares_the_capture_owner_symbols() {
         "riley_cuda_graph_capture_enqueue_residual_add_bf16",
         "riley_cuda_graph_capture_begin_canonical_rms_norm_bf16",
         "riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16",
+        "riley_cuda_graph_capture_begin_bf16_argmax",
+        "riley_cuda_graph_capture_enqueue_bf16_argmax",
         "riley_cuda_graph_capture_end",
         "riley_cuda_graph_instantiate",
         "riley_cuda_graph_exec_launch",
@@ -233,6 +238,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
     assert_eq!(CudaGraphCaptureOperation::GatedMultiplyBf16 as u32, 4);
     assert_eq!(CudaGraphCaptureOperation::ResidualAddBf16 as u32, 5);
     assert_eq!(CudaGraphCaptureOperation::CanonicalRmsNormBf16 as u32, 6);
+    assert_eq!(CudaGraphCaptureOperation::Bf16Argmax as u32, 7);
     assert_eq!(CudaGraphCaptureCapability::Unknown as u32, 0);
     assert_eq!(CudaGraphCaptureCapability::Unsupported as u32, 1);
     assert_eq!(CudaGraphCaptureCapability::Supported as u32, 2);
@@ -254,6 +260,7 @@ fn graph_public_values_fix_the_cpu_only_contract() {
         CudaGraphCaptureOperation::GatedMultiplyBf16,
         CudaGraphCaptureOperation::ResidualAddBf16,
         CudaGraphCaptureOperation::CanonicalRmsNormBf16,
+        CudaGraphCaptureOperation::Bf16Argmax,
     ] {
         assert_eq!(
             operation.capture_capability().unwrap_err().kind(),
@@ -566,6 +573,48 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         exec.close()
     }
 
+    fn begin_owned_bf16_argmax(
+        stream: CudaStream,
+        logits: CudaDeviceBuffer,
+        results: CudaDeviceBuffer,
+    ) -> Result<OwnedGraphBf16ArgmaxCapture, OwnedGraphBf16ArgmaxCaptureBeginError> {
+        stream.begin_owned_graph_bf16_argmax_capture(
+            logits,
+            results,
+            4,
+            257,
+            CudaGraphCaptureMode::ThreadLocal,
+        )
+    }
+
+    fn end_owned_bf16_argmax(
+        capture: OwnedGraphBf16ArgmaxCapture,
+    ) -> CudaResult<OwnedCapturedBf16ArgmaxGraph> {
+        capture.end()
+    }
+
+    fn instantiate_owned_bf16_argmax(
+        graph: OwnedCapturedBf16ArgmaxGraph,
+    ) -> CudaResult<OwnedGraphBf16ArgmaxExec> {
+        graph.instantiate()
+    }
+
+    fn launch_owned_bf16_argmax(
+        exec: &mut OwnedGraphBf16ArgmaxExec,
+    ) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'_>> {
+        exec.launch()
+    }
+
+    fn finish_owned_bf16_argmax(launch: OwnedGraphBf16ArgmaxLaunch<'_>) -> CudaResult<()> {
+        launch.finish()
+    }
+
+    fn close_owned_bf16_argmax(
+        exec: OwnedGraphBf16ArgmaxExec,
+    ) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+        exec.close()
+    }
+
     let _ = (
         begin_fill,
         end_fill,
@@ -609,6 +658,12 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
         launch_owned_canonical_rms_norm_bf16,
         finish_owned_canonical_rms_norm_bf16,
         close_owned_canonical_rms_norm_bf16,
+        begin_owned_bf16_argmax,
+        end_owned_bf16_argmax,
+        instantiate_owned_bf16_argmax,
+        launch_owned_bf16_argmax,
+        finish_owned_bf16_argmax,
+        close_owned_bf16_argmax,
     );
 
     let graph_source = include_str!("../src/graph.rs");
@@ -622,6 +677,7 @@ fn feature_off_capture_stub_keeps_the_future_mutable_stream_borrow() {
     assert!(
         graph_source.contains("\"CudaStream::begin_owned_graph_canonical_rms_norm_bf16_capture\"")
     );
+    assert!(graph_source.contains("\"CudaStream::begin_owned_graph_bf16_argmax_capture\""));
     assert!(graph_source.contains("self.native.begin_graph_capture(mode as u32)?;"));
     assert!(graph_source.contains("native capture handle"));
     for forbidden in ["riley_model", "riley_runtime", "riley_server", "llama"] {
@@ -1660,6 +1716,233 @@ fn owned_canonical_bf16_rms_norm_graph_uses_fixed_three_buffer_lifecycle_without
         assert!(
             !graph.contains(forbidden),
             "C05-12 graph ownership must remain model/runtime independent: {forbidden}"
+        );
+    }
+}
+
+#[test]
+fn owned_bf16_argmax_graph_uses_fixed_two_buffer_lifecycle_without_c07_mapping() {
+    let header = include_str!("../../../kernels/include/riley_cuda.h");
+    let internal = include_str!("../../../kernels/src/ffi_internal.hpp");
+    let native = include_str!("../../../kernels/src/graph.cu");
+    let ffi = include_str!("../src/ffi.rs");
+    let graph = include_str!("../src/graph.rs");
+    let abi_layout = include_str!("../../../kernels/tests/abi_layout.c");
+
+    for required in [
+        "riley_cuda_graph_capture_begin_bf16_argmax",
+        "riley_cuda_graph_capture_enqueue_bf16_argmax",
+    ] {
+        assert!(header.contains(required), "missing C05-13 ABI: {required}");
+        assert!(
+            ffi.contains(required),
+            "missing C05-13 Rust FFI: {required}"
+        );
+    }
+    assert!(abi_layout.contains("graph_capture_begin_bf16_argmax_symbol"));
+    assert!(abi_layout.contains("graph_capture_enqueue_bf16_argmax_symbol"));
+
+    for required in [
+        "kBf16Argmax = 7",
+        "bf16_argmax_logits",
+        "bf16_argmax_row_count",
+        "bf16_argmax_vocabulary_size",
+        "bf16_argmax_enqueue_count",
+        "bf16_argmax_logits_lease_held",
+        "RileyCudaGraphCaptureOperation operation",
+    ] {
+        assert!(
+            internal.contains(required),
+            "C05-13 native graph ownership state is missing: {required}"
+        );
+    }
+    assert!(native.contains("release_capture_bf16_argmax_leases"));
+    assert!(native.contains("release_graph_bf16_argmax_leases"));
+
+    let begin = native
+        .split("RileyCudaStatus capture_begin_bf16_argmax_impl(")
+        .nth(1)
+        .expect("deterministic BF16 argmax capture admission helper must remain present")
+        .split("}  // namespace")
+        .next()
+        .expect("deterministic BF16 argmax capture admission helper must end before C exports");
+    for lease in [
+        "try_acquire_exclusive_use(logits->active_uses)",
+        "try_acquire_exclusive_use(results->active_uses)",
+        "try_acquire_exclusive_use(stream->active_uses)",
+    ] {
+        assert_precedes(
+            begin,
+            lease,
+            "cudaStreamBeginCapture(",
+            "C05-13 deterministic BF16 argmax capture lease admission",
+        );
+    }
+    for required in [
+        "logits == results",
+        "row_count == 0",
+        "vocabulary_size == 0",
+        "vocabulary_size > UINT32_MAX",
+        "RileyCudaGraphCaptureOperation::kBf16Argmax",
+    ] {
+        assert!(
+            begin.contains(required),
+            "C05-13 capture admission must preserve deterministic BF16 argmax bounds: {required}"
+        );
+    }
+
+    let enqueue = native_export_body(native, "riley_cuda_graph_capture_enqueue_bf16_argmax");
+    assert!(enqueue.contains("graph_bf16_argmax_bf16<<<"));
+    assert!(enqueue.contains("cudaGetLastError"));
+    assert!(enqueue.contains("owner->bf16_argmax_enqueue_count != 0"));
+    for forbidden in [
+        "std::calloc",
+        "std::free",
+        "cudaStreamSynchronize",
+        "riley_cuda_bf16_argmax_execute",
+    ] {
+        assert!(
+            !enqueue.contains(forbidden),
+            "C05-13 capture enqueue must stay allocation-free and capture-safe: {forbidden}"
+        );
+    }
+
+    for required in [
+        "pub struct OwnedGraphBf16ArgmaxResources",
+        "pub struct OwnedGraphBf16ArgmaxCaptureBeginError",
+        "pub struct OwnedGraphBf16ArgmaxCapture",
+        "pub struct OwnedCapturedBf16ArgmaxGraph",
+        "pub struct OwnedGraphBf16ArgmaxExec",
+        "pub struct OwnedGraphBf16ArgmaxLaunch<'exec>",
+        "pub fn begin_owned_graph_bf16_argmax_capture",
+        "pub fn enqueue_bf16_argmax(&mut self)",
+        "pub fn launch<'exec>",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-13 safe owner contract is missing: {required}"
+        );
+    }
+    for required in [
+        "lower token ID",
+        "non-finite",
+        "row gather",
+        "C07 executor integration",
+    ] {
+        assert!(
+            graph.contains(required),
+            "C05-13 public documentation must preserve its narrow scope: {required}"
+        );
+    }
+
+    let preflight = graph
+        .split("fn validate_graph_bf16_argmax_capture_preflight(")
+        .nth(1)
+        .expect("C05-13 BF16 argmax preflight must remain present")
+        .split("impl CudaStream")
+        .next()
+        .expect("C05-13 BF16 argmax preflight must precede stream entry points");
+    for required in [
+        "row_count == 0",
+        "vocabulary_size == 0",
+        "u64::from(u32::MAX)",
+        "row_count.checked_mul(vocabulary_size)",
+        "row_count.checked_mul(2)",
+        "size_of::<u16>()",
+        "size_of::<u32>()",
+    ] {
+        assert!(
+            preflight.contains(required),
+            "C05-13 preflight must retain the checked fixed-address geometry: {required}"
+        );
+    }
+    let resources = graph
+        .split("impl OwnedGraphBf16ArgmaxResources")
+        .nth(1)
+        .expect("C05-13 resource bundle must remain present")
+        .split("/// Error from beginning an owned fixed-address deterministic BF16 argmax graph")
+        .next()
+        .expect("C05-13 resource bundle must end before its begin error");
+    assert_precedes(
+        resources,
+        "results.close()?",
+        "logits.close()?",
+        "C05-13 resource close order",
+    );
+    assert_precedes(
+        resources,
+        "logits.close()?",
+        "stream.close()",
+        "C05-13 resource close order",
+    );
+
+    let owned_begin = graph
+        .split("pub fn begin_owned_graph_bf16_argmax_capture")
+        .nth(1)
+        .expect("owned deterministic BF16 argmax graph capture entry point must remain present")
+        .split("/// Begins the sole C05-5 capture-admitted operation set")
+        .next()
+        .expect("owned deterministic BF16 argmax capture must precede borrowed fill capture");
+    assert_precedes(
+        owned_begin,
+        "validate_graph_bf16_argmax_capture_preflight",
+        "begin_graph_bf16_argmax_capture",
+        "C05-13 deterministic BF16 argmax Rust preflight",
+    );
+    assert!(owned_begin.contains("OwnedGraphBf16ArgmaxCaptureBeginError::recoverable"));
+    assert!(owned_begin.contains("OwnedGraphBf16ArgmaxCaptureBeginError::terminal"));
+
+    for owner in [
+        "pub struct OwnedGraphBf16ArgmaxCapture {",
+        "pub struct OwnedCapturedBf16ArgmaxGraph {",
+        "pub struct OwnedGraphBf16ArgmaxExec {",
+    ] {
+        let source = graph
+            .split(owner)
+            .nth(1)
+            .unwrap_or_else(|| panic!("missing {owner}"));
+        let native_position = source
+            .find("native:")
+            .unwrap_or_else(|| panic!("{owner} must retain native ownership first"));
+        let resources_position = source
+            .find("resources: Option<OwnedGraphBf16ArgmaxResources>")
+            .unwrap_or_else(|| panic!("{owner} must retain graph resources by value"));
+        assert!(
+            native_position < resources_position,
+            "{owner} must drop native ownership before its captured resources"
+        );
+        assert!(
+            source.contains("PhantomData<Rc<()>>"),
+            "{owner} must remain !Send + !Sync"
+        );
+    }
+
+    let owned_exec = graph
+        .split("impl OwnedGraphBf16ArgmaxExec")
+        .nth(1)
+        .expect("owned deterministic BF16 argmax exec must remain present")
+        .split("/// Completion owner for one [`OwnedGraphBf16ArgmaxExec`] replay")
+        .next()
+        .expect("owned deterministic BF16 argmax exec must end before its completion owner");
+    assert!(owned_exec.contains("pub fn launch<'exec>"));
+    for forbidden in [
+        "launch_with_input",
+        "launch_with_source",
+        "CudaBufferSpan",
+        "row_gather",
+        "graph_decode",
+        "llama",
+    ] {
+        assert!(
+            !owned_exec.contains(forbidden),
+            "C05-13 must not expose C07 or mutable replay capability: {forbidden}"
+        );
+    }
+
+    for forbidden in ["riley_runtime", "riley_server", "graph_decode", "llama"] {
+        assert!(
+            !graph.contains(forbidden),
+            "C05-13 graph ownership must remain model/runtime independent: {forbidden}"
         );
     }
 }

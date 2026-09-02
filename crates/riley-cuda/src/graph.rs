@@ -132,6 +132,13 @@ pub enum CudaGraphCaptureOperation {
     /// This is deliberately distinct from SmolLM2 and Fixed37 variants, fused
     /// RMSNorm, and C07 executor integration.
     CanonicalRmsNormBf16 = 6,
+    /// One fixed-address deterministic BF16 greedy-argmax kernel.
+    ///
+    /// This retains only the fixed logits and U32 result allocations. It does
+    /// not include output-row gather, token/status transfer, completion
+    /// handling, C07 executor integration, or a sampling policy beyond this
+    /// exact deterministic primitive.
+    Bf16Argmax = 7,
 }
 
 impl CudaGraphCaptureOperation {
@@ -4513,6 +4520,515 @@ fn validate_graph_canonical_rms_norm_bf16_capture_preflight(
     Ok(())
 }
 
+/// A by-value stream and two fixed device buffers recovered from one known
+/// deterministic BF16 argmax graph lifecycle transition.
+///
+/// This recovery bundle exposes no graph-visible pointer, mutable span, or
+/// fresh replay input. The BF16 logits and U32 result records remain distinct
+/// throughout capture, graph, and exec ownership.
+pub struct OwnedGraphBf16ArgmaxResources {
+    stream: CudaStream,
+    logits: CudaDeviceBuffer,
+    results: CudaDeviceBuffer,
+}
+
+impl OwnedGraphBf16ArgmaxResources {
+    fn new(stream: CudaStream, logits: CudaDeviceBuffer, results: CudaDeviceBuffer) -> Self {
+        Self {
+            stream,
+            logits,
+            results,
+        }
+    }
+
+    /// Returns the exact stream, logits, and result records after a known
+    /// native graph-lease release.
+    #[must_use]
+    pub fn into_parts(self) -> (CudaStream, CudaDeviceBuffer, CudaDeviceBuffer) {
+        let Self {
+            stream,
+            logits,
+            results,
+        } = self;
+        (stream, logits, results)
+    }
+
+    /// Explicitly destroys recovered device buffers before their stream.
+    pub fn close(self) -> CudaResult<()> {
+        let (stream, logits, results) = self.into_parts();
+        results.close()?;
+        logits.close()?;
+        stream.close()
+    }
+}
+
+/// Error from beginning an owned fixed-address deterministic BF16 argmax graph
+/// capture.
+///
+/// Only Rust-side preflight errors recover the untouched resource trio. Once
+/// native begin is attempted, ambiguous CUDA state retains all raw addresses
+/// fail-closed.
+#[must_use]
+pub struct OwnedGraphBf16ArgmaxCaptureBeginError {
+    error: CudaError,
+    resources: Option<OwnedGraphBf16ArgmaxResources>,
+}
+
+impl OwnedGraphBf16ArgmaxCaptureBeginError {
+    fn recoverable(error: CudaError, resources: OwnedGraphBf16ArgmaxResources) -> Self {
+        Self {
+            error,
+            resources: Some(resources),
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn terminal(error: CudaError) -> Self {
+        Self {
+            error,
+            resources: None,
+        }
+    }
+
+    /// The underlying validation or native error.
+    #[must_use]
+    pub const fn error(&self) -> &CudaError {
+        &self.error
+    }
+
+    /// Returns the untouched stream/logits/results trio only when native
+    /// capture ownership was never entered.
+    #[must_use]
+    pub fn into_resources(self) -> Option<OwnedGraphBf16ArgmaxResources> {
+        self.resources
+    }
+}
+
+impl std::fmt::Debug for OwnedGraphBf16ArgmaxCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OwnedGraphBf16ArgmaxCaptureBeginError")
+            .field("error", &self.error)
+            .field("resources_recoverable", &self.resources.is_some())
+            .finish()
+    }
+}
+
+impl std::fmt::Display for OwnedGraphBf16ArgmaxCaptureBeginError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "owned CUDA Graph deterministic BF16 argmax capture begin failed: {}",
+            self.error
+        )
+    }
+}
+
+impl std::error::Error for OwnedGraphBf16ArgmaxCaptureBeginError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
+/// By-value owner of one active fixed-address deterministic BF16 argmax CUDA
+/// Graph capture.
+pub struct OwnedGraphBf16ArgmaxCapture {
+    // Native drops before child resource wrappers. A capture ambiguity owns
+    // their raw addresses and must remain fail-closed before Rust drops them.
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphCaptureHandle,
+    resources: Option<OwnedGraphBf16ArgmaxResources>,
+    active: bool,
+    enqueued: bool,
+    enqueue_failed: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16ArgmaxCapture {
+    /// Captures the one immutable deterministic BF16 argmax node.
+    pub fn enqueue_bf16_argmax(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "OwnedGraphBf16ArgmaxCapture::enqueue_bf16_argmax";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph deterministic BF16 argmax capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph deterministic BF16 argmax enqueue failed and this capture must be aborted",
+            ));
+        }
+        if self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a fixed deterministic BF16 argmax graph capture admits exactly one enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.enqueue_bf16_argmax();
+            if result.is_ok() {
+                self.enqueued = true;
+            } else {
+                self.enqueue_failed = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Ends capture and transfers the fixed stream/logits/results trio into a
+    /// by-value captured graph.
+    pub fn end(mut self) -> CudaResult<OwnedCapturedBf16ArgmaxGraph> {
+        const OPERATION: &str = "OwnedGraphBf16ArgmaxCapture::end";
+        if !self.active {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "the owned graph deterministic BF16 argmax capture was already ended or aborted",
+            ));
+        }
+        if self.enqueue_failed {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "a prior graph deterministic BF16 argmax enqueue failed and this capture must be aborted",
+            ));
+        }
+        if !self.enqueued {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "capture end requires the one fixed deterministic BF16 argmax enqueue",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.end();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            let native = transition.result?;
+            let resources = take_owned_graph_bf16_argmax_resources(&mut self.resources, OPERATION)?;
+            Ok(OwnedCapturedBf16ArgmaxGraph {
+                native,
+                resources: Some(resources),
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Aborts capture and returns resources only after native recovery proves
+    /// every permanent graph lease has been released.
+    pub fn abort(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+        self.abort_once()?;
+        take_owned_graph_bf16_argmax_resources(
+            &mut self.resources,
+            "OwnedGraphBf16ArgmaxCapture::abort",
+        )
+    }
+
+    fn abort_once(&mut self) -> CudaResult<()> {
+        if !self.active {
+            return Ok(());
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let transition = self.native.abort_with_transition();
+            if transition.resource_release_known {
+                finish_deferred_capture_contexts();
+            }
+            self.active = !transition.owner_consumed;
+            transition.result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.active = false;
+            Err(CudaError::unavailable("OwnedGraphBf16ArgmaxCapture::abort"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16ArgmaxCapture {
+    fn drop(&mut self) {
+        let _ = self.abort_once();
+    }
+}
+
+/// By-value fixed-address deterministic BF16 argmax CUDA Graph awaiting
+/// instantiate or close.
+pub struct OwnedCapturedBf16ArgmaxGraph {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphHandle,
+    resources: Option<OwnedGraphBf16ArgmaxResources>,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedCapturedBf16ArgmaxGraph {
+    /// Instantiates this graph while retaining its fixed stream/logits/results
+    /// trio by value.
+    pub fn instantiate(mut self) -> CudaResult<OwnedGraphBf16ArgmaxExec> {
+        #[cfg(feature = "cuda")]
+        {
+            let native = self.native.instantiate()?;
+            let resources = take_owned_graph_bf16_argmax_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16ArgmaxGraph::instantiate",
+            )?;
+            Ok(OwnedGraphBf16ArgmaxExec {
+                native,
+                resources: Some(resources),
+                terminal: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16ArgmaxGraph::instantiate",
+            ))
+        }
+    }
+
+    /// Destroys this graph and returns resources only after known native
+    /// graph-lease release evidence.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_argmax_resources(
+                &mut self.resources,
+                "OwnedCapturedBf16ArgmaxGraph::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable(
+                "OwnedCapturedBf16ArgmaxGraph::close",
+            ))
+        }
+    }
+}
+
+/// By-value fixed-address deterministic BF16 argmax CUDA Graph executable.
+///
+/// It replays only the capture-time BF16 logits and U32 result allocations.
+/// Row gather, token/status transfer, completion dependencies, fresh input
+/// staging, mutable spans, node updates, sampling policy, and C07 executor
+/// integration stay outside this narrow C05 ownership slice.
+pub struct OwnedGraphBf16ArgmaxExec {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphExecHandle,
+    resources: Option<OwnedGraphBf16ArgmaxResources>,
+    terminal: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16ArgmaxExec {
+    /// Replays the fixed-address deterministic BF16 argmax graph once.
+    pub fn launch<'exec>(&'exec mut self) -> CudaResult<OwnedGraphBf16ArgmaxLaunch<'exec>> {
+        const OPERATION: &str = "OwnedGraphBf16ArgmaxExec::launch";
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                OPERATION,
+                "an earlier graph deterministic BF16 argmax transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            let native = match self.resources.as_mut() {
+                Some(resources) => self.native.launch(&mut resources.stream.native),
+                None => {
+                    self.terminal = true;
+                    return Err(CudaError::invalid_state(
+                        OPERATION,
+                        "the owned graph deterministic BF16 argmax exec lost its captured resources",
+                    ));
+                }
+            };
+            match native {
+                Ok(native) => Ok(OwnedGraphBf16ArgmaxLaunch {
+                    native,
+                    exec: self,
+                    active: true,
+                    _not_send_or_sync: PhantomData,
+                }),
+                Err(error) => {
+                    self.terminal = true;
+                    Err(error)
+                }
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            self.terminal = true;
+            Err(CudaError::unavailable(OPERATION))
+        }
+    }
+
+    /// Destroys this executable and returns its resource trio only after native
+    /// close proves every graph lease was released.
+    pub fn close(mut self) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+        if self.terminal {
+            return Err(CudaError::invalid_state(
+                "OwnedGraphBf16ArgmaxExec::close",
+                "an earlier graph deterministic BF16 argmax transition left native state uncertain",
+            ));
+        }
+        #[cfg(feature = "cuda")]
+        {
+            self.native.close()?;
+            take_owned_graph_bf16_argmax_resources(
+                &mut self.resources,
+                "OwnedGraphBf16ArgmaxExec::close",
+            )
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = &mut self.resources;
+            Err(CudaError::unavailable("OwnedGraphBf16ArgmaxExec::close"))
+        }
+    }
+}
+
+/// Completion owner for one [`OwnedGraphBf16ArgmaxExec`] replay.
+pub struct OwnedGraphBf16ArgmaxLaunch<'exec> {
+    #[cfg(feature = "cuda")]
+    native: crate::ffi::GraphLaunchHandle,
+    exec: &'exec mut OwnedGraphBf16ArgmaxExec,
+    active: bool,
+    _not_send_or_sync: PhantomData<Rc<()>>,
+}
+
+impl OwnedGraphBf16ArgmaxLaunch<'_> {
+    /// Waits for graph replay completion exactly once.
+    pub fn finish(mut self) -> CudaResult<()> {
+        self.complete_once()
+    }
+
+    fn complete_once(&mut self) -> CudaResult<()> {
+        let _ = &mut *self.exec;
+        if !self.active {
+            return Ok(());
+        }
+        self.active = false;
+        #[cfg(feature = "cuda")]
+        {
+            let result = self.native.complete();
+            if result.is_err() {
+                self.exec.terminal = true;
+            }
+            result
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            self.exec.terminal = true;
+            Err(CudaError::unavailable("OwnedGraphBf16ArgmaxLaunch::finish"))
+        }
+    }
+}
+
+impl Drop for OwnedGraphBf16ArgmaxLaunch<'_> {
+    fn drop(&mut self) {
+        let _ = self.complete_once();
+    }
+}
+
+fn take_owned_graph_bf16_argmax_resources(
+    resources: &mut Option<OwnedGraphBf16ArgmaxResources>,
+    operation: &'static str,
+) -> CudaResult<OwnedGraphBf16ArgmaxResources> {
+    resources.take().ok_or_else(|| {
+        CudaError::invalid_state(
+            operation,
+            "the owned graph deterministic BF16 argmax owner lost its captured resources",
+        )
+    })
+}
+
+#[cfg(feature = "cuda")]
+fn validate_graph_bf16_argmax_capture_preflight(
+    stream: &CudaStream,
+    logits: &CudaDeviceBuffer,
+    results: &CudaDeviceBuffer,
+    row_count: u64,
+    vocabulary_size: u64,
+    operation: &'static str,
+) -> CudaResult<()> {
+    ensure_same_context(&stream.context, logits.context_owner(), operation)?;
+    ensure_same_context(&stream.context, results.context_owner(), operation)?;
+    logits.ensure_idle_for_operation(operation)?;
+    results.ensure_idle_for_operation(operation)?;
+    if row_count == 0 {
+        return Err(CudaError::out_of_range(
+            operation,
+            "row_count must be non-zero for a one-node deterministic BF16 argmax graph",
+        ));
+    }
+    if vocabulary_size == 0 {
+        return Err(CudaError::invalid_argument(
+            operation,
+            "vocabulary_size must be non-zero",
+        ));
+    }
+    if vocabulary_size > u64::from(u32::MAX) {
+        return Err(CudaError::out_of_range(
+            operation,
+            "vocabulary_size exceeds the U32 token-id contract",
+        ));
+    }
+    let logit_elements = row_count.checked_mul(vocabulary_size).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "row_count * vocabulary_size overflows the deterministic BF16 argmax element range",
+        )
+    })?;
+    let logits_bytes = logit_elements
+        .checked_mul(std::mem::size_of::<u16>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "row_count * vocabulary_size overflows the deterministic BF16 argmax BF16 byte range",
+            )
+        })?;
+    let result_words = row_count.checked_mul(2).ok_or_else(|| {
+        CudaError::out_of_range(
+            operation,
+            "row_count * two-U32 result records overflows the deterministic BF16 argmax result range",
+        )
+    })?;
+    let results_bytes = result_words
+        .checked_mul(std::mem::size_of::<u32>() as u64)
+        .ok_or_else(|| {
+            CudaError::out_of_range(
+                operation,
+                "row_count * two-U32 result records overflows the deterministic BF16 argmax byte range",
+            )
+        })?;
+    if logits_bytes > logits.byte_len() || results_bytes > results.byte_len() {
+        return Err(CudaError::out_of_range(
+            operation,
+            format!(
+                "row_count={row_count}, vocabulary_size={vocabulary_size} require BF16/U32 capacities {logits_bytes}/{results_bytes} bytes, but logits/results capacities are {}/{} bytes",
+                logits.byte_len(),
+                results.byte_len(),
+            ),
+        ));
+    }
+    Ok(())
+}
+
 impl CudaStream {
     /// Starts one owned thread-local CUDA Graph capture on this stream.
     ///
@@ -5001,6 +5517,80 @@ impl CudaStream {
                     resources,
                 ),
             )
+        }
+    }
+
+    /// Begins a by-value C05-13 capture containing exactly one fixed-address,
+    /// deterministic BF16 argmax node.
+    ///
+    /// The moved BF16 logits and U32 result records remain inaccessible until
+    /// graph close. This slice follows only [`crate::deterministic_bf16_argmax`]:
+    /// finite ties choose the lower token ID, and any non-finite input writes
+    /// the fixed invalid-token/non-finite status pair. It excludes row gather,
+    /// token/status transfer, completion dependencies, C07 executor
+    /// integration, fresh inputs, spans, offsets, node updates, sampling
+    /// policy, and eager fallback.
+    ///
+    /// # Errors
+    ///
+    /// Rust preflight failures return the untouched resource trio through
+    /// [`OwnedGraphBf16ArgmaxCaptureBeginError::into_resources`]. After native
+    /// entry, no resource is returned because CUDA may retain the raw addresses
+    /// while resolving an ambiguous capture failure.
+    pub fn begin_owned_graph_bf16_argmax_capture(
+        self,
+        logits: CudaDeviceBuffer,
+        results: CudaDeviceBuffer,
+        row_count: u64,
+        vocabulary_size: u64,
+        mode: CudaGraphCaptureMode,
+    ) -> Result<OwnedGraphBf16ArgmaxCapture, OwnedGraphBf16ArgmaxCaptureBeginError> {
+        #[cfg(feature = "cuda")]
+        let mut resources = OwnedGraphBf16ArgmaxResources::new(self, logits, results);
+        #[cfg(not(feature = "cuda"))]
+        let resources = OwnedGraphBf16ArgmaxResources::new(self, logits, results);
+        #[cfg(feature = "cuda")]
+        {
+            const OPERATION: &str = "CudaStream::begin_owned_graph_bf16_argmax_capture";
+            if let Err(error) = validate_graph_bf16_argmax_capture_preflight(
+                &resources.stream,
+                &resources.logits,
+                &resources.results,
+                row_count,
+                vocabulary_size,
+                OPERATION,
+            ) {
+                return Err(OwnedGraphBf16ArgmaxCaptureBeginError::recoverable(
+                    error, resources,
+                ));
+            }
+            let native = match resources.stream.native.begin_graph_bf16_argmax_capture(
+                resources.logits.native_handle(),
+                resources.results.native_handle(),
+                row_count,
+                vocabulary_size,
+                mode as u32,
+            ) {
+                Ok(native) => native,
+                Err(error) => return Err(OwnedGraphBf16ArgmaxCaptureBeginError::terminal(error)),
+            };
+            begin_deferred_capture_contexts();
+            Ok(OwnedGraphBf16ArgmaxCapture {
+                native,
+                resources: Some(resources),
+                active: true,
+                enqueued: false,
+                enqueue_failed: false,
+                _not_send_or_sync: PhantomData,
+            })
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            let _ = (row_count, vocabulary_size, mode);
+            Err(OwnedGraphBf16ArgmaxCaptureBeginError::recoverable(
+                CudaError::unavailable("CudaStream::begin_owned_graph_bf16_argmax_capture"),
+                resources,
+            ))
         }
     }
 

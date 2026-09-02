@@ -1430,6 +1430,22 @@ unsafe extern "C" {
         out_graph_error: *mut RawGraphErrorInfo,
         error: *mut ErrorInfo,
     ) -> i32;
+    fn riley_cuda_graph_capture_begin_bf16_argmax(
+        stream: *mut RawStream,
+        logits: *mut RawDeviceBuffer,
+        results: *mut RawDeviceBuffer,
+        row_count: u64,
+        vocabulary_size: u64,
+        mode: u32,
+        out_capture: *mut *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
+    fn riley_cuda_graph_capture_enqueue_bf16_argmax(
+        capture: *mut RawGraphCapture,
+        out_graph_error: *mut RawGraphErrorInfo,
+        error: *mut ErrorInfo,
+    ) -> i32;
     fn riley_cuda_graph_capture_end(
         capture: *mut *mut RawGraphCapture,
         out_graph: *mut *mut RawGraph,
@@ -2963,6 +2979,94 @@ impl StreamHandle {
         ))
     }
 
+    pub(super) fn begin_graph_bf16_argmax_capture(
+        &mut self,
+        logits: &DeviceBufferHandle,
+        results: &DeviceBufferHandle,
+        row_count: u64,
+        vocabulary_size: u64,
+        mode: u32,
+    ) -> CudaResult<GraphCaptureHandle> {
+        const OPERATION: &str = "begin CUDA Graph deterministic BF16 argmax capture";
+        let mut capture = ptr::null_mut::<RawGraphCapture>();
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the by-value graph owner retains the exact stream and two
+        // distinct device allocations for its whole capture/graph/exec
+        // lifecycle. Native validates fixed BF16/U32 geometry and permanent
+        // resource leases before it can enter capture.
+        let status = unsafe {
+            riley_cuda_graph_capture_begin_bf16_argmax(
+                self.as_ptr(),
+                logits.as_ptr(),
+                results.as_ptr(),
+                row_count,
+                vocabulary_size,
+                mode,
+                &mut capture,
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let decoded = decode_graph_failure_info(&graph_error);
+        let pointer = NonNull::new(capture);
+
+        if status == STATUS_SUCCESS {
+            if let (Some(pointer), Ok(graph_failure)) = (pointer, decoded.as_ref()) {
+                if graph_capture_begin_success_metadata_is_valid(&graph_error, graph_failure) {
+                    return Ok(GraphCaptureHandle {
+                        pointer: Some(pointer),
+                    });
+                }
+            }
+        }
+
+        // A non-null owner after an unsuccessful begin can still be actively
+        // capturing after a deferred CUDA error. The generic abort is the one
+        // operation-aware recovery boundary for every graph capture family.
+        let cleanup = pointer.map(|pointer| {
+            let mut owner = GraphCaptureHandle {
+                pointer: Some(pointer),
+            };
+            owner.abort()
+        });
+        let metadata_error = decoded.err();
+        let native_error = if status == STATUS_SUCCESS {
+            None
+        } else {
+            Some(
+                status_result(status, OPERATION, &error)
+                    .expect_err("a non-success native status must decode as an error"),
+            )
+        };
+        if let Some(cleanup_error) = cleanup.and_then(Result::err) {
+            return Err(CudaError::new(
+                CudaErrorKind::Internal,
+                CudaErrorDomain::Internal,
+                CudaErrorStage::Close,
+                cleanup_error.native_code(),
+                OPERATION,
+                format!(
+                    "native deterministic BF16 argmax capture begin did not yield an acceptable owner and abort recovery also failed: {cleanup_error}"
+                ),
+            ));
+        }
+        if let Some(metadata_error) = metadata_error {
+            return Err(metadata_error);
+        }
+        if let Some(native_error) = native_error {
+            return Err(native_error);
+        }
+        Err(CudaError::new(
+            CudaErrorKind::Internal,
+            CudaErrorDomain::Internal,
+            CudaErrorStage::Prepare,
+            0,
+            OPERATION,
+            "native graph deterministic BF16 argmax capture returned success without a valid owned capture handle",
+        ))
+    }
+
     pub(super) fn wait_event(&mut self, event: &EventHandle) -> CudaResult<()> {
         let mut error = ErrorInfo::new();
         // SAFETY: both native handles remain alive and the native ABI validates
@@ -3177,6 +3281,30 @@ impl GraphCaptureHandle {
         // other safe operations while this capture is active.
         let status = unsafe {
             riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+                pointer.as_ptr(),
+                &mut graph_error,
+                &mut error,
+            )
+        };
+        let graph_failure = decode_graph_failure_info(&graph_error)?;
+        if !graph_capture_enqueue_metadata_is_valid(&graph_error, &graph_failure) {
+            return Err(malformed_graph_metadata(OPERATION));
+        }
+        status_result(status, OPERATION, &error)
+    }
+
+    pub(super) fn enqueue_bf16_argmax(&mut self) -> CudaResult<()> {
+        const OPERATION: &str = "enqueue CUDA Graph deterministic BF16 argmax";
+        let Some(pointer) = self.pointer else {
+            return Err(graph_owner_missing(OPERATION));
+        };
+        let mut graph_error = RawGraphErrorInfo::new();
+        let mut error = ErrorInfo::new();
+        // SAFETY: the public by-value owner keeps the captured stream and both
+        // fixed, distinct device allocations alive and inaccessible to other
+        // safe operations while this capture is active.
+        let status = unsafe {
+            riley_cuda_graph_capture_enqueue_bf16_argmax(
                 pointer.as_ptr(),
                 &mut graph_error,
                 &mut error,

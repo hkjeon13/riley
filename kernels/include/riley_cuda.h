@@ -197,6 +197,8 @@ typedef uint32_t RileyCudaGraphCaptureOperationKind;
   ((RileyCudaGraphCaptureOperationKind)5)
 #define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16 \
   ((RileyCudaGraphCaptureOperationKind)6)
+#define RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX \
+  ((RileyCudaGraphCaptureOperationKind)7)
 
 // Detailed graph lifecycle phase recorded separately from the established
 // RileyCudaErrorInfo stage. Unknown future values must never be interpreted as
@@ -1329,6 +1331,33 @@ RileyCudaStatus riley_cuda_graph_capture_begin_canonical_rms_norm_bf16(
 // riley_cuda_graph_capture_begin_canonical_rms_norm_bf16. All three captured
 // allocations and exact geometry are immutable for the graph lifetime.
 RileyCudaStatus riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16(
+    RileyCudaGraphCapture* capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Begins a C05-13 capture containing exactly one fixed-address deterministic
+// BF16 argmax node. `logits` is contiguous BF16 `[row_count,
+// vocabulary_size]`; `results` is U32 `[row_count, 2]` containing the exact
+// token/status records defined by RileyCudaBf16ArgmaxResult. The two live
+// allocations must be distinct and remain fixed for the graph lifetime.
+// `row_count` must be nonzero and `vocabulary_size` must be in
+// 1..=UINT32_MAX. This narrow graph contract preserves the eager primitive's
+// lower-token-id finite tie rule and non-finite row status, but admits no
+// spans, offsets, fresh logits, row gather, host result handling, sampling,
+// executor wiring, or C07 capability evidence.
+RileyCudaStatus riley_cuda_graph_capture_begin_bf16_argmax(
+    RileyCudaStream* stream,
+    RileyCudaDeviceBuffer* logits,
+    RileyCudaDeviceBuffer* results,
+    uint64_t row_count,
+    uint64_t vocabulary_size,
+    RileyCudaGraphCaptureMode mode,
+    RileyCudaGraphCapture** out_capture,
+    RileyCudaGraphErrorInfo* out_graph_error,
+    RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;
+// Enqueues the sole deterministic BF16 argmax node for a capture created by
+// riley_cuda_graph_capture_begin_bf16_argmax. The captured logits, result
+// records, and exact shape remain immutable for the graph lifetime.
+RileyCudaStatus riley_cuda_graph_capture_enqueue_bf16_argmax(
     RileyCudaGraphCapture* capture,
     RileyCudaGraphErrorInfo* out_graph_error,
     RileyCudaErrorInfo* error) RILEY_CUDA_NOEXCEPT;

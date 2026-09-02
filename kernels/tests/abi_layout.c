@@ -45,7 +45,8 @@ _Static_assert(RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_UNKNOWN == 0 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_SILU_BF16 == 3 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_GATED_MULTIPLY_BF16 == 4 &&
                    RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_RESIDUAL_ADD_BF16 == 5 &&
-                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16 == 6,
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_CANONICAL_RMS_NORM_BF16 == 6 &&
+                   RILEY_CUDA_GRAPH_CAPTURE_OPERATION_KIND_BF16_ARGMAX == 7,
                "graph-capture-operation-kind ABI discriminants changed");
 _Static_assert(sizeof(RileyCudaGraphStage) == 4,
                "graph-stage ABI width changed");
@@ -599,6 +600,14 @@ static RileyCudaStatus (*const graph_capture_begin_canonical_rms_norm_bf16_symbo
 static RileyCudaStatus (*const graph_capture_enqueue_canonical_rms_norm_bf16_symbol)(
     RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
     riley_cuda_graph_capture_enqueue_canonical_rms_norm_bf16;
+static RileyCudaStatus (*const graph_capture_begin_bf16_argmax_symbol)(
+    RileyCudaStream*, RileyCudaDeviceBuffer*, RileyCudaDeviceBuffer*, uint64_t,
+    uint64_t, RileyCudaGraphCaptureMode, RileyCudaGraphCapture**,
+    RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_begin_bf16_argmax;
+static RileyCudaStatus (*const graph_capture_enqueue_bf16_argmax_symbol)(
+    RileyCudaGraphCapture*, RileyCudaGraphErrorInfo*, RileyCudaErrorInfo*) =
+    riley_cuda_graph_capture_enqueue_bf16_argmax;
 static RileyCudaStatus (*const graph_capture_end_symbol)(
     RileyCudaGraphCapture**, RileyCudaGraph**, RileyCudaGraphErrorInfo*,
     RileyCudaErrorInfo*) = riley_cuda_graph_capture_end;
@@ -867,6 +876,8 @@ const void* riley_cuda_abi_symbol_references[] = {
     (const void*)&graph_capture_enqueue_residual_add_bf16_symbol,
     (const void*)&graph_capture_begin_canonical_rms_norm_bf16_symbol,
     (const void*)&graph_capture_enqueue_canonical_rms_norm_bf16_symbol,
+    (const void*)&graph_capture_begin_bf16_argmax_symbol,
+    (const void*)&graph_capture_enqueue_bf16_argmax_symbol,
     (const void*)&graph_capture_end_symbol,
     (const void*)&graph_instantiate_symbol,
     (const void*)&graph_exec_launch_symbol,

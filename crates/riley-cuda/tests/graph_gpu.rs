@@ -1,9 +1,11 @@
 use std::error::Error;
 
 use riley_cuda::{
-    CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice, CudaErrorKind,
-    CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
-    ResidualAddParams, RmsNormParams, SiluParams, gated_multiply, residual_add, rms_norm, silu,
+    BF16_ARGMAX_INVALID_TOKEN_ID, BF16_ARGMAX_STATUS_NON_FINITE, BF16_ARGMAX_STATUS_SUCCESS,
+    Bf16ArgmaxParams, CudaBufferSpan, CudaBufferSpanMut, CudaContext, CudaDType, CudaDevice,
+    CudaErrorKind, CudaGraphCaptureMode, CudaResult, CudaRuntime, CudaStream, GatedMultiplyParams,
+    ResidualAddParams, RmsNormParams, SiluParams, deterministic_bf16_argmax, gated_multiply,
+    residual_add, rms_norm, silu,
 };
 
 fn all_f32_bits_equal(values: &[f32], expected: f32) -> bool {
@@ -155,6 +157,54 @@ fn graph_canonical_rms_norm_bf16_fixture_bytes(element_count: usize, branch: usi
     (0..element_count)
         .flat_map(|index| pattern[index % pattern.len()].to_ne_bytes())
         .collect()
+}
+
+fn graph_bf16_argmax_edge_fixture_bytes() -> Vec<u8> {
+    const ROW_COUNT: usize = 7;
+    const VOCABULARY_SIZE: usize = 257;
+
+    // Keep the 7x257 edge corpus from `bf16_argmax_gpu.rs`: last odd column,
+    // cross-warp equal maxima, signed-zero equality, negative maxima, and all
+    // BF16 non-finite classes. Its U32 token/status layout is the semantic
+    // contract for this fixed-address graph node.
+    let mut logits_bits: Vec<u16> = vec![0xc100; ROW_COUNT * VOCABULARY_SIZE]; // -8.0
+    let index = |row: usize, token: usize| row * VOCABULARY_SIZE + token;
+    logits_bits[index(0, 256)] = 0x40a0; // 5.0
+    logits_bits[index(1, 3)] = 0x4040; // 3.0, lower-id tie winner
+    logits_bits[index(1, 193)] = 0x4040;
+    logits_bits[index(2, 17)] = 0x8000; // -0.0, lower-id tie winner
+    logits_bits[index(2, 201)] = 0x0000; // +0.0
+    logits_bits[index(3, 7)] = 0xbf80; // -1.0
+    logits_bits[index(3, 251)] = 0xbf00; // -0.5, finite negative maximum
+    logits_bits[index(4, 29)] = 0x7fc1; // NaN
+    logits_bits[index(5, 127)] = 0x7f80; // +infinity
+    logits_bits[index(6, 255)] = 0xff80; // -infinity
+    logits_bits
+        .iter()
+        .flat_map(|&bits| bits.to_ne_bytes())
+        .collect()
+}
+
+fn graph_bf16_argmax_edge_expected_result_bytes() -> Vec<u8> {
+    [
+        256,
+        BF16_ARGMAX_STATUS_SUCCESS,
+        3,
+        BF16_ARGMAX_STATUS_SUCCESS,
+        17,
+        BF16_ARGMAX_STATUS_SUCCESS,
+        251,
+        BF16_ARGMAX_STATUS_SUCCESS,
+        BF16_ARGMAX_INVALID_TOKEN_ID,
+        BF16_ARGMAX_STATUS_NON_FINITE,
+        BF16_ARGMAX_INVALID_TOKEN_ID,
+        BF16_ARGMAX_STATUS_NON_FINITE,
+        BF16_ARGMAX_INVALID_TOKEN_ID,
+        BF16_ARGMAX_STATUS_NON_FINITE,
+    ]
+    .iter()
+    .flat_map(|&word| word.to_ne_bytes())
+    .collect()
 }
 
 #[test]
@@ -954,6 +1004,251 @@ fn owned_canonical_bf16_rms_norm_graph_preflight_and_abort_recover_every_resourc
     assert_eq!(context.allocation_stats()?, allocation_baseline);
     close_context(context)?;
     println!("c05-12-owned-canonical-bf16-rms-norm-preflight-abort-recovery status=passed");
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_argmax_graph_replays_edge_fixture_byte_exact_against_eager()
+-> Result<(), Box<dyn Error>> {
+    const ROW_COUNT: u64 = 7;
+    const VOCABULARY_SIZE: u64 = 257;
+    const RESULT_U32_WORDS_PER_ROW: u64 = 2;
+    const REPLAYS: usize = 64;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+
+    let mut eager_stream = context.create_stream()?;
+    let capture_stream = context.create_stream()?;
+    let mut transfer_stream = context.create_stream()?;
+    let bf16_byte_width = u64::try_from(std::mem::size_of::<u16>())?;
+    let u32_byte_width = u64::try_from(std::mem::size_of::<u32>())?;
+    let logits_byte_len = ROW_COUNT
+        .checked_mul(VOCABULARY_SIZE)
+        .and_then(|element_count| element_count.checked_mul(bf16_byte_width))
+        .ok_or("BF16 argmax graph logits byte length overflow")?;
+    let results_byte_len = ROW_COUNT
+        .checked_mul(RESULT_U32_WORDS_PER_ROW)
+        .and_then(|word_count| word_count.checked_mul(u32_byte_width))
+        .ok_or("BF16 argmax graph result byte length overflow")?;
+    let host_logits = graph_bf16_argmax_edge_fixture_bytes();
+    let expected_result_bytes = graph_bf16_argmax_edge_expected_result_bytes();
+    assert_eq!(u64::try_from(host_logits.len())?, logits_byte_len);
+    assert_eq!(
+        u64::try_from(expected_result_bytes.len())?,
+        results_byte_len
+    );
+    let sentinel_results = vec![0xa5; usize::try_from(results_byte_len)?];
+    let mut staging = context.allocate_pinned_host_buffer(logits_byte_len)?;
+
+    let mut eager_logits = context.allocate_device_buffer(logits_byte_len)?;
+    eager_logits.upload_from_slice(0, &host_logits, &mut staging, &mut eager_stream)?;
+    let mut eager_results = context.allocate_device_buffer(results_byte_len)?;
+    eager_results.upload_from_slice(0, &sentinel_results, &mut staging, &mut eager_stream)?;
+    let graph_logits = {
+        let mut buffer = context.allocate_device_buffer(logits_byte_len)?;
+        buffer.upload_from_slice(0, &host_logits, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+    let graph_results = {
+        let mut buffer = context.allocate_device_buffer(results_byte_len)?;
+        buffer.upload_from_slice(0, &sentinel_results, &mut staging, &mut eager_stream)?;
+        buffer
+    };
+
+    {
+        let mut eager = Bf16ArgmaxParams {
+            logits: CudaBufferSpan::new(&eager_logits, CudaDType::BF16, 0, logits_byte_len)?,
+            results: CudaBufferSpanMut::new(
+                &mut eager_results,
+                CudaDType::U32,
+                0,
+                results_byte_len,
+            )?,
+            row_count: ROW_COUNT,
+            vocabulary_size: VOCABULARY_SIZE,
+        };
+        deterministic_bf16_argmax(&mut eager, &mut eager_stream)?;
+    }
+
+    let allocation_with_resources = context.allocation_stats()?;
+    let mut capture = capture_stream.begin_owned_graph_bf16_argmax_capture(
+        graph_logits,
+        graph_results,
+        ROW_COUNT,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    )?;
+    capture.enqueue_bf16_argmax()?;
+    // The local one-node rejection must leave the admitted node/capture usable.
+    assert_invalid_state(
+        capture.enqueue_bf16_argmax(),
+        "second fixed BF16 argmax graph enqueue",
+    );
+    let captured = capture.end()?;
+    let mut exec = captured.instantiate()?;
+
+    // This asserts owned lifecycle accounting, not an inference-performance
+    // claim about CUDA Graph driver internals.
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+    for _ in 0..REPLAYS {
+        exec.launch()?.finish()?;
+    }
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = exec.close()?;
+    let (capture_stream, mut graph_logits, mut graph_results) = resources.into_parts();
+    let mut eager_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    let mut graph_result_bytes = vec![0_u8; usize::try_from(results_byte_len)?];
+    let mut graph_logits_after = vec![0_u8; usize::try_from(logits_byte_len)?];
+    eager_results.download_to_slice(
+        0,
+        &mut eager_result_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_results.download_to_slice(
+        0,
+        &mut graph_result_bytes,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    graph_logits.download_to_slice(
+        0,
+        &mut graph_logits_after,
+        &mut staging,
+        &mut transfer_stream,
+    )?;
+    assert_eq!(
+        eager_result_bytes, expected_result_bytes,
+        "eager deterministic BF16 argmax must retain the 7x257 token/status contract"
+    );
+    assert_eq!(
+        graph_result_bytes, eager_result_bytes,
+        "fixed graph BF16 argmax U32 token/status bytes must match eager output"
+    );
+    assert_eq!(
+        graph_logits_after, host_logits,
+        "fixed graph replay must not mutate its retained BF16 logits allocation"
+    );
+
+    graph_results.close()?;
+    graph_logits.close()?;
+    eager_results.close()?;
+    eager_logits.close()?;
+    staging.close()?;
+    capture_stream.close()?;
+    eager_stream.close()?;
+    transfer_stream.close()?;
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!(
+        "c05-13-owned-bf16-argmax-fixed-address replays={REPLAYS} rows={ROW_COUNT} vocabulary={VOCABULARY_SIZE} status=passed"
+    );
+    Ok(())
+}
+
+#[test]
+#[ignore = "remote GPU"]
+fn owned_bf16_argmax_graph_preflight_and_abort_recover_every_resource() -> Result<(), Box<dyn Error>>
+{
+    const ROW_COUNT: u64 = 7;
+    const VOCABULARY_SIZE: u64 = 257;
+    const LOGITS_BYTE_LEN: u64 = ROW_COUNT * VOCABULARY_SIZE * 2;
+    const RESULTS_BYTE_LEN: u64 = ROW_COUNT * 2 * 4;
+
+    let device = first_device()?;
+    let context = device.create_context()?;
+    let allocation_baseline = context.allocation_stats()?;
+    assert!(allocation_baseline.is_zero());
+    let stream = context.create_stream()?;
+    let logits = context.allocate_device_buffer(LOGITS_BYTE_LEN)?;
+    let results = context.allocate_device_buffer(RESULTS_BYTE_LEN)?;
+    let allocation_with_resources = context.allocation_stats()?;
+
+    let error = match stream.begin_owned_graph_bf16_argmax_capture(
+        logits,
+        results,
+        0,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("zero-row owned BF16 argmax graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("zero-row BF16 argmax preflight must return all untouched resources");
+    let (stream, logits, results) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let error = match stream.begin_owned_graph_bf16_argmax_capture(
+        logits,
+        results,
+        ROW_COUNT,
+        0,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("zero-vocabulary owned BF16 argmax graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::InvalidArgument);
+    let resources = error
+        .into_resources()
+        .expect("zero-vocabulary BF16 argmax preflight must return all untouched resources");
+    let (stream, logits, results) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let error = match stream.begin_owned_graph_bf16_argmax_capture(
+        logits,
+        results,
+        ROW_COUNT,
+        u64::from(u32::MAX) + 1,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("U32-overflow owned BF16 argmax graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    let resources = error
+        .into_resources()
+        .expect("U32-overflow BF16 argmax preflight must return all untouched resources");
+    let (stream, logits, results) = resources.into_parts();
+    assert_eq!(context.allocation_stats()?, allocation_with_resources);
+
+    let resources = stream
+        .begin_owned_graph_bf16_argmax_capture(
+            logits,
+            results,
+            ROW_COUNT,
+            VOCABULARY_SIZE,
+            CudaGraphCaptureMode::ThreadLocal,
+        )?
+        .abort()?;
+    let (stream, logits, results) = resources.into_parts();
+    let error = match stream.begin_owned_graph_bf16_argmax_capture(
+        logits,
+        results,
+        ROW_COUNT + 1,
+        VOCABULARY_SIZE,
+        CudaGraphCaptureMode::ThreadLocal,
+    ) {
+        Ok(_) => panic!("oversized owned BF16 argmax graph preflight unexpectedly succeeded"),
+        Err(error) => error,
+    };
+    assert_eq!(error.error().kind(), CudaErrorKind::OutOfRange);
+    error
+        .into_resources()
+        .expect("oversized BF16 argmax preflight must preserve all three resources")
+        .close()?;
+
+    assert_eq!(context.allocation_stats()?, allocation_baseline);
+    close_context(context)?;
+    println!("c05-13-owned-bf16-argmax-preflight-abort-recovery status=passed");
     Ok(())
 }
 
