@@ -1,6 +1,6 @@
 # C05 — CUDA Graph Ownership ABI
 
-**상태:** In progress — C05-16까지 decode output 경계의 fixed-address BF16 row-gather → argmax → exact result D2H three-node graph GPU lifecycle/parity를 닫았다. 다음 C05-17은 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 독립 fixed-address graph로 좁힌다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않는다.
+**상태:** In progress — C05-17까지 C07 pure-decode의 indexed BF16 RoPE 한 kernel을 포함한 fixed-address CUDA Graph lifecycle/parity를 닫았다. C05-16의 raw result receipt는 계속 C07 `GpuGreedy`/`CompletionBoundary`나 executor integration을 뜻하지 않으며, C05-17도 full decode graph 또는 성능 향상 근거는 아니다.
 **의미 등급:** `E0` infrastructure  
 **한 가지 목적:** CUDA Graph capture·instantiate·replay·close를 안전하게 소유하는 additive native C ABI와 Rust wrapper를 구현한다.
 
@@ -262,7 +262,7 @@ result-record bytes가 정확히 일치했고, exact pinned-size preflight/abort
 NaN·non-finite result bytes도 별도 GPU regression으로 닫았다. 이 결과는 세-node raw result lifecycle/parity의
 근거일 뿐 host token/status validation, scheduler commit, C07 inventory 승격 또는 성능 향상 주장은 아니다.
 
-### C05-17 — fixed-address BF16 indexed-RoPE capture (CUDA; planned)
+### C05-17 — fixed-address BF16 indexed-RoPE capture (CUDA; completed)
 
 C05-17은 C07 V1 pure-decode chain의 per-row-position RoPE primitive만 one-node CUDA Graph로 좁힌다. 이것은
 기존 eager `indexed_rope`의 non-interleaved Llama BF16 semantics와 raw device-position OOB의 BF16-NaN
@@ -294,11 +294,19 @@ inputs, sampling, scheduler commit 또는 performance promotion을 만들지 않
 정확한 operation을 `Rope` slot에 매핑할 수 있고, inventory aggregate는 나머지 operation이 명시적으로
 review되기 전까지 `Unknown`이다.
 
-GPU acceptance는 valid host mirror와 eager indexed-RoPE의 exact BF16 output bytes, 최소 64회 sequential replay,
+GPU acceptance criteria는 valid host mirror와 eager indexed-RoPE의 exact BF16 output bytes, 최소 64회 sequential replay,
 second-enqueue rejection, foreign context·five-way alias·geometry/capacity·busy·host-mirror preflight rejection 뒤
 untouched-resource recovery, abort/explicit close 뒤 allocation statistics 0을 확인한다. private CUDA test는 raw
 device-position OOB가 eager와 동일한 BF16-NaN sentinel bytes를 내는지 확인한다. 이 결과는 one-node RoPE
 lifecycle/parity의 근거일 뿐 full decode graph 또는 성능 향상 근거는 아니다.
+
+**완료 검증 (2026-09-02):** 원격 RTX 4090/CUDA 12.8에서 native ABI link, CUDA feature library, source-contract
+CPU graph 27개와 전체 ignored graph GPU suite 40개를 통과했다. 정상 valid host mirror는 eager BF16 output과
+byte-exact하고, input/cos/sin/device-position bytes가 그대로인 채 64회 sequential replay하며 second enqueue를
+거부했다. raw device-position OOB는 eager와 같은 rotary BF16-NaN sentinel 및 non-rotary tail-copy bytes를
+보존했다. out-of-range host mirror·short output preflight와 begin 뒤 abort recovery는 resource bundle 및
+allocation statistics 0을 확인했다. 이는 one-node RoPE lifecycle/parity의 실제 근거일 뿐 full decode,
+C07 executor integration 또는 end-to-end 성능 향상을 입증하지 않는다.
 
 ## 2. 범위
 
